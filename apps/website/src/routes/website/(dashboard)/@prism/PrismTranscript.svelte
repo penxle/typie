@@ -118,6 +118,7 @@
   const late = $derived(nowTick - lastBeat >= LATE_MS);
 
   const MAX_FRAME_MS = 100;
+  const BOTTOM_FOLLOW_TOLERANCE_PX = 8;
 
   const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const newPaced = () => new PacedText({ instant: reduceMotion });
@@ -136,6 +137,11 @@
     }
 
     chase = true;
+  };
+
+  const resumeFollow = () => {
+    follow = true;
+    if (container) chaseBottom(container);
   };
 
   let live = $state<PacedText | null>(null);
@@ -229,8 +235,11 @@
       if (follow && container) {
         const target = container.scrollHeight - container.clientHeight;
         const gap = target - container.scrollTop;
-        if (gap > 0) container.scrollTop = gap < 1 ? target : container.scrollTop + gap * (1 - Math.exp(-dt / 120));
-        if (!active && gap < 1) chase = false;
+        if (gap > 0) {
+          const step = gap * (1 - Math.exp(-dt / 120));
+          container.scrollTop = gap < BOTTOM_FOLLOW_TOLERANCE_PX ? target : container.scrollTop + Math.max(1, step);
+        }
+        if (!active && gap < BOTTOM_FOLLOW_TOLERANCE_PX) chase = false;
       } else if (!active) {
         chase = false;
       }
@@ -286,7 +295,7 @@
   let prevPending: string | null = null;
 
   $effect.pre(() => {
-    if (pending !== null && prevPending === null) follow = true;
+    if (pending !== null && prevPending === null) resumeFollow();
     prevPending = pending;
   });
 
@@ -313,10 +322,10 @@
     }
 
     const gap = element.scrollHeight - element.scrollTop - element.clientHeight;
-    if (element.scrollTop < lastTop - 1 && gap >= 8) {
+    if (element.scrollTop < lastTop - 1 && gap >= BOTTOM_FOLLOW_TOLERANCE_PX) {
       follow = false;
-    } else if (gap < 8) {
-      follow = true;
+    } else if (!follow && gap < BOTTOM_FOLLOW_TOLERANCE_PX) {
+      resumeFollow();
     }
 
     lastTop = element.scrollTop;
@@ -337,7 +346,7 @@
     const scroller = container;
     if (!scroller || !content) return;
     const observer = new ResizeObserver(() => {
-      if (follow && !active) {
+      if (follow) {
         chaseBottom(scroller);
       }
       updateOverflow();
@@ -515,10 +524,7 @@
         _active: { transform: 'scale(0.97)' },
       })}
       aria-label="아래로"
-      onclick={() => {
-        follow = true;
-        container?.scrollTo({ top: container.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
-      }}
+      onclick={resumeFollow}
       type="button"
       in:pop
       out:pop={{ out: true }}
