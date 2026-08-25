@@ -223,6 +223,7 @@
 
   const drainOf = (seq: number) => drains.find((entry) => entry.seq === seq);
   const draining = $derived(drains.some((entry) => !entry.paced.done));
+  const narrating = $derived(draining || (live !== null && live.boundary > 0));
 
   // 배출이 끝나기 전에 뒤 그룹을 세우면 표시 순서가 역전되고, 자라는 서술이 그 그룹을 밀어낸다.
   const gateGroups = (list: PassageGroup[]): PassageGroup[] => {
@@ -578,7 +579,7 @@
   {#if live !== null && live.boundary > 0 && !draining}
     <div class={narrationClass}><PrismMarkdown blocks={live.blocks} plain={live.plain} settled={false} /></div>
   {/if}
-  {#if !awaiting}
+  {#if !awaiting && !narrating}
     <PrismWaitRow style={css.raw({ marginTop: '10px' })} label={tail ?? '리뷰가 진행 중이에요'} text={tail} />
   {/if}
 {/snippet}
