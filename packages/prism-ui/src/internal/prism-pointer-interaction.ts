@@ -1,4 +1,4 @@
-import { projectPrismIconPose } from './prism-icon-morph.ts';
+import { PRISM_ICON_CSS_SIZE, projectPrismIconPose } from './prism-icon-morph.ts';
 import { PRISM_RENDER_SCALE_REFERENCE_SIZE, resolvePrismObjectPoseQuaternion } from './prism-object.ts';
 
 type Vector2 = [number, number];
@@ -522,17 +522,17 @@ export function createPrismPointerInteraction(element: HTMLElement, options: Opt
       const scale = 1 + Math.sin(now / 1050) * 0.009 + proximity * 0.018 + pressedScale * PRESS_SCALE_AMOUNT;
       relativeLightPhase += dt * (1 / options.lightPeriod - baseSpeed);
       const rect = element.getBoundingClientRect();
-      const projectedVertices = projectPrismIconPose(
-        {
-          cameraDistance: 4.2,
-          orientation,
-          projectionDistance: 2.96,
-          renderScale: baseScale * clamp(scale, 0.9, 1.12),
-        },
-        32,
-      );
+      const projectedVertices = projectPrismIconPose({
+        cameraDistance: 4.2,
+        orientation,
+        projectionDistance: 2.96,
+        renderScale: baseScale * clamp(scale, 0.9, 1.12),
+      });
       currentPrismHull = convexHull(
-        projectedVertices.map(([x, y]): Vector2 => [rect.left + rect.width * 0.5 + x - 16, rect.top + rect.height * 0.5 + y - 16]),
+        projectedVertices.map(([x, y]): Vector2 => [
+          rect.left + rect.width * 0.5 + x - PRISM_ICON_CSS_SIZE * 0.5,
+          rect.top + rect.height * 0.5 + y - PRISM_ICON_CSS_SIZE * 0.5,
+        ]),
       );
       const hdrSpeedProgress = Math.max(0, (finalSpeedTurns - baseSpeed) / (HDR_NEAR_MAX_SPEED_TURNS - baseSpeed));
       const speedEnergy = 1 - Math.exp(-3 * hdrSpeedProgress);

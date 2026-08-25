@@ -1,4 +1,4 @@
-import { resolvePrismIconShaderOffsetY } from './prism-icon-morph.ts';
+import { PRISM_ICON_CSS_SIZE, resolvePrismIconShaderOffsetY } from './prism-icon-morph.ts';
 import { createAdaptiveLightResolutionPolicy, resolvePrismRenderTargets, resolvePrismRenderWork } from './prism-render-policy.ts';
 import { PRISM_SPINNER_HDR_HEADROOM_DEFAULT } from './prism-spinner-hdr.ts';
 import {
@@ -245,7 +245,7 @@ export const prismObjectDefaults = {
   canvasSize: 160,
   prismSize: 72,
   transitionProgress: 0,
-  iconSize: 32,
+  iconSize: PRISM_ICON_CSS_SIZE,
   iconEdgeColor: [0.5, 0.5, 0.5, 1],
   spinnerMorphProgress: 0,
   spinnerSize: PRISM_SPINNER_CSS_SIZE,

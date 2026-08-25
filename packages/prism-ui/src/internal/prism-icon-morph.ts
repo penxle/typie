@@ -10,11 +10,11 @@ type Face = readonly number[];
 const CAMERA_PLANE_SAFETY_DISTANCE = 0.000001;
 const EPSILON = 0.000001;
 const PHASE_VALIDATION_RATE = 240;
-const PRISM_ICON_CANONICAL_CSS_SIZE = 32;
+export const PRISM_ICON_CSS_SIZE = 44;
 const PRISM_ICON_OPTICAL_OFFSET_Y = 1.25 / 24;
 const PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE = 132;
 const PRISM_ICON_SVG_FIT_SCALE = 0.5832;
-const PRISM_ICON_TO_VIEWPORT_SCALE = PRISM_ICON_CANONICAL_CSS_SIZE / (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5);
+const PRISM_ICON_TO_VIEWPORT_SCALE = PRISM_ICON_CSS_SIZE / (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5);
 const PRISM_ICON_CAMERA_DISTANCE_UNSCALED = 32 / 15;
 const PRISM_SETTLED_CAMERA_DISTANCE = 4.2;
 const PRISM_SETTLED_PROJECTION_DISTANCE = 2.96;
@@ -263,12 +263,12 @@ function validatePose(pose: PrismIconPose): void {
   }
 }
 
-export function projectPrismIconPose(pose: PrismIconPose, cssSize = 32): readonly Vector2[] {
+export function projectPrismIconPose(pose: PrismIconPose, cssSize = PRISM_ICON_CSS_SIZE): readonly Vector2[] {
   requireFinitePositive(cssSize, 'Prism icon CSS size');
   validatePose(pose);
   const center = cssSize * 0.5;
   const centerY = center + (pose.viewportOffsetY ?? 0) * cssSize;
-  const viewportPixelsPerWorldUnit = (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5 * cssSize) / PRISM_ICON_CANONICAL_CSS_SIZE;
+  const viewportPixelsPerWorldUnit = (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5 * cssSize) / PRISM_ICON_CSS_SIZE;
   return PRISM_ICON_GEOMETRY.vertices.map((vertex): Vector2 => {
     const rotated = rotateByQuaternion(vertex, pose.orientation);
     const world = rotated.map((value) => value * pose.renderScale) as unknown as Vector3;
