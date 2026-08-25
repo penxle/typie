@@ -44,9 +44,13 @@ export type MarginController = {
   readonly activeId: string | null;
   readonly mode: MarginMode;
   readonly ready: boolean;
+  readonly presentationRoundId: string | null;
+  readonly presentationProgress: number;
+  readonly presentationInteractive: boolean;
   readonly myId: string;
   select: (roundId: string | null) => void;
   activate: (id: string | null, from?: MarginActivationSource) => void;
+  markPresentationPrepared: (roundId: string) => void;
   setSegment: (next: MarginSegment) => void;
   reply: (threadId: string, body: string) => Promise<void>;
   editComment: (commentId: string, body: string) => Promise<void>;

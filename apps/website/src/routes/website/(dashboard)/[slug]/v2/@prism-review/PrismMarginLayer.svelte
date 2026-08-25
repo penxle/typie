@@ -6,7 +6,8 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
-  import { COLUMN_GAP, COLUMN_WIDTH, GUTTER } from './margin-view.ts';
+  import { lanePresentation, targetColumnLeft } from './margin-motion.ts';
+  import { COLUMN_WIDTH, GUTTER } from './margin-view.ts';
   import PrismCardColumn from './PrismCardColumn.svelte';
   import PrismCardPopover from './PrismCardPopover.svelte';
   import PrismOverviewRuler from './PrismOverviewRuler.svelte';
@@ -29,7 +30,7 @@
   let desiredTops = $state.raw<Record<string, number>>({});
   let marks = $state.raw<Mark[]>([]);
   let bodyLeft = $state(0);
-  let pageRight = $state(0);
+  let columnLeft = $state(0);
   // 확장 영역 위에 얹힌 헤더(제목·부제목) 블록의 높이 — 세그먼트를 그 높이에 세운다
   let headerHeight = $state(0);
 
@@ -115,7 +116,7 @@
       bodyLeft = pageRect.left - areaRect.left + inset;
       // 확장 영역은 인셋을 제 padding으로 받고 페이지는 그 안에서 가운데 정렬된다 — 오른쪽 끝에 붙이면
       // 창이 넓을수록 카드가 원고에서 멀어진다. 레일이 그렇듯 컬럼도 페이지에 붙어야 한다.
-      pageRight = pageRect.right - areaRect.left;
+      columnLeft = targetColumnLeft(pageRect.right - areaRect.left, margin.presentationProgress);
     }
   };
 
@@ -132,7 +133,26 @@
   const railGutter = $derived(Math.min(GUTTER, Math.max(0, bodyLeft)));
   const railGap = $derived(Math.min(RAIL_TEXT_GAP, Math.max(0, railGutter - RAIL_WIDTH)));
 
-  const columnReserved = $derived(insetRight > 0);
+  // 완전히 닫힌 첫 프레임에도 숨은 컬럼을 먼저 세운다. 카드가 배치를 마쳤다는 신호가
+  // 컨트롤러에 도착해야 그제야 inset/scale/fade가 함께 출발한다.
+  const columnPresent = $derived(insetRight > 0 || (margin.mode === 'column' && margin.ready && margin.presentationRoundId !== null));
+  const presentation = $derived(lanePresentation(margin.presentationProgress));
+  const presentationAnimating = $derived(margin.presentationProgress < 1);
+
+  let headerShell = $state<HTMLDivElement>();
+  let columnShell = $state<HTMLDivElement>();
+  let wasPresentationInteractive = false;
+  $effect(() => {
+    const interactive = margin.presentationInteractive;
+    if (wasPresentationInteractive && !interactive) {
+      untrack(() => {
+        const focused = document.activeElement;
+        if (!(focused instanceof HTMLElement)) return;
+        if (headerShell?.contains(focused) || columnShell?.contains(focused)) focused.blur();
+      });
+    }
+    wasPresentationInteractive = interactive;
+  });
 
   let detailOpen = $state(false);
 
@@ -190,29 +210,41 @@
     <!-- 레일 좌표계의 원점은 본문 왼쪽에서 거터만큼 왼쪽이다 — 컬럼 모드는 인셋이 그 자리를 만들어 주지만
          팝오버 모드는 인셋이 0이라 컨테이너를 직접 그 자리로 옮겨야 막대가 본문 위로 올라오지 않는다.
          빈 거터는 클릭을 본문에 넘긴다 — 막대·칩만 받는다. -->
-    <div
-      style:left={`${bodyLeft - railGutter}px`}
-      style:width={`${railGutter}px`}
-      class={css({ position: 'absolute', top: '0', bottom: '0', '& > button': { pointerEvents: 'auto' } })}
-    >
-      <PrismRail gap={railGap} gutter={railGutter} {spans} />
-    </div>
+    {#if margin.selectedRoundId !== null}
+      <div
+        style:left={`${bodyLeft - railGutter}px`}
+        style:width={`${railGutter}px`}
+        class={css({ position: 'absolute', top: '0', bottom: '0', '& > button': { pointerEvents: 'auto' } })}
+      >
+        <PrismRail gap={railGap} gutter={railGutter} {spans} />
+      </div>
+    {/if}
 
-    {#if margin.mode === 'column'}
-      {#if columnReserved}
-        <!-- 헤더 띠 — 확장 영역 위쪽이라 음수 top으로 올라간다 -->
+    {#if columnPresent}
+      <!-- 헤더 띠 — 확장 영역 위쪽이라 음수 top으로 올라간다. 컬럼 좌표는 열림 목표에 고정하고
+           원고와 실제로 겹쳐 가리지 않도록 scale/fade만 적용한다. -->
+      <div
+        bind:this={headerShell}
+        style:height={`${headerHeight}px`}
+        style:left={`${columnLeft}px`}
+        style:pointer-events={margin.presentationInteractive ? 'auto' : 'none'}
+        style:top={`${-headerHeight}px`}
+        style:width={`${COLUMN_WIDTH}px`}
+        class={css({ position: 'absolute' })}
+        inert={!margin.presentationInteractive}
+      >
         <div
-          style:left={`${pageRight + COLUMN_GAP}px`}
-          style:top={`${-headerHeight}px`}
-          style:height={`${headerHeight}px`}
-          style:width={`${COLUMN_WIDTH}px`}
+          style:opacity={presentation.opacity}
+          style:transform={`scale(${presentation.scale})`}
+          style:will-change={presentationAnimating ? 'opacity, transform' : 'auto'}
           class={css({
-            position: 'absolute',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'flex-end',
             gap: '8px',
+            size: 'full',
             pointerEvents: 'auto',
+            transformOrigin: 'center',
           })}
         >
           {#if margin.detailRound !== null}
@@ -226,25 +258,33 @@
             value={margin.segment}
           />
         </div>
+      </div>
 
-        <div
-          style:left={`${pageRight + COLUMN_GAP}px`}
-          style:width={`${COLUMN_WIDTH}px`}
-          class={css({ position: 'absolute', top: '0', bottom: '0', pointerEvents: 'auto' })}
-        >
-          <PrismCardColumn {desiredTops} />
-        </div>
-      {/if}
-      <!-- 컬럼은 지적만 세운다 — 강점은 여기서도 팝오버가 받는다 -->
-      <PrismCardPopover strengthsOnly />
-    {:else}
-      <PrismCardPopover />
+      <div
+        bind:this={columnShell}
+        style:left={`${columnLeft}px`}
+        style:pointer-events={margin.presentationInteractive ? 'auto' : 'none'}
+        style:width={`${COLUMN_WIDTH}px`}
+        class={css({ position: 'absolute', top: '0', bottom: '0' })}
+        inert={!margin.presentationInteractive}
+      >
+        {#if margin.presentationRoundId !== null}
+          <PrismCardColumn {desiredTops} onPrepared={margin.markPresentationPrepared} preparationKey={margin.presentationRoundId} />
+        {/if}
+      </div>
+    {/if}
+
+    <!-- 컬럼이 서 있거나 사라지는 중에는 지적 카드를 컬럼 한 곳만 소유한다. -->
+    {#if margin.selectedRoundId !== null}
+      <PrismCardPopover strengthsOnly={columnPresent || margin.mode === 'column'} />
     {/if}
 
     <!-- 룰러도 가드 안에 선다 — 밖에 두면 마크의 pointerdown이 본문까지 올라가 캐럿이 튀고,
          잡힌 포인터 캡처가 click을 가로채 활성화 자체가 불발된다.
          변형 조상이 없으므로 position:fixed는 여기서도 뷰포트 기준 그대로다. -->
-    <PrismOverviewRuler {marks} />
+    {#if margin.selectedRoundId !== null}
+      <PrismOverviewRuler {marks} />
+    {/if}
   </div>
 
   {#if margin.detailRound !== null}

@@ -4,13 +4,16 @@
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { onDestroy, tick, untrack } from 'svelte';
+  import { Tween } from 'svelte/motion';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { cache } from '$lib/graphql';
   import { takeMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
+  import { prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
   import { setupMarginContext } from './context.svelte.ts';
-  import { COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode } from './margin-view.ts';
+  import { marginInsets, marginMotionDuration, marginMotionTarget, nextMarginReserved, resolvePresentedRoundId } from './margin-motion.ts';
+  import { describeThread, resolveMode } from './margin-view.ts';
   import PrismReviewHighlightLayer from './PrismReviewHighlightLayer.svelte';
   import type { Selection } from '@typie/editor-ffi/browser';
   import type { Anchor } from '@typie/prism';
@@ -28,7 +31,14 @@
     myId: string;
     available: number;
     bodyWidth: number;
-    children: Snippet<[{ left: number; right: number }]>;
+    children: Snippet<
+      [
+        {
+          left: number;
+          right: number;
+        },
+      ]
+    >;
   };
   let { documentId: documentIdProp, entityId: entityIdProp, myId, available, bodyWidth, children }: Props = $props();
 
@@ -50,6 +60,17 @@
   const ctx = getEditorContext();
   const editor = $derived(ctx.editor);
   const idle = $derived(documentId === null || entityId === null);
+
+  let mode = $state<MarginMode>('popover');
+  $effect(() => {
+    mode = resolveMode(
+      available,
+      bodyWidth,
+      untrack(() => mode),
+    );
+  });
+
+  let ready = $state(false);
 
   const roundsQuery = createQuery(
     graphql(`
@@ -113,6 +134,42 @@
 
   const selectedRoundId = $derived(selection === undefined ? null : rounds.some((r) => r.id === selection) ? selection : null);
 
+  // 리뷰가 없는 문서에까지 여백을 잡아 두면 본문이 통째로 밀린다 — 회차가 걸린 뒤에만 자리를 낸다.
+  // 짚은 곳이 하나도 없는 회차도 컬럼은 선다: 자리가 아예 없으면 "짚은 곳이 없어요"를 말할 자리도 없다.
+  // 한 번 낸 자리는 회차가 걸려 있는 동안 유지한다: 회차를 갈아탈 때마다 접었다 펴면 본문이 좌우로 두 번 튄다.
+  let reserved = $state(false);
+  $effect(() => {
+    reserved = nextMarginReserved(
+      untrack(() => reserved),
+      selectedRoundId,
+      ready,
+    );
+  });
+
+  const presentation = new Tween(0, {
+    duration: marginMotionDuration(reducedMotion()),
+    easing: prismVisibilityEasing,
+  });
+  let presentationPrepared = $state(false);
+  // 이미 보이는 컬럼은 닫는 중 다시 열거나 회차를 바꿀 때 재입장을 기다리지 않는다.
+  // 완전히 닫힌 컬럼만 첫 카드 배치가 끝났다는 신호를 받은 뒤 열림을 시작한다.
+  const presentationAdmitted = $derived(presentationPrepared || presentation.current > 0);
+  const presentationTarget = $derived(marginMotionTarget(mode, idle, reserved, presentationAdmitted));
+  $effect(() => {
+    presentation.target = presentationTarget;
+  });
+
+  $effect(() => {
+    if (mode !== 'column') presentationPrepared = false;
+  });
+
+  // 선택은 즉시 바뀌되, 닫힘을 그리는 데이터만 진행률이 0이 될 때까지 마지막 회차를 붙잡는다.
+  let lastRoundId = $state<string | null>(null);
+  $effect(() => {
+    if (selectedRoundId !== null) lastRoundId = selectedRoundId;
+  });
+  const presentedRoundId = $derived(resolvePresentedRoundId(selectedRoundId, lastRoundId, presentation.current));
+
   const select = (roundId: string | null) => {
     selection = roundId;
     const key = storageKey;
@@ -123,7 +180,7 @@
   const detailRound = $derived.by((): DetailRound | null => {
     const entity = roundsQuery.data?.entity;
     if (idle || entity === undefined || entity.node.__typename !== 'Document') return null;
-    const selected = entity.node.prismReviewRounds.find((round) => round.id === selectedRoundId);
+    const selected = entity.node.prismReviewRounds.find((round) => round.id === presentedRoundId);
     if (selected === undefined || !selected.hasDetail) return null;
     return {
       id: selected.id,
@@ -202,8 +259,8 @@
         }
       }
     `),
-    () => ({ roundId: selectedRoundId ?? '' }),
-    () => ({ skip: selectedRoundId === null }),
+    () => ({ roundId: presentedRoundId ?? '' }),
+    () => ({ skip: presentedRoundId === null }),
   );
 
   createSubscription(
@@ -237,25 +294,29 @@
     }),
   );
 
-  // 고른 회차의 것이 아닌 응답은 쓰지 않는다 — 회차를 바꾼 직후 한 틱 동안 옛 회차가 그려진다
+  // 지금 표시할 회차의 것이 아닌 응답은 쓰지 않는다 — 회차를 바꾼 직후 한 틱 동안 옛 회차가 그려진다
   const round = $derived.by(() => {
     const detail = detailQuery.data?.prismReviewRound;
-    return detail !== undefined && detail.id === selectedRoundId ? detail : null;
+    return detail !== undefined && detail.id === presentedRoundId ? detail : null;
   });
 
-  let mode = $state<MarginMode>('popover');
-  $effect(() => {
-    mode = resolveMode(
-      available,
-      bodyWidth,
-      untrack(() => mode),
-    );
-  });
+  // 응답 객체의 신원이 아니라 실제 카드 자리 재계산에 쓰는 값만 본다. 댓글·상태 갱신이나
+  // 같은 네트워크 응답이 다시 와도 재앵커링과 WASM 좌표 변환을 반복하지 않는다.
+  const placementKey = $derived.by(() =>
+    round === null
+      ? null
+      : JSON.stringify([
+          round.id,
+          round.threads.map((thread) => [thread.id, thread.issueIndex, thread.anchors]),
+          (round.detail?.strengths ?? []).map((strength) => strength.anchor),
+          (round.detail?.patterns ?? []).map((pattern) => [pattern.theme, pattern.issues.map((issue) => issue.index)]),
+          (round.detail?.priorities ?? []).map((priority) => [priority.body, priority.issues.map((issue) => issue.index)]),
+        ]),
+  );
 
   let activeId = $state<string | null>(null);
 
   let raw = $state.raw<MarginPlacement[]>([]);
-  let ready = $state(false);
   // 지금 선 항목이 어느 회차의 것인지 — 회차를 갈아 끼운 직후엔 고른 회차와 어긋난다
   let builtRoundId = $state<string | null>(null);
   let placed = new Map<string, Placed>();
@@ -270,8 +331,11 @@
       raw = [];
       ready = false;
       builtRoundId = null;
+      presentationPrepared = false;
       return;
     }
+
+    if (builtRoundId !== round.id) presentationPrepared = false;
 
     // 코드젠은 nullable을 `?: T | null`로 내므로 undefined를 null로 접어 문면 타입에 맞춘다
     const patterns = (round.detail?.patterns ?? []).map((pattern) => ({ ...pattern, theme: pattern.theme ?? null }));
@@ -376,6 +440,11 @@
     builtRoundId = round.id;
   };
 
+  const markPresentationPrepared = (roundId: string) => {
+    if (mode !== 'column' || !ready || selectedRoundId !== roundId || builtRoundId !== roundId) return;
+    presentationPrepared = true;
+  };
+
   // `add`는 결과 이벤트가 없다 — 실제로 앉았는지는 적용된 스냅숏에 나타나는지로만 안다.
   // 편집으로 range가 떨어져 나가는 것도 같은 자리에서 잡힌다.
   const items = $derived.by(() => {
@@ -409,7 +478,7 @@
 
   $effect(() => {
     void editor;
-    void round;
+    void placementKey;
     untrack(() => buildItems());
   });
 
@@ -682,11 +751,21 @@
     get ready() {
       return ready;
     },
+    get presentationRoundId() {
+      return builtRoundId;
+    },
+    get presentationProgress() {
+      return presentation.current;
+    },
+    get presentationInteractive() {
+      return presentationTarget === 1 && presentation.current === 1;
+    },
     get myId() {
       return myId;
     },
     select,
     activate,
+    markPresentationPrepared,
     setSegment,
     reply: (threadId, body) => guard(() => replyMutation({ input: { threadId, body } }), '답글을 남기지 못했어요'),
     editComment: (commentId, body) => guard(() => updateCommentMutation({ input: { commentId, body } }), '처리하지 못했어요'),
@@ -696,18 +775,7 @@
     react: (threadId, value) => guard(() => reactMutation({ input: { threadId, value } }), '처리하지 못했어요'),
   });
 
-  // 리뷰가 없는 문서에까지 여백을 잡아 두면 본문이 통째로 밀린다 — 회차가 걸린 뒤에만 자리를 낸다.
-  // 짚은 곳이 하나도 없는 회차도 컬럼은 선다: 자리가 아예 없으면 "짚은 곳이 없어요"를 말할 자리도 없다.
-  // 한 번 낸 자리는 회차가 걸려 있는 동안 유지한다: 회차를 갈아탈 때마다 접었다 펴면 본문이 좌우로 두 번 튄다.
-  let reserved = $state(false);
-  $effect(() => {
-    if (selectedRoundId === null) reserved = false;
-    else if (ready) reserved = true;
-  });
-
-  const insets = $derived(
-    mode === 'column' && !idle && reserved ? { left: GUTTER, right: COLUMN_WIDTH + COLUMN_GAP } : { left: 0, right: 0 },
-  );
+  const insets = $derived(marginInsets(presentation.current));
 
   onDestroy(() => {
     clearTimeout(lostRetry);
