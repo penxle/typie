@@ -2,7 +2,6 @@
   import { getAppContext } from '@typie/ui/context';
   import { page } from '$app/state';
   import { hydrateQuery } from '$lib/graphql';
-  import WidgetGroup from '../@widgets/WidgetGroup.svelte';
   import { getPaneGroup } from './@pane/context.svelte';
   import Panes from './@pane/Panes.svelte';
 
@@ -40,14 +39,8 @@
       app.state.current = slug;
     }
   });
-
-  const loaded = $derived(!!query.data && !query.loading);
 </script>
 
 {#if slug && root}
   <Panes {root} />
-{/if}
-
-{#if loaded && query.data}
-  <WidgetGroup query$key={query.data} />
 {/if}

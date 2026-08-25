@@ -6,7 +6,7 @@
   import { Button, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Tip } from '@typie/ui/notification';
-  import { animateFlip, clamp, createDndHandler, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
+  import { animateFlip, createDndHandler, createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { on } from 'svelte/events';
@@ -19,7 +19,6 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { getEditorRegistry } from '../[slug]/@pane/editor-registry.svelte';
   import { findMemberById } from '../[slug]/@pane/tree';
-  import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from '../@prism/prism-panel.ts';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { setupWidgetContext } from './widget-context.svelte';
   import WidgetPalette from './WidgetPalette.svelte';
@@ -139,15 +138,9 @@
   let transitioning = $state(false);
   let altPressed = $state(false);
 
-  const prismPanelInset = $derived(
-    app.state.prismAccess && app.preference.current.prismPanelOpen
-      ? clamp(app.preference.current.prismPanelWidth, PRISM_PANEL_MIN, PRISM_PANEL_MAX)
-      : 0,
-  );
-
   const transformRight = $derived.by(() => {
     if (!isHidden || editMode) {
-      return `translateX(${-prismPanelInset}px)`;
+      return 'translateX(0)';
     }
 
     return 'translateX(calc(100% + 24px))';
@@ -814,13 +807,13 @@
   class={cx(
     'group',
     css({
-      position: 'fixed',
+      position: 'absolute',
       bottom: '0',
       right: '24px',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-end',
-      height: '[100dvh]',
+      height: 'full',
       zIndex: 'widget',
       transition: '[transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out]',
       pointerEvents: altPressed ? 'none!' : 'none',
@@ -1086,10 +1079,10 @@
 />
 
 <button
-  style:right={`${4 + prismPanelInset}px`}
   class={center({
-    position: 'fixed',
+    position: 'absolute',
     bottom: '4px',
+    right: '4px',
     size: '32px',
     borderRadius: '8px',
     zIndex: 'widget',
@@ -1098,7 +1091,7 @@
     borderWidth: '0',
     color: isHidden ? 'text.faint' : 'text.default',
     _hover: { color: 'text.default', backgroundColor: 'surface.dark/10' },
-    transition: '[background-color 0.2s, color 0.2s, right 0.3s cubic-bezier(0.4, 0, 0.2, 1)]',
+    transition: '[background-color 0.2s, color 0.2s]',
   })}
   aria-label={isHidden ? '위젯 보기' : '위젯 숨기기'}
   onclick={() => {
