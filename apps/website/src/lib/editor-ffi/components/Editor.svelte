@@ -13,6 +13,7 @@
     style?: SystemStyleObject;
     contentInsetLeft?: number;
     contentInsetRight?: number;
+    contentMotion?: { fromX: number; duration: number; easing: string };
     header?: Snippet;
     footer?: Snippet;
     children?: Snippet;
@@ -27,6 +28,7 @@
     style,
     contentInsetLeft = 0,
     contentInsetRight = 0,
+    contentMotion,
     header,
     footer,
     children,
@@ -50,6 +52,7 @@
     {active}
     {contentInsetLeft}
     {contentInsetRight}
+    {contentMotion}
     {document$key}
     {footer}
     {header}

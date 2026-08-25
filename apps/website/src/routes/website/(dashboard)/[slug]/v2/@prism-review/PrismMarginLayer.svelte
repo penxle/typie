@@ -7,7 +7,7 @@
   import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
   import { lanePresentation, targetColumnLeft } from './margin-motion.ts';
-  import { COLUMN_WIDTH, GUTTER } from './margin-view.ts';
+  import { COLUMN_GAP, COLUMN_WIDTH, GUTTER } from './margin-view.ts';
   import PrismCardColumn from './PrismCardColumn.svelte';
   import PrismCardPopover from './PrismCardPopover.svelte';
   import PrismOverviewRuler from './PrismOverviewRuler.svelte';
@@ -20,8 +20,11 @@
 
   // 컨트롤러가 실제로 낸 오른쪽 자리. 회차를 갈아타는 동안에도 래치되어 유지되므로
   // 컬럼의 렌더 조건을 여기서 읽으면 자리가 없는 프레임에 그리지도, 전환 중에 깜빡이지도 않는다
-  type Props = { insetRight: number };
-  let { insetRight }: Props = $props();
+  type Props = {
+    insetRight: number;
+    contentMotion?: { fromX: number; duration: number; easing: string };
+  };
+  let { insetRight, contentMotion }: Props = $props();
 
   const ctx = getEditorContext();
   const margin = getMarginContext();
@@ -31,11 +34,26 @@
   let marks = $state.raw<Mark[]>([]);
   let bodyLeft = $state(0);
   let columnLeft = $state(0);
+  const railAnimation = $derived.by(() => {
+    if (!contentMotion || contentMotion.fromX === 0) return;
+    const name = contentMotion.fromX > 0 ? 'editor-content-from-right' : 'editor-content-from-left';
+    return `${name} ${contentMotion.duration}ms ${contentMotion.easing} both`;
+  });
   // 확장 영역 위에 얹힌 헤더(제목·부제목) 블록의 높이 — 세그먼트를 그 높이에 세운다
   let headerHeight = $state(0);
 
   const toneOf = (item: MarginItem): RailTone =>
     item.kind === 'strength' ? 'strength' : item.thread?.state === 'CLOSED' ? 'closed' : 'open';
+
+  const layoutLeftWithin = (element: HTMLElement, ancestor: HTMLElement): number | null => {
+    let left = 0;
+    let current: HTMLElement | null = element;
+    while (current !== null && current !== ancestor) {
+      left += current.offsetLeft;
+      current = current.offsetParent instanceof HTMLElement ? current.offsetParent : null;
+    }
+    return current === ancestor ? left : null;
+  };
 
   // items는 적용 스냅숏마다 새로 지어지고 published도 프레임 교체마다 새 번들이다 — 신원으로 재측정을 걸면
   // 타이핑 한 번마다 rect를 읽어 강제 리플로우가 난다. 측정은 판 번호와 항목 집합이 실제로 바뀔 때만 돈다.
@@ -113,10 +131,15 @@
     if (pageEl && layout) {
       const inset = layout.type === 'paginated' ? layout.page_margin_left * zoom : CONTINUOUS_VIEW_PADDING;
       const pageRect = pageEl.getBoundingClientRect();
-      bodyLeft = pageRect.left - areaRect.left + inset;
-      // 확장 영역은 인셋을 제 padding으로 받고 페이지는 그 안에서 가운데 정렬된다 — 오른쪽 끝에 붙이면
-      // 창이 넓을수록 카드가 원고에서 멀어진다. 레일이 그렇듯 컬럼도 페이지에 붙어야 한다.
-      columnLeft = targetColumnLeft(pageRect.right - areaRect.left, margin.presentationProgress);
+      const pageLayoutLeft = layoutLeftWithin(pageEl, area);
+      if (pageLayoutLeft !== null) {
+        bodyLeft = pageLayoutLeft + inset;
+        // getBoundingClientRect에는 본문 합성 translate가 들어간다. 레일·컬럼은 움직이면 안 되므로 transform을
+        // 타지 않는 layout 좌표와 실제 DOM에 적용된 인셋으로 목표 위치를 구한다.
+        const rightInset = Number.parseFloat(area.style.paddingRight) || 0;
+        const layoutProgress = Math.max(0, Math.min(1, rightInset / (COLUMN_WIDTH + COLUMN_GAP)));
+        columnLeft = targetColumnLeft(pageLayoutLeft + pageRect.width, layoutProgress);
+      }
     }
   };
 
@@ -212,6 +235,8 @@
          빈 거터는 클릭을 본문에 넘긴다 — 막대·칩만 받는다. -->
     {#if margin.selectedRoundId !== null}
       <div
+        style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
+        style:animation={railAnimation}
         style:left={`${bodyLeft - railGutter}px`}
         style:width={`${railGutter}px`}
         class={css({ position: 'absolute', top: '0', bottom: '0', '& > button': { pointerEvents: 'auto' } })}

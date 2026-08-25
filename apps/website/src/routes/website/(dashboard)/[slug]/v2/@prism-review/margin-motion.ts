@@ -28,6 +28,8 @@ export const marginMotionTarget = (mode: MarginMode, idle: boolean, reserved: bo
 
 export const marginMotionDuration = (reduceMotion: boolean): number => (reduceMotion ? 0 : PRISM_VISIBILITY_MOTION.duration);
 
+export const contentMotionOffset = (target: 0 | 1, progress: number, shift: number): number => (target - clampProgress(progress)) * shift;
+
 export const targetColumnLeft = (pageRight: number, progress: number): number => {
   const remaining = 1 - clampProgress(progress);
   return pageRight + COLUMN_GAP + ((GUTTER - (COLUMN_WIDTH + COLUMN_GAP)) * remaining) / 2;

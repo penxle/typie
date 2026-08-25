@@ -9,10 +9,17 @@
   import { cache } from '$lib/graphql';
   import { takeMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
-  import { prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
+  import { PRISM_VISIBILITY_MOTION, prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
   import { setupMarginContext } from './context.svelte.ts';
-  import { marginInsets, marginMotionDuration, marginMotionTarget, nextMarginReserved, resolvePresentedRoundId } from './margin-motion.ts';
+  import {
+    contentMotionOffset,
+    marginInsets,
+    marginMotionDuration,
+    marginMotionTarget,
+    nextMarginReserved,
+    resolvePresentedRoundId,
+  } from './margin-motion.ts';
   import { describeThread, resolveMode } from './margin-view.ts';
   import PrismReviewHighlightLayer from './PrismReviewHighlightLayer.svelte';
   import type { Selection } from '@typie/editor-ffi/browser';
@@ -36,6 +43,7 @@
         {
           left: number;
           right: number;
+          contentMotion?: { fromX: number; duration: number; easing: string };
         },
       ]
     >;
@@ -146,8 +154,9 @@
     );
   });
 
+  const reduceMotion = reducedMotion();
   const presentation = new Tween(0, {
-    duration: marginMotionDuration(reducedMotion()),
+    duration: marginMotionDuration(reduceMotion),
     easing: prismVisibilityEasing,
   });
   let presentationPrepared = $state(false);
@@ -155,8 +164,25 @@
   // 완전히 닫힌 컬럼만 첫 카드 배치가 끝났다는 신호를 받은 뒤 열림을 시작한다.
   const presentationAdmitted = $derived(presentationPrepared || presentation.current > 0);
   const presentationTarget = $derived(marginMotionTarget(mode, idle, reserved, presentationAdmitted));
+  const openInsets = marginInsets(1);
+  const contentShift = (openInsets.right - openInsets.left) / 2;
+  let contentMotion = $state<{ fromX: number; duration: number; easing: string }>();
+  // 목표가 바뀌는 순간의 진행률만 잡는다. Tween 매 프레임을 따라가면 CSS animation이 계속 다시 시작된다.
   $effect(() => {
-    presentation.target = presentationTarget;
+    const target = presentationTarget;
+    const progress = untrack(() => presentation.current);
+    contentMotion =
+      reduceMotion || progress === target
+        ? undefined
+        : {
+            fromX: contentMotionOffset(target, progress, contentShift),
+            duration: PRISM_VISIBILITY_MOTION.duration,
+            easing: PRISM_VISIBILITY_MOTION.easing,
+          };
+    presentation.target = target;
+  });
+  $effect(() => {
+    if (presentation.current === presentationTarget) contentMotion = undefined;
   });
 
   $effect(() => {
@@ -775,7 +801,7 @@
     react: (threadId, value) => guard(() => reactMutation({ input: { threadId, value } }), '처리하지 못했어요'),
   });
 
-  const insets = $derived(marginInsets(presentation.current));
+  const insets = $derived({ ...marginInsets(presentationTarget), contentMotion });
 
   onDestroy(() => {
     clearTimeout(lostRetry);

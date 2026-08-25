@@ -1336,6 +1336,7 @@
                             active={focused}
                             contentInsetLeft={insets.left}
                             contentInsetRight={insets.right}
+                            contentMotion={insets.contentMotion}
                             document$key={document}
                             onReady={handleEditorReady}
                           >
@@ -1445,7 +1446,7 @@
                               </div>
                             {/snippet}
                             <CommentPopover />
-                            <PrismMarginLayer insetRight={insets.right} />
+                            <PrismMarginLayer contentMotion={insets.contentMotion} insetRight={insets.right} />
                           </EditorComponent>
                         </svelte:boundary>
                       {/key}
