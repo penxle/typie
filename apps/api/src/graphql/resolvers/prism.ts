@@ -27,6 +27,7 @@ import {
   first,
   firstOrThrow,
   Folders,
+  Notes,
   PrismReviewRounds,
   PrismRuns,
   PrismSessionEvents,
@@ -53,7 +54,7 @@ import { materialize } from '#/utils/prism-transcript.ts';
 import { cancelActiveRun, cancelSessionWorkflows, closeRun } from '#/utils/prism-workflows.ts';
 import { entityRefFilter } from '#/utils/prism-workspace.ts';
 import { builder } from '../builder.ts';
-import { Entity, PrismSession, PrismWorkflow, User } from '../objects.ts';
+import { Entity, Note, PrismSession, PrismWorkflow, User } from '../objects.ts';
 import type {
   ProjectedDeltaFrame,
   ProjectedStreamFrame,
@@ -467,6 +468,20 @@ builder.queryFields((t) => ({
       );
 
       return entities;
+    },
+  }),
+
+  prismNotes: t.withAuth({ session: true }).field({
+    type: [Note],
+    args: { ids: t.arg.idList() },
+    resolve: async (_, args, ctx) => {
+      const ids = [...new Set(args.ids)];
+      if (ids.length === 0) return [];
+
+      return await db
+        .select()
+        .from(Notes)
+        .where(and(inArray(Notes.id, ids), eq(Notes.userId, ctx.session.userId)));
     },
   }),
 }));

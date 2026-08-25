@@ -1445,6 +1445,7 @@ type Query {
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
   prismEntities(ids: [ID!]!): [Entity!]!
+  prismNotes(ids: [ID!]!): [Note!]!
   prismReviewRound(roundId: ID!): PrismReviewRound!
   prismSession(sessionId: ID!): PrismSession!
   randomName: String!

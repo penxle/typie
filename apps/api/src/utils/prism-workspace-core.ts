@@ -29,40 +29,55 @@ export const ReadDocumentInput = z.object({
 export const ReadNoteInput = z.object({ noteId: z.string() });
 export const ReadSharingInput = z.object({ ids: z.array(z.string()).min(1).max(20) });
 export const ReadCommentsInput = z.object({ documentId: z.string(), resolved: z.boolean().default(false) });
-export const CreateFolderInput = z.object({ name: z.string().min(1).max(100), parentFolderId: z.string().optional() });
-export const DeleteEntitiesInput = z.object({ ids: z.array(z.string()).min(1).max(50) });
-export const CreateDocumentInput = z.object({ folderId: z.string().optional() });
-export const RenameFolderInput = z.object({ folderId: z.string(), name: z.string().min(1).max(100) });
-export const MoveEntitiesInput = z.object({ ids: z.array(z.string()).min(1).max(50), folderId: z.string().optional() });
-export const DuplicateDocumentInput = z.object({ documentId: z.string() });
-export const UpdateIconInput = z.object({ id: z.string(), icon: z.string(), iconColor: z.string() });
-export const RecoverEntityInput = z.object({ id: z.string() });
-export const CreateNoteInput = z.object({ content: z.string().min(1), color: z.string().optional() });
-export const UpdateNoteInput = z.object({
-  noteId: z.string(),
-  content: z.string().min(1).optional(),
-  color: z.string().optional(),
-  status: z.enum(NoteStatus).optional(),
+export const BATCH_MAX = 50;
+const batch = <T extends z.ZodType>(item: T) => z.array(item).min(1).max(BATCH_MAX);
+
+export const CreateFoldersInput = z.object({
+  items: batch(z.object({ name: z.string().min(1).max(100), parentFolderId: z.string().optional() })),
 });
-export const NoteLinkInput = z.object({ noteId: z.string(), id: z.string() });
-export const SetGoalInput = z.object({
-  targetCharacterCount: z.number().int().positive(),
-  id: z.string().optional(),
-  dueAt: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+export const DeleteEntitiesInput = z.object({ ids: batch(z.string()) });
+export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional() })) });
+export const RenameFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
+export const MoveEntitiesInput = z.object({ ids: batch(z.string()), folderId: z.string().optional() });
+export const DuplicateDocumentsInput = z.object({ documentIds: batch(z.string()) });
+export const UpdateIconsInput = z.object({
+  items: batch(z.object({ id: z.string(), icon: z.string().optional(), iconColor: z.string().optional() })),
 });
-export const DeleteNoteInput = z.object({ noteId: z.string() });
-export const DeleteGoalInput = z.object({ id: z.string().optional() });
+export const RecoverEntitiesInput = z.object({ ids: batch(z.string()) });
+export const CreateNotesInput = z.object({ items: batch(z.object({ content: z.string().min(1), color: z.string().optional() })) });
+export const UpdateNotesInput = z.object({
+  items: batch(
+    z.object({
+      noteId: z.string(),
+      content: z.string().min(1).optional(),
+      color: z.string().optional(),
+      status: z.enum(NoteStatus).optional(),
+    }),
+  ),
+});
+export const NoteLinksInput = z.object({ items: batch(z.object({ noteId: z.string(), id: z.string() })) });
+export const SetGoalsInput = z.object({
+  items: batch(
+    z.object({
+      targetCharacterCount: z.number().int().positive(),
+      id: z.string().optional(),
+      dueAt: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+    }),
+  ),
+});
+export const DeleteNotesInput = z.object({ noteIds: batch(z.string()) });
+export const DeleteGoalsInput = z.object({ items: batch(z.object({ id: z.string().optional() })) });
 export const UpdateSharingInput = z.object({
   ids: z.array(z.string()).min(1).max(20),
   visibility: z.enum(['PUBLIC', 'UNLISTED', 'PRIVATE']),
   recursive: z.boolean().optional(),
 });
 
-export const validIcon = (icon: string, iconColor: string): boolean =>
-  ENTITY_ICON_NAMES.includes(icon) && ENTITY_ICON_COLORS.includes(iconColor);
+export const validIcon = (icon?: string, iconColor?: string): boolean =>
+  (icon === undefined || ENTITY_ICON_NAMES.includes(icon)) && (iconColor === undefined || ENTITY_ICON_COLORS.includes(iconColor));
 
 export type TextWindow = { content: string; range: { offset: number; end: number; total: number } };
 
