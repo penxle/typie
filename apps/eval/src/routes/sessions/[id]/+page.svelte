@@ -537,7 +537,7 @@
     </span>
     <span class={css({ flex: 'none', fontSize: '12px', color: 'text.faint' })}>/</span>
     <span class={css({ flex: 'none', fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>
-      AI 리뷰 · {data.review.roundNumber}회차
+      리뷰 · {data.review.roundNumber}회차
     </span>
 
     <span class={css(badgeRecipe.raw({ status: data.review.status }))}>

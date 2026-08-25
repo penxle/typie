@@ -2,7 +2,7 @@
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
-  import PrismIcon from '~icons/typie/prism';
+  import ReviewLensIcon from '~icons/typie/review-lens';
   import { tryMarginContext } from './context.svelte';
   import PrismRoundsModal from './PrismRoundsModal.svelte';
 
@@ -32,7 +32,7 @@
     type="button"
     use:tooltip={{ message: '리뷰' }}
   >
-    <Icon icon={PrismIcon} size={16} />
+    <Icon icon={ReviewLensIcon} size={16} />
   </button>
   <PrismRoundsModal bind:open />
 {/if}
