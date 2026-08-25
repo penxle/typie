@@ -1199,7 +1199,7 @@ enum PrismReviewRoundState {
 }
 
 type PrismReviewStrength {
-  anchor: PrismReviewAnchor!
+  anchors: [PrismReviewAnchor!]!
   body: String
   quote: String!
 }

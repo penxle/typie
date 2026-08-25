@@ -36,7 +36,7 @@ export type ReviewResult = {
   conclusion: {
     understanding: string | null;
     progress?: string | null;
-    strengths?: (Anchor & { body: string | null })[];
+    strengths?: { body: string | null; anchors: Anchor[] }[];
     patterns: { theme: string | null; body: string; issues: string[] }[];
     priorities: { body: string; issues: string[] }[];
   };

@@ -52,7 +52,7 @@ export type IssueBrief = { index: number; trait: string };
 export type OutcomeDetail = {
   understanding: string | null;
   progress: string | null;
-  strengths: { quote: string; body: string | null; anchor: Anchor }[];
+  strengths: { quote: string; body: string | null; anchors: Anchor[] }[];
   verdicts: { trait: string; note: string | null }[];
   elevations: { trait: string; quote: string | null; body: string }[];
   patterns: { theme: string | null; body: string; issues: IssueBrief[] }[];
@@ -72,11 +72,11 @@ const briefsOfRefs = (refs: readonly (number | string)[], issues: ReviewIssue[])
   });
 };
 
-// 강점은 인용과 설명뿐이라 인용을 원문에서 못 찾으면 항목이 빈다 — 앵커가 들고 있는 머리·꼬리로 세운다.
-const strengthQuote = (content: string, strength: Anchor): string => {
-  const quote = anchorQuote(content, [strength]);
+// 강점은 인용과 설명뿐이라 인용을 원문에서 못 찾으면 항목이 빈다 — 앵커가 들고 있는 머리·꼬리로 세운다(앵커마다, ⋯로 잇는다).
+const strengthQuote = (content: string, anchors: Anchor[]): string => {
+  const quote = anchorQuote(content, anchors);
   if (quote.length > 0) return quote;
-  return strength.head === strength.tail ? strength.head : `${strength.head} ⋯ ${strength.tail}`;
+  return anchors.map((anchor) => (anchor.head === anchor.tail ? anchor.head : `${anchor.head} ⋯ ${anchor.tail}`)).join(' ⋯ ');
 };
 
 export const detailOutcome = (outcome: ReviewOutcome | null, content: string): OutcomeDetail | null => {
@@ -88,9 +88,9 @@ export const detailOutcome = (outcome: ReviewOutcome | null, content: string): O
     understanding: conclusion.understanding,
     progress: conclusion.progress ?? null,
     strengths: (conclusion.strengths ?? []).map((strength) => ({
-      quote: strengthQuote(content, strength),
+      quote: strengthQuote(content, strength.anchors),
       body: strength.body,
-      anchor: { start: strength.start, end: strength.end, head: strength.head, tail: strength.tail },
+      anchors: strength.anchors,
     })),
     verdicts: (outcome.verdicts ?? []).map((verdict) => ({
       trait: verdict.trait,

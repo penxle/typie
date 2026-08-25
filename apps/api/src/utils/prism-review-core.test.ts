@@ -23,7 +23,7 @@ test('summarizeOutcome: feedback은 집계, issues는 건수만, rejected는 문
       understanding: '리드',
       patterns: [{ theme: null, body: 'p', issues: [] }],
       priorities: [],
-      strengths: [{ start: 0, end: 1, head: 'h', tail: 't', body: null }],
+      strengths: [{ anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }], body: null }],
     },
     verdicts: [{ trait: 't', point: 3, note: null }],
   });
@@ -100,7 +100,7 @@ const feedback = {
   conclusion: {
     understanding: '리드',
     progress: '나아진 점',
-    strengths: [{ start: 0, end: 5, head: '가나다', tail: '다라마', body: '강점 설명' }],
+    strengths: [{ anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }], body: '강점 설명' }],
     patterns: [{ theme: '주제', body: '습관', issues: ['stylistic-1', 'judgment-1'] }],
     priorities: [{ body: '순서', issues: ['judgment-1'] }],
   },
@@ -116,7 +116,7 @@ test('detailOutcome: 총평 전문을 인용·해소된 참조로 사영한다',
   assert.equal(detail?.understanding, '리드');
   assert.equal(detail?.progress, '나아진 점');
   assert.deepEqual(detail?.strengths, [
-    { quote: '가나다라마', body: '강점 설명', anchor: { start: 0, end: 5, head: '가나다', tail: '다라마' } },
+    { quote: '가나다라마', body: '강점 설명', anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }] },
   ]);
   assert.deepEqual(detail?.verdicts, [
     { trait: '인물', note: '메모' },
@@ -139,7 +139,7 @@ test('detailOutcome: 총평 전문을 인용·해소된 참조로 사영한다',
 test('detailOutcome: 강점 인용은 못 찾으면 머리·꼬리로 서고, 격상 인용은 없으면 빠진다', () => {
   const detail = detailOutcome({ ...feedback, elevations: [{ trait: '문체', body: '격상', anchors: [] }] }, '');
   assert.deepEqual(detail?.strengths, [
-    { quote: '가나다 ⋯ 다라마', body: '강점 설명', anchor: { start: 0, end: 5, head: '가나다', tail: '다라마' } },
+    { quote: '가나다 ⋯ 다라마', body: '강점 설명', anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }] },
   ]);
   assert.deepEqual(detail?.elevations, [{ trait: '문체', quote: null, body: '격상' }]);
 });
