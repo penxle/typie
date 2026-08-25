@@ -62,6 +62,8 @@
   const query = $derived(hydrateQuery(() => data.query));
 
   const app = setupAppContext(query.data.me.id);
+  let prismPanel = $state<PrismPanel>();
+  const startPrismNewChat = (draft: string) => void prismPanel?.startNewChat(draft);
 
   const legacyTrial = $derived(
     query.data.me.subscription
@@ -597,12 +599,12 @@
         {/if}
       </div>
 
-      <PrismPanel user$key={query.data.me} />
+      <PrismPanel bind:this={prismPanel} user$key={query.data.me} />
     </div>
   </div>
 {/if}
 
-<CommandPalette user$key={query.data.me} />
+<CommandPalette onPrismNewChat={startPrismNewChat} user$key={query.data.me} />
 <Notes />
 <PreferenceModal user$key={query.data.me} />
 <SiteSettingsModal site$key={currentSite} user$key={query.data.me} />

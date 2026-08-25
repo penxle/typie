@@ -338,6 +338,15 @@
   let listOpen = $state(false);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
 
+  export const startNewChat = async (nextDraft?: string) => {
+    selected.current = null;
+    listOpen = false;
+    if (nextDraft !== undefined) draft = nextDraft;
+    app.preference.current.prismPanelOpen = true;
+    await tick();
+    composer?.focus();
+  };
+
   let seenTitle: string | null = null;
 
   $effect.pre(() => {
@@ -973,11 +982,7 @@
       <button
         class={css(headerButton)}
         aria-label="새 대화"
-        onclick={() => {
-          selected.current = null;
-          listOpen = false;
-          composer?.focus();
-        }}
+        onclick={() => void startNewChat()}
         type="button"
         use:tooltip={{ message: '새 대화' }}
       >
