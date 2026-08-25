@@ -2,11 +2,11 @@
   import { css, cva, cx } from '@typie/styled-system/css';
   import { getMarginContext } from './context.svelte.ts';
   import { GUTTER } from './margin-view.ts';
-  import { layoutRailHitTargets, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railLeft } from './rail-layout.ts';
+  import { layoutRailHitTargets, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH } from './rail-layout.ts';
   import type { RailSpan } from './rail-layout.ts';
 
-  // 거터는 실제로 비어 있는 폭, gap은 본문과의 이격이다 — 둘 다 좁아진 만큼만 받는다.
-  // 공간이 모자랄 때 양보하는 것은 이격이지 막대가 아니다
+  // 거터는 rail이 사용할 수 있는 전체 폭이다. gap은 lane과 번호 칩의 상대 위치를 정할 때 오른쪽에 미리 남겨 두는 공간이다.
+  // layoutRails는 그 상대 위치를 유지한 채, 세로로 겹치는 묶음 전체를 본문에서 최소 간격만큼 떨어진 자리로 옮긴다.
   type Props = { spans: RailSpan[]; gutter?: number; gap?: number };
   let { spans, gutter = GUTTER, gap = RAIL_TEXT_GAP }: Props = $props();
 
@@ -95,7 +95,6 @@
 <!-- 숫자와 막대의 최소 사각형이 한 버튼이다. 시각 요소는 모든 투명 클릭 면보다 위에 서서 직접 클릭을 먼저 받는다. -->
 {#each rails as rail (rail.id)}
   {@const active = margin.activeId === rail.itemId}
-  {@const barLeft = railLeft(rail.lane, gutter, gap)}
   {@const visualPriority = rails.length + rail.hitPriority + 1}
   <button
     style:top={`${rail.hitBox.top}px`}
@@ -127,7 +126,7 @@
     <span
       style:top={`${rail.top - rail.hitBox.top}px`}
       style:height={`${rail.height}px`}
-      style:left={`${barLeft - rail.hitBox.left}px`}
+      style:left={`${rail.left - rail.hitBox.left}px`}
       style:width={`${RAIL_WIDTH}px`}
       style:z-index={visualPriority}
       class={css(barRecipe.raw({ tone: rail.tone, active }))}
