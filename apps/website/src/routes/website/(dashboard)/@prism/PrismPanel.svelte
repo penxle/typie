@@ -513,23 +513,25 @@
   const PANEL_HIDDEN_SCALE = 0.96;
   const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
   const panelOpen = $derived(app.state.prismAccess && app.preference.current.prismPanelOpen);
+  const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
   let panelEl = $state<HTMLElement>();
   let prevPanelOpen: boolean | null = null;
 
   $effect(() => {
     const open = panelOpen;
+    const interactive = panelInteractive;
     const transition = prevPanelOpen === false && open;
     prevPanelOpen = open;
 
-    if (!open) {
+    if (!interactive) {
       untrack(() => {
         const focused = document.activeElement;
         if (focused instanceof HTMLElement && panelEl?.contains(focused)) focused.blur();
       });
     }
 
-    if (transition) composer?.focus();
+    if (transition && interactive) composer?.focus();
   });
 
   const markSeen = (sessionId: string) => {
@@ -765,23 +767,25 @@
 </script>
 
 {#if app.state.prismAccess}
-  <div
-    style:width={panelOpen ? `${width}px` : '0px'}
-    style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
-    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-    class={css({
-      flexShrink: '0',
-      height: 'full',
-      transitionProperty: '[width]',
-    })}
-    aria-hidden="true"
-  ></div>
+  {#if !app.preference.current.zenModeEnabled}
+    <div
+      style:width={panelOpen ? `${width}px` : '0px'}
+      style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
+      style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+      class={css({
+        flexShrink: '0',
+        height: 'full',
+        transitionProperty: '[width]',
+      })}
+      aria-hidden="true"
+    ></div>
+  {/if}
 
   <aside
     bind:this={panelEl}
     style:width={`${width}px`}
     style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
-    style:pointer-events={panelOpen ? 'auto' : 'none'}
+    style:pointer-events={panelInteractive ? 'auto' : 'none'}
     style:transform={panelOpen ? 'scale(1)' : `scale(${PANEL_HIDDEN_SCALE})`}
     style:transition-duration={`${panelMotionDuration}ms`}
     style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
@@ -800,7 +804,7 @@
       transitionProperty: '[clip-path, transform]',
       zIndex: 'panel',
     })}
-    inert={!panelOpen}
+    inert={!panelInteractive}
   >
     <div
       class={css({
