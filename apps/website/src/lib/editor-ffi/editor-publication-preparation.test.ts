@@ -272,7 +272,7 @@ describe('editor publication preparation', () => {
       appliedSnapshot: candidate,
       appliedRevision: candidate.revision,
       publishedRevision: candidate.revision,
-      published: undefined,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
       viewport: { height: 400 },
       scaleFactor: 1,
       displayZoom: 1,
@@ -295,5 +295,76 @@ describe('editor publication preparation', () => {
     const preparation = resolveEditorSurfacePreparation(editor, scroll);
 
     expect(preparation?.requiredPages).toEqual(new Set());
+  });
+
+  it('prepares the nearest page for the first frame when no page reaches the acquire range', () => {
+    const candidate = snapshot({
+      revision: 1,
+      pageSizes: [{ width: 600, height: 1000 }],
+    });
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      appliedRevision: candidate.revision,
+      publishedRevision: undefined,
+      published: undefined,
+      viewport: { height: 400 },
+      scaleFactor: 1,
+      displayZoom: 1,
+      activeSurfacePages: new Set<number>(),
+      scrollRootEl: null,
+      extensionAreaEl: {
+        getBoundingClientRect: () => new DOMRect(0, 1000, 600, 1000),
+      },
+      scrollViewport: {
+        getRect: () => new DOMRect(0, 0, 600, 400),
+        getScrollTop: () => 0,
+        getScrollHeight: () => 2000,
+        scrollTo: vi.fn(),
+      },
+      requestPublication: vi.fn(),
+      safeDisplayZoom: () => 1,
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+
+    const preparation = resolveEditorSurfacePreparation(editor, scroll);
+
+    expect(preparation?.requiredPages).toEqual(new Set([0]));
+  });
+
+  it('keeps preparing the nearest page while only pageless bundles have been published', () => {
+    const candidate = snapshot({
+      revision: 2,
+      pageSizes: [{ width: 600, height: 1000 }],
+    });
+    const pageless = snapshot({ revision: 1 });
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      appliedRevision: candidate.revision,
+      publishedRevision: pageless.revision,
+      published: { snapshot: pageless, frames: new Map() },
+      viewport: { height: 400 },
+      scaleFactor: 1,
+      displayZoom: 1,
+      activeSurfacePages: new Set<number>(),
+      scrollRootEl: null,
+      extensionAreaEl: {
+        getBoundingClientRect: () => new DOMRect(0, 1000, 600, 1000),
+      },
+      scrollViewport: {
+        getRect: () => new DOMRect(0, 0, 600, 400),
+        getScrollTop: () => 0,
+        getScrollHeight: () => 2000,
+        scrollTo: vi.fn(),
+      },
+      requestPublication: vi.fn(),
+      safeDisplayZoom: () => 1,
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+
+    const preparation = resolveEditorSurfacePreparation(editor, scroll);
+
+    expect(preparation?.requiredPages).toEqual(new Set([0]));
   });
 });

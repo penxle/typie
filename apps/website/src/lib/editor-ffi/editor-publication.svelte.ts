@@ -1,7 +1,7 @@
 import { flushSync, untrack } from 'svelte';
 import { PAGE_GAP } from './constants';
 import { applyMinimumRevealTargetHeight, pageRectsToRevealTargetSpan, resolvePageSpans } from './geometry';
-import { requiredSurfacePages } from './required-surface-pages';
+import { nearestSurfacePage, requiredSurfacePages } from './required-surface-pages';
 import { isInstantReveal } from './scroll.svelte';
 import { zoomDiffers } from './zoom';
 import type { EditorContext, EditorSnapshot, PublishedBundle } from './editor.svelte';
@@ -176,6 +176,13 @@ export function resolveEditorSurfacePreparation(
     activePages: editor.activeSurfacePages,
     preparationViewports,
   });
+  // 요구 집합이 비면 프레임 없는 발행이 수용되는데, 그 뒤로는 requireFrame 게이트를 깨울 트리거가 없다 —
+  // 첫 페이지 프레임이 발행되기 전까지는 최근접 페이지 하나를 항상 준비한다.
+  const published = editor.published;
+  if (requiredPages.size === 0 && (!published || published.snapshot.pageSizes.length === 0)) {
+    const nearest = nearestSurfacePage(pageSpans, currentViewport);
+    if (nearest !== null) requiredPages.add(nearest);
+  }
   if (instantReveal) {
     const exactViewport =
       scrollIntent?.type === 'scroll_to' ? { top: scrollIntent.y, bottom: scrollIntent.y + clientHeight } : currentViewport;

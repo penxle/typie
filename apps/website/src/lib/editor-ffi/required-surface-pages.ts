@@ -38,6 +38,22 @@ export const requiredSurfacePages = ({
   return required;
 };
 
+export const nearestSurfacePage = (pages: readonly SurfacePageSpan[], viewport: VerticalSpan | null): number | null => {
+  if (viewport === null || !hasFinitePositiveHeight(viewport)) return null;
+
+  let nearest: number | null = null;
+  let nearestDistance = Infinity;
+  for (const page of pages) {
+    if (!hasFinitePositiveHeight(page)) continue;
+    const distance = Math.max(page.top - viewport.bottom, viewport.top - page.bottom, 0);
+    if (distance < nearestDistance) {
+      nearest = page.page;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+};
+
 const intersecting = (pages: readonly SurfacePageSpan[], viewport: VerticalSpan): Set<number> => {
   const result = new Set<number>();
   addIntersecting(result, pages, viewport);

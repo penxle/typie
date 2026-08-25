@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requiredSurfacePages } from './required-surface-pages';
+import { nearestSurfacePage, requiredSurfacePages } from './required-surface-pages';
 import { resolveGuardedScrollTop, resolveInstantRevealPreparationViewports, resolveTypewriterScrollTop } from './scroll';
 import type { SurfacePageSpan, VerticalSpan } from './required-surface-pages';
 
@@ -293,5 +293,34 @@ describe('requiredSurfacePages', () => {
     const result = required({ pages: pageSpans, currentViewport: { top: 0, bottom: 100 } });
     expect(result).toEqual([0, 1]);
     expect(result).not.toContain(8);
+  });
+});
+
+describe('nearestSurfacePage', () => {
+  it('picks the first page below the viewport', () => {
+    expect(nearestSurfacePage(pages(1000, 2000, 3000), { top: 0, bottom: 100 })).toBe(0);
+  });
+
+  it('picks the last page above the viewport', () => {
+    expect(nearestSurfacePage(pages(0, 100, 200, 300), { top: 3000, bottom: 3100 })).toBe(2);
+  });
+
+  it('prefers the closer side', () => {
+    expect(nearestSurfacePage(pages(0, 100, 200), { top: 250, bottom: 350 })).toBe(1);
+  });
+
+  it('skips degenerate pages', () => {
+    const pageSpans = [
+      { page: 0, top: 1000, bottom: 1000 },
+      { page: 1, top: 1000, bottom: 2000 },
+    ];
+    expect(nearestSurfacePage(pageSpans, { top: 0, bottom: 100 })).toBe(1);
+  });
+
+  it('returns null without a usable candidate', () => {
+    expect(nearestSurfacePage([], { top: 0, bottom: 100 })).toBeNull();
+    expect(nearestSurfacePage([{ page: 0, top: 500, bottom: 500 }], { top: 0, bottom: 100 })).toBeNull();
+    expect(nearestSurfacePage(pages(0, 100), null)).toBeNull();
+    expect(nearestSurfacePage(pages(0, 100), { top: 100, bottom: 100 })).toBeNull();
   });
 });

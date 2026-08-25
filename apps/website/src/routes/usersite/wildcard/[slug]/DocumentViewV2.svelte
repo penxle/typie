@@ -581,16 +581,30 @@
 
       <div class={css({ position: 'relative', isolation: 'isolate' })}>
         {#if hydrated && !editorReady}
+          <!-- 오버레이여야 한다 — 인플로우로 두면 에디터가 스켈레톤 높이만큼 밀려나 첫 페이지가
+               뷰포트 준비 범위 밖으로 벗어나고, 첫 프레임을 기다리는 ready 게이트와 교착한다. -->
           <div
-            style:max-width="640px"
-            style:padding-inline="20px"
-            class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
+            class={css({
+              position: 'absolute',
+              top: '0',
+              left: '0',
+              right: '0',
+              zIndex: 'editorOverlay',
+              minHeight: '[100dvh]',
+              backgroundColor: 'surface.default',
+            })}
           >
-            {@render documentHeader()}
-            <div bind:this={fallbackBodySurface}>
-              <DocumentViewSkeleton />
+            <div
+              style:max-width="640px"
+              style:padding-inline="20px"
+              class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
+            >
+              {@render documentHeader()}
+              <div bind:this={fallbackBodySurface}>
+                <DocumentViewSkeleton />
+              </div>
+              {@render documentFooter()}
             </div>
-            {@render documentFooter()}
           </div>
         {/if}
 

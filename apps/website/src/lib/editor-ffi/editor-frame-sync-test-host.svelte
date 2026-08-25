@@ -35,6 +35,7 @@
     useWindowScroll?: boolean;
     userId: string;
     withZoom?: boolean;
+    headerHeight?: number;
   };
 
   let {
@@ -47,6 +48,7 @@
     useWindowScroll = false,
     userId,
     withZoom = false,
+    headerHeight = 0,
   }: Props = $props();
 
   const app = setupAppContext(userId);
@@ -156,9 +158,15 @@
     editor.scrollRootEl = useWindowScroll ? null : el;
   }}
   data-editor-scroll-root
-  onscroll={() => editor.requestPublication()}
+  onscroll={() => {
+    ctx.scroll?.observeViewportScroll();
+    editor.requestPublication();
+  }}
   bind:clientWidth={viewportWidth}
 >
+  {#if headerHeight > 0}
+    <div style:height={`${headerHeight}px`} data-editor-test-header></div>
+  {/if}
   {#if withZoom}
     <EditorZoom active {editor} {isPaginated} {pageWidth} {viewportWidth}>
       {@render editorContent()}
