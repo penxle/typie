@@ -1,6 +1,6 @@
 import { flushSync, untrack } from 'svelte';
 import { PAGE_GAP } from './constants';
-import { pageRectsToRevealTargetSpan, resolvePageSpans } from './geometry';
+import { applyMinimumRevealTargetHeight, pageRectsToRevealTargetSpan, resolvePageSpans } from './geometry';
 import { requiredSurfacePages } from './required-surface-pages';
 import { isInstantReveal } from './scroll.svelte';
 import { zoomDiffers } from './zoom';
@@ -145,7 +145,11 @@ export function resolveEditorSurfacePreparation(
 
   const pendingRequest = scroll.activateForRevision(snapshot.revision);
   const targetRects = pendingRequest ? scroll.resolveTargetRects(pendingRequest.target, snapshot) : null;
-  const target = targetRects ? pageRectsToRevealTargetSpan(targetRects, pageSpans, zoom) : null;
+  const resolvedTarget = targetRects ? pageRectsToRevealTargetSpan(targetRects, pageSpans, zoom) : null;
+  const target =
+    resolvedTarget && pendingRequest?.target.type === 'tracked_item'
+      ? applyMinimumRevealTargetHeight(resolvedTarget, pendingRequest.target.minimumHeight)
+      : resolvedTarget;
   const instantReveal = isInstantReveal(pendingRequest);
   const preparationViewports =
     target && pendingRequest && instantReveal

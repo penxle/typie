@@ -940,7 +940,7 @@ export class Editor {
     if (idx === undefined) return;
     const match = this.#searchMatches[idx];
     if (!match) return;
-    this.revealTrackedItem(match.id, 'instant');
+    this.revealTrackedItem(match.id, { behavior: 'instant' });
   }
 
   #handleSearchReplaceResult(id: string, outcome: string): void {
@@ -1574,11 +1574,14 @@ export class Editor {
     this.#viewportScrollObserver?.();
   }
 
-  revealTrackedItem(id: string, behavior: EditorScrollBehavior = 'smooth'): Promise<void> | undefined {
+  revealTrackedItem(
+    id: string,
+    { behavior = 'smooth', minimumHeight }: { behavior?: EditorScrollBehavior; minimumHeight?: number } = {},
+  ): Promise<void> | undefined {
     let presentation: Promise<void> | undefined;
     void this.update((request) => {
       request.enqueue({ type: 'view', op: { type: 'expand_folds_for_tracked_range', id } });
-      presentation = this.scrollIntoView({ target: { type: 'tracked_item', id }, policy: 'reveal', behavior });
+      presentation = this.scrollIntoView({ target: { type: 'tracked_item', id, minimumHeight }, policy: 'reveal', behavior });
     }).catch((err: unknown) => this.fail(err));
     return presentation;
   }

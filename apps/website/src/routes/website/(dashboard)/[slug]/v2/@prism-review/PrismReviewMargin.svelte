@@ -3,7 +3,7 @@
   import { reanchorAll } from '@typie/prism';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { onDestroy, tick, untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { Tween } from 'svelte/motion';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { cache } from '$lib/graphql';
@@ -27,7 +27,7 @@
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
   import type { DetailRound } from '../../../@prism/review/round-view.ts';
-  import type { MarginActivationSource, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
+  import type { MarginActivation, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
   import type { MarginMode, RoundOption } from './margin-view.ts';
 
   // 인셋은 모드에 따라 정해지므로 자식에게 인자로 넘긴다 — DocumentEditor가 그대로 EditorComponent에 준다
@@ -340,7 +340,8 @@
         ]),
   );
 
-  let activeId = $state<string | null>(null);
+  let activation = $state<MarginActivation>({ id: null, rangeId: null, sequence: 0 });
+  const activeId = $derived(activation.id);
 
   let raw = $state.raw<MarginPlacement[]>([]);
   // 지금 선 항목이 어느 회차의 것인지 — 회차를 갈아 끼운 직후엔 고른 회차와 어긋난다
@@ -559,35 +560,30 @@
     });
   });
 
-  const activate = (id: string | null, from: MarginActivationSource = 'manuscript') => {
-    activeId = id;
-    const current = editor;
-    const target = items.find((item) => item.id === id);
-    if (!current || target === undefined || !target.anchored) return;
-    // 죽은 id로는 아무 데도 가지 못한다 — 코어가 아직 들고 있는 자리로만 데려간다
-    const live = new Set(current.appliedSnapshot.trackedRanges.map((range) => range.id));
-    const seat = target.rangeIds.find((rangeId) => live.has(rangeId));
-    if (seat === undefined) return;
-
-    // 원고에서 출발한 활성은 반대편(카드)만 데려간다 — 원고는 이미 눈앞에 있고, 배치에 밀려 화면 밖으로
-    // 나간 카드가 데려올 대상이다. 컬럼이 서지 않는 모드·강점은 카드가 없어 원고 쪽으로 떨어진다.
-    if (from === 'manuscript' && mode === 'column' && target.kind === 'issue') {
-      const itemId = target.id;
-      void tick().then(() => {
-        const card = document.querySelector(`[data-prism-card="${itemId}"]`);
-        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        else void current.revealTrackedItem(seat);
-      });
+  const activate = (id: string | null) => {
+    const sequence = activation.sequence + 1;
+    if (id === null) {
+      activation = { id: null, rangeId: null, sequence };
       return;
     }
+    const current = editor;
+    const target = items.find((item) => item.id === id);
+    // 죽은 id로는 아무 데도 가지 못한다 — 코어가 아직 들고 있는 자리로만 데려간다
+    const live = new Set(current?.appliedSnapshot.trackedRanges.map((range) => range.id));
+    const rangeId = target?.anchored ? (target.rangeIds.find((candidate) => live.has(candidate)) ?? null) : null;
+    activation = { id, rangeId, sequence };
+    if (!current || target === undefined || rangeId === null) return;
 
-    void current.revealTrackedItem(seat);
+    // 컬럼 지적은 최종 높이와 배치 시점을 소유하는 PrismCardColumn이 reveal한다.
+    if (mode === 'column' && target.kind === 'issue') return;
+
+    void current.revealTrackedItem(rangeId);
   };
 
   $effect(() => {
     void selectedRoundId;
     untrack(() => {
-      activeId = null;
+      activation = { id: null, rangeId: null, sequence: activation.sequence + 1 };
     });
   });
 
@@ -619,7 +615,7 @@
     if (builtRoundId !== target.roundId || items.every((item) => item.id !== target.itemId)) return;
 
     untrack(() => {
-      activate(target.itemId, 'jump');
+      activate(target.itemId);
       pendingJump = null;
     });
   });
@@ -767,6 +763,9 @@
     },
     get segmentCards() {
       return segmentCards;
+    },
+    get activation() {
+      return activation;
     },
     get activeId() {
       return activeId;

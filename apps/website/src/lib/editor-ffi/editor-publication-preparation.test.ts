@@ -124,6 +124,55 @@ describe('editor publication preparation', () => {
     expect(preparation?.requiredPages).toEqual(new Set([1, 2]));
   });
 
+  it('reveals the minimum target height together with a tracked item', () => {
+    const candidate = snapshot({
+      pageSizes: [{ width: 600, height: 1000 }],
+      trackedRanges: [
+        {
+          id: 'target',
+          group: 'comment',
+          anchor: { node: 'paragraph', offset: 0, affinity: 'downstream' },
+          head: { node: 'paragraph', offset: 0, affinity: 'downstream' },
+          metadata: '',
+          rects: [{ page_idx: 0, rect: { x: 0, y: 100, width: 1, height: 20 } }],
+          text: '',
+        },
+      ],
+    });
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      appliedRevision: candidate.revision,
+      publishedRevision: candidate.revision,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
+      viewport: { height: 400 },
+      scaleFactor: 1,
+      displayZoom: 1,
+      activeSurfacePages: new Set<number>(),
+      extensionAreaEl: {
+        getBoundingClientRect: () => new DOMRect(0, 0, 600, 1000),
+      },
+      scrollViewport: {
+        getRect: () => new DOMRect(0, 0, 600, 400),
+        getScrollTop: () => 0,
+        getScrollHeight: () => 1000,
+        scrollTo: vi.fn(),
+      },
+      requestPublication: vi.fn(),
+      safeDisplayZoom: () => 1,
+      trackedRangeForSnapshot: (id: string, current: EditorSnapshot) => current.trackedRanges.find((range) => range.id === id),
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+    scroll.scrollIntoView({
+      target: { type: 'tracked_item', id: 'target', minimumHeight: 500 },
+      policy: 'reveal',
+    });
+
+    const preparation = resolveEditorSurfacePreparation(editor, scroll);
+
+    expect(preparation?.scrollIntent).toEqual({ type: 'scroll_to', y: 40 });
+  });
+
   it('prepares destination surfaces when reduced motion turns a smooth reveal into an instant reveal', () => {
     const candidate = snapshot({
       pageSizes: Array.from({ length: 3 }, () => ({ width: 600, height: 1000 })),

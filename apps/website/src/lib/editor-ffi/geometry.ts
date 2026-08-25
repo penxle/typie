@@ -40,6 +40,14 @@ export function pageRectsToRevealTargetSpan(
   return targetTop === Infinity ? null : { targetTop, targetBottom };
 }
 
+export function applyMinimumRevealTargetHeight(target: RevealTargetSpan, minimumHeight: number | undefined): RevealTargetSpan {
+  if (minimumHeight === undefined || !Number.isFinite(minimumHeight) || minimumHeight <= 0) return target;
+  return {
+    targetTop: target.targetTop,
+    targetBottom: Math.max(target.targetBottom, target.targetTop + minimumHeight),
+  };
+}
+
 export function isSelectionCollapsed(selection: Selection | undefined): boolean {
   return (
     selection === undefined ||

@@ -10,10 +10,7 @@ export type MarginThread = Round['threads'][number];
 export type MarginComment = MarginThread['comments'][number];
 
 export type MarginStrength = { index: number; quote: string; body: string | null };
-
-// 활성 전환의 출발지 — 원고와 카드가 같은 스크롤 통에 있어 둘 다 옮기면 서로를 밀어낸다.
-// 반대편만 데려가려면 어디서 눌렀는지를 알아야 한다.
-export type MarginActivationSource = 'manuscript' | 'card' | 'jump';
+export type MarginActivation = { id: string | null; rangeId: string | null; sequence: number };
 
 // 목록의 갈래 — 닫는다고 옮겨 가지 않는다. 'settled'로 옮겨 오는 유일한 경로는 재리뷰 사영이다.
 export type MarginSegment = 'open' | 'settled' | 'lost';
@@ -41,6 +38,7 @@ export type MarginController = {
   readonly segment: MarginSegment;
   readonly segmentCounts: Record<MarginSegment, number>;
   readonly segmentCards: MarginItem[];
+  readonly activation: MarginActivation;
   readonly activeId: string | null;
   readonly mode: MarginMode;
   readonly ready: boolean;
@@ -49,7 +47,7 @@ export type MarginController = {
   readonly presentationInteractive: boolean;
   readonly myId: string;
   select: (roundId: string | null) => void;
-  activate: (id: string | null, from?: MarginActivationSource) => void;
+  activate: (id: string | null) => void;
   markPresentationPrepared: (roundId: string) => void;
   setSegment: (next: MarginSegment) => void;
   reply: (threadId: string, body: string) => Promise<void>;
