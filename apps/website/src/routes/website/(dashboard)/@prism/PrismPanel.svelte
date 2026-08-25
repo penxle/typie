@@ -501,7 +501,8 @@
     _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
     _active: { transform: 'scale(0.95)' },
   });
-  const PANEL_HIDDEN_SCRIM_OPACITY = 0.2;
+  const PANEL_HIDDEN_SCALE = 0.96;
+  const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
   const panelOpen = $derived(app.state.prismAccess && app.preference.current.prismPanelOpen);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
   let panelEl = $state<HTMLElement>();
@@ -771,9 +772,8 @@
     bind:this={panelEl}
     style:width={`${width}px`}
     style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
-    style:opacity={panelOpen ? 1 : 0}
     style:pointer-events={panelOpen ? 'auto' : 'none'}
-    style:transform={panelOpen ? 'scale(1)' : `scale(${PRISM_VISIBILITY_MOTION.hiddenScale})`}
+    style:transform={panelOpen ? 'scale(1)' : `scale(${PANEL_HIDDEN_SCALE})`}
     style:transition-duration={`${panelMotionDuration}ms`}
     style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
     class={flex({
@@ -788,7 +788,7 @@
       borderColor: 'border.subtle',
       backgroundColor: 'surface.default',
       transformOrigin: 'center',
-      transitionProperty: '[clip-path, opacity, transform]',
+      transitionProperty: '[clip-path, transform]',
       zIndex: 'panel',
     })}
     inert={!panelOpen}
@@ -1125,19 +1125,25 @@
         {/if}
       {/if}
     </div>
-    <div
-      style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
-      style:transition-duration={`${panelMotionDuration}ms`}
-      style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-      class={css({
-        position: 'absolute',
-        inset: '0',
-        zIndex: '5',
-        pointerEvents: 'none',
-        backgroundColor: 'black',
-        transitionProperty: '[opacity]',
-      })}
-      aria-hidden="true"
-    ></div>
   </aside>
+
+  <div
+    style:width={`${width}px`}
+    style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
+    style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
+    style:transition-duration={`${panelMotionDuration}ms`}
+    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+    class={css({
+      position: 'absolute',
+      top: '0',
+      right: '0',
+      bottom: '0',
+      zIndex: 'panel',
+      pointerEvents: 'none',
+      backgroundColor: 'surface.default',
+      filter: '[brightness(0.9)]',
+      transitionProperty: '[clip-path, opacity]',
+    })}
+    aria-hidden="true"
+  ></div>
 {/if}
