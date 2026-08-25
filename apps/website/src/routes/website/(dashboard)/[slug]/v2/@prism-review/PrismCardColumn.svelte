@@ -78,6 +78,9 @@
   let suppressUntil = 0;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
   let previousActive: string | null = null;
+  // relayout은 여러 경로에서 반복되므로 준비된 활성만 한 번 소비하고, mode 변화로 같은 활성을 다시 등록하지 않는다.
+  let pendingRevealSequence: number | null = null;
+  let revealedSequence = 0;
 
   const cancelPreparation = () => {
     if (preparationFrame !== undefined) cancelAnimationFrame(preparationFrame);
@@ -139,6 +142,14 @@
     tops = result.tops;
     spacer = result.spacer;
     syncContentBottomOverflow(result.spacer);
+    const activation = margin.activation;
+    const active = activation.sequence === pendingRevealSequence ? entries.find((entry) => entry.id === activation.id) : undefined;
+    const editor = ctx.editor;
+    if (editor && active !== undefined && margin.mode === 'column' && activation.rangeId !== null) {
+      revealedSequence = activation.sequence;
+      pendingRevealSequence = null;
+      void editor.revealTrackedItem(activation.rangeId, { minimumHeight: active.height });
+    }
 
     // 같은 커밋에서 전환을 켜면 top 0→N 이동 자체가 애니메이션되어 전 카드가 위에서 미끄러진다
     if (!animated && entries.length > 0) {
@@ -225,8 +236,14 @@
   $effect(() => () => cancelPreparation());
 
   $effect(() => {
-    const current = margin.activeId;
+    const currentActivation = margin.activation;
+    const current = currentActivation.id;
+    const columnMode = margin.mode === 'column';
     untrack(() => {
+      pendingRevealSequence =
+        columnMode && currentActivation.id !== null && currentActivation.rangeId !== null && currentActivation.sequence > revealedSequence
+          ? currentActivation.sequence
+          : null;
       if (previousActive === current) return;
       heightOverrides = {};
       for (const [id, willExpand] of [
@@ -436,8 +453,8 @@
           <PrismCard
             expanded={margin.activeId === item.id}
             {item}
-            onClose={() => margin.activate(null, 'card')}
-            onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
+            onClose={() => margin.activate(null)}
+            onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id)}
           />
         </div>
       {/each}
@@ -473,8 +490,8 @@
           <PrismCard
             expanded={margin.activeId === item.id}
             {item}
-            onClose={() => margin.activate(null, 'card')}
-            onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
+            onClose={() => margin.activate(null)}
+            onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id)}
           />
         </div>
       {/each}

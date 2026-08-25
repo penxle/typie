@@ -22,7 +22,10 @@ export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' |
 type ResolvedEditorScrollRevealPolicy = Exclude<EditorScrollRevealPolicy, 'pointer_cursor_guard'>;
 export type EditorScrollBehavior = 'instant' | 'smooth';
 
-export type EditorScrollIntoViewTarget = { type: 'current_selection_head' } | { type: 'tracked_item'; id: string };
+export type EditorScrollIntoViewTarget =
+  | { type: 'current_selection_head' }
+  // 같은 top anchor를 공유하는 UI가 있으면 rect union을 아래로 minimumHeight까지 늘린다.
+  | { type: 'tracked_item'; id: string; minimumHeight?: number };
 
 export type EditorScrollIntoViewOptions = {
   target: EditorScrollIntoViewTarget;
