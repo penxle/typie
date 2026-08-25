@@ -283,7 +283,7 @@ async function mountEditor(
   return { editor, ...result };
 }
 
-async function mountEditorWithPublishedReady(plain: PlainDoc) {
+async function mountEditorWithPublishedReady(plain: PlainDoc, options: { headerHeight?: number } = {}) {
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
   const target = document.createElement('div');
   document.body.append(target);
@@ -298,10 +298,11 @@ async function mountEditorWithPublishedReady(plain: PlainDoc) {
         publishedReady = true;
       },
       userId: `frame-sync-ready-${crypto.randomUUID()}`,
+      headerHeight: options.headerHeight,
     },
   });
-  await mountedReady.promise;
-  return { editor, publishedReady: () => publishedReady };
+  const harness = await mountedReady.promise;
+  return { editor, publishedReady: () => publishedReady, ...harness };
 }
 
 function dispatchEditorKey(editor: Editor, key: RepeatKey, init: KeyboardEventInit = {}): number {
@@ -707,6 +708,22 @@ describe('web editor frame synchronization', () => {
     await expect.poll(() => mountedEditor.editor.isPublished(mountedEditor.editor.appliedRevision, { requireFrame: true })).toBe(true);
 
     expect(mountedEditor.publishedReady()).toBe(true);
+  });
+
+  it('prepares the nearest page for the first frame when the initial viewport does not reach the first page', async () => {
+    // 뷰포트 높이 180, 헤더 400: 확장 뷰포트 [-180, 360]이 페이지 시작(400)에 닿지 않는다.
+    // 최근접 페이지 폴백이 없으면 프레임 0개 publication이 수용되어 ready 게이트가 영구 교착한다.
+    const mountedEditor = await mountEditorWithPublishedReady(doc('hello'), { headerHeight: 400 });
+
+    await expect.poll(() => mountedEditor.publishedReady()).toBe(true);
+    expect(mountedEditor.editor.published?.frames.has(0)).toBe(true);
+  });
+
+  it('fires the ready gate when the initial viewport reaches the first page below a header', async () => {
+    // 헤더 100: 확장 뷰포트 [-180, 360]이 페이지 시작(100)과 교차한다.
+    const mountedEditor = await mountEditorWithPublishedReady(doc('hello'), { headerHeight: 100 });
+
+    await expect.poll(() => mountedEditor.publishedReady()).toBe(true);
   });
 
   it('completes a pending reveal without removing the last frame after terminal surface failure', async () => {
