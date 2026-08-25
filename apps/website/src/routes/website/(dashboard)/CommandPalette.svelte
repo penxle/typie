@@ -31,16 +31,18 @@
 
   type Props = {
     user$key: DashboardLayout_CommandPalette_user$key;
+    onPrismNewChat: (draft: string) => void;
   };
 
   type Command = {
     name: string;
+    label?: string;
     aliases: string[];
     icon: Component;
     action: () => void | Promise<void>;
   };
 
-  let { user$key }: Props = $props();
+  let { user$key, onPrismNewChat }: Props = $props();
 
   const user = createFragment(
     graphql(`
@@ -185,6 +187,9 @@
     () => ({ siteId: currentSiteId }),
   );
 
+  let query = $state('');
+  const prismDraft = $derived(query.trim());
+
   const commands: Command[] = $derived([
     {
       name: '새 문서 만들기',
@@ -223,10 +228,16 @@
     ...(app.state.prismAccess
       ? [
           {
-            name: app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',
-            aliases: ['ai', 'assistant'],
+            name: prismDraft ? 'PRISM과 새 대화' : app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',
+            label: prismDraft ? `PRISM과 새 대화: “${prismDraft}”` : undefined,
+            aliases: prismDraft ? [prismDraft] : ['ai', 'assistant'],
             icon: PrismIcon,
             action: () => {
+              if (prismDraft) {
+                onPrismNewChat(prismDraft);
+                return;
+              }
+
               app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen;
             },
           },
@@ -300,12 +311,11 @@
   let inputEl = $state<HTMLInputElement>();
   let listEl = $state<HTMLDivElement>();
 
-  let query = $state('');
   let selectedResultIndex = $state<number | null>(null);
 
   const commandHits = $derived(
     matchSorter(commands, disassemble(query), {
-      keys: [(item) => disassemble(item.name), (item) => item.aliases.map((v) => disassemble(v))],
+      keys: [(item) => disassemble(item.label ?? item.name), (item) => item.aliases.map((v) => disassemble(v))],
       sorter: (items) => items,
     }).map((item) => ({
       __typename: 'SearchHitCommand' as const,
@@ -596,7 +606,7 @@
               <Icon icon={hit.icon} size={16} />
             </div>
 
-            <span class={css({ fontSize: '14px', fontWeight: 'medium' })}>{hit.name}</span>
+            <span class={css({ minWidth: '0', fontSize: '14px', fontWeight: 'medium', truncate: true })}>{hit.label ?? hit.name}</span>
           {:else if hit.__typename === 'SearchHitDocument'}
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
