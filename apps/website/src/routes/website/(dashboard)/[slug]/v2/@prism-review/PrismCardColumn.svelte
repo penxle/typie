@@ -324,12 +324,14 @@
 
   const edgeLineSegClass = css({ flexGrow: '1', height: '1px', backgroundColor: 'border.default' });
 
-  // 서로 다른 radius의 층으로 세로 progressive blur를 근사한다. 범위는 원래보다 좁히고, 같은 요소를
-  // 계속 마운트한 채 0px에서 각 radius로 바꿔 어포던스의 opacity와 함께 보간한다.
+  // 서로 다른 radius의 세로 band로 progressive blur를 근사한다. band는 서로 누적하지 않고 인접한
+  // 경계에서만 crossfade하므로 각 radius가 그 위치의 직접 목표값이 된다. 같은 요소를 계속 마운트한 채
+  // 0px에서 목표값으로 바꿔 어포던스의 opacity와 함께 보간한다.
   const edgeBlurRecipe = cva({
     base: {
       position: 'absolute',
       insetX: '0',
+      insetY: '-10px',
       zIndex: '[-2]',
       pointerEvents: 'none',
       backdropFilter: 'auto',
@@ -338,20 +340,19 @@
     variants: {
       layer: {
         outermost: {
-          insetY: '-10px',
-          maskImage: '[linear-gradient(to bottom, transparent, black 42%, black 58%, transparent)]',
+          maskImage:
+            '[linear-gradient(to bottom, transparent 0%, black 6%, black 23%, transparent 27%, transparent 73%, black 77%, black 94%, transparent 100%)]',
         },
         outer: {
-          insetY: '-6px',
-          maskImage: '[linear-gradient(to bottom, transparent, black 38%, black 62%, transparent)]',
+          maskImage:
+            '[linear-gradient(to bottom, transparent 23%, black 27%, black 35.5%, transparent 39.5%, transparent 60.5%, black 64.5%, black 73%, transparent 77%)]',
         },
         inner: {
-          insetY: '-2px',
-          maskImage: '[linear-gradient(to bottom, transparent, black 34%, black 66%, transparent)]',
+          maskImage:
+            '[linear-gradient(to bottom, transparent 35.5%, black 39.5%, black 43%, transparent 47%, transparent 53%, black 57%, black 60.5%, transparent 64.5%)]',
         },
         innermost: {
-          insetY: '2px',
-          maskImage: '[linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)]',
+          maskImage: '[linear-gradient(to bottom, transparent 43%, black 47%, black 53%, transparent 57%)]',
         },
       },
       shown: {
