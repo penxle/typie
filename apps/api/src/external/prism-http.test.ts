@@ -80,6 +80,36 @@ test('전체 예산이 소진되면 재시도를 멈추고 타임아웃으로 �
   }
 });
 
+test('유니어리 재시도는 h2 세션을 파기해 다음 시도가 새 연결을 쓰게 한다', async () => {
+  const bodies: string[] = [];
+  const server = await startServer((req, res) => {
+    void readBody(req).then((body) => {
+      bodies.push(body);
+      if (bodies.length === 1) return;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ runSeq: 1 }));
+    });
+  });
+
+  try {
+    const agent = new Http2Agent();
+    let destroyed = 0;
+    const originalDestroy = agent.destroy.bind(agent);
+    agent.destroy = (reason?: Error) => {
+      destroyed += 1;
+      originalDestroy(reason);
+    };
+
+    const http = createPrismHttp({ baseUrl: server.baseUrl, token: 't', timeout: 100, totalTimeout: 5000, http2Agent: agent });
+    const res = await http.request('/agents', { method: 'POST', body: { key: 'k1' } });
+
+    assert.equal(res.status, 200);
+    assert.equal(destroyed, 1);
+  } finally {
+    await server.close();
+  }
+});
+
 test('열린 스트림이 같은 origin의 후속 요청을 막지 않는다', async () => {
   const server = await startServer((req, res) => {
     if (req.url?.endsWith('/events')) {

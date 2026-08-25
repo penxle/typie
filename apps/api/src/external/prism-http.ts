@@ -7,6 +7,7 @@ import type { PrismHttp } from './prism-core.ts';
 const TIMEOUT_MS = 10_000;
 const TOTAL_TIMEOUT_MS = 30_000;
 const STREAM_OPEN_TIMEOUT_MS = 15_000;
+const SESSION_IDLE_TIMEOUT_MS = 30_000;
 const RETRY_LIMIT = 2;
 const BACKOFF_BASE_MS = 300;
 
@@ -22,7 +23,7 @@ export type PrismHttpOptions = {
 };
 
 export const createPrismHttp = (options: PrismHttpOptions): PrismHttp => {
-  const http2Agent = options.http2Agent ?? new Http2Agent();
+  const http2Agent = options.http2Agent ?? new Http2Agent({ timeout: SESSION_IDLE_TIMEOUT_MS });
   const client = got.extend({
     http2: true,
     throwHttpErrors: false,
@@ -83,6 +84,7 @@ export const createPrismHttp = (options: PrismHttpOptions): PrismHttp => {
         hooks: {
           beforeRetry: [
             (error, retryCount) => {
+              http2Agent.destroy();
               error.options.timeout = { request: Math.max(1, Math.min(perAttempt, remaining())) };
               options.onRetry?.({ method, path, attempt: retryCount, error });
             },
