@@ -9,7 +9,7 @@ export type RailSpan = {
   height: number;
 };
 
-export type PlacedRail = RailSpan & { lane: number; chipTop: number; chipLeft: number };
+export type PlacedRail = RailSpan & { lane: number; left: number; chipTop: number; chipLeft: number };
 
 export type RailHitBox = { left: number; top: number; right: number; bottom: number };
 export type RailHitTarget = PlacedRail & { hitBox: RailHitBox; hitPriority: number };
@@ -21,6 +21,7 @@ export const RAIL_TEXT_GAP = 44;
 const RAIL_LANE_STEP = 7;
 const RAIL_MIN_HEIGHT = 14;
 const RAIL_CHIP_GAP = 2;
+const RAIL_BODY_GAP = 16;
 const LANE_CLEARANCE = 6;
 
 // 레인 상한의 구속 조건은 막대가 아니라 왼쪽 칩 자리다 — 마지막 레인도 왼쪽 배치가 가능해야
@@ -28,8 +29,9 @@ const LANE_CLEARANCE = 6;
 export const maxRailLanes = (gutter: number): number =>
   Math.max(1, Math.floor((gutter - RAIL_TEXT_GAP - RAIL_WIDTH - RAIL_CHIP_SIZE - RAIL_CHIP_GAP) / RAIL_LANE_STEP) + 1);
 
-// 공간이 모자라면 양보하는 것은 막대가 아니라 본문과의 이격이다 — 거터가 좁을 때 gap을 줄여 부르면
-// 0번 레인이 컨테이너 왼쪽 밖으로 나가지 않는다. maxRailLanes는 gap을 받지 않아도 된다:
+// lane과 번호 칩의 상대 위치를 정할 때는 오른쪽에 gap만큼 빈 공간을 둔다. 거터가 좁을 때 gap을 줄여 부르면
+// 0번 레인이 컨테이너 왼쪽 밖으로 나가지 않는다. 이 좌표는 아래에서 rail 묶음 전체를 옮기기 전의 위치다.
+// maxRailLanes는 gap을 받지 않아도 된다:
 // gap이 줄어드는 구간(거터 < 47)에서는 어느 쪽 셈이든 결과가 1레인으로 같다.
 export const railLeft = (lane: number, gutter: number, gap = RAIL_TEXT_GAP): number => gutter - gap - RAIL_WIDTH - lane * RAIL_LANE_STEP;
 
@@ -38,7 +40,7 @@ const intersects = (a: RailHitBox, b: RailHitBox) => a.left < b.right && b.left 
 export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RAIL_TEXT_GAP): PlacedRail[] => {
   const lanes = maxRailLanes(gutter);
   const rails: PlacedRail[] = spans
-    .map((span) => ({ ...span, height: Math.max(RAIL_MIN_HEIGHT, span.height), lane: 0, chipTop: span.top, chipLeft: 0 }))
+    .map((span) => ({ ...span, height: Math.max(RAIL_MIN_HEIGHT, span.height), lane: 0, left: 0, chipTop: span.top, chipLeft: 0 }))
     .toSorted((a, b) => a.top - b.top);
 
   const laneBottoms: number[] = [];
@@ -58,13 +60,13 @@ export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RA
   }
 
   const bars: RailHitBox[] = rails.map((rail) => {
-    const left = railLeft(rail.lane, gutter, gap);
-    return { left, top: rail.top, right: left + RAIL_WIDTH, bottom: rail.top + rail.height };
+    rail.left = railLeft(rail.lane, gutter, gap);
+    return { left: rail.left, top: rail.top, right: rail.left + RAIL_WIDTH, bottom: rail.top + rail.height };
   });
 
   const chips: RailHitBox[] = [];
   for (const [index, rail] of rails.entries()) {
-    const barX = railLeft(rail.lane, gutter, gap);
+    const barX = rail.left;
     const sides = [barX - RAIL_CHIP_SIZE - RAIL_CHIP_GAP, barX + RAIL_WIDTH + RAIL_CHIP_GAP];
     let chosen: RailHitBox | null = null;
 
@@ -97,18 +99,41 @@ export const layoutRails = (spans: readonly RailSpan[], gutter: number, gap = RA
     rail.chipTop = chosen.top;
   }
 
+  // 막대와 번호 칩의 세로 범위가 겹치거나 연쇄적으로 이어지는 rail을 한 묶음으로 본다.
+  // 묶음 안의 lane과 칩 좌우 위치는 그대로 두고, 가장 오른쪽 요소가 본문에서 RAIL_BODY_GAP만큼 떨어지도록
+  // 모든 rail을 같은 거리만큼 옮긴다. 세로 범위가 겹치지 않는 묶음은 따로 옮겨도 새 교차가 생기지 않는다.
+  const groups: { bottom: number; rails: PlacedRail[] }[] = [];
+  for (const rail of rails) {
+    const top = Math.min(rail.top, rail.chipTop);
+    const bottom = Math.max(rail.top + rail.height, rail.chipTop + RAIL_CHIP_SIZE);
+    const group = groups.at(-1);
+    if (group === undefined || group.bottom <= top) groups.push({ bottom, rails: [rail] });
+    else {
+      group.bottom = Math.max(group.bottom, bottom);
+      group.rails.push(rail);
+    }
+  }
+
+  for (const group of groups) {
+    const right = Math.max(...group.rails.map((rail) => Math.max(rail.left + RAIL_WIDTH, rail.chipLeft + RAIL_CHIP_SIZE)));
+    const offset = Math.max(0, gutter - RAIL_BODY_GAP - right);
+    for (const rail of group.rails) {
+      rail.left += offset;
+      rail.chipLeft += offset;
+    }
+  }
+
   return rails;
 };
 
 export const layoutRailHitTargets = (spans: readonly RailSpan[], gutter: number, gap = RAIL_TEXT_GAP): RailHitTarget[] => {
   const targets = layoutRails(spans, gutter, gap).map((rail) => {
-    const barLeft = railLeft(rail.lane, gutter, gap);
     return {
       ...rail,
       hitBox: {
-        left: Math.min(barLeft, rail.chipLeft),
+        left: Math.min(rail.left, rail.chipLeft),
         top: Math.min(rail.top, rail.chipTop),
-        right: Math.max(barLeft + RAIL_WIDTH, rail.chipLeft + RAIL_CHIP_SIZE),
+        right: Math.max(rail.left + RAIL_WIDTH, rail.chipLeft + RAIL_CHIP_SIZE),
         bottom: Math.max(rail.top + rail.height, rail.chipTop + RAIL_CHIP_SIZE),
       },
     };
