@@ -59,8 +59,8 @@
       180deg,
       color-mix(in oklch, currentColor 4%, transparent) 0%,
       color-mix(in oklch, currentColor 4%, transparent) 52%,
-      color-mix(in oklch, currentColor 15%, transparent) 74%,
-      color-mix(in oklch, currentColor 36%, transparent) 100%
+      color-mix(in oklch, currentColor 10%, transparent) 74%,
+      color-mix(in oklch, currentColor 24%, transparent) 100%
     );
     mix-blend-mode: color;
   }
