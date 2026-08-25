@@ -6,13 +6,14 @@ export const COLUMN_WIDTH = 368;
 // 연속된 유색 막대가 붙어 있어 같은 거리도 더 좁게 읽힌다.
 export const COLUMN_GAP = 28;
 
-const HYSTERESIS = 40;
+const COLUMN_ENTRY_SLACK = 8;
 
-// 임계 근처에서 모드가 튀지 않도록 진입과 이탈의 문턱을 벌린다
+// 실제 필요 폭은 컬럼 유지의 하드 경계다. 새로 진입할 때만 작은 여유를 두어 리사이즈 중 왕복을 줄인다.
 export const resolveMode = (available: number, bodyWidth: number, current: MarginMode): MarginMode => {
   const need = GUTTER + bodyWidth + COLUMN_GAP + COLUMN_WIDTH;
-  if (current === 'column') return available >= need - HYSTERESIS ? 'column' : 'popover';
-  return available >= need + HYSTERESIS ? 'column' : 'popover';
+  if (available < need) return 'popover';
+  if (current === 'column') return 'column';
+  return available >= need + COLUMN_ENTRY_SLACK ? 'column' : 'popover';
 };
 
 // 카드 헤더 우측이 무엇을 세우는가. 접힘은 정적 요약이고 펼침은 액션이라는 규칙이 다섯 상태에 걸쳐 있어
