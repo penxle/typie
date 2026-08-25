@@ -4,7 +4,7 @@ import { DocumentCommentState, DocumentCommentThreadState, EntityState, EntityTy
 import { TypieError } from '@typie/lib/errors';
 import { toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
@@ -52,11 +52,13 @@ import {
   entityUrl,
   kstDate,
   kstDueDate,
+  LIST_ROWS_MAX,
   ListEntitiesInput,
   MoveEntitiesInput,
   NoteLinksInput,
   notePreview,
   pageOf,
+  preorder,
   ReadCommentsInput,
   ReadDocumentInput,
   ReadNoteInput,
@@ -154,38 +156,72 @@ const searchEntities = async (ctx: PrismToolContext, input: unknown) => {
 };
 
 type EntityItem =
-  | { kind: 'document'; id: string; entityId: string; title: string | null; subtitle: string | null }
-  | { kind: 'folder'; id: string; entityId: string; name: string };
+  | { kind: 'document'; id: string; entityId: string; title: string | null; subtitle: string | null; depth: number }
+  | { kind: 'folder'; id: string; entityId: string; name: string; depth: number };
 
 const listEntities = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = ListEntitiesInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+  const { offset, limit, recursive } = parsed.data;
 
-  let parentEntityId: string | null = null;
+  let scope: { id: string; entityId: string; name: string } | null = null;
   if (parsed.data.folderId !== undefined) {
-    const parent = await db
-      .select({ entityId: Folders.entityId })
+    const folder = await db
+      .select({ id: Folders.id, entityId: Folders.entityId, name: Folders.name })
       .from(Folders)
       .innerJoin(Entities, eq(Folders.entityId, Entities.id))
       .where(and(eq(Folders.id, parsed.data.folderId), eq(Entities.siteId, ctx.siteId), eq(Entities.state, EntityState.ACTIVE)))
       .then(first);
-    if (!parent) return toolFailure('error', '그 폴더를 찾지 못했어요 — list-entities를 인자 없이 불러 스페이스 첫 깊이부터 확인하세요.');
-    parentEntityId = parent.entityId;
+    if (!folder) return toolFailure('error', '그 폴더를 찾지 못했어요 — list-entities를 인자 없이 불러 스페이스 전체 트리부터 확인하세요.');
+    scope = folder;
   }
 
-  const rows = await db
-    .select({ entityId: Entities.id, type: Entities.type, order: Entities.order })
+  const inScope = and(
+    eq(Entities.siteId, ctx.siteId),
+    eq(Entities.state, EntityState.ACTIVE),
+    scope === null ? isNull(Entities.parentId) : eq(Entities.parentId, scope.entityId),
+  );
+  const total = await db
+    .select({ total: count() })
     .from(Entities)
-    .where(
-      and(
-        eq(Entities.siteId, ctx.siteId),
-        eq(Entities.state, EntityState.ACTIVE),
-        parentEntityId === null ? isNull(Entities.parentId) : eq(Entities.parentId, parentEntityId),
-      ),
-    )
-    .orderBy(asc(Entities.order));
+    .where(inScope)
+    .then((rows) => rows[0]?.total ?? 0);
+  if (offset > 0 && offset >= total) {
+    return toolFailure('error', `끝을 넘는 위치예요 — 여기 직계 항목은 ${total}개까지예요. offset을 그 안으로 주세요.`);
+  }
 
-  const entityIds = rows.map((row) => row.entityId);
+  const page = await db.select({ id: Entities.id }).from(Entities).where(inScope).orderBy(asc(Entities.order)).offset(offset).limit(limit);
+  const roots = page.map((row) => row.id);
+
+  const descendants =
+    recursive && roots.length > 0
+      ? await db.execute<{ id: string; parent_id: string }>(sql`
+        WITH RECURSIVE descendants AS (
+          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
+          FROM ${Entities}
+          WHERE ${inArray(Entities.parentId, roots)} AND ${eq(Entities.state, EntityState.ACTIVE)}
+          UNION ALL
+          SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
+          FROM ${Entities}
+          JOIN descendants ON ${Entities.parentId} = descendants.id
+          WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+        )
+        SELECT id, parent_id FROM descendants ORDER BY "order" ASC
+      `)
+      : [];
+
+  const walk = preorder(
+    roots,
+    descendants.map((row) => ({ id: row.id, parentId: row.parent_id })),
+  );
+  if (walk.length > LIST_ROWS_MAX) {
+    return toolFailure(
+      'error',
+      `결과가 너무 커요(${walk.length}행) — limit을 줄이거나 recursive를 끄고 폴더별로 보세요(한 번에 ${LIST_ROWS_MAX}행까지).`,
+    );
+  }
+
+  const entityIds = walk.map((node) => node.id);
   const documents =
     entityIds.length === 0
       ? []
@@ -206,14 +242,14 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
 
   return {
     ok: true,
-    items: rows.flatMap((row): EntityItem[] => {
-      if (row.type === EntityType.DOCUMENT) {
-        const doc = documentByEntity.get(row.entityId);
-        return doc ? [{ kind: 'document', id: doc.id, entityId: row.entityId, title: doc.title, subtitle: doc.subtitle }] : [];
-      }
-      const folder = folderByEntity.get(row.entityId);
-      return folder ? [{ kind: 'folder', id: folder.id, entityId: row.entityId, name: folder.name }] : [];
+    folder: scope,
+    items: walk.flatMap((node): EntityItem[] => {
+      const doc = documentByEntity.get(node.id);
+      if (doc) return [{ kind: 'document', id: doc.id, entityId: node.id, title: doc.title, subtitle: doc.subtitle, depth: node.depth }];
+      const folder = folderByEntity.get(node.id);
+      return folder ? [{ kind: 'folder', id: folder.id, entityId: node.id, name: folder.name, depth: node.depth }] : [];
     }),
+    range: { offset, end: offset + roots.length, total },
   };
 };
 

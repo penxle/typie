@@ -18,7 +18,33 @@ const ENTITY_REF_KINDS: Record<string, EntityRefKind | undefined> = {
 export const entityRefKind = (id: string): EntityRefKind | null => ENTITY_REF_KINDS[decodeDbId(id)] ?? null;
 
 export const SearchEntitiesInput = z.object({ query: z.string().min(1) });
-export const ListEntitiesInput = z.object({ folderId: z.string().optional() });
+export const LIST_PAGE_DEFAULT = 50;
+export const LIST_PAGE_MAX = 100;
+export const LIST_ROWS_MAX = 500;
+export const ListEntitiesInput = z.object({
+  folderId: z.string().optional(),
+  recursive: z.boolean().default(true),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(LIST_PAGE_MAX).default(LIST_PAGE_DEFAULT),
+});
+
+export const preorder = (roots: string[], descendants: { id: string; parentId: string }[]): { id: string; depth: number }[] => {
+  const children = new Map<string, string[]>();
+  for (const node of descendants) {
+    const siblings = children.get(node.parentId) ?? [];
+    siblings.push(node.id);
+    children.set(node.parentId, siblings);
+  }
+
+  const out: { id: string; depth: number }[] = [];
+  const walk = (id: string, depth: number) => {
+    out.push({ id, depth });
+    for (const child of children.get(id) ?? []) walk(child, depth + 1);
+  };
+  for (const root of roots) walk(root, 0);
+
+  return out;
+};
 export const DOCUMENT_WINDOW_DEFAULT = 2000;
 export const DOCUMENT_WINDOW_MAX = 5000;
 export const ReadDocumentInput = z.object({

@@ -24,6 +24,7 @@ import {
   NoteLinksInput,
   notePreview,
   pageOf,
+  preorder,
   ReadCommentsInput,
   ReadDocumentInput,
   ReadNoteInput,
@@ -45,7 +46,16 @@ import {
 test('입력 미러: 유효·불능', () => {
   assert.deepEqual(SearchEntitiesInput.parse({ query: '해변' }), { query: '해변' });
   assert.equal(SearchEntitiesInput.safeParse({ query: '' }).success, false);
-  assert.deepEqual(ListEntitiesInput.parse({}), {});
+  assert.deepEqual(ListEntitiesInput.parse({}), { recursive: true, offset: 0, limit: 50 });
+  assert.deepEqual(ListEntitiesInput.parse({ folderId: 'F1', recursive: false, offset: 50, limit: 100 }), {
+    folderId: 'F1',
+    recursive: false,
+    offset: 50,
+    limit: 100,
+  });
+  assert.equal(ListEntitiesInput.safeParse({ offset: -1 }).success, false);
+  assert.equal(ListEntitiesInput.safeParse({ limit: 0 }).success, false);
+  assert.equal(ListEntitiesInput.safeParse({ limit: 101 }).success, false);
   assert.equal(ReadDocumentInput.safeParse({}).success, false);
   assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1' }), { documentId: 'D1', offset: 0, length: DOCUMENT_WINDOW_DEFAULT });
   assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1', offset: 2000, length: 5000 }), {
@@ -57,6 +67,26 @@ test('입력 미러: 유효·불능', () => {
   assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: 0 }).success, false);
   assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: DOCUMENT_WINDOW_MAX + 1 }).success, false);
   assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', offset: 1.5 }).success, false);
+});
+
+test('preorder: 페이지 자식을 뿌리로 전위 순회하고, 형제 순서는 온 순서(SQL order 정렬)를 지킨다', () => {
+  const descendants = [
+    { id: 'A1', parentId: 'A' },
+    { id: 'B1', parentId: 'B' },
+    { id: 'A2', parentId: 'A' },
+    { id: 'A1a', parentId: 'A1' },
+    { id: 'X', parentId: 'orphan' },
+  ];
+  assert.deepEqual(preorder(['A', 'B'], descendants), [
+    { id: 'A', depth: 0 },
+    { id: 'A1', depth: 1 },
+    { id: 'A1a', depth: 2 },
+    { id: 'A2', depth: 1 },
+    { id: 'B', depth: 0 },
+    { id: 'B1', depth: 1 },
+  ]);
+  assert.deepEqual(preorder(['A'], []), [{ id: 'A', depth: 0 }]);
+  assert.deepEqual(preorder([], descendants), []);
 });
 
 test('windowOf: 코드 포인트 단위로 자르고, 끝을 넘는 offset은 빈 내용에 범위만 남긴다', () => {
