@@ -1735,7 +1735,8 @@ void main() {
   vec2 screenCoordinates = (gl_FragCoord.xy * 2.0 - uResolution) / uResolution.y * uViewportScale;
   float spinnerSilhouetteAlignment = uSpinnerMorph.x;
   // One physical prism owns the icon route and the settled material.
-  vec2 coordinates = screenCoordinates;
+  bool iconMorphActive = uObjectProjection.w > 0.5;
+  vec2 coordinates = screenCoordinates - vec2(0.0, iconMorphActive ? uObjectProjection.z : 0.0);
   vec2 spectralFanCoordinate = coordinates + refractiveTurbulence(coordinates);
   vec2 spectralFanCoordinateDx = dFdx(spectralFanCoordinate);
   vec2 spectralFanCoordinateDy = dFdy(spectralFanCoordinate);
@@ -1746,7 +1747,6 @@ void main() {
   float opticalTransition = uTransitionAppearance.y;
   float spectrumPassProgress = uTransitionAppearance.z;
   float iconEdgeAlpha = uTransitionAppearance.w;
-  bool iconMorphActive = uObjectProjection.w > 0.5;
   float spinnerCamera = uSpinnerMorph.y;
   float spinnerMaterial = uSpinnerMorph.w;
   float spinnerEdgeDevelopment = uSpinnerMaterialMorph.x;

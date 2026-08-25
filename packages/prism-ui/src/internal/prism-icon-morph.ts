@@ -11,6 +11,7 @@ const CAMERA_PLANE_SAFETY_DISTANCE = 0.000001;
 const EPSILON = 0.000001;
 const PHASE_VALIDATION_RATE = 240;
 const PRISM_ICON_CANONICAL_CSS_SIZE = 32;
+const PRISM_ICON_OPTICAL_OFFSET_Y = 1.25 / 24;
 const PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE = 132;
 const PRISM_ICON_SVG_FIT_SCALE = 0.5832;
 const PRISM_ICON_TO_VIEWPORT_SCALE = PRISM_ICON_CANONICAL_CSS_SIZE / (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5);
@@ -32,6 +33,7 @@ export type PrismIconPose = {
   orientation: Quaternion;
   projectionDistance: number;
   renderScale: number;
+  viewportOffsetY?: number;
 };
 
 export type PrismIconGeometry = {
@@ -225,6 +227,7 @@ export const PRISM_ICON_IDLE_POSE: PrismIconPose = Object.freeze({
   orientation: canonicalOrientation(PRISM_ICON_IDLE_PHASE_TURNS, 0),
   projectionDistance: PRISM_ICON_PROJECTION_DISTANCE,
   renderScale: PRISM_ICON_IDLE_RENDER_SCALE,
+  viewportOffsetY: PRISM_ICON_OPTICAL_OFFSET_Y,
 });
 
 export const PRISM_ICON_IDLE_VISIBLE_EDGE_INDICES = Object.freeze([0, 1, 2, 3, 6, 8] as const);
@@ -245,6 +248,9 @@ function validatePose(pose: PrismIconPose): void {
   requireFinitePositive(pose.cameraDistance, 'Prism icon camera distance');
   requireFinitePositive(pose.projectionDistance, 'Prism icon projection distance');
   requireFinitePositive(pose.renderScale, 'Prism icon render scale');
+  if (pose.viewportOffsetY !== undefined && !Number.isFinite(pose.viewportOffsetY)) {
+    throw new RangeError('Prism icon viewport offset must be finite.');
+  }
   const norm = Array.isArray(pose.orientation) ? Math.hypot(...pose.orientation) : NaN;
   if (
     norm === 0 ||
@@ -261,6 +267,7 @@ export function projectPrismIconPose(pose: PrismIconPose, cssSize = 32): readonl
   requireFinitePositive(cssSize, 'Prism icon CSS size');
   validatePose(pose);
   const center = cssSize * 0.5;
+  const centerY = center + (pose.viewportOffsetY ?? 0) * cssSize;
   const viewportPixelsPerWorldUnit = (PRISM_OBJECT_VIEWPORT_REFERENCE_SIZE * 0.5 * cssSize) / PRISM_ICON_CANONICAL_CSS_SIZE;
   return PRISM_ICON_GEOMETRY.vertices.map((vertex): Vector2 => {
     const rotated = rotateByQuaternion(vertex, pose.orientation);
@@ -270,8 +277,12 @@ export function projectPrismIconPose(pose: PrismIconPose, cssSize = 32): readonl
       throw new RangeError('Prism icon vertices must remain safely in front of the camera plane.');
     }
     const perspective = pose.projectionDistance / cameraPlaneDistance;
-    return [center + world[0] * perspective * viewportPixelsPerWorldUnit, center - world[1] * perspective * viewportPixelsPerWorldUnit];
+    return [center + world[0] * perspective * viewportPixelsPerWorldUnit, centerY - world[1] * perspective * viewportPixelsPerWorldUnit];
   });
+}
+
+export function resolvePrismIconShaderOffsetY(progress: number): number {
+  return -PRISM_ICON_OPTICAL_OFFSET_Y * PRISM_ICON_TO_VIEWPORT_SCALE * (1 - smootherstep(progress));
 }
 
 function binomialCoefficient(degree: number, index: number): number {
