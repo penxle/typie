@@ -6,15 +6,23 @@ export type InlineNode =
   | { kind: 'space'; key: number; text: string }
   | { kind: 'strong' | 'em' | 'del'; key: number; children: InlineNode[] }
   | { kind: 'link'; key: number; href: string; children: InlineNode[] }
+  | { kind: 'image'; key: number; src: string; alt: string }
   | { kind: 'codespan'; key: number; text: string }
   | { kind: 'br'; key: number };
 
-export type ListItemNode = { key: number; blocks: BlockNode[] };
+export type CellAlign = 'left' | 'center' | 'right' | null;
+
+export type ListItemNode = { key: number; task: boolean; checked: boolean; blocks: BlockNode[] };
+
+export type TableCellNode = { key: number; align: CellAlign; children: InlineNode[] };
+
+export type TableRowNode = { key: number; cells: TableCellNode[] };
 
 export type BlockNode =
   | { kind: 'paragraph'; key: number; children: InlineNode[] }
   | { kind: 'heading'; key: number; depth: number; children: InlineNode[] }
   | { kind: 'list'; key: number; ordered: boolean; startIndex: number; items: ListItemNode[] }
+  | { kind: 'table'; key: number; header: TableRowNode; rows: TableRowNode[] }
   | { kind: 'code'; key: number; lang: string | null; text: string }
   | { kind: 'card'; key: number; name: string; text: string; pending: boolean }
   | { kind: 'blockquote'; key: number; children: BlockNode[] }
@@ -59,6 +67,11 @@ const inlineNodes = (tokens: Token[], cursor: number): InlineNode[] => {
         });
         break;
       }
+      case 'image': {
+        const image = token as Tokens.Image;
+        out.push({ kind: 'image', key: cursor, src: image.href, alt: image.text });
+        break;
+      }
       case 'codespan': {
         out.push({ kind: 'codespan', key: cursor, text: (token as Tokens.Codespan).text });
         break;
@@ -85,7 +98,9 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
   const out: BlockNode[] = [];
   for (const token of tokens) {
     switch (token.type) {
-      case 'space': {
+      case 'space':
+      case 'def':
+      case 'checkbox': {
         break;
       }
       case 'paragraph': {
@@ -107,10 +122,31 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
         const items: ListItemNode[] = [];
         let itemCursor = cursor;
         for (const item of list.items) {
-          items.push({ key: itemCursor, blocks: blockNodes(item.tokens, itemCursor) });
+          items.push({
+            key: itemCursor,
+            task: item.task === true,
+            checked: item.checked === true,
+            blocks: blockNodes(item.tokens, itemCursor),
+          });
           itemCursor += item.raw.length;
         }
         out.push({ kind: 'list', key: cursor, ordered: list.ordered, startIndex: typeof list.start === 'number' ? list.start : 1, items });
+        break;
+      }
+      case 'table': {
+        const table = token as Tokens.Table;
+        let cellCursor = cursor;
+        const cell = (source: Tokens.TableCell): TableCellNode => {
+          const node: TableCellNode = { key: cellCursor, align: source.align ?? null, children: inlineNodes(source.tokens, cellCursor) };
+          cellCursor += source.text.length + 1;
+          return node;
+        };
+        const row = (cells: Tokens.TableCell[]): TableRowNode => {
+          const key = cellCursor;
+          cellCursor += 1;
+          return { key, cells: cells.map((source) => cell(source)) };
+        };
+        out.push({ kind: 'table', key: cursor, header: row(table.header), rows: table.rows.map((cells) => row(cells)) });
         break;
       }
       case 'code': {

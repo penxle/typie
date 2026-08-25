@@ -62,9 +62,46 @@ describe('parseMarkdown', () => {
     expect(quote.children.map((child) => child.kind)).toEqual(['paragraph']);
   });
 
-  it('미지원 토큰은 원문 그대로 평문 폴백한다', () => {
-    const [table] = parseMarkdown('| a | b |\n| - | - |\n| 1 | 2 |');
-    expect(table.kind).toBe('paragraph');
+  it('표는 정렬을 실은 행·칸 트리가 된다', () => {
+    const [table] = parseMarkdown('| a | b | c |\n| :- | :-: | -: |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |') as (BlockNode & { kind: 'table' })[];
+    expect(table.kind).toBe('table');
+    expect(wordsOf(table.header.cells.flatMap((cell) => cell.children))).toEqual(['a', 'b', 'c']);
+    expect(table.header.cells.map((cell) => cell.align)).toEqual(['left', 'center', 'right']);
+    expect(table.rows).toHaveLength(2);
+    expect(wordsOf(table.rows[1].cells.flatMap((cell) => cell.children))).toEqual(['4', '5', '6']);
+
+    const keys = [table.header, ...table.rows].flatMap((row) => [row.key, ...row.cells.map((cell) => cell.key)]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('할 일 목록은 체크 상태를 항목에 싣고 표식 텍스트를 남기지 않는다', () => {
+    const [list] = parseMarkdown('- [ ] 미완\n- [x] 완료\n- 보통') as (BlockNode & { kind: 'list' })[];
+    expect(list.items.map((item) => [item.task, item.checked])).toEqual([
+      [true, false],
+      [true, true],
+      [false, false],
+    ]);
+    expect(list.items.map((item) => item.blocks.length)).toEqual([1, 1, 1]);
+    expect(list.items.flatMap((item) => wordsOf((item.blocks[0] as BlockNode & { kind: 'paragraph' }).children))).toEqual([
+      '미완',
+      '완료',
+      '보통',
+    ]);
+  });
+
+  it('이미지는 인라인 노드가 되고 참조 정의는 렌더 트리에서 사라진다', () => {
+    const [paragraph] = parseMarkdown('앞 ![대체](https://x.co/a.png) 뒤') as (BlockNode & { kind: 'paragraph' })[];
+    expect(paragraph.children.find((node) => node.kind === 'image')).toMatchObject({ src: 'https://x.co/a.png', alt: '대체' });
+
+    const blocks = parseMarkdown('[참조][ref] 문장\n\n[ref]: https://x.co');
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph']);
+    const [linked] = blocks as (BlockNode & { kind: 'paragraph' })[];
+    expect(linked.children.find((node) => node.kind === 'link')).toMatchObject({ href: 'https://x.co' });
+  });
+
+  it('여전히 미지원인 토큰은 원문 그대로 평문 폴백한다', () => {
+    const [html] = parseMarkdown('<div>블록</div>');
+    expect(html.kind).toBe('paragraph');
   });
 
   it('typie: lang 펜스는 카드 노드로 승격된다', () => {
