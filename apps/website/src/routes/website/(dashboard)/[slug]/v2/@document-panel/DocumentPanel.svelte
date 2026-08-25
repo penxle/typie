@@ -151,46 +151,105 @@
   </div>
 {/snippet}
 
-<aside
+<div
   style:--min-width={`${minWidth}px`}
   style:--width={`${newWidth}px`}
   style:--max-width={`${maxWidth}px`}
-  class={flex({
+  class={css({
     position: 'relative',
-    zIndex: 'panel',
-    backgroundColor: 'surface.default',
-    flexDirection: 'column',
     flexShrink: '0',
     minWidth: isExpanded ? 'var(--min-width)' : '0',
     width: isExpanded ? 'var(--width)' : '0',
     maxWidth: isExpanded ? 'var(--max-width)' : '0',
-    opacity: isExpanded ? '100' : '0',
-    transitionProperty: '[min-width, max-width, opacity]',
+    transitionProperty: '[min-width, max-width]',
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
-    willChange: 'min-width, max-width, opacity',
-    overflow: 'hidden',
-    borderLeftWidth: '1px',
-    borderColor: 'border.subtle',
+    willChange: 'min-width, max-width',
   })}
-  onfocusin={(event) => {
-    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-    focusReturn.capture(event.relatedTarget);
-  }}
 >
+  <aside
+    class={flex({
+      position: 'absolute',
+      inset: '0',
+      zIndex: 'panel',
+      backgroundColor: 'surface.default',
+      flexDirection: 'column',
+      width: 'full',
+      height: 'full',
+      opacity: isExpanded ? '100' : '0',
+      transitionProperty: '[opacity]',
+      transitionDuration: '200ms',
+      transitionTimingFunction: 'ease',
+      overflow: 'hidden',
+      borderLeftWidth: '1px',
+      borderColor: 'border.subtle',
+    })}
+    onfocusin={(event) => {
+      if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+      focusReturn.capture(event.relatedTarget);
+    }}
+  >
+    {#if isExpanded}
+      {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
+        <DocumentPanelSettings document$key={document.data} />
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
+        <DocumentPanelInfo document$key={document.data} editor={ctx.editor} user$key={user.data} />
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
+        <DocumentPanelNote entity$key={document.data.entity} />
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
+        {#if ctx.editor}
+          <DocumentPanelTimeline document$key={document.data} {onPreviewEditorFailed} {onPreviewEditorRecovered} />
+        {/if}
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
+        {#if user.data.entitled}
+          <DocumentPanelSpellcheck document$key={document.data} editor={ctx.editor} user$key={user.data} />
+        {:else}
+          {@render planUpgradePrompt(SpellCheckIcon, '맞춤법 검사', '글의 맞춤법과 띄어쓰기를\n자동으로 검사하고 수정할 수 있어요.')}
+        {/if}
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
+        {#if user.data.entitled}
+          <DocumentPanelAi document$key={document.data} editor={ctx.editor} user$key={user.data} />
+        {:else}
+          {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
+        {/if}
+      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'comment'}
+        <DocumentPanelComment editor={ctx.editor} />
+      {:else}
+        <div
+          class={flex({
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            height: 'full',
+            color: 'text.faint',
+            fontSize: '12px',
+          })}
+        >
+          <Icon style={css.raw({ color: 'text.faint' })} icon={ConstructionIcon} size={24} />
+          아직 준비중인 기능이에요
+        </div>
+      {/if}
+    {/if}
+  </aside>
+
   <div
+    style:pointer-events={isExpanded ? 'auto' : 'none'}
+    style:transform="translateX(-50%)"
     class={css({
       position: 'absolute',
-      zIndex: '1',
+      zIndex: 'overEditor',
       top: '0',
       left: '0',
+      display: 'flex',
+      justifyContent: 'center',
       width: '8px',
       height: 'full',
       cursor: 'col-resize',
       _hoverAfter: {
         content: '""',
         display: 'block',
-        borderRightRadius: '4px',
+        borderRadius: '4px',
         height: 'full',
         width: '2px',
         backgroundColor: 'border.strong',
@@ -216,47 +275,4 @@
       },
     }}
   ></div>
-
-  {#if isExpanded}
-    {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
-      <DocumentPanelSettings document$key={document.data} />
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
-      <DocumentPanelInfo document$key={document.data} editor={ctx.editor} user$key={user.data} />
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
-      <DocumentPanelNote entity$key={document.data.entity} />
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
-      {#if ctx.editor}
-        <DocumentPanelTimeline document$key={document.data} {onPreviewEditorFailed} {onPreviewEditorRecovered} />
-      {/if}
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
-      {#if user.data.entitled}
-        <DocumentPanelSpellcheck document$key={document.data} editor={ctx.editor} user$key={user.data} />
-      {:else}
-        {@render planUpgradePrompt(SpellCheckIcon, '맞춤법 검사', '글의 맞춤법과 띄어쓰기를\n자동으로 검사하고 수정할 수 있어요.')}
-      {/if}
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
-      {#if user.data.entitled}
-        <DocumentPanelAi document$key={document.data} editor={ctx.editor} user$key={user.data} />
-      {:else}
-        {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
-      {/if}
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'comment'}
-      <DocumentPanelComment editor={ctx.editor} />
-    {:else}
-      <div
-        class={flex({
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          height: 'full',
-          color: 'text.faint',
-          fontSize: '12px',
-        })}
-      >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={ConstructionIcon} size={24} />
-        아직 준비중인 기능이에요
-      </div>
-    {/if}
-  {/if}
-</aside>
+</div>
