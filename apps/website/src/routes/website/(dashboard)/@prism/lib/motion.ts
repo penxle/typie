@@ -11,6 +11,30 @@ export const PRISM_VISIBILITY_MOTION = {
 
 export const reducedMotion = (): boolean => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const cubic = (at: number, first: number, second: number): number => {
+  const c = 3 * first;
+  const b = 3 * (second - first) - c;
+  const a = 1 - c - b;
+  return ((a * at + b) * at + c) * at;
+};
+
+export const prismVisibilityEasing = (progress: number): number => {
+  const x = Math.max(0, Math.min(1, progress));
+  let lower = 0;
+  let upper = 1;
+  let at = x;
+
+  for (let step = 0; step < 24; step += 1) {
+    const estimate = cubic(at, 0.32, 0);
+    if (Math.abs(estimate - x) < 1e-8) break;
+    if (estimate < x) lower = at;
+    else upper = at;
+    at = (lower + upper) / 2;
+  }
+
+  return cubic(at, 0.72, 1);
+};
+
 export const fadeIn = { duration: MOTION.state, easing: quintOut };
 export const fadeOut = { duration: MOTION.quick, easing: quintOut };
 

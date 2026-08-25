@@ -8,11 +8,16 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { layoutCards } from './column-layout.ts';
   import { getMarginContext } from './context.svelte.ts';
+  import { lanePresentation } from './margin-motion.ts';
   import { COLUMN_WIDTH, edgeJumpLabel } from './margin-view.ts';
   import PrismCard from './PrismCard.svelte';
 
-  type Props = { desiredTops: Record<string, number> };
-  let { desiredTops }: Props = $props();
+  type Props = {
+    desiredTops: Record<string, number>;
+    preparationKey: string;
+    onPrepared: (key: string) => void;
+  };
+  let { desiredTops, preparationKey, onPrepared }: Props = $props();
 
   const ctx = getEditorContext();
   const margin = getMarginContext();
@@ -32,6 +37,8 @@
 
   const cards = $derived(margin.segmentCards);
   const anchored = $derived(margin.segment !== 'lost');
+  const presentation = $derived(lanePresentation(margin.presentationProgress));
+  const presentationAnimating = $derived(margin.presentationProgress < 1);
 
   // 갈래가 바뀌면 카드가 새로 마운트되어 top 0에서 시작한다 — 전환이 켜진 채면 전 카드가 위에서 미끄러진다.
   // 첫 배치와 같은 취급으로 되돌리면 relayout의 이중 rAF가 제자리에 세운 뒤 다시 켠다.
@@ -62,12 +69,38 @@
   let tops = $state<Record<string, number>>({});
   let spacer = $state(0);
   let animated = $state(false);
+  let preparedKey: string | null = null;
+  let preparationFrame: number | undefined;
+  let preparationPaintFrame: number | undefined;
 
   const TOGGLE_WINDOW_MS = 270;
   let heightOverrides: Record<string, number> = {};
   let suppressUntil = 0;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
   let previousActive: string | null = null;
+
+  const cancelPreparation = () => {
+    if (preparationFrame !== undefined) cancelAnimationFrame(preparationFrame);
+    if (preparationPaintFrame !== undefined) cancelAnimationFrame(preparationPaintFrame);
+    preparationFrame = undefined;
+    preparationPaintFrame = undefined;
+  };
+
+  const schedulePrepared = () => {
+    const key = preparationKey;
+    if (preparedKey === key) return;
+    cancelPreparation();
+    // 첫 rAF에서 배치 결과가 DOM에 반영되고 한 번 그려진 뒤, 다음 rAF에서 열림을 admit한다.
+    preparationFrame = requestAnimationFrame(() => {
+      preparationFrame = undefined;
+      preparationPaintFrame = requestAnimationFrame(() => {
+        preparationPaintFrame = undefined;
+        if (preparationKey !== key) return;
+        preparedKey = key;
+        onPrepared(key);
+      });
+    });
+  };
 
   const syncContentBottomOverflow = (cardExtent: number) => {
     const editor = ctx.editor;
@@ -116,6 +149,8 @@
     // 카드 이동·성장이 0.25s 곡선을 달리는 동안의 셈은 이동 전 좌표다 — 곡선이 끝난 뒤 한 번 다시 센다
     clearTimeout(edgeTimer);
     edgeTimer = setTimeout(updateEdgeCounts, 300);
+
+    if (entries.length === cards.length) schedulePrepared();
   };
 
   // 화면 밖 카드 수의 가장자리 어포던스 — 스크롤 통 위·아래로 완전히 벗어난 카드를 센다.
@@ -181,10 +216,13 @@
   $effect(() => () => clearTimeout(edgeTimer));
 
   $effect(() => {
+    void preparationKey;
     void cardsKey;
     void desiredKey;
     void tick().then(relayout);
   });
+
+  $effect(() => () => cancelPreparation());
 
   $effect(() => {
     const current = margin.activeId;
@@ -350,6 +388,8 @@
     color: 'text.faint',
     whiteSpace: 'nowrap',
   });
+
+  const presentationClass = css({ transformOrigin: 'center' });
 </script>
 
 <!-- 세그먼트 행은 카드 좌표계 **밖**에 둔다 — 안에 두면 절대 배치된 카드가 행 높이만큼 밀린다.
@@ -357,10 +397,17 @@
      카드가 원고보다 짧을 때 스크롤 말미에 sticky가 바닥에 눌려 마지막 카드 밑으로 딸려 올라간다 -->
 <div style:width={`${COLUMN_WIDTH}px`} class={flex({ direction: 'column', flex: 'none', minWidth: '0', height: 'full' })}>
   {#if cards.length === 0}
-    <p class={emptyBoxClass}>{emptyCopy}</p>
+    <p
+      style:opacity={presentation.opacity}
+      style:transform={`scale(${presentation.scale})`}
+      style:will-change={presentationAnimating ? 'opacity, transform' : 'auto'}
+      class={`${emptyBoxClass} ${presentationClass}`}
+    >
+      {emptyCopy}
+    </p>
   {:else if anchored}
     <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1' })}>
-      <div class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
+      <div style:opacity={presentation.opacity} class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
           <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenAbove > 0 }))}></div>
           <div class={css(edgeBlurRecipe.raw({ layer: 'outer', shown: hiddenAbove > 0 }))}></div>
@@ -379,8 +426,11 @@
       {#each cards as item (item.id)}
         <div
           bind:this={cardEls[item.id]}
+          style:opacity={presentation.opacity}
           style:top={`${tops[item.id] ?? 0}px`}
-          class={css(wrapperRecipe.raw({ positioned: tops[item.id] !== undefined, animated }))}
+          style:transform={`scale(${presentation.scale})`}
+          style:will-change={presentationAnimating ? 'opacity, transform' : 'auto'}
+          class={`${css(wrapperRecipe.raw({ positioned: tops[item.id] !== undefined, animated }))} ${presentationClass}`}
         >
           <PrismCard
             expanded={margin.activeId === item.id}
@@ -393,7 +443,7 @@
 
       <div style:height={`${spacer}px`}></div>
 
-      <div class={css(edgeLineRecipe.raw({ edge: 'bottom' }))}>
+      <div style:opacity={presentation.opacity} class={css(edgeLineRecipe.raw({ edge: 'bottom' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenBelow > 0 }))} onclick={() => jumpEdge('down')} type="button">
           <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenBelow > 0 }))}></div>
           <div class={css(edgeBlurRecipe.raw({ layer: 'outer', shown: hiddenBelow > 0 }))}></div>
@@ -413,12 +463,19 @@
     <!-- 자리를 잃은 카드는 맞출 앵커가 없다 — 위에서부터 흐름으로 쌓는다 -->
     <div class={flex({ direction: 'column', gap: '10px', marginTop: '12px' })}>
       {#each cards as item (item.id)}
-        <PrismCard
-          expanded={margin.activeId === item.id}
-          {item}
-          onClose={() => margin.activate(null, 'card')}
-          onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
-        />
+        <div
+          style:opacity={presentation.opacity}
+          style:transform={`scale(${presentation.scale})`}
+          style:will-change={presentationAnimating ? 'opacity, transform' : 'auto'}
+          class={presentationClass}
+        >
+          <PrismCard
+            expanded={margin.activeId === item.id}
+            {item}
+            onClose={() => margin.activate(null, 'card')}
+            onToggle={() => margin.activate(margin.activeId === item.id ? null : item.id, 'card')}
+          />
+        </div>
       {/each}
     </div>
   {/if}
