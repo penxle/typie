@@ -32,8 +32,8 @@
   let busy = $state(false);
 
   const selected = $derived(
-    documents.find((doc) => doc.id === picked) ??
-      documents.find((doc) => doc.id === hint.documentId) ??
+    documents.find((doc) => doc.documentId === picked) ??
+      documents.find((doc) => doc.documentId === hint.documentId) ??
       documents.find((doc) => doc.active) ??
       documents.at(0) ??
       null,
@@ -93,7 +93,7 @@
       return;
     }
 
-    void act({ decision: 'confirmed', documentId: doc.id, tier: depth.toUpperCase() });
+    void act({ decision: 'confirmed', documentId: doc.documentId, tier: depth.toUpperCase() });
   };
 
   const cardClass = css({
@@ -197,8 +197,8 @@
         <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
       {/snippet}
 
-      {#each documents as doc (doc.id)}
-        <MenuItem onclick={() => (picked = doc.id)}>
+      {#each documents as doc (doc.documentId)}
+        <MenuItem onclick={() => (picked = doc.documentId)}>
           <div class={flex({ alignItems: 'center', gap: '8px', flexGrow: '1', minWidth: '0' })}>
             <span class={css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
               {doc.title || '제목 없음'}
@@ -208,7 +208,7 @@
             {/if}
             <span class={countClass}>{doc.charCount.toLocaleString()}자</span>
             <div class={css({ flexShrink: '0', size: '14px' })}>
-              {#if doc.id === selected?.id}
+              {#if doc.documentId === selected?.documentId}
                 <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
               {/if}
             </div>

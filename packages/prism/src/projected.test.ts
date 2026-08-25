@@ -138,7 +138,17 @@ describe('tool data registry', () => {
     const declined = { ok: false, code: 'declined', message: '작가가 이 행동을 하지 않기로 했어요' };
     expect(resolved('delete-notes', { ok: true, count: 2 })).toEqual({ tool: 'delete-notes', ok: true, data: { ok: true, count: 2 } });
     expect(resolved('delete-goals', { ok: true, count: 1 })).toEqual({ tool: 'delete-goals', ok: true, data: { ok: true, count: 1 } });
-    const change = { id: 'E1', kind: 'document', title: '바다', from: 'PRIVATE', to: 'UNLISTED' };
+    const change = {
+      kind: 'document',
+      documentId: 'D1',
+      entityId: 'E1',
+      title: '바다',
+      subtitle: null,
+      icon: 'file',
+      iconColor: 'gray',
+      from: 'PRIVATE',
+      to: 'UNLISTED',
+    };
     expect(resolved('update-sharing', { ok: true, count: 1, changes: [change] })).toEqual({
       tool: 'update-sharing',
       ok: true,

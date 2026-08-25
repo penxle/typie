@@ -57,16 +57,16 @@ test('입력 미러: 유효·불능', () => {
   assert.equal(ListEntitiesInput.safeParse({ limit: 0 }).success, false);
   assert.equal(ListEntitiesInput.safeParse({ limit: 101 }).success, false);
   assert.equal(ReadDocumentInput.safeParse({}).success, false);
-  assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1' }), { documentId: 'D1', offset: 0, length: DOCUMENT_WINDOW_DEFAULT });
-  assert.deepEqual(ReadDocumentInput.parse({ documentId: 'D1', offset: 2000, length: 5000 }), {
-    documentId: 'D1',
+  assert.deepEqual(ReadDocumentInput.parse({ id: 'D1' }), { id: 'D1', offset: 0, length: DOCUMENT_WINDOW_DEFAULT });
+  assert.deepEqual(ReadDocumentInput.parse({ id: 'D1', offset: 2000, length: 5000 }), {
+    id: 'D1',
     offset: 2000,
     length: 5000,
   });
-  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', offset: -1 }).success, false);
-  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: 0 }).success, false);
-  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', length: DOCUMENT_WINDOW_MAX + 1 }).success, false);
-  assert.equal(ReadDocumentInput.safeParse({ documentId: 'D1', offset: 1.5 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ id: 'D1', offset: -1 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ id: 'D1', length: 0 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ id: 'D1', length: DOCUMENT_WINDOW_MAX + 1 }).success, false);
+  assert.equal(ReadDocumentInput.safeParse({ id: 'D1', offset: 1.5 }).success, false);
 });
 
 test('preorder: 페이지 자식을 뿌리로 전위 순회하고, 형제 순서는 온 순서(SQL order 정렬)를 지킨다', () => {
@@ -176,9 +176,9 @@ test('입력 미러: read-note·read-sharing·read-comments', () => {
   assert.equal(ReadSharingInput.safeParse({ ids: [] }).success, false);
   assert.equal(ReadSharingInput.safeParse({ ids: Array.from({ length: 21 }, (_, i) => `E${i}`) }).success, false);
 
-  assert.deepEqual(ReadCommentsInput.parse({ documentId: 'DOC0' }), { documentId: 'DOC0', resolved: false });
-  assert.deepEqual(ReadCommentsInput.parse({ documentId: 'DOC0', resolved: true }), { documentId: 'DOC0', resolved: true });
-  assert.equal(ReadCommentsInput.safeParse({ documentId: 'DOC0', resolved: '아니오' }).success, false);
+  assert.deepEqual(ReadCommentsInput.parse({ id: 'DOC0' }), { id: 'DOC0', resolved: false });
+  assert.deepEqual(ReadCommentsInput.parse({ id: 'DOC0', resolved: true }), { id: 'DOC0', resolved: true });
+  assert.equal(ReadCommentsInput.safeParse({ id: 'DOC0', resolved: '아니오' }).success, false);
 });
 
 test('entityUrl: 와일드카드 서브도메인을 걷어낸 사용자 사이트 주소', () => {
@@ -203,8 +203,8 @@ test('입력 미러: entity·document 계열', () => {
   assert.equal(MoveEntitiesInput.safeParse({ ids: [] }).success, false);
   assert.equal(MoveEntitiesInput.safeParse({ ids: Array.from({ length: 51 }, (_, i) => `E${i}`) }).success, false);
 
-  assert.deepEqual(DuplicateDocumentsInput.parse({ documentIds: ['DOC0', 'DOC1'] }), { documentIds: ['DOC0', 'DOC1'] });
-  assert.equal(DuplicateDocumentsInput.safeParse({ documentIds: [] }).success, false);
+  assert.deepEqual(DuplicateDocumentsInput.parse({ ids: ['DOC0', 'DOC1'] }), { ids: ['DOC0', 'DOC1'] });
+  assert.equal(DuplicateDocumentsInput.safeParse({ ids: [] }).success, false);
   assert.equal(DuplicateDocumentsInput.safeParse({ documentId: 'DOC0' }).success, false);
 
   assert.deepEqual(

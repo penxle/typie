@@ -48,13 +48,25 @@ export const preorder = (roots: string[], descendants: { id: string; parentId: s
 export const DOCUMENT_WINDOW_DEFAULT = 2000;
 export const DOCUMENT_WINDOW_MAX = 5000;
 export const ReadDocumentInput = z.object({
-  documentId: z.string(),
+  id: z.string(),
   offset: z.number().int().min(0).default(0),
   length: z.number().int().min(1).max(DOCUMENT_WINDOW_MAX).default(DOCUMENT_WINDOW_DEFAULT),
 });
 export const ReadNoteInput = z.object({ noteId: z.string() });
 export const ReadSharingInput = z.object({ ids: z.array(z.string()).min(1).max(20) });
-export const ReadCommentsInput = z.object({ documentId: z.string(), resolved: z.boolean().default(false) });
+export const ReadCommentsInput = z.object({ id: z.string(), resolved: z.boolean().default(false) });
+
+export type EntityRef =
+  | {
+      kind: 'document';
+      documentId: string;
+      entityId: string;
+      title: string | null;
+      subtitle: string | null;
+      icon: string;
+      iconColor: string;
+    }
+  | { kind: 'folder'; folderId: string; entityId: string; name: string; icon: string; iconColor: string };
 export const BATCH_MAX = 50;
 const batch = <T extends z.ZodType>(item: T) => z.array(item).min(1).max(BATCH_MAX);
 
@@ -65,7 +77,7 @@ export const DeleteEntitiesInput = z.object({ ids: batch(z.string()) });
 export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional() })) });
 export const RenameFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
 export const MoveEntitiesInput = z.object({ ids: batch(z.string()), folderId: z.string().optional() });
-export const DuplicateDocumentsInput = z.object({ documentIds: batch(z.string()) });
+export const DuplicateDocumentsInput = z.object({ ids: batch(z.string()) });
 export const UpdateIconsInput = z.object({
   items: batch(z.object({ id: z.string(), icon: z.string().optional(), iconColor: z.string().optional() })),
 });
