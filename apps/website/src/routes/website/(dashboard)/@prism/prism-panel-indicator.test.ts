@@ -67,6 +67,8 @@ let animationFrames: Map<number, FrameRequestCallback>;
 let idleCallbacks: Map<number, IdleRequestCallback>;
 let nextFrameId: number;
 let nextIdleId: number;
+let originalAnimateDescriptor: PropertyDescriptor | undefined;
+let animate: ReturnType<typeof vi.fn>;
 
 const stepAnimationFrame = (now = 0) => {
   const callbacks = [...animationFrames.values()];
@@ -100,9 +102,26 @@ beforeEach(() => {
     return id;
   });
   vi.stubGlobal('cancelIdleCallback', (id: number) => idleCallbacks.delete(id));
+  originalAnimateDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'animate');
+  animate = vi.fn(
+    () =>
+      ({
+        cancel: vi.fn(),
+        currentTime: 0,
+        effect: null,
+        onfinish: null,
+        playState: 'running',
+      }) as unknown as Animation,
+  );
+  Object.defineProperty(Element.prototype, 'animate', {
+    configurable: true,
+    value: animate,
+  });
 });
 
 afterEach(() => {
+  if (originalAnimateDescriptor) Object.defineProperty(Element.prototype, 'animate', originalAnimateDescriptor);
+  else delete (Element.prototype as Partial<Element>).animate;
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
@@ -174,6 +193,75 @@ describe('Prism panel indicator', () => {
       stepAnimationFrame();
       await tick();
       expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('reveals the welcome message only after the icon-to-prism morph starts and keeps it outside the moving actor', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, welcomeMessageVisible: true });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-message]')).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(700);
+      runtime.emit({ readiness: 'ready' });
+      stepIdleCallback();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      await tick();
+
+      const actor = target.querySelector('[data-prism-indicator-actor]');
+      const message = target.querySelector('[data-prism-indicator-message]');
+      expect(message?.textContent).toBe('도울 일이 있다면 맡겨주세요.');
+      expect(actor?.contains(message)).toBe(false);
+      expect(animate).toHaveBeenCalledWith(expect.any(Array), { duration: 1700, fill: 'forwards' });
+    } finally {
+      random.mockRestore();
+      await unmount(component);
+    }
+  });
+
+  test('keeps the welcome message until the indicator leaves the welcome phase', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({
+      phase: 'welcome' as 'submitting' | 'welcome',
+      reducedMotion: true,
+      welcomeMessageVisible: true,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+      expect(animate).not.toHaveBeenCalled();
+
+      props.welcomeMessageVisible = false;
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+
+      props.phase = 'submitting';
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-message]')).toBeNull();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('starts the welcome message transition without a delay when morphing is unavailable', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, welcomeMessageVisible: true });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      runtime.emit({ readiness: 'unavailable' });
+      await tick();
+
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+      expect(animate).toHaveBeenCalledWith(expect.any(Array), { duration: 0, fill: 'forwards' });
     } finally {
       await unmount(component);
     }
