@@ -61,7 +61,7 @@ const PrismReviewStrength = builder.simpleObject('PrismReviewStrength', {
   fields: (t) => ({
     quote: t.string(),
     body: t.string({ nullable: true }),
-    anchor: t.field({ type: PrismReviewAnchor }),
+    anchors: t.field({ type: [PrismReviewAnchor] }),
   }),
 });
 

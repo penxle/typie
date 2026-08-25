@@ -259,7 +259,7 @@
             strengths {
               quote
               body
-              anchor {
+              anchors {
                 start
                 end
                 head
@@ -334,7 +334,7 @@
       : JSON.stringify([
           round.id,
           round.threads.map((thread) => [thread.id, thread.issueIndex, thread.anchors]),
-          (round.detail?.strengths ?? []).map((strength) => strength.anchor),
+          (round.detail?.strengths ?? []).map((strength) => strength.anchors),
           (round.detail?.patterns ?? []).map((pattern) => [pattern.theme, pattern.issues.map((issue) => issue.index)]),
           (round.detail?.priorities ?? []).map((priority) => [priority.body, priority.issues.map((issue) => issue.index)]),
         ]),
@@ -383,9 +383,9 @@
         },
       })),
       ...strengths.map((strength, index) => ({
-        anchors: [strength.anchor],
+        anchors: strength.anchors,
         tone: 'strength' as const,
-        rangeId: () => `strength:${index}`,
+        rangeId: (at: number) => `strength:${index}:${at}`,
         item: {
           id: `strength:${index}`,
           kind: 'strength' as const,
