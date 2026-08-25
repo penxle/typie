@@ -1,3 +1,4 @@
+import { resolvePrismIconShaderOffsetY } from './prism-icon-morph.ts';
 import { createAdaptiveLightResolutionPolicy, resolvePrismRenderTargets, resolvePrismRenderWork } from './prism-render-policy.ts';
 import { PRISM_SPINNER_HDR_HEADROOM_DEFAULT } from './prism-spinner-hdr.ts';
 import {
@@ -648,7 +649,7 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
         'uObjectProjection',
         iconMorphSample?.cameraDistance ?? 4.2,
         iconMorphSample?.projectionDistance ?? 2.96,
-        1,
+        iconMorphSample ? resolvePrismIconShaderOffsetY(iconMorphSample.progress) : 0,
         iconMorphSample ? 1 : 0,
       );
       let scissor: { height: number; width: number; x: number; y: number } | null = null;
