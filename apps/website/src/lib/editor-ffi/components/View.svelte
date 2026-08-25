@@ -53,6 +53,8 @@
     /** 본문 좌우에 비워 둘 폭. 여백 레이어(프리즘 리뷰)가 레일·카드 컬럼을 놓는 자리다. */
     contentInsetLeft?: number;
     contentInsetRight?: number;
+    /** 최종 레이아웃으로 바뀐 본문을 이전 화면 위치에서 합성하는 일회성 모션. */
+    contentMotion?: { fromX: number; duration: number; easing: string };
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
@@ -67,6 +69,7 @@
     style,
     contentInsetLeft = 0,
     contentInsetRight = 0,
+    contentMotion,
     onReady,
     header,
     footer,
@@ -173,6 +176,11 @@
   const continuousMaxFrameWidth = $derived(
     layoutMode?.type === 'continuous' ? `${layoutMode.max_width + CONTINUOUS_VIEW_PADDING * 2}px` : undefined,
   );
+  const contentAnimation = $derived.by(() => {
+    if (!contentMotion || contentMotion.fromX === 0) return;
+    const name = contentMotion.fromX > 0 ? 'editor-content-from-right' : 'editor-content-from-left';
+    return `${name} ${contentMotion.duration}ms ${contentMotion.easing} both`;
+  });
   // 헤더 폴백(판 없음)에서도 인셋은 래퍼 패딩으로 들어간다 — 상한도 그만큼 넓어야 안쪽 트랙이 그대로 남는다
   const headerFallbackMaxWidth = $derived(
     layoutMode?.type === 'continuous'
@@ -330,6 +338,8 @@
   >
     {#if ctx.editor && header}
       <div
+        style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
+        style:animation={contentAnimation}
         style:width={headerGeometry ? `${headerGeometry.trackWidth + contentInsetLeft + contentInsetRight}px` : '100%'}
         style:min-width={headerGeometry ? undefined : editorMinWidth}
         style:max-width={headerGeometry ? undefined : headerFallbackMaxWidth}
@@ -372,9 +382,6 @@
               flexGrow: '1',
               width: 'full',
               userSelect: 'none',
-              ...(isPaginated && {
-                rowGap: 'var(--page-gap)',
-              }),
             },
             ctx.editor.readOnly && {
               WebkitUserSelect: 'none',
@@ -413,15 +420,32 @@
           tabindex={0}
           use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
-          <EditorPages editor={ctx.editor} {surfaceHost} />
+          <div
+            style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
+            style:animation={contentAnimation}
+            class={css({
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              flexGrow: '1',
+              flexShrink: '0',
+              width: 'full',
+              ...(isPaginated && {
+                rowGap: 'var(--page-gap)',
+              }),
+            })}
+          >
+            <EditorPages editor={ctx.editor} {surfaceHost} />
 
-          <DocumentOverlayLayer />
+            <DocumentOverlayLayer />
 
-          <Caret />
+            <Caret />
 
-          <LineHighlight />
+            <LineHighlight />
 
-          <PlaceholderOverlay />
+            <PlaceholderOverlay />
+          </div>
 
           <ViewportOverlay>
             <Input />
@@ -461,3 +485,23 @@
     <Scrollbar />
   {/if}
 </div>
+
+<style>
+  @keyframes -global-editor-content-from-right {
+    from {
+      translate: var(--editor-content-from-x) 0;
+    }
+    to {
+      translate: 0 0;
+    }
+  }
+
+  @keyframes -global-editor-content-from-left {
+    from {
+      translate: var(--editor-content-from-x) 0;
+    }
+    to {
+      translate: 0 0;
+    }
+  }
+</style>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  contentMotionOffset,
   lanePresentation,
   marginInsets,
   marginMotionDuration,
@@ -78,5 +79,19 @@ describe('targetColumnLeft', () => {
     expect(targetColumnLeft(closedPageRight, 0)).toBe(expected);
     expect(targetColumnLeft(closedPageRight + shift / 2, 0.5)).toBe(expected);
     expect(targetColumnLeft(closedPageRight + shift, 1)).toBe(expected);
+  });
+});
+
+describe('contentMotionOffset', () => {
+  it('전환 중 목표가 바뀌어도 현재 화면 위치를 이어 간다', () => {
+    const shift = 148;
+    const progress = 0.4;
+    const openingLayoutLeft = -shift;
+    const closingLayoutLeft = 0;
+
+    const openingVisualLeft = openingLayoutLeft + contentMotionOffset(1, progress, shift);
+    const closingVisualLeft = closingLayoutLeft + contentMotionOffset(0, progress, shift);
+
+    expect(openingVisualLeft).toBeCloseTo(closingVisualLeft);
   });
 });
