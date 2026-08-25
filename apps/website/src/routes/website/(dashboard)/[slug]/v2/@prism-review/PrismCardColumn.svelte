@@ -424,7 +424,7 @@
       {emptyCopy}
     </p>
   {:else if anchored}
-    <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1' })}>
+    <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1', overflowY: 'clip' })}>
       <div style:opacity={presentation.opacity} class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
           <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenAbove > 0 }))}></div>
