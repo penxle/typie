@@ -160,7 +160,7 @@
 </script>
 
 <div bind:this={cardEl} class={cardClass}>
-  <div class={titleClass}>AI 리뷰를 시작할까요?</div>
+  <div class={titleClass}>리뷰를 시작할까요?</div>
 
   <div class={labelClass}>대상 문서</div>
   {#if readonly}

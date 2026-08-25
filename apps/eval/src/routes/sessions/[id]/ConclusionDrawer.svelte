@@ -238,7 +238,7 @@
       <span class={css({ flex: 'none', fontSize: '11px', fontWeight: 'bold', color: 'text.brand', letterSpacing: '[0.09em]' })}>
         편집자의 총평
       </span>
-      <span class={css({ fontSize: '11px', color: 'text.faint' })}>AI 리뷰 {roundNumber}회차 · 피드백 {conclusionThreads.length}개</span>
+      <span class={css({ fontSize: '11px', color: 'text.faint' })}>리뷰 {roundNumber}회차 · 피드백 {conclusionThreads.length}개</span>
       <button
         class={flex({
           align: 'center',

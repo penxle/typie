@@ -2,7 +2,7 @@
   import { css, cva } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal, TimeAgo } from '@typie/ui/components';
-  import PrismIcon from '~icons/typie/prism';
+  import ReviewLensIcon from '~icons/typie/review-lens';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { getMarginContext } from './context.svelte.ts';
 
@@ -54,7 +54,7 @@
 
 <Modal style={css.raw({ maxWidth: '420px' })} bind:open>
   <div class={center({ gap: '4px', padding: '12px' })}>
-    <Icon style={css.raw({ color: 'text.faint' })} icon={PrismIcon} size={14} />
+    <Icon style={css.raw({ color: 'text.faint' })} icon={ReviewLensIcon} size={14} />
     <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>프리즘 리뷰</span>
   </div>
 
