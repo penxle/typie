@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { token } from '@typie/styled-system/tokens';
+  import { css } from '@typie/styled-system/css';
   import { quintOut } from 'svelte/easing';
   import type { TransitionConfig } from 'svelte/transition';
 
@@ -63,8 +63,24 @@
 
 {#if visible}
   <p
-    style:color={token('colors.text.faint')}
-    class="message"
+    class={css({
+      position: 'absolute',
+      top: '[calc(50% + 60px)]',
+      left: '0',
+      zIndex: '1',
+      width: 'full',
+      paddingX: '40px',
+      overflowWrap: 'break-word',
+      fontSize: '15px',
+      fontWeight: 'medium',
+      lineHeight: '[26px]',
+      textAlign: 'center',
+      textWrap: 'balance',
+      wordBreak: 'keep-all',
+      color: 'text.faint',
+      pointerEvents: 'none',
+      willChange: 'opacity, transform, filter',
+    })}
     data-prism-indicator-message
     in:reveal={{ delay: delayMs, skip: immediate }}
     out:hide={{ skip: immediate }}
@@ -72,25 +88,3 @@
     {message}
   </p>
 {/if}
-
-<style>
-  .message {
-    position: absolute;
-    top: calc(50% + 60px);
-    left: 0;
-    z-index: 1;
-    box-sizing: border-box;
-    width: 100%;
-    margin: 0;
-    padding: 0 40px;
-    overflow-wrap: break-word;
-    font-size: 18px;
-    font-weight: 600;
-    line-height: 26px;
-    text-align: center;
-    text-wrap: balance;
-    word-break: keep-all;
-    pointer-events: none;
-    will-change: opacity, transform, filter;
-  }
-</style>
