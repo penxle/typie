@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { PRISM_ICON_DURATION_SECONDS } from '@typie/prism-ui';
   import { token } from '@typie/styled-system/tokens';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import PrismObject from '$lib/prism-ui/PrismObject.svelte';
   import { createPrismIndicatorPath, samplePrismIndicatorPath } from './lib/prism-indicator-path.ts';
+  import PrismPanelWelcomeMessage from './PrismPanelWelcomeMessage.svelte';
   import type { PrismRuntimeSnapshot, PrismTarget } from '@typie/prism-ui';
   import type { ThemeVariant } from '@typie/ui/context';
   import type { PrismIndicatorPath, PrismIndicatorPoint } from './lib/prism-indicator-path.ts';
@@ -12,6 +14,8 @@
 
   const PRISM_TO_SPINNER_DURATION_MS = 2200;
   const PRISM_TO_SPINNER_PRESENTATION_END_PROGRESS = 5 / 11;
+  const WELCOME_MESSAGE_MORPH_LEAD_MS = 500;
+  const WELCOME_MESSAGE_DELAY_MS = PRISM_ICON_DURATION_SECONDS * 1000 - WELCOME_MESSAGE_MORPH_LEAD_MS;
 
   type Props = {
     destination?: HTMLElement;
@@ -61,6 +65,7 @@
   let followerFrame = 0;
   let returnStartProgress = 0;
   let spinnerOwner: PrismSpinnerOwner | undefined;
+  const showWelcomeMessage = $derived(phase === 'welcome' && (target === 'prism' || reducedMotion || snapshot.readiness === 'unavailable'));
 
   const center = (element: HTMLElement): PrismIndicatorPoint => {
     const bounds = element.getBoundingClientRect();
@@ -439,6 +444,12 @@
     {/if}
   </span>
 </div>
+
+<PrismPanelWelcomeMessage
+  delayMs={snapshot.readiness === 'unavailable' ? 0 : WELCOME_MESSAGE_DELAY_MS}
+  immediate={reducedMotion}
+  visible={showWelcomeMessage}
+/>
 
 <style>
   .indicator {
