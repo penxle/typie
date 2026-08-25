@@ -6,36 +6,36 @@ import { ENTITY_ICON_COLORS, ENTITY_ICON_NAMES } from '@typie/lib/catalogs';
 import dayjs from 'dayjs';
 import {
   COMMENT_PAGE_SIZE,
-  CreateDocumentInput,
-  CreateFolderInput,
-  CreateNoteInput,
+  CreateDocumentsInput,
+  CreateFoldersInput,
+  CreateNotesInput,
   DeleteEntitiesInput,
-  DeleteGoalInput,
-  DeleteNoteInput,
+  DeleteGoalsInput,
+  DeleteNotesInput,
   DOCUMENT_WINDOW_DEFAULT,
   DOCUMENT_WINDOW_MAX,
-  DuplicateDocumentInput,
+  DuplicateDocumentsInput,
   entityRefKind,
   entityUrl,
   kstDate,
   kstDueDate,
   ListEntitiesInput,
   MoveEntitiesInput,
-  NoteLinkInput,
+  NoteLinksInput,
   notePreview,
   pageOf,
   ReadCommentsInput,
   ReadDocumentInput,
   ReadNoteInput,
   ReadSharingInput,
-  RecoverEntityInput,
-  RenameFolderInput,
+  RecoverEntitiesInput,
+  RenameFoldersInput,
   SearchEntitiesInput,
-  SetGoalInput,
+  SetGoalsInput,
   snippetOf,
   TRASH_PAGE_SIZE,
-  UpdateIconInput,
-  UpdateNoteInput,
+  UpdateIconsInput,
+  UpdateNotesInput,
   UpdateSharingInput,
   validIcon,
   windowOf,
@@ -68,12 +68,16 @@ test('windowOf: 코드 포인트 단위로 자르고, 끝을 넘는 offset은 �
   assert.deepEqual(windowOf('', 0, 1), { content: '', range: { offset: 0, end: 0, total: 0 } });
 });
 
-test('입력 미러: create-folder', () => {
-  assert.deepEqual(CreateFolderInput.parse({ name: '초고' }), { name: '초고' });
-  assert.deepEqual(CreateFolderInput.parse({ name: '초고', parentFolderId: 'FLDR0' }), { name: '초고', parentFolderId: 'FLDR0' });
-  assert.equal(CreateFolderInput.safeParse({ name: '' }).success, false);
-  assert.equal(CreateFolderInput.safeParse({ name: '가'.repeat(101) }).success, false);
-  assert.equal(CreateFolderInput.safeParse({}).success, false);
+test('입력 미러: create-folders', () => {
+  assert.deepEqual(CreateFoldersInput.parse({ items: [{ name: '초고' }] }), { items: [{ name: '초고' }] });
+  assert.deepEqual(CreateFoldersInput.parse({ items: [{ name: '초고', parentFolderId: 'FLDR0' }, { name: '퇴고' }] }), {
+    items: [{ name: '초고', parentFolderId: 'FLDR0' }, { name: '퇴고' }],
+  });
+  assert.equal(CreateFoldersInput.safeParse({ items: [{ name: '' }] }).success, false);
+  assert.equal(CreateFoldersInput.safeParse({ items: [{ name: '가'.repeat(101) }] }).success, false);
+  assert.equal(CreateFoldersInput.safeParse({ items: [] }).success, false);
+  assert.equal(CreateFoldersInput.safeParse({ items: Array.from({ length: 51 }, () => ({ name: '초고' })) }).success, false);
+  assert.equal(CreateFoldersInput.safeParse({ name: '초고' }).success, false);
 });
 
 test('입력 미러: delete-entities', () => {
@@ -152,69 +156,102 @@ test('entityUrl: 와일드카드 서브도메인을 걷어낸 사용자 사이�
 });
 
 test('입력 미러: entity·document 계열', () => {
-  assert.deepEqual(CreateDocumentInput.parse({}), {});
-  assert.deepEqual(CreateDocumentInput.parse({ folderId: 'FLDR0' }), { folderId: 'FLDR0' });
+  assert.deepEqual(CreateDocumentsInput.parse({ items: [{}] }), { items: [{}] });
+  assert.deepEqual(CreateDocumentsInput.parse({ items: [{ folderId: 'FLDR0' }, {}] }), { items: [{ folderId: 'FLDR0' }, {}] });
+  assert.equal(CreateDocumentsInput.safeParse({}).success, false);
+  assert.equal(CreateDocumentsInput.safeParse({ items: [] }).success, false);
 
-  assert.deepEqual(RenameFolderInput.parse({ folderId: 'FLDR0', name: '초고' }), { folderId: 'FLDR0', name: '초고' });
-  assert.equal(RenameFolderInput.safeParse({ folderId: 'FLDR0', name: '' }).success, false);
-  assert.equal(RenameFolderInput.safeParse({ folderId: 'FLDR0', name: '가'.repeat(101) }).success, false);
-  assert.equal(RenameFolderInput.safeParse({ name: '초고' }).success, false);
+  assert.deepEqual(RenameFoldersInput.parse({ items: [{ folderId: 'FLDR0', name: '초고' }] }), {
+    items: [{ folderId: 'FLDR0', name: '초고' }],
+  });
+  assert.equal(RenameFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '' }] }).success, false);
+  assert.equal(RenameFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '가'.repeat(101) }] }).success, false);
+  assert.equal(RenameFoldersInput.safeParse({ items: [{ name: '초고' }] }).success, false);
+  assert.equal(RenameFoldersInput.safeParse({ folderId: 'FLDR0', name: '초고' }).success, false);
 
   assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'] }), { ids: ['E1'] });
   assert.equal(MoveEntitiesInput.safeParse({ ids: [] }).success, false);
   assert.equal(MoveEntitiesInput.safeParse({ ids: Array.from({ length: 51 }, (_, i) => `E${i}`) }).success, false);
 
-  assert.deepEqual(DuplicateDocumentInput.parse({ documentId: 'DOC0' }), { documentId: 'DOC0' });
-  assert.equal(DuplicateDocumentInput.safeParse({}).success, false);
+  assert.deepEqual(DuplicateDocumentsInput.parse({ documentIds: ['DOC0', 'DOC1'] }), { documentIds: ['DOC0', 'DOC1'] });
+  assert.equal(DuplicateDocumentsInput.safeParse({ documentIds: [] }).success, false);
+  assert.equal(DuplicateDocumentsInput.safeParse({ documentId: 'DOC0' }).success, false);
 
-  assert.deepEqual(UpdateIconInput.parse({ id: 'E1', icon: 'star', iconColor: 'red' }), {
-    id: 'E1',
-    icon: 'star',
-    iconColor: 'red',
-  });
-  assert.equal(UpdateIconInput.safeParse({ id: 'E1', icon: 'star' }).success, false);
+  assert.deepEqual(
+    UpdateIconsInput.parse({
+      items: [
+        { id: 'E1', icon: 'star', iconColor: 'red' },
+        { id: 'E2', icon: 'book' },
+      ],
+    }),
+    {
+      items: [
+        { id: 'E1', icon: 'star', iconColor: 'red' },
+        { id: 'E2', icon: 'book' },
+      ],
+    },
+  );
+  assert.deepEqual(UpdateIconsInput.parse({ items: [{ id: 'E1', iconColor: 'red' }] }), { items: [{ id: 'E1', iconColor: 'red' }] });
+  assert.deepEqual(UpdateIconsInput.parse({ items: [{ id: 'E1' }] }), { items: [{ id: 'E1' }] });
+  assert.equal(UpdateIconsInput.safeParse({ items: [{ icon: 'star' }] }).success, false);
+  assert.equal(UpdateIconsInput.safeParse({ items: [] }).success, false);
+  assert.equal(UpdateIconsInput.safeParse({ items: Array.from({ length: 51 }, (_, i) => ({ id: `E${i}`, icon: 'star' })) }).success, false);
 
-  assert.deepEqual(RecoverEntityInput.parse({ id: 'E1' }), { id: 'E1' });
-  assert.equal(RecoverEntityInput.safeParse({}).success, false);
+  assert.deepEqual(RecoverEntitiesInput.parse({ ids: ['E1', 'D2'] }), { ids: ['E1', 'D2'] });
+  assert.equal(RecoverEntitiesInput.safeParse({ ids: [] }).success, false);
+  assert.equal(RecoverEntitiesInput.safeParse({ id: 'E1' }).success, false);
 });
 
 test('validIcon: 카탈로그 밖 이름·색 거절', () => {
   assert.equal(validIcon(ENTITY_ICON_NAMES[0], ENTITY_ICON_COLORS[0]), true);
   assert.equal(validIcon('not-an-icon', ENTITY_ICON_COLORS[0]), false);
   assert.equal(validIcon(ENTITY_ICON_NAMES[0], 'not-a-color'), false);
+  assert.equal(validIcon(ENTITY_ICON_NAMES[0]), true);
+  assert.equal(validIcon(undefined, ENTITY_ICON_COLORS[0]), true);
+  assert.equal(validIcon('not-an-icon'), false);
+  assert.equal(validIcon(undefined, 'not-a-color'), false);
 });
 
 test('입력 미러: note 계열', () => {
-  assert.deepEqual(CreateNoteInput.parse({ content: '메모' }), { content: '메모' });
-  assert.deepEqual(CreateNoteInput.parse({ content: '메모', color: 'red' }), { content: '메모', color: 'red' });
-  assert.equal(CreateNoteInput.safeParse({ content: '' }).success, false);
+  assert.deepEqual(CreateNotesInput.parse({ items: [{ content: '메모' }] }), { items: [{ content: '메모' }] });
+  assert.deepEqual(CreateNotesInput.parse({ items: [{ content: '메모', color: 'red' }, { content: '둘' }] }), {
+    items: [{ content: '메모', color: 'red' }, { content: '둘' }],
+  });
+  assert.equal(CreateNotesInput.safeParse({ items: [{ content: '' }] }).success, false);
+  assert.equal(CreateNotesInput.safeParse({ content: '메모' }).success, false);
 
-  assert.deepEqual(UpdateNoteInput.parse({ noteId: 'NOTE0' }), { noteId: 'NOTE0' });
-  assert.deepEqual(UpdateNoteInput.parse({ noteId: 'NOTE0', status: 'RESOLVED' }), { noteId: 'NOTE0', status: 'RESOLVED' });
-  assert.equal(UpdateNoteInput.safeParse({ noteId: 'NOTE0', content: '' }).success, false);
-  assert.equal(UpdateNoteInput.safeParse({ noteId: 'NOTE0', status: 'DONE' }).success, false);
+  assert.deepEqual(UpdateNotesInput.parse({ items: [{ noteId: 'NOTE0' }] }), { items: [{ noteId: 'NOTE0' }] });
+  assert.deepEqual(UpdateNotesInput.parse({ items: [{ noteId: 'NOTE0', status: 'RESOLVED' }] }), {
+    items: [{ noteId: 'NOTE0', status: 'RESOLVED' }],
+  });
+  assert.equal(UpdateNotesInput.safeParse({ items: [{ noteId: 'NOTE0', content: '' }] }).success, false);
+  assert.equal(UpdateNotesInput.safeParse({ items: [{ noteId: 'NOTE0', status: 'DONE' }] }).success, false);
+  assert.equal(UpdateNotesInput.safeParse({ noteId: 'NOTE0' }).success, false);
 
-  assert.deepEqual(NoteLinkInput.parse({ noteId: 'NOTE0', id: 'E1' }), { noteId: 'NOTE0', id: 'E1' });
-  assert.equal(NoteLinkInput.safeParse({ noteId: 'NOTE0' }).success, false);
+  assert.deepEqual(NoteLinksInput.parse({ items: [{ noteId: 'NOTE0', id: 'E1' }] }), { items: [{ noteId: 'NOTE0', id: 'E1' }] });
+  assert.equal(NoteLinksInput.safeParse({ items: [{ noteId: 'NOTE0' }] }).success, false);
+  assert.equal(NoteLinksInput.safeParse({ noteId: 'NOTE0', id: 'E1' }).success, false);
 
-  assert.deepEqual(DeleteNoteInput.parse({ noteId: 'NOTE0' }), { noteId: 'NOTE0' });
-  assert.equal(DeleteNoteInput.safeParse({}).success, false);
+  assert.deepEqual(DeleteNotesInput.parse({ noteIds: ['NOTE0', 'NOTE1'] }), { noteIds: ['NOTE0', 'NOTE1'] });
+  assert.equal(DeleteNotesInput.safeParse({ noteIds: [] }).success, false);
+  assert.equal(DeleteNotesInput.safeParse({ noteId: 'NOTE0' }).success, false);
 });
 
 test('입력 미러: goal 계열 — dueAt은 YYYY-MM-DD만', () => {
-  assert.deepEqual(SetGoalInput.parse({ targetCharacterCount: 1000 }), { targetCharacterCount: 1000 });
-  assert.deepEqual(SetGoalInput.parse({ targetCharacterCount: 1000, id: 'E1', dueAt: '2026-08-24' }), {
-    targetCharacterCount: 1000,
-    id: 'E1',
-    dueAt: '2026-08-24',
+  assert.deepEqual(SetGoalsInput.parse({ items: [{ targetCharacterCount: 1000 }] }), { items: [{ targetCharacterCount: 1000 }] });
+  assert.deepEqual(SetGoalsInput.parse({ items: [{ targetCharacterCount: 1000, id: 'E1', dueAt: '2026-08-24' }] }), {
+    items: [{ targetCharacterCount: 1000, id: 'E1', dueAt: '2026-08-24' }],
   });
-  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 0 }).success, false);
-  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1.5 }).success, false);
-  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1000, dueAt: '2026-08-24T00:00:00Z' }).success, false);
-  assert.equal(SetGoalInput.safeParse({ targetCharacterCount: 1000, dueAt: '2026/08/24' }).success, false);
+  assert.equal(SetGoalsInput.safeParse({ items: [{ targetCharacterCount: 0 }] }).success, false);
+  assert.equal(SetGoalsInput.safeParse({ items: [{ targetCharacterCount: 1.5 }] }).success, false);
+  assert.equal(SetGoalsInput.safeParse({ items: [{ targetCharacterCount: 1000, dueAt: '2026-08-24T00:00:00Z' }] }).success, false);
+  assert.equal(SetGoalsInput.safeParse({ items: [{ targetCharacterCount: 1000, dueAt: '2026/08/24' }] }).success, false);
+  assert.equal(SetGoalsInput.safeParse({ targetCharacterCount: 1000 }).success, false);
 
-  assert.deepEqual(DeleteGoalInput.parse({}), {});
-  assert.deepEqual(DeleteGoalInput.parse({ id: 'E1' }), { id: 'E1' });
+  assert.deepEqual(DeleteGoalsInput.parse({ items: [{}] }), { items: [{}] });
+  assert.deepEqual(DeleteGoalsInput.parse({ items: [{ id: 'E1' }, {}] }), { items: [{ id: 'E1' }, {}] });
+  assert.equal(DeleteGoalsInput.safeParse({}).success, false);
+  assert.equal(DeleteGoalsInput.safeParse({ items: [] }).success, false);
 });
 
 test('kstDueDate: 달력에 없는 날짜는 무음 롤오버 대신 null', () => {

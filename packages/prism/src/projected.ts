@@ -6,8 +6,8 @@ import type { Context, TurnContext } from './wire.ts';
 const EmptyData = z.object({});
 
 const DeleteTargetsData = z.object({ ids: z.array(z.string()) }).catch({ ids: [] });
-const DeleteNoteTargetData = z.object({ noteId: z.string() }).catch({ noteId: '' });
-const DeleteGoalTargetData = z.object({ id: z.string().optional() }).catch({ id: '' });
+const DeleteNoteTargetsData = z.object({ noteIds: z.array(z.string()) }).catch({ noteIds: [] });
+const DeleteGoalTargetsData = z.object({ items: z.array(z.object({ id: z.string().optional() })) }).catch({ items: [] });
 const SharingTargetsData = z
   .object({ ids: z.array(z.string()), visibility: z.enum(['PUBLIC', 'UNLISTED', 'PRIVATE']).nullable(), recursive: z.boolean().optional() })
   .catch({ ids: [], visibility: null });
@@ -25,16 +25,13 @@ const SharingResultData = z.union([
   z.object({ ok: z.literal(true), count: z.number().int().nonnegative(), changes: z.array(SharingChange) }),
   ToolFailureSchema,
 ]);
-const DeleteNoteResultData = z.union([z.object({ ok: z.literal(true), noteId: z.string() }), ToolFailureSchema]);
-const OkResultData = z.union([z.object({ ok: z.literal(true) }), ToolFailureSchema]);
-
 const TOOL_REQUEST_DATA: Record<string, z.ZodType | undefined> = {
   'list-open-documents': EmptyData,
   'confirm-review': ConfirmHintSchema,
   'ask-user': AskQuestionsSchema,
   'delete-entities': DeleteTargetsData,
-  'delete-note': DeleteNoteTargetData,
-  'delete-goal': DeleteGoalTargetData,
+  'delete-notes': DeleteNoteTargetsData,
+  'delete-goals': DeleteGoalTargetsData,
   'update-sharing': SharingTargetsData,
 };
 
@@ -42,8 +39,8 @@ const TOOL_RESULT_DATA: Record<string, z.ZodType | undefined> = {
   'confirm-review': ConfirmDecisionSchema,
   'ask-user': AskAnswersSchema,
   'delete-entities': CountResultData,
-  'delete-note': DeleteNoteResultData,
-  'delete-goal': OkResultData,
+  'delete-notes': CountResultData,
+  'delete-goals': CountResultData,
   'update-sharing': SharingResultData,
 };
 

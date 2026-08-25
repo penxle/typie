@@ -112,13 +112,16 @@ describe('tool data registry', () => {
     ).toThrow();
   });
 
-  it('되돌리기 어려운 나머지 셋(delete-note·delete-goal·update-sharing)도 요청 data를 보존하고, 형태 위반은 빈 좌표로 떨어진다', () => {
+  it('되돌리기 어려운 나머지 셋(delete-notes·delete-goals·update-sharing)도 요청 data를 보존하고, 형태 위반은 빈 좌표로 떨어진다', () => {
     const requested = (tool: string, data: unknown) => ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool, data } }).data;
-    expect(requested('delete-note', { noteId: 'N1', extra: 1 })).toEqual({ tool: 'delete-note', data: { noteId: 'N1' } });
-    expect(requested('delete-note', { noteId: 5 })).toEqual({ tool: 'delete-note', data: { noteId: '' } });
-    expect(requested('delete-goal', {})).toEqual({ tool: 'delete-goal', data: {} });
-    expect(requested('delete-goal', { id: 'E1' })).toEqual({ tool: 'delete-goal', data: { id: 'E1' } });
-    expect(requested('delete-goal', { id: 5 })).toEqual({ tool: 'delete-goal', data: { id: '' } });
+    expect(requested('delete-notes', { noteIds: ['N1', 'N2'], extra: 1 })).toEqual({
+      tool: 'delete-notes',
+      data: { noteIds: ['N1', 'N2'] },
+    });
+    expect(requested('delete-notes', { noteIds: [5] })).toEqual({ tool: 'delete-notes', data: { noteIds: [] } });
+    expect(requested('delete-goals', { items: [{}] })).toEqual({ tool: 'delete-goals', data: { items: [{}] } });
+    expect(requested('delete-goals', { items: [{ id: 'E1' }, {}] })).toEqual({ tool: 'delete-goals', data: { items: [{ id: 'E1' }, {}] } });
+    expect(requested('delete-goals', { items: [{ id: 5 }] })).toEqual({ tool: 'delete-goals', data: { items: [] } });
     expect(requested('update-sharing', { ids: ['D1', 'E2'], visibility: 'PUBLIC', recursive: true, extra: 1 })).toEqual({
       tool: 'update-sharing',
       data: { ids: ['D1', 'E2'], visibility: 'PUBLIC', recursive: true },
@@ -133,12 +136,8 @@ describe('tool data registry', () => {
     const resolved = (tool: string, data: unknown) =>
       ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool, ok: true, data } }).data;
     const declined = { ok: false, code: 'declined', message: '작가가 이 행동을 하지 않기로 했어요' };
-    expect(resolved('delete-note', { ok: true, noteId: 'N1' })).toEqual({
-      tool: 'delete-note',
-      ok: true,
-      data: { ok: true, noteId: 'N1' },
-    });
-    expect(resolved('delete-goal', { ok: true })).toEqual({ tool: 'delete-goal', ok: true, data: { ok: true } });
+    expect(resolved('delete-notes', { ok: true, count: 2 })).toEqual({ tool: 'delete-notes', ok: true, data: { ok: true, count: 2 } });
+    expect(resolved('delete-goals', { ok: true, count: 1 })).toEqual({ tool: 'delete-goals', ok: true, data: { ok: true, count: 1 } });
     const change = { id: 'E1', kind: 'document', title: '바다', from: 'PRIVATE', to: 'UNLISTED' };
     expect(resolved('update-sharing', { ok: true, count: 1, changes: [change] })).toEqual({
       tool: 'update-sharing',
@@ -146,10 +145,11 @@ describe('tool data registry', () => {
       data: { ok: true, count: 1, changes: [change] },
     });
     expect(() => resolved('update-sharing', { ok: true, count: 1 })).toThrow();
-    for (const tool of ['delete-note', 'delete-goal', 'update-sharing']) {
+    for (const tool of ['delete-notes', 'delete-goals', 'update-sharing']) {
       expect(resolved(tool, declined)).toEqual({ tool, ok: true, data: declined });
     }
-    expect(() => resolved('delete-note', { ok: true })).toThrow();
+    expect(() => resolved('delete-notes', { ok: true })).toThrow();
+    expect(() => resolved('delete-goals', { ok: true })).toThrow();
     expect(() => resolved('update-sharing', { ok: true })).toThrow();
   });
 

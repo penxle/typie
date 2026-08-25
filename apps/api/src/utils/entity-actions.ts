@@ -719,8 +719,8 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
 type UpdateEntityIconCoreArgs = {
   userId: string;
   entityId: string;
-  icon: string;
-  iconColor: string;
+  icon?: string;
+  iconColor?: string;
 };
 
 export const updateEntityIconCore = async (executor: Database | Transaction, args: UpdateEntityIconCoreArgs) => {
@@ -739,7 +739,10 @@ export const updateEntityIconCore = async (executor: Database | Transaction, arg
 
   const updatedEntity = await executor
     .update(Entities)
-    .set({ icon: args.icon, iconColor: args.iconColor })
+    .set({
+      ...(args.icon !== undefined && { icon: args.icon }),
+      ...(args.iconColor !== undefined && { iconColor: args.iconColor }),
+    })
     .where(eq(Entities.id, args.entityId))
     .returning()
     .then(firstOrThrow);

@@ -30,7 +30,7 @@ export const actionCards: Record<string, ActionCard | undefined> = {
     action: 'danger',
     doneLabel: '삭제했어요',
   },
-  'delete-note': {
+  'delete-notes': {
     title: '노트를 지울까요?',
     icon: TrashIcon,
     body: DeleteNoteBody,
@@ -38,7 +38,7 @@ export const actionCards: Record<string, ActionCard | undefined> = {
     action: 'danger',
     doneLabel: '노트를 지웠어요',
   },
-  'delete-goal': {
+  'delete-goals': {
     title: '목표를 없앨까요?',
     icon: TargetIcon,
     body: DeleteGoalBody,

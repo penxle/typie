@@ -41,34 +41,34 @@ import { snapshotManuscript } from './prism-manuscript.ts';
 import { ERROR_MESSAGE } from './prism-tool-messages.ts';
 import {
   COMMENT_PAGE_SIZE,
-  CreateDocumentInput,
-  CreateFolderInput,
-  CreateNoteInput,
+  CreateDocumentsInput,
+  CreateFoldersInput,
+  CreateNotesInput,
   DeleteEntitiesInput,
-  DeleteGoalInput,
-  DeleteNoteInput,
-  DuplicateDocumentInput,
+  DeleteGoalsInput,
+  DeleteNotesInput,
+  DuplicateDocumentsInput,
   entityRefKind,
   entityUrl,
   kstDate,
   kstDueDate,
   ListEntitiesInput,
   MoveEntitiesInput,
-  NoteLinkInput,
+  NoteLinksInput,
   notePreview,
   pageOf,
   ReadCommentsInput,
   ReadDocumentInput,
   ReadNoteInput,
   ReadSharingInput,
-  RecoverEntityInput,
-  RenameFolderInput,
+  RecoverEntitiesInput,
+  RenameFoldersInput,
   SearchEntitiesInput,
-  SetGoalInput,
+  SetGoalsInput,
   snippetOf,
   TRASH_PAGE_SIZE,
-  UpdateIconInput,
-  UpdateNoteInput,
+  UpdateIconsInput,
+  UpdateNotesInput,
   UpdateSharingInput,
   validIcon,
   windowOf,
@@ -579,6 +579,20 @@ const folderEntityId = async (ctx: PrismToolContext, folderId: string): Promise<
     .then(first)
     .then((row) => row?.entityId ?? null);
 
+const folderEntityIds = async (ctx: PrismToolContext, folderIds: string[]): Promise<Map<string, string> | null> => {
+  const unique = [...new Set(folderIds)];
+  if (unique.length === 0) return new Map();
+
+  const rows = await ctx.executor
+    .select({ folderId: Folders.id, entityId: Folders.entityId })
+    .from(Folders)
+    .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+    .where(and(inArray(Folders.id, unique), eq(Entities.siteId, ctx.siteId), eq(Entities.state, EntityState.ACTIVE)));
+  if (rows.length !== unique.length) return null;
+
+  return new Map(rows.map((row) => [row.folderId, row.entityId]));
+};
+
 const idsOfKind = (ids: string[], kind: EntityRefKind): string[] => ids.filter((id) => entityRefKind(id) === kind);
 
 export const entityRefFilter = (ids: string[]): SQL | undefined =>
@@ -616,52 +630,53 @@ const resolveEntityRefs = async (ctx: PrismToolContext, ids: string[], state: En
   return refs;
 };
 
-const resolveEntityId = async (ctx: PrismToolContext, id: string): Promise<string | null> => {
-  const refs = await resolveEntityRefs(ctx, [id], EntityState.ACTIVE);
-
-  return refs.get(id)?.entityId ?? null;
-};
-
-const resolveEntityIds = async (ctx: PrismToolContext, ids: string[]): Promise<string[] | null> => {
+const resolveEntityIdMap = async (ctx: PrismToolContext, ids: string[]): Promise<Map<string, string> | null> => {
   const unique = [...new Set(ids)];
   const refs = await resolveEntityRefs(ctx, unique, EntityState.ACTIVE);
   if (refs.size !== unique.length) return null;
 
-  return [...new Set([...refs.values()].map((ref) => ref.entityId))];
+  return new Map([...refs].map(([id, ref]) => [id, ref.entityId]));
 };
 
-const scopedNote = async (ctx: PrismToolContext, noteId: string): Promise<boolean> =>
-  await ctx.executor
+const resolveEntityIds = async (ctx: PrismToolContext, ids: string[]): Promise<string[] | null> => {
+  const map = await resolveEntityIdMap(ctx, ids);
+  if (map === null) return null;
+
+  return [...new Set(map.values())];
+};
+
+const scopedNotes = async (ctx: PrismToolContext, noteIds: string[]): Promise<boolean> => {
+  const unique = [...new Set(noteIds)];
+  const rows = await ctx.executor
     .select({ id: Notes.id })
     .from(Notes)
-    .where(and(eq(Notes.id, noteId), eq(Notes.siteId, ctx.siteId), eq(Notes.userId, ctx.userId), eq(Notes.state, NoteState.ACTIVE)))
-    .then(first)
-    .then((row) => row !== undefined);
+    .where(and(inArray(Notes.id, unique), eq(Notes.siteId, ctx.siteId), eq(Notes.userId, ctx.userId), eq(Notes.state, NoteState.ACTIVE)));
 
-const createFolder = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = CreateFolderInput.safeParse(input);
+  return rows.length === unique.length;
+};
+
+const createFolders = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = CreateFoldersInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  let parentEntityId: string | null = null;
-  if (parsed.data.parentFolderId !== undefined) {
-    const parent = await ctx.executor
-      .select({ entityId: Folders.entityId })
-      .from(Folders)
-      .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-      .where(and(eq(Folders.id, parsed.data.parentFolderId), eq(Entities.siteId, ctx.siteId), eq(Entities.state, EntityState.ACTIVE)))
-      .then(first);
-    if (!parent) return toolFailure('error', '상위 폴더를 찾지 못했어요 — list-entities로 폴더를 다시 확인하세요.');
-    parentEntityId = parent.entityId;
+  const parents = await folderEntityIds(
+    ctx,
+    parsed.data.items.flatMap((item) => (item.parentFolderId === undefined ? [] : [item.parentFolderId])),
+  );
+  if (parents === null) return toolFailure('error', '상위 폴더를 찾지 못했어요 — list-entities로 폴더를 다시 확인하세요.');
+
+  const folders = [];
+  for (const item of parsed.data.items) {
+    const folder = await createFolderCore(ctx.executor, {
+      userId: ctx.userId,
+      siteId: ctx.siteId,
+      parentEntityId: item.parentFolderId === undefined ? null : (parents.get(item.parentFolderId) ?? null),
+      name: item.name,
+    });
+    folders.push({ folderId: folder.id, name: item.name, entityId: folder.entityId });
   }
 
-  const folder = await createFolderCore(ctx.executor, {
-    userId: ctx.userId,
-    siteId: ctx.siteId,
-    parentEntityId,
-    name: parsed.data.name,
-  });
-
-  return { ok: true, folderId: folder.id, name: parsed.data.name, entityId: folder.entityId };
+  return { ok: true, folders };
 };
 
 const deleteEntities = async (ctx: PrismToolContext, input: unknown) => {
@@ -680,29 +695,43 @@ const deleteEntities = async (ctx: PrismToolContext, input: unknown) => {
   return { ok: true, count: entityIds.length };
 };
 
-const createDocument = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = CreateDocumentInput.safeParse(input);
+const createDocuments = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = CreateDocumentsInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  let parentEntityId: string | null = null;
-  if (parsed.data.folderId !== undefined) {
-    parentEntityId = await folderEntityId(ctx, parsed.data.folderId);
-    if (parentEntityId === null) return toolFailure('error', NOT_FOUND_FOLDER);
+  const parents = await folderEntityIds(
+    ctx,
+    parsed.data.items.flatMap((item) => (item.folderId === undefined ? [] : [item.folderId])),
+  );
+  if (parents === null) return toolFailure('error', NOT_FOUND_FOLDER);
+
+  const documents = [];
+  for (const item of parsed.data.items) {
+    const document = await createDocumentCore(ctx.executor, {
+      userId: ctx.userId,
+      siteId: ctx.siteId,
+      parentEntityId: item.folderId === undefined ? null : (parents.get(item.folderId) ?? null),
+    });
+    documents.push({ documentId: document.id, entityId: document.entityId });
   }
 
-  const document = await createDocumentCore(ctx.executor, { userId: ctx.userId, siteId: ctx.siteId, parentEntityId });
-
-  return { ok: true, documentId: document.id, entityId: document.entityId };
+  return { ok: true, documents };
 };
 
-const renameFolder = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = RenameFolderInput.safeParse(input);
+const renameFolders = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = RenameFoldersInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if ((await folderEntityId(ctx, parsed.data.folderId)) === null) return toolFailure('error', NOT_FOUND_FOLDER);
+  const folders = await folderEntityIds(
+    ctx,
+    parsed.data.items.map((item) => item.folderId),
+  );
+  if (folders === null) return toolFailure('error', NOT_FOUND_FOLDER);
 
-  await renameFolderCore(ctx.executor, { userId: ctx.userId, folderId: parsed.data.folderId, name: parsed.data.name });
+  for (const item of parsed.data.items) {
+    await renameFolderCore(ctx.executor, { userId: ctx.userId, folderId: item.folderId, name: item.name });
+  }
 
-  return { ok: true, folderId: parsed.data.folderId, name: parsed.data.name };
+  return { ok: true, count: parsed.data.items.length };
 };
 
 const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
@@ -730,160 +759,228 @@ const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
   return { ok: true, count: entityIds.length };
 };
 
-const duplicateDocument = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = DuplicateDocumentInput.safeParse(input);
+const duplicateDocuments = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = DuplicateDocumentsInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
+  const unique = [...new Set(parsed.data.documentIds)];
   const owned = await ctx.executor
     .select({ id: Documents.id })
     .from(Documents)
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .where(and(eq(Documents.id, parsed.data.documentId), eq(Entities.siteId, ctx.siteId), eq(Entities.state, EntityState.ACTIVE)))
-    .then(first);
-  if (!owned) return toolFailure('error', '그 문서를 찾지 못했어요 — search-entities나 list-entities로 다시 찾아보세요.');
+    .where(and(inArray(Documents.id, unique), eq(Entities.siteId, ctx.siteId), eq(Entities.state, EntityState.ACTIVE)));
+  if (owned.length !== unique.length) {
+    return toolFailure('error', '일부 문서를 찾지 못했어요 — search-entities나 list-entities로 다시 찾아보세요.');
+  }
 
-  const document = await duplicateDocumentCore(ctx.executor, { userId: ctx.userId, documentId: parsed.data.documentId });
+  const documents = [];
+  for (const documentId of parsed.data.documentIds) {
+    const document = await duplicateDocumentCore(ctx.executor, { userId: ctx.userId, documentId });
+    documents.push({ documentId: document.id, entityId: document.entityId });
+  }
 
-  return { ok: true, documentId: document.id, entityId: document.entityId };
+  return { ok: true, documents };
 };
 
-const updateIcon = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = UpdateIconInput.safeParse(input);
+const updateIcons = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = UpdateIconsInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if (!validIcon(parsed.data.icon, parsed.data.iconColor)) {
+  if (parsed.data.items.some((item) => item.icon === undefined && item.iconColor === undefined)) {
+    return toolFailure('error', '아이콘이나 색 중 하나는 줘야 해요.');
+  }
+  if (parsed.data.items.some((item) => !validIcon(item.icon, item.iconColor))) {
     return toolFailure('error', '그 아이콘이나 색은 없어요 — 목록에 있는 이름만 쓸 수 있어요.');
   }
-  const entityId = await resolveEntityId(ctx, parsed.data.id);
-  if (entityId === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  const entityIds = await resolveEntityIdMap(
+    ctx,
+    parsed.data.items.map((item) => item.id),
+  );
+  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
 
-  await updateEntityIconCore(ctx.executor, { userId: ctx.userId, entityId, icon: parsed.data.icon, iconColor: parsed.data.iconColor });
-
-  return { ok: true, entityId };
-};
-
-const recoverEntity = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = RecoverEntityInput.safeParse(input);
-  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  const refs = await resolveEntityRefs(ctx, [parsed.data.id], EntityState.DELETED);
-  const ref = refs.get(parsed.data.id);
-  if (ref === undefined || ref.deletedAt === null || !ref.deletedAt.isAfter(dayjs().subtract(30, 'days'))) {
-    return toolFailure('error', '휴지통에서 그 항목을 찾지 못했어요 — list-trash로 다시 확인하세요.');
+  for (const item of parsed.data.items) {
+    const entityId = entityIds.get(item.id);
+    if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
+    await updateEntityIconCore(ctx.executor, { userId: ctx.userId, entityId, icon: item.icon, iconColor: item.iconColor });
   }
 
-  await recoverEntityCore(ctx.executor, { userId: ctx.userId, entityId: ref.entityId });
-
-  return { ok: true, entityId: ref.entityId };
+  return { ok: true, count: parsed.data.items.length };
 };
 
-const createNote = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = CreateNoteInput.safeParse(input);
+const recoverEntities = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = RecoverEntitiesInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+  const unique = [...new Set(parsed.data.ids)];
+  const refs = await resolveEntityRefs(ctx, unique, EntityState.DELETED);
+  const floor = dayjs().subtract(30, 'days');
+  const recoverable = [...refs.values()].filter((ref) => ref.deletedAt !== null && ref.deletedAt.isAfter(floor));
+  if (recoverable.length !== unique.length) {
+    return toolFailure('error', '휴지통에서 일부 항목을 찾지 못했어요 — list-trash로 다시 확인하세요.');
+  }
+
+  const entityIds = [...new Set(recoverable.map((ref) => ref.entityId))];
+  for (const entityId of entityIds) {
+    await recoverEntityCore(ctx.executor, { userId: ctx.userId, entityId });
+  }
+
+  return { ok: true, count: entityIds.length };
+};
+
+const createNotes = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = CreateNotesInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
   await assertActiveSubscription({ userId: ctx.userId });
 
-  const color = parsed.data.color ?? NOTE_DEFAULT_COLOR;
-  if (!NOTE_COLORS.includes(color)) return toolFailure('error', INVALID_COLOR);
+  const items = parsed.data.items.map((item) => ({ content: item.content, color: item.color ?? NOTE_DEFAULT_COLOR }));
+  if (items.some((item) => !NOTE_COLORS.includes(item.color))) return toolFailure('error', INVALID_COLOR);
 
-  const note = await createNoteCore(ctx.executor, {
-    userId: ctx.userId,
-    siteId: ctx.siteId,
-    content: parsed.data.content,
-    color,
-    entityIds: [],
-  });
-
-  return { ok: true, noteId: note.id };
-};
-
-const updateNote = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = UpdateNoteInput.safeParse(input);
-  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if (parsed.data.color !== undefined && !NOTE_COLORS.includes(parsed.data.color)) return toolFailure('error', INVALID_COLOR);
-  if (!(await scopedNote(ctx, parsed.data.noteId))) return toolFailure('error', NOT_FOUND_NOTE);
-
-  await updateNoteCore(ctx.executor, { userId: ctx.userId, ...parsed.data });
-
-  return { ok: true, noteId: parsed.data.noteId };
-};
-
-const attachNote = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = NoteLinkInput.safeParse(input);
-  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if (!(await scopedNote(ctx, parsed.data.noteId))) return toolFailure('error', NOT_FOUND_NOTE);
-  const entityId = await resolveEntityId(ctx, parsed.data.id);
-  if (entityId === null) return toolFailure('error', NOT_FOUND_TARGETS);
-
-  await addNoteEntityCore(ctx.executor, { userId: ctx.userId, noteId: parsed.data.noteId, entityId });
-
-  return { ok: true, noteId: parsed.data.noteId, entityId };
-};
-
-const detachNote = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = NoteLinkInput.safeParse(input);
-  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if (!(await scopedNote(ctx, parsed.data.noteId))) return toolFailure('error', NOT_FOUND_NOTE);
-  const entityId = await resolveEntityId(ctx, parsed.data.id);
-  if (entityId === null) return toolFailure('error', NOT_FOUND_TARGETS);
-
-  await removeNoteEntityCore(ctx.executor, { userId: ctx.userId, noteId: parsed.data.noteId, entityId });
-
-  return { ok: true, noteId: parsed.data.noteId, entityId };
-};
-
-const setGoal = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = SetGoalInput.safeParse(input);
-  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-
-  if (parsed.data.id === undefined) {
-    await upsertUserGoalCore(ctx.executor, { userId: ctx.userId, targetCharacterCount: parsed.data.targetCharacterCount });
-
-    return { ok: true };
+  const noteIds = [];
+  for (const item of items) {
+    const note = await createNoteCore(ctx.executor, {
+      userId: ctx.userId,
+      siteId: ctx.siteId,
+      content: item.content,
+      color: item.color,
+      entityIds: [],
+    });
+    noteIds.push(note.id);
   }
 
-  const entityId = await resolveEntityId(ctx, parsed.data.id);
-  if (entityId === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  return { ok: true, noteIds };
+};
 
-  const dueAt = parsed.data.dueAt === undefined ? null : kstDueDate(parsed.data.dueAt);
-  if (dueAt === null && parsed.data.dueAt !== undefined) {
-    return toolFailure('error', '그 날짜는 달력에 없어요 — YYYY-MM-DD로 실제 날짜를 주세요.');
+const updateNotes = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = UpdateNotesInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+  if (parsed.data.items.some((item) => item.color !== undefined && !NOTE_COLORS.includes(item.color))) {
+    return toolFailure('error', INVALID_COLOR);
+  }
+  const noteIds = parsed.data.items.map((item) => item.noteId);
+  if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
+
+  for (const item of parsed.data.items) {
+    await updateNoteCore(ctx.executor, { userId: ctx.userId, ...item });
   }
 
-  await upsertEntityGoalCore(ctx.executor, {
-    userId: ctx.userId,
-    entityId,
-    targetCharacterCount: parsed.data.targetCharacterCount,
-    dueAt,
-  });
-
-  return { ok: true };
+  return { ok: true, count: parsed.data.items.length };
 };
 
-const deleteNote = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = DeleteNoteInput.safeParse(input);
+const resolveNoteLinks = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = NoteLinksInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
-  if (!(await scopedNote(ctx, parsed.data.noteId))) return toolFailure('error', NOT_FOUND_NOTE);
+  const noteIds = parsed.data.items.map((item) => item.noteId);
+  if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
+  const entityIds = await resolveEntityIdMap(
+    ctx,
+    parsed.data.items.map((item) => item.id),
+  );
+  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
 
-  await deleteNoteCore(ctx.executor, { userId: ctx.userId, noteId: parsed.data.noteId });
+  const links = [];
+  for (const item of parsed.data.items) {
+    const entityId = entityIds.get(item.id);
+    if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
+    links.push({ noteId: item.noteId, entityId });
+  }
 
-  return { ok: true, noteId: parsed.data.noteId };
+  return links;
 };
 
-const deleteGoal = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = DeleteGoalInput.safeParse(input);
+const attachNotes = async (ctx: PrismToolContext, input: unknown) => {
+  const links = await resolveNoteLinks(ctx, input);
+  if (!Array.isArray(links)) return links;
+
+  for (const link of links) {
+    await addNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link });
+  }
+
+  return { ok: true, count: links.length };
+};
+
+const detachNotes = async (ctx: PrismToolContext, input: unknown) => {
+  const links = await resolveNoteLinks(ctx, input);
+  if (!Array.isArray(links)) return links;
+
+  for (const link of links) {
+    await removeNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link });
+  }
+
+  return { ok: true, count: links.length };
+};
+
+const setGoals = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = SetGoalsInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  if (parsed.data.id === undefined) {
+  const entityIds = await resolveEntityIdMap(
+    ctx,
+    parsed.data.items.flatMap((item) => (item.id === undefined ? [] : [item.id])),
+  );
+  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+
+  const goals = [];
+  for (const item of parsed.data.items) {
+    if (item.id === undefined) {
+      goals.push({ entityId: null, targetCharacterCount: item.targetCharacterCount, dueAt: null });
+      continue;
+    }
+    const entityId = entityIds.get(item.id);
+    if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
+    const dueAt = item.dueAt === undefined ? null : kstDueDate(item.dueAt);
+    if (dueAt === null && item.dueAt !== undefined) {
+      return toolFailure('error', '그 날짜는 달력에 없어요 — YYYY-MM-DD로 실제 날짜를 주세요.');
+    }
+    goals.push({ entityId, targetCharacterCount: item.targetCharacterCount, dueAt });
+  }
+
+  for (const goal of goals) {
+    if (goal.entityId === null) {
+      await upsertUserGoalCore(ctx.executor, { userId: ctx.userId, targetCharacterCount: goal.targetCharacterCount });
+    } else {
+      await upsertEntityGoalCore(ctx.executor, {
+        userId: ctx.userId,
+        entityId: goal.entityId,
+        targetCharacterCount: goal.targetCharacterCount,
+        dueAt: goal.dueAt,
+      });
+    }
+  }
+
+  return { ok: true, count: goals.length };
+};
+
+const deleteNotes = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = DeleteNotesInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+  const noteIds = [...new Set(parsed.data.noteIds)];
+  if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
+
+  for (const noteId of noteIds) {
+    await deleteNoteCore(ctx.executor, { userId: ctx.userId, noteId });
+  }
+
+  return { ok: true, count: noteIds.length };
+};
+
+const deleteGoals = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = DeleteGoalsInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+
+  const scopedIds = [...new Set(parsed.data.items.flatMap((item) => (item.id === undefined ? [] : [item.id])))];
+  const entityIds = await resolveEntityIdMap(ctx, scopedIds);
+  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+
+  const targets = [...new Set(scopedIds.map((id) => entityIds.get(id)).filter((entityId) => entityId !== undefined))];
+  const userGoal = parsed.data.items.some((item) => item.id === undefined);
+
+  if (userGoal) {
     await deleteUserGoalCore(ctx.executor, { userId: ctx.userId });
-
-    return { ok: true };
+  }
+  for (const entityId of targets) {
+    await deleteEntityGoalCore(ctx.executor, { userId: ctx.userId, entityId });
   }
 
-  const entityId = await resolveEntityId(ctx, parsed.data.id);
-  if (entityId === null) return toolFailure('error', NOT_FOUND_TARGETS);
-
-  await deleteEntityGoalCore(ctx.executor, { userId: ctx.userId, entityId });
-
-  return { ok: true };
+  return { ok: true, count: targets.length + (userGoal ? 1 : 0) };
 };
 
 const updateSharing = async (ctx: PrismToolContext, input: unknown) => {
@@ -962,20 +1059,20 @@ export const workspaceTools: Record<string, PrismToolHandler> = {
   'read-comments': readComments,
   'list-trash': listTrash,
   'list-icons': listIcons,
-  'create-folder': createFolder,
-  'create-document': createDocument,
-  'rename-folder': renameFolder,
+  'create-folders': createFolders,
+  'create-documents': createDocuments,
+  'rename-folders': renameFolders,
   'move-entities': moveEntities,
-  'duplicate-document': duplicateDocument,
-  'create-note': createNote,
-  'update-note': updateNote,
-  'attach-note': attachNote,
-  'detach-note': detachNote,
-  'set-goal': setGoal,
-  'update-icon': updateIcon,
-  'recover-entity': recoverEntity,
+  'duplicate-documents': duplicateDocuments,
+  'create-notes': createNotes,
+  'update-notes': updateNotes,
+  'attach-notes': attachNotes,
+  'detach-notes': detachNotes,
+  'set-goals': setGoals,
+  'update-icons': updateIcons,
+  'recover-entities': recoverEntities,
   'delete-entities': deleteEntities,
-  'delete-note': deleteNote,
-  'delete-goal': deleteGoal,
+  'delete-notes': deleteNotes,
+  'delete-goals': deleteGoals,
   'update-sharing': updateSharing,
 };
