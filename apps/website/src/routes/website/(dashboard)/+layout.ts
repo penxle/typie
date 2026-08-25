@@ -107,6 +107,7 @@ export const load: LayoutLoad = async (event) => {
 
         ...AdminImpersonateBanner_query
         ...DashboardLayout_Shortcuts_query
+        ...WidgetGroup_query
       }
     `),
   );

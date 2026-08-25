@@ -29,8 +29,6 @@ export const load: PageLoad = async (event) => {
             }
           }
         }
-
-        ...WidgetGroup_query
       }
     `),
     { slug, isHome },

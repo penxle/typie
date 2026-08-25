@@ -45,6 +45,7 @@
   import { SubscribeModal as SubscribeModalState } from './@subscription/subscribe-modal.svelte';
   import SubscribeModal from './@subscription/SubscribeModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
+  import WidgetGroup from './@widgets/WidgetGroup.svelte';
   import AppHeader from './AppHeader.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
@@ -569,9 +570,11 @@
 
       <div
         class={flex({
+          position: 'relative',
           flexDirection: 'column',
           flexGrow: '1',
           minWidth: '0',
+          overflow: 'hidden',
         })}
       >
         <AppHeader />
@@ -588,6 +591,10 @@
         >
           {@render children()}
         </div>
+
+        {#if page.params.slug}
+          <WidgetGroup query$key={query.data} />
+        {/if}
       </div>
 
       <PrismPanel user$key={query.data.me} />
