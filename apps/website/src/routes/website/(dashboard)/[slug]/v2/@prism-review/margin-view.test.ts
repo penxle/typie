@@ -21,19 +21,18 @@ describe('resolveMode', () => {
     expect(resolveMode(need - 100, body, 'column')).toBe('popover');
   });
 
-  it('임계 근처에서는 현재 모드를 유지한다', () => {
-    expect(resolveMode(need - 20, body, 'column')).toBe('column');
-    expect(resolveMode(need + 20, body, 'popover')).toBe('popover');
+  it('실제로 들어가지 않는 폭에서는 컬럼을 유지하지 않는다', () => {
+    expect(resolveMode(need - 0.1, body, 'column')).toBe('popover');
+    expect(resolveMode(need, body, 'column')).toBe('column');
   });
 
-  it('이탈 문턱은 정확히 40이다', () => {
-    expect(resolveMode(need - 40, body, 'column')).toBe('column');
-    expect(resolveMode(need - 41, body, 'column')).toBe('popover');
+  it('진입 여유 안에서는 현재 모드를 유지한다', () => {
+    expect(resolveMode(need, body, 'column')).toBe('column');
+    expect(resolveMode(need + 7, body, 'popover')).toBe('popover');
   });
 
-  it('진입 문턱은 정확히 40이다', () => {
-    expect(resolveMode(need + 40, body, 'popover')).toBe('column');
-    expect(resolveMode(need + 39, body, 'popover')).toBe('popover');
+  it('8px 여유가 생기면 컬럼에 진입한다', () => {
+    expect(resolveMode(need + 8, body, 'popover')).toBe('column');
   });
 });
 
