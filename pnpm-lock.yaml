@@ -680,6 +680,9 @@ importers:
       marked:
         specifier: ^18.0.7
         version: 18.0.7
+      marked-cjk-friendly:
+        specifier: ^0.1.1
+        version: 0.1.1(marked@18.0.7)
       match-sorter:
         specifier: ^8.3.0
         version: 8.3.0
@@ -7361,6 +7364,12 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
+
+  marked-cjk-friendly@0.1.1:
+    resolution: {integrity: sha512-fuGeoX9R5qACZcSFP+w6xHw+tzlYNqbI0H4v5Tkch8HMnxHgq+soRF7/w7Pn+9MlRX4yqtFGeuUE4mmWUEwvyQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      marked: '>=15.0.0'
 
   marked@15.0.12:
     resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
@@ -16269,6 +16278,10 @@ snapshots:
       web-worker: 1.5.0
 
   markdown-table@3.0.4: {}
+
+  marked-cjk-friendly@0.1.1(marked@18.0.7):
+    dependencies:
+      marked: 18.0.7
 
   marked@15.0.12: {}
 

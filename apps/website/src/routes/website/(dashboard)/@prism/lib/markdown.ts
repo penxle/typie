@@ -1,4 +1,5 @@
-import { Lexer } from 'marked';
+import { Marked } from 'marked';
+import markedCjkFriendly from 'marked-cjk-friendly';
 import type { Token, Tokens } from 'marked';
 
 export type InlineNode =
@@ -177,9 +178,12 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
   return out;
 };
 
+// `**'인용'**을`처럼 닫는 기호 앞이 구두점이면 CommonMark의 right-flanking 판정이 강조를 취소한다.
+const marked = new Marked({ gfm: true, breaks: true }, markedCjkFriendly());
+
 export const parseMarkdown = (source: string): BlockNode[] => {
   if (source.length === 0) return [];
-  return blockNodes(new Lexer({ gfm: true, breaks: true }).lex(source), 0);
+  return blockNodes(marked.lexer(source), 0);
 };
 
 const CARD_FENCE_OPENING = '```typie:';

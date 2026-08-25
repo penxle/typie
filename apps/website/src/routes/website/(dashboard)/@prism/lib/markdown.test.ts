@@ -5,6 +5,11 @@ import type { BlockNode, InlineNode } from './markdown.ts';
 const wordsOf = (nodes: InlineNode[]): string[] =>
   nodes.flatMap((node) => ('children' in node ? wordsOf(node.children) : node.kind === 'word' ? [node.text] : []));
 
+const nestedOf = (nodes: InlineNode[]): string[] =>
+  nodes.flatMap((node) => ('children' in node ? [node.kind, ...nestedOf(node.children)] : []));
+
+const inlineOf = (source: string): InlineNode[] => (parseMarkdown(source)[0] as BlockNode & { kind: 'paragraph' }).children;
+
 describe('parseMarkdown', () => {
   it('문단·강조·링크를 오프셋 키가 붙은 트리로 만든다', () => {
     const source = '첫 문단이에요\n\n둘째 **굵게** 문단과 [링크](https://x.co)';
@@ -97,6 +102,23 @@ describe('parseMarkdown', () => {
     expect(blocks.map((block) => block.kind)).toEqual(['paragraph']);
     const [linked] = blocks as (BlockNode & { kind: 'paragraph' })[];
     expect(linked.children.find((node) => node.kind === 'link')).toMatchObject({ href: 'https://x.co' });
+  });
+
+  it('닫는 기호 앞이 구두점이고 뒤에 조사가 붙어도 강조가 선다', () => {
+    expect(nestedOf(inlineOf("그리고 **'두 존재를 결합한 기괴한 부활극'**을 온전히 엮어"))).toEqual(['strong']);
+    expect(nestedOf(inlineOf('앞 **"가나"**을 뒤'))).toEqual(['strong']);
+    expect(nestedOf(inlineOf('앞 **(가나)**이 뒤'))).toEqual(['strong']);
+    expect(nestedOf(inlineOf('앞 **가나.**은 뒤'))).toEqual(['strong']);
+    expect(nestedOf(inlineOf("앞 *'가나'*라고 뒤"))).toEqual(['em']);
+    expect(nestedOf(inlineOf("앞 ~~'가나'~~를 뒤"))).toEqual(['del']);
+    expect(wordsOf(inlineOf("그리고 **'두 존재'**를 엮어"))).toEqual(['그리고', "'두", "존재'", '를', '엮어']);
+  });
+
+  it('한글이 없으면 CommonMark 그대로다 — 영문 거동과 별표 리터럴은 바뀌지 않는다', () => {
+    expect(nestedOf(inlineOf("and **'the thing'**was here"))).toEqual([]);
+    expect(nestedOf(inlineOf('2 * 3 * 4 = 24'))).toEqual([]);
+    expect(nestedOf(inlineOf('**굵고 *기울고* 굵게**'))).toEqual(['strong', 'em']);
+    expect(nestedOf(inlineOf('and **bold** here'))).toEqual(['strong']);
   });
 
   it('여전히 미지원인 토큰은 원문 그대로 평문 폴백한다', () => {
