@@ -167,29 +167,25 @@
     willChange: 'min-width, max-width',
   })}
 >
-  <aside
-    class={flex({
-      position: 'absolute',
-      inset: '0',
-      zIndex: 'panel',
-      backgroundColor: 'surface.default',
-      flexDirection: 'column',
-      width: 'full',
-      height: 'full',
-      opacity: isExpanded ? '100' : '0',
-      transitionProperty: '[opacity]',
-      transitionDuration: '200ms',
-      transitionTimingFunction: 'ease',
-      overflow: 'hidden',
-      borderLeftWidth: '1px',
-      borderColor: 'border.subtle',
-    })}
-    onfocusin={(event) => {
-      if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-      focusReturn.capture(event.relatedTarget);
-    }}
-  >
-    {#if isExpanded}
+  {#if isExpanded}
+    <aside
+      class={flex({
+        position: 'absolute',
+        inset: '0',
+        zIndex: 'panel',
+        backgroundColor: 'surface.default',
+        flexDirection: 'column',
+        width: 'full',
+        height: 'full',
+        overflow: 'hidden',
+        borderLeftWidth: '1px',
+        borderColor: 'border.subtle',
+      })}
+      onfocusin={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        focusReturn.capture(event.relatedTarget);
+      }}
+    >
       {#if paneGroup.state.current.panelTabByPaneId[paneId] === 'settings'}
         <DocumentPanelSettings document$key={document.data} />
       {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
@@ -230,49 +226,48 @@
           아직 준비중인 기능이에요
         </div>
       {/if}
-    {/if}
-  </aside>
+    </aside>
 
-  <div
-    style:pointer-events={isExpanded ? 'auto' : 'none'}
-    style:transform="translateX(-50%)"
-    class={css({
-      position: 'absolute',
-      zIndex: 'overEditor',
-      top: '0',
-      left: '0',
-      display: 'flex',
-      justifyContent: 'center',
-      width: '8px',
-      height: 'full',
-      cursor: 'col-resize',
-      _hoverAfter: {
-        content: '""',
-        display: 'block',
-        borderRadius: '4px',
+    <div
+      style:transform="translateX(-50%)"
+      class={css({
+        position: 'absolute',
+        zIndex: 'overEditor',
+        top: '0',
+        left: '0',
+        display: 'flex',
+        justifyContent: 'center',
+        width: '8px',
         height: 'full',
-        width: '2px',
-        backgroundColor: 'border.strong',
-        opacity: '50',
-      },
-    })}
-    use:pointerCapture={{
-      start: (event): ResizeSession | null => {
-        if (!event.isPrimary || event.button !== 0) return null;
-        event.preventDefault();
-        const session = { startX: event.clientX, startWidth: storedWidth };
-        previewWidth = session.startWidth;
-        return session;
-      },
-      move: updateResize,
-      end: (session, event) => {
-        updateResize(session, event);
-        if (previewWidth !== null) app.preference.current.panelWidth = previewWidth;
-        previewWidth = null;
-      },
-      cancel: () => {
-        previewWidth = null;
-      },
-    }}
-  ></div>
+        cursor: 'col-resize',
+        _hoverAfter: {
+          content: '""',
+          display: 'block',
+          borderRadius: '4px',
+          height: 'full',
+          width: '2px',
+          backgroundColor: 'border.strong',
+          opacity: '50',
+        },
+      })}
+      use:pointerCapture={{
+        start: (event): ResizeSession | null => {
+          if (!event.isPrimary || event.button !== 0) return null;
+          event.preventDefault();
+          const session = { startX: event.clientX, startWidth: storedWidth };
+          previewWidth = session.startWidth;
+          return session;
+        },
+        move: updateResize,
+        end: (session, event) => {
+          updateResize(session, event);
+          if (previewWidth !== null) app.preference.current.panelWidth = previewWidth;
+          previewWidth = null;
+        },
+        cancel: () => {
+          previewWidth = null;
+        },
+      }}
+    ></div>
+  {/if}
 </div>
