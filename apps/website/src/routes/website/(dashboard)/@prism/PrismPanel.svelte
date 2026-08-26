@@ -20,6 +20,7 @@
   import TrashIcon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
   import PrismIcon from '~icons/typie/prism';
+  import { page } from '$app/state';
   import { cache, wsStatus } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
@@ -28,14 +29,15 @@
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
-  import { expand, PRISM_VISIBILITY_MOTION, reducedMotion, swap } from './lib/motion.ts';
+  import { expand, PRISM_VISIBILITY_MOTION, reducedMotion, rise, swap } from './lib/motion.ts';
   import { hasUnread, sessionLabel } from './lib/session-groups.ts';
+  import { prismAccessUnavailableMessage } from './prism-access.ts';
   import { createPrismChat } from './prism-chat.svelte';
   import { fetchTranscript, toFrame } from './prism-data';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
   import { createPrismSessionState } from './prism-session.svelte';
+  import PrismAccessPrompt from './PrismAccessPrompt.svelte';
   import PrismComposer from './PrismComposer.svelte';
-  import PrismGateCard from './PrismGateCard.svelte';
   import PrismPanelIndicator from './PrismPanelIndicator.svelte';
   import PrismPushCard from './PrismPushCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
@@ -45,6 +47,7 @@
   import { workflowApps } from './workflows/index.ts';
   import type { ToolPolicy, WorkflowMessage } from '@typie/prism';
   import type { DashboardLayout_PrismPanel_user$key } from '$mearie';
+  import type { PrismAccessReason } from './prism-access.ts';
 
   type Props = {
     user$key: DashboardLayout_PrismPanel_user$key;
@@ -64,7 +67,9 @@
     graphql(`
       fragment DashboardLayout_PrismPanel_user on User {
         id
+        entitled
         preferences
+        prismAccess
 
         prismCredit {
           balance
@@ -93,6 +98,18 @@
     `),
     () => user$key,
   );
+  const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
+  let betaGate = $state<'prism_beta_required' | null>(null);
+  const accessReason: PrismAccessReason | null = $derived.by(() => {
+    if (betaGate !== null) return betaGate;
+    if (!user.data.prismAccess) return 'prism_beta_required';
+    if (!user.data.entitled) return 'subscription_required';
+    if (!aiOptIn) return 'ai_opt_in_required';
+    if (user.data.prismCredit.balance <= 0) return 'prism_credit_insufficient';
+    return null;
+  });
+  const prismAvailable = $derived(accessReason === null);
+  const accessUnavailableMessage = $derived(accessReason === null ? undefined : prismAccessUnavailableMessage(accessReason));
 
   $effect(() => {
     app.state.prismBadge = user.data.prismSessions.some((session) => hasUnread(session));
@@ -300,6 +317,11 @@
   });
 
   $effect(() => {
+    if (!prismAvailable) {
+      untrack(() => autoResolver.reset());
+      return;
+    }
+
     const sessionId = chat.sessionId;
     const requests = pendingRootRequests(chat.transcript).filter((request) => clientResolvers[request.tool] !== undefined);
     if (sessionId === null || chat.loading) {
@@ -340,6 +362,7 @@
     _hover: { backgroundColor: 'interactive.hover' },
   });
   let listOpen = $state(false);
+  const accessPromptInWelcome = $derived(!prismAvailable && selected.current === null && !chat.loading && emptySession && !listOpen);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
 
   export const startNewChat = async (nextDraft?: string) => {
@@ -348,7 +371,7 @@
     if (nextDraft !== undefined) draft = nextDraft;
     app.preference.current.prismPanelOpen = true;
     await tick();
-    composer?.focus();
+    if (prismAvailable) composer?.focus();
   };
 
   let seenTitle: string | null = null;
@@ -516,8 +539,9 @@
   });
   const PANEL_HIDDEN_SCALE = 0.96;
   const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
-  const panelOpen = $derived(app.state.prismAccess && app.preference.current.prismPanelOpen);
+  const panelOpen = $derived(app.preference.current.prismPanelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
+  const welcomeAdmission = $derived(prismAvailable && panelInteractive && !listOpen && page.state.shallowRoute == null);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
   let panelEl = $state<HTMLElement>();
   let prevPanelOpen: boolean | null = null;
@@ -535,7 +559,7 @@
       });
     }
 
-    if (transition && interactive) composer?.focus();
+    if (transition && interactive && prismAvailable) composer?.focus();
   });
 
   const markSeen = (sessionId: string) => {
@@ -543,7 +567,7 @@
   };
 
   $effect(() => {
-    if (!app.state.prismAccess || !app.preference.current.prismPanelOpen) {
+    if (!app.preference.current.prismPanelOpen) {
       return;
     }
 
@@ -556,7 +580,7 @@
 
   $effect(() => {
     const session = currentSession;
-    if (session === null || session.unseenReviewCount === 0 || !app.state.prismAccess || !app.preference.current.prismPanelOpen) {
+    if (session === null || session.unseenReviewCount === 0 || !app.preference.current.prismPanelOpen) {
       return;
     }
 
@@ -620,17 +644,8 @@
     }, delay);
   };
 
-  let betaGate = $state<'prism_beta_required' | null>(null);
-  const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
-  const gate = $derived(betaGate ?? (app.state.subscribed ? (aiOptIn ? null : 'ai_opt_in_required') : 'subscription_required'));
-
   const subscriptionSkipped = $derived(
-    chat.sessionId === null ||
-      !app.state.prismAccess ||
-      !app.preference.current.prismPanelOpen ||
-      chat.loading ||
-      reconnecting ||
-      reconnectFailed,
+    chat.sessionId === null || !app.preference.current.prismPanelOpen || chat.loading || reconnecting || reconnectFailed,
   );
 
   const socketDown = $derived(!subscriptionSkipped && wsStatus.current !== 'connected');
@@ -772,7 +787,7 @@
   };
 </script>
 
-{#if app.state.prismAccess}
+{#if app.state.prismAccess || app.preference.current.prismPanelOpen}
   {#if !app.preference.current.zenModeEnabled}
     <div
       style:width={panelOpen ? `${width}px` : '0px'}
@@ -994,126 +1009,144 @@
       </header>
 
       <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
-        {#if gate}
-          <PrismGateCard reason={gate} />
-        {:else}
-          {#if listOpen}
-            <PrismSessionList
-              currentId={selected.current}
-              onArchive={archiveSession}
-              onClose={() => (listOpen = false)}
-              onDelete={requestDelete}
-              onRename={renameSession}
-              onSelect={(id) => {
-                selected.current = id;
-                listOpen = false;
-              }}
-              onUnarchive={unarchiveSession}
-              {sessions}
-            />
-          {/if}
+        {#if listOpen}
+          <PrismSessionList
+            currentId={selected.current}
+            onArchive={archiveSession}
+            onClose={() => (listOpen = false)}
+            onDelete={requestDelete}
+            onRename={renameSession}
+            onSelect={(id) => {
+              selected.current = id;
+              listOpen = false;
+            }}
+            onUnarchive={unarchiveSession}
+            {sessions}
+          />
+        {/if}
 
-          <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
-            {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
-              {#key chat.generation}
-                <PrismPanelIndicator
-                  destination={indicatorDestination}
-                  onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
-                  phase={indicatorPhase}
-                  themeVariant={theme.currentThemeVariant}
-                />
-              {/key}
-            {/if}
-
+        <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
+          {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
             {#key chat.generation}
-              <PrismTranscript
-                failedIds={autoResolver.failedIds}
-                loading={chat.loading}
-                onResolve={resolveTool}
-                onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
-                pending={chat.pending}
-                {policy}
-                reconnecting={disconnected}
-                sessionId={chat.sessionId}
-                spinnerOwner={indicatorSpinnerOwner}
-                transcript={chat.transcript}
-                bind:waitSpinnerAnchor={indicatorDestination}
+              <PrismPanelIndicator
+                destination={indicatorDestination}
+                onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
+                phase={accessPromptInWelcome ? 'inactive' : indicatorPhase}
+                themeVariant={theme.currentThemeVariant}
+                {welcomeAdmission}
               />
             {/key}
+          {/if}
 
-            {#if statusKind !== null}
-              <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
-                <div bind:this={statusEl} class={css({ position: 'relative', zIndex: '2' })}>
-                  {#if statusKind === 'reconnecting'}
-                    <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                      <PrismSpinner label="다시 연결하는 중" />
-                      <span class={calloutTextClass}>다시 연결하는 중이에요</span>
-                    </div>
-                  {:else if statusKind === 'error'}
-                    <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                      <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                      <span class={calloutTextClass}>{chat.error}</span>
-                      <Button
-                        style={css.raw({ flexShrink: '0' })}
-                        onclick={() => void chat.load(selected.current)}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        다시 불러오기
-                      </Button>
-                    </div>
-                  {:else}
-                    <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                      <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                      <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
-                      <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
-                    </div>
-                  {/if}
-                </div>
+          {#if accessPromptInWelcome && accessReason !== null}
+            <PrismAccessPrompt placement="welcome" reason={accessReason} />
+          {/if}
+
+          {#key chat.generation}
+            <PrismTranscript
+              failedIds={autoResolver.failedIds}
+              loading={chat.loading}
+              onResolve={resolveTool}
+              onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
+              pending={chat.pending}
+              {policy}
+              reconnecting={disconnected}
+              sessionId={chat.sessionId}
+              spinnerOwner={indicatorSpinnerOwner}
+              transcript={chat.transcript}
+              unavailableMessage={accessUnavailableMessage}
+              bind:waitSpinnerAnchor={indicatorDestination}
+            />
+          {/key}
+
+          {#if statusKind !== null}
+            <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
+              <div bind:this={statusEl} class={css({ position: 'relative', zIndex: '2' })}>
+                {#if statusKind === 'reconnecting'}
+                  <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <PrismSpinner label="다시 연결하는 중" />
+                    <span class={calloutTextClass}>다시 연결하는 중이에요</span>
+                  </div>
+                {:else if statusKind === 'error'}
+                  <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                    <span class={calloutTextClass}>{chat.error}</span>
+                    <Button
+                      style={css.raw({ flexShrink: '0' })}
+                      onclick={() => void chat.load(selected.current)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      다시 불러오기
+                    </Button>
+                  </div>
+                {:else}
+                  <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+                    <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+                    <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
+                    <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+                  </div>
+                {/if}
               </div>
-            {/if}
+            </div>
+          {/if}
 
-            {#if !chat.loading && emptySession}
-              <div
-                class={css(
-                  { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
-                  chipsVisible ? {} : { opacity: '0', pointerEvents: 'none' },
-                )}
-                aria-hidden={!chipsVisible}
-              >
-                <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
-                <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
-                  {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
-                    <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
-                      <Icon icon={chip.icon} size={14} />
-                      {chip.label}
-                    </button>
-                  {/each}
-                </div>
+          {#if prismAvailable && !chat.loading && emptySession}
+            <div
+              class={css(
+                { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
+                chipsVisible ? {} : { opacity: '0', pointerEvents: 'none' },
+              )}
+              aria-hidden={!chipsVisible}
+              in:rise
+            >
+              <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
+              <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
+                {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
+                  <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
+                    <Icon icon={chip.icon} size={14} />
+                    {chip.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <PrismPushCard visible={app.state.prismBadge} />
+
+        {#if !chat.loading}
+          <div class={css({ position: 'relative' })}>
+            <div
+              style:visibility={prismAvailable ? 'visible' : 'hidden'}
+              class={css({
+                '&[data-enabled=true]': { animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]' },
+                _motionReduce: { animation: 'none' },
+              })}
+              aria-hidden={!prismAvailable}
+              data-enabled={prismAvailable}
+              inert={!prismAvailable}
+            >
+              <PrismComposer
+                bind:this={composer}
+                {blocked}
+                {commands}
+                disabled={!prismAvailable}
+                {onSend}
+                {onStop}
+                policy={{ current: policy, disabled: !prismAvailable, onChange: onPolicyChange }}
+                running={chat.transcript.run === 'running'}
+                status={composerStatus}
+                bind:text={draft}
+              />
+            </div>
+
+            {#if !prismAvailable && !accessPromptInWelcome && accessReason !== null}
+              <div class={css({ position: 'absolute', inset: '0', zIndex: '2' })}>
+                <PrismAccessPrompt placement="composer" reason={accessReason} />
               </div>
             {/if}
           </div>
-
-          <PrismPushCard visible={app.state.prismBadge} />
-
-          {#if user.data.prismCredit.balance <= 0}
-            <PrismGateCard reason="prism_credit_insufficient" />
-          {/if}
-
-          {#if !chat.loading}
-            <PrismComposer
-              bind:this={composer}
-              {blocked}
-              {commands}
-              disabled={false}
-              {onSend}
-              {onStop}
-              policy={{ current: policy, disabled: false, onChange: onPolicyChange }}
-              running={chat.transcript.run === 'running'}
-              status={composerStatus}
-              bind:text={draft}
-            />
-          {/if}
         {/if}
       </div>
     </aside>

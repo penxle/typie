@@ -10,7 +10,7 @@
   import type { ThemeVariant } from '@typie/ui/context';
   import type { PrismIndicatorPath, PrismIndicatorPoint } from './lib/prism-indicator-path.ts';
 
-  export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome';
+  export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'inactive' | 'submitting' | 'welcome';
   export type PrismSpinnerOwner = 'panel' | 'row';
 
   const PRISM_TO_SPINNER_DURATION_MS = 2200;
@@ -24,6 +24,7 @@
     phase: PrismIndicatorPhase;
     reducedMotion?: boolean;
     themeVariant?: ThemeVariant;
+    welcomeAdmission?: boolean;
   };
 
   type Mode = 'arrived' | 'candidate' | 'fallback' | 'idle' | 'morphing' | 'returning';
@@ -36,6 +37,7 @@
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     themeVariant,
+    welcomeAdmission = true,
   }: Props = $props();
   let actor = $state<HTMLDivElement>();
   let actorMounted = $state(true);
@@ -94,6 +96,7 @@
   const scheduleWelcomeMorph = () => {
     if (
       phase !== 'welcome' ||
+      !welcomeAdmission ||
       mode !== 'idle' ||
       target !== 'icon' ||
       reducedMotion ||
@@ -108,6 +111,7 @@
       welcomeFrame = 0;
       if (
         phase !== 'welcome' ||
+        !welcomeAdmission ||
         mode !== 'idle' ||
         target !== 'icon' ||
         reducedMotion ||
@@ -119,6 +123,15 @@
       targetDurationMs = undefined;
       target = 'prism';
     });
+  };
+
+  const holdWelcomeIcon = () => {
+    if (welcomeFrame !== 0) {
+      cancelAnimationFrame(welcomeFrame);
+      welcomeFrame = 0;
+    }
+    targetDurationMs = undefined;
+    target = 'icon';
   };
 
   const observeStablePaints = () => {
@@ -373,7 +386,7 @@
     if (reducedMotion) return;
     if (document.readyState === 'complete') observeLoadedBrowser();
     else window.addEventListener('load', observeLoadedBrowser, { once: true });
-    if (phase === 'welcome') {
+    if (phase === 'welcome' || phase === 'inactive') {
       dwellTimer = setTimeout(() => {
         dwellTimer = undefined;
         dwellElapsed = true;
@@ -399,6 +412,10 @@
   });
 
   $effect(() => {
+    if (welcomeAdmission) untrack(scheduleWelcomeMorph);
+  });
+
+  $effect(() => {
     const nextPhase = phase;
     const nextDestination = destination;
     untrack(() => {
@@ -406,6 +423,7 @@
       else if (nextPhase === 'failed') fail();
       else if (nextPhase === 'answered') answer();
       else if (nextPhase === 'hidden') hide();
+      else if (nextPhase === 'inactive') holdWelcomeIcon();
     });
   });
 </script>

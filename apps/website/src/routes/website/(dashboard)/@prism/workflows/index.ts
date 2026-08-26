@@ -9,6 +9,7 @@ export type WorkflowBlockProps = {
   transcript: Transcript;
   requests: ToolRequestMessage[];
   failedIds: ReadonlySet<string>;
+  unavailableMessage?: string;
   reconnecting: boolean;
   resolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
   onRetry: (toolCallId: string) => void;

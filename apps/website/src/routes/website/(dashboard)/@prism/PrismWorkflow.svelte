@@ -9,12 +9,13 @@
     sessionId: string;
     transcript: Transcript;
     failedIds: ReadonlySet<string>;
+    unavailableMessage?: string;
     reconnecting: boolean;
     resolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
   };
 
-  let { message, sessionId, transcript, failedIds, reconnecting, resolve, onRetry }: Props = $props();
+  let { message, sessionId, transcript, failedIds, unavailableMessage, reconnecting, resolve, onRetry }: Props = $props();
 
   const app = $derived(workflowApps[message.app]);
   const requests = $derived(
@@ -37,7 +38,7 @@
 
 {#if app}
   {@const Block = app.block}
-  <Block {failedIds} {message} {onRetry} {reconnecting} {requests} {resolve} {sessionId} {transcript} />
+  <Block {failedIds} {message} {onRetry} {reconnecting} {requests} {resolve} {sessionId} {transcript} {unavailableMessage} />
 {:else if message.status === 'running'}
   <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', color: 'text.subtle' })}>
     <div
