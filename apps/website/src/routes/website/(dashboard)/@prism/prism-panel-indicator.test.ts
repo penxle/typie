@@ -1,3 +1,4 @@
+import themeData from '@typie/assets/theme.json' with { type: 'json' };
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import PrismPanelIndicator from './PrismPanelIndicator.svelte';
@@ -140,27 +141,34 @@ const setSourceRect = (target: HTMLElement) => {
 };
 
 describe('Prism panel indicator', () => {
-  test('resamples the rendered edge color when the theme variant changes', async () => {
+  test('uses the theme-state edge color before the view-transition DOM catches up', async () => {
     const target = document.createElement('div');
-    let renderedColor = 'rgb(190, 190, 190)';
-    const computedStyle = vi
-      .spyOn(globalThis, 'getComputedStyle')
-      .mockImplementation(() => ({ color: renderedColor }) as CSSStyleDeclaration);
-    const props = reactiveProps({ phase: 'welcome' as const, themeVariant: 'light-white' as 'dark-black' | 'light-white' });
+    const previousTheme = document.documentElement.dataset.theme;
+    const previousLightVariant = document.documentElement.dataset.variantLight;
+    const previousDarkVariant = document.documentElement.dataset.variantDark;
+    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.dataset.variantDark = 'black';
+    const darkColor = themeData.variants['dark-black']['ui.border.default'];
+    const lightColor = themeData.variants['light-white']['ui.border.default'];
+    const props = reactiveProps({ phase: 'welcome' as const, themeVariant: 'dark-black' as 'dark-black' | 'light-white' });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
       await tick();
       await tick();
-      expect(runtime.object.update).toHaveBeenCalledWith(expect.objectContaining({ edgeColor: renderedColor }));
+      expect(runtime.object.update).toHaveBeenCalledWith(expect.objectContaining({ edgeColor: darkColor }));
 
       runtime.object.update.mockClear();
-      renderedColor = 'rgb(96, 96, 96)';
-      props.themeVariant = 'dark-black';
+      props.themeVariant = 'light-white';
       await tick();
       await tick();
-      expect(runtime.object.update).toHaveBeenCalledWith(expect.objectContaining({ edgeColor: renderedColor }));
+      expect(runtime.object.update).toHaveBeenCalledWith(expect.objectContaining({ edgeColor: lightColor }));
     } finally {
-      computedStyle.mockRestore();
+      if (previousTheme === undefined) delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = previousTheme;
+      if (previousLightVariant === undefined) delete document.documentElement.dataset.variantLight;
+      else document.documentElement.dataset.variantLight = previousLightVariant;
+      if (previousDarkVariant === undefined) delete document.documentElement.dataset.variantDark;
+      else document.documentElement.dataset.variantDark = previousDarkVariant;
       await unmount(component);
     }
   });

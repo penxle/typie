@@ -1,7 +1,8 @@
 <script lang="ts">
+  import themeData from '@typie/assets/theme.json' with { type: 'json' };
   import { PRISM_ICON_DURATION_SECONDS } from '@typie/prism-ui';
   import { token } from '@typie/styled-system/tokens';
-  import { onDestroy, onMount, tick, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import PrismObject from '$lib/prism-ui/PrismObject.svelte';
   import { createPrismIndicatorPath, samplePrismIndicatorPath } from './lib/prism-indicator-path.ts';
   import PrismPanelWelcomeMessage from './PrismPanelWelcomeMessage.svelte';
@@ -39,7 +40,7 @@
   let actor = $state<HTMLDivElement>();
   let actorMounted = $state(true);
   let actorVisible = $state(true);
-  let edgeColor = $state<string>();
+  const edgeColor = $derived(themeVariant ? themeData.variants[themeVariant]['ui.border.default'] : undefined);
   let mode = $state<Mode>('idle');
   let path: PrismIndicatorPath | null = null;
   let snapshot = $state<PrismRuntimeSnapshot>({
@@ -390,17 +391,6 @@
     clearDwell();
     cancelAdmission();
     stopFollowing();
-  });
-
-  $effect(() => {
-    const currentThemeVariant = themeVariant;
-    const currentActor = actor;
-    if (!currentActor) return;
-
-    void tick().then(() => {
-      if (destroyed || currentThemeVariant !== themeVariant || currentActor !== actor) return;
-      edgeColor = getComputedStyle(currentActor).color;
-    });
   });
 
   $effect(() => {

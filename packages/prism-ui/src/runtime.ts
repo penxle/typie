@@ -638,6 +638,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       controller.setIconMorphSample(null);
       if (targetProgress === 0) {
         controller.setActive(false);
+        resetPointerInteractionAppearance();
         settledTarget = 'icon';
       } else {
         controller.setRotationPhase(sample.phase);
@@ -673,6 +674,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const first = samplePrismIconMorphTrajectory(trajectory, 0);
       const last = samplePrismIconMorphTrajectory(trajectory, 1);
       controller.setActive(true);
+      controller.setMorphPoseQuaternion(null);
       renderIconSample(first);
 
       if (action.instant) {
@@ -840,7 +842,10 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const durationMs = targetDuration(requestOptions);
       if (destroyed || target === requestedTarget) return;
       stopPointerInteraction();
-      resetPointerInteractionAppearance();
+      // Keep the current light phase and interaction appearance until the
+      // WebGPU prism is fully hidden. Resetting them here makes the light jump
+      // before the prism-to-icon trajectory has even started.
+      if (target !== 'icon') resetPointerInteractionAppearance();
       requestedTarget = target;
       settledTarget = null;
       if (durationMs === null) {
