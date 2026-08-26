@@ -1,14 +1,27 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
 import { anchorQuote } from '@typie/prism';
 import { z } from 'zod';
-import type { PrismReviewRoundState, PrismReviewTier, PrismWorkflowState } from '@typie/lib/enums';
-import type { Anchor, PrismReviewTierName, ReviewIssue, ReviewOutcome } from '@typie/prism';
+import type { PrismReviewRoundState, PrismReviewThreadState, PrismReviewTier, PrismWorkflowState } from '@typie/lib/enums';
+import type {
+  Anchor,
+  PrismReviewTierName,
+  ReviewIssue,
+  ReviewOutcome,
+  ReviewPreviousContext,
+  ReviewSeedMapping,
+  ReviewThreadDisposition,
+} from '@typie/prism';
 import type { Dayjs } from 'dayjs';
 
 export const ENUM_TO_TIER: Record<PrismReviewTier, PrismReviewTierName> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' };
 
 export const ConfirmInputSchema = z.union([
-  z.object({ decision: z.literal('confirmed'), versionId: z.string(), tier: z.enum(['LOW', 'MEDIUM', 'HIGH']) }),
+  z.object({
+    decision: z.literal('confirmed'),
+    versionId: z.string(),
+    tier: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+    lineageId: z.string().optional(),
+  }),
   z.object({ decision: z.literal('declined') }),
 ]);
 
@@ -130,11 +143,67 @@ export type Snapshot = { title: string | null; subtitle: string | null; content:
 
 export const manuscriptPath = (versionId: string): string => `manuscript/${versionId}.txt`;
 
+export const seedsPrefix = (roundId: string): string => `seeds/${roundId}`;
+
 export const confirmResult = (
   key: string,
   tier: PrismReviewTierName,
   document: { id: string; title: string | null; subtitle: string | null; path: string },
-) => ({ decision: 'confirmed', key, tier, document }) as const;
+  followup?: { previous: ReviewPreviousContext; seeds: string },
+) => ({ decision: 'confirmed', key, tier, document, ...(followup !== undefined && followup) }) as const;
+
+export type PreviousThreadSource = {
+  id: string;
+  pass: 'JUDGMENT' | 'STYLISTIC';
+  trait: string;
+  body: string | null;
+  state: PrismReviewThreadState;
+  issueId: string | null;
+  anchors: Anchor[];
+  comments: { author: 'USER' | 'AI'; body: string; createdAt: Date }[];
+};
+
+const PASS_NAME = { JUDGMENT: 'judgment', STYLISTIC: 'stylistic' } as const;
+const STATE_NAME = { OPEN: 'open', CLOSED: 'closed', RESOLVED: 'resolved', WITHDRAWN: 'withdrawn' } as const;
+
+// AI 코멘트는 지난 리뷰 자신의 산출물이라 싣지 않는다. fresh = base 회차가 입력을 굳힌 뒤 달린 답글 — prism은 시각을 모르므로 여기서 판별해 표지만 넘긴다.
+export const buildPreviousContext = (input: {
+  base: { title: string | null; subtitle: string | null; versionId: string; createdAt: Date };
+  threads: PreviousThreadSource[];
+}): ReviewPreviousContext => ({
+  title: input.base.title,
+  subtitle: input.base.subtitle,
+  path: manuscriptPath(input.base.versionId),
+  threads: input.threads.map((thread) => ({
+    id: thread.id,
+    pass: PASS_NAME[thread.pass],
+    trait: thread.trait,
+    body: thread.body ?? '',
+    anchors: thread.anchors.map(({ head, tail }) => ({ head, tail })),
+    replies: thread.comments
+      .filter((comment) => comment.author === 'USER')
+      .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((comment) => ({ body: comment.body, fresh: comment.createdAt.getTime() > input.base.createdAt.getTime() })),
+    state: STATE_NAME[thread.state],
+    ...(thread.issueId !== null && thread.issueId !== '' && { issue: thread.issueId }),
+  })),
+});
+
+export const seedUploads = (
+  roundId: string,
+  seeds: readonly ReviewSeedMapping[],
+  contents: ReadonlyMap<string, string | null>,
+): { path: string; content: string }[] | { missing: string } => {
+  const files: { path: string; content: string }[] = [];
+
+  for (const seed of seeds) {
+    const content = contents.get(seed.from) ?? null;
+    if (content === null) return { missing: seed.from };
+    files.push({ path: `${seedsPrefix(roundId)}/${seed.to}`, content });
+  }
+
+  return files;
+};
 
 export const pickVersion = (latest: (Snapshot & { version: number }) | null, snap: Snapshot): { reuse: boolean; version: number } => {
   if (latest && latest.content === snap.content && latest.title === snap.title && latest.subtitle === snap.subtitle)
@@ -147,6 +216,12 @@ export const roundState = (round: { closedAt: Dayjs | null }, workflow: { state:
   return round.closedAt === null ? 'PENDING' : 'CANCELED';
 };
 
+export const lineageLocked = (rounds: readonly { closedAt: Dayjs | null; workflowState: PrismWorkflowState | null }[]): boolean =>
+  rounds.some((round) => {
+    const state = roundState(round, round.workflowState === null ? null : { state: round.workflowState });
+    return state === 'PENDING' || state === 'RUNNING';
+  });
+
 export type ProjectedThread = {
   issueIndex: number;
   issueId: string | null;
@@ -156,18 +231,54 @@ export type ProjectedThread = {
   anchors: Anchor[];
 };
 
-export const threadsFromResult = (outcome: ReviewOutcome | null): ProjectedThread[] => {
-  if (outcome === null || outcome.kind === 'rejected') return [];
+export type CarriedSeat = { threadId: string; issueIndex: number; anchors: Anchor[] };
+export type ProjectionPlan = { fresh: ProjectedThread[]; carried: CarriedSeat[]; dispositions: ReviewThreadDisposition[] };
 
-  return outcome.issues.map((issue, index) => ({
-    issueIndex: index,
-    issueId: issue.id ?? null,
-    trait: issue.trait,
-    pass: issue.pass === 'judgment' ? 'JUDGMENT' : 'STYLISTIC',
-    body: issue.body,
-    anchors: issue.anchors,
-  }));
+// thread 표지 없는 이슈만 새 스레드가 된다 — 표지 이슈는 지난 스레드의 계속이라 좌석만 늘린다
+export const planProjection = (outcome: ReviewOutcome | null): ProjectionPlan => {
+  if (outcome === null || outcome.kind === 'rejected') return { fresh: [], carried: [], dispositions: [] };
+
+  const fresh: ProjectedThread[] = [];
+  const carried: CarriedSeat[] = [];
+
+  for (const [index, issue] of outcome.issues.entries()) {
+    if (issue.thread === undefined) {
+      fresh.push({
+        issueIndex: index,
+        issueId: issue.id ?? null,
+        trait: issue.trait,
+        pass: issue.pass === 'judgment' ? 'JUDGMENT' : 'STYLISTIC',
+        body: issue.body,
+        anchors: issue.anchors,
+      });
+    } else {
+      carried.push({ threadId: issue.thread, issueIndex: index, anchors: issue.anchors });
+    }
+  }
+
+  return { fresh, carried, dispositions: outcome.dispositions ?? [] };
 };
+
+export const dispositionSummary = (
+  outcome: ReviewOutcome | null,
+): { carried: number; resolved: number; withdrawn: number; new: number } | null => {
+  if (outcome === null || outcome.kind === 'rejected' || outcome.dispositions === undefined) return null;
+
+  const plan = planProjection(outcome);
+
+  return {
+    carried: plan.carried.length,
+    resolved: plan.dispositions.filter((disposition) => disposition.verdict === 'resolved').length,
+    withdrawn: plan.dispositions.filter((disposition) => disposition.verdict === 'withdrawn').length,
+    new: plan.fresh.length,
+  };
+};
+
+// 계보에 회차가 둘 이상 있어야 '신규'가 성립한다 — 첫 회차의 스레드는 전부 처음이라 표지가 의미 없다
+export const threadIsNew = (bornRoundId: string, viewRoundId: string, completedRoundsInLineage: number): boolean =>
+  bornRoundId === viewRoundId && completedRoundsInLineage >= 2;
+
+export const aiCommentId = (threadId: string, roundId: string): string => `${threadId}.${roundId}`;
 
 // 인용은 저장하지 않는다 — 리뷰 시점 판본에서 조회 때마다 자른다
 export const threadQuote = (content: string, anchors: Anchor[]): string => anchorQuote(content, anchors);

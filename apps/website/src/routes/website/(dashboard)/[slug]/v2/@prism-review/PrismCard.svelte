@@ -27,6 +27,8 @@
 
   const margin = getMarginContext();
   const thread = $derived(item.thread);
+  // 다음 회차가 도는 동안의 답글·닫기는 이미 떠난 사영에 얹힌다 — 그 창에서는 조작면을 잠근다
+  const locked = $derived(margin.locked);
   // 닫힘(작가가 접음)·해소·철회(재리뷰 처분)는 조작면과 흐림 처리를 공유한다 — 되돌리기는 닫힘만의 몫이다
   const settled = $derived(thread !== null && thread.state !== 'OPEN');
   const reaction = $derived(thread?.reaction ?? null);
@@ -99,7 +101,7 @@
   const stateLabel = $derived(thread === null || thread.state === 'OPEN' ? null : STATE_LABELS[thread.state]);
 
   // 사람 댓글은 실제 작성자를 세운다 — 문서를 함께 쓰는 사람이 남긴 답글과 내 답글이 갈려야 한다
-  const authorLabel = (comment: MarginComment) => (comment.author === 'AI' ? 'AI' : comment.user.name);
+  const authorLabel = (comment: MarginComment) => (comment.author === 'AI' ? '타이피 PRISM' : comment.user.name);
 
   // 지운 답글은 서버에서 되돌릴 수 없다 — 한 번의 오클릭이 남의 글을 지우게 두지 않는다
   const confirmDelete = (commentId: string) => {
@@ -329,6 +331,23 @@
         {thread?.trait ?? '잘 닿은 대목'}
       </span>
 
+      {#if thread?.isNew}
+        <span
+          class={css({
+            flex: 'none',
+            paddingX: '4px',
+            paddingY: '1px',
+            borderRadius: '4px',
+            backgroundColor: 'accent.brand.subtle',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            color: 'text.brand',
+          })}
+        >
+          신규
+        </span>
+      {/if}
+
       {#if slot.comments || slot.state}
         <span class={flex({ align: 'center', gap: '8px', flex: 'none', marginLeft: 'auto', fontSize: '11px', color: 'text.faint' })}>
           {#if slot.comments}
@@ -345,6 +364,7 @@
       <button
         class={css(headerActionRecipe.raw({ flush: !onClose }))}
         aria-label={slot.action === 'close' ? '다음 회차부터 다시 짚지 않기' : '다음 회차부터 다시 짚기'}
+        disabled={locked}
         onclick={() => void run(() => (slot.action === 'close' ? margin.close(thread.id) : margin.reopen(thread.id)))}
         type="button"
         use:tooltip={{
@@ -493,6 +513,7 @@
                       {/snippet}
                       {#snippet children({ close })}
                         <MenuItem
+                          disabled={locked}
                           icon={PencilIcon}
                           onclick={() => {
                             editingId = comment.id;
@@ -503,6 +524,7 @@
                           수정
                         </MenuItem>
                         <MenuItem
+                          disabled={locked}
                           icon={Trash2Icon}
                           onclick={() => {
                             close();
@@ -540,7 +562,7 @@
                     <button class={editCancelClass} onclick={cancelEdit} type="button">취소</button>
                     <button
                       class={editSaveClass}
-                      disabled={editDraft.trim().length === 0}
+                      disabled={editDraft.trim().length === 0 || locked}
                       onclick={() => void submitEdit(comment.id)}
                       type="button"
                     >
@@ -559,6 +581,11 @@
           {/each}
 
           {#if !settled}
+            {#if locked}
+              <p class={css({ marginTop: '12px', _first: { marginTop: '0' }, fontSize: '11px', color: 'text.faint' })}>
+                리뷰가 진행되는 동안에는 답글을 남길 수 없어요
+              </p>
+            {/if}
             <div
               class={flex({
                 align: 'flex-end',
@@ -588,7 +615,7 @@
                   _placeholder: { color: 'text.faint' },
                   _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
                 })}
-                disabled={sending}
+                disabled={sending || locked}
                 onkeydown={(event) => {
                   if (event.key === 'Escape') {
                     // 팝오버의 Escape로 새어 나가면 카드가 닫히며 쓰던 답글이 사라진다
@@ -617,7 +644,7 @@
                   _disabled: { backgroundColor: 'interactive.disabled', color: 'text.disabled', cursor: 'not-allowed' },
                 })}
                 aria-label="답글 남기기"
-                disabled={!canSubmit}
+                disabled={!canSubmit || locked}
                 onclick={() => void submitReply()}
                 type="button"
               >

@@ -2,15 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import dayjs from 'dayjs';
 import {
+  aiCommentId,
+  buildPreviousContext,
   ConfirmInputSchema,
   confirmResult,
   detailOutcome,
+  dispositionSummary,
   hasDetail,
+  lineageLocked,
   manuscriptPath,
   pickVersion,
+  planProjection,
   roundState,
+  seedsPrefix,
+  seedUploads,
   summarizeOutcome,
-  threadsFromResult,
+  threadIsNew,
 } from './prism-review-core.ts';
 import type { ReviewOutcome } from '@typie/prism';
 
@@ -188,12 +195,16 @@ test('hasDetail: 설 섹션이 하나라도 있어야 참이다', () => {
   assert.equal(hasDetail(null), false);
 });
 
-test('threadsFromResult - 거부 회차와 빈 결과는 행이 없다', () => {
-  assert.deepEqual(threadsFromResult(null), []);
-  assert.deepEqual(threadsFromResult({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '거절', basis: null } }), []);
+test('planProjection - 거부 회차와 빈 결과는 행이 없다', () => {
+  assert.deepEqual(planProjection(null), { fresh: [], carried: [], dispositions: [] });
+  assert.deepEqual(planProjection({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '거절', basis: null } }), {
+    fresh: [],
+    carried: [],
+    dispositions: [],
+  });
 });
 
-test('threadsFromResult - 이슈마다 번호와 계열을 붙인다', () => {
+test('planProjection - 이슈마다 번호와 계열을 붙인다', () => {
   const outcome = {
     version: 1,
     kind: 'issues',
@@ -209,7 +220,7 @@ test('threadsFromResult - 이슈마다 번호와 계열을 붙인다', () => {
     ],
   } satisfies ReviewOutcome;
 
-  const threads = threadsFromResult(outcome);
+  const threads = planProjection(outcome).fresh;
 
   assert.equal(threads.length, 2);
   assert.equal(threads[0].issueIndex, 0);
@@ -221,7 +232,7 @@ test('threadsFromResult - 이슈마다 번호와 계열을 붙인다', () => {
   assert.equal(threads[1].pass, 'JUDGMENT');
 });
 
-test('threadsFromResult - feedback 결과도 같은 방식으로 편다', () => {
+test('planProjection - feedback 결과도 같은 방식으로 편다', () => {
   const outcome = {
     version: 1,
     kind: 'feedback',
@@ -229,5 +240,137 @@ test('threadsFromResult - feedback 결과도 같은 방식으로 편다', () => 
     conclusion: { understanding: null, patterns: [], priorities: [] },
   } satisfies ReviewOutcome;
 
-  assert.equal(threadsFromResult(outcome).length, 1);
+  assert.equal(planProjection(outcome).fresh.length, 1);
+});
+
+test('ConfirmInputSchema: lineageId는 선택이고 declined에서는 벗겨진다', () => {
+  assert.ok(ConfirmInputSchema.safeParse({ decision: 'confirmed', versionId: 'v', tier: 'HIGH', lineageId: 'PRLN1' }).success);
+  assert.ok(ConfirmInputSchema.safeParse({ decision: 'confirmed', versionId: 'v', tier: 'HIGH' }).success);
+  assert.deepEqual(ConfirmInputSchema.parse({ decision: 'declined', lineageId: 'x' }), { decision: 'declined' });
+});
+
+test('confirmResult: 이어서면 previous·seeds를 싣고 아니면 키 자체가 없다', () => {
+  const doc = { id: 'd', title: null, subtitle: null, path: 'manuscript/v.txt' };
+  const previous = { title: null, subtitle: null, path: 'manuscript/b.txt', threads: [] };
+  assert.deepEqual(confirmResult('k', 'high', doc), { decision: 'confirmed', key: 'k', tier: 'high', document: doc });
+  assert.deepEqual(confirmResult('k', 'high', doc, { previous, seeds: 'seeds/k' }), {
+    decision: 'confirmed',
+    key: 'k',
+    tier: 'high',
+    document: doc,
+    previous,
+    seeds: 'seeds/k',
+  });
+  assert.equal(seedsPrefix('PRRR1'), 'seeds/PRRR1');
+});
+
+test('buildPreviousContext: 소문자 사상·USER 답글만·fresh는 base 확인 시각 이후·issue 키는 값 있을 때만·앵커는 head/tail만', () => {
+  const baseAt = new Date('2026-08-20T00:00:00Z');
+  const previous = buildPreviousContext({
+    base: { title: '제목', subtitle: null, versionId: 'PRDV1', createdAt: baseAt },
+    threads: [
+      {
+        id: 'PRTH1',
+        pass: 'JUDGMENT',
+        trait: '장면',
+        body: null,
+        state: 'OPEN',
+        issueId: 'i-1',
+        anchors: [{ start: 0, end: 3, head: '가나', tail: '나다' }],
+        comments: [
+          { author: 'AI', body: '지난 코멘트', createdAt: new Date('2026-08-19T00:00:00Z') },
+          { author: 'USER', body: '새 답글', createdAt: new Date('2026-08-21T00:00:00Z') },
+          { author: 'USER', body: '옛 답글', createdAt: new Date('2026-08-19T00:00:00Z') },
+        ],
+      },
+      { id: 'PRTH2', pass: 'STYLISTIC', trait: '문장', body: '겹말', state: 'CLOSED', issueId: null, anchors: [], comments: [] },
+    ],
+  });
+  assert.deepEqual(previous, {
+    title: '제목',
+    subtitle: null,
+    path: 'manuscript/PRDV1.txt',
+    threads: [
+      {
+        id: 'PRTH1',
+        pass: 'judgment',
+        trait: '장면',
+        body: '',
+        anchors: [{ head: '가나', tail: '나다' }],
+        replies: [
+          { body: '옛 답글', fresh: false },
+          { body: '새 답글', fresh: true },
+        ],
+        state: 'open',
+        issue: 'i-1',
+      },
+      { id: 'PRTH2', pass: 'stylistic', trait: '문장', body: '겹말', anchors: [], replies: [], state: 'closed' },
+    ],
+  });
+  assert.equal('issue' in previous.threads[1], false);
+});
+
+test('seedUploads: from→seeds/<round>/<to>로 옮기고 하나라도 없으면 missing', () => {
+  const seeds = [
+    { from: 'artifacts/rubric.yaml', to: 'artifacts/rubric.yaml' },
+    { from: 'artifacts/continuity.yaml', to: 'previous/continuity.yaml' },
+  ];
+  const full = new Map([
+    ['artifacts/rubric.yaml', 'r'],
+    ['artifacts/continuity.yaml', 'c'],
+  ]);
+  assert.deepEqual(seedUploads('PRRR1', seeds, full), [
+    { path: 'seeds/PRRR1/artifacts/rubric.yaml', content: 'r' },
+    { path: 'seeds/PRRR1/previous/continuity.yaml', content: 'c' },
+  ]);
+  const partial = new Map([
+    ['artifacts/rubric.yaml', 'r'],
+    ['artifacts/continuity.yaml', null],
+  ]);
+  assert.deepEqual(seedUploads('PRRR1', seeds, partial), { missing: 'artifacts/continuity.yaml' });
+});
+
+test('planProjection: thread 표지 없는 이슈는 fresh, 있는 이슈는 carried, dispositions는 그대로', () => {
+  const outcome: ReviewOutcome = {
+    version: 1,
+    kind: 'issues',
+    issues: [
+      { trait: 'a', pass: 'judgment', body: null, anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }] },
+      { id: 'i-2', trait: 'b', pass: 'stylistic', body: 'x', anchors: [{ start: 2, end: 3, head: 'h', tail: 't' }], thread: 'PRTH9' },
+    ],
+    dispositions: [
+      { threadId: 'PRTH9', verdict: 'kept', comment: null },
+      { threadId: 'PRTH8', verdict: 'resolved', comment: '고쳐졌어요' },
+    ],
+  };
+  assert.deepEqual(planProjection(outcome), {
+    fresh: [
+      { issueIndex: 0, issueId: null, trait: 'a', pass: 'JUDGMENT', body: null, anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }] },
+    ],
+    carried: [{ threadId: 'PRTH9', issueIndex: 1, anchors: [{ start: 2, end: 3, head: 'h', tail: 't' }] }],
+    dispositions: outcome.dispositions,
+  });
+  assert.deepEqual(planProjection({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: 'm', basis: null } }), {
+    fresh: [],
+    carried: [],
+    dispositions: [],
+  });
+  assert.deepEqual(dispositionSummary(outcome), { carried: 1, resolved: 1, withdrawn: 0, new: 1 });
+  assert.equal(dispositionSummary({ version: 1, kind: 'issues', issues: [] }), null);
+});
+
+test('threadIsNew·lineageLocked·aiCommentId', () => {
+  assert.equal(threadIsNew('R2', 'R2', 2), true);
+  assert.equal(threadIsNew('R2', 'R2', 1), false);
+  assert.equal(threadIsNew('R1', 'R2', 2), false);
+  assert.equal(lineageLocked([{ closedAt: null, workflowState: null }]), true);
+  assert.equal(lineageLocked([{ closedAt: null, workflowState: 'RUNNING' }]), true);
+  assert.equal(
+    lineageLocked([
+      { closedAt: dayjs(), workflowState: null },
+      { closedAt: null, workflowState: 'COMPLETED' },
+    ]),
+    false,
+  );
+  assert.equal(aiCommentId('PRTH1', 'PRRR2'), 'PRTH1.PRRR2');
 });

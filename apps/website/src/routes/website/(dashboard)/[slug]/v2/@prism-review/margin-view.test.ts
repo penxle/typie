@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardHeaderSlot, COLUMN_GAP, COLUMN_WIDTH, describeThread, GUTTER, resolveMode } from './margin-view.ts';
+import { cardHeaderSlot, COLUMN_GAP, COLUMN_WIDTH, describeThread, groupRoundsByLineage, GUTTER, resolveMode } from './margin-view.ts';
 
 describe('레이아웃 상수', () => {
   it('치수가 조용히 바뀌면 레일 자리와 컬럼 임계가 어긋난다', () => {
@@ -105,5 +105,20 @@ describe('cardHeaderSlot', () => {
   it('스레드가 없는 강점은 아무것도 세우지 않는다', () => {
     expect(cardHeaderSlot(null, false, 0)).toEqual({ comments: false, state: false, action: null });
     expect(cardHeaderSlot(null, true, 0)).toEqual({ comments: false, state: false, action: null });
+  });
+});
+
+describe('groupRoundsByLineage', () => {
+  it('계보별로 묶고 그룹 순서는 최신 회차 우선, 그룹 안은 서수 내림차', () => {
+    const rounds = [
+      { id: 'r3', ordinal: 1, tierLabel: '빠른 검토', issueCount: 1, sessionId: null, createdAt: '2026-08-03T00:00:00Z', lineageId: 'B' },
+      { id: 'r2', ordinal: 2, tierLabel: '심층 검토', issueCount: 1, sessionId: null, createdAt: '2026-08-02T00:00:00Z', lineageId: 'A' },
+      { id: 'r1', ordinal: 1, tierLabel: '심층 검토', issueCount: 1, sessionId: null, createdAt: '2026-08-01T00:00:00Z', lineageId: 'A' },
+    ];
+    expect(groupRoundsByLineage(rounds).map((g) => [g.lineageId, g.rounds.map((r) => r.id)])).toEqual([
+      ['B', ['r3']],
+      ['A', ['r2', 'r1']],
+    ]);
+    expect(groupRoundsByLineage(rounds)[1]).toMatchObject({ tierLabel: '심층 검토', startedAt: '2026-08-01T00:00:00Z' });
   });
 });

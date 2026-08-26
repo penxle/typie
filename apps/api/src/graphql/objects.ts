@@ -72,6 +72,7 @@ export const Plan = createObjectRef('Plan', T.Plans);
 export const PrismSession = createObjectRef('PrismSession', T.PrismSessions);
 export const PrismWorkflow = createObjectRef('PrismWorkflow', T.PrismWorkflows);
 export const PrismReviewRound = createObjectRef('PrismReviewRound', T.PrismReviewRounds);
+export const PrismReviewLineage = createObjectRef('PrismReviewLineage', T.PrismReviewLineages);
 export const PrismReviewThread = createObjectRef('PrismReviewThread', T.PrismReviewThreads);
 export const PrismReviewThreadComment = createObjectRef('PrismReviewThreadComment', T.PrismReviewThreadComments);
 export const PrismCreditEntry = createObjectRef('PrismCreditEntry', T.PrismCreditEntries);

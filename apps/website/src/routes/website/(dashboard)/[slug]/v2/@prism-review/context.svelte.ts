@@ -46,6 +46,7 @@ export type MarginController = {
   readonly presentationProgress: number;
   readonly presentationInteractive: boolean;
   readonly myId: string;
+  readonly locked: boolean;
   select: (roundId: string | null) => void;
   activate: (id: string | null) => void;
   markPresentationPrepared: (roundId: string) => void;

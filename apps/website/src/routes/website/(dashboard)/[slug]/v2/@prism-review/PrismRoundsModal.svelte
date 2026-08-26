@@ -2,14 +2,20 @@
   import { css, cva } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal, TimeAgo } from '@typie/ui/components';
+  import dayjs from 'dayjs';
   import ReviewLensIcon from '~icons/typie/review-lens';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { getMarginContext } from './context.svelte.ts';
+  import { groupRoundsByLineage } from './margin-view.ts';
 
   type Props = { open: boolean };
   let { open = $bindable() }: Props = $props();
 
   const margin = getMarginContext();
+
+  // 계보가 하나뿐이면 무리 짓는 머리가 아무것도 가르지 않는다 — 둘 이상일 때만 세운다
+  const groups = $derived(groupRoundsByLineage(margin.rounds));
+  const grouped = $derived(groups.length > 1);
 
   const show = (roundId: string) => {
     margin.select(roundId);
@@ -61,67 +67,79 @@
   <HorizontalDivider />
 
   <div class={flex({ flexDirection: 'column', gap: '8px', padding: '16px' })}>
-    {#each margin.rounds as round (round.id)}
-      {@const shown = margin.selectedRoundId === round.id}
-      {@const sessionId = round.sessionId}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class={css(rowRecipe.raw({ shown }))}
-        aria-current={shown ? 'true' : undefined}
-        onclick={(event) => showFromRow(event, round.id)}
-      >
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <button
-            class={flex({ alignItems: 'baseline', gap: '6px', flexGrow: '1', minWidth: '0', textAlign: 'left', cursor: 'pointer' })}
-            aria-label={`${round.ordinal}회차 에디터에 표시`}
-            onclick={() => show(round.id)}
-            type="button"
-          >
-            <span class={css({ flex: 'none', fontSize: '13px', fontWeight: 'bold' })}>{round.ordinal}회차</span>
-            <span class={css({ minWidth: '0', fontSize: '12px', color: 'text.subtle', truncate: true })}>{round.tierLabel}</span>
-          </button>
-          {#if shown}
-            <span
-              class={css({
-                flex: 'none',
-                paddingX: '6px',
-                paddingY: '2px',
-                borderRadius: '4px',
-                backgroundColor: 'accent.brand.subtle',
-                fontSize: '10px',
-                fontWeight: 'bold',
-                color: 'text.brand',
-              })}
-            >
-              표시 중
-            </span>
-          {/if}
+    {#each groups as group, index (group.lineageId)}
+      {#if grouped}
+        <!-- 첫 무리 위는 모달 머리의 구분선이 이미 긋는다 -->
+        {#if index > 0}
+          <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
+        {/if}
+        <div class={css({ fontSize: '11px', color: 'text.faint' })}>
+          {group.tierLabel} · 시작 {dayjs(group.startedAt).format('M월 D일')}
         </div>
+      {/if}
 
-        <div class={flex({ alignItems: 'center', gap: '12px', marginTop: '4px' })}>
-          <span class={css({ minWidth: '0', fontSize: '11px', color: 'text.faint' })}>
-            피드백 {round.issueCount}개 · <TimeAgo timestamp={new Date(round.createdAt).getTime()} />
-          </span>
-          {#if sessionId !== null}
+      {#each group.rounds as round (round.id)}
+        {@const shown = margin.selectedRoundId === round.id}
+        {@const sessionId = round.sessionId}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class={css(rowRecipe.raw({ shown }))}
+          aria-current={shown ? 'true' : undefined}
+          onclick={(event) => showFromRow(event, round.id)}
+        >
+          <div class={flex({ alignItems: 'center', gap: '8px' })}>
             <button
-              class={css({
-                flex: 'none',
-                marginLeft: 'auto',
-                fontSize: '11px',
-                color: 'text.faint',
-                cursor: 'pointer',
-                _hover: { color: 'text.subtle' },
-              })}
-              aria-label={`${round.ordinal}회차 대화 보기`}
-              onclick={() => goSession(sessionId)}
+              class={flex({ alignItems: 'baseline', gap: '6px', flexGrow: '1', minWidth: '0', textAlign: 'left', cursor: 'pointer' })}
+              aria-label={`${round.ordinal}회차 에디터에 표시`}
+              onclick={() => show(round.id)}
               type="button"
             >
-              대화 보기
+              <span class={css({ flex: 'none', fontSize: '13px', fontWeight: 'bold' })}>{round.ordinal}회차</span>
+              <span class={css({ minWidth: '0', fontSize: '12px', color: 'text.subtle', truncate: true })}>{round.tierLabel}</span>
             </button>
-          {/if}
+            {#if shown}
+              <span
+                class={css({
+                  flex: 'none',
+                  paddingX: '6px',
+                  paddingY: '2px',
+                  borderRadius: '4px',
+                  backgroundColor: 'accent.brand.subtle',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  color: 'text.brand',
+                })}
+              >
+                표시 중
+              </span>
+            {/if}
+          </div>
+
+          <div class={flex({ alignItems: 'center', gap: '12px', marginTop: '4px' })}>
+            <span class={css({ minWidth: '0', fontSize: '11px', color: 'text.faint' })}>
+              피드백 {round.issueCount}개 · <TimeAgo timestamp={new Date(round.createdAt).getTime()} />
+            </span>
+            {#if sessionId !== null}
+              <button
+                class={css({
+                  flex: 'none',
+                  marginLeft: 'auto',
+                  fontSize: '11px',
+                  color: 'text.faint',
+                  cursor: 'pointer',
+                  _hover: { color: 'text.subtle' },
+                })}
+                aria-label={`${round.ordinal}회차 대화 보기`}
+                onclick={() => goSession(sessionId)}
+                type="button"
+              >
+                대화 보기
+              </button>
+            {/if}
+          </div>
         </div>
-      </div>
+      {/each}
     {/each}
   </div>
 

@@ -16,6 +16,23 @@ export type ReviewThreadDisposition = {
   comment: string | null;
 };
 
+export type ReviewPreviousThreadState = 'open' | 'closed' | 'resolved' | 'withdrawn';
+
+export type ReviewPreviousThread = {
+  id: string;
+  pass: Pass;
+  trait: string;
+  body: string;
+  anchors: { head: string; tail: string }[];
+  replies: { body: string; fresh: boolean }[];
+  state: ReviewPreviousThreadState;
+  issue?: string;
+};
+
+export type ReviewPreviousContext = { title: string | null; subtitle: string | null; path: string; threads: ReviewPreviousThread[] };
+
+export type ReviewSeedMapping = { from: string; to: string };
+
 export type ReviewDiagnostics = {
   dropped: { trait: string; count: number }[];
   gaps: (string | null)[];

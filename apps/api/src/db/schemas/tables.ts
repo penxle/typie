@@ -855,6 +855,23 @@ export const PrismReviewDocumentVersions = pgTable(
   (t) => [unique().on(t.documentId, t.version)],
 );
 
+export const PrismReviewLineages = pgTable(
+  'prism_review_lineages',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_LINEAGES)),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    tier: E._PrismReviewTier('tier').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.documentId)],
+);
+
 export const PrismReviewRounds = pgTable(
   'prism_review_rounds',
   {
@@ -872,6 +889,11 @@ export const PrismReviewRounds = pgTable(
       .references(() => PrismWorkflows.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     closedAt: datetime('closed_at'),
     tier: E._PrismReviewTier('tier').notNull(),
+    lineageId: text('lineage_id')
+      .notNull()
+      .references(() => PrismReviewLineages.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    // 이어서일 때 물려받은 회차 — 확인 순간 굳는다(fresh 판별·처분 대조의 기준). 새로 시작은 null
+    baseRoundId: text('base_round_id').references((): AnyPgColumn => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     documentVersionId: text('document_version_id')
       .notNull()
       .references(() => PrismReviewDocumentVersions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -882,7 +904,7 @@ export const PrismReviewRounds = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.documentId, t.round), index().on(t.sessionId)],
+  (t) => [unique().on(t.documentId, t.round), index().on(t.sessionId), index().on(t.lineageId)],
 );
 
 export const PrismReviewThreads = pgTable(
@@ -894,25 +916,47 @@ export const PrismReviewThreads = pgTable(
     documentId: text('document_id')
       .notNull()
       .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    // 태어난 회차 번호와 지금 앉은 회차 — 재리뷰가 스레드를 다음 회차로 옮기면 둘이 갈린다
-    bornRound: integer('born_round').notNull(),
-    roundId: text('round_id')
+    lineageId: text('lineage_id')
+      .notNull()
+      .references(() => PrismReviewLineages.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    bornRoundId: text('born_round_id')
       .notNull()
       .references(() => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    issueIndex: integer('issue_index').notNull(),
     issueId: text('issue_id'),
     trait: text('trait').notNull(),
     pass: E._PrismReviewPass('pass').notNull(),
     body: text('body'),
-    anchors: jsonb('anchors').$type<Anchor[]>().notNull(),
     state: E._PrismReviewThreadState('state').notNull().default('OPEN'),
     stateChangedAt: datetime('state_changed_at'),
+    // 해소·철회를 사영한 회차 — 그 회차의 여백이 "정리됨" 갈래로 세운다. 작가가 닫은 스레드는 채우지 않는다
+    settledRoundId: text('settled_round_id').references(() => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     reaction: E._PrismReaction('reaction'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.documentId, t.bornRound, t.issueIndex), index().on(t.roundId)],
+  (t) => [index().on(t.lineageId), index().on(t.bornRoundId), index().on(t.settledRoundId)],
+);
+
+export const PrismReviewThreadSeats = pgTable(
+  'prism_review_thread_seats',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_REVIEW_THREAD_SEATS)),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => PrismReviewThreads.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    roundId: text('round_id')
+      .notNull()
+      .references(() => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    issueIndex: integer('issue_index').notNull(),
+    anchors: jsonb('anchors').$type<Anchor[]>().notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.threadId, t.roundId), unique().on(t.roundId, t.issueIndex), index().on(t.roundId)],
 );
 
 export const PrismReviewThreadComments = pgTable(
