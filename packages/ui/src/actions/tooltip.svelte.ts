@@ -1,13 +1,13 @@
 import { on } from 'svelte/events';
 import { registerTooltipTrigger } from './tooltip-coordinator.svelte';
 import type { Placement } from '@floating-ui/dom';
-import type { Component } from 'svelte';
+import type { Component, Snippet } from 'svelte';
 import type { Action } from 'svelte/action';
 
 type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
 
 export type TooltipParameter = {
-  message?: string | null;
+  message?: string | Snippet | null;
   trailing?: string;
   trailingIcon?: Component;
   placement?: Placement;
@@ -33,18 +33,25 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, parameter) => {
     force,
     arrow = true,
     keys,
-  }: Parameter) => ({
-    element,
-    container: element.ownerDocument.querySelector('.tooltip-container') ?? element.ownerDocument.body,
-    eligible: Boolean(message),
-    pinned: force === true,
-    suppressed: force === false,
-    delay,
-    placement,
-    offset,
-    arrow,
-    presentation: { kind: 'action' as const, message, trailing, trailingIcon, keys },
-  });
+  }: Parameter) => {
+    const presentation =
+      typeof message === 'function'
+        ? { kind: 'wrapper' as const, message }
+        : { kind: 'action' as const, message, trailing, trailingIcon, keys };
+
+    return {
+      element,
+      container: element.ownerDocument.querySelector('.tooltip-container') ?? element.ownerDocument.body,
+      eligible: Boolean(message),
+      pinned: force === true,
+      suppressed: force === false,
+      delay,
+      placement,
+      offset,
+      arrow,
+      presentation,
+    };
+  };
 
   const registration = registerTooltipTrigger(description(current));
   const pointerenter = on(element, 'pointerenter', () => {

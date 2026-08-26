@@ -194,6 +194,17 @@ describe('tooltip opening delays', () => {
     expectTooltip('Third tooltip');
   });
 
+  it('renders rich action content after its configured delay', async () => {
+    await mountFixture();
+    enter(trigger('action-snippet-trigger'));
+
+    await advance(999);
+    expect(tooltipElement()).toBeNull();
+
+    await expect(advance(1)).resolves.toBeUndefined();
+    expect(tooltipElement()?.querySelector('[data-testid="action-snippet"]')).not.toBeNull();
+  });
+
   it('cancels and replaces a pending opening with the next trigger delay', async () => {
     await mountFixture({ secondDelay: 200 });
     const first = trigger('action-first');

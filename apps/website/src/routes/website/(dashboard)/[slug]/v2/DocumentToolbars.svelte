@@ -114,6 +114,7 @@
     <ToolbarButton
       style={css.raw({ borderRightRadius: '0' })}
       icon={UndoIcon}
+      keys={['Mod', 'Z']}
       label="실행 취소"
       onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
     />
@@ -121,6 +122,7 @@
     <ToolbarButton
       style={css.raw({ borderLeftRadius: '0' })}
       icon={RedoIcon}
+      keys={['Mod', 'Shift', 'Z']}
       label="다시 실행"
       onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
     />

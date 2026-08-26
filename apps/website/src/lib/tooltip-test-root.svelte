@@ -48,6 +48,10 @@
   <strong data-testid="wrapper-snippet">Wrapper snippet</strong>
 {/snippet}
 
+{#snippet actionSnippet()}
+  <strong data-testid="action-snippet">Action snippet</strong>
+{/snippet}
+
 {#snippet tallTooltipSnippet()}
   <span style="display: block; width: 100px">
     Tall line one
@@ -99,6 +103,10 @@
   <button data-testid="action-second" type="button" use:tooltip={{ message: secondMessage, delay: secondDelay }}>Second trigger</button>
 
   <button data-testid="action-third" type="button" use:tooltip={{ message: thirdMessage, delay: thirdDelay }}>Third trigger</button>
+
+  <button data-testid="action-snippet-trigger" type="button" use:tooltip={{ message: actionSnippet, delay: 1000, placement: 'right' }}>
+    Action snippet trigger
+  </button>
 
   <Tooltip
     style={{ display: 'inline-flex' }}

@@ -369,7 +369,6 @@
         type="button"
         use:tooltip={{
           message: slot.action === 'close' ? '다음 회차부터 다시 짚지 않기' : '다음 회차부터 다시 짚기',
-          delay: 200,
           arrow: false,
         }}
       >
@@ -385,7 +384,6 @@
         type="button"
         use:tooltip={{
           message: '닫기',
-          delay: 200,
           arrow: false,
         }}
       >
