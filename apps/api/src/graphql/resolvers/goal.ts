@@ -1,5 +1,8 @@
 import dayjs from 'dayjs';
-import { db, TableCode, validateDbId } from '#/db/index.ts';
+import { eq } from 'drizzle-orm';
+import { clearLoaders } from '#/context.ts';
+import { db, firstOrThrow, TableCode, Users, validateDbId } from '#/db/index.ts';
+import { pubsub } from '#/pubsub.ts';
 import { deleteEntityGoalCore, deleteUserGoalCore, upsertEntityGoalCore, upsertUserGoalCore } from '#/utils/goal-actions.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityGoal, User, UserGoal } from '../objects.ts';
@@ -75,6 +78,26 @@ builder.mutationFields((t) => ({
       await deleteUserGoalCore(db, { userId: ctx.session.userId });
 
       return ctx.session.userId;
+    },
+  }),
+}));
+
+builder.subscriptionFields((t) => ({
+  userGoalUpdateStream: t.withAuth({ session: true }).field({
+    type: User,
+    subscribe: async (_, __, ctx) => {
+      const repeater = pubsub.subscribe('user:goal:update', ctx.session.userId);
+
+      ctx.c.req.raw.signal.addEventListener('abort', () => {
+        repeater.return();
+      });
+
+      return repeater;
+    },
+    resolve: async (_, __, ctx) => {
+      clearLoaders(ctx);
+
+      return await db.select().from(Users).where(eq(Users.id, ctx.session.userId)).then(firstOrThrow);
     },
   }),
 }));

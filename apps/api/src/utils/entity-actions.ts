@@ -30,11 +30,13 @@ import {
 import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from './plan.ts';
+import { runAfterCommit } from './post-commit.ts';
 import { enqueueSearchSyncForEntityIds } from './search-index.ts';
 import { wasm as wasmFfi } from './wasm-ffi.ts';
 import type { DocumentContentRating, EntityAvailability, EntityVisibility } from '@typie/lib/enums';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { TemplatePreset } from './entity.ts';
+import type { PostCommitRegistrar } from './post-commit.ts';
 
 type CreateFolderCoreArgs = {
   userId: string;
@@ -45,7 +47,7 @@ type CreateFolderCoreArgs = {
   upperOrder?: string | null;
 };
 
-export const createFolderCore = async (executor: Database | Transaction, args: CreateFolderCoreArgs) => {
+export const createFolderCore = async (executor: Database | Transaction, args: CreateFolderCoreArgs, afterCommit?: PostCommitRegistrar) => {
   await assertSitePermission({
     userId: args.userId,
     siteId: args.siteId,
@@ -116,14 +118,16 @@ export const createFolderCore = async (executor: Database | Transaction, args: C
     return folder;
   });
 
-  if (args.parentEntityId) {
-    pubsub.publish('site:update', args.siteId, { scope: 'entity', entityId: args.parentEntityId });
-  } else {
-    pubsub.publish('site:update', args.siteId, { scope: 'site' });
-  }
+  await runAfterCommit(afterCommit, async () => {
+    if (args.parentEntityId) {
+      pubsub.publish('site:update', args.siteId, { scope: 'entity', entityId: args.parentEntityId });
+    } else {
+      pubsub.publish('site:update', args.siteId, { scope: 'site' });
+    }
 
-  const { enqueueJob } = await import('#/mq/index.ts');
-  await enqueueJob('search:index:folder', folder.id);
+    const { enqueueJob } = await import('#/mq/index.ts');
+    await enqueueJob('search:index:folder', folder.id);
+  });
 
   return folder;
 };
@@ -133,7 +137,11 @@ type DeleteEntitiesCoreArgs = {
   entityIds: string[];
 };
 
-export const deleteEntitiesCore = async (executor: Database | Transaction, args: DeleteEntitiesCoreArgs) => {
+export const deleteEntitiesCore = async (
+  executor: Database | Transaction,
+  args: DeleteEntitiesCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const entities = await executor.execute<{ id: string; site_id: string; parent_id: string | null }>(sql`
     WITH RECURSIVE sq AS (
       SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
@@ -198,13 +206,18 @@ export const deleteEntitiesCore = async (executor: Database | Transaction, args:
       )
     `);
 
-    const inputEntityIdSet = new Set(args.entityIds);
-    const directEntities = entities.filter((e) => inputEntityIdSet.has(e.id));
-    const parentIds = new Set(directEntities.map((e) => e.parent_id).filter((id): id is string => id !== null));
+    return deletedEntities;
+  });
+
+  const inputEntityIdSet = new Set(args.entityIds);
+  const directEntities = entities.filter((entity) => inputEntityIdSet.has(entity.id));
+  const parentIds = new Set(directEntities.map((entity) => entity.parent_id).filter((id): id is string => id !== null));
+
+  await runAfterCommit(afterCommit, async () => {
     for (const parentId of parentIds) {
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
     }
-    if (directEntities.some((e) => e.parent_id === null)) {
+    if (directEntities.some((entity) => entity.parent_id === null)) {
       pubsub.publish('site:update', siteId, { scope: 'site' });
     }
     pubsub.publish('user:usage:update', args.userId, null);
@@ -213,10 +226,8 @@ export const deleteEntitiesCore = async (executor: Database | Transaction, args:
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
     }
 
-    return deletedEntities;
+    await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
   });
-
-  await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
 
   return deletedEntities;
 };
@@ -229,7 +240,11 @@ type CreateDocumentCoreArgs = {
   upperOrder?: string | null;
 };
 
-export const createDocumentCore = async (executor: Database | Transaction, args: CreateDocumentCoreArgs) => {
+export const createDocumentCore = async (
+  executor: Database | Transaction,
+  args: CreateDocumentCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   await assertSitePermission({
     userId: args.userId,
     siteId: args.siteId,
@@ -330,16 +345,18 @@ export const createDocumentCore = async (executor: Database | Transaction, args:
     return document;
   });
 
-  if (args.parentEntityId) {
-    pubsub.publish('site:update', args.siteId, { scope: 'entity', entityId: args.parentEntityId });
-  } else {
-    pubsub.publish('site:update', args.siteId, { scope: 'site' });
-  }
+  await runAfterCommit(afterCommit, async () => {
+    if (args.parentEntityId) {
+      pubsub.publish('site:update', args.siteId, { scope: 'entity', entityId: args.parentEntityId });
+    } else {
+      pubsub.publish('site:update', args.siteId, { scope: 'site' });
+    }
 
-  pubsub.publish('user:usage:update', args.userId, null);
+    pubsub.publish('user:usage:update', args.userId, null);
 
-  const { enqueueJob } = await import('#/mq/index.ts');
-  await enqueueJob('search:index:document', document.id);
+    const { enqueueJob } = await import('#/mq/index.ts');
+    await enqueueJob('search:index:document', document.id);
+  });
 
   return document;
 };
@@ -349,7 +366,11 @@ type DuplicateDocumentCoreArgs = {
   documentId: string;
 };
 
-export const duplicateDocumentCore = async (executor: Database | Transaction, args: DuplicateDocumentCoreArgs) => {
+export const duplicateDocumentCore = async (
+  executor: Database | Transaction,
+  args: DuplicateDocumentCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const entity = await executor
     .select({
       id: Entities.id,
@@ -477,15 +498,17 @@ export const duplicateDocumentCore = async (executor: Database | Transaction, ar
     return newDocument;
   });
 
-  if (entity.parentEntityId) {
-    pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntityId });
-  } else {
-    pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-  }
-  pubsub.publish('user:usage:update', args.userId, null);
+  await runAfterCommit(afterCommit, async () => {
+    if (entity.parentEntityId) {
+      pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntityId });
+    } else {
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+    }
+    pubsub.publish('user:usage:update', args.userId, null);
 
-  const { enqueueJob } = await import('#/mq/index.ts');
-  await enqueueJob('search:index:document', newDocument.id);
+    const { enqueueJob } = await import('#/mq/index.ts');
+    await enqueueJob('search:index:document', newDocument.id);
+  });
 
   return newDocument;
 };
@@ -496,7 +519,7 @@ type RenameFolderCoreArgs = {
   name: string;
 };
 
-export const renameFolderCore = async (executor: Database | Transaction, args: RenameFolderCoreArgs) => {
+export const renameFolderCore = async (executor: Database | Transaction, args: RenameFolderCoreArgs, afterCommit?: PostCommitRegistrar) => {
   const folder = await executor
     .select({ siteId: Entities.siteId, parentId: Entities.parentId })
     .from(Folders)
@@ -518,14 +541,16 @@ export const renameFolderCore = async (executor: Database | Transaction, args: R
     .returning()
     .then(firstOrThrow);
 
-  if (folder.parentId) {
-    pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
-  } else {
-    pubsub.publish('site:update', folder.siteId, { scope: 'site' });
-  }
+  await runAfterCommit(afterCommit, async () => {
+    if (folder.parentId) {
+      pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
+    } else {
+      pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+    }
 
-  const { enqueueJob } = await import('#/mq/index.ts');
-  await enqueueJob('search:index:folder', args.folderId);
+    const { enqueueJob } = await import('#/mq/index.ts');
+    await enqueueJob('search:index:folder', args.folderId);
+  });
 
   return renamedFolder;
 };
@@ -539,7 +564,7 @@ type MoveEntitiesCoreArgs = {
   targetSiteId: string | null;
 };
 
-export const moveEntitiesCore = async (executor: Database | Transaction, args: MoveEntitiesCoreArgs) => {
+export const moveEntitiesCore = async (executor: Database | Transaction, args: MoveEntitiesCoreArgs, afterCommit?: PostCommitRegistrar) => {
   const entities = await executor.execute<{ id: string; site_id: string; depth: number; parent_id: string | null }>(sql`
     WITH RECURSIVE descendants AS (
       SELECT ${Entities.id}
@@ -630,7 +655,12 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
     targetDepth = parentEntity.depth + 1;
   }
 
-  return await executor.transaction(async (tx) => {
+  const sourceParentIds = new Set(
+    entities.map((entity) => entity.parent_id).filter((id): id is string => id !== null && id !== targetParentId),
+  );
+  const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
+
+  const movedEntities = await executor.transaction(async (tx) => {
     const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
     let lastOrder = args.lowerOrder ?? null;
 
@@ -687,23 +717,24 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
       }
     }
 
-    // 대상 pubsub
+    for (const parentId of sourceParentIds) {
+      movedEntities.push(parentId);
+    }
+
+    return movedEntities;
+  });
+
+  await runAfterCommit(afterCommit, () => {
     if (targetParentId) {
       pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: targetParentId });
     } else {
       pubsub.publish('site:update', targetSiteId, { scope: 'site' });
     }
 
-    // 소스 pubsub (소스와 대상이 다르거나, 소스 위치가 달라진 경우)
-    const sourceParentIds = new Set(
-      entities.map((entity) => entity.parent_id).filter((id): id is string => id !== null && id !== targetParentId),
-    );
     for (const parentId of sourceParentIds) {
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
-      movedEntities.push(parentId);
     }
 
-    const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
     if (hasRootSourceEntity && (targetParentId || isCrossSite)) {
       pubsub.publish('site:update', siteId, { scope: 'site' });
     }
@@ -711,9 +742,9 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
     for (const entity of entities) {
       pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: entity.id });
     }
-
-    return movedEntities;
   });
+
+  return movedEntities;
 };
 
 type UpdateEntityIconCoreArgs = {
@@ -723,7 +754,11 @@ type UpdateEntityIconCoreArgs = {
   iconColor?: string;
 };
 
-export const updateEntityIconCore = async (executor: Database | Transaction, args: UpdateEntityIconCoreArgs) => {
+export const updateEntityIconCore = async (
+  executor: Database | Transaction,
+  args: UpdateEntityIconCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const entity = await executor
     .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId })
     .from(Entities)
@@ -747,11 +782,13 @@ export const updateEntityIconCore = async (executor: Database | Transaction, arg
     .returning()
     .then(firstOrThrow);
 
-  if (entity.parentId) {
-    pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
-  } else {
-    pubsub.publish('site:update', entity.siteId, { scope: 'site' });
-  }
+  await runAfterCommit(afterCommit, () => {
+    if (entity.parentId) {
+      pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
+    } else {
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+    }
+  });
 
   return updatedEntity;
 };
@@ -761,7 +798,11 @@ type RecoverEntityCoreArgs = {
   entityId: string;
 };
 
-export const recoverEntityCore = async (executor: Database | Transaction, args: RecoverEntityCoreArgs) => {
+export const recoverEntityCore = async (
+  executor: Database | Transaction,
+  args: RecoverEntityCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const ParentEntities = alias(Entities, 'parent_entities');
 
   const entity = await executor
@@ -859,6 +900,10 @@ export const recoverEntityCore = async (executor: Database | Transaction, args: 
 
     const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
 
+    return { recoveredEntity, recoveredEntityIds };
+  });
+
+  await runAfterCommit(afterCommit, async () => {
     if (isParentActive && entity.parentEntity?.id) {
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntity.id });
     } else {
@@ -866,10 +911,8 @@ export const recoverEntityCore = async (executor: Database | Transaction, args: 
     }
     pubsub.publish('user:usage:update', args.userId, null);
 
-    return { recoveredEntity, recoveredEntityIds };
+    await enqueueSearchSyncForEntityIds(recoveredEntityIds);
   });
-
-  await enqueueSearchSyncForEntityIds(recoveredEntityIds);
 
   return recoveredEntity;
 };
@@ -886,7 +929,11 @@ type UpdateDocumentsOptionCoreArgs = {
   protectContent?: boolean | null;
 };
 
-export const updateDocumentsOptionCore = async (executor: Database | Transaction, args: UpdateDocumentsOptionCoreArgs) => {
+export const updateDocumentsOptionCore = async (
+  executor: Database | Transaction,
+  args: UpdateDocumentsOptionCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const documents = await executor
     .select({
       id: Documents.id,
@@ -958,9 +1005,11 @@ export const updateDocumentsOptionCore = async (executor: Database | Transaction
     }
   });
 
-  for (const doc of documents) {
-    pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
-  }
+  await runAfterCommit(afterCommit, () => {
+    for (const doc of documents) {
+      pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
+    }
+  });
 
   return documents.map((doc) => doc.id);
 };
@@ -973,7 +1022,13 @@ type UpdateFolderOptionCoreArgs = {
   recursive: boolean;
 };
 
-export const updateFolderOptionCore = async (executor: Database | Transaction, args: UpdateFolderOptionCoreArgs) => {
+export const updateFolderOptionCore = async (
+  executor: Database | Transaction,
+  args: UpdateFolderOptionCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
+  const DescendantEntities = alias(Entities, 'descendant_entities');
+
   const { folder, siteId } = await executor
     .select({ folder: Folders, siteId: Entities.siteId })
     .from(Folders)
@@ -988,7 +1043,9 @@ export const updateFolderOptionCore = async (executor: Database | Transaction, a
 
   await assertActiveSubscription({ userId: args.userId });
 
-  await executor.transaction(async (tx) => {
+  const changedFolderEntityIds = await executor.transaction(async (tx) => {
+    const changedFolderEntityIds = [folder.entityId];
+
     await tx.update(Entities).set({ visibility: args.visibility }).where(eq(Entities.id, folder.entityId));
 
     if (args.thumbnailId !== undefined) {
@@ -996,23 +1053,36 @@ export const updateFolderOptionCore = async (executor: Database | Transaction, a
     }
 
     if (args.recursive) {
-      const descendantEntityIds = await tx
-        .execute<{ id: string }>(
-          sql`
-            WITH RECURSIVE sq AS (
-              SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
-              UNION ALL
-              SELECT ${Entities.id} FROM ${Entities}
-              JOIN sq ON ${Entities.parentId} = sq.id
-            )
-            SELECT id FROM sq;
-          `,
-        )
-        .then((rows) => rows.map(({ id }) => id));
+      const descendantEntities = await tx.execute<{ id: string; type: EntityType; state: EntityState }>(
+        sql`
+          WITH RECURSIVE sq AS (
+            SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
+            UNION ALL
+            SELECT ${Entities.id} FROM ${Entities}
+            JOIN sq ON ${Entities.parentId} = sq.id
+          )
+          SELECT ${DescendantEntities.id}, ${DescendantEntities.type}, ${DescendantEntities.state}
+          FROM sq
+          INNER JOIN ${DescendantEntities} ON ${DescendantEntities.id} = sq.id;
+        `,
+      );
+      const descendantEntityIds = descendantEntities.map(({ id }) => id);
 
       if (descendantEntityIds.length > 0) {
         await tx.update(Entities).set({ visibility: args.visibility }).where(inArray(Entities.id, descendantEntityIds));
       }
+
+      changedFolderEntityIds.push(
+        ...descendantEntities.filter(({ type, state }) => type === EntityType.FOLDER && state === EntityState.ACTIVE).map(({ id }) => id),
+      );
+    }
+
+    return changedFolderEntityIds;
+  });
+
+  await runAfterCommit(afterCommit, () => {
+    for (const entityId of changedFolderEntityIds) {
+      pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     }
   });
 

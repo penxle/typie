@@ -2,57 +2,13 @@ import { logger } from '@typie/lib';
 import { PrismToolResolver, SiteState } from '@typie/lib/enums';
 import { serveVerdict, TOOL_META, toolFailure } from '@typie/prism';
 import { and, asc, eq } from 'drizzle-orm';
-import { db, first, firstOrThrow, PrismRuns, PrismSessions, PrismToolCalls, Sites } from '#/db/index.ts';
+import { db, first, PrismRuns, PrismSessions, Sites } from '#/db/index.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
+import { recordToolResolution, withToolLedger } from './prism-tool-calls.ts';
 import { DENIED_MESSAGE, ERROR_MESSAGE } from './prism-tool-messages.ts';
 import { prismTools } from './prism-tools.ts';
-import type { Transaction } from '#/db/index.ts';
 
 const log = logger.getChild('prism-serve');
-
-type ToolCallRef = { toolCallId: string; tool: string; resolver: PrismToolResolver };
-
-export const withToolLedger = async (
-  session: { id: string },
-  call: ToolCallRef,
-  body: (tx: Transaction) => Promise<unknown>,
-): Promise<unknown> =>
-  await db.transaction(async (tx) => {
-    const claimed = await tx
-      .insert(PrismToolCalls)
-      .values({ sessionId: session.id, toolCallId: call.toolCallId, tool: call.tool, resolver: call.resolver })
-      .onConflictDoNothing({ target: [PrismToolCalls.sessionId, PrismToolCalls.toolCallId] })
-      .returning({ id: PrismToolCalls.id })
-      .then(first);
-
-    if (!claimed) {
-      const prior = await tx
-        .select({ result: PrismToolCalls.result })
-        .from(PrismToolCalls)
-        .where(and(eq(PrismToolCalls.sessionId, session.id), eq(PrismToolCalls.toolCallId, call.toolCallId)))
-        .then(firstOrThrow);
-      return prior.result;
-    }
-
-    const result = await body(tx);
-    await tx.update(PrismToolCalls).set({ result }).where(eq(PrismToolCalls.id, claimed.id));
-    return result;
-  });
-
-export const recordToolResolution = async (session: { id: string }, call: ToolCallRef, result: unknown): Promise<void> => {
-  await db
-    .insert(PrismToolCalls)
-    .values({ sessionId: session.id, toolCallId: call.toolCallId, tool: call.tool, resolver: call.resolver, result })
-    .onConflictDoNothing({ target: [PrismToolCalls.sessionId, PrismToolCalls.toolCallId] });
-};
-
-export const toolResolverOf = async (sessionId: string, toolCallId: string): Promise<PrismToolResolver | null> =>
-  await db
-    .select({ resolver: PrismToolCalls.resolver })
-    .from(PrismToolCalls)
-    .where(and(eq(PrismToolCalls.sessionId, sessionId), eq(PrismToolCalls.toolCallId, toolCallId)))
-    .then(first)
-    .then((row) => row?.resolver ?? null);
 
 export const runSite = async (session: { id: string; userId: string }, runSeq: number | null): Promise<string | null> => {
   if (runSeq !== null) {
@@ -109,12 +65,12 @@ export const serveTool = async (args: {
     if (handler === undefined || siteId === null) {
       result = toolFailure('error', ERROR_MESSAGE);
     } else {
-      const base = { userId: session.userId, session, siteId, toolCallId: args.toolCallId, agent };
+      const base = { userId: session.userId, session, siteId, toolCallId: args.toolCallId, agent, afterCommit: undefined };
       try {
         result =
           TOOL_META[args.tool]?.tier === 'read'
             ? await handler({ ...base, executor: db }, args.input)
-            : await withToolLedger(session, call, (tx) => handler({ ...base, executor: tx }, args.input));
+            : await withToolLedger(session, call, (tx, afterCommit) => handler({ ...base, executor: tx, afterCommit }, args.input));
       } catch (err) {
         log.warn('prism tool handler failed: {tool} {*}', { tool: args.tool, error: err });
         result = toolFailure('error', ERROR_MESSAGE);

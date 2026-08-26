@@ -7,8 +7,10 @@ import { pubsub } from '#/pubsub.ts';
 import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription } from './plan.ts';
+import { runAfterCommit } from './post-commit.ts';
 import type { NoteStatus } from '@typie/lib/enums';
 import type { Database, Transaction } from '#/db/index.ts';
+import type { PostCommitRegistrar } from './post-commit.ts';
 
 type CreateNoteCoreArgs = {
   userId: string;
@@ -19,7 +21,7 @@ type CreateNoteCoreArgs = {
   clientId?: string | null;
 };
 
-export const createNoteCore = async (executor: Database | Transaction, args: CreateNoteCoreArgs) => {
+export const createNoteCore = async (executor: Database | Transaction, args: CreateNoteCoreArgs, afterCommit?: PostCommitRegistrar) => {
   await assertSitePermission({ userId: args.userId, siteId: args.siteId });
 
   if (args.entityIds.length > 0) {
@@ -68,10 +70,12 @@ export const createNoteCore = async (executor: Database | Transaction, args: Cre
     return note;
   });
 
-  pubsub.publish('note:update', args.siteId, {
-    kind: 'CREATED',
-    noteId: note.id,
-    originClientId: args.clientId ?? undefined,
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('note:update', args.siteId, {
+      kind: 'CREATED',
+      noteId: note.id,
+      originClientId: args.clientId ?? undefined,
+    });
   });
 
   return note;
@@ -87,7 +91,7 @@ type UpdateNoteCoreArgs = {
   clientId?: string | null;
 };
 
-export const updateNoteCore = async (executor: Database | Transaction, args: UpdateNoteCoreArgs) => {
+export const updateNoteCore = async (executor: Database | Transaction, args: UpdateNoteCoreArgs, afterCommit?: PostCommitRegistrar) => {
   await assertActiveSubscription({ userId: args.userId });
 
   const updated = await executor.transaction(async (tx) => {
@@ -124,10 +128,12 @@ export const updateNoteCore = async (executor: Database | Transaction, args: Upd
     return updated;
   });
 
-  pubsub.publish('note:update', updated.siteId, {
-    kind: 'UPDATED',
-    noteId: updated.id,
-    originClientId: args.clientId ?? undefined,
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('note:update', updated.siteId, {
+      kind: 'UPDATED',
+      noteId: updated.id,
+      originClientId: args.clientId ?? undefined,
+    });
   });
 
   return updated;
@@ -139,7 +145,7 @@ type DeleteNoteCoreArgs = {
   clientId?: string | null;
 };
 
-export const deleteNoteCore = async (executor: Database | Transaction, args: DeleteNoteCoreArgs) => {
+export const deleteNoteCore = async (executor: Database | Transaction, args: DeleteNoteCoreArgs, afterCommit?: PostCommitRegistrar) => {
   const deleted = await executor
     .update(Notes)
     .set({ state: NoteState.DELETED, updatedAt: dayjs() })
@@ -147,10 +153,12 @@ export const deleteNoteCore = async (executor: Database | Transaction, args: Del
     .returning()
     .then(firstOrThrowWith(new NotFoundError()));
 
-  pubsub.publish('note:update', deleted.siteId, {
-    kind: 'DELETED',
-    noteId: deleted.id,
-    originClientId: args.clientId ?? undefined,
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('note:update', deleted.siteId, {
+      kind: 'DELETED',
+      noteId: deleted.id,
+      originClientId: args.clientId ?? undefined,
+    });
   });
 
   return deleted;
@@ -163,7 +171,7 @@ type NoteEntityCoreArgs = {
   clientId?: string | null;
 };
 
-export const addNoteEntityCore = async (executor: Database | Transaction, args: NoteEntityCoreArgs) => {
+export const addNoteEntityCore = async (executor: Database | Transaction, args: NoteEntityCoreArgs, afterCommit?: PostCommitRegistrar) => {
   const note = await executor
     .select()
     .from(Notes)
@@ -180,16 +188,22 @@ export const addNoteEntityCore = async (executor: Database | Transaction, args: 
 
   await executor.insert(NoteEntities).values({ noteId: note.id, entityId: args.entityId }).onConflictDoNothing();
 
-  pubsub.publish('note:update', note.siteId, {
-    kind: 'UPDATED',
-    noteId: note.id,
-    originClientId: args.clientId ?? undefined,
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('note:update', note.siteId, {
+      kind: 'UPDATED',
+      noteId: note.id,
+      originClientId: args.clientId ?? undefined,
+    });
   });
 
   return note;
 };
 
-export const removeNoteEntityCore = async (executor: Database | Transaction, args: NoteEntityCoreArgs) => {
+export const removeNoteEntityCore = async (
+  executor: Database | Transaction,
+  args: NoteEntityCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const note = await executor
     .select()
     .from(Notes)
@@ -200,10 +214,12 @@ export const removeNoteEntityCore = async (executor: Database | Transaction, arg
 
   await executor.delete(NoteEntities).where(and(eq(NoteEntities.noteId, note.id), eq(NoteEntities.entityId, args.entityId)));
 
-  pubsub.publish('note:update', note.siteId, {
-    kind: 'UPDATED',
-    noteId: note.id,
-    originClientId: args.clientId ?? undefined,
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('note:update', note.siteId, {
+      kind: 'UPDATED',
+      noteId: note.id,
+      originClientId: args.clientId ?? undefined,
+    });
   });
 
   return note;

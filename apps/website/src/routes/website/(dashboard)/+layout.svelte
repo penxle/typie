@@ -93,6 +93,7 @@
           ... on Entity {
             id
             state
+            visibility
 
             goal {
               id
@@ -146,6 +147,28 @@
       }
     `),
     () => ({ siteId }),
+  );
+
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_UserGoalUpdateStream {
+        userGoalUpdateStream {
+          id
+
+          goal {
+            id
+            targetCharacterCount
+          }
+
+          goalHistory {
+            date
+            targetCharacterCount
+            additions
+            achieved
+          }
+        }
+      }
+    `),
   );
 
   createSubscription(
