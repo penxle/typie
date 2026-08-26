@@ -8,7 +8,7 @@ import type { Dayjs } from 'dayjs';
 export const ENUM_TO_TIER: Record<PrismReviewTier, PrismReviewTierName> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' };
 
 export const ConfirmInputSchema = z.union([
-  z.object({ decision: z.literal('confirmed'), documentId: z.string(), tier: z.enum(['LOW', 'MEDIUM', 'HIGH']) }),
+  z.object({ decision: z.literal('confirmed'), versionId: z.string(), tier: z.enum(['LOW', 'MEDIUM', 'HIGH']) }),
   z.object({ decision: z.literal('declined') }),
 ]);
 

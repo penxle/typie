@@ -25,6 +25,7 @@ export type OpsAlertId =
   | 'google-pending-refund-review'
   | 'google-acknowledge-failed'
   | 'iap-unbound-independent-notification'
+  | 'prism-credit-charge-unknown'
   | 'invariant-violation';
 
 export const opsAlert = async (id: OpsAlertId, context: Record<string, unknown>) => {

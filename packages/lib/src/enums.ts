@@ -361,3 +361,13 @@ export const PrismToolResolver = {
   USER: 'USER',
   SERVER: 'SERVER',
 } as const;
+
+export type PrismCreditEntryKind = keyof typeof PrismCreditEntryKind;
+export const PrismCreditEntryKind = {
+  GRANT: 'GRANT',
+  TRIAL: 'TRIAL',
+  REVIEW_CHARGE: 'REVIEW_CHARGE',
+  REVIEW_REFUND: 'REVIEW_REFUND',
+  CHAT_CHARGE: 'CHAT_CHARGE',
+  ADJUSTMENT: 'ADJUSTMENT',
+} as const;

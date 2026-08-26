@@ -16,6 +16,7 @@ export const pubsub = createPubSub<{
   'document:comment': [documentId: string, payload: { threadId: string; originClientId: string }];
   'note:update': [siteId: string, payload: { kind: (typeof NOTE_UPDATE_KINDS)[number]; noteId: string; originClientId?: string }];
   'prism:badge': [userId: string, payload: { sessionId: string }];
+  'prism:credit': [userId: string, payload: Record<string, never>];
   'prism:review': [documentId: string, payload: { roundId: string }];
   'prism:session': [sessionId: string, payload: ProjectedStreamFrame];
   'site:update': [siteId: string, payload: { scope: 'site' } | { scope: 'entity'; entityId: string }];

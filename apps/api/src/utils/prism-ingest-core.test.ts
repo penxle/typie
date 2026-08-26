@@ -45,9 +45,29 @@ test('advance는 seq가 커서를 넘을 때만', () => {
 test('agent 펌프의 도메인 op — run 시작·종결·링크·제목·질문 푸시', () => {
   assert.deepEqual(planEvent('agent', ev(1, 'run.started', run, { message: 'a' }), 0).ops, [{ op: 'run-started', runSeq: 1, at: 1001 }]);
   assert.deepEqual(planEvent('agent', ev(2, 'run.failed', run, { reason: 'x' }), 1).ops, [
-    { op: 'run-terminal', runSeq: 1, state: 'FAILED', at: 1002 },
+    { op: 'run-terminal', runSeq: 1, state: 'FAILED', at: 1002, charge: undefined },
   ]);
-  assert.deepEqual(planEvent('agent', ev(3, 'run.canceled', run), 2).ops, [{ op: 'run-terminal', runSeq: 1, state: 'CANCELED', at: 1003 }]);
+  assert.deepEqual(planEvent('agent', ev(3, 'run.canceled', run, { charge: null }), 2).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'CANCELED', at: 1003, charge: null },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(10, 'run.completed', run, { result: 'r', charge: { milli: 1234 } }), 9).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1010, charge: 1234 },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(11, 'run.completed', run, { result: 'r', charge: { milli: '12' } }), 10).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1011, charge: null },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(12, 'run.completed', run, { result: 'r', charge: { milli: -1 } }), 11).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1012, charge: null },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(13, 'run.completed', run, { result: 'r', charge: 5 }), 12).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1013, charge: null },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(13, 'run.completed', run, { result: 'r', charge: { milli: 1.5 } }), 12).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1013, charge: null },
+  ]);
+  assert.deepEqual(planEvent('agent', ev(14, 'run.completed', run, { result: 'r', charge: { milli: 0 } }), 13).ops, [
+    { op: 'run-terminal', runSeq: 1, state: 'COMPLETED', at: 1014, charge: 0 },
+  ]);
   assert.deepEqual(
     planEvent(
       'agent',

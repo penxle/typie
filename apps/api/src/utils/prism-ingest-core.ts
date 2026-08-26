@@ -46,7 +46,7 @@ const WORKFLOW_TERMINAL: Record<string, PrismWorkflowState | undefined> = {
 
 export type DomainOp =
   | { op: 'run-started'; runSeq: number; at: number }
-  | { op: 'run-terminal'; runSeq: number; state: PrismRunState; at: number }
+  | { op: 'run-terminal'; runSeq: number; state: PrismRunState; at: number; charge: number | null | undefined }
   | { op: 'workflow-link'; descriptor: { prismWorkflowId: string; app: string; name: string; ref: string | null; startedAt: number } }
   | { op: 'titled'; title: string }
   | { op: 'ask-push'; toolCallId: string; tool: string; data: unknown; at: number }
@@ -67,6 +67,15 @@ const usageOf = (raw: unknown): RunUsage | null => {
   const parsed = WorkflowUsageSchema.nullable().safeParse(raw ?? null);
   if (!parsed.success || parsed.data === null) return null;
   return { complete: parsed.data.settled ? parsed.data.complete : false, folds: parsed.data.folds };
+};
+
+const ChargeSchema = z.object({ milli: z.number().int().nonnegative() });
+
+const chargeOf = (raw: unknown): number | null | undefined => {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const parsed = ChargeSchema.safeParse(raw);
+  return parsed.success ? parsed.data.milli : null;
 };
 
 const askPush = (event: EventFrame): DomainOp[] => {
@@ -96,7 +105,7 @@ const agentOps = (event: EventFrame): DomainOp[] => {
     return [{ op: 'run-started', runSeq: context.run, at: event.occurredAt }];
   const terminal = RUN_TERMINAL[event.kind];
   if (terminal !== undefined && typeof context.run === 'number') {
-    return [{ op: 'run-terminal', runSeq: context.run, state: terminal, at: event.occurredAt }];
+    return [{ op: 'run-terminal', runSeq: context.run, state: terminal, at: event.occurredAt, charge: chargeOf(event.data.charge) }];
   }
   if (event.kind === 'invocation.started') {
     const target = WorkflowTargetSchema.safeParse(event.data.target);

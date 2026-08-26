@@ -936,6 +936,28 @@ export const PrismReviewThreadComments = pgTable(
   (t) => [index().on(t.threadId, t.createdAt)],
 );
 
+export const PrismCreditEntries = pgTable(
+  'prism_credit_entries',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_CREDIT_ENTRIES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    kind: E._PrismCreditEntryKind('kind').notNull(),
+    paidDelta: bigint('paid_delta', { mode: 'number' }).notNull(),
+    freeDelta: bigint('free_delta', { mode: 'number' }).notNull(),
+    key: text('key'),
+    note: text('note'),
+    actorId: text('actor_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.kind, t.key), index().on(t.userId)],
+);
+
 export const Prompts = pgTable('prompts', {
   id: text('id').primaryKey(),
   model: text('model').notNull(),

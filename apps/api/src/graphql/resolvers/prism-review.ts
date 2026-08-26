@@ -14,6 +14,7 @@ import {
   db,
   first,
   firstOrThrow,
+  PrismCreditEntries,
   PrismReviewRounds,
   PrismReviewThreadComments,
   PrismReviewThreads,
@@ -22,6 +23,9 @@ import {
 } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { assertDocumentPermission } from '#/utils/permission.ts';
+import { assertPrismAccess } from '#/utils/prism-access.ts';
+import { toDisplayCredits } from '#/utils/prism-credit-core.ts';
+import { prepareReviewSnapshot } from '#/utils/prism-review.ts';
 import { detailOutcome, hasDetail, roundState, summarizeOutcome, threadQuote } from '#/utils/prism-review-core.ts';
 import { clearRoundMemos, ensureRoundThreads, roundThreadComments, roundVersionContent } from '#/utils/prism-review-threads.ts';
 import { builder } from '../builder.ts';
@@ -79,6 +83,10 @@ const PrismReviewPattern = builder.simpleObject('PrismReviewPattern', {
 
 const PrismReviewPriority = builder.simpleObject('PrismReviewPriority', {
   fields: (t) => ({ body: t.string(), issues: t.field({ type: [PrismReviewIssueBrief] }) }),
+});
+
+const PrismReviewSnapshot = builder.simpleObject('PrismReviewSnapshot', {
+  fields: (t) => ({ versionId: t.id(), characterCount: t.int() }),
 });
 
 const PrismReviewDetail = builder.simpleObject('PrismReviewDetail', {
@@ -160,6 +168,17 @@ PrismReviewRound.implement({
       },
     }),
     tier: t.expose('tier', { type: PrismReviewTier }),
+    credits: t.int({
+      nullable: true,
+      resolve: async (self) => {
+        const charge = await db
+          .select({ paidDelta: PrismCreditEntries.paidDelta, freeDelta: PrismCreditEntries.freeDelta })
+          .from(PrismCreditEntries)
+          .where(and(eq(PrismCreditEntries.kind, 'REVIEW_CHARGE'), eq(PrismCreditEntries.key, self.id)))
+          .then(first);
+        return charge ? toDisplayCredits(0 - (charge.paidDelta + charge.freeDelta)) : null;
+      },
+    }),
     state: t.field({
       type: PrismReviewRoundState,
       resolve: async (self, _, ctx) => {
@@ -264,6 +283,15 @@ builder.queryFields((t) => ({
 }));
 
 builder.mutationFields((t) => ({
+  preparePrismReview: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismReviewSnapshot,
+    input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
+    resolve: async (_, { input }, ctx) => {
+      await assertPrismAccess({ userId: ctx.session.userId });
+      return await prepareReviewSnapshot({ userId: ctx.session.userId, documentId: input.documentId });
+    },
+  }),
+
   reactPrismReviewRound: t.withAuth({ session: true }).fieldWithInput({
     type: PrismReviewRound,
     input: {

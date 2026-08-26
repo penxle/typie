@@ -74,6 +74,7 @@ export const PrismWorkflow = createObjectRef('PrismWorkflow', T.PrismWorkflows);
 export const PrismReviewRound = createObjectRef('PrismReviewRound', T.PrismReviewRounds);
 export const PrismReviewThread = createObjectRef('PrismReviewThread', T.PrismReviewThreads);
 export const PrismReviewThreadComment = createObjectRef('PrismReviewThreadComment', T.PrismReviewThreadComments);
+export const PrismCreditEntry = createObjectRef('PrismCreditEntry', T.PrismCreditEntries);
 export const DocumentReaction = createObjectRef('DocumentReaction', T.DocumentReactions);
 export const DocumentCommentThread = createObjectRef('DocumentCommentThread', T.DocumentCommentThreads);
 export const DocumentComment = createObjectRef('DocumentComment', T.DocumentComments);

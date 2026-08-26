@@ -13,7 +13,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 10,
     });
     r.upsert('p2', {
       kind: 'document',
@@ -24,7 +23,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: true,
-      charCount: 12,
     });
     r.upsert('p3', {
       kind: 'document',
@@ -35,7 +33,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 0,
     });
     expect(r.snapshot()).toEqual({
       documents: [
@@ -48,7 +45,6 @@ describe('OpenDocumentRegistry', () => {
           icon: 'file',
           iconColor: 'gray',
           active: true,
-          charCount: 12,
         },
         {
           kind: 'document',
@@ -59,7 +55,6 @@ describe('OpenDocumentRegistry', () => {
           icon: 'file',
           iconColor: 'gray',
           active: false,
-          charCount: 0,
         },
       ],
     });
@@ -76,7 +71,6 @@ describe('OpenDocumentRegistry', () => {
           icon: 'file',
           iconColor: 'gray',
           active: false,
-          charCount: 10,
         },
       ],
     });
@@ -93,7 +87,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 10,
     });
     r.upsert('p1', {
       kind: 'document',
@@ -104,7 +97,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: true,
-      charCount: 20,
     });
     expect(r.snapshot()).toEqual({
       documents: [
@@ -117,7 +109,6 @@ describe('OpenDocumentRegistry', () => {
           icon: 'file',
           iconColor: 'gray',
           active: true,
-          charCount: 20,
         },
       ],
     });
@@ -132,7 +123,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 5,
     });
     expect(r.snapshot()).toEqual({
       documents: [
@@ -145,7 +135,6 @@ describe('OpenDocumentRegistry', () => {
           icon: 'file',
           iconColor: 'gray',
           active: false,
-          charCount: 5,
         },
       ],
     });
@@ -162,7 +151,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 10,
     });
     r.upsert('p2', {
       kind: 'document',
@@ -173,7 +161,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 20,
     });
     r.remove('p1');
     r.upsert('p1', {
@@ -185,7 +172,6 @@ describe('OpenDocumentRegistry', () => {
       icon: 'file',
       iconColor: 'gray',
       active: false,
-      charCount: 11,
     });
 
     expect(r.snapshot().documents.map((doc) => doc.documentId)).toEqual(['D1', 'D2']);

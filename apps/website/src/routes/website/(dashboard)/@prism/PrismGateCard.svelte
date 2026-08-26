@@ -5,7 +5,7 @@
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
 
   type Props = {
-    reason: 'prism_beta_required' | 'subscription_required' | 'ai_opt_in_required';
+    reason: 'prism_beta_required' | 'subscription_required' | 'ai_opt_in_required' | 'prism_credit_insufficient';
   };
 
   let { reason }: Props = $props();
@@ -30,6 +30,8 @@
     <div class={css({ marginTop: '8px' })}>
       <Button onclick={() => SubscribeModal.show('prism_panel')} size="sm">구독 보기</Button>
     </div>
+  {:else if reason === 'prism_credit_insufficient'}
+    크레딧이 부족해요. 운영에 문의해 주세요.
   {:else}
     AI 기능을 쓰려면 먼저 AI 사용에 동의해 주세요.
 

@@ -39,6 +39,7 @@ export const _PrismReviewThreadState = createPgEnum('_prism_review_thread_state'
 export const _PrismReviewCommentAuthor = createPgEnum('_prism_review_comment_author', E.PrismReviewCommentAuthor);
 export const _PrismToolPolicy = createPgEnum('_prism_tool_policy', E.PrismToolPolicy);
 export const _PrismToolResolver = createPgEnum('_prism_tool_resolver', E.PrismToolResolver);
+export const _PrismCreditEntryKind = createPgEnum('_prism_credit_entry_kind', E.PrismCreditEntryKind);
 export const _RedirectType = createPgEnum('_redirect_type', E.RedirectType);
 export const _SiteDateDisplay = createPgEnum('_site_date_display', E.SiteDateDisplay);
 export const _SiteState = createPgEnum('_site_state', E.SiteState);

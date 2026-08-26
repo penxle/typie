@@ -597,7 +597,7 @@
       <div class={css({ marginTop: '8px' })} in:rise><PrismToolCalls count={group.count} rows={group.rows} /></div>
     {:else if group.kind === 'question'}
       <div class={css({ marginTop: '12px' })} in:rise={{ block: true }}>
-        <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {transcript} />
+        <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {sessionId} {transcript} />
       </div>
     {:else}
       {@const open = expanded[group.key] ?? (group.key === liveKey || heldRoundKeys.includes(group.key))}

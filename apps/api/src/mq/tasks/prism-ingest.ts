@@ -10,7 +10,9 @@ import { env } from '#/env.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
 import { pumpSse } from '#/external/prism-stream.ts';
 import { pubsub } from '#/pubsub.ts';
+import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { prismApps } from '#/utils/prism-apps.ts';
+import { chargePrismCredit } from '#/utils/prism-credit.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, shouldStop } from '#/utils/prism-ingest-core.ts';
 import { serveTool, toolResolverOf } from '#/utils/prism-serve.ts';
@@ -112,12 +114,40 @@ const applyAgentOp = async (
     }
 
     case 'run-terminal': {
-      await tx
+      const where = and(eq(PrismRuns.sessionId, session.id), eq(PrismRuns.runSeq, op.runSeq));
+      const updated = await tx
         .update(PrismRuns)
         .set({ state: op.state, finishedAt: dayjs(op.at) })
-        .where(and(eq(PrismRuns.sessionId, session.id), eq(PrismRuns.runSeq, op.runSeq), eq(PrismRuns.state, 'RUNNING')));
+        .where(and(where, eq(PrismRuns.state, 'RUNNING')))
+        .returning({ id: PrismRuns.id })
+        .then(first);
+      const run =
+        updated ??
+        (await tx.select({ id: PrismRuns.id }).from(PrismRuns).where(where).then(first)) ??
+        (await tx
+          .insert(PrismRuns)
+          .values({ sessionId: session.id, runSeq: op.runSeq, state: op.state, startedAt: dayjs(op.at), finishedAt: dayjs(op.at) })
+          .onConflictDoNothing({ target: [PrismRuns.sessionId, PrismRuns.runSeq] })
+          .returning({ id: PrismRuns.id })
+          .then(first));
+
       await closeRun(tx, session.id, op.runSeq);
-      return null;
+
+      let unknownCharge: 'unknown-price' | 'run-missing' | null = null;
+      if (op.state !== 'FAILED' && op.charge !== undefined) {
+        if (op.charge === null) unknownCharge = 'unknown-price';
+        else if (run === undefined) unknownCharge = 'run-missing';
+        else await chargePrismCredit(tx, { userId: session.userId, kind: 'CHAT_CHARGE', key: run.id, amount: op.charge });
+      }
+
+      return async () => {
+        // 단가 미지는 전 유저 공통 조건이라 전역 1일 1회, run 미확보는 정산 1건의 유실이라 건마다 — 한 키로 접으면 후자가 전자에 묻힌다
+        if (unknownCharge) {
+          const dedupeKey = unknownCharge === 'unknown-price' ? 'global' : `run:${session.id}:${op.runSeq}`;
+          await opsAlertOnce('prism-credit-charge-unknown', dedupeKey, { cause: unknownCharge, sessionId: session.id, runSeq: op.runSeq });
+        }
+        pubsub.publish('prism:credit', session.userId, {});
+      };
     }
 
     case 'workflow-link': {
@@ -478,11 +508,14 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
       if (err.status === 404) {
         if (target.kind === 'agent') {
           const row = await db
-            .select({ openRunSeq: PrismSessions.openRunSeq })
+            .select({ userId: PrismSessions.userId, openRunSeq: PrismSessions.openRunSeq })
             .from(PrismSessions)
             .where(eq(PrismSessions.id, target.sessionId))
             .then(firstOrThrow);
-          if (row.openRunSeq !== null) await closeRun(db, target.sessionId, row.openRunSeq);
+          if (row.openRunSeq !== null) {
+            await closeRun(db, target.sessionId, row.openRunSeq);
+            pubsub.publish('prism:credit', row.userId, {});
+          }
           await writeAwaiting(false);
           log.warn('prism agent absent, closing: {sessionId}', { sessionId: target.sessionId });
           return 'done';

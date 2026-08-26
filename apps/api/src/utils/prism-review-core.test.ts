@@ -76,15 +76,15 @@ test('confirmResult·manuscriptPath: prism 확인 결과 형태 그대로', () =
   });
 });
 
-test('ConfirmInputSchema: declined는 단독, confirmed는 documentId·대문자 tier 필수', () => {
+test('ConfirmInputSchema: declined는 단독, confirmed는 versionId·대문자 tier 필수', () => {
   assert.deepEqual(ConfirmInputSchema.parse({ decision: 'declined' }), { decision: 'declined' });
-  assert.deepEqual(ConfirmInputSchema.parse({ decision: 'confirmed', documentId: 'DOCU1', tier: 'HIGH' }), {
+  assert.deepEqual(ConfirmInputSchema.parse({ decision: 'confirmed', versionId: 'PRDV1', tier: 'HIGH' }), {
     decision: 'confirmed',
-    documentId: 'DOCU1',
+    versionId: 'PRDV1',
     tier: 'HIGH',
   });
-  assert.equal(ConfirmInputSchema.safeParse({ decision: 'confirmed', documentId: 'DOCU1', tier: 'high' }).success, false);
-  assert.equal(ConfirmInputSchema.safeParse({ decision: 'confirmed', documentId: 'DOCU1' }).success, false);
+  assert.equal(ConfirmInputSchema.safeParse({ decision: 'confirmed', versionId: 'PRDV1', tier: 'high' }).success, false);
+  assert.equal(ConfirmInputSchema.safeParse({ decision: 'confirmed', versionId: 'PRDV1' }).success, false);
   assert.equal(ConfirmInputSchema.safeParse({ decision: 'confirmed', tier: 'LOW' }).success, false);
   assert.equal(ConfirmInputSchema.safeParse({ decision: 'maybe' }).success, false);
   assert.equal(ConfirmInputSchema.safeParse(null).success, false);
