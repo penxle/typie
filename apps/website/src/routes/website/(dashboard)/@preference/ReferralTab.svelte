@@ -145,15 +145,15 @@
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
           <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
           <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
-            친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL
+            친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 구독 캐시를 지급받아요. 지급받은 구독 캐시로 바로 FULL
             ACCESS 플랜을 체험해볼 수 있어요.
           </span>
         </li>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
           <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
           <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
-            친구가 크레딧을 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 크레딧을 지급받아요. 이 크레딧은
-            다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.
+            친구가 구독 캐시를 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 구독 캐시를 지급받아요. 이 구독
+            캐시는 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.
           </span>
         </li>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>

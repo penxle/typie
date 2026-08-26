@@ -370,4 +370,46 @@ export const PrismCreditEntryKind = {
   REVIEW_REFUND: 'REVIEW_REFUND',
   CHAT_CHARGE: 'CHAT_CHARGE',
   ADJUSTMENT: 'ADJUSTMENT',
+  PURCHASE: 'PURCHASE',
+  BONUS: 'BONUS',
+  REFUND_OUT: 'REFUND_OUT',
+} as const;
+
+export type PrismCreditPack = keyof typeof PrismCreditPack;
+export const PrismCreditPack = {
+  P100: 'P100',
+  P330: 'P330',
+  P690: 'P690',
+  P1440: 'P1440',
+  P3000: 'P3000',
+} as const;
+
+export type PrismCreditPurchaseChannel = keyof typeof PrismCreditPurchaseChannel;
+export const PrismCreditPurchaseChannel = {
+  BILLING_KEY: 'BILLING_KEY',
+} as const;
+
+export type PrismCreditPurchaseState = keyof typeof PrismCreditPurchaseState;
+export const PrismCreditPurchaseState = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  FAILED: 'FAILED',
+} as const;
+
+export type PrismCreditRefundKind = keyof typeof PrismCreditRefundKind;
+export const PrismCreditRefundKind = {
+  WITHDRAWAL: 'WITHDRAWAL',
+  REMAINDER: 'REMAINDER',
+} as const;
+
+export type PrismCreditRefundMethod = keyof typeof PrismCreditRefundMethod;
+export const PrismCreditRefundMethod = {
+  PG_CANCEL: 'PG_CANCEL',
+  MANUAL: 'MANUAL',
+} as const;
+
+export type PrismCreditRefundState = keyof typeof PrismCreditRefundState;
+export const PrismCreditRefundState = {
+  PENDING: 'PENDING',
+  DONE: 'DONE',
 } as const;

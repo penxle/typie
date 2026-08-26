@@ -234,8 +234,21 @@
       </div>
     {/if}
 
-    <Button style={css.raw({ width: 'full' })} loading={form.state.isLoading} type="submit">
-      {user.data.billingKey ? '변경하기' : '등록하기'}
-    </Button>
+    <div class={flex({ gap: '8px' })}>
+      <Button
+        style={css.raw({ flex: '1' })}
+        disabled={form.state.isLoading}
+        onclick={() => {
+          open = false;
+        }}
+        type="button"
+        variant="secondary"
+      >
+        취소
+      </Button>
+      <Button style={css.raw({ flex: '1' })} loading={form.state.isLoading} type="submit">
+        {user.data.billingKey ? '변경하기' : '등록하기'}
+      </Button>
+    </div>
   </form>
 </Modal>

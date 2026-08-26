@@ -12,6 +12,7 @@
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import PrismCreditIcon from '~icons/typie/prism-credit';
+  import { pushState } from '$app/navigation';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
@@ -387,7 +388,8 @@
   {#if open && insufficient}
     <div class={calloutClass}>
       <Icon style={css.raw({ flexShrink: '0', color: 'accent.warning.default' })} icon={TriangleAlertIcon} size={14} />
-      <span class={calloutTextClass}>크레딧이 부족해요. 운영에 문의해 주세요.</span>
+      <span class={calloutTextClass}>크레딧이 부족해요</span>
+      <Button onclick={() => pushState('', { shallowRoute: '/preference/prism' })} size="sm" variant="secondary">충전하기</Button>
     </div>
   {/if}
 

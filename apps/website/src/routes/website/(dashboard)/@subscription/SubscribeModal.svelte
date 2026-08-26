@@ -518,14 +518,14 @@
 
                   {#if user.data.credit > 0}
                     <div class={flex({ justify: 'space-between', marginTop: '8px' })}>
-                      <span class={css({ color: 'text.subtle' })}>보유 크레딧</span>
+                      <span class={css({ color: 'text.subtle' })}>보유 구독 캐시</span>
                       <span class={css({ color: 'text.default' })}>{comma(user.data.credit)}원</span>
                     </div>
                   {/if}
 
                   {#if !isTrial && creditDiscount > 0}
                     <div class={flex({ justify: 'space-between', marginTop: '8px' })}>
-                      <span class={css({ color: 'text.subtle' })}>크레딧 차감</span>
+                      <span class={css({ color: 'text.subtle' })}>구독 캐시 차감</span>
                       <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>-{comma(creditDiscount)}원</span>
                     </div>
                   {/if}
@@ -545,7 +545,7 @@
                               class={flex({ alignItems: 'center' })}
                               use:tooltip={{
                                 message:
-                                  '현재 보유 크레딧 기준 예상 금액이에요.\n실제 결제 금액은 결제 시점에 남아 있는 크레딧에 따라 달라질 수 있어요.',
+                                  '현재 보유 구독 캐시 기준 예상 금액이에요.\n실제 결제 금액은 결제 시점에 남아 있는 구독 캐시에 따라 달라질 수 있어요.',
                                 placement: 'top-start',
                               }}
                             >

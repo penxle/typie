@@ -342,7 +342,7 @@
         </p>
       </div>
 
-      <Button onclick={() => pushState('', { shallowRoute: '/preference/ai' })} size="sm" variant="secondary">설정으로 이동</Button>
+      <Button onclick={() => pushState('', { shallowRoute: '/preference/prism' })} size="sm" variant="secondary">설정으로 이동</Button>
     </div>
   {:else if !hasChecked && !inflight}
     <div

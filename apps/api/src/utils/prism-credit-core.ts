@@ -41,6 +41,15 @@ export const validateEntry = (kind: PrismCreditEntryKind, { paidDelta, freeDelta
       case 'REVIEW_REFUND': {
         return paidDelta >= 0 && freeDelta >= 0;
       }
+      case 'PURCHASE': {
+        return paidDelta > 0 && freeDelta === 0;
+      }
+      case 'BONUS': {
+        return freeDelta > 0 && paidDelta === 0;
+      }
+      case 'REFUND_OUT': {
+        return paidDelta <= 0 && freeDelta <= 0 && (paidDelta !== 0 || freeDelta !== 0);
+      }
       case 'ADJUSTMENT': {
         return true;
       }

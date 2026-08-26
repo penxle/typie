@@ -97,3 +97,20 @@ test('toMilli: 정수 크레딧을 밀리로', () => {
   assert.equal(toMilli(-2), -2000);
   assert.throws(() => toMilli(1.5));
 });
+
+test('validateEntry: PURCHASE는 paid>0·free=0, BONUS는 free>0·paid=0, REFUND_OUT은 둘 다 ≤0이고 둘 다 0은 아님', () => {
+  validateEntry('PURCHASE', { paidDelta: 100_000, freeDelta: 0 });
+  assert.throws(() => validateEntry('PURCHASE', { paidDelta: 100_000, freeDelta: 1 }), /PURCHASE/);
+  assert.throws(() => validateEntry('PURCHASE', { paidDelta: 0, freeDelta: 0 }), /PURCHASE/);
+
+  validateEntry('BONUS', { paidDelta: 0, freeDelta: 30_000 });
+  assert.throws(() => validateEntry('BONUS', { paidDelta: 1, freeDelta: 30_000 }), /BONUS/);
+
+  validateEntry('REFUND_OUT', { paidDelta: -100_000, freeDelta: 0 });
+  validateEntry('REFUND_OUT', { paidDelta: -100_000, freeDelta: -30_000 });
+  assert.throws(() => validateEntry('REFUND_OUT', { paidDelta: 0, freeDelta: 0 }), /REFUND_OUT/);
+  assert.throws(() => validateEntry('REFUND_OUT', { paidDelta: 1, freeDelta: 0 }), /REFUND_OUT/);
+  assert.throws(() => validateEntry('REFUND_OUT', { paidDelta: 0, freeDelta: 1 }), /REFUND_OUT/);
+  assert.throws(() => validateEntry('BONUS', { paidDelta: 0, freeDelta: 0 }), /BONUS/);
+  assert.throws(() => validateEntry('BONUS', { paidDelta: 0, freeDelta: -1 }), /BONUS/);
+});
