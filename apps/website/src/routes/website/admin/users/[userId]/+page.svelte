@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createMutation } from '@mearie/svelte';
+  import { createMutation, createQuery } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { comma } from '@typie/ui/utils';
@@ -91,6 +92,119 @@
       alert(unwrapped instanceof Error ? unwrapped.message : 'Adjust failed');
     }
   };
+
+  let refundTarget = $state<{ kind: 'WITHDRAWAL' | 'REMAINDER'; purchaseId: string | null } | null>(null);
+
+  const refundQuote = createQuery(
+    graphql(`
+      query AdminUserDetail_PrismCreditRefundQuote_Query($userId: String!, $kind: PrismCreditRefundKind!, $purchaseId: String) {
+        adminPrismCreditRefundQuote(userId: $userId, kind: $kind, purchaseId: $purchaseId) {
+          eligible
+          reason
+          amount
+          paidCredits
+          freeCredits
+          shortfall
+          cancels {
+            purchaseId
+            paymentKey
+            amount
+          }
+        }
+      }
+    `),
+    () => ({ userId: query.data.adminUser.id, kind: refundTarget?.kind ?? 'REMAINDER', purchaseId: refundTarget?.purchaseId ?? null }),
+    () => ({ skip: refundTarget === null }),
+  );
+
+  const [adminRefundPrismCredit] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminRefundPrismCredit_Mutation($input: AdminRefundPrismCreditInput!) {
+        adminRefundPrismCredit(input: $input) {
+          id
+          state
+        }
+      }
+    `),
+  );
+
+  const [adminRetryPrismCreditRefund] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminRetryPrismCreditRefund_Mutation($input: AdminRetryPrismCreditRefundInput!) {
+        adminRetryPrismCreditRefund(input: $input) {
+          id
+          state
+        }
+      }
+    `),
+  );
+
+  let prismRefundOpen = $state(false);
+  let prismRefundNote = $state('');
+  let prismRefundMethod = $state<'PG_CANCEL' | 'MANUAL'>('PG_CANCEL');
+  let prismRefundBusy = $state(false);
+
+  const prismRefundQuote = $derived(refundQuote.data?.adminPrismCreditRefundQuote);
+  const prismRefundManualOnly = $derived(!!prismRefundQuote?.eligible && prismRefundQuote.shortfall > 0);
+
+  const openPrismRefund = (kind: 'WITHDRAWAL' | 'REMAINDER', purchaseId: string | null) => {
+    prismRefundNote = '';
+    prismRefundMethod = 'PG_CANCEL';
+    refundTarget = { kind, purchaseId };
+    prismRefundOpen = true;
+  };
+
+  $effect(() => {
+    if (!prismRefundOpen) refundTarget = null;
+  });
+
+  $effect(() => {
+    if (prismRefundManualOnly) prismRefundMethod = 'MANUAL';
+  });
+
+  const handlePrismRefund = async () => {
+    const quote = refundQuote.data?.adminPrismCreditRefundQuote;
+    if (prismRefundBusy || !refundTarget || !quote?.eligible || !prismRefundNote.trim()) return;
+    prismRefundBusy = true;
+    try {
+      await adminRefundPrismCredit({
+        input: {
+          userId: query.data.adminUser.id,
+          kind: refundTarget.kind,
+          purchaseId: refundTarget.purchaseId,
+          expectedAmount: quote.amount,
+          method: prismRefundMethod,
+          note: prismRefundNote.trim(),
+        },
+      });
+      prismRefundOpen = false;
+      query.refetch();
+    } catch (err) {
+      const unwrapped = unwrapError(err);
+      alert(unwrapped instanceof Error ? unwrapped.message : 'Refund failed');
+      if (unwrapped instanceof TypieError && unwrapped.code === 'refund_quote_changed') refundQuote.refetch();
+      query.refetch();
+    } finally {
+      prismRefundBusy = false;
+    }
+  };
+
+  const handleRetryPrismRefund = async (refundId: string, method: 'PG_CANCEL' | 'MANUAL') => {
+    if (prismRefundBusy) return;
+    prismRefundBusy = true;
+    try {
+      await adminRetryPrismCreditRefund({ input: { refundId, method } });
+    } catch (err) {
+      const unwrapped = unwrapError(err);
+      alert(unwrapped instanceof Error ? unwrapped.message : 'Retry failed');
+    } finally {
+      prismRefundBusy = false;
+    }
+    query.refetch();
+  };
+
+  const prismRefundCancels = (data: unknown): { purchaseId: string; paymentKey: string; amount: number; status: string }[] =>
+    (data as { cancels?: { purchaseId: string; paymentKey: string; amount: number; status: string }[] } | null)?.cancels ?? [];
 
   let refundModalOpen = $state(false);
   let selectedInvoice: (typeof query.data.adminUser.paymentInvoices)[number] | null = $state(null);
@@ -620,6 +734,22 @@
               </span>
             </div>
 
+            <button
+              class={css({
+                borderWidth: '1px',
+                borderColor: 'amber.500',
+                paddingX: '12px',
+                paddingY: '8px',
+                fontSize: '12px',
+                color: 'amber.500',
+                width: 'full',
+              })}
+              onclick={() => openPrismRefund('REMAINDER', null)}
+              type="button"
+            >
+              REFUND REMAINDER (90%)
+            </button>
+
             {#if query.data.adminPrismCreditEntries.length > 0}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each query.data.adminPrismCreditEntries as entry (entry.id)}
@@ -697,6 +827,111 @@
             >
               ADJUST PRISM CREDIT
             </button>
+
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '8px' })}>PURCHASES</div>
+            {#if query.data.adminPrismCreditPurchases.length === 0}
+              <div class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</div>
+            {:else}
+              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                {#each query.data.adminPrismCreditPurchases as purchase (purchase.id)}
+                  <div class={css({ borderWidth: '1px', borderColor: 'amber.500', padding: '8px' })}>
+                    <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                        {dayjs(purchase.paidAt ?? purchase.createdAt).formatAsDateTime()} [{purchase.state}] {purchase.pack}
+                      </span>
+                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                        {comma(purchase.price)}원 · {purchase.credits}+{purchase.bonusCredits} · REFUNDED {comma(purchase.refundedAmount)}원
+                      </span>
+                    </div>
+                    <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>KEY: {purchase.paymentKey}</div>
+                    {#if purchase.state === 'FAILED' && purchase.data?.failure}
+                      <div class={css({ fontSize: '11px', color: 'red.500', marginTop: '4px' })}>
+                        FAIL: {purchase.data.failure.code}{purchase.data.failure.message ? ` ${purchase.data.failure.message}` : ''}
+                      </div>
+                    {/if}
+                    {#if purchase.state === 'PAID'}
+                      <button
+                        class={css({
+                          marginTop: '6px',
+                          borderWidth: '1px',
+                          borderColor: 'amber.500',
+                          paddingX: '8px',
+                          paddingY: '4px',
+                          fontSize: '11px',
+                          color: 'amber.500',
+                        })}
+                        onclick={() => openPrismRefund('WITHDRAWAL', purchase.id)}
+                        type="button"
+                      >
+                        WITHDRAW (7D)
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '8px' })}>REFUNDS</div>
+            {#if query.data.adminPrismCreditRefunds.length === 0}
+              <div class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</div>
+            {:else}
+              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                {#each query.data.adminPrismCreditRefunds as refund (refund.id)}
+                  <div
+                    class={css({ borderWidth: '1px', borderColor: refund.state === 'PENDING' ? 'red.500' : 'amber.500', padding: '8px' })}
+                  >
+                    <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                        {dayjs(refund.createdAt).formatAsDateTime()} [{refund.state}] {refund.kind} / {refund.method}
+                      </span>
+                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>{comma(refund.amount)}원</span>
+                    </div>
+                    <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>
+                      BY: {refund.actor.name} · NOTE: {refund.note}
+                      {#if refund.purchaseId}
+                        · PURCHASE: {refund.purchaseId}{/if}
+                    </div>
+                    {#each prismRefundCancels(refund.data) as cancel (cancel.purchaseId)}
+                      <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+                        CANCEL {cancel.paymentKey}: {comma(cancel.amount)}원 [{cancel.status}]
+                      </div>
+                    {/each}
+                    {#if refund.state === 'PENDING'}
+                      <div class={flex({ gap: '8px', marginTop: '6px' })}>
+                        <button
+                          class={css({
+                            borderWidth: '1px',
+                            borderColor: 'amber.500',
+                            paddingX: '8px',
+                            paddingY: '4px',
+                            fontSize: '11px',
+                            color: 'amber.500',
+                          })}
+                          onclick={() => handleRetryPrismRefund(refund.id, 'PG_CANCEL')}
+                          type="button"
+                        >
+                          RETRY PG
+                        </button>
+                        <button
+                          class={css({
+                            borderWidth: '1px',
+                            borderColor: 'amber.500',
+                            paddingX: '8px',
+                            paddingY: '4px',
+                            fontSize: '11px',
+                            color: 'amber.500',
+                          })}
+                          onclick={() => handleRetryPrismRefund(refund.id, 'MANUAL')}
+                          type="button"
+                        >
+                          MARK MANUAL DONE
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
 
@@ -870,6 +1105,82 @@
               bind:value={refundReason}
             />
           </div>
+        </div>
+      {/if}
+    </AdminModal>
+
+    <AdminModal
+      actions={{
+        cancel: {},
+        confirm: {
+          label: 'CONFIRM PRISM REFUND',
+          onclick: handlePrismRefund,
+          variant: 'danger',
+          disabled:
+            prismRefundBusy ||
+            !refundQuote.data?.adminPrismCreditRefundQuote.eligible ||
+            prismRefundNote.trim().length === 0 ||
+            (refundQuote.data.adminPrismCreditRefundQuote.shortfall > 0 && prismRefundMethod === 'PG_CANCEL'),
+        },
+      }}
+      title="PRISM CREDIT REFUND"
+      bind:open={prismRefundOpen}
+    >
+      {#if refundTarget}
+        {@const quote = prismRefundQuote}
+        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+          <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+            {refundTarget.kind}{refundTarget.purchaseId ? ` · ${refundTarget.purchaseId}` : ''}
+          </div>
+          {#if !quote}
+            <div class={css({ fontSize: '12px', color: 'gray.400' })}>LOADING…</div>
+          {:else if !quote.eligible}
+            <div class={css({ fontSize: '12px', color: 'red.500' })}>NOT ELIGIBLE: {quote.reason}</div>
+          {:else}
+            <div class={css({ fontSize: '12px', color: 'amber.500' })}>AMOUNT: {comma(quote.amount)}원</div>
+            <div class={css({ fontSize: '12px', color: 'amber.500' })}>RECLAIM: paid {quote.paidCredits} / free {quote.freeCredits}</div>
+            {#if quote.shortfall > 0}
+              <div class={css({ fontSize: '12px', color: 'red.500' })}>
+                PG SHORTFALL: {comma(quote.shortfall)}원 — PG_CANCEL UNAVAILABLE, METHOD FORCED TO MANUAL
+              </div>
+            {/if}
+            <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+              {#each quote.cancels as cancel (cancel.purchaseId)}
+                <div>CANCEL {cancel.paymentKey}: {comma(cancel.amount)}원</div>
+              {/each}
+            </div>
+            <label class={css({ fontSize: '11px', color: 'amber.400' })}>
+              METHOD
+              <select
+                class={css({
+                  marginLeft: '8px',
+                  backgroundColor: 'gray.900',
+                  color: 'amber.500',
+                  borderWidth: '1px',
+                  borderColor: 'amber.500',
+                })}
+                bind:value={prismRefundMethod}
+              >
+                <option disabled={prismRefundManualOnly} value="PG_CANCEL">PG_CANCEL</option>
+                <option value="MANUAL">MANUAL</option>
+              </select>
+            </label>
+            <label class={css({ fontSize: '11px', color: 'amber.400' })}>
+              NOTE (required)
+              <input
+                class={css({
+                  marginLeft: '8px',
+                  width: 'full',
+                  backgroundColor: 'gray.900',
+                  color: 'amber.500',
+                  borderWidth: '1px',
+                  borderColor: 'amber.500',
+                  padding: '4px',
+                })}
+                bind:value={prismRefundNote}
+              />
+            </label>
+          {/if}
         </div>
       {/if}
     </AdminModal>

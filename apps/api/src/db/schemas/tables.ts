@@ -958,6 +958,63 @@ export const PrismCreditEntries = pgTable(
   (t) => [unique().on(t.kind, t.key), index().on(t.userId)],
 );
 
+export const PrismCreditPurchases = pgTable(
+  'prism_credit_purchases',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_CREDIT_PURCHASES)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    pack: E._PrismCreditPack('pack').notNull(),
+    price: integer('price').notNull(),
+    credits: integer('credits').notNull(),
+    bonusCredits: integer('bonus_credits').notNull(),
+    channel: E._PrismCreditPurchaseChannel('channel').notNull(),
+    billingKeyType: E._BillingKeyType('billing_key_type').notNull(),
+    paymentKey: text('payment_key').notNull().unique(),
+    state: E._PrismCreditPurchaseState('state').notNull(),
+    paidAt: datetime('paid_at'),
+    data: jsonb('data').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index().on(t.userId, t.createdAt),
+    index('prism_credit_purchases_pending_index')
+      .on(t.createdAt)
+      .where(sql`${t.state} = 'PENDING'`),
+  ],
+);
+
+export const PrismCreditRefunds = pgTable(
+  'prism_credit_refunds',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_CREDIT_REFUNDS)),
+    userId: text('user_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    kind: E._PrismCreditRefundKind('kind').notNull(),
+    purchaseId: text('purchase_id').references(() => PrismCreditPurchases.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    amount: integer('amount').notNull(),
+    method: E._PrismCreditRefundMethod('method').notNull(),
+    state: E._PrismCreditRefundState('state').notNull(),
+    actorId: text('actor_id')
+      .notNull()
+      .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    note: text('note').notNull(),
+    data: jsonb('data').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.userId, t.createdAt), index().on(t.purchaseId)],
+);
+
 export const Prompts = pgTable('prompts', {
   id: text('id').primaryKey(),
   model: text('model').notNull(),

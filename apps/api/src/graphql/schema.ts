@@ -18,6 +18,7 @@ import './resolvers/payment.ts';
 import './resolvers/prism.ts';
 import './resolvers/prism-review.ts';
 import './resolvers/prism-credit.ts';
+import './resolvers/prism-credit-purchase.ts';
 import './resolvers/redirect.ts';
 import './resolvers/search.ts';
 import './resolvers/site.ts';

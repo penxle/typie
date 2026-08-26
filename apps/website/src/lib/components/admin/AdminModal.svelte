@@ -20,6 +20,7 @@
         label?: string;
         onclick?: () => void;
         variant?: 'primary' | 'danger';
+        disabled?: boolean;
       };
     };
   };
@@ -189,7 +190,16 @@
                   color: 'gray.900',
                   borderColor: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
                 },
+                _disabled: {
+                  opacity: '[0.4]',
+                  cursor: 'not-allowed',
+                  _hover: {
+                    backgroundColor: 'gray.900',
+                    color: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
+                  },
+                },
               })}
+              disabled={actions.confirm.disabled ?? false}
               onclick={actions.confirm.onclick}
               type="button"
             >

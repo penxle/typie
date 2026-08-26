@@ -12,7 +12,7 @@ import {
   SendSubscriptionWaivedEmailJob,
 } from './email.ts';
 import { PrismWorkflowsPollCron } from './prism.ts';
-import { PrismCreditInvariantsCron } from './prism-credit.ts';
+import { PrismCreditInvariantsCron, PrismCreditPurchaseReconcileCron } from './prism-credit.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
   IapIngestJob,
@@ -58,6 +58,7 @@ export const crons = [
   SubscriptionInvariantsCron,
   PrismWorkflowsPollCron,
   PrismCreditInvariantsCron,
+  PrismCreditPurchaseReconcileCron,
 ];
 
 export type Jobs = typeof jobs;

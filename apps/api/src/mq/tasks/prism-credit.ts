@@ -1,7 +1,8 @@
 import * as Sentry from '@sentry/node';
 import { sql } from 'drizzle-orm';
-import { dbr, PrismCreditEntries } from '#/db/index.ts';
+import { dbr, PrismCreditEntries, PrismCreditPurchases, PrismCreditRefunds } from '#/db/index.ts';
 import { opsAlert } from '#/utils/ops-alert.ts';
+import { reconcilePendingPurchases } from '#/utils/prism-credit-purchase.ts';
 import { defineCron } from '../types.ts';
 import type { SQL } from 'drizzle-orm';
 
@@ -28,6 +29,58 @@ const INVARIANT_CHECKS: InvariantCheck[] = [
         ON c.kind = 'REVIEW_CHARGE' AND c.key = r.key
       WHERE r.kind = 'REVIEW_REFUND'
         AND (c.id IS NULL OR c.paid_delta <> -r.paid_delta OR c.free_delta <> -r.free_delta OR c.user_id <> r.user_id)
+    `,
+  },
+  {
+    key: 'prism-credit-purchase-ledger-mismatch',
+    violations: sql`
+      SELECT p.id AS id
+      FROM ${PrismCreditPurchases} p
+      LEFT JOIN ${PrismCreditEntries} pe ON pe.kind = 'PURCHASE' AND pe.key = p.id
+      LEFT JOIN ${PrismCreditEntries} be ON be.kind = 'BONUS' AND be.key = p.id
+      WHERE p.state = 'PAID'
+        AND (
+          pe.id IS NULL OR pe.user_id <> p.user_id OR pe.paid_delta <> p.credits * 1000
+          OR (p.bonus_credits > 0 AND (be.id IS NULL OR be.free_delta <> p.bonus_credits * 1000))
+          OR (p.bonus_credits = 0 AND be.id IS NOT NULL)
+        )
+      UNION
+      SELECT e.id AS id
+      FROM ${PrismCreditEntries} e
+      LEFT JOIN ${PrismCreditPurchases} p ON p.id = e.key AND p.state = 'PAID'
+      WHERE e.kind IN ('PURCHASE', 'BONUS') AND p.id IS NULL
+    `,
+  },
+  {
+    key: 'prism-credit-refund-ledger-mismatch',
+    violations: sql`
+      SELECT r.id AS id
+      FROM ${PrismCreditRefunds} r
+      LEFT JOIN ${PrismCreditEntries} e ON e.kind = 'REFUND_OUT' AND e.key = r.id
+      WHERE e.id IS NULL OR e.user_id <> r.user_id
+      UNION
+      SELECT e.id AS id
+      FROM ${PrismCreditEntries} e
+      LEFT JOIN ${PrismCreditRefunds} r ON r.id = e.key
+      WHERE e.kind = 'REFUND_OUT' AND r.id IS NULL
+    `,
+  },
+  {
+    key: 'prism-credit-purchase-stuck',
+    violations: sql`
+      SELECT ${PrismCreditPurchases.id} AS id
+      FROM ${PrismCreditPurchases}
+      WHERE ${PrismCreditPurchases.state} = 'PENDING'
+        AND ${PrismCreditPurchases.createdAt} < now() - interval '30 minutes'
+    `,
+  },
+  {
+    key: 'prism-credit-refund-stuck',
+    violations: sql`
+      SELECT ${PrismCreditRefunds.id} AS id
+      FROM ${PrismCreditRefunds}
+      WHERE ${PrismCreditRefunds.state} = 'PENDING'
+        AND ${PrismCreditRefunds.createdAt} < now() - interval '30 minutes'
     `,
   },
 ];
@@ -58,4 +111,8 @@ export const PrismCreditInvariantsCron = defineCron('prism:credit-invariants', '
   for (const check of INVARIANT_CHECKS) {
     await runInvariantCheck(check);
   }
+});
+
+export const PrismCreditPurchaseReconcileCron = defineCron('prism:credit-purchase-reconcile', '*/5 * * * *', async () => {
+  await reconcilePendingPurchases();
 });

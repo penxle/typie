@@ -98,6 +98,34 @@ export const load = async (event) => {
               name
             }
           }
+          adminPrismCreditPurchases(userId: $userId) {
+            id
+            pack
+            price
+            credits
+            bonusCredits
+            state
+            paymentKey
+            paidAt
+            createdAt
+            refundedAmount
+            data
+          }
+          adminPrismCreditRefunds(userId: $userId) {
+            id
+            kind
+            purchaseId
+            amount
+            method
+            state
+            note
+            createdAt
+            data
+            actor {
+              id
+              name
+            }
+          }
         }
       `),
       {

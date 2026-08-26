@@ -14,14 +14,13 @@
   import PencilIcon from '~icons/lucide/pencil';
   import ShieldIcon from '~icons/lucide/shield';
   import SlidersHorizontalIcon from '~icons/lucide/sliders-horizontal';
-  import SparklesIcon from '~icons/lucide/sparkles';
   import TextCursorInputIcon from '~icons/lucide/text-cursor-input';
   import TypeIcon from '~icons/lucide/type';
   import UserIcon from '~icons/lucide/user';
+  import PrismIcon from '~icons/typie/prism';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$mearie';
-  import AiTab from './AiTab.svelte';
   import BillingTab from './BillingTab.svelte';
   import EditorTab from './EditorTab.svelte';
   import FontTab from './FontTab.svelte';
@@ -29,6 +28,7 @@
   import LaboratoryTab from './LaboratoryTab.svelte';
   import PlanTab from './PlanTab.svelte';
   import PresetTab from './PresetTab.svelte';
+  import PrismTab from './PrismTab.svelte';
   import ProfileTab from './ProfileTab.svelte';
   import ReferralTab from './ReferralTab.svelte';
   import RevenueTab from './RevenueTab.svelte';
@@ -70,7 +70,7 @@
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
-        ...DashboardLayout_PreferenceModal_AiTab_user
+        ...DashboardLayout_PreferenceModal_PrismTab_user
         ...DashboardLayout_PreferenceModal_TextReplacementTab_user
       }
     `),
@@ -174,10 +174,10 @@
       label: '고급',
       tabs: [
         {
-          path: '/preference/ai',
-          label: 'AI',
-          icon: SparklesIcon,
-          component: AiTab,
+          path: '/preference/prism',
+          label: '프리즘',
+          icon: PrismIcon,
+          component: PrismTab,
         },
         {
           path: '/preference/laboratory',

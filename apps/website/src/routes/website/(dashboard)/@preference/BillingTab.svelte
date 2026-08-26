@@ -411,7 +411,7 @@
                 {nextSubscription.plan.name} 플랜
               {/snippet}
               {#snippet description()}
-                {dayjs(nextSubscription.startsAt).formatAsDate()}에 {comma(nextSubscription.plan.fee)}원이 결제될 예정이에요. 크레딧이
+                {dayjs(nextSubscription.startsAt).formatAsDate()}에 {comma(nextSubscription.plan.fee)}원이 결제될 예정이에요. 구독 캐시가
                 있으면 차감된 금액으로 결제돼요.
               {/snippet}
               {#snippet value()}
@@ -558,10 +558,10 @@
       <SettingsCard>
         <SettingsRow>
           {#snippet label()}
-            현재 크레딧
+            구독 캐시
           {/snippet}
           {#snippet description()}
-            구독료 결제 시 크레딧이 있으면 우선 차감돼요.
+            구독료 결제 시 구독 캐시가 있으면 우선 차감돼요.
           {/snippet}
           {#snippet value()}
             <span>{comma(user.data.credit)}원</span>
@@ -575,7 +575,7 @@
             할인 코드
           {/snippet}
           {#snippet description()}
-            이벤트나 프로모션 코드로 크레딧을 충전해요.
+            이벤트나 프로모션 코드로 구독 캐시를 받아요.
           {/snippet}
           {#snippet value()}
             <Button onclick={() => (redeemCreditCodeOpen = true)} size="sm" variant="secondary">코드 등록</Button>

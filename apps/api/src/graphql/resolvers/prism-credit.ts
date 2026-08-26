@@ -61,7 +61,7 @@ PrismCreditEntry.implement({
   }),
 });
 
-const assertSelf = (self: { id: string }, ctx: { session?: { userId: string } }) => {
+export const assertSelf = (self: { id: string }, ctx: { session?: { userId: string } }) => {
   if (ctx.session?.userId !== self.id) {
     throw new TypieError({ code: 'permission_denied' });
   }

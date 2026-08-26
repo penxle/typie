@@ -49,9 +49,66 @@ type AdminPrismCreditEntry {
   paidDelta: BigInt!
 }
 
+type AdminPrismCreditPurchase {
+  bonusCredits: Int!
+  createdAt: DateTime!
+  credits: Int!
+  data: JSON!
+  id: ID!
+  pack: PrismCreditPack!
+  paidAt: DateTime
+  paymentKey: String!
+  price: Int!
+  refundedAmount: Int!
+  state: PrismCreditPurchaseState!
+}
+
+type AdminPrismCreditRefund {
+  actor: User!
+  amount: Int!
+  createdAt: DateTime!
+  data: JSON!
+  id: ID!
+  kind: PrismCreditRefundKind!
+  method: PrismCreditRefundMethod!
+  note: String!
+  purchaseId: ID
+  state: PrismCreditRefundState!
+}
+
+type AdminPrismCreditRefundCancel {
+  amount: Int!
+  paymentKey: String!
+  purchaseId: ID!
+}
+
+type AdminPrismCreditRefundQuote {
+  amount: Int!
+  cancels: [AdminPrismCreditRefundCancel!]!
+  eligible: Boolean!
+  freeCredits: Int!
+  paidCredits: Int!
+  reason: String
+  shortfall: Int!
+}
+
 input AdminRefundPaymentInput {
   invoiceId: String!
   reason: String
+}
+
+input AdminRefundPrismCreditInput {
+  expectedAmount: Int!
+  kind: PrismCreditRefundKind!
+  method: PrismCreditRefundMethod!
+  note: String!
+  purchaseId: String
+  userId: String!
+}
+
+input AdminRetryPrismCreditRefundInput {
+  method: PrismCreditRefundMethod!
+  refundId: String!
 }
 
 type AdminUsersResult {
@@ -875,6 +932,8 @@ type Mutation {
   adminGrantPrismCredit(input: AdminGrantPrismCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminRefundPayment(input: AdminRefundPaymentInput!): Boolean!
+  adminRefundPrismCredit(input: AdminRefundPrismCreditInput!): AdminPrismCreditRefund!
+  adminRetryPrismCreditRefund(input: AdminRetryPrismCreditRefundInput!): AdminPrismCreditRefund!
   adminStopImpersonation: Boolean!
   archiveFont(input: ArchiveFontInput!): Font!
   archiveFontFamily(input: ArchiveFontFamilyInput!): FontFamily!
@@ -933,6 +992,7 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   preparePrismReview(input: PreparePrismReviewInput!): PrismReviewSnapshot!
+  purchasePrismCreditPack(input: PurchasePrismCreditPackInput!): PrismCreditPurchase!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
   reactPrismReviewThread(input: ReactPrismReviewThreadInput!): PrismReviewThread!
@@ -1152,11 +1212,58 @@ type PrismCreditEntry {
 
 enum PrismCreditEntryKind {
   ADJUSTMENT
+  BONUS
   CHAT_CHARGE
   GRANT
+  PURCHASE
+  REFUND_OUT
   REVIEW_CHARGE
   REVIEW_REFUND
   TRIAL
+}
+
+enum PrismCreditPack {
+  P100
+  P330
+  P690
+  P1440
+  P3000
+}
+
+type PrismCreditPurchase {
+  bonusCredits: Int!
+  credits: Int!
+  id: ID!
+  pack: PrismCreditPack!
+  paidAt: DateTime
+  price: Int!
+  receiptUrl: String
+  refundedAmount: Int!
+}
+
+enum PrismCreditPurchaseChannel {
+  BILLING_KEY
+}
+
+enum PrismCreditPurchaseState {
+  FAILED
+  PAID
+  PENDING
+}
+
+enum PrismCreditRefundKind {
+  REMAINDER
+  WITHDRAWAL
+}
+
+enum PrismCreditRefundMethod {
+  MANUAL
+  PG_CANCEL
+}
+
+enum PrismCreditRefundState {
+  DONE
+  PENDING
 }
 
 enum PrismReaction {
@@ -1482,6 +1589,10 @@ type PrismWorkflowTranscript {
   turns: [PrismTranscriptTurn!]!
 }
 
+input PurchasePrismCreditPackInput {
+  pack: PrismCreditPack!
+}
+
 input PurgeEntitiesInput {
   entityIds: [ID!]!
 }
@@ -1492,6 +1603,9 @@ type Query {
   adminDocuments(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: DocumentType): AdminDocumentsResult!
   adminPrismCredit(userId: String!): AdminPrismCreditBalance!
   adminPrismCreditEntries(limit: Int! = 50, offset: Int! = 0, userId: String!): [AdminPrismCreditEntry!]!
+  adminPrismCreditPurchases(userId: String!): [AdminPrismCreditPurchase!]!
+  adminPrismCreditRefundQuote(kind: PrismCreditRefundKind!, purchaseId: String, userId: String!): AdminPrismCreditRefundQuote!
+  adminPrismCreditRefunds(userId: String!): [AdminPrismCreditRefund!]!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
@@ -2035,6 +2149,7 @@ type User implements IUser {
   prismCommands: [PrismCommand!]
   prismCredit: PrismCreditBalance!
   prismCreditEntries(limit: Int! = 50, offset: Int! = 0): [PrismCreditEntry!]!
+  prismCreditPurchases: [PrismCreditPurchase!]!
   prismSessions(includeArchived: Boolean! = false): [PrismSession!]!
   recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral

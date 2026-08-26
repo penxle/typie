@@ -118,13 +118,14 @@ export const payWithBillingKey = async (params: PayWithBillingKeyParams): Promis
   }
 };
 
-type CancelPaymentParams = { paymentId: string; reason: string };
+type CancelPaymentParams = { paymentId: string; reason: string; amount?: number };
 type CancelPaymentResult = PortOneResult<unknown>;
 export const cancelPayment = async (params: CancelPaymentParams): Promise<CancelPaymentResult> => {
   try {
     await client.payment.cancelPayment({
       paymentId: params.paymentId,
       reason: params.reason,
+      ...(params.amount !== undefined && { amount: params.amount }),
     });
 
     return makeSuccessResult({});
@@ -150,7 +151,8 @@ export const getPayment = async (params: GetPaymentParams): Promise<GetPaymentRe
   return makeFailureResult(resp);
 };
 
-export type LookupPaymentResult = { kind: 'paid'; amount: number } | { kind: 'not-paid'; paymentStatus: string } | { kind: 'error' };
+export type LookupPaymentResult =
+  { kind: 'paid'; amount: number } | { kind: 'not-paid'; paymentStatus: string } | { kind: 'not-found' } | { kind: 'error' };
 export const lookupPayment = async (params: { paymentId: string }): Promise<LookupPaymentResult> => {
   try {
     const resp = await client.payment.getPayment({ paymentId: params.paymentId });
@@ -160,7 +162,11 @@ export const lookupPayment = async (params: { paymentId: string }): Promise<Look
     }
 
     return { kind: 'not-paid', paymentStatus: String(resp.status) };
-  } catch {
+  } catch (err) {
+    if (err instanceof RestError && err.data.type === 'PAYMENT_NOT_FOUND') {
+      return { kind: 'not-found' };
+    }
+
     return { kind: 'error' };
   }
 };
