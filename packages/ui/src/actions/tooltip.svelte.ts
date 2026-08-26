@@ -59,6 +59,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, parameter) => {
     registration.enter();
   });
   const pointerleave = on(element, 'pointerleave', registration.leave);
+  const contextmenu = on(element, 'contextmenu', registration.close);
   const click = on(
     element,
     'click',
@@ -76,6 +77,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, parameter) => {
     destroy: () => {
       pointerenter();
       pointerleave();
+      contextmenu();
       click();
       registration.destroy();
     },

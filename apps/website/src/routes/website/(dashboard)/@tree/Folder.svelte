@@ -2,7 +2,7 @@
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { contextMenu } from '@typie/ui/actions';
+  import { contextMenu, tooltip } from '@typie/ui/actions';
   import { Icon, Menu, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
@@ -19,6 +19,7 @@
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
+  import FolderTooltip from './FolderTooltip.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Folder_folder$key } from '$mearie';
 
@@ -67,6 +68,23 @@
       }
     `),
     () => folder$key,
+  );
+
+  let tooltipRequested = $state(false);
+
+  const tooltipInfo = createQuery(
+    graphql(`
+      query DashboardLayout_EntityTree_FolderTooltip_Info_Query($folderId: ID!) {
+        folder(id: $folderId) {
+          id
+          characterCount
+          folderCount
+          documentCount
+        }
+      }
+    `),
+    () => ({ folderId: folder.data.id }),
+    () => ({ skip: !tooltipRequested }),
   );
 
   const children = createQuery(
@@ -241,8 +259,10 @@
         e.preventDefault();
       }
     }}
+    onpointerenter={() => (tooltipRequested = true)}
     role="treeitem"
     use:contextMenu={{ content: contextMenuContent }}
+    use:tooltip={{ message: tooltipContent, placement: 'right', delay: 1000 }}
   >
     <EntitySelectionIndicator entityId={folder.data.entity.id} visibility={folder.data.entity.visibility} />
 
@@ -362,6 +382,16 @@
         via="tree"
       />
     {/if}
+  {/snippet}
+
+  {#snippet tooltipContent()}
+    <FolderTooltip
+      characterCount={tooltipInfo.data?.folder.characterCount}
+      documentCount={tooltipInfo.data?.folder.documentCount}
+      folderCount={tooltipInfo.data?.folder.folderCount}
+      loading={tooltipInfo.loading}
+      visibility={folder.data.entity.visibility}
+    />
   {/snippet}
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">

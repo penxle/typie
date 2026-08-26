@@ -2,7 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
-  import { contextMenu } from '@typie/ui/actions';
+  import { contextMenu, tooltip } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
@@ -15,6 +15,7 @@
   import EntityGoalIndicator from '../@goal/EntityGoalIndicator.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
+  import DocumentTooltip from './DocumentTooltip.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
 
@@ -142,6 +143,7 @@
   href="/{document.data.entity.slug}"
   role="treeitem"
   use:contextMenu={{ content: contextMenuContent }}
+  use:tooltip={{ message: tooltipContent, placement: 'right', delay: 1000 }}
 >
   <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
 
@@ -205,4 +207,14 @@
   {:else}
     <DocumentMenu document={document.data} entity={document.data.entity} via="tree" />
   {/if}
+{/snippet}
+
+{#snippet tooltipContent()}
+  <DocumentTooltip
+    availability={document.data.entity.availability}
+    characterCount={document.data.characterCount}
+    createdAt={document.data.createdAt}
+    updatedAt={document.data.updatedAt}
+    visibility={document.data.entity.visibility}
+  />
 {/snippet}
