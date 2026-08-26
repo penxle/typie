@@ -134,4 +134,59 @@ mod tests {
         assert!(leaf_effective_at(&editor, p1, 0).contains_key(&ModifierType::Bold));
         assert!(leaf_effective_at(&editor, p1, 2).contains_key(&ModifierType::Bold));
     }
+
+    #[test]
+    fn undo_of_mixed_background_removal_restores_exact_runs() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph {
+                text("r") [background_color("red".to_string())]
+                text("_")
+                text("b") [background_color("blue".to_string())]
+            } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        let backgrounds = |editor: &Editor| {
+            (0..3)
+                .map(|slot| {
+                    match leaf_effective_at(editor, p1, slot).get(&ModifierType::BackgroundColor) {
+                        Some(Modifier::BackgroundColor { value }) => Some(value.clone()),
+                        _ => None,
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let selection = editor.state().selection.unwrap();
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Edit {
+                modifier_type: ModifierType::BackgroundColor,
+                modifier: None,
+            },
+        });
+        assert_eq!(backgrounds(&editor), vec![None, None, None]);
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(
+            backgrounds(&editor),
+            vec![Some("red".to_string()), None, Some("blue".to_string())]
+        );
+        let restored = editor.state().selection.unwrap();
+        assert_eq!(
+            (
+                restored.anchor.node,
+                restored.anchor.offset,
+                restored.head.node,
+                restored.head.offset,
+            ),
+            (
+                selection.anchor.node,
+                selection.anchor.offset,
+                selection.head.node,
+                selection.head.offset,
+            )
+        );
+    }
 }

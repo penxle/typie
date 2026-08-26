@@ -332,7 +332,7 @@ pub(crate) fn edit_modifier_range(
     modifier_type: ModifierType,
     modifier: Option<Modifier>,
 ) -> CommandResult {
-    let (spans, present, end_touched) = {
+    let (spans, should_edit_spans, end_touched) = {
         let view = tr.view();
         let rs = selection
             .resolve(&view)
@@ -345,36 +345,41 @@ pub(crate) fn edit_modifier_range(
             &applicability,
             rs.as_cell_rect().is_some(),
         );
-        let present = spans.first().and_then(|&(first, _)| {
-            view.leaf_state_by_dot_slow(first)
-                .and_then(|st| st.eff.get(&modifier_type).cloned())
-        });
+        let should_edit_spans = modifier.is_some()
+            || groups
+                .iter()
+                .zip(&applicability)
+                .any(|(group, applies)| *applies && group.own.contains_key(&modifier_type));
         let end_touched: Vec<Dot> = end_touched_textblocks(&view, &rs)
             .into_iter()
             .filter(|&b| block_accepts_carry_kind(&view, b, modifier_type))
             .collect();
-        (spans, present, end_touched)
+        (spans, should_edit_spans, end_touched)
     };
 
-    for &(first, last) in &spans {
-        match &modifier {
-            Some(m) => {
+    let changed_span = match &modifier {
+        Some(m) => {
+            for &(first, last) in &spans {
                 tr.add_span_modifier(first, last, m.clone())?;
             }
-            None => {
-                if let Some(present) = present.clone() {
-                    tr.remove_span_modifier(first, last, present)?;
-                }
-            }
+            !spans.is_empty()
         }
-    }
+        None if should_edit_spans => {
+            let placeholder = placeholder_modifier(modifier_type);
+            for &(first, last) in &spans {
+                tr.remove_span_modifier(first, last, placeholder.clone())?;
+            }
+            !spans.is_empty()
+        }
+        None => false,
+    };
 
     match &modifier {
         Some(m) => companion_set(tr, &end_touched, m)?,
         None => companion_unset(tr, &end_touched, modifier_type)?,
     }
 
-    if spans.is_empty() && end_touched.is_empty() {
+    if !changed_span && end_touched.is_empty() {
         return Ok(false);
     }
     Ok(true)
