@@ -97,6 +97,7 @@ type PageSnapshot = Readonly<{
 
 export type EditorSnapshot = Readonly<{
   revision: number;
+  viewport: Viewport;
   cursor: CursorMetrics | undefined;
   placeholder: PlaceholderMetrics | undefined;
   selection: Selection | undefined;
@@ -351,6 +352,7 @@ export class Editor {
 
   #applied = $state.raw<EditorSnapshot>({
     revision: 0,
+    viewport: { width: 0, height: 0, scale_factor: 1 },
     cursor: undefined,
     placeholder: undefined,
     selection: undefined,
@@ -618,6 +620,7 @@ export class Editor {
 
       return {
         revision,
+        viewport: this.#appliedViewport,
         cursor: fields.has('cursor') ? core.cursor() : previous.cursor,
         placeholder: fields.has('placeholder') ? (core.placeholder() ?? undefined) : previous.placeholder,
         selection: fields.has('selection') || fields.has('doc') ? core.selection() : previous.selection,
@@ -1506,6 +1509,10 @@ export class Editor {
 
   get publishedRevision(): number | undefined {
     return this.published?.snapshot.revision;
+  }
+
+  get publishedViewport(): Viewport | undefined {
+    return this.published?.snapshot.viewport;
   }
 
   awaitPublishedRevision(revision: number, options?: { requireFrame?: boolean }): Promise<EditorPublicationResult> {

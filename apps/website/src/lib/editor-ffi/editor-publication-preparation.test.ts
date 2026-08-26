@@ -5,6 +5,7 @@ import type { Editor, EditorSnapshot } from './editor.svelte';
 
 const snapshot = (overrides: Partial<EditorSnapshot>): EditorSnapshot => ({
   revision: 1,
+  viewport: { width: 600, height: 400, scale_factor: 1 },
   cursor: undefined,
   placeholder: undefined,
   selection: undefined,
