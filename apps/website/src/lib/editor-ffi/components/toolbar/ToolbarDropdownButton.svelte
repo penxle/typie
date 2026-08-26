@@ -110,7 +110,7 @@
   onclick={open}
   type="button"
   use:anchorAction
-  use:tooltip={{ message: label, keys, delay: 1000, arrow: false }}
+  use:tooltip={{ message: label, keys, arrow: false }}
 >
   {@render anchor({ open, opened })}
 

@@ -1,18 +1,21 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { scale } from 'svelte/transition';
   import { Icon } from '../components';
-  import type { Component } from 'svelte';
-  import type { ArrowAction, FloatingAction } from './floating.svelte';
+  import type { Action } from 'svelte/action';
+  import type { TooltipPresentation } from './tooltip-coordinator.svelte';
 
   type Props = {
-    message?: string | null;
-    trailing?: string;
-    trailingIcon?: Component;
-    keys?: [...ModifierKey[], string];
-    floating: FloatingAction;
-    arrow?: ArrowAction;
+    presentation: TooltipPresentation;
+    outgoingPresentation?: TooltipPresentation;
+    contentHidden: boolean;
+    floating: Action<HTMLElement>;
+    surfaceAction: Action<HTMLElement>;
+    arrowAction: Action<HTMLElement>;
+    contentAction: Action<HTMLElement>;
+    outgoingContentAction: Action<HTMLElement>;
+    showArrow: boolean;
+    motion: 'idle' | 'travel' | 'crossfade';
   };
 
   type ModifierKey = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
@@ -25,39 +28,35 @@
     Shift: isMac ? '⇧' : 'Shift',
   };
 
-  let { message, trailing, trailingIcon, keys, floating, arrow }: Props = $props();
+  const contentClass = (value: TooltipPresentation) =>
+    value.kind === 'action' ? flex({ alignItems: 'center', gap: '4px', fontWeight: 'semibold' }) : css({ fontWeight: 'medium' });
+
+  let {
+    presentation,
+    outgoingPresentation,
+    contentHidden,
+    floating,
+    surfaceAction,
+    arrowAction,
+    contentAction,
+    outgoingContentAction,
+    showArrow,
+    motion,
+  }: Props = $props();
 </script>
 
-{#if message}
-  <div
-    class={flex({
-      alignItems: 'center',
-      gap: '4px',
-      borderRadius: '4px',
-      paddingX: '8px',
-      paddingY: '4px',
-      fontSize: '12px',
-      fontWeight: 'semibold',
-      color: 'text.bright',
-      backgroundColor: 'surface.dark',
-      boxShadow: 'medium',
-      zIndex: 'tooltip',
-      pointerEvents: 'none',
-    })}
-    role="tooltip"
-    use:floating={{ appendTo: document.querySelector('.tooltip-container') as Element | null }}
-    in:scale|global={{ start: 0.9, duration: 200 }}
-  >
-    <span class={css({ whiteSpace: 'pre-line' })}>{message}</span>
+{#snippet renderPresentation(value: TooltipPresentation)}
+  {#if value.kind === 'action'}
+    <span class={css({ whiteSpace: 'pre-line' })}>{value.message}</span>
 
-    {#if trailingIcon}
-      <Icon style={css.raw({ color: 'text.bright', opacity: '70' })} icon={trailingIcon} size={12} />
+    {#if value.trailingIcon}
+      <Icon style={css.raw({ color: 'text.bright', opacity: '70' })} icon={value.trailingIcon} size={12} />
     {/if}
-    {#if trailing}
-      <span class={css({ color: 'text.bright', opacity: '70' })}>{trailing}</span>
+    {#if value.trailing}
+      <span class={css({ color: 'text.bright', opacity: '70' })}>{value.trailing}</span>
     {/if}
 
-    {#if keys}
+    {#if value.keys}
       <div
         class={flex({
           gap: isMac ? '0' : '2px',
@@ -69,27 +68,80 @@
           lineHeight: '[1em]',
         })}
       >
-        {#each keys as key, index (index)}
+        {#each value.keys as key, index (index)}
           <kbd class={center({ minWidth: '12px' })}>
             {modifierKeys[key as ModifierKey] ?? key}
           </kbd>
 
-          {#if !isMac && index < keys.length - 1}
+          {#if !isMac && index < value.keys.length - 1}
             <span>+</span>
           {/if}
         {/each}
       </div>
     {/if}
+  {:else if typeof value.message === 'string'}
+    {value.message}
+  {:else}
+    {@render value.message?.()}
+  {/if}
+{/snippet}
 
-    {#if arrow}
+<div
+  class={css({ width: '[max-content]', maxWidth: '[calc(100vw - 16px)]', zIndex: 'tooltip', pointerEvents: 'none' })}
+  data-tooltip-motion={motion}
+  role="tooltip"
+  use:floating
+>
+  <div
+    class={css(
+      {
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: '4px',
+        boxSizing: 'border-box',
+        paddingX: '8px',
+        paddingY: '4px',
+        fontSize: '12px',
+        color: 'text.bright',
+        backgroundColor: 'surface.dark',
+        boxShadow: 'medium',
+      },
+      presentation.kind === 'wrapper' ? presentation.tooltipStyle : undefined,
+    )}
+    data-tooltip-surface
+    use:surfaceAction
+  >
+    <div class={css({ position: 'relative' })}>
       <div
-        class={css({
-          borderTopLeftRadius: '2px',
-          size: '8px',
-          backgroundColor: 'surface.dark',
-        })}
-        use:arrow
-      ></div>
-    {/if}
+        style:opacity={contentHidden ? 0 : undefined}
+        class={contentClass(presentation)}
+        data-tooltip-content="current"
+        use:contentAction
+      >
+        {@render renderPresentation(presentation)}
+      </div>
+
+      {#if outgoingPresentation}
+        <div
+          class={[css({ position: 'absolute', top: '0', left: '0' }), contentClass(outgoingPresentation)]}
+          aria-hidden="true"
+          data-tooltip-content="outgoing"
+          use:outgoingContentAction
+        >
+          {@render renderPresentation(outgoingPresentation)}
+        </div>
+      {/if}
+    </div>
   </div>
-{/if}
+
+  {#if showArrow}
+    <div
+      class={css({
+        borderTopLeftRadius: '2px',
+        size: '8px',
+        backgroundColor: 'surface.dark',
+      })}
+      use:arrowAction
+    ></div>
+  {/if}
+</div>

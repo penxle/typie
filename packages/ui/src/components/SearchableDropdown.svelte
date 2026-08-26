@@ -216,7 +216,7 @@
     style,
   )}
   use:anchorAction
-  use:tooltip={{ message: isFocused ? null : label, delay: 200, arrow: false }}
+  use:tooltip={{ message: isFocused ? null : label, arrow: false }}
 >
   <input
     bind:this={inputElement}

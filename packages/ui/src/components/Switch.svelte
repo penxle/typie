@@ -64,11 +64,7 @@
   });
 </script>
 
-<label
-  class={css(style)}
-  for={rest['name']}
-  use:tooltip={{ message: indeterminate ? '일부 선택됨' : null, delay: 500, placement: 'right' }}
->
+<label class={css(style)} for={rest['name']} use:tooltip={{ message: indeterminate ? '일부 선택됨' : null, placement: 'right' }}>
   {@render children?.()}
   <input id={rest['name']} class={recipe({ size, indeterminate })} type="checkbox" bind:checked {...rest} />
 </label>
