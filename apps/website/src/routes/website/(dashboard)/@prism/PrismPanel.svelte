@@ -362,8 +362,28 @@
     _hover: { backgroundColor: 'interactive.hover' },
   });
   let listOpen = $state(false);
+  const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
   const accessPromptInWelcome = $derived(!prismAvailable && selected.current === null && !chat.loading && emptySession && !listOpen);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
+  let currentTitleButton = $state<HTMLButtonElement>();
+  let currentTitleClientWidth = $state(0);
+  let currentTitleTruncated = $state(false);
+
+  $effect(() => {
+    const element = currentTitleButton;
+    void currentTitle;
+    void currentTitleClientWidth;
+    if (!element) return;
+
+    let cancelled = false;
+    void tick().then(() => {
+      if (!cancelled) currentTitleTruncated = element.scrollWidth > element.clientWidth;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  });
 
   export const startNewChat = async (nextDraft?: string) => {
     selected.current = null;
@@ -787,6 +807,12 @@
   };
 </script>
 
+{#snippet currentTitleTooltip()}
+  <span class={css({ display: 'block', maxWidth: '280px', overflowWrap: 'break-word', textWrap: 'balance', wordBreak: 'keep-all' })}>
+    {currentTitle}
+  </span>
+{/snippet}
+
 {#if app.state.prismAccess || app.preference.current.prismPanelOpen}
   {#if !app.preference.current.zenModeEnabled}
     <div
@@ -888,6 +914,7 @@
           />
         {:else}
           <button
+            bind:this={currentTitleButton}
             class={css({
               marginLeft: 'auto',
               minWidth: '0',
@@ -903,9 +930,11 @@
               backgroundColor: listOpen ? 'surface.muted' : 'transparent',
               _hover: { backgroundColor: 'surface.muted' },
             })}
+            aria-label={`${listToggleLabel}: ${currentTitle}`}
             onclick={() => (listOpen = !listOpen)}
             type="button"
-            use:tooltip={{ message: currentTitle }}
+            bind:clientWidth={currentTitleClientWidth}
+            use:tooltip={{ message: currentTitleTruncated ? currentTitleTooltip : listToggleLabel, arrow: !currentTitleTruncated }}
           >
             {currentTitle}
           </button>
@@ -992,7 +1021,7 @@
           aria-pressed={listOpen}
           onclick={() => (listOpen = !listOpen)}
           type="button"
-          use:tooltip={{ message: listOpen ? '대화 목록 닫기' : '대화 목록 열기' }}
+          use:tooltip={{ message: listToggleLabel }}
         >
           <Icon icon={HistoryIcon} size={16} />
         </button>
