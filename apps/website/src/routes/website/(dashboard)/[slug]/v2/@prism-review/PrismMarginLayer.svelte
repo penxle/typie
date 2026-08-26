@@ -18,13 +18,10 @@
 
   type Mark = { itemId: string; ratio: number; tone: RailTone };
 
-  // 컨트롤러가 실제로 낸 오른쪽 자리. 회차를 갈아타는 동안에도 래치되어 유지되므로
-  // 컬럼의 렌더 조건을 여기서 읽으면 자리가 없는 프레임에 그리지도, 전환 중에 깜빡이지도 않는다
   type Props = {
-    insetRight: number;
     contentMotion?: { fromX: number; duration: number; easing: string };
   };
-  let { insetRight, contentMotion }: Props = $props();
+  let { contentMotion }: Props = $props();
 
   const ctx = getEditorContext();
   const margin = getMarginContext();
@@ -156,9 +153,11 @@
   const railGutter = $derived(Math.min(GUTTER, Math.max(0, bodyLeft)));
   const railGap = $derived(Math.min(RAIL_TEXT_GAP, Math.max(0, railGutter - RAIL_WIDTH)));
 
-  // 완전히 닫힌 첫 프레임에도 숨은 컬럼을 먼저 세운다. 카드가 배치를 마쳤다는 신호가
-  // 컨트롤러에 도착해야 그제야 inset/scale/fade가 함께 출발한다.
-  const columnPresent = $derived(insetRight > 0 || (margin.mode === 'column' && margin.ready && margin.presentationRoundId !== null));
+  // 완전히 닫힌 첫 프레임에도 숨은 컬럼을 먼저 세우고, 닫히는 동안은 진행률이 0이 될 때까지 붙잡는다.
+  // 카드가 배치를 마쳤다는 신호가 컨트롤러에 도착해야 그제야 inset/scale/fade가 함께 출발한다.
+  const columnPresent = $derived(
+    margin.presentationProgress > 0 || (margin.mode === 'column' && margin.ready && margin.presentationRoundId !== null),
+  );
   const presentation = $derived(lanePresentation(margin.presentationProgress));
   const presentationAnimating = $derived(margin.presentationProgress < 1);
 
@@ -206,12 +205,20 @@
   <!-- 이 레이어는 에디터의 포인터 표면(extensionAreaEl) 안에 산다 — 막지 않으면 레일·카드의 pointerdown이
        handlePointerDown까지 올라가 캐럿이 튀고 포인터 캡처가 잡혀 click이 버튼 대신 본문에 떨어진다.
        focusin은 editor.focus()로 답글 입력의 포커스를 뺏고, userSelect:none은 카드 글자 선택을 막는다.
+       닫히는 컬럼은 inset이 먼저 풀린 뒤 fade하므로, 가로 overflow는 여기서 잘라 스크롤 폭에 넣지 않는다.
        드롭은 막기만 하면 브라우저 기본 동작이 파일을 열어 버리므로, 여기서 삼켜 아무 일도 없게 만든다.
        팝오버는 스크롤러로 포탈되어 이 경로 밖이고, 여기서 막히는 것은 레일·룰러·컬럼이다.
        tabindex는 포커스 탐색을 여기서 멈추기 위한 것이다 — 없으면 클릭이 레이어를 지나쳐
        에디터 쪽 조상에 포커스를 앉히고, 그 focusin이 원고 입력을 도로 잡아채 카드 선택이 지워진다. -->
   <div
-    class={css({ position: 'absolute', inset: '0', pointerEvents: 'none', userSelect: 'text', WebkitUserSelect: 'text' })}
+    class={css({
+      position: 'absolute',
+      inset: '0',
+      overflowX: 'clip',
+      pointerEvents: 'none',
+      userSelect: 'text',
+      WebkitUserSelect: 'text',
+    })}
     draggable={false}
     onclick={(event) => event.stopPropagation()}
     oncontextmenu={(event) => event.stopPropagation()}

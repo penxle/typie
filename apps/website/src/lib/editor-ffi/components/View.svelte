@@ -290,6 +290,7 @@
 >
   <div
     style:--page-gap={isPaginated ? `${pageGap}px` : undefined}
+    style:overflow-x={!useWindowScroll && contentAnimation ? 'clip' : undefined}
     class={css({
       display: 'flex',
       flexDirection: 'column',

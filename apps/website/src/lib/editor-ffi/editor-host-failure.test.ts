@@ -1281,14 +1281,40 @@ describe('Editor guarded core invocation', () => {
     editor.resizeViewportNow(320, 800, 1);
     expect(editor.appliedRevision).toBe(2);
     expect(editor.publishedRevision).toBe(1);
+    expect(editor.publishedViewport).toEqual({ width: 1, height: 1, scale_factor: 1 });
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
 
     core.render_surface.mockReturnValue({ value: 2 });
     editor.invalidateSurface(0);
 
     expect(editor.publishedRevision).toBe(2);
+    expect(editor.publishedViewport).toEqual({ width: 320, height: 800, scale_factor: 1 });
     expect(editor.publishedSurfaceCanvas(0)).toBe(candidate);
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
+
+    releaseHost();
+    editor.destroy();
+  });
+
+  it('publishes the immediately applied viewport with the retained frame', async () => {
+    const { editor, core } = await createEditor();
+    const releaseHost = editor.activateVisualHost();
+    const displayed = document.createElement('canvas');
+    editor.attachSurface(0, displayed, 100, 100);
+    core.render_surface.mockClear();
+    core.tick_through.mockImplementation((requestId) => ({
+      revision: { value: 2 },
+      events: [],
+      request_outcomes: [{ request_id: requestId, command_outcomes: [{ type: 'applied' }] }],
+    }));
+
+    editor.resizeViewportNow(320, 800, 1);
+
+    expect(core.render_surface).not.toHaveBeenCalled();
+    expect(editor.appliedRevision).toBe(2);
+    expect(editor.publishedRevision).toBe(2);
+    expect(editor.publishedViewport).toEqual({ width: 320, height: 800, scale_factor: 1 });
+    expect(editor.publishedSurfaceCanvas(0)).toBe(displayed);
 
     releaseHost();
     editor.destroy();

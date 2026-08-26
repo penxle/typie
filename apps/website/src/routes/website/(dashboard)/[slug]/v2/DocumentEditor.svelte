@@ -288,6 +288,7 @@
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
 
   let editorAreaWidth = $state(0);
+  const marginAvailable = $derived(Math.min(editorAreaWidth, ctx.editor?.publishedViewport?.width ?? 0));
 
   // 판이 아직 없으면 컬럼이 들어갈 수 있는지 판정할 수 없다 — 폭을 모르는 동안은 팝오버로 선다
   const marginBodyWidth = $derived.by(() => {
@@ -1022,7 +1023,7 @@
     <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
       <!-- 헤더의 리뷰 버튼도 여백 컨텍스트를 읽는다 — 헤더까지 감싼다 -->
       <PrismReviewMargin
-        available={editorAreaWidth}
+        available={marginAvailable}
         bodyWidth={marginBodyWidth}
         {documentId}
         entityId={entity?.id ?? null}
@@ -1446,7 +1447,7 @@
                               </div>
                             {/snippet}
                             <CommentPopover />
-                            <PrismMarginLayer contentMotion={insets.contentMotion} insetRight={insets.right} />
+                            <PrismMarginLayer contentMotion={insets.contentMotion} />
                           </EditorComponent>
                         </svelte:boundary>
                       {/key}

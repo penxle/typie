@@ -993,6 +993,15 @@ impl View {
     pub fn resize(&mut self, viewport: Viewport, state: &State) -> bool {
         let old_fingerprint = self.fingerprint.clone();
         self.viewport = viewport;
+        let retained_layout_is_current = self.layout.is_some()
+            && self
+                .layout_state
+                .as_ref()
+                .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected));
+        let (_, _, new_fingerprint) = self.build_pipeline(state);
+        if retained_layout_is_current && old_fingerprint.as_ref() == Some(&new_fingerprint) {
+            return false;
+        }
         self.compute(state);
         let changed = self.fingerprint.as_ref() != old_fingerprint.as_ref();
         if changed {
@@ -1242,6 +1251,31 @@ mod invalidation_tests {
             view.layout_state().and_then(|state| state.selection),
             selection_state.selection,
         );
+    }
+
+    #[test]
+    fn fingerprint_preserving_resize_keeps_page_fragments() {
+        let mut projected = ProjectedState::empty();
+        projected.commit();
+        let state = State::new(projected, None);
+        let mut view = make_view(800.0);
+
+        view.layout(&state);
+        assert!(view.fragment_for_page(0).is_some());
+        assert!(
+            view.layout.as_ref().unwrap().page_fragments[0]
+                .get()
+                .is_some()
+        );
+
+        assert!(!view.resize(Viewport::new(700.0, 700.0, 1.0), &state));
+
+        assert!(
+            view.layout.as_ref().unwrap().page_fragments[0]
+                .get()
+                .is_some()
+        );
+        assert_eq!(view.viewport(), &Viewport::new(700.0, 700.0, 1.0));
     }
 
     #[test]
