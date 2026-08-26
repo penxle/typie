@@ -48,7 +48,6 @@
   use:tooltip={{
     message: label,
     keys,
-    delay: 1000,
     arrow: false,
   }}
 >

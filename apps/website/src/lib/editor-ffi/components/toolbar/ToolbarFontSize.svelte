@@ -167,7 +167,7 @@
       },
     })}
     use:anchorAction
-    use:tooltip={{ message: isFocused ? null : '폰트 크기', delay: 200, arrow: false }}
+    use:tooltip={{ message: isFocused ? null : '폰트 크기', arrow: false }}
   >
     <input
       bind:this={inputElement}
