@@ -580,4 +580,16 @@ describe('tooltip click behavior', () => {
 
     expectTooltip('First tooltip');
   });
+
+  it('cancels a pending action tooltip when its context menu opens', async () => {
+    await mountFixture();
+    const first = trigger('action-first');
+    enter(first);
+    await advance(250);
+
+    first.dispatchEvent(new MouseEvent('contextmenu'));
+    await advance(250);
+
+    expect(tooltipElement()).toBeNull();
+  });
 });
