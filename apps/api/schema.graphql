@@ -1783,6 +1783,7 @@ type Subscription {
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
+  userGoalUpdateStream: User!
   userUsageUpdateStream(userId: ID!): User!
 }
 

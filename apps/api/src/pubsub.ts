@@ -21,6 +21,7 @@ export const pubsub = createPubSub<{
   'prism:session': [sessionId: string, payload: ProjectedStreamFrame];
   'site:update': [siteId: string, payload: { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, payload: null];
+  'user:goal:update': [userId: string, payload: null];
   'user:usage:update': [userId: string, payload: null];
 }>({
   eventTarget: createRedisEventTarget({

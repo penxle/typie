@@ -47,7 +47,8 @@ import { parseAllowlist } from '#/utils/prism-access-core.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
-import { recordToolResolution, runSite, withToolLedger } from '#/utils/prism-serve.ts';
+import { runSite } from '#/utils/prism-serve.ts';
+import { recordToolResolution, withToolLedger } from '#/utils/prism-tool-calls.ts';
 import { ERROR_MESSAGE } from '#/utils/prism-tool-messages.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
 import { materialize } from '#/utils/prism-transcript.ts';
@@ -598,7 +599,7 @@ builder.mutationFields((t) => ({
         const runSeq = agentId === session.prismAgentId ? (activeRun(agent.runs)?.runSeq ?? null) : null;
         const siteId = await runSite(session, runSeq);
         if (siteId === null) throw new TypieError({ code: 'site_not_found', status: 404 });
-        const context = { userId: ctx.session.userId, session, siteId, toolCallId: input.toolCallId, agent };
+        const context = { userId: ctx.session.userId, session, siteId, toolCallId: input.toolCallId, agent, afterCommit: undefined };
 
         if (meta?.tier === 'destructive') {
           if (serveVerdict(tool, session.toolPolicy) === 'deny') throw new TypieError({ code: 'prism_tool_policy', status: 403 });
@@ -608,7 +609,9 @@ builder.mutationFields((t) => ({
           if (decision.data.approve) {
             const pendingData = agent.pending.data;
             try {
-              result = await withToolLedger(session, call, (tx) => handler({ ...context, executor: tx }, pendingData));
+              result = await withToolLedger(session, call, (tx, afterCommit) =>
+                handler({ ...context, executor: tx, afterCommit }, pendingData),
+              );
             } catch (err) {
               log.warn('prism tool handler failed: {tool} {*}', { tool, error: err });
               result = toolFailure('error', ERROR_MESSAGE);

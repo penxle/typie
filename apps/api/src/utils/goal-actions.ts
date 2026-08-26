@@ -5,15 +5,21 @@ import { and, eq } from 'drizzle-orm';
 import { Entities, EntityGoals, firstOrThrow, UserGoals } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { assertSitePermission } from './permission.ts';
+import { runAfterCommit } from './post-commit.ts';
 import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
+import type { PostCommitRegistrar } from './post-commit.ts';
 
 type UpsertUserGoalCoreArgs = {
   userId: string;
   targetCharacterCount: number;
 };
 
-export const upsertUserGoalCore = async (executor: Database | Transaction, args: UpsertUserGoalCoreArgs) => {
+export const upsertUserGoalCore = async (
+  executor: Database | Transaction,
+  args: UpsertUserGoalCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   if (args.targetCharacterCount <= 0) {
     throw new TypieError({ code: 'invalid_target_character_count' });
   }
@@ -27,13 +33,21 @@ export const upsertUserGoalCore = async (executor: Database | Transaction, args:
       target: [UserGoals.userId, UserGoals.effectiveAt],
       set: { targetCharacterCount: args.targetCharacterCount },
     });
+
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('user:goal:update', args.userId, null);
+  });
 };
 
 type DeleteUserGoalCoreArgs = {
   userId: string;
 };
 
-export const deleteUserGoalCore = async (executor: Database | Transaction, args: DeleteUserGoalCoreArgs) => {
+export const deleteUserGoalCore = async (
+  executor: Database | Transaction,
+  args: DeleteUserGoalCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const today = dayjs.kst().startOf('day');
 
   await executor
@@ -43,6 +57,10 @@ export const deleteUserGoalCore = async (executor: Database | Transaction, args:
       target: [UserGoals.userId, UserGoals.effectiveAt],
       set: { targetCharacterCount: null },
     });
+
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('user:goal:update', args.userId, null);
+  });
 };
 
 type UpsertEntityGoalCoreArgs = {
@@ -52,7 +70,11 @@ type UpsertEntityGoalCoreArgs = {
   dueAt: Dayjs | null;
 };
 
-export const upsertEntityGoalCore = async (executor: Database | Transaction, args: UpsertEntityGoalCoreArgs) => {
+export const upsertEntityGoalCore = async (
+  executor: Database | Transaction,
+  args: UpsertEntityGoalCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   if (args.targetCharacterCount <= 0) {
     throw new TypieError({ code: 'invalid_target_character_count' });
   }
@@ -73,7 +95,9 @@ export const upsertEntityGoalCore = async (executor: Database | Transaction, arg
       set: { targetCharacterCount: args.targetCharacterCount, dueAt: args.dueAt, updatedAt: dayjs() },
     });
 
-  pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: args.entityId });
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: args.entityId });
+  });
 };
 
 type DeleteEntityGoalCoreArgs = {
@@ -81,7 +105,11 @@ type DeleteEntityGoalCoreArgs = {
   entityId: string;
 };
 
-export const deleteEntityGoalCore = async (executor: Database | Transaction, args: DeleteEntityGoalCoreArgs) => {
+export const deleteEntityGoalCore = async (
+  executor: Database | Transaction,
+  args: DeleteEntityGoalCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
   const entity = await executor
     .select({ siteId: Entities.siteId })
     .from(Entities)
@@ -92,5 +120,7 @@ export const deleteEntityGoalCore = async (executor: Database | Transaction, arg
 
   await executor.delete(EntityGoals).where(eq(EntityGoals.entityId, args.entityId));
 
-  pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: args.entityId });
+  await runAfterCommit(afterCommit, () => {
+    pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: args.entityId });
+  });
 };

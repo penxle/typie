@@ -691,12 +691,16 @@ const createFolders = async (ctx: PrismToolContext, input: unknown) => {
 
   const entityIds = [];
   for (const item of parsed.data.items) {
-    const folder = await createFolderCore(ctx.executor, {
-      userId: ctx.userId,
-      siteId: ctx.siteId,
-      parentEntityId: item.parentFolderId === undefined ? null : (parents.get(item.parentFolderId) ?? null),
-      name: item.name,
-    });
+    const folder = await createFolderCore(
+      ctx.executor,
+      {
+        userId: ctx.userId,
+        siteId: ctx.siteId,
+        parentEntityId: item.parentFolderId === undefined ? null : (parents.get(item.parentFolderId) ?? null),
+        name: item.name,
+      },
+      ctx.afterCommit,
+    );
     entityIds.push(folder.entityId);
   }
 
@@ -714,7 +718,7 @@ const deleteEntities = async (ctx: PrismToolContext, input: unknown) => {
       '그 문서나 폴더를 지금 작업 중인 스페이스에서 찾지 못했어요 — list-entities로 지울 대상을 다시 확인하세요.',
     );
 
-  await deleteEntitiesCore(ctx.executor, { userId: ctx.userId, entityIds });
+  await deleteEntitiesCore(ctx.executor, { userId: ctx.userId, entityIds }, ctx.afterCommit);
 
   return { ok: true, count: entityIds.length };
 };
@@ -731,11 +735,15 @@ const createDocuments = async (ctx: PrismToolContext, input: unknown) => {
 
   const entityIds = [];
   for (const item of parsed.data.items) {
-    const document = await createDocumentCore(ctx.executor, {
-      userId: ctx.userId,
-      siteId: ctx.siteId,
-      parentEntityId: item.folderId === undefined ? null : (parents.get(item.folderId) ?? null),
-    });
+    const document = await createDocumentCore(
+      ctx.executor,
+      {
+        userId: ctx.userId,
+        siteId: ctx.siteId,
+        parentEntityId: item.folderId === undefined ? null : (parents.get(item.folderId) ?? null),
+      },
+      ctx.afterCommit,
+    );
     entityIds.push(document.entityId);
   }
 
@@ -752,7 +760,7 @@ const renameFolders = async (ctx: PrismToolContext, input: unknown) => {
   if (folders === null) return toolFailure('error', NOT_FOUND_FOLDER);
 
   for (const item of parsed.data.items) {
-    await renameFolderCore(ctx.executor, { userId: ctx.userId, folderId: item.folderId, name: item.name });
+    await renameFolderCore(ctx.executor, { userId: ctx.userId, folderId: item.folderId, name: item.name }, ctx.afterCommit);
   }
 
   return { ok: true, count: parsed.data.items.length };
@@ -771,14 +779,18 @@ const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
     if (parentEntityId === null) return toolFailure('error', NOT_FOUND_FOLDER);
   }
 
-  await moveEntitiesCore(ctx.executor, {
-    userId: ctx.userId,
-    entityIds,
-    parentEntityId,
-    lowerOrder: null,
-    upperOrder: null,
-    targetSiteId: null,
-  });
+  await moveEntitiesCore(
+    ctx.executor,
+    {
+      userId: ctx.userId,
+      entityIds,
+      parentEntityId,
+      lowerOrder: null,
+      upperOrder: null,
+      targetSiteId: null,
+    },
+    ctx.afterCommit,
+  );
 
   return { ok: true, count: entityIds.length };
 };
@@ -794,7 +806,7 @@ const duplicateDocuments = async (ctx: PrismToolContext, input: unknown) => {
   for (const id of parsed.data.ids) {
     const documentId = documentIds.get(id);
     if (documentId === undefined) return toolFailure('error', NOT_FOUND_DOCUMENT);
-    const document = await duplicateDocumentCore(ctx.executor, { userId: ctx.userId, documentId });
+    const document = await duplicateDocumentCore(ctx.executor, { userId: ctx.userId, documentId }, ctx.afterCommit);
     entityIds.push(document.entityId);
   }
 
@@ -819,7 +831,7 @@ const updateIcons = async (ctx: PrismToolContext, input: unknown) => {
   for (const item of parsed.data.items) {
     const entityId = entityIds.get(item.id);
     if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
-    await updateEntityIconCore(ctx.executor, { userId: ctx.userId, entityId, icon: item.icon, iconColor: item.iconColor });
+    await updateEntityIconCore(ctx.executor, { userId: ctx.userId, entityId, icon: item.icon, iconColor: item.iconColor }, ctx.afterCommit);
   }
 
   return { ok: true, count: parsed.data.items.length };
@@ -838,7 +850,7 @@ const recoverEntities = async (ctx: PrismToolContext, input: unknown) => {
 
   const entityIds = [...new Set(recoverable.map((ref) => ref.entityId))];
   for (const entityId of entityIds) {
-    await recoverEntityCore(ctx.executor, { userId: ctx.userId, entityId });
+    await recoverEntityCore(ctx.executor, { userId: ctx.userId, entityId }, ctx.afterCommit);
   }
 
   return { ok: true, count: entityIds.length };
@@ -855,13 +867,17 @@ const createNotes = async (ctx: PrismToolContext, input: unknown) => {
 
   const noteIds = [];
   for (const item of items) {
-    const note = await createNoteCore(ctx.executor, {
-      userId: ctx.userId,
-      siteId: ctx.siteId,
-      content: item.content,
-      color: item.color,
-      entityIds: [],
-    });
+    const note = await createNoteCore(
+      ctx.executor,
+      {
+        userId: ctx.userId,
+        siteId: ctx.siteId,
+        content: item.content,
+        color: item.color,
+        entityIds: [],
+      },
+      ctx.afterCommit,
+    );
     noteIds.push(note.id);
   }
 
@@ -878,7 +894,7 @@ const updateNotes = async (ctx: PrismToolContext, input: unknown) => {
   if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
 
   for (const item of parsed.data.items) {
-    await updateNoteCore(ctx.executor, { userId: ctx.userId, ...item });
+    await updateNoteCore(ctx.executor, { userId: ctx.userId, ...item }, ctx.afterCommit);
   }
 
   return { ok: true, count: parsed.data.items.length };
@@ -910,7 +926,7 @@ const attachNotes = async (ctx: PrismToolContext, input: unknown) => {
   if (!Array.isArray(links)) return links;
 
   for (const link of links) {
-    await addNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link });
+    await addNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link }, ctx.afterCommit);
   }
 
   return { ok: true, count: links.length };
@@ -921,7 +937,7 @@ const detachNotes = async (ctx: PrismToolContext, input: unknown) => {
   if (!Array.isArray(links)) return links;
 
   for (const link of links) {
-    await removeNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link });
+    await removeNoteEntityCore(ctx.executor, { userId: ctx.userId, ...link }, ctx.afterCommit);
   }
 
   return { ok: true, count: links.length };
@@ -954,14 +970,18 @@ const setGoals = async (ctx: PrismToolContext, input: unknown) => {
 
   for (const goal of goals) {
     if (goal.entityId === null) {
-      await upsertUserGoalCore(ctx.executor, { userId: ctx.userId, targetCharacterCount: goal.targetCharacterCount });
+      await upsertUserGoalCore(ctx.executor, { userId: ctx.userId, targetCharacterCount: goal.targetCharacterCount }, ctx.afterCommit);
     } else {
-      await upsertEntityGoalCore(ctx.executor, {
-        userId: ctx.userId,
-        entityId: goal.entityId,
-        targetCharacterCount: goal.targetCharacterCount,
-        dueAt: goal.dueAt,
-      });
+      await upsertEntityGoalCore(
+        ctx.executor,
+        {
+          userId: ctx.userId,
+          entityId: goal.entityId,
+          targetCharacterCount: goal.targetCharacterCount,
+          dueAt: goal.dueAt,
+        },
+        ctx.afterCommit,
+      );
     }
   }
 
@@ -975,7 +995,7 @@ const deleteNotes = async (ctx: PrismToolContext, input: unknown) => {
   if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
 
   for (const noteId of noteIds) {
-    await deleteNoteCore(ctx.executor, { userId: ctx.userId, noteId });
+    await deleteNoteCore(ctx.executor, { userId: ctx.userId, noteId }, ctx.afterCommit);
   }
 
   return { ok: true, count: noteIds.length };
@@ -993,10 +1013,10 @@ const deleteGoals = async (ctx: PrismToolContext, input: unknown) => {
   const userGoal = parsed.data.items.some((item) => item.id === undefined);
 
   if (userGoal) {
-    await deleteUserGoalCore(ctx.executor, { userId: ctx.userId });
+    await deleteUserGoalCore(ctx.executor, { userId: ctx.userId }, ctx.afterCommit);
   }
   for (const entityId of targets) {
-    await deleteEntityGoalCore(ctx.executor, { userId: ctx.userId, entityId });
+    await deleteEntityGoalCore(ctx.executor, { userId: ctx.userId, entityId }, ctx.afterCommit);
   }
 
   return { ok: true, count: targets.length + (userGoal ? 1 : 0) };
@@ -1019,16 +1039,20 @@ const updateSharing = async (ctx: PrismToolContext, input: unknown) => {
 
   const documentIds = refs.flatMap((ref) => (ref.kind === 'document' ? [ref.documentId] : []));
   if (documentIds.length > 0) {
-    await updateDocumentsOptionCore(ctx.executor, { userId: ctx.userId, documentIds, visibility: parsed.data.visibility });
+    await updateDocumentsOptionCore(ctx.executor, { userId: ctx.userId, documentIds, visibility: parsed.data.visibility }, ctx.afterCommit);
   }
   for (const ref of refs) {
     if (ref.kind !== 'folder') continue;
-    await updateFolderOptionCore(ctx.executor, {
-      userId: ctx.userId,
-      folderId: ref.folderId,
-      visibility: parsed.data.visibility,
-      recursive: parsed.data.recursive ?? false,
-    });
+    await updateFolderOptionCore(
+      ctx.executor,
+      {
+        userId: ctx.userId,
+        folderId: ref.folderId,
+        visibility: parsed.data.visibility,
+        recursive: parsed.data.recursive ?? false,
+      },
+      ctx.afterCommit,
+    );
   }
 
   return {
