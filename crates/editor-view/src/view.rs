@@ -144,7 +144,7 @@ impl View {
             .as_ref()
             .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected));
         if dirty_empty && same_projected_state && self.layout.is_some() {
-            let (_, _, new_fingerprint) = self.build_pipeline(state);
+            let new_fingerprint = self.layout_fingerprint(state);
             if self.fingerprint.as_ref() == Some(&new_fingerprint) {
                 self.layout_state = Some(state.clone());
                 return false;
@@ -214,7 +214,7 @@ impl View {
     /// or unresolvable context returns `false` and the caller runs the full
     /// pipeline.
     fn try_splice_content(&mut self, state: &State, targets: &[Dot]) -> bool {
-        let (_, _, new_fingerprint) = self.build_pipeline(state);
+        let new_fingerprint = self.layout_fingerprint(state);
         if self.fingerprint.as_ref() != Some(&new_fingerprint) {
             return false;
         }
@@ -388,9 +388,25 @@ impl View {
         }
     }
 
-    fn build_pipeline(&self, state: &State) -> (Paginator, f32, LayoutFingerprint) {
+    fn layout_fingerprint(&self, state: &State) -> LayoutFingerprint {
         let layout_mode = Self::doc_layout_mode(state);
-        match layout_mode {
+        let effective_viewport_width = match layout_mode {
+            LayoutMode::Paginated { .. } => 0.0,
+            LayoutMode::Continuous { max_width } => {
+                let available_content_width =
+                    (self.viewport.width - 2.0 * CONTINUOUS_MARGIN_X).max(0.0);
+                (max_width as f32).min(available_content_width)
+            }
+        };
+        LayoutFingerprint {
+            layout_mode,
+            effective_viewport_width,
+        }
+    }
+
+    fn build_pipeline(&self, state: &State) -> (Paginator, f32, LayoutFingerprint) {
+        let fingerprint = self.layout_fingerprint(state);
+        match fingerprint.layout_mode {
             LayoutMode::Paginated {
                 page_width,
                 page_height,
@@ -408,32 +424,17 @@ impl View {
                 let content_width = page_width as f32 - margins.left - margins.right;
                 let paginator =
                     Paginator::paginated(page_width as f32, page_height as f32, margins);
-                (
-                    paginator,
-                    content_width,
-                    LayoutFingerprint {
-                        layout_mode,
-                        effective_viewport_width: 0.0,
-                    },
-                )
+                (paginator, content_width, fingerprint)
             }
-            LayoutMode::Continuous { max_width } => {
-                let avail_content = (self.viewport.width - 2.0 * CONTINUOUS_MARGIN_X).max(0.0);
-                let content_width = (max_width as f32).min(avail_content);
+            LayoutMode::Continuous { .. } => {
+                let content_width = fingerprint.effective_viewport_width;
                 let page_width = content_width + 2.0 * CONTINUOUS_MARGIN_X;
                 let paginator = Paginator::continuous(
                     page_width,
                     CONTINUOUS_CONTENT_CAP,
                     EdgeInsets::all(CONTINUOUS_MARGIN_X),
                 );
-                (
-                    paginator,
-                    content_width,
-                    LayoutFingerprint {
-                        layout_mode,
-                        effective_viewport_width: content_width,
-                    },
-                )
+                (paginator, content_width, fingerprint)
             }
         }
     }
@@ -998,7 +999,7 @@ impl View {
                 .layout_state
                 .as_ref()
                 .is_some_and(|layout_state| Arc::ptr_eq(&layout_state.projected, &state.projected));
-        let (_, _, new_fingerprint) = self.build_pipeline(state);
+        let new_fingerprint = self.layout_fingerprint(state);
         if retained_layout_is_current && old_fingerprint.as_ref() == Some(&new_fingerprint) {
             return false;
         }
