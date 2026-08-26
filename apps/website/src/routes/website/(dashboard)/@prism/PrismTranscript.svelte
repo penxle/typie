@@ -26,6 +26,7 @@
     pending: string | null;
     sessionId: string | null;
     failedIds: ReadonlySet<string>;
+    unavailableMessage?: string;
     reconnecting: boolean;
     policy: ToolPolicy;
     spinnerOwner?: 'panel' | 'row';
@@ -40,6 +41,7 @@
     pending,
     sessionId,
     failedIds,
+    unavailableMessage,
     reconnecting,
     policy,
     spinnerOwner = 'row',
@@ -466,12 +468,29 @@
           {:else if item.entry.role === 'tool-calls'}
             <PrismToolCalls count={item.entry.count} rows={item.entry.rows} />
           {:else if item.entry.role === 'tool-request'}
-            <PrismToolRequest {failedIds} message={item.entry} {onRetry} resolve={onResolve} {sessionId} {transcript} />
+            <PrismToolRequest
+              {failedIds}
+              message={item.entry}
+              {onRetry}
+              resolve={onResolve}
+              {sessionId}
+              {transcript}
+              {unavailableMessage}
+            />
           {:else if item.entry.role === 'run-failed'}
             <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>응답을 마치지 못했어요. 다시 보내 주세요</div>
           {:else if item.entry.role === 'workflow'}
             {#if sessionId !== null}
-              <PrismWorkflow {failedIds} message={item.entry} {onRetry} {reconnecting} resolve={onResolve} {sessionId} {transcript} />
+              <PrismWorkflow
+                {failedIds}
+                message={item.entry}
+                {onRetry}
+                {reconnecting}
+                resolve={onResolve}
+                {sessionId}
+                {transcript}
+                {unavailableMessage}
+              />
             {/if}
           {:else}
             <PrismMessage message={item.entry} />

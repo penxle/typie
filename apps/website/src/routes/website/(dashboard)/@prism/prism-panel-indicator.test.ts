@@ -206,6 +206,33 @@ describe('Prism panel indicator', () => {
     }
   });
 
+  test('waits for parent welcome admission without restarting the dwell', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, welcomeAdmission: false });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      await vi.advanceTimersByTimeAsync(700);
+      runtime.emit({ readiness: 'ready' });
+      stepIdleCallback();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      await tick();
+
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
+
+      props.welcomeAdmission = true;
+      await tick();
+      stepAnimationFrame();
+      await tick();
+
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
+    } finally {
+      await unmount(component);
+    }
+  });
+
   test('reveals the welcome message only after the icon-to-prism morph starts and keeps it outside the moving actor', async () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
     const target = document.createElement('div');

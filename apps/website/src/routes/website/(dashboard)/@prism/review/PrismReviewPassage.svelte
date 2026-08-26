@@ -28,7 +28,8 @@
   import type { PassageGroup, PassageView, StageView } from './passage-view.ts';
   import type { StageKey } from './stages.ts';
 
-  let { message, sessionId, transcript, requests, failedIds, reconnecting, resolve, onRetry }: WorkflowBlockProps = $props();
+  let { message, sessionId, transcript, requests, failedIds, unavailableMessage, reconnecting, resolve, onRetry }: WorkflowBlockProps =
+    $props();
 
   const query = createQuery(
     graphql(`
@@ -597,7 +598,7 @@
       <div class={css({ marginTop: '8px' })} in:rise><PrismToolCalls count={group.count} rows={group.rows} /></div>
     {:else if group.kind === 'question'}
       <div class={css({ marginTop: '12px' })} in:rise={{ block: true }}>
-        <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {sessionId} {transcript} />
+        <PrismToolRequest {failedIds} message={group.request} {onRetry} {resolve} {sessionId} {transcript} {unavailableMessage} />
       </div>
     {:else}
       {@const open = expanded[group.key] ?? (group.key === liveKey || heldRoundKeys.includes(group.key))}

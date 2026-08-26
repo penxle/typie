@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Switch } from '@typie/ui/components';
-  import { Dialog } from '@typie/ui/notification';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
@@ -37,7 +37,44 @@
     `),
   );
 
-  let aiOptIn = $derived(user.data.preferences.aiOptIn ?? false);
+  const persistedAiOptIn = $derived(user.data.preferences.aiOptIn ?? false);
+  let aiOptInOverride = $state<boolean>();
+  let updatingAiOptIn = $state(false);
+  const aiOptIn = $derived(aiOptInOverride ?? persistedAiOptIn);
+
+  $effect(() => {
+    if (!updatingAiOptIn && aiOptInOverride !== undefined && aiOptInOverride === persistedAiOptIn) {
+      aiOptInOverride = undefined;
+    }
+  });
+
+  const updateAiOptIn = async (enabled: boolean) => {
+    aiOptInOverride = enabled;
+    updatingAiOptIn = true;
+    try {
+      await updatePreferences(
+        { input: { value: { aiOptIn: enabled } } },
+        {
+          metadata: {
+            cache: {
+              optimisticResponse: {
+                updatePreferences: {
+                  id: user.data.id,
+                  preferences: { ...user.data.preferences, aiOptIn: enabled },
+                },
+              },
+            },
+          },
+        },
+      );
+      mixpanel.track('ai_opt_in', { enabled });
+    } catch {
+      aiOptInOverride = undefined;
+      Toast.error('AI 설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요');
+    } finally {
+      updatingAiOptIn = false;
+    }
+  };
 
   const handleToggle = () => {
     if (aiOptIn) {
@@ -45,8 +82,7 @@
         return;
       }
 
-      updatePreferences({ input: { value: { aiOptIn: false } } });
-      mixpanel.track('ai_opt_in', { enabled: false });
+      void updateAiOptIn(false);
     } else {
       Dialog.confirm({
         title: 'AI 기능을 활성화하시겠어요?',
@@ -59,8 +95,7 @@
             return;
           }
 
-          await updatePreferences({ input: { value: { aiOptIn: true } } });
-          mixpanel.track('ai_opt_in', { enabled: true });
+          await updateAiOptIn(true);
         },
       });
     }
@@ -129,8 +164,12 @@
       {#snippet value()}
         <Switch
           checked={aiOptIn}
+          disabled={updatingAiOptIn}
           onclick={(e) => {
-            e.preventDefault();
+            // The switch is controlled by the confirmed/optimistic preference.
+            // Put the input back before its input event so a cancelled enable
+            // confirmation cannot leave the native checkbox visually toggled.
+            e.currentTarget.checked = aiOptIn;
             handleToggle();
           }}
         />
