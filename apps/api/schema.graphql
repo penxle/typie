@@ -4,6 +4,13 @@ input AddNoteEntityInput {
   noteId: ID!
 }
 
+input AdminAdjustPrismCreditInput {
+  freeDelta: Int!
+  note: String!
+  paidDelta: Int!
+  userId: String!
+}
+
 type AdminDocumentsResult {
   documents: [Document!]!
   totalCount: Int!
@@ -14,8 +21,32 @@ input AdminGiveCreditInput {
   userId: String!
 }
 
+input AdminGrantPrismCreditInput {
+  amount: Int!
+  note: String!
+  userId: String!
+}
+
 input AdminImpersonateInput {
   userId: String!
+}
+
+type AdminPrismCreditBalance {
+  display: Int!
+  free: BigInt!
+  paid: BigInt!
+  total: BigInt!
+}
+
+type AdminPrismCreditEntry {
+  actor: User
+  createdAt: DateTime!
+  freeDelta: BigInt!
+  id: ID!
+  key: String
+  kind: PrismCreditEntryKind!
+  note: String
+  paidDelta: BigInt!
 }
 
 input AdminRefundPaymentInput {
@@ -839,7 +870,9 @@ input MoveWidgetInput {
 
 type Mutation {
   addNoteEntity(input: AddNoteEntityInput!): Note!
+  adminAdjustPrismCredit(input: AdminAdjustPrismCreditInput!): Boolean!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
+  adminGrantPrismCredit(input: AdminGrantPrismCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminRefundPayment(input: AdminRefundPaymentInput!): Boolean!
   adminStopImpersonation: Boolean!
@@ -899,6 +932,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  preparePrismReview(input: PreparePrismReviewInput!): PrismReviewSnapshot!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
   reactPrismReviewThread(input: ReactPrismReviewThreadInput!): PrismReviewThread!
@@ -1087,6 +1121,10 @@ enum PreorderPaymentState {
   PENDING
 }
 
+input PreparePrismReviewInput {
+  documentId: ID!
+}
+
 type PrismAssistantMessage {
   at: DateTime!
   key: String!
@@ -1099,6 +1137,26 @@ type PrismCommand {
   argumentHint: String
   description: String!
   name: String!
+}
+
+type PrismCreditBalance {
+  balance: Int!
+}
+
+type PrismCreditEntry {
+  amount: Int!
+  createdAt: DateTime!
+  id: ID!
+  kind: PrismCreditEntryKind!
+}
+
+enum PrismCreditEntryKind {
+  ADJUSTMENT
+  CHAT_CHARGE
+  GRANT
+  REVIEW_CHARGE
+  REVIEW_REFUND
+  TRIAL
 }
 
 enum PrismReaction {
@@ -1172,6 +1230,7 @@ type PrismReviewRejection {
 type PrismReviewRound {
   conclusion: PrismReviewConclusionSummary
   createdAt: DateTime!
+  credits: Int
   detail: PrismReviewDetail
   document: Document!
   documentId: ID!
@@ -1196,6 +1255,11 @@ enum PrismReviewRoundState {
   FAILED
   PENDING
   RUNNING
+}
+
+type PrismReviewSnapshot {
+  characterCount: Int!
+  versionId: ID!
 }
 
 type PrismReviewStrength {
@@ -1426,6 +1490,8 @@ type Query {
   activeWritersCount: Int!
   adminDocument(documentId: String!): Document!
   adminDocuments(limit: Int! = 20, offset: Int! = 0, search: String, state: EntityState, type: DocumentType): AdminDocumentsResult!
+  adminPrismCredit(userId: String!): AdminPrismCreditBalance!
+  adminPrismCreditEntries(limit: Int! = 50, offset: Int! = 0, userId: String!): [AdminPrismCreditEntry!]!
   adminRawQuery(params: [JSON!], query: String!): [JSON!]!
   adminUser(userId: String!): User!
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
@@ -1712,6 +1778,7 @@ type Subscription {
   literaryAnalysisDocumentStreamV2(documentId: ID, text: String!): DocumentLiteraryAnalysisPayloadV2!
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
   prismBadgeStream: PrismSession!
+  prismCreditStream: User!
   prismReviewStream(documentId: ID!): PrismReviewRound!
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
@@ -1965,6 +2032,8 @@ type User implements IUser {
   preferences: JSON!
   prismAccess: Boolean!
   prismCommands: [PrismCommand!]
+  prismCredit: PrismCreditBalance!
+  prismCreditEntries(limit: Int! = 50, offset: Int! = 0): [PrismCreditEntry!]!
   prismSessions(includeArchived: Boolean! = false): [PrismSession!]!
   recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral

@@ -134,6 +134,7 @@ meili
 meilisearch
 memcpy
 metas
+milli
 milliunits
 minid
 monzo

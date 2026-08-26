@@ -160,6 +160,19 @@
     `),
   );
 
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_PrismCreditStream {
+        prismCreditStream {
+          id
+          prismCredit {
+            balance
+          }
+        }
+      }
+    `),
+  );
+
   const [registerPushNotificationToken] = createMutation(
     graphql(`
       mutation DashboardLayout_RegisterPushToken_Mutation($input: RegisterPushNotificationTokenInput!) {

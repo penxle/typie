@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { TypieError } from '@typie/lib/errors';
-  import { ConfirmDecisionSchema, ConfirmHintSchema } from '@typie/prism';
+  import { ConfirmDecisionSchema, ConfirmHintSchema, quoteReviewCredits } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
@@ -9,14 +10,17 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
+  import TriangleAlertIcon from '~icons/lucide/triangle-alert';
+  import PrismCreditIcon from '~icons/typie/prism-credit';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
+  import { graphql } from '$mearie';
   import { swap } from '../lib/motion.ts';
   import { TIER_OPTIONS } from './tiers.ts';
   import type { ConfirmHint, PrismReviewTierName } from '@typie/prism';
   import type { ToolCardProps } from '../tools/index.ts';
 
-  let { message, open, resolve }: ToolCardProps = $props();
+  let { message, sessionId, open, resolve }: ToolCardProps = $props();
 
   const openDocuments = getOpenDocuments();
   const documents = $derived(openDocuments.snapshot().documents);
@@ -42,6 +46,71 @@
 
   const readonly = $derived(!open);
 
+  const me = createQuery(
+    graphql(`
+      query DashboardLayout_PrismReviewConfirmCard_Query {
+        me {
+          id
+
+          prismCredit {
+            balance
+          }
+        }
+      }
+    `),
+  );
+
+  const [preparePrismReview] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismReviewConfirmCard_Prepare_Mutation($input: PreparePrismReviewInput!) {
+        preparePrismReview(input: $input) {
+          versionId
+          characterCount
+        }
+      }
+    `),
+  );
+
+  let snapshot = $state<{ documentId: string; versionId: string; characterCount: number } | null>(null);
+  let preparing = $state(false);
+  let inflight: string | null = null;
+
+  $effect(() => {
+    const documentId = selected?.documentId ?? null;
+    if (!open || documentId === null) {
+      return;
+    }
+
+    if (inflight === documentId || snapshot?.documentId === documentId) {
+      return;
+    }
+
+    inflight = documentId;
+    preparing = true;
+    void preparePrismReview({ input: { documentId } })
+      .then((result) => {
+        snapshot = { documentId, ...result.preparePrismReview };
+      })
+      .catch((err) => {
+        const error = unwrapError(err);
+        const code = error instanceof TypieError ? error.code : null;
+        Toast.error(code === 'prism_manuscript_empty' ? '원고가 비어 있어요' : '잠시 후 다시 시도해 주세요');
+      })
+      .finally(() => {
+        if (inflight === documentId) {
+          inflight = null;
+        }
+
+        preparing = false;
+      });
+  });
+
+  const current = $derived(snapshot !== null && snapshot.documentId === selected?.documentId ? snapshot : null);
+  const quoteOf = (name: PrismReviewTierName): number | null =>
+    current === null ? null : quoteReviewCredits(name, current.characterCount);
+  const balance = $derived(me.data?.me?.prismCredit.balance ?? null);
+  const insufficient = $derived(!busy && tier !== null && balance !== null && (quoteOf(tier) ?? 0) > balance);
+
   let cardEl = $state<HTMLElement>();
   let heightFrom = $state<number>();
   let prevOpen: boolean | undefined;
@@ -55,6 +124,24 @@
   const decided = $derived(parsedDecision.success && parsedDecision.data.decision === 'confirmed');
 
   const chosenTier = $derived(parsedDecision.success && parsedDecision.data.decision === 'confirmed' ? parsedDecision.data.tier : tier);
+  const chosenKey = $derived(parsedDecision.success && parsedDecision.data.decision === 'confirmed' ? parsedDecision.data.key : null);
+  const rounds = createQuery(
+    graphql(`
+      query DashboardLayout_PrismReviewConfirmCard_Rounds_Query($sessionId: ID!) {
+        prismSession(sessionId: $sessionId) {
+          id
+
+          reviewRounds {
+            id
+            credits
+          }
+        }
+      }
+    `),
+    () => ({ sessionId: sessionId ?? '' }),
+    () => ({ skip: sessionId === null || chosenKey === null }),
+  );
+  const chosenCredits = $derived(rounds.data?.prismSession.reviewRounds.find((round) => round.id === chosenKey)?.credits ?? null);
   const chosenTitle = $derived(
     parsedDecision.success && parsedDecision.data.decision === 'confirmed'
       ? parsedDecision.data.document.title
@@ -81,19 +168,24 @@
         return;
       }
 
+      if (code === 'prism_credit_insufficient') {
+        Toast.error('크레딧이 부족해요');
+        busy = false;
+        return;
+      }
+
       Toast.error(code === 'prism_manuscript_empty' ? '원고가 비어 있어요' : '잠시 후 다시 시도해 주세요');
       busy = false;
     }
   };
 
   const confirm = () => {
-    const doc = selected;
     const depth = tier;
-    if (doc === null || depth === null) {
+    if (current === null || depth === null) {
       return;
     }
 
-    void act({ decision: 'confirmed', documentId: doc.documentId, tier: depth.toUpperCase() });
+    void act({ decision: 'confirmed', versionId: current.versionId, tier: depth.toUpperCase() });
   };
 
   const cardClass = css({
@@ -133,6 +225,18 @@
     textAlign: 'left',
     transition: '[border-color 150ms ease, color 150ms ease]',
   });
+  const calloutClass = flex({
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+    paddingX: '12px',
+    paddingY: '10px',
+    borderWidth: '1px',
+    borderColor: 'accent.warning.default',
+    borderRadius: '10px',
+    backgroundColor: 'accent.warning.subtle',
+  });
+  const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
   const tailClass = flex({
     alignItems: 'center',
     gap: '8px',
@@ -146,6 +250,26 @@
   });
   const whenClass = css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'normal', color: 'text.disabled' });
   const countClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const skeletonStyle = css.raw({
+    flexShrink: '0',
+    height: '10px',
+    borderRadius: '4px',
+    backgroundColor: 'surface.muted',
+    animation: 'pulse 1.6s ease-in-out infinite',
+  });
+  const loading = $derived(open && preparing && current === null);
+  const startQuote = $derived(tier === null ? null : quoteOf(tier));
+  const creditClass = css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    flexShrink: '0',
+    fontSize: '12px',
+    fontWeight: 'semibold',
+    fontVariantNumeric: 'tabular-nums',
+    color: 'text.brand',
+  });
+  const startLabelClass = css({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' });
   const activeTagClass = css({
     flexShrink: '0',
     paddingX: '4px',
@@ -157,9 +281,12 @@
     color: 'text.faint',
   });
   const ellipsisClass = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+  const shrinkTitleClass = css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+  const spacerClass = css({ flexGrow: '1' });
+  const timeClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
 </script>
 
-<div bind:this={cardEl} class={cardClass}>
+<div bind:this={cardEl} class={cardClass} aria-busy={loading}>
   <div class={titleClass}>리뷰를 시작할까요?</div>
 
   <div class={labelClass}>대상 문서</div>
@@ -187,12 +314,15 @@
       setFullWidth
     >
       {#snippet button({ open: expanded })}
-        <span class={ellipsisClass}>{selected?.title || '제목 없음'}</span>
+        <span class={shrinkTitleClass}>{selected?.title || '제목 없음'}</span>
+        {#if current !== null}
+          <span class={countClass}>원고 {current.characterCount.toLocaleString()}자</span>
+        {:else if loading}
+          <span class={css(skeletonStyle, { width: '64px' })}></span>
+        {/if}
+        <span class={spacerClass}></span>
         {#if selected?.active}
           <span class={activeTagClass}>활성</span>
-        {/if}
-        {#if selected}
-          <span class={countClass}>{selected.charCount.toLocaleString()}자</span>
         {/if}
         <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
       {/snippet}
@@ -206,7 +336,6 @@
             {#if doc.active}
               <span class={activeTagClass}>활성</span>
             {/if}
-            <span class={countClass}>{doc.charCount.toLocaleString()}자</span>
             <div class={css({ flexShrink: '0', size: '14px' })}>
               {#if doc.documentId === selected?.documentId}
                 <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
@@ -227,28 +356,55 @@
           class={css(readonlyOptionStyle, on ? { borderColor: 'border.strong' } : { color: 'text.faint', borderColor: 'border.subtle' })}
           aria-current={on ? 'true' : undefined}
         >
-          <span class={css({ flexGrow: '1' })}>{opt.label}</span>
-          <span class={css({ fontSize: '11px', color: 'text.faint' })}>{opt.time}</span>
+          <span>{opt.label}</span>
+          {#if on && chosenCredits !== null}
+            <span class={creditClass}><Icon icon={PrismCreditIcon} size={14} />{chosenCredits.toLocaleString()}</span>
+          {/if}
+          <span class={spacerClass}></span>
+          <span class={timeClass}>{opt.time}</span>
         </div>
       {:else}
+        {@const quote = quoteOf(opt.tier)}
         <button
           class={css(optionStyle, { borderColor: on ? 'border.strong' : 'border.subtle' })}
           aria-pressed={on}
           onclick={() => (pickedTier = opt.tier)}
           type="button"
         >
-          <span class={css({ flexGrow: '1' })}>{opt.label}</span>
-          <span class={css({ fontSize: '11px', color: 'text.faint' })}>{opt.time}</span>
+          <span>{opt.label}</span>
+          {#if quote !== null}
+            <span class={creditClass}><Icon icon={PrismCreditIcon} size={14} />{quote.toLocaleString()}</span>
+          {:else if loading}
+            <span class={css(skeletonStyle, { width: '40px' })}></span>
+          {/if}
+          <span class={spacerClass}></span>
+          <span class={timeClass}>{opt.time}</span>
         </button>
       {/if}
     {/each}
   </div>
 
+  {#if open && insufficient}
+    <div class={calloutClass}>
+      <Icon style={css.raw({ flexShrink: '0', color: 'accent.warning.default' })} icon={TriangleAlertIcon} size={14} />
+      <span class={calloutTextClass}>크레딧이 부족해요. 운영에 문의해 주세요.</span>
+    </div>
+  {/if}
+
   {#if open}
     <div class={flex({ gap: '8px', justifyContent: 'flex-end' })}>
       <Button disabled={busy} onclick={() => void act({ decision: 'declined' })} size="sm" variant="ghost">이번엔 안 할래요</Button>
-      <Button style={css.raw({ minWidth: '96px' })} disabled={busy || selected === null || tier === null} onclick={confirm} size="sm">
-        시작
+      <Button
+        style={css.raw({ minWidth: '96px' })}
+        disabled={busy || selected === null || tier === null || preparing || current === null || insufficient}
+        onclick={confirm}
+        size="sm"
+      >
+        {#if startQuote === null}
+          시작
+        {:else}
+          <span class={startLabelClass}>시작 · <Icon icon={PrismCreditIcon} size={14} />{startQuote.toLocaleString()}</span>
+        {/if}
       </Button>
     </div>
   {:else}

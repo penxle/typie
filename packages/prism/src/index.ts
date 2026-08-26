@@ -9,6 +9,7 @@ export type {
   WorkflowStatus,
 } from './conversation.ts';
 export { applyFrame, emptyTranscript, pendingRootRequests, runningWorkflows } from './conversation.ts';
+export * from './credit.ts';
 export type { TurnLive } from './delta.ts';
 export { applyDelta, sealTurn, startTurn } from './delta.ts';
 export type { ParkedEvent, ParkedOptions, ParkedScope, PendingServerRequest } from './parked.ts';

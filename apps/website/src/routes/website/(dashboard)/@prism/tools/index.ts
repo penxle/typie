@@ -7,6 +7,7 @@ import type { OpenDocumentRegistry } from '$lib/prism/open-documents.svelte';
 
 export type ToolCardProps = {
   message: ToolRequestMessage;
+  sessionId: string | null;
   open: boolean;
   resolve: (input: unknown) => Promise<void>;
 };

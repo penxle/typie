@@ -500,7 +500,7 @@ builder.mutationFields((t) => ({
       message: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
-      await assertPrismAccess({ userId: ctx.session.userId });
+      await assertPrismAccess({ userId: ctx.session.userId, credit: { required: 1 } });
       const message = input.message.trim();
       if (message.length === 0) throw new TypieError({ code: 'empty_message', status: 400 });
       const key = nanoid();
@@ -517,7 +517,10 @@ builder.mutationFields((t) => ({
       if (input.sessionId) {
         const session = await ownedSession(input.sessionId, ctx.session.userId);
         const { runSeq } = await prism.resumeAgent(session.prismAgentId, { message, key }).catch(prismError);
-        if (session.openRunSeq !== null && session.openRunSeq !== runSeq) await closeRun(db, session.id, session.openRunSeq);
+        if (session.openRunSeq !== null && session.openRunSeq !== runSeq) {
+          await closeRun(db, session.id, session.openRunSeq);
+          pubsub.publish('prism:credit', ctx.session.userId, {});
+        }
         const updated = await db
           .update(PrismSessions)
           .set({ updatedAt: dayjs(), openRunSeq: runSeq })
@@ -750,6 +753,7 @@ builder.mutationFields((t) => ({
         await closeRun(db, session.id, session.openRunSeq).catch((err) =>
           log.warn('prism close-run on delete failed: {sessionId} {*}', { sessionId: session.id, error: err }),
         );
+        pubsub.publish('prism:credit', ctx.session.userId, {});
       }
 
       return updated;
@@ -809,6 +813,15 @@ builder.subscriptionFields((t) => ({
       // 구독 ctx는 소켓 수명이다 — 로더를 비우지 않으면 두 번째 이벤트부터 첫 값이 굳는다
       clearLoaders(ctx);
       return payload.sessionId;
+    },
+  }),
+
+  prismCreditStream: t.withAuth({ session: true }).field({
+    type: User,
+    subscribe: async (_, __, ctx) => pubsub.subscribe('prism:credit', ctx.session.userId),
+    resolve: (_, __, ctx) => {
+      clearLoaders(ctx);
+      return ctx.session.userId;
     },
   }),
 

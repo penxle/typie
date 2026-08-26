@@ -79,6 +79,25 @@ export const load = async (event) => {
               }
             }
           }
+          adminPrismCredit(userId: $userId) {
+            total
+            paid
+            free
+            display
+          }
+          adminPrismCreditEntries(userId: $userId, limit: 50) {
+            id
+            kind
+            paidDelta
+            freeDelta
+            key
+            note
+            createdAt
+            actor {
+              id
+              name
+            }
+          }
         }
       `),
       {

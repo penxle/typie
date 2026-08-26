@@ -3,6 +3,7 @@ import { parked } from '@typie/prism';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db, PrismSessions, PrismWorkflows } from '#/db/index.ts';
 import { PrismApiError } from '#/external/prism.ts';
+import { pubsub } from '#/pubsub.ts';
 import { cancelActiveRun, closeRun } from '#/utils/prism-workflows.ts';
 import { ensureIngest } from '../prism-queue.ts';
 import { defineCron } from '../types.ts';
@@ -47,7 +48,12 @@ const sweepWorkflows = async () => {
 
 const closeDeleted = async () => {
   const sessions = await db
-    .select({ id: PrismSessions.id, prismAgentId: PrismSessions.prismAgentId, openRunSeq: PrismSessions.openRunSeq })
+    .select({
+      id: PrismSessions.id,
+      userId: PrismSessions.userId,
+      prismAgentId: PrismSessions.prismAgentId,
+      openRunSeq: PrismSessions.openRunSeq,
+    })
     .from(PrismSessions)
     .where(and(isNotNull(PrismSessions.openRunSeq), isNotNull(PrismSessions.deletedAt)));
 
@@ -63,6 +69,7 @@ const closeDeleted = async () => {
       }
 
       await closeRun(db, session.id, openRunSeq);
+      pubsub.publish('prism:credit', session.userId, {});
     } catch (err) {
       log.warn('deleted-session close failed for session {id}: {*}', { id: session.id, error: err });
     }

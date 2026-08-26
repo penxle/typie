@@ -46,6 +46,52 @@
     `),
   );
 
+  const [adminGrantPrismCredit] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminGrantPrismCredit_Mutation($input: AdminGrantPrismCreditInput!) {
+        adminGrantPrismCredit(input: $input)
+      }
+    `),
+  );
+
+  const [adminAdjustPrismCredit] = createMutation(
+    graphql(`
+      mutation AdminUserDetail_AdminAdjustPrismCredit_Mutation($input: AdminAdjustPrismCreditInput!) {
+        adminAdjustPrismCredit(input: $input)
+      }
+    `),
+  );
+
+  const handleGrantPrismCredit = async () => {
+    const amount = Number.parseInt(prompt('Enter prism credits to grant (integer): ') || '');
+    if (Number.isNaN(amount) || amount <= 0) return;
+    const note = prompt('Enter note (required): ')?.trim();
+    if (!note) return;
+    try {
+      await adminGrantPrismCredit({ input: { userId: query.data.adminUser.id, amount, note } });
+      query.refetch();
+    } catch (err) {
+      const unwrapped = unwrapError(err);
+      alert(unwrapped instanceof Error ? unwrapped.message : 'Grant failed');
+    }
+  };
+
+  const handleAdjustPrismCredit = async () => {
+    const paidDelta = Number.parseInt(prompt('Paid delta in credits (integer, may be negative): ') || '');
+    if (Number.isNaN(paidDelta)) return;
+    const freeDelta = Number.parseInt(prompt('Free delta in credits (integer, may be negative): ') || '');
+    if (Number.isNaN(freeDelta)) return;
+    const note = prompt('Enter note (required): ')?.trim();
+    if (!note) return;
+    try {
+      await adminAdjustPrismCredit({ input: { userId: query.data.adminUser.id, paidDelta, freeDelta, note } });
+      query.refetch();
+    } catch (err) {
+      const unwrapped = unwrapError(err);
+      alert(unwrapped instanceof Error ? unwrapped.message : 'Adjust failed');
+    }
+  };
+
   let refundModalOpen = $state(false);
   let selectedInvoice: (typeof query.data.adminUser.paymentInvoices)[number] | null = $state(null);
   let refundReason = $state('');
@@ -545,6 +591,112 @@
                 ₩{comma(query.data.adminUser.credit)}
               </span>
             </div>
+          </div>
+        </div>
+
+        <!-- PRISM CREDIT -->
+        <div
+          class={css({
+            borderWidth: '2px',
+            borderColor: 'amber.500',
+            padding: '24px',
+            backgroundColor: 'gray.900',
+          })}
+        >
+          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PRISM CREDIT</h3>
+
+          <div class={flex({ flexDirection: 'column', gap: '16px' })}>
+            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+              <span class={css({ fontSize: '11px', color: 'amber.400' })}>BALANCE</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminPrismCredit.display === 0 ? 'gray.400' : 'amber.500' })}>
+                {comma(query.data.adminPrismCredit.display)} ({query.data.adminPrismCredit.total}m)
+              </span>
+            </div>
+
+            <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+              <span class={css({ fontSize: '11px', color: 'amber.400' })}>PAID / FREE</span>
+              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                {query.data.adminPrismCredit.paid}m / {query.data.adminPrismCredit.free}m
+              </span>
+            </div>
+
+            {#if query.data.adminPrismCreditEntries.length > 0}
+              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                {#each query.data.adminPrismCreditEntries as entry (entry.id)}
+                  <div class={css({ borderWidth: '1px', borderColor: 'amber.500', padding: '8px' })}>
+                    <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
+                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                        {dayjs(entry.createdAt).formatAsDateTime()} [{entry.kind}]
+                      </span>
+                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                        {entry.paidDelta}m / {entry.freeDelta}m
+                      </span>
+                    </div>
+                    {#if entry.key || entry.note || entry.actor}
+                      <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>
+                        {#if entry.key}KEY: {entry.key}{/if}
+                        {#if entry.actor}
+                          BY: {entry.actor.name}{/if}
+                        {#if entry.note}
+                          NOTE: {entry.note}{/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '8px' })}>NO ENTRIES</div>
+            {/if}
+
+            <button
+              class={css({
+                borderWidth: '1px',
+                borderColor: 'amber.500',
+                paddingX: '12px',
+                paddingY: '8px',
+                fontSize: '12px',
+                color: 'amber.500',
+                backgroundColor: 'transparent',
+                width: 'full',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                _hover: {
+                  backgroundColor: 'amber.500',
+                  color: 'gray.900',
+                },
+              })}
+              onclick={handleGrantPrismCredit}
+              type="button"
+            >
+              GRANT PRISM CREDIT
+            </button>
+
+            <button
+              class={css({
+                borderWidth: '1px',
+                borderColor: 'amber.500',
+                paddingX: '12px',
+                paddingY: '8px',
+                fontSize: '12px',
+                color: 'amber.500',
+                backgroundColor: 'transparent',
+                width: 'full',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                _hover: {
+                  backgroundColor: 'amber.500',
+                  color: 'gray.900',
+                },
+              })}
+              onclick={handleAdjustPrismCredit}
+              type="button"
+            >
+              ADJUST PRISM CREDIT
+            </button>
           </div>
         </div>
 

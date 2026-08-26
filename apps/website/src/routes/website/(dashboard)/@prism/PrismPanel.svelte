@@ -66,6 +66,10 @@
         id
         preferences
 
+        prismCredit {
+          balance
+        }
+
         sites {
           id
         }
@@ -706,6 +710,8 @@
 
       if (code === 'prism_beta_required') {
         betaGate = 'prism_beta_required';
+      } else if (code === 'prism_credit_insufficient') {
+        Toast.error('크레딧이 부족해요');
       } else if (code === 'prism_run_active') {
         Toast.error('답변이 끝난 뒤에 보낼 수 있어요');
       } else if (code === 'prism_unknown_command') {
@@ -1089,6 +1095,10 @@
           </div>
 
           <PrismPushCard visible={app.state.prismBadge} />
+
+          {#if user.data.prismCredit.balance <= 0}
+            <PrismGateCard reason="prism_credit_insufficient" />
+          {/if}
 
           {#if !chat.loading}
             <PrismComposer

@@ -10,7 +10,6 @@ export type OpenDocument = {
   icon: string;
   iconColor: string;
   active: boolean;
-  charCount: number;
 };
 
 const key: unique symbol = Symbol('OpenDocuments');
@@ -31,10 +30,7 @@ export class OpenDocumentRegistry {
     const byId = new Map<string, OpenDocument>();
     for (const doc of this.#entries.values()) {
       const prev = byId.get(doc.documentId);
-      byId.set(
-        doc.documentId,
-        prev ? { ...prev, active: prev.active || doc.active, charCount: Math.max(prev.charCount, doc.charCount) } : { ...doc },
-      );
+      byId.set(doc.documentId, prev ? { ...prev, active: prev.active || doc.active } : { ...doc });
     }
     return { documents: [...byId.values()].toSorted((a, b) => a.documentId.localeCompare(b.documentId)) };
   }

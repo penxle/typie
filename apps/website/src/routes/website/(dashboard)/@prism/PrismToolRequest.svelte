@@ -8,13 +8,14 @@
 
   type Props = {
     message: ToolRequestMessage;
+    sessionId: string | null;
     transcript: Transcript;
     failedIds: ReadonlySet<string>;
     resolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
   };
 
-  let { message, transcript, failedIds, resolve, onRetry }: Props = $props();
+  let { message, sessionId, transcript, failedIds, resolve, onRetry }: Props = $props();
 
   const card = $derived(toolCards[message.tool]);
 
@@ -29,7 +30,7 @@
 
 {#if card}
   {@const Card = card}
-  <Card {message} {open} resolve={(input) => resolve(message.agentId, message.toolCallId, input)} />
+  <Card {message} {open} resolve={(input) => resolve(message.agentId, message.toolCallId, input)} {sessionId} />
 {:else if failed}
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
     <span class={css({ fontSize: '11px', color: 'text.danger' })}>요청을 처리하지 못했어요</span>

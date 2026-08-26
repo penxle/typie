@@ -38,7 +38,6 @@
               nullableTitle
               subtitle
               documentType: type
-              characterCount
               createdAt
               updatedAt
 
@@ -110,7 +109,6 @@
       icon: entity.icon,
       iconColor: entity.iconColor,
       active: focused,
-      charCount: ctx.editor?.characterCounts.docWithWhitespace || node.characterCount,
     });
 
     return () => openDocuments.remove(paneKey);
