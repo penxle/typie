@@ -3,7 +3,7 @@ import { logger } from '@typie/lib';
 import { TypieError } from '@typie/lib/errors';
 import { quoteReviewCredits, ReviewOutcomeEnvelopeSchema } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { PgTransaction } from 'drizzle-orm/pg-core';
 import {
   db,
@@ -11,21 +11,39 @@ import {
   first,
   firstOrThrow,
   PrismReviewDocumentVersions,
+  PrismReviewLineages,
   PrismReviewRounds,
+  PrismReviewThreadComments,
+  PrismReviewThreads,
+  PrismReviewThreadSeats,
   PrismSessions,
+  PrismWorkflows,
   TableCode,
   validateDbId,
 } from '#/db/index.ts';
 import { activeRun, prism } from '#/external/prism.ts';
 import { pubsub } from '#/pubsub.ts';
 import { assertDocumentPermission } from './permission.ts';
+import { prismReviewSeeds } from './prism-catalog.ts';
 import { chargePrismCredit, lockUserPrismCredit, readPrismCreditBalance, refundPrismReview } from './prism-credit.ts';
 import { toMilli } from './prism-credit-core.ts';
 import { snapshotManuscript } from './prism-manuscript.ts';
-import { ConfirmInputSchema, confirmResult, ENUM_TO_TIER, manuscriptPath, pickVersion } from './prism-review-core.ts';
-import { projectRoundThreads } from './prism-review-threads.ts';
+import {
+  buildPreviousContext,
+  ConfirmInputSchema,
+  confirmResult,
+  ENUM_TO_TIER,
+  lineageLocked,
+  manuscriptPath,
+  pickVersion,
+  seedsPrefix,
+  seedUploads,
+  summarizeOutcome,
+} from './prism-review-core.ts';
+import { ensureRoundThreads, projectRoundThreads } from './prism-review-threads.ts';
 import type { PrismReviewTier } from '@typie/lib/enums';
-import type { ReviewOutcome } from '@typie/prism';
+import type { Anchor, PrismReviewTierName, ReviewOutcome, ReviewSeedMapping } from '@typie/prism';
+import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { PrismAppHooks, PrismWorkflowRow, WorkflowOutcome } from './prism-apps.ts';
 import type { Manuscript } from './prism-manuscript.ts';
@@ -114,6 +132,8 @@ const createRound = async (input: {
   tier: PrismReviewTier;
   versionId: string;
   characterCount: number;
+  lineageId: string;
+  baseRoundId: string | null;
 }): Promise<{ id: string }> => {
   const amount = toMilli(quoteReviewCredits(ENUM_TO_TIER[input.tier], input.characterCount));
 
@@ -138,6 +158,8 @@ const createRound = async (input: {
           prismRunSeq: input.runSeq,
           tier: input.tier,
           documentVersionId: input.versionId,
+          lineageId: input.lineageId,
+          baseRoundId: input.baseRoundId,
         })
         .onConflictDoNothing({ target: [PrismReviewRounds.documentId, PrismReviewRounds.round] })
         .returning({ id: PrismReviewRounds.id })
@@ -207,13 +229,168 @@ export const prepareReviewSnapshot = async ({
   throw new TypieError({ code: 'prism_round_conflict', status: 409 });
 };
 
+type BaseRound = {
+  id: string;
+  createdAt: Dayjs;
+  documentVersionId: string;
+  title: string | null;
+  subtitle: string | null;
+  content: string;
+  prismWorkflowId: string;
+};
+
+const openLineage = async (documentId: string, tier: PrismReviewTier): Promise<{ id: string; base: null }> => {
+  const lineage = await db
+    .insert(PrismReviewLineages)
+    .values({ documentId, tier })
+    .returning({ id: PrismReviewLineages.id })
+    .then(firstOrThrow);
+
+  return { id: lineage.id, base: null };
+};
+
+// base는 계보의 최신 완료·비거부 회차 — 진행 중 회차가 있으면 잇지 못한다(입력을 굳힌 회차 위에 또 굳힐 수 없다)
+const continueLineage = async (lineageId: string, documentId: string, tier: PrismReviewTier): Promise<{ id: string; base: BaseRound }> => {
+  const lineage = await db.select().from(PrismReviewLineages).where(eq(PrismReviewLineages.id, lineageId)).then(first);
+  if (!lineage || lineage.documentId !== documentId || lineage.tier !== tier)
+    throw new TypieError({ code: 'invalid_confirm_input', status: 400 });
+
+  const rounds = await db
+    .select({
+      id: PrismReviewRounds.id,
+      createdAt: PrismReviewRounds.createdAt,
+      closedAt: PrismReviewRounds.closedAt,
+      result: PrismReviewRounds.result,
+      documentVersionId: PrismReviewRounds.documentVersionId,
+      workflowState: PrismWorkflows.state,
+      prismWorkflowId: PrismWorkflows.prismWorkflowId,
+      title: PrismReviewDocumentVersions.title,
+      subtitle: PrismReviewDocumentVersions.subtitle,
+      content: PrismReviewDocumentVersions.content,
+    })
+    .from(PrismReviewRounds)
+    .leftJoin(PrismWorkflows, eq(PrismWorkflows.id, PrismReviewRounds.workflowId))
+    .innerJoin(PrismReviewDocumentVersions, eq(PrismReviewDocumentVersions.id, PrismReviewRounds.documentVersionId))
+    .where(eq(PrismReviewRounds.lineageId, lineageId))
+    .orderBy(desc(PrismReviewRounds.round));
+
+  if (lineageLocked(rounds.map((round) => ({ closedAt: round.closedAt, workflowState: round.workflowState }))))
+    throw new TypieError({ code: 'prism_review_running', status: 409 });
+
+  const base = rounds.find(
+    (round) =>
+      round.workflowState === 'COMPLETED' &&
+      round.prismWorkflowId !== null &&
+      round.result !== null &&
+      summarizeOutcome(round.result).rejection === null,
+  );
+  if (!base || base.prismWorkflowId === null) throw new TypieError({ code: 'prism_review_no_base', status: 409 });
+
+  return {
+    id: lineage.id,
+    base: {
+      id: base.id,
+      createdAt: base.createdAt,
+      documentVersionId: base.documentVersionId,
+      title: base.title,
+      subtitle: base.subtitle,
+      content: base.content,
+      prismWorkflowId: base.prismWorkflowId,
+    },
+  };
+};
+
+// 회차 행이 선 뒤에 읽는다 — 잠금 이후의 읽기가 이번 회차의 확정 입력이다
+const followupMaterials = async (roundId: string, lineageId: string, base: BaseRound, tier: PrismReviewTierName) => {
+  // 결과만 있고 스레드가 안 선 base(배포 전 종료·settle 실패)를 이으면 지난 리뷰가 통째로 비어 실린다
+  await ensureRoundThreads(base.id);
+
+  const threads = await db
+    .select()
+    .from(PrismReviewThreads)
+    .where(eq(PrismReviewThreads.lineageId, lineageId))
+    .orderBy(asc(PrismReviewThreads.createdAt));
+  const threadIds = threads.map((thread) => thread.id);
+  const seats =
+    threadIds.length === 0
+      ? []
+      : await db
+          .select({
+            threadId: PrismReviewThreadSeats.threadId,
+            roundId: PrismReviewThreadSeats.roundId,
+            anchors: PrismReviewThreadSeats.anchors,
+          })
+          .from(PrismReviewThreadSeats)
+          .innerJoin(PrismReviewRounds, eq(PrismReviewRounds.id, PrismReviewThreadSeats.roundId))
+          .where(inArray(PrismReviewThreadSeats.threadId, threadIds))
+          .orderBy(asc(PrismReviewRounds.round));
+  const comments =
+    threadIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(PrismReviewThreadComments)
+          .where(inArray(PrismReviewThreadComments.threadId, threadIds))
+          .orderBy(asc(PrismReviewThreadComments.createdAt));
+
+  // base 회차의 좌석이 없으면 가장 높은 회차의 좌석 — latestSeat과 같은 정의다
+  const anchorsOf = (threadId: string): Anchor[] => {
+    const mine = seats.filter((seat) => seat.threadId === threadId);
+    return (mine.find((seat) => seat.roundId === base.id) ?? mine.at(-1))?.anchors ?? [];
+  };
+
+  const previous = buildPreviousContext({
+    base: { title: base.title, subtitle: base.subtitle, versionId: base.documentVersionId, createdAt: base.createdAt.toDate() },
+    threads: threads.map((thread) => ({
+      id: thread.id,
+      pass: thread.pass,
+      trait: thread.trait,
+      body: thread.body,
+      state: thread.state,
+      issueId: thread.issueId,
+      anchors: anchorsOf(thread.id),
+      comments: comments
+        .filter((comment) => comment.threadId === thread.id)
+        .map((comment) => ({ author: comment.author, body: comment.body, createdAt: comment.createdAt.toDate() })),
+    })),
+  });
+
+  let seeds: ReviewSeedMapping[];
+  try {
+    seeds = await prismReviewSeeds(tier);
+  } catch (err) {
+    log.warn('review seeds catalog unavailable: {*}', { error: err });
+    throw new TypieError({ code: 'prism_review_seed_unavailable', status: 502 });
+  }
+
+  const contents = new Map<string, string | null>();
+  for (const seed of seeds) {
+    try {
+      contents.set(seed.from, await prism.getWorkflowFile(base.prismWorkflowId, seed.from));
+    } catch (err) {
+      log.warn('review seed fetch failed: {path} {*}', { path: seed.from, error: err });
+      throw new TypieError({ code: 'prism_review_seed_unavailable', status: 502 });
+    }
+  }
+
+  const uploads = seedUploads(roundId, seeds, contents);
+  if ('missing' in uploads) {
+    log.warn('review seed missing in base workflow: {path}', { path: uploads.missing });
+    throw new TypieError({ code: 'prism_review_seed_unavailable', status: 502 });
+  }
+
+  return { previous, uploads };
+};
+
 const confirmReview = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = ConfirmInputSchema.safeParse(input);
   if (!parsed.success) throw new TypieError({ code: 'invalid_confirm_input', status: 400 });
   if (parsed.data.decision === 'declined') return { decision: 'declined' } as const;
 
-  const { versionId, tier } = parsed.data;
+  const { versionId, tier, lineageId } = parsed.data;
   if (!validateDbId(TableCode.PRISM_REVIEW_DOCUMENT_VERSIONS).regex.test(versionId))
+    throw new TypieError({ code: 'invalid_confirm_input', status: 400 });
+  if (lineageId !== undefined && !validateDbId(TableCode.PRISM_REVIEW_LINEAGES).regex.test(lineageId))
     throw new TypieError({ code: 'invalid_confirm_input', status: 400 });
 
   const version = await db
@@ -235,6 +412,9 @@ const confirmReview = async (ctx: PrismToolContext, input: unknown) => {
   const running = activeRun(ctx.agent.runs);
   if (!running) throw new TypieError({ code: 'prism_tool_settled', status: 409 });
 
+  const lineage =
+    lineageId === undefined ? await openLineage(version.documentId, tier) : await continueLineage(lineageId, version.documentId, tier);
+
   const round = await createRound({
     userId: ctx.userId,
     sessionId: ctx.session.id,
@@ -243,17 +423,30 @@ const confirmReview = async (ctx: PrismToolContext, input: unknown) => {
     tier,
     versionId: version.id,
     characterCount: version.characterCount,
+    lineageId: lineage.id,
+    baseRoundId: lineage.base?.id ?? null,
   });
   const path = manuscriptPath(version.id);
+  const document = { id: version.documentId, title: version.title, subtitle: version.subtitle, path };
 
   try {
-    await prism.writeAgentFiles(ctx.session.prismAgentId, [{ path, content: version.content }]);
+    if (lineage.base === null) {
+      await prism.writeAgentFiles(ctx.session.prismAgentId, [{ path, content: version.content }]);
+      return confirmResult(round.id, ENUM_TO_TIER[tier], document);
+    }
+
+    const followup = await followupMaterials(round.id, lineage.id, lineage.base, ENUM_TO_TIER[tier]);
+    await prism.writeAgentFiles(ctx.session.prismAgentId, [
+      { path, content: version.content },
+      ...(followup.previous.path === path ? [] : [{ path: followup.previous.path, content: lineage.base.content }]),
+      ...followup.uploads,
+    ]);
+
+    return confirmResult(round.id, ENUM_TO_TIER[tier], document, { previous: followup.previous, seeds: seedsPrefix(round.id) });
   } catch (err) {
     await closeRound(round.id);
     throw err;
   }
-
-  return confirmResult(round.id, ENUM_TO_TIER[tier], { id: version.documentId, title: version.title, subtitle: version.subtitle, path });
 };
 
 export const reviewTools: Record<string, PrismToolHandler> = { 'confirm-review': confirmReview };

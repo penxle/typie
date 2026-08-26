@@ -181,6 +181,13 @@
     {/if}
   </div>
 
+  {#if round.dispositionSummary}
+    {@const s = round.dispositionSummary}
+    <p class={css({ marginTop: '8px', fontSize: '11px', color: 'text.faint' })}>
+      이어진 {s.carried} · 해소 {s.resolved} · 철회 {s.withdrawn} · 신규 {s.new}
+    </p>
+  {/if}
+
   <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '12px' })}>
     {#if round.hasDetail}
       <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} size="sm" variant="secondary">총평 읽기</Button>

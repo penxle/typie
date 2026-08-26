@@ -4,7 +4,7 @@
   import { ConfirmDecisionSchema, ConfirmHintSchema, quoteReviewCredits } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { Button, Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import CheckIcon from '~icons/lucide/check';
@@ -15,11 +15,14 @@
   import { pushState } from '$app/navigation';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
+  import { readReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
   import { swap } from '../lib/motion.ts';
+  import { lineageRowLabel, pickDefaultLineage } from './lineage-view.ts';
   import { TIER_OPTIONS } from './tiers.ts';
   import type { ConfirmHint, PrismReviewTierName } from '@typie/prism';
   import type { ToolCardProps } from '../tools/index.ts';
+  import type { LineageOption } from './lineage-view.ts';
 
   let { message, sessionId, open, resolve }: ToolCardProps = $props();
 
@@ -34,6 +37,7 @@
 
   let picked = $state<string | null>(null);
   let pickedTier = $state<PrismReviewTierName | null>(null);
+  let pickedLineage = $state<string | 'fresh' | null>(null);
   let busy = $state(false);
 
   const selected = $derived(
@@ -43,9 +47,89 @@
       documents.at(0) ??
       null,
   );
-  const tier = $derived<PrismReviewTierName | null>(pickedTier ?? hint.tier ?? null);
 
   const readonly = $derived(!open);
+
+  const lineagesQuery = createQuery(
+    graphql(`
+      query DashboardLayout_PrismReviewConfirmCard_Lineages_Query($documentId: ID!) {
+        documentById(documentId: $documentId) {
+          id
+
+          prismReviewLineages {
+            id
+            tier
+            locked
+            roundCount
+
+            latestRound {
+              id
+              ordinal
+              createdAt
+            }
+          }
+
+          prismReviewRounds {
+            id
+
+            lineage {
+              id
+            }
+          }
+        }
+      }
+    `),
+    () => ({ documentId: selected?.documentId ?? '' }),
+    () => ({ skip: selected === null || !open }),
+  );
+
+  // 첫 회차가 도는 중인 계보에는 이어 볼 회차가 없다 — 목록에 세우지 않는다
+  const lineages = $derived<(LineageOption & { createdAt: string })[]>(
+    (lineagesQuery.data?.documentById.prismReviewLineages ?? []).flatMap((lineage) => {
+      const latest = lineage.latestRound ?? null;
+      return latest === null
+        ? []
+        : [
+            {
+              id: lineage.id,
+              tier: lineage.tier.toLowerCase() as PrismReviewTierName,
+              latestOrdinal: latest.ordinal,
+              locked: lineage.locked,
+              createdAt: latest.createdAt,
+            },
+          ];
+    }),
+  );
+
+  // 계보 목록이 닿기 전에 시작하면 이어서여야 할 리뷰가 새 계보로 나가고 크레딧이 그대로 빠진다
+  const lineagesLoading = $derived(open && selected !== null && lineagesQuery.data === undefined);
+
+  const shownRoundId = $derived(selected === null ? null : readReviewRoundSelection(selected.documentId));
+  const shownLineageId = $derived(
+    shownRoundId === null || shownRoundId === 'none'
+      ? null
+      : (lineagesQuery.data?.documentById.prismReviewRounds.find((round) => round.id === shownRoundId)?.lineage.id ?? null),
+  );
+  const defaultLineage = $derived(pickDefaultLineage(lineages, shownLineageId));
+  const lineageChoice = $derived<string | 'fresh'>(pickedLineage ?? defaultLineage ?? 'fresh');
+
+  // 문서를 바꾸면 계보 목록도 통째로 바뀐다 — 앞 문서에서 고른 계보를 들고 가지 않는다
+  let lineageFor: string | null = null;
+  $effect(() => {
+    const documentId = selected?.documentId ?? null;
+    if (lineageFor === documentId) {
+      return;
+    }
+
+    lineageFor = documentId;
+    pickedLineage = null;
+  });
+
+  // 이어서 보는 리뷰는 계보의 깊이를 따른다
+  const lockedTier = $derived<PrismReviewTierName | null>(
+    lineageChoice === 'fresh' ? null : (lineages.find((lineage) => lineage.id === lineageChoice)?.tier ?? null),
+  );
+  const tier = $derived<PrismReviewTierName | null>(lockedTier ?? pickedTier ?? hint.tier ?? null);
 
   const me = createQuery(
     graphql(`
@@ -175,6 +259,24 @@
         return;
       }
 
+      if (code === 'prism_review_running') {
+        Toast.error('리뷰가 아직 진행 중이에요');
+        busy = false;
+        return;
+      }
+
+      if (code === 'prism_review_no_base') {
+        Toast.error('이어서 볼 리뷰가 없어요');
+        busy = false;
+        return;
+      }
+
+      if (code === 'prism_review_seed_unavailable') {
+        Toast.error('지난 리뷰 재료를 불러오지 못했어요. 잠시 후 다시 시도해 주세요');
+        busy = false;
+        return;
+      }
+
       Toast.error(code === 'prism_manuscript_empty' ? '원고가 비어 있어요' : '잠시 후 다시 시도해 주세요');
       busy = false;
     }
@@ -186,7 +288,12 @@
       return;
     }
 
-    void act({ decision: 'confirmed', versionId: current.versionId, tier: depth.toUpperCase() });
+    void act({
+      decision: 'confirmed',
+      versionId: current.versionId,
+      tier: depth.toUpperCase(),
+      ...(lineageChoice !== 'fresh' && { lineageId: lineageChoice }),
+    });
   };
 
   const cardClass = css({
@@ -213,6 +320,7 @@
     textAlign: 'left',
     transition: '[border-color 150ms ease, background-color 150ms ease]',
     _hover: { backgroundColor: 'surface.muted' },
+    _disabled: { opacity: '50', _hover: { backgroundColor: 'transparent' } },
   });
   const readonlyOptionStyle = css.raw({
     display: 'flex',
@@ -258,7 +366,7 @@
     backgroundColor: 'surface.muted',
     animation: 'pulse 1.6s ease-in-out infinite',
   });
-  const loading = $derived(open && preparing && current === null);
+  const loading = $derived(lineagesLoading || (open && preparing && current === null));
   const startQuote = $derived(tier === null ? null : quoteOf(tier));
   const creditClass = css({
     display: 'inline-flex',
@@ -284,7 +392,8 @@
   const ellipsisClass = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const shrinkTitleClass = css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const spacerClass = css({ flexGrow: '1' });
-  const timeClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const timeStyle = css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const timeClass = css(timeStyle);
 </script>
 
 <div bind:this={cardEl} class={cardClass} aria-busy={loading}>
@@ -348,6 +457,38 @@
     </Menu>
   {/if}
 
+  {#if lineages.length > 0 && !readonly}
+    <div class={labelClass}>지난 리뷰</div>
+    <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: '12px' })}>
+      {#each lineages as lineage (lineage.id)}
+        {@const on = lineageChoice === lineage.id}
+        <button
+          class={css(optionStyle, { borderColor: on ? 'border.strong' : 'border.subtle' })}
+          aria-pressed={on}
+          disabled={lineage.locked}
+          onclick={() => (pickedLineage = lineage.id)}
+          type="button"
+        >
+          <span>{lineageRowLabel(lineage)}</span>
+          <span class={spacerClass}></span>
+          {#if lineage.locked}
+            <span class={timeClass}>진행 중</span>
+          {:else}
+            <TimeAgo style={timeStyle} timestamp={new Date(lineage.createdAt).getTime()} />
+          {/if}
+        </button>
+      {/each}
+      <button
+        class={css(optionStyle, { borderColor: lineageChoice === 'fresh' ? 'border.strong' : 'border.subtle' })}
+        aria-pressed={lineageChoice === 'fresh'}
+        onclick={() => (pickedLineage = 'fresh')}
+        type="button"
+      >
+        <span>새로 시작</span>
+      </button>
+    </div>
+  {/if}
+
   <div class={labelClass}>검토 깊이</div>
   <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: readonly ? '0' : '12px' })}>
     {#each TIER_OPTIONS as opt (opt.tier)}
@@ -366,9 +507,11 @@
         </div>
       {:else}
         {@const quote = quoteOf(opt.tier)}
+        {@const barred = lockedTier !== null && lockedTier !== opt.tier}
         <button
           class={css(optionStyle, { borderColor: on ? 'border.strong' : 'border.subtle' })}
           aria-pressed={on}
+          disabled={barred}
           onclick={() => (pickedTier = opt.tier)}
           type="button"
         >
@@ -398,7 +541,7 @@
       <Button disabled={busy} onclick={() => void act({ decision: 'declined' })} size="sm" variant="ghost">이번엔 안 할래요</Button>
       <Button
         style={css.raw({ minWidth: '96px' })}
-        disabled={busy || selected === null || tier === null || preparing || current === null || insufficient}
+        disabled={busy || selected === null || tier === null || preparing || current === null || lineagesLoading || insufficient}
         onclick={confirm}
         size="sm"
       >

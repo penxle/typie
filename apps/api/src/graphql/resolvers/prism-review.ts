@@ -15,6 +15,7 @@ import {
   first,
   firstOrThrow,
   PrismCreditEntries,
+  PrismReviewLineages,
   PrismReviewRounds,
   PrismReviewThreadComments,
   PrismReviewThreads,
@@ -26,11 +27,33 @@ import { assertDocumentPermission } from '#/utils/permission.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { toDisplayCredits } from '#/utils/prism-credit-core.ts';
 import { prepareReviewSnapshot } from '#/utils/prism-review.ts';
-import { detailOutcome, hasDetail, roundState, summarizeOutcome, threadQuote } from '#/utils/prism-review-core.ts';
-import { clearRoundMemos, ensureRoundThreads, roundThreadComments, roundVersionContent } from '#/utils/prism-review-threads.ts';
+import {
+  detailOutcome,
+  dispositionSummary,
+  hasDetail,
+  lineageLocked,
+  roundState,
+  summarizeOutcome,
+  threadIsNew,
+  threadQuote,
+} from '#/utils/prism-review-core.ts';
+import {
+  clearRoundMemos,
+  ensureRoundThreads,
+  lineageRounds,
+  preloadThreadComments,
+  publishThread,
+  recordView,
+  roundSeats,
+  roundVersionContent,
+  threadComments,
+  viewedRoundOf,
+  viewSeat,
+} from '#/utils/prism-review-threads.ts';
 import { builder } from '../builder.ts';
 import {
   Document,
+  PrismReviewLineage,
   PrismReviewRound,
   PrismReviewThread,
   PrismReviewThreadComment,
@@ -85,6 +108,10 @@ const PrismReviewPriority = builder.simpleObject('PrismReviewPriority', {
   fields: (t) => ({ body: t.string(), issues: t.field({ type: [PrismReviewIssueBrief] }) }),
 });
 
+const PrismReviewDispositionSummary = builder.simpleObject('PrismReviewDispositionSummary', {
+  fields: (t) => ({ carried: t.int(), resolved: t.int(), withdrawn: t.int(), new: t.int() }),
+});
+
 const PrismReviewSnapshot = builder.simpleObject('PrismReviewSnapshot', {
   fields: (t) => ({ versionId: t.id(), characterCount: t.int() }),
 });
@@ -111,27 +138,76 @@ PrismReviewThreadComment.implement({
   }),
 });
 
+// 결과가 없거나 거부된 회차는 계보의 회차로 세지 않는다 — 작가에게 보여 줄 리뷰가 없다
+const completedRounds = (rounds: Awaited<ReturnType<typeof lineageRounds>>) =>
+  rounds.filter(
+    (round) => round.workflowState === 'COMPLETED' && round.result !== null && summarizeOutcome(round.result).rejection === null,
+  );
+
+PrismReviewLineage.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    tier: t.expose('tier', { type: PrismReviewTier }),
+    // 첫 회차가 아직 도는 계보에는 보여 줄 회차가 없다 — PrismReviewRound.lineage로도 닿으므로 null을 낸다
+    latestRound: t.field({
+      type: PrismReviewRound,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const [latest] = completedRounds(await lineageRounds(ctx, self.id));
+        return latest?.id ?? null;
+      },
+    }),
+    roundCount: t.int({ resolve: async (self, _, ctx) => completedRounds(await lineageRounds(ctx, self.id)).length }),
+    locked: t.boolean({ resolve: async (self, _, ctx) => lineageLocked(await lineageRounds(ctx, self.id)) }),
+  }),
+});
+
 PrismReviewThread.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
-    issueIndex: t.exposeInt('issueIndex'),
+    issueIndex: t.int({
+      resolve: async (self, _, ctx) => {
+        const seat = await viewSeat(ctx, self.id);
+        return seat?.issueIndex ?? 0;
+      },
+    }),
     issueId: t.exposeString('issueId', { nullable: true }),
     trait: t.exposeString('trait'),
     pass: t.expose('pass', { type: PrismReviewPass }),
     body: t.exposeString('body', { nullable: true }),
-    anchors: t.field({ type: [PrismReviewAnchor], resolve: (self) => self.anchors }),
+    anchors: t.field({
+      type: [PrismReviewAnchor],
+      resolve: async (self, _, ctx) => {
+        const seat = await viewSeat(ctx, self.id);
+        return seat?.anchors ?? [];
+      },
+    }),
     quote: t.string({
-      // 리뷰 시점 판본에서 자른다 — 카드는 앵커가 살아 있든 자리를 잃었든 이 인용을 보여 준다
-      resolve: async (self, _, ctx) => threadQuote(await roundVersionContent(ctx, self.roundId), self.anchors),
+      // 좌석 회차의 판본에서 자른다 — 카드는 앵커가 살아 있든 자리를 잃었든 이 인용을 보여 준다
+      resolve: async (self, _, ctx) => {
+        const seat = await viewSeat(ctx, self.id);
+        if (seat === null) {
+          return '';
+        }
+
+        return threadQuote(await roundVersionContent(ctx, seat.roundId), seat.anchors);
+      },
     }),
     state: t.expose('state', { type: PrismReviewThreadState }),
     stateChangedAt: t.expose('stateChangedAt', { type: 'DateTime', nullable: true }),
     reaction: t.expose('reaction', { type: PrismReaction, nullable: true }),
-    comments: t.field({
-      type: [PrismReviewThreadComment],
+    comments: t.field({ type: [PrismReviewThreadComment], resolve: (self, _, ctx) => threadComments(ctx, self.id) }),
+    lineage: t.field({ type: PrismReviewLineage, resolve: (self) => self.lineageId }),
+    settledRound: t.field({ type: PrismReviewRound, nullable: true, resolve: (self) => self.settledRoundId }),
+    isNew: t.boolean({
+      // 어느 회차의 눈으로 보는지 기록이 없으면(뮤테이션 반환 등) 표지를 세우지 않는다
       resolve: async (self, _, ctx) => {
-        const byThread = await roundThreadComments(ctx, self.roundId);
-        return byThread.get(self.id) ?? [];
+        const viewRoundId = viewedRoundOf(ctx, self.id);
+        if (viewRoundId === null) {
+          return false;
+        }
+
+        return threadIsNew(self.bornRoundId, viewRoundId, completedRounds(await lineageRounds(ctx, self.lineageId)).length);
       },
     }),
   }),
@@ -157,7 +233,7 @@ PrismReviewRound.implement({
           .from(PrismReviewRounds)
           .where(
             and(
-              eq(PrismReviewRounds.documentId, self.documentId),
+              eq(PrismReviewRounds.lineageId, self.lineageId),
               lt(PrismReviewRounds.round, self.round),
               isNotNull(PrismReviewRounds.result),
               ne(sql`${PrismReviewRounds.result} ->> 'kind'`, 'rejected'),
@@ -210,17 +286,38 @@ PrismReviewRound.implement({
     }),
     reaction: t.expose('reaction', { type: PrismReaction, nullable: true }),
     reactionNote: t.exposeString('reactionNote', { nullable: true }),
-    threads: t.field({
+    lineage: t.field({ type: PrismReviewLineage, resolve: (self) => self.lineageId }),
+    baseRound: t.field({ type: PrismReviewRound, nullable: true, resolve: (self) => self.baseRoundId }),
+    dispositionSummary: t.field({
+      type: PrismReviewDispositionSummary,
+      nullable: true,
+      resolve: (self) => dispositionSummary(self.result),
+    }),
+    // 이 회차가 해소·철회로 사영한 스레드 — 여백은 이걸 "정리됨" 갈래로 세운다
+    settledThreads: t.field({
       type: [PrismReviewThread],
-      resolve: async (self) => {
-        // 배포 전에 끝난 회차는 결과만 있고 행이 없다 — 첫 조회가 메운다
-        await ensureRoundThreads(self.id);
+      resolve: async (self, _, ctx) => {
         const threads = await db
           .select({ id: PrismReviewThreads.id })
           .from(PrismReviewThreads)
-          .where(eq(PrismReviewThreads.roundId, self.id))
-          .orderBy(asc(PrismReviewThreads.issueIndex));
-        return threads.map((thread) => thread.id);
+          .where(eq(PrismReviewThreads.settledRoundId, self.id))
+          .orderBy(asc(PrismReviewThreads.stateChangedAt));
+
+        const ids = threads.map((thread) => thread.id);
+        await preloadThreadComments(ctx, ids);
+        return ids;
+      },
+    }),
+    threads: t.field({
+      type: [PrismReviewThread],
+      resolve: async (self, _, ctx) => {
+        // 배포 전에 끝난 회차는 결과만 있고 행이 없다 — 첫 조회가 메운다
+        await ensureRoundThreads(self.id);
+        const seats = await roundSeats(ctx, self.id);
+        const ids = [...seats.entries()].toSorted((a, b) => a[1].issueIndex - b[1].issueIndex).map(([id]) => id);
+        recordView(ctx, self.id, ids);
+        await preloadThreadComments(ctx, ids);
+        return ids;
       },
     }),
   }),
@@ -267,6 +364,41 @@ builder.objectFields(Document, (t) => ({
 
       // 지적이 있는 완료·비거부 회차만 — 나머지는 여백에 세울 것이 없다
       return rounds.filter((round) => summarizeOutcome(round.result).issueCount > 0).map((round) => round.id);
+    },
+  }),
+
+  prismReviewLineages: t.field({
+    type: [PrismReviewLineage],
+    // 회차와 같은 눈 — 문서를 가진 사람에게만. 최근 회차가 앞에 온다
+    resolve: async (self, _, ctx) => {
+      if (!ctx.session) {
+        return [];
+      }
+
+      try {
+        await assertDocumentPermission({ userId: ctx.session.userId, documentId: self.id });
+      } catch (err) {
+        if (err instanceof TypieError) {
+          return [];
+        }
+
+        throw err;
+      }
+
+      const lineages = await db
+        .select({ id: PrismReviewLineages.id })
+        .from(PrismReviewLineages)
+        .where(eq(PrismReviewLineages.documentId, self.id));
+
+      const ranked: { id: string; latest: number }[] = [];
+      for (const lineage of lineages) {
+        const [latest] = completedRounds(await lineageRounds(ctx, lineage.id));
+        if (latest !== undefined) {
+          ranked.push({ id: lineage.id, latest: latest.round });
+        }
+      }
+
+      return ranked.toSorted((a, b) => b.latest - a.latest).map((lineage) => lineage.id);
     },
   }),
 }));
@@ -319,13 +451,14 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const thread = await ownedThread(input.threadId, ctx.session.userId);
+      await assertLineageUnlocked(ctx, thread.lineageId);
       const body = input.body.trim();
       if (body.length === 0) {
         throw new TypieError({ code: 'invalid_input', status: 400 });
       }
 
       await db.insert(PrismReviewThreadComments).values({ threadId: thread.id, author: 'USER', userId: ctx.session.userId, body });
-      pubsub.publish('prism:review', thread.documentId, { roundId: thread.roundId });
+      await publishThread(thread);
       return thread.id;
     },
   }),
@@ -338,6 +471,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const { comment, thread } = await ownedComment(input.commentId, ctx.session.userId);
+      await assertLineageUnlocked(ctx, thread.lineageId);
       if (comment.author !== 'USER' || comment.userId !== ctx.session.userId) {
         throw new TypieError({ code: 'permission_denied', status: 403 });
       }
@@ -348,7 +482,7 @@ builder.mutationFields((t) => ({
       }
 
       await db.update(PrismReviewThreadComments).set({ body }).where(eq(PrismReviewThreadComments.id, comment.id));
-      pubsub.publish('prism:review', thread.documentId, { roundId: thread.roundId });
+      await publishThread(thread);
       return thread.id;
     },
   }),
@@ -358,12 +492,13 @@ builder.mutationFields((t) => ({
     input: { commentId: t.input.id({ validate: validateDbId(TableCode.PRISM_REVIEW_THREAD_COMMENTS) }) },
     resolve: async (_, { input }, ctx) => {
       const { comment, thread } = await ownedComment(input.commentId, ctx.session.userId);
+      await assertLineageUnlocked(ctx, thread.lineageId);
       if (comment.author !== 'USER' || comment.userId !== ctx.session.userId) {
         throw new TypieError({ code: 'permission_denied', status: 403 });
       }
 
       await db.delete(PrismReviewThreadComments).where(eq(PrismReviewThreadComments.id, comment.id));
-      pubsub.publish('prism:review', thread.documentId, { roundId: thread.roundId });
+      await publishThread(thread);
       return thread.id;
     },
   }),
@@ -371,13 +506,13 @@ builder.mutationFields((t) => ({
   closePrismReviewThread: t.withAuth({ session: true }).fieldWithInput({
     type: PrismReviewThread,
     input: { threadId: t.input.id({ validate: validateDbId(TableCode.PRISM_REVIEW_THREADS) }) },
-    resolve: async (_, { input }, ctx) => setThreadState(input.threadId, ctx.session.userId, 'OPEN', 'CLOSED'),
+    resolve: async (_, { input }, ctx) => setThreadState(ctx, input.threadId, ctx.session.userId, 'OPEN', 'CLOSED'),
   }),
 
   reopenPrismReviewThread: t.withAuth({ session: true }).fieldWithInput({
     type: PrismReviewThread,
     input: { threadId: t.input.id({ validate: validateDbId(TableCode.PRISM_REVIEW_THREADS) }) },
-    resolve: async (_, { input }, ctx) => setThreadState(input.threadId, ctx.session.userId, 'CLOSED', 'OPEN'),
+    resolve: async (_, { input }, ctx) => setThreadState(ctx, input.threadId, ctx.session.userId, 'CLOSED', 'OPEN'),
   }),
 
   reactPrismReviewThread: t.withAuth({ session: true }).fieldWithInput({
@@ -392,11 +527,18 @@ builder.mutationFields((t) => ({
         .update(PrismReviewThreads)
         .set({ reaction: input.value ?? null })
         .where(eq(PrismReviewThreads.id, thread.id));
-      pubsub.publish('prism:review', thread.documentId, { roundId: thread.roundId });
+      await publishThread(thread);
       return thread.id;
     },
   }),
 }));
+
+// 리뷰가 도는 동안 계보의 스레드는 읽기 전용이다 — 사영이 덮어쓸 상태를 작가가 함께 건드리지 못하게
+const assertLineageUnlocked = async (scope: object, lineageId: string): Promise<void> => {
+  if (lineageLocked(await lineageRounds(scope, lineageId))) {
+    throw new TypieError({ code: 'prism_review_running', status: 409 });
+  }
+};
 
 const ownedThread = async (threadId: string, userId: string) => {
   const thread = await db.select().from(PrismReviewThreads).where(eq(PrismReviewThreads.id, threadId)).then(first);
@@ -418,14 +560,21 @@ const ownedComment = async (commentId: string, userId: string) => {
   return { comment, thread };
 };
 
-const setThreadState = async (threadId: string, userId: string, from: 'OPEN' | 'CLOSED', to: 'OPEN' | 'CLOSED'): Promise<string> => {
+const setThreadState = async (
+  scope: object,
+  threadId: string,
+  userId: string,
+  from: 'OPEN' | 'CLOSED',
+  to: 'OPEN' | 'CLOSED',
+): Promise<string> => {
   const thread = await ownedThread(threadId, userId);
+  await assertLineageUnlocked(scope, thread.lineageId);
   if (thread.state !== from) {
     throw new TypieError({ code: 'invalid_state', status: 409 });
   }
 
   await db.update(PrismReviewThreads).set({ state: to, stateChangedAt: dayjs() }).where(eq(PrismReviewThreads.id, thread.id));
-  pubsub.publish('prism:review', thread.documentId, { roundId: thread.roundId });
+  await publishThread(thread);
   return thread.id;
 };
 

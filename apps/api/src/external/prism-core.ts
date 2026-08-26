@@ -1,6 +1,6 @@
 import { AgentStateSchema, WorkflowStateSchema } from '@typie/prism';
 import { z } from 'zod';
-import type { AgentState, RunSummary, WorkflowState } from '@typie/prism';
+import type { AgentState, PrismReviewTierName, ReviewSeedMapping, RunSummary, WorkflowState } from '@typie/prism';
 
 export class PrismApiError extends Error {
   readonly code: string;
@@ -57,6 +57,16 @@ const CatalogSchema = z.object({
     z.string(),
     z.object({ commands: z.record(z.string(), z.object({ description: z.string(), argumentHint: z.string().nullable() })).optional() }),
   ),
+});
+
+const FileSchema = z.object({ content: z.string().nullable() });
+const SeedSchema = z.object({ from: z.string(), to: z.string() });
+const ReviewCatalogSchema = z.object({
+  workflows: z.object({
+    high: z.object({ seeds: z.array(SeedSchema) }),
+    medium: z.object({ seeds: z.array(SeedSchema) }),
+    low: z.object({ seeds: z.array(SeedSchema) }),
+  }),
 });
 
 export const createPrismClient = (http: PrismHttp) => {
@@ -116,6 +126,16 @@ export const createPrismClient = (http: PrismHttp) => {
     },
     async cancelWorkflow(workflowId: string): Promise<void> {
       await expectOk(await http.request(`${workflowPath(workflowId)}/cancel`, { method: 'POST' }));
+    },
+    async getWorkflowFile(workflowId: string, path: string): Promise<string | null> {
+      const encoded = path.split('/').map(encodeURIComponent).join('/');
+      const res = await expectOk(await http.request(`${workflowPath(workflowId)}/files/${encoded}`));
+      const file = await jsonOf(res, FileSchema);
+      return file.content;
+    },
+    async getReviewSeeds(): Promise<Record<PrismReviewTierName, ReviewSeedMapping[]>> {
+      const catalog = await jsonOf(await expectOk(await http.request('/apps/feedback/catalog')), ReviewCatalogSchema);
+      return { high: catalog.workflows.high.seeds, medium: catalog.workflows.medium.seeds, low: catalog.workflows.low.seeds };
     },
     async getCatalog(): Promise<{ commands: PrismCommand[] | null }> {
       const catalog = await jsonOf(await expectOk(await http.request(`/apps/${PRISM_CONVERSATION.app}/catalog`)), CatalogSchema);

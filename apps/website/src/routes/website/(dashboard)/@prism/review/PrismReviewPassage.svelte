@@ -47,6 +47,10 @@
             reaction
             reactionNote
 
+            lineage {
+              id
+            }
+
             workflow {
               id
               prismWorkflowId
@@ -72,6 +76,13 @@
               patternsCount
               prioritiesCount
               strengthsCount
+            }
+
+            dispositionSummary {
+              carried
+              resolved
+              withdrawn
+              new
             }
           }
         }
@@ -100,6 +111,26 @@
       : message.status,
   );
   const mode = $derived(recheckMode(round, rounds !== null, status));
+
+  // 회차가 서고 끝날 때마다 그 계보의 잠금이 뒤집힌다 — 여백은 실패·취소를 알림으로 받지 못해 여기서 알린다
+  let lockedSignal: string | null = null;
+  $effect(() => {
+    const observed = round;
+    if (observed === null) {
+      return;
+    }
+
+    const signal = `${observed.id}:${observed.state}`;
+    if (lockedSignal === signal) {
+      return;
+    }
+
+    lockedSignal = signal;
+    cache.invalidate(
+      { __typename: 'Document', id: observed.document.id, $field: 'prismReviewLineages' },
+      { __typename: 'PrismReviewLineage', id: observed.lineage.id, $field: 'locked' },
+    );
+  });
 
   let attempts = $state(0);
   let exhausted = $state(false);

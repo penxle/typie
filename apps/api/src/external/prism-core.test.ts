@@ -189,3 +189,32 @@ test('getCatalog는 chat agent의 commands를 배열로 펴고, commands 키가 
     (err: unknown) => err instanceof PrismApiError && err.code === 'malformed-response',
   );
 });
+
+test('getWorkflowFile: {content}를 돌려주고 null은 부재다', async () => {
+  const http = fakeHttp((path) => ({ status: 200, json: { content: path.endsWith('rubric.yaml') ? 'r' : null } }));
+  const client = createPrismClient(http);
+  assert.equal(await client.getWorkflowFile('wf_1', 'artifacts/rubric.yaml'), 'r');
+  assert.equal(await client.getWorkflowFile('wf_1', 'artifacts/none.yaml'), null);
+  assert.equal(http.calls[0]?.path, '/workflows/wf_1/files/artifacts/rubric.yaml');
+});
+
+test('getReviewSeeds: feedback 카탈로그의 티어별 seeds', async () => {
+  const http = fakeHttp(() => ({
+    status: 200,
+    json: {
+      agents: {},
+      workflows: {
+        high: { agents: [], seeds: [{ from: 'artifacts/continuity.yaml', to: 'previous/continuity.yaml' }] },
+        medium: { agents: [], seeds: [] },
+        low: { agents: [], seeds: [] },
+      },
+    },
+  }));
+  const client = createPrismClient(http);
+  assert.deepEqual(await client.getReviewSeeds(), {
+    high: [{ from: 'artifacts/continuity.yaml', to: 'previous/continuity.yaml' }],
+    medium: [],
+    low: [],
+  });
+  assert.equal(http.calls[0]?.path, '/apps/feedback/catalog');
+});

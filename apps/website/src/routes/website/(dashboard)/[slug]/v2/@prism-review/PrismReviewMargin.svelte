@@ -1,13 +1,15 @@
 <script lang="ts">
   import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { reanchorAll } from '@typie/prism';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { onDestroy, untrack } from 'svelte';
   import { Tween } from 'svelte/motion';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { cache } from '$lib/graphql';
+  import { cache, unwrapError } from '$lib/graphql';
   import { takeMarginJump } from '$lib/prism/margin-jump.svelte';
+  import { readReviewRoundSelection, writeReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
   import { PRISM_VISIBILITY_MOTION, prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
@@ -102,6 +104,11 @@
                 hasDetail
                 sessionId
                 createdAt
+
+                lineage {
+                  id
+                  locked
+                }
               }
             }
           }
@@ -122,21 +129,21 @@
       issueCount: round.issueCount,
       sessionId: round.sessionId ?? null,
       createdAt: round.createdAt,
+      lineageId: round.lineage.id,
     })),
   );
 
-  const storageKey = $derived(documentId === null ? null : `typie:prism-review-round:${documentId}`);
   let selection = $state<string | null>();
   let selectedFor: string | null = null;
 
   // 저장된 값이 없거나 사라진 회차를 가리키면 최신 회차. 'none'은 작가가 명시적으로 끈 상태다.
   // 목록이 도착하기 전에 고르면 언제나 '없음'이 되므로 첫 응답을 기다린다.
   $effect(() => {
-    const key = storageKey;
-    if (key === null || selectedFor === key || roundsQuery.data === undefined) return;
-    const saved = localStorage.getItem(key);
+    const id = documentId;
+    if (id === null || selectedFor === id || roundsQuery.data === undefined) return;
+    const saved = readReviewRoundSelection(id);
     const known = untrack(() => rounds);
-    selectedFor = key;
+    selectedFor = id;
     selection = saved === 'none' ? null : (known.find((round) => round.id === saved)?.id ?? known[0]?.id ?? null);
   });
 
@@ -198,8 +205,7 @@
 
   const select = (roundId: string | null) => {
     selection = roundId;
-    const key = storageKey;
-    if (key !== null) localStorage.setItem(key, roundId ?? 'none');
+    if (documentId !== null) writeReviewRoundSelection(documentId, roundId);
   };
 
   // 총평이 없는 회차(hasDetail=false)는 열 문이 없어야 한다 — 세션 카드의 게이트와 같은 기준이다
@@ -232,6 +238,7 @@
             quote
             state
             reaction
+            isNew
             anchors {
               start
               end
@@ -254,6 +261,42 @@
                 }
               }
             }
+          }
+          settledThreads {
+            id
+            issueIndex
+            trait
+            body
+            quote
+            state
+            reaction
+            isNew
+            anchors {
+              start
+              end
+              head
+              tail
+            }
+            comments {
+              id
+              author
+              body
+              createdAt
+
+              user {
+                id
+                name
+
+                avatar {
+                  id
+                  ...Img_image
+                }
+              }
+            }
+          }
+          lineage {
+            id
+            locked
           }
           detail {
             strengths {
@@ -309,7 +352,9 @@
         // 스레드 뮤테이션마다도 같은 채널로 발행된다 — 내 편집까지 전량 재조회하지 않도록 무효화로 받는다
         cache.invalidate(
           { __typename: 'Document', id: current, $field: 'prismReviewRounds' },
+          { __typename: 'Document', id: current, $field: 'prismReviewLineages' },
           { __typename: 'PrismReviewRound', id: arrived, $field: 'threads' },
+          { __typename: 'PrismReviewRound', id: arrived, $field: 'settledThreads' },
           { __typename: 'PrismReviewRound', id: arrived, $field: 'detail' },
         );
         // 목록을 모르는 동안에는 무엇이 새 회차인지 가릴 수 없다 — 가리기 전에 고르면 옛 회차가 저장된다
@@ -325,6 +370,9 @@
     const detail = detailQuery.data?.prismReviewRound;
     return detail !== undefined && detail.id === presentedRoundId ? detail : null;
   });
+
+  // 그 계보의 다음 리뷰가 도는 동안에는 답글·닫기가 사영의 입력을 바꾼다 — 회차 경계 밖에서 잠근다
+  const locked = $derived(round?.lineage.locked ?? false);
 
   // 응답 객체의 신원이 아니라 실제 카드 자리 재계산에 쓰는 값만 본다. 댓글·상태 갱신이나
   // 같은 네트워크 응답이 다시 와도 재앵커링과 WASM 좌표 변환을 반복하지 않는다.
@@ -531,11 +579,25 @@
   };
 
   // 닫는다고 목록에서 빠지지 않는다 — 이번 회차의 피드백은 닫혀도 회색으로 제자리에 남는다.
-  // 다른 갈래로 옮겨 가는 것은 재리뷰 사영(회차 경계)에서만 일어나며, 그 축(bornRound)은 다음 스코프다.
+  // 다른 갈래로 옮겨 가는 것은 재리뷰 사영(회차 경계)에서만 일어난다.
   const issues = $derived(items.filter((item) => item.kind === 'issue'));
   const lostCards = $derived(issues.filter((item) => !item.anchored));
   const openCards = $derived(issues.filter((item) => item.anchored));
-  const settledCards = $derived<MarginItem[]>([]);
+
+  // 정리된 스레드는 앵커 없이 컬럼 하단에 흐름으로 선다 — 이 회차의 사영이 해소·철회한 것들이다
+  const settledCards = $derived<MarginItem[]>(
+    (round?.settledThreads ?? []).map((thread) => ({
+      id: thread.id,
+      kind: 'issue',
+      number: thread.issueIndex + 1,
+      rangeIds: [],
+      callouts: { pattern: null, priority: null },
+      strengthIndex: null,
+      anchored: false,
+      thread,
+      strength: null,
+    })),
+  );
 
   let segment = $state<MarginSegment>('open');
   const setSegment = (next: MarginSegment) => {
@@ -737,7 +799,10 @@
     try {
       await run();
     } catch (err) {
-      Toast.error(message);
+      // 잠금은 서버가 지킨다 — 여백이 잠금을 늦게 알아도 막힌 이유는 말해 준다
+      const error = unwrapError(err);
+      const code = error instanceof TypieError ? error.code : null;
+      Toast.error(code === 'prism_review_running' ? '리뷰가 진행 중이에요' : message);
       throw err;
     }
   };
@@ -787,6 +852,9 @@
     },
     get myId() {
       return myId;
+    },
+    get locked() {
+      return locked;
     },
     select,
     activate,

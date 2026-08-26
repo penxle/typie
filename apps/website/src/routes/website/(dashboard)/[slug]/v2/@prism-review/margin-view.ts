@@ -40,6 +40,24 @@ export type RoundOption = {
   issueCount: number;
   sessionId: string | null;
   createdAt: string;
+  lineageId: string;
+};
+
+export type LineageGroup = { lineageId: string; tierLabel: string; startedAt: string; rounds: RoundOption[] };
+
+// 입력은 최신순(round desc). 그룹은 첫 등장 순서 = 최신 회차를 가진 계보 우선
+export const groupRoundsByLineage = (rounds: readonly RoundOption[]): LineageGroup[] => {
+  const groups: LineageGroup[] = [];
+  for (const round of rounds) {
+    const group = groups.find((g) => g.lineageId === round.lineageId);
+    if (group) {
+      group.rounds.push(round);
+      if (round.createdAt < group.startedAt) group.startedAt = round.createdAt;
+    } else {
+      groups.push({ lineageId: round.lineageId, tierLabel: round.tierLabel, startedAt: round.createdAt, rounds: [round] });
+    }
+  }
+  return groups;
 };
 
 type IssueBrief = { index: number; trait: string };

@@ -335,6 +335,7 @@ type Document implements IDocument {
   locked: Boolean!
   nullableTitle: String
   password: String
+  prismReviewLineages: [PrismReviewLineage!]!
   prismReviewRounds: [PrismReviewRound!]!
   protectContent: Boolean!
   reactionCount: Int!
@@ -1303,6 +1304,13 @@ type PrismReviewDetail {
   verdicts: [PrismReviewVerdict!]!
 }
 
+type PrismReviewDispositionSummary {
+  carried: Int!
+  new: Int!
+  resolved: Int!
+  withdrawn: Int!
+}
+
 type PrismReviewElevation {
   body: String!
   quote: String
@@ -1312,6 +1320,14 @@ type PrismReviewElevation {
 type PrismReviewIssueBrief {
   index: Int!
   trait: String!
+}
+
+type PrismReviewLineage {
+  id: ID!
+  latestRound: PrismReviewRound
+  locked: Boolean!
+  roundCount: Int!
+  tier: PrismReviewTier!
 }
 
 enum PrismReviewPass {
@@ -1335,21 +1351,25 @@ type PrismReviewRejection {
 }
 
 type PrismReviewRound {
+  baseRound: PrismReviewRound
   conclusion: PrismReviewConclusionSummary
   createdAt: DateTime!
   credits: Int
   detail: PrismReviewDetail
+  dispositionSummary: PrismReviewDispositionSummary
   document: Document!
   documentId: ID!
   hasDetail: Boolean!
   id: ID!
   issueCount: Int!
+  lineage: PrismReviewLineage!
   ordinal: Int!
   reaction: PrismReaction
   reactionNote: String
   rejection: PrismReviewRejection
   round: Int!
   sessionId: ID
+  settledThreads: [PrismReviewThread!]!
   state: PrismReviewRoundState!
   threads: [PrismReviewThread!]!
   tier: PrismReviewTier!
@@ -1380,11 +1400,14 @@ type PrismReviewThread {
   body: String
   comments: [PrismReviewThreadComment!]!
   id: ID!
+  isNew: Boolean!
   issueId: String
   issueIndex: Int!
+  lineage: PrismReviewLineage!
   pass: PrismReviewPass!
   quote: String!
   reaction: PrismReaction
+  settledRound: PrismReviewRound
   state: PrismReviewThreadState!
   stateChangedAt: DateTime
   trait: String!

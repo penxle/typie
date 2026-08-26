@@ -11,6 +11,7 @@ const makeRound = (over: Partial<ReviewRound> = {}): ReviewRound => ({
   hasDetail: false,
   reaction: null,
   reactionNote: null,
+  lineage: { id: 'lineage-1' },
   workflow: { id: 'row-1', prismWorkflowId: 'prism-1' },
   document: { id: 'document-1', title: '제목', entity: { id: 'entity-1', slug: 'slug-1' } },
   rejection: null,
