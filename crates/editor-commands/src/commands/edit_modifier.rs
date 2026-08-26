@@ -577,6 +577,88 @@ mod tests {
     }
 
     #[test]
+    fn mixed_range_remove_background_clears_every_present_run() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {
+                text("plain")
+                text("red") [background_color("red".to_string()), italic]
+                text("blue") [background_color("blue".to_string())]
+                text("tail")
+            } } }
+            selection: (p, 0) -> (p, 12)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::BackgroundColor,
+            None,
+        ));
+        let (expected, ..) = state! {
+            doc { root { p: paragraph {
+                text("plain")
+                text("red") [italic]
+                text("bluetail")
+            } } }
+            selection: (p, 0) -> (p, 12)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn fragmented_background_remove_emits_one_span_op() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {
+                text("ab") [background_color("red".to_string())]
+                text("cd") [background_color("red".to_string()), italic]
+                text("ef") [background_color("red".to_string()), underline]
+            } } }
+            selection: (p, 0) -> (p, 6)
+        };
+        let mut tr = Transaction::new(&initial);
+        assert!(edit_modifier(&mut tr, ModifierType::BackgroundColor, None).unwrap());
+        let (actual, _steps, recorded, ..) = tr.commit();
+        let span_ops = recorded
+            .iter()
+            .filter(|r| matches!(r.op.payload, editor_model::EditOp::Span(_)))
+            .count();
+        assert_eq!(
+            span_ops, 1,
+            "unrelated modifier boundaries must not multiply background removal ops"
+        );
+        let (expected, ..) = state! {
+            doc { root { p: paragraph {
+                text("ab")
+                text("cd") [italic]
+                text("ef") [underline]
+            } } }
+            selection: (p, 0) -> (p, 6)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn mixed_range_remove_link_clears_every_present_run() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {
+                text("plain")
+                text("A") [link(href: "https://a.com".to_string())]
+                text("B") [link(href: "https://b.com".to_string())]
+                text("tail")
+            } } }
+            selection: (p, 0) -> (p, 7)
+        };
+        let (actual, ..) = transact!(initial, |tr| edit_modifier(
+            &mut tr,
+            ModifierType::Link,
+            None,
+        ));
+        let (expected, ..) = state! {
+            doc { root { p: paragraph { text("plainABtail") } } }
+            selection: (p, 0) -> (p, 7)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
     fn range_background_none_at_paragraph_end_clears_carry_background() {
         let (initial, p1) = state! {
             doc { root { p1: paragraph carry([background_color("red".to_string())]) {
