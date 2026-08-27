@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { createContext } from 'svelte';
+  import { createStableContext } from '@typie/ui/context/stable';
 
   class ViewportOverlayContext {
     #frame: number | null = null;
@@ -20,7 +20,8 @@
     }
   }
 
-  const [getViewportOverlayContext, setViewportOverlayContext] = createContext<ViewportOverlayContext>();
+  const [getViewportOverlayContext, setViewportOverlayContext] =
+    createStableContext<ViewportOverlayContext>('editor-ffi.ViewportOverlayContext');
 
   export { getViewportOverlayContext };
 </script>
