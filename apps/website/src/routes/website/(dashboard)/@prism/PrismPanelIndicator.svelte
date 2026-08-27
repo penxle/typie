@@ -10,7 +10,7 @@
   import type { ThemeVariant } from '@typie/ui/context';
   import type { PrismIndicatorPath, PrismIndicatorPoint } from './lib/prism-indicator-path.ts';
 
-  export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'inactive' | 'submitting' | 'welcome';
+  export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome';
   export type PrismSpinnerOwner = 'panel' | 'row';
 
   const PRISM_TO_SPINNER_DURATION_MS = 2200;
@@ -123,15 +123,6 @@
       targetDurationMs = undefined;
       target = 'prism';
     });
-  };
-
-  const holdWelcomeIcon = () => {
-    if (welcomeFrame !== 0) {
-      cancelAnimationFrame(welcomeFrame);
-      welcomeFrame = 0;
-    }
-    targetDurationMs = undefined;
-    target = 'icon';
   };
 
   const observeStablePaints = () => {
@@ -386,7 +377,7 @@
     if (reducedMotion) return;
     if (document.readyState === 'complete') observeLoadedBrowser();
     else window.addEventListener('load', observeLoadedBrowser, { once: true });
-    if (phase === 'welcome' || phase === 'inactive') {
+    if (phase === 'welcome') {
       dwellTimer = setTimeout(() => {
         dwellTimer = undefined;
         dwellElapsed = true;
@@ -423,7 +414,6 @@
       else if (nextPhase === 'failed') fail();
       else if (nextPhase === 'answered') answer();
       else if (nextPhase === 'hidden') hide();
-      else if (nextPhase === 'inactive') holdWelcomeIcon();
     });
   });
 </script>

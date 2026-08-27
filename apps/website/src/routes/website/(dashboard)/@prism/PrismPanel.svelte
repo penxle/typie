@@ -36,8 +36,8 @@
   import { fetchTranscript, toFrame } from './prism-data';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
   import { createPrismSessionState } from './prism-session.svelte';
-  import PrismAccessPrompt from './PrismAccessPrompt.svelte';
   import PrismComposer from './PrismComposer.svelte';
+  import PrismGateCard from './PrismGateCard.svelte';
   import PrismPanelIndicator from './PrismPanelIndicator.svelte';
   import PrismPushCard from './PrismPushCard.svelte';
   import PrismSessionList from './PrismSessionList.svelte';
@@ -108,7 +108,6 @@
     if (user.data.prismCredit.balance <= 0) return 'prism_credit_insufficient';
     return null;
   });
-  const prismAvailable = $derived(accessReason === null);
   const accessUnavailableMessage = $derived(accessReason === null ? undefined : prismAccessUnavailableMessage(accessReason));
 
   $effect(() => {
@@ -317,7 +316,7 @@
   });
 
   $effect(() => {
-    if (!prismAvailable) {
+    if (accessReason !== null) {
       untrack(() => autoResolver.reset());
       return;
     }
@@ -360,10 +359,10 @@
     backgroundColor: 'surface.muted',
     transition: '[background-color 150ms ease]',
     _hover: { backgroundColor: 'interactive.hover' },
+    _disabled: { opacity: '60', pointerEvents: 'none' },
   });
   let listOpen = $state(false);
   const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
-  const accessPromptInWelcome = $derived(!prismAvailable && selected.current === null && !chat.loading && emptySession && !listOpen);
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
   let currentTitleButton = $state<HTMLButtonElement>();
   let currentTitleClientWidth = $state(0);
@@ -391,7 +390,7 @@
     if (nextDraft !== undefined) draft = nextDraft;
     app.preference.current.prismPanelOpen = true;
     await tick();
-    if (prismAvailable) composer?.focus();
+    if (accessReason === null) composer?.focus();
   };
 
   let seenTitle: string | null = null;
@@ -561,7 +560,7 @@
   const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
-  const welcomeAdmission = $derived(prismAvailable && panelInteractive && !listOpen && page.state.shallowRoute == null);
+  const welcomeAdmission = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
   let panelEl = $state<HTMLElement>();
   let prevPanelOpen: boolean | null = null;
@@ -579,7 +578,7 @@
       });
     }
 
-    if (transition && interactive && prismAvailable) composer?.focus();
+    if (transition && interactive && accessReason === null) composer?.focus();
   });
 
   const markSeen = (sessionId: string) => {
@@ -762,6 +761,7 @@
   };
 
   const onChipInsert = (text: string) => {
+    if (accessReason !== null) return;
     draft = text;
     composer?.focus();
   };
@@ -1060,15 +1060,11 @@
               <PrismPanelIndicator
                 destination={indicatorDestination}
                 onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
-                phase={accessPromptInWelcome ? 'inactive' : indicatorPhase}
+                phase={indicatorPhase}
                 themeVariant={theme.currentThemeVariant}
                 {welcomeAdmission}
               />
             {/key}
-          {/if}
-
-          {#if accessPromptInWelcome && accessReason !== null}
-            <PrismAccessPrompt placement="welcome" reason={accessReason} />
           {/if}
 
           {#key chat.generation}
@@ -1120,7 +1116,7 @@
             </div>
           {/if}
 
-          {#if prismAvailable && !chat.loading && emptySession}
+          {#if !chat.loading && emptySession}
             <div
               class={css(
                 { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
@@ -1132,10 +1128,21 @@
               <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
               <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
                 {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
-                  <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
-                    <Icon icon={chip.icon} size={14} />
-                    {chip.label}
-                  </button>
+                  <span
+                    class={css({ display: 'flex' })}
+                    use:tooltip={{ message: accessUnavailableMessage ?? null, placement: 'bottom', delay: 0, arrow: false }}
+                  >
+                    <button
+                      class={chipClass}
+                      disabled={accessReason !== null}
+                      onclick={() => onChipInsert(chip.insert)}
+                      tabindex={chipsVisible && accessReason === null ? 0 : -1}
+                      type="button"
+                    >
+                      <Icon icon={chip.icon} size={14} />
+                      {chip.label}
+                    </button>
+                  </span>
                 {/each}
               </div>
             </div>
@@ -1144,38 +1151,23 @@
 
         <PrismPushCard visible={app.state.prismBadge} />
 
-        {#if !chat.loading}
-          <div class={css({ position: 'relative' })}>
-            <div
-              style:visibility={prismAvailable ? 'visible' : 'hidden'}
-              class={css({
-                '&[data-enabled=true]': { animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]' },
-                _motionReduce: { animation: 'none' },
-              })}
-              aria-hidden={!prismAvailable}
-              data-enabled={prismAvailable}
-              inert={!prismAvailable}
-            >
-              <PrismComposer
-                bind:this={composer}
-                {blocked}
-                {commands}
-                disabled={!prismAvailable}
-                {onSend}
-                {onStop}
-                policy={{ current: policy, disabled: !prismAvailable, onChange: onPolicyChange }}
-                running={chat.transcript.run === 'running'}
-                status={composerStatus}
-                bind:text={draft}
-              />
-            </div>
+        {#if accessReason !== null}
+          <PrismGateCard reason={accessReason} />
+        {/if}
 
-            {#if !prismAvailable && !accessPromptInWelcome && accessReason !== null}
-              <div class={css({ position: 'absolute', inset: '0', zIndex: '2' })}>
-                <PrismAccessPrompt placement="composer" reason={accessReason} />
-              </div>
-            {/if}
-          </div>
+        {#if !chat.loading}
+          <PrismComposer
+            bind:this={composer}
+            {blocked}
+            {commands}
+            disabled={accessReason !== null}
+            {onSend}
+            {onStop}
+            policy={{ current: policy, disabled: accessReason !== null, onChange: onPolicyChange }}
+            running={chat.transcript.run === 'running'}
+            status={composerStatus}
+            bind:text={draft}
+          />
         {/if}
       </div>
     </aside>
