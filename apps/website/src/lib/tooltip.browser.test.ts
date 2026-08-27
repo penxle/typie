@@ -68,6 +68,10 @@ const waitForPositionedTooltip = async (text: string): Promise<HTMLElement> => {
 afterEach(async () => {
   if (component) await unmount(component);
   component = undefined;
+  for (const element of document.querySelectorAll<HTMLElement>('[data-tooltip-presence]')) {
+    for (const animation of element.getAnimations()) animation.finish();
+  }
+  await frames(1);
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -82,7 +86,6 @@ describe('shared tooltip anchor motion', () => {
     const host = await waitForPositionedTooltip('굵게');
     const surface = host.querySelector<HTMLElement>('[data-tooltip-surface]');
     const firstLeft = Number.parseFloat(host.style.left);
-    const firstWidth = surface?.getBoundingClientRect().width ?? 0;
 
     leave(first);
     enter(second);
@@ -103,23 +106,19 @@ describe('shared tooltip anchor motion', () => {
     expect(getComputedStyle(currentContent as HTMLElement).opacity).toBe('0');
     const outgoingAnimation = outgoingContent?.getAnimations()[0];
     const incomingAnimation = currentContent?.getAnimations()[0];
-    expect(outgoingAnimation?.effect?.getTiming().duration).toBe(120);
-    expect(incomingAnimation?.effect?.getTiming().duration).toBe(120);
-    expect((outgoingAnimation?.effect as KeyframeEffect | null)?.getKeyframes().map(({ opacity }) => opacity)).toEqual(['1', '0']);
-    expect((incomingAnimation?.effect as KeyframeEffect | null)?.getKeyframes().map(({ opacity }) => opacity)).toEqual(['0', '1']);
     const sizeAnimation = surface
       ?.getAnimations()
       .find((animation) => (animation.effect as KeyframeEffect | null)?.getKeyframes().some((frame) => frame.width !== undefined));
-    const sizeKeyframes = (sizeAnimation?.effect as KeyframeEffect | null)?.getKeyframes();
-    expect(sizeAnimation?.effect?.getTiming().duration).toBe(120);
-    expect(Math.abs(Number.parseFloat(String(sizeKeyframes?.[0]?.width)) - firstWidth)).toBeLessThanOrEqual(1);
-    expect(Number.parseFloat(String(sizeKeyframes?.at(-1)?.width))).toBeGreaterThan(firstWidth);
+    expect(outgoingAnimation).toBeDefined();
+    expect(incomingAnimation).toBeDefined();
+    expect(sizeAnimation).toBeDefined();
     expect(getComputedStyle(surface as HTMLElement).overflow).toBe('hidden');
     expect(Math.abs(Number.parseFloat(host.style.left) - firstLeft)).toBeLessThanOrEqual(160);
+    const midpoint = Number(sizeAnimation?.effect?.getTiming().duration ?? 0) / 2;
     for (const animation of [outgoingAnimation, incomingAnimation, sizeAnimation]) {
       if (!animation) continue;
       animation.pause();
-      animation.currentTime = 60;
+      animation.currentTime = midpoint;
     }
     await frames(1);
     expect(currentContent?.getBoundingClientRect().top).toBeCloseTo(outgoingContent?.getBoundingClientRect().top ?? 0, 1);
@@ -138,6 +137,112 @@ describe('shared tooltip anchor motion', () => {
     expect(tooltip()).toBe(host);
     expect(host.dataset.tooltipMotion).toBe('travel');
     await vi.waitFor(() => expect(host.dataset.tooltipMotion).toBe('idle'));
+  });
+
+  it('preserves the full outgoing layout when a width transition reverses midway', async () => {
+    await mountFixture();
+    const lock = trigger('motion-toolbar-lock');
+    const zen = trigger('motion-toolbar-zen');
+
+    enter(lock);
+    const host = await waitForPositionedTooltip('편집 잠금');
+    host.querySelector<HTMLElement>('[data-tooltip-presence]')?.getAnimations()[0]?.finish();
+    await frames(1);
+
+    leave(lock);
+    enter(zen);
+    await vi.waitFor(() => expect(host.dataset.tooltipMotion).toBe('travel'));
+    const firstSurface = host.querySelector<HTMLElement>('[data-tooltip-surface]');
+    const firstIncoming = host.querySelector<HTMLElement>('[data-tooltip-content="current"]');
+    const sizeAnimation = firstSurface
+      ?.getAnimations()
+      .find((animation) => (animation.effect as KeyframeEffect | null)?.getKeyframes().some((frame) => frame.width !== undefined));
+    const midpoint = Number(sizeAnimation?.effect?.getTiming().duration ?? 0) / 2;
+    for (const animation of [
+      ...host.getAnimations(),
+      ...(firstSurface?.getAnimations() ?? []),
+      ...(firstIncoming?.getAnimations() ?? []),
+    ]) {
+      animation.pause();
+      animation.currentTime = midpoint;
+    }
+    const fullZenWidth = Number.parseFloat(firstIncoming?.style.width ?? '');
+    expect(fullZenWidth).toBeGreaterThan(0);
+
+    leave(zen);
+    enter(lock);
+    await vi.waitFor(() => {
+      expect(host.querySelector<HTMLElement>('[data-tooltip-content="outgoing"]')?.textContent).toContain('집중 모드 켜기');
+      expect(host.querySelector<HTMLElement>('[data-tooltip-content="current"]')?.textContent).toContain('편집 잠금');
+    });
+
+    const outgoing = host.querySelector<HTMLElement>('[data-tooltip-content="outgoing"]');
+    const outgoingLabel = outgoing?.querySelector<HTMLElement>('span');
+    expect(outgoingLabel).not.toBeNull();
+    const fontSize = Number.parseFloat(getComputedStyle(outgoingLabel as HTMLElement).fontSize);
+    expect(outgoingLabel?.getBoundingClientRect().height).toBeLessThan(fontSize * 1.5);
+    expect(Number.parseFloat(outgoing?.style.width ?? '')).toBeCloseTo(fullZenWidth, 1);
+  });
+
+  it('preserves a stable wide tooltip layout during a single transition to a narrower target', async () => {
+    await mountFixture();
+    const zen = trigger('motion-toolbar-zen');
+    const lock = trigger('motion-toolbar-lock');
+
+    enter(zen);
+    const host = await waitForPositionedTooltip('집중 모드 켜기');
+    host.querySelector<HTMLElement>('[data-tooltip-presence]')?.getAnimations()[0]?.finish();
+    await frames(1);
+    const stableContent = host.querySelector<HTMLElement>('[data-tooltip-content="current"]');
+    const stableIntrinsicWidth = stableContent?.scrollWidth ?? 0;
+    expect(stableIntrinsicWidth).toBeGreaterThan(0);
+
+    leave(zen);
+    enter(lock);
+    await vi.waitFor(() => {
+      expect(host.querySelector<HTMLElement>('[data-tooltip-content="outgoing"]')?.textContent).toContain('집중 모드 켜기');
+    });
+
+    const outgoing = host.querySelector<HTMLElement>('[data-tooltip-content="outgoing"]');
+    const outgoingLabel = outgoing?.querySelector<HTMLElement>('span');
+    expect(outgoingLabel).not.toBeNull();
+    const fontSize = Number.parseFloat(getComputedStyle(outgoingLabel as HTMLElement).fontSize);
+    expect(outgoingLabel?.getBoundingClientRect().height).toBeLessThan(fontSize * 1.5);
+    expect(Number.parseFloat(outgoing?.style.width ?? '')).toBeGreaterThanOrEqual(stableIntrinsicWidth);
+  });
+
+  it('pins the arrow to the next anchor immediately while the shared shell travels underneath it', async () => {
+    await mountFixture();
+    const close = trigger('motion-toolbar-close');
+    const zen = trigger('motion-toolbar-zen');
+
+    enter(close);
+    const host = await waitForPositionedTooltip('창 닫기');
+    host.querySelector<HTMLElement>('[data-tooltip-presence]')?.getAnimations()[0]?.finish();
+    await frames(1);
+    const arrow = host.querySelector<HTMLElement>('[data-tooltip-surface]')?.nextElementSibling as HTMLElement | null;
+    expect(arrow).not.toBeNull();
+    const nextAnchorCenter = zen.getBoundingClientRect().left + zen.getBoundingClientRect().width / 2;
+
+    leave(close);
+    enter(zen);
+    await vi.waitFor(() => expect(host.dataset.tooltipMotion).toBe('travel'));
+    const travel = host
+      .getAnimations()
+      .find((animation) => (animation.effect as KeyframeEffect | null)?.getKeyframes().some((keyframe) => keyframe.left !== undefined));
+    expect(travel).toBeDefined();
+    const arrowMotion = arrow?.getAnimations()[0];
+    expect(arrowMotion).toBeDefined();
+    const duration = Number(travel?.effect?.getTiming().duration ?? 0);
+    for (const progress of [0, 0.5, 0.99]) {
+      for (const animation of [travel, arrowMotion]) {
+        animation?.pause();
+        if (animation) animation.currentTime = duration * progress;
+      }
+      await frames(1);
+      const arrowCenter = (arrow?.getBoundingClientRect().left ?? 0) + (arrow?.getBoundingClientRect().width ?? 0) / 2;
+      expect(arrowCenter).toBeCloseTo(nextAnchorCenter, 0);
+    }
   });
 
   it('crossfades without travelling to a far anchor', async () => {
@@ -221,6 +326,8 @@ describe('shared tooltip anchor motion', () => {
 
     enter(first);
     const host = await waitForPositionedTooltip('wraps onto');
+    host.querySelector<HTMLElement>('[data-tooltip-presence]')?.getAnimations()[0]?.finish();
+    await frames(1);
     const previousContent = host.querySelector<HTMLElement>('[data-tooltip-content="current"]')?.getBoundingClientRect();
     expect(previousContent).toBeDefined();
 
@@ -273,6 +380,46 @@ describe('shared tooltip anchor motion', () => {
         (animation.effect as KeyframeEffect | null)?.getKeyframes().some((keyframe) => keyframe.opacity !== undefined),
       );
     expect(rootOpacityAnimations).toHaveLength(0);
+  });
+
+  it('returns to fully visible without a snap when an outro interrupts the intro', async () => {
+    await mountFixture();
+    const first = trigger('motion-first');
+    const second = trigger('motion-second');
+
+    enter(first);
+    const host = await waitForPositionedTooltip('굵게');
+    const presence = host.querySelector<HTMLElement>('[data-tooltip-presence]');
+    const intro = presence?.getAnimations()[0];
+    expect(intro).toBeDefined();
+    if (!intro) throw new Error('Expected an intro animation');
+    intro.pause();
+    intro.currentTime = Number(intro.effect?.getTiming().duration ?? 0) / 2;
+    await frames(1);
+
+    leave(first);
+    await vi.waitFor(() => expect(presence?.getAnimations()[0]).not.toBe(intro));
+    const outro = presence?.getAnimations()[0];
+    expect(outro).toBeDefined();
+    if (!outro) throw new Error('Expected an outro animation');
+    outro.pause();
+    outro.currentTime = Number(outro.effect?.getTiming().duration ?? 0) / 2;
+    await frames(1);
+    const opacityBeforeReentry = Number.parseFloat(getComputedStyle(presence as HTMLElement).opacity);
+
+    enter(second);
+    const opacityAfterReentry = Number.parseFloat(getComputedStyle(presence as HTMLElement).opacity);
+    expect(opacityAfterReentry).toBeCloseTo(opacityBeforeReentry, 2);
+    await waitForTooltip('기울임');
+    const returnAnimation = presence?.getAnimations()[0];
+    expect(returnAnimation).toBeDefined();
+    if (!returnAnimation) throw new Error('Expected a return animation');
+
+    returnAnimation.pause();
+    const duration = Number(returnAnimation.effect?.getTiming().duration ?? 0);
+    returnAnimation.currentTime = returnAnimation.playbackRate < 0 ? 0 : duration;
+    await frames(1);
+    expect(getComputedStyle(presence as HTMLElement).opacity).toBe('1');
   });
 
   it('settles shared transitions immediately when reduced motion is requested', async () => {

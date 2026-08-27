@@ -48,6 +48,7 @@ type TooltipHostProps = {
   outgoingPresentation?: TooltipPresentation;
   contentHidden: boolean;
   floating: Action<HTMLElement>;
+  presenceAction: Action<HTMLElement>;
   surfaceAction: Action<HTMLElement>;
   arrowAction: Action<HTMLElement>;
   contentAction: Action<HTMLElement>;
@@ -83,9 +84,18 @@ type HostMotion =
   | { kind: 'crossfade-out'; animation: Animation; target: TriggerRecord }
   | { kind: 'crossfade-in'; animation: Animation; target: TriggerRecord };
 
+type PresenceMotion = { kind: 'idle' } | { kind: 'intro' | 'outro'; animation: Animation };
+
 type SizeSnapshot = {
   width: number;
   height: number;
+};
+
+type ContentTransitionGeometry = {
+  previousSurface: SizeSnapshot;
+  nextSurface: SizeSnapshot;
+  previousContent: SizeSnapshot;
+  nextContent: SizeSnapshot;
 };
 
 type CalculatedPosition = Awaited<ReturnType<typeof computePosition>>;
@@ -102,6 +112,9 @@ const reactiveProps = <T extends object>(value: T): T => new ReactiveProps(value
 
 const TOOLTIP_SKIP_DELAY_MS = 300;
 const TOOLTIP_LEAVE_GRACE_MS = 80;
+const TOOLTIP_INTRO_MS = 200;
+const TOOLTIP_OUTRO_MS = 100;
+const TOOLTIP_PRESENCE_SCALE = 0.9;
 const TOOLTIP_MAX_TRAVEL_PX = 160;
 const TOOLTIP_TRAVEL_MS = 120;
 const TOOLTIP_CONTENT_CROSSFADE_MS = 120;
@@ -152,8 +165,23 @@ const sameSurfaceStyle = (left: TooltipPresentation, right: TooltipPresentation)
 
 const captureSize = (element: HTMLElement | undefined): SizeSnapshot | undefined => {
   if (!element) return;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   const rect = element.getBoundingClientRect();
-  return { width: rect.width || element.offsetWidth, height: rect.height || element.offsetHeight };
+  const width = Number.parseFloat(style?.width ?? '');
+  const height = Number.parseFloat(style?.height ?? '');
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : rect.width || element.offsetWidth,
+    height: Number.isFinite(height) && height > 0 ? height : rect.height || element.offsetHeight,
+  };
+};
+
+const captureContentSize = (element: HTMLElement | undefined): SizeSnapshot | undefined => {
+  const size = captureSize(element);
+  if (!element || !size) return size;
+  return {
+    width: Math.max(size.width, element.scrollWidth),
+    height: Math.max(size.height, element.scrollHeight),
+  };
 };
 
 const setSize = (element: HTMLElement | undefined, size: SizeSnapshot | undefined): void => {
@@ -182,6 +210,7 @@ class TooltipCoordinator {
   #hostProps: TooltipHostProps | undefined;
   #rendered: RenderedTooltipSnapshot | undefined;
   #floatingElement: HTMLElement | undefined;
+  #presenceElement: HTMLElement | undefined;
   #surfaceElement: HTMLElement | undefined;
   #arrowElement: HTMLElement | undefined;
   #contentElement: HTMLElement | undefined;
@@ -189,7 +218,11 @@ class TooltipCoordinator {
   #cleanupAutoUpdate: (() => void) | undefined;
   #positionVersion = 0;
   #hostMotion: HostMotion = { kind: 'idle' };
+  #presenceMotion: PresenceMotion = { kind: 'idle' };
+  #introPending = false;
+  #closing = false;
   #sizeAnimation: Animation | undefined;
+  #arrowAnimation: Animation | undefined;
   #contentAnimations: Animation[] = [];
   #contentMotionToken = 0;
 
@@ -200,8 +233,19 @@ class TooltipCoordinator {
 
     return {
       destroy: () => {
-        if (this.#floatingElement === element) this.#floatingElement = undefined;
-        this.#stopPositioning();
+        if (this.#floatingElement === element) {
+          this.#floatingElement = undefined;
+          this.#stopPositioning();
+        }
+      },
+    };
+  };
+
+  readonly #presenceAction: Action<HTMLElement> = (element) => {
+    this.#presenceElement = element;
+    return {
+      destroy: () => {
+        if (this.#presenceElement === element) this.#presenceElement = undefined;
       },
     };
   };
@@ -259,6 +303,11 @@ class TooltipCoordinator {
       } else {
         this.#show(record);
       }
+      return;
+    }
+
+    if (this.#closing) {
+      this.#show(record);
       return;
     }
 
@@ -351,36 +400,45 @@ class TooltipCoordinator {
     this.#clearLeaveTimer();
     this.#clearWarmTimer();
     const previous = this.#active;
+    const reopening = this.#closing;
     this.#active = record;
 
-    if (!this.#component) {
-      const hostProps = reactiveProps<TooltipHostProps>({
-        presentation: record.description.presentation,
-        outgoingPresentation: undefined,
-        contentHidden: false,
-        floating: this.#floatingAction,
-        surfaceAction: this.#surfaceAction,
-        arrowAction: this.#arrowAction,
-        contentAction: this.#contentAction,
-        outgoingContentAction: this.#outgoingContentAction,
-        showArrow: record.description.arrow,
-        motion: 'idle',
-      });
-      this.#hostProps = hostProps;
-      this.#rendered = {
-        record,
-        presentation: record.description.presentation,
-        showArrow: record.description.arrow,
-      };
-      this.#component = mount(TooltipComponent, {
-        target: record.description.container,
-        props: hostProps,
-      }) as Record<string, unknown>;
-    } else if (previous && previous !== record) {
-      void this.#switchTarget(record);
-    } else {
-      this.#syncHost(record);
+    if (this.#component) {
+      if (reopening) this.#reopenPresence();
+      if ((previous && previous !== record) || (reopening && this.#rendered?.record !== record)) {
+        if (!reopening) this.#finishIntro();
+        void this.#switchTarget(record);
+      } else {
+        this.#syncHost(record);
+      }
+      return;
     }
+
+    this.#closing = false;
+    this.#introPending = true;
+    const hostProps = reactiveProps<TooltipHostProps>({
+      presentation: record.description.presentation,
+      outgoingPresentation: undefined,
+      contentHidden: false,
+      floating: this.#floatingAction,
+      presenceAction: this.#presenceAction,
+      surfaceAction: this.#surfaceAction,
+      arrowAction: this.#arrowAction,
+      contentAction: this.#contentAction,
+      outgoingContentAction: this.#outgoingContentAction,
+      showArrow: record.description.arrow,
+      motion: 'idle',
+    });
+    this.#hostProps = hostProps;
+    this.#rendered = {
+      record,
+      presentation: record.description.presentation,
+      showArrow: record.description.arrow,
+    };
+    this.#component = mount(TooltipComponent, {
+      target: record.description.container,
+      props: hostProps,
+    }) as Record<string, unknown>;
   }
 
   #syncHost(record: TriggerRecord): void {
@@ -420,17 +478,113 @@ class TooltipCoordinator {
   }
 
   #closeVisible(): void {
-    if (!this.#active && !this.#component) return;
+    if (this.#closing || (!this.#active && !this.#component)) return;
     this.#active = undefined;
+    this.#closing = true;
     this.#clearLeaveTimer();
     this.#stopPositioning();
     this.#cancelMotion();
     this.#clearContentTransition();
+    this.#restoreRenderedDescription();
+    if (!this.#component || !this.#presenceElement || this.#prefersReducedMotion()) {
+      this.#finishClose();
+      return;
+    }
+    this.#startOutro();
+  }
+
+  #startIntro(): void {
+    if (!this.#presenceElement || !this.#introPending) return;
+    this.#introPending = false;
+    if (this.#prefersReducedMotion()) return;
+
+    this.#animatePresenceIn('0', `scale(${TOOLTIP_PRESENCE_SCALE})`, TOOLTIP_INTRO_MS);
+  }
+
+  #animatePresenceIn(opacity: string, transform: string, duration: number): void {
+    const element = this.#presenceElement;
+    if (!element) return;
+    this.#cancelPresenceMotion();
+    const animation = element.animate(
+      [
+        { opacity, transform },
+        { opacity: 1, transform: 'scale(1)' },
+      ],
+      { duration, easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'both' },
+    );
+    this.#trackPresenceMotion('intro', animation);
+  }
+
+  #startOutro(): void {
+    const element = this.#presenceElement;
+    if (!element) {
+      this.#finishClose();
+      return;
+    }
+
+    this.#introPending = false;
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+    const opacity = style?.opacity || '1';
+    const transform = !style?.transform || style.transform === 'none' ? 'scale(1)' : style.transform;
+    this.#cancelPresenceMotion();
+    const animation = element.animate(
+      [
+        { opacity, transform },
+        { opacity: 0, transform: `scale(${TOOLTIP_PRESENCE_SCALE})` },
+      ],
+      { duration: TOOLTIP_OUTRO_MS, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'both' },
+    );
+    this.#trackPresenceMotion('outro', animation);
+  }
+
+  #trackPresenceMotion(kind: 'intro' | 'outro', animation: Animation): void {
+    const motion: PresenceMotion = { kind, animation };
+    this.#presenceMotion = motion;
+    animation.onfinish = () => {
+      if (this.#presenceMotion !== motion) return;
+      if (this.#closing) this.#finishClose();
+      else this.#finishPresenceMotion(motion);
+    };
+  }
+
+  #reopenPresence(): void {
+    this.#closing = false;
+    if (this.#presenceMotion.kind !== 'outro') return;
+    const element = this.#presenceElement;
+    if (!element) return;
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+    const opacity = style?.opacity || '0';
+    const transform = !style?.transform || style.transform === 'none' ? `scale(${TOOLTIP_PRESENCE_SCALE})` : style.transform;
+    this.#introPending = false;
+    this.#animatePresenceIn(opacity, transform, TOOLTIP_OUTRO_MS);
+  }
+
+  #finishIntro(): void {
+    if (this.#presenceMotion.kind === 'intro') this.#finishPresenceMotion(this.#presenceMotion);
+  }
+
+  #finishPresenceMotion(motion: Exclude<PresenceMotion, { kind: 'idle' }>): void {
+    if (this.#presenceMotion !== motion) return;
+    motion.animation.cancel();
+    this.#presenceMotion = { kind: 'idle' };
+  }
+
+  #cancelPresenceMotion(): void {
+    if (this.#presenceMotion.kind !== 'idle') this.#presenceMotion.animation.cancel();
+    this.#presenceMotion = { kind: 'idle' };
+  }
+
+  #finishClose(): void {
+    if (!this.#closing) return;
+    this.#cancelPresenceMotion();
     const component = this.#component;
+    this.#closing = false;
+    this.#introPending = false;
     this.#component = undefined;
     this.#hostProps = undefined;
     this.#rendered = undefined;
     this.#floatingElement = undefined;
+    this.#presenceElement = undefined;
     this.#surfaceElement = undefined;
     this.#arrowElement = undefined;
     this.#contentElement = undefined;
@@ -467,7 +621,7 @@ class TooltipCoordinator {
   }
 
   #cleanupIfUnused(): void {
-    if (this.#records.size > 0 || this.#active || this.#pending || this.#warm) return;
+    if (this.#records.size > 0 || this.#active || this.#pending || this.#warm || this.#component) return;
     this.#clearPending();
     this.#clearLeaveTimer();
     this.#stopPositioning();
@@ -497,6 +651,7 @@ class TooltipCoordinator {
   async #switchTarget(record: TriggerRecord): Promise<void> {
     const previousPosition = this.#captureVisualPosition();
     const previousSurfaceSize = captureSize(this.#surfaceElement);
+    const previousContentSize = this.#captureRenderedContentSize();
     this.#stopPositioning();
     this.#cancelMotion(previousPosition, previousSurfaceSize);
     this.#clearContentTransition();
@@ -518,7 +673,6 @@ class TooltipCoordinator {
       return;
     }
 
-    const previousContentSize = captureSize(this.#contentElement);
     const contentMotionToken = this.#prepareContentCrossfade(record, previousPresentation);
     await tick();
     if (this.#active !== record) return;
@@ -529,7 +683,7 @@ class TooltipCoordinator {
     if (!result || this.#active !== record) return;
     const destination = snapshotPosition(record, result.x, result.y, result.placement);
     const nextSurfaceSize = captureSize(this.#surfaceElement);
-    const nextContentSize = captureSize(this.#contentElement);
+    const nextContentSize = captureContentSize(this.#contentElement);
     setSize(this.#contentElement, nextContentSize);
     setSize(this.#outgoingContentElement, previousContentSize);
 
@@ -539,8 +693,18 @@ class TooltipCoordinator {
     if (travels) {
       this.#presentHostDescription(record);
       this.#applyPosition(record, result);
-      this.#startContentCrossfade(record, contentMotionToken);
+      const contentGeometry =
+        previousSurfaceSize && nextSurfaceSize && previousContentSize && nextContentSize
+          ? {
+              previousSurface: previousSurfaceSize,
+              nextSurface: nextSurfaceSize,
+              previousContent: previousContentSize,
+              nextContent: nextContentSize,
+            }
+          : undefined;
+      this.#startContentCrossfade(record, contentMotionToken, contentGeometry);
       this.#startSizeTransition(previousSurfaceSize, nextSurfaceSize);
+      this.#pinArrowDuringTravel(previousPosition, destination);
       this.#startTravel(previousPosition, destination);
       this.#startTracking(record, false);
       return;
@@ -598,6 +762,12 @@ class TooltipCoordinator {
     return { ...position, x: Number.isFinite(x) ? x : position.x, y: Number.isFinite(y) ? y : position.y };
   }
 
+  #captureRenderedContentSize(): SizeSnapshot | undefined {
+    const element =
+      this.#hostProps?.outgoingPresentation === this.#rendered?.presentation ? this.#outgoingContentElement : this.#contentElement;
+    return captureContentSize(element);
+  }
+
   #startSizeTransition(previous: SizeSnapshot | undefined, next: SizeSnapshot | undefined): void {
     const surfaceElement = this.#surfaceElement;
     if (!surfaceElement || !previous || !next || (previous.width === next.width && previous.height === next.height)) {
@@ -618,6 +788,28 @@ class TooltipCoordinator {
       animation.cancel();
       this.#sizeAnimation = undefined;
       clearSize(this.#surfaceElement);
+    };
+  }
+
+  #pinArrowDuringTravel(previous: PositionSnapshot, destination: PositionSnapshot): void {
+    const element = this.#arrowElement;
+    if (!element) return;
+    const axis = destination.side === 'top' || destination.side === 'bottom' ? 'left' : 'top';
+    const value = Number.parseFloat(element.ownerDocument.defaultView?.getComputedStyle(element)[axis] ?? '');
+    if (!Number.isFinite(value)) return;
+    const travel = axis === 'left' ? destination.x - previous.x : destination.y - previous.y;
+    if (Math.abs(travel) < 0.5) return;
+    const keyframes =
+      axis === 'left' ? [{ left: `${value + travel}px` }, { left: `${value}px` }] : [{ top: `${value + travel}px` }, { top: `${value}px` }];
+    const animation = element.animate(keyframes, {
+      duration: TOOLTIP_TRAVEL_MS,
+      easing: 'cubic-bezier(0.2, 0, 0, 1)',
+    });
+    this.#arrowAnimation = animation;
+    animation.onfinish = () => {
+      if (this.#arrowAnimation !== animation) return;
+      animation.cancel();
+      this.#arrowAnimation = undefined;
     };
   }
 
@@ -644,7 +836,7 @@ class TooltipCoordinator {
     return token;
   }
 
-  #startContentCrossfade(record: TriggerRecord, token: number): void {
+  #startContentCrossfade(record: TriggerRecord, token: number, geometry: ContentTransitionGeometry | undefined): void {
     const outgoingContentElement = this.#outgoingContentElement;
     const contentElement = this.#contentElement;
     if (!outgoingContentElement || !contentElement || this.#active !== record || this.#contentMotionToken !== token) {
@@ -653,28 +845,59 @@ class TooltipCoordinator {
     }
     const outgoing = outgoingContentElement.animate([{ opacity: 1 }, { opacity: 0 }], {
       duration: TOOLTIP_CONTENT_CROSSFADE_MS,
-      easing: 'ease-out',
       fill: 'forwards',
     });
     const incoming = contentElement.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: TOOLTIP_CONTENT_CROSSFADE_MS,
-      easing: 'ease-out',
       fill: 'forwards',
     });
-    this.#contentAnimations = [outgoing, incoming];
-    incoming.onfinish = () => void this.#finishContentCrossfade(record, token, outgoing, incoming);
+    const outgoingPosition = geometry
+      ? this.#centerContentDuringResize(outgoingContentElement, geometry.previousContent, geometry.previousSurface, geometry.nextSurface)
+      : undefined;
+    const incomingPosition = geometry
+      ? this.#centerContentDuringResize(contentElement, geometry.nextContent, geometry.previousSurface, geometry.nextSurface)
+      : undefined;
+    this.#contentAnimations = [outgoing, incoming, outgoingPosition, incomingPosition].filter(
+      (animation): animation is Animation => animation !== undefined,
+    );
+    incoming.onfinish = () => void this.#finishContentCrossfade(record, token, incoming);
   }
 
-  async #finishContentCrossfade(record: TriggerRecord, token: number, outgoing: Animation, incoming: Animation): Promise<void> {
+  #centerContentDuringResize(
+    element: HTMLElement,
+    content: SizeSnapshot,
+    previousSurface: SizeSnapshot,
+    nextSurface: SizeSnapshot,
+  ): Animation | undefined {
+    const surfaceElement = this.#surfaceElement;
+    if (!surfaceElement) return;
+    const style = surfaceElement.ownerDocument.defaultView?.getComputedStyle(surfaceElement);
+    const horizontalPadding = Number.parseFloat(style?.paddingLeft ?? '') + Number.parseFloat(style?.paddingRight ?? '');
+    const verticalPadding = Number.parseFloat(style?.paddingTop ?? '') + Number.parseFloat(style?.paddingBottom ?? '');
+    if (!Number.isFinite(horizontalPadding) || !Number.isFinite(verticalPadding)) return;
+    const offset = (surface: SizeSnapshot) => ({
+      x: (surface.width - horizontalPadding - content.width) / 2,
+      y: (surface.height - verticalPadding - content.height) / 2,
+    });
+    const from = offset(previousSurface);
+    const to = offset(nextSurface);
+    if (Math.abs(from.x - to.x) < 0.5 && Math.abs(from.y - to.y) < 0.5) return;
+    return element.animate([{ transform: `translate(${from.x}px, ${from.y}px)` }, { transform: `translate(${to.x}px, ${to.y}px)` }], {
+      duration: TOOLTIP_TRAVEL_MS,
+      easing: 'cubic-bezier(0.2, 0, 0, 1)',
+    });
+  }
+
+  async #finishContentCrossfade(record: TriggerRecord, token: number, incoming: Animation): Promise<void> {
     if (this.#contentMotionToken !== token || !this.#contentAnimations.includes(incoming) || this.#active !== record) return;
+    const animations = this.#contentAnimations;
     if (this.#hostProps) {
       this.#hostProps.contentHidden = false;
       this.#hostProps.outgoingPresentation = undefined;
     }
     await tick();
     if (this.#contentMotionToken !== token || this.#active !== record) return;
-    outgoing.cancel();
-    incoming.cancel();
+    for (const animation of animations) animation.cancel();
     this.#contentAnimations = [];
     clearSize(this.#contentElement);
     clearSize(this.#outgoingContentElement);
@@ -727,6 +950,8 @@ class TooltipCoordinator {
     this.#setHostMotion({ kind: 'idle' });
     this.#sizeAnimation?.cancel();
     this.#sizeAnimation = undefined;
+    this.#arrowAnimation?.cancel();
+    this.#arrowAnimation = undefined;
     if (position && this.#floatingElement) {
       this.#floatingElement.style.left = `${position.x}px`;
       this.#floatingElement.style.top = `${position.y}px`;
@@ -806,6 +1031,7 @@ class TooltipCoordinator {
       visibility: 'visible',
     });
     if (this.#rendered?.record === record) this.#rendered.position = snapshotPosition(record, result.x, result.y, result.placement);
+    this.#startIntro();
 
     if (!arrowElement || !result.middlewareData.arrow) return;
     const side = resolvedSide(result.placement);

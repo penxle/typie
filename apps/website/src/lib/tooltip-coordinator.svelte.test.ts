@@ -88,10 +88,21 @@ const advance = async (milliseconds: number) => {
   await settle();
 };
 
+const lastAnimation = (): Animation | undefined => vi.mocked(Element.prototype.animate).mock.results.at(-1)?.value as Animation | undefined;
+
 const finishLastAnimation = async () => {
-  const animation = vi.mocked(Element.prototype.animate).mock.results.at(-1)?.value as Animation | undefined;
+  const animation = lastAnimation();
   animation?.onfinish?.call(animation, {} as AnimationPlaybackEvent);
   await settle();
+};
+
+const finishAnimations = async () => {
+  const results = vi.mocked(Element.prototype.animate).mock.results;
+  for (const result of results) {
+    const animation = result.value as Animation | undefined;
+    animation?.onfinish?.call(animation, {} as AnimationPlaybackEvent);
+    await settle();
+  }
 };
 
 const expectTooltip = (text: string) => {
@@ -146,6 +157,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await unmountFixture();
+  await finishAnimations();
   await vi.runOnlyPendingTimersAsync();
   if (originalAnimateDescriptor) Object.defineProperty(Element.prototype, 'animate', originalAnimateDescriptor);
   else delete (Element.prototype as Partial<Element>).animate;
@@ -346,7 +358,7 @@ describe('tooltip skip delay and shared host', () => {
     expect(tooltipElement()).toBe(firstHost);
   });
 
-  it('closes at 80ms but opens a new host immediately from warm state', async () => {
+  it('returns from the outro and reuses its host when another trigger arrives', async () => {
     await mountFixture();
     const first = trigger('action-third');
     const second = trigger('action-second');
@@ -354,14 +366,35 @@ describe('tooltip skip delay and shared host', () => {
     enter(first);
     await settle();
     const firstHost = tooltipElement();
+    await finishLastAnimation();
+
     leave(first);
     await advance(80);
-    expect(tooltipElement()).toBeNull();
+    const outro = lastAnimation();
+    expect(outro).toBeDefined();
 
     enter(second);
     await settle();
     expectTooltip('Second tooltip');
-    expect(tooltipElement()).not.toBe(firstHost);
+    expect(tooltipElement()).toBe(firstHost);
+
+    await finishLastAnimation();
+    expect(tooltipElement()).toBe(firstHost);
+  });
+
+  it('runs the tooltip outro independently of its trigger parent unmount', async () => {
+    await mountFixture();
+    enter(trigger('action-third'));
+    await settle();
+    const host = tooltipElement();
+    await finishLastAnimation();
+
+    await unmountFixture();
+
+    expect(document.querySelector('[data-testid="tooltip-test-root"]')).toBeNull();
+    expect(tooltipElement()).toBe(host);
+    await finishLastAnimation();
+    expect(tooltipElement()).toBeNull();
   });
 
   it('opens immediately 299ms into the warm window', async () => {
@@ -373,6 +406,7 @@ describe('tooltip skip delay and shared host', () => {
     await settle();
     leave(first);
     await advance(80);
+    await finishLastAnimation();
     await advance(299);
     enter(second);
     await settle();
@@ -389,6 +423,7 @@ describe('tooltip skip delay and shared host', () => {
     await settle();
     leave(first);
     await advance(80);
+    await finishLastAnimation();
     await advance(300);
     enter(second);
 
@@ -482,6 +517,7 @@ describe('tooltip eligibility and persistent visibility', () => {
 
     props.firstMessage = null;
     await settle();
+    await finishLastAnimation();
     expect(tooltipElement()).toBeNull();
     enter(trigger('action-second'));
     await settle();
@@ -539,6 +575,7 @@ describe('tooltip eligibility and persistent visibility', () => {
     await settle();
     props.firstForce = undefined;
     await settle();
+    await finishLastAnimation();
     expect(tooltipElement()).toBeNull();
 
     enter(trigger('action-second'));
@@ -566,6 +603,7 @@ describe('tooltip click behavior', () => {
     await settle();
     first.click();
     await settle();
+    await finishLastAnimation();
 
     expect(tooltipElement()).toBeNull();
   });
