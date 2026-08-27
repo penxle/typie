@@ -25,6 +25,7 @@ anifantakis
 aosp
 apng
 apollographql
+apos
 argb
 batang
 bbox

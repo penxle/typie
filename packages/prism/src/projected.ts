@@ -41,6 +41,37 @@ const SharingResultData = z.union([
   z.object({ ok: z.literal(true), count: z.number().int().nonnegative(), changes: z.array(SharingChange) }),
   ToolFailureSchema,
 ]);
+const SaveDocumentRequestData = z.object({ path: z.string(), summary: z.string() }).catch({ path: '', summary: '' });
+const DocumentRefData = z.object({
+  kind: z.literal('document'),
+  documentId: z.string(),
+  entityId: z.string(),
+  title: z.string().nullable(),
+  subtitle: z.string().nullable(),
+  icon: z.string(),
+  iconColor: z.string(),
+});
+const ChangedCountsData = z.object({
+  blocks: z.object({
+    inserted: z.number().int().nonnegative(),
+    deleted: z.number().int().nonnegative(),
+    moved: z.number().int().nonnegative(),
+    updated: z.number().int().nonnegative(),
+  }),
+  chars: z.object({ inserted: z.number().int().nonnegative(), deleted: z.number().int().nonnegative() }),
+});
+const OpenDocumentResultData = z.union([z.object({ ok: z.literal(true), document: DocumentRefData, path: z.string() }), ToolFailureSchema]);
+const SaveDocumentResultData = z.union([
+  z.object({
+    ok: z.literal(true),
+    unchanged: z.boolean(),
+    document: DocumentRefData,
+    path: z.string(),
+    changed: ChangedCountsData,
+  }),
+  ToolFailureSchema,
+]);
+
 const TOOL_REQUEST_DATA: Record<string, z.ZodType | undefined> = {
   'list-open-documents': EmptyData,
   'confirm-review': ConfirmHintSchema,
@@ -49,6 +80,7 @@ const TOOL_REQUEST_DATA: Record<string, z.ZodType | undefined> = {
   'delete-notes': DeleteNoteTargetsData,
   'delete-goals': DeleteGoalTargetsData,
   'update-sharing': SharingTargetsData,
+  'save-document': SaveDocumentRequestData,
 };
 
 const TOOL_RESULT_DATA: Record<string, z.ZodType | undefined> = {
@@ -58,6 +90,8 @@ const TOOL_RESULT_DATA: Record<string, z.ZodType | undefined> = {
   'delete-notes': CountResultData,
   'delete-goals': CountResultData,
   'update-sharing': SharingResultData,
+  'open-document': OpenDocumentResultData,
+  'save-document': SaveDocumentResultData,
 };
 
 const narrowData = (

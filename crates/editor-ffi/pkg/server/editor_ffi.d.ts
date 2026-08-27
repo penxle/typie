@@ -650,6 +650,7 @@ export interface ViewportAnchorPoint {
 export interface XmlEditResult {
     error: XmlErrorInfo | undefined;
     bundle: Uint8Array;
+    xml: string;
     blocks_inserted: number;
     blocks_deleted: number;
     blocks_moved: number;

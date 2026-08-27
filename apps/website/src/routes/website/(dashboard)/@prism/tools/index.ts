@@ -31,6 +31,7 @@ export const toolCards: Record<string, Component<ToolCardProps> | undefined> = {
   'delete-notes': PrismActionCard,
   'delete-goals': PrismActionCard,
   'update-sharing': PrismActionCard,
+  'save-document': PrismActionCard,
 };
 
 export const toolCallLabels: Record<string, string | undefined> = {
@@ -46,6 +47,7 @@ export const toolCallLabels: Record<string, string | undefined> = {
   'read-comments': '코멘트를 읽었어요',
   'list-trash': '휴지통을 살펴봤어요',
   'list-icons': '아이콘 목록을 확인했어요',
+  'open-document': '문서를 열었어요',
   'create-folders': '폴더를 만들었어요',
   'create-documents': '문서를 만들었어요',
   'rename-folders': '폴더 이름을 바꿨어요',
@@ -62,4 +64,14 @@ export const toolCallLabels: Record<string, string | undefined> = {
   'delete-notes': '노트를 지웠어요',
   'delete-goals': '목표를 없앴어요',
   'update-sharing': '공개 범위를 바꿨어요',
+  'save-document': '문서를 저장했어요',
+  read: '파일을 읽었어요',
+  grep: '파일을 검색했어요',
+  write: '파일을 작성했어요',
+  edit: '파일을 고쳤어요',
+  list: '파일을 살펴봤어요',
+};
+
+export const toolCallFailureLabels: Record<string, string | undefined> = {
+  'save-document': '문서를 저장하지 못했어요',
 };

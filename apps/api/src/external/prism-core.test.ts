@@ -196,6 +196,31 @@ test('getWorkflowFile: {content}를 돌려주고 null은 부재다', async () =>
   assert.equal(await client.getWorkflowFile('wf_1', 'artifacts/rubric.yaml'), 'r');
   assert.equal(await client.getWorkflowFile('wf_1', 'artifacts/none.yaml'), null);
   assert.equal(http.calls[0]?.path, '/workflows/wf_1/files/artifacts/rubric.yaml');
+
+  const absent = createPrismClient(fakeHttp(() => ({ status: 404, json: { error: 'file-not-found' } })));
+  assert.equal(await absent.getWorkflowFile('wf_1', 'artifacts/none.yaml'), null);
+});
+
+test('getAgentFile: 404 file-not-found만 부재로 접고 나머지는 그대로 던진다', async () => {
+  const http = fakeHttp((path) => {
+    if (path.endsWith('none.xml')) return { status: 404, json: { error: 'file-not-found' } };
+    if (path.endsWith('gone.xml')) return { status: 404, json: { error: 'not-found' } };
+    if (path.endsWith('huge.xml')) return { status: 409, json: { error: 'file-too-large' } };
+    return { status: 200, json: { content: '<root/>' } };
+  });
+  const client = createPrismClient(http);
+
+  assert.equal(await client.getAgentFile('chat-1', 'documents/D0ABC.xml'), '<root/>');
+  assert.equal(http.calls[0]?.path, '/agents/chat-1/files/documents/D0ABC.xml');
+  assert.equal(await client.getAgentFile('chat-1', 'documents/none.xml'), null);
+  await assert.rejects(
+    client.getAgentFile('chat-1', 'documents/gone.xml'),
+    (err: unknown) => err instanceof PrismApiError && err.code === 'not-found' && err.status === 404,
+  );
+  await assert.rejects(
+    client.getAgentFile('chat-1', 'documents/huge.xml'),
+    (err: unknown) => err instanceof PrismApiError && err.code === 'file-too-large' && err.status === 409,
+  );
 });
 
 test('getReviewSeeds: feedback 카탈로그의 티어별 seeds', async () => {

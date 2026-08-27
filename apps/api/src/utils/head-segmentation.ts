@@ -47,6 +47,7 @@ export const planHeadWrites = (input: {
   latestHead: LatestHead | null;
   bucketMs: number;
   systemUserId: string;
+  prismUserId: string;
   threshold?: number;
 }): HeadWrite[] => {
   const threshold = input.threshold ?? ISOLATION_THRESHOLD;
@@ -105,7 +106,9 @@ export const planHeadWrites = (input: {
     const net = entry.charCount - prevCharCount;
     prevCharCount = entry.charCount;
 
-    const isolated = entry.userId !== input.systemUserId && Math.max(entry.grossInsertions, entry.grossDeletions) >= threshold;
+    const isolated =
+      entry.userId === input.prismUserId ||
+      (entry.userId !== input.systemUserId && Math.max(entry.grossInsertions, entry.grossDeletions) >= threshold);
 
     if (isolated) {
       flushSegment();

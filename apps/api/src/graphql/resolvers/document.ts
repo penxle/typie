@@ -44,8 +44,9 @@ import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { appendBundle, getDurableHeads, readMergedGraph, setLiveHeads } from '#/utils/changeset.ts';
+import { readMergedGraph } from '#/utils/changeset.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { publishBundle } from '#/utils/document-bundle.ts';
 import { extractAssetIdsFromPlainDoc, extractPlainDocLayoutMode } from '#/utils/entity.ts';
 import { createDocumentCore, duplicateDocumentCore, updateDocumentsOptionCore } from '#/utils/entity-actions.ts';
 import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
@@ -956,26 +957,7 @@ builder.mutationFields((t) => ({
         return { heads: currentHeads };
       }
 
-      const seq = await appendBundle(input.documentId, revert, ctx.session.userId, ctx.session.deviceId);
-
-      const mergedGraph = await readMergedGraph(input.documentId);
-      const heads = await wasmFfi.use((host) => host.heads(mergedGraph));
-      // No wasm recompute: the durable frontier is whatever collect has folded
-      // into `document_states.heads` so far — the revert bundle itself only
-      // affects it once collect processes this push, same as any other push.
-      const durableHeads = (await getDurableHeads(input.documentId)) ?? new Uint8Array();
-
-      await setLiveHeads(input.documentId, heads);
-
-      pubsub.publish('document:changesets', input.documentId, {
-        target: '*',
-        seq,
-        changesets: [revert.toBase64()],
-        heads: heads.toBase64(),
-        durableHeads: durableHeads.toBase64(),
-      });
-
-      await enqueueJob('document:changesets:collect', input.documentId);
+      const { heads } = await publishBundle(input.documentId, revert, ctx.session.userId, ctx.session.deviceId);
 
       return { heads };
     },

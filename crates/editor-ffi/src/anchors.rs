@@ -173,7 +173,7 @@ mod tests {
             editor_codec::decode_changeset_stream(&graph[..])
                 .unwrap()
                 .into_graph_input();
-        let state = crate::graph::build_state_tolerant(cs).unwrap();
+        let state = crate::graph::build_state_tolerant(cs, &[]).unwrap();
         let view = state.view();
         let ctx = editor_state::StableResolveCtx::from_live(&view, state.projected.seq_checkout());
         let sel = anchors[0].resolve(&ctx).unwrap();

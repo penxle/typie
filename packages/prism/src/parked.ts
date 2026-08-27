@@ -1,24 +1,34 @@
-import { effectiveResolver, toolResolver } from './tools.ts';
-import type { ToolPolicy, ToolResolver } from './tools.ts';
+import { toolResolver } from './tools.ts';
+import type { ToolResolver } from './tools.ts';
 import type { Context } from './wire.ts';
 
 export type ParkedEvent = {
   kind: string;
   context: Context | null;
   data: Record<string, unknown>;
+  occurredAt: number;
 };
 export type ParkedScope = 'agent' | 'workflow';
-export type ParkedOptions = { settledWorkflows?: ReadonlySet<string>; resolverOf?: (tool: string) => ToolResolver };
+export type ParkedOptions = {
+  settledWorkflows?: ReadonlySet<string>;
+  resolverOf?: (tool: string) => ToolResolver;
+  resolved?: ReadonlySet<string>;
+};
 
 const RUN_TERMINAL = new Set(['run.completed', 'run.failed', 'run.canceled']);
 const INVOCATION_TERMINAL = new Set(['invocation.completed', 'invocation.failed', 'invocation.canceled']);
 
 const runKey = (context: NonNullable<ParkedEvent['context']>): string => `${context.agent?.id ?? ''}#${context.run ?? 0}`;
 
-type FoldedRequest = { run: string; runSeq: number | null; tool: string; input: unknown; agentId: string };
+type FoldedRequest = { run: string; runSeq: number | null; tool: string; input: unknown; agentId: string; at: number };
 type Folded = { openRuns: Set<string>; requests: Map<string, FoldedRequest>; invocations: Map<string, string> };
 
-const fold = (events: ParkedEvent[], scope: ParkedScope, settledWorkflows?: ReadonlySet<string>): Folded => {
+const fold = (
+  events: ParkedEvent[],
+  scope: ParkedScope,
+  settledWorkflows?: ReadonlySet<string>,
+  resolved?: ReadonlySet<string>,
+): Folded => {
   const openRuns = new Set<string>();
   const requests = new Map<string, FoldedRequest>();
   const invocations = new Map<string, string>();
@@ -35,12 +45,14 @@ const fold = (events: ParkedEvent[], scope: ParkedScope, settledWorkflows?: Read
       for (const [id, request] of requests) if (request.run === run) requests.delete(id);
       for (const [id, owner] of invocations) if (owner === run) invocations.delete(id);
     } else if (event.kind === 'tool.requested' && context.toolCallId !== undefined) {
+      if (resolved?.has(context.toolCallId)) continue;
       requests.set(context.toolCallId, {
         run,
         runSeq: scope === 'agent' && typeof context.run === 'number' ? context.run : null,
         tool: String(event.data.tool),
         input: event.data.data,
         agentId: context.agent?.id ?? '',
+        at: event.occurredAt,
       });
     } else if (event.kind === 'tool.resolved' && context.toolCallId !== undefined) {
       requests.delete(context.toolCallId);
@@ -58,7 +70,7 @@ const fold = (events: ParkedEvent[], scope: ParkedScope, settledWorkflows?: Read
 
 export const parked = (events: ParkedEvent[], scope: ParkedScope, options: ParkedOptions = {}): boolean => {
   const resolverOf = options.resolverOf ?? toolResolver;
-  const { openRuns, requests, invocations } = fold(events, scope, options.settledWorkflows);
+  const { openRuns, requests, invocations } = fold(events, scope, options.settledWorkflows, options.resolved);
 
   const waiting = (run: string): boolean => requests.values().some((request) => request.run === run && resolverOf(request.tool) === 'user');
   const invoking = (run: string): boolean => [...invocations.values()].includes(run);
@@ -76,11 +88,11 @@ export const awaitingUser = (
   return [...openRuns].some((run) => [...requests.values()].some((request) => request.run === run && resolverOf(request.tool) === 'user'));
 };
 
-export type PendingServerRequest = { toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null };
+export type PendingRequest = { toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null; at: number };
 
-export const pendingServerRequests = (events: ParkedEvent[], scope: ParkedScope, policy: ToolPolicy): PendingServerRequest[] => {
+export const pendingRequests = (events: ParkedEvent[], scope: ParkedScope): PendingRequest[] => {
   const { openRuns, requests } = fold(events, scope);
   return [...requests.entries()]
-    .filter(([, request]) => openRuns.has(request.run) && effectiveResolver(request.tool, policy) === 'server')
-    .map(([toolCallId, { tool, input, agentId, runSeq }]) => ({ toolCallId, tool, input, agentId, runSeq }));
+    .filter(([, request]) => openRuns.has(request.run))
+    .map(([toolCallId, { tool, input, agentId, runSeq, at }]) => ({ toolCallId, tool, input, agentId, runSeq, at }));
 };
