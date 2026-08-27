@@ -237,8 +237,9 @@ pub(crate) fn request_shaped_glyphs(
         chunks.sort_unstable();
         editor.push_event(EditorEvent::FontDataMissing {
             family: family_names
-                .remove(&family_id)
-                .expect("glyph chunk request has an interned family"),
+                .get(&family_id)
+                .expect("glyph chunk request has an interned family")
+                .clone(),
             weight,
             required: chunks
                 .into_iter()
