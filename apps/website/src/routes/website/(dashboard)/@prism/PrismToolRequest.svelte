@@ -35,7 +35,7 @@
   {@const Card = card}
   <div use:tooltip={{ message: guarded ? unavailableMessage : null, placement: 'bottom', delay: 0, arrow: false }}>
     <div class={css({ '&[data-readonly=true]': { opacity: '70' } })} aria-disabled={guarded} data-readonly={guarded} inert={guarded}>
-      <Card {message} {open} resolve={(input) => resolve(message.agentId, message.toolCallId, input)} {sessionId} />
+      <Card disabled={guarded} {message} {open} resolve={(input) => resolve(message.agentId, message.toolCallId, input)} {sessionId} />
     </div>
   </div>
 {:else if failed}

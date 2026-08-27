@@ -83,18 +83,20 @@
     try {
       await updatePreferences(
         { input: { value: { aiOptIn: enabled } } },
-        {
-          metadata: {
-            cache: {
-              optimisticResponse: {
-                updatePreferences: {
-                  id: user.data.id,
-                  preferences: { ...user.data.preferences, aiOptIn: enabled },
+        enabled
+          ? undefined
+          : {
+              metadata: {
+                cache: {
+                  optimisticResponse: {
+                    updatePreferences: {
+                      id: user.data.id,
+                      preferences: { ...user.data.preferences, aiOptIn: enabled },
+                    },
+                  },
                 },
               },
             },
-          },
-        },
       );
       mixpanel.track('ai_opt_in', { enabled });
     } catch {

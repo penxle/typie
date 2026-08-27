@@ -9,6 +9,7 @@ export type ToolCardProps = {
   message: ToolRequestMessage;
   sessionId: string | null;
   open: boolean;
+  disabled: boolean;
   resolve: (input: unknown) => Promise<void>;
 };
 
