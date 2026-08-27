@@ -646,6 +646,34 @@ export interface ViewportAnchorPoint {
     y: number;
 }
 
+export interface XmlEditResult {
+    error: XmlErrorInfo | undefined;
+    bundle: Uint8Array;
+    blocks_inserted: number;
+    blocks_deleted: number;
+    blocks_moved: number;
+    blocks_updated: number;
+    chars_inserted: number;
+    chars_deleted: number;
+}
+
+export interface XmlErrorInfo {
+    line: number | undefined;
+    column: number | undefined;
+    dot: string | undefined;
+    detail: string;
+    message: string;
+}
+
+export interface XmlRender {
+    error: XmlErrorInfo | undefined;
+    xml: string;
+}
+
+export interface XmlVerdict {
+    error: XmlErrorInfo | undefined;
+}
+
 export type Alignment = "left" | "center" | "right" | "justify";
 
 export type ArchivedNodeAttr = { type: "id"; value: string | undefined };
@@ -935,6 +963,7 @@ declare class EditorServer {
     count_characters(text: string): number;
     static create(icu_data: Uint8Array): EditorServer;
     default_doc_with_preset(root: PlainRootNode, modifiers: Modifier[]): PlainDoc;
+    edit_from_xml(graph: Uint8Array, sweep_tombstones: string[], xml: string): XmlEditResult;
     extract_text(doc: PlainDoc): string;
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;
     get_font_metadata(data: Uint8Array): FontMetadata;
@@ -961,6 +990,12 @@ declare class EditorServer {
     to_plain(changeset_payloads: Uint8Array): PlainDoc;
     to_plain_resolved(changeset_payloads: Uint8Array): PlainDoc;
     /**
+     * The file the model reads. The state is built the way `edit_from_xml`
+     * builds it — sweep tombstones included — so that the dots it writes are
+     * the dots the edit will look for.
+     */
+    to_xml(graph: Uint8Array, sweep_tombstones: string[]): XmlRender;
+    /**
      * Advance a cached frontier by one push bundle without touching the
      * graph: a dot is a head iff no op references it as a parent, so
      * `F' = (F ∪ ids(bundle)) − parents(bundle)` — `O(bundle)`, while
@@ -981,6 +1016,7 @@ declare class EditorServer {
      * Verifies a PlainDoc's structural invariants by attempting to load it.
      */
     verify_plain(plain: PlainDoc): void;
+    verify_xml(xml: string): XmlVerdict;
     zombie_dots(graph: Uint8Array): string[];
 }
 
