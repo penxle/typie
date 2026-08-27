@@ -9,5 +9,5 @@ export const pickDefaultLineage = (lineages: readonly LineageOption[], shownLine
   return (shown ?? lineages.find((lineage) => !lineage.locked))?.id ?? null;
 };
 
-export const lineageRowLabel = (lineage: LineageOption): string =>
+export const lineageRowLabel = (lineage: Pick<LineageOption, 'tier' | 'latestOrdinal'>): string =>
   `${lineage.latestOrdinal}회차에 이어서 · ${TIER_OPTIONS.find((option) => option.tier === lineage.tier)?.label ?? '리뷰'}`;
