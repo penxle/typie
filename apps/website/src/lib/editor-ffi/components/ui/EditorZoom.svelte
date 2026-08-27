@@ -230,23 +230,18 @@
     if (!target) return;
 
     const handleWheelForZoom = (event: Event) => {
-      if (!active) return;
       void zoom.handleWheel(event as WheelEvent);
     };
     const handleTouchStart = (event: Event) => {
-      if (!active) return;
       handleTouchStartForPinch(event as TouchEvent);
     };
     const handleTouchMove = (event: Event) => {
-      if (!active) return;
       handleTouchMoveForPinch(event as TouchEvent);
     };
     const handleTouchEnd = (event: Event) => {
-      if (!active) return;
       handleTouchEndForPinch(event as TouchEvent);
     };
     const handleTouchCancel = () => {
-      if (!active) return;
       handleTouchCancelForPinch();
     };
 
@@ -266,7 +261,7 @@
   });
 
   $effect(() => {
-    if (active && zoomEnabled) {
+    if (zoomEnabled) {
       return;
     }
 
