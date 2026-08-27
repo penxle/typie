@@ -10,6 +10,7 @@
     outgoingPresentation?: TooltipPresentation;
     contentHidden: boolean;
     floating: Action<HTMLElement>;
+    presenceAction: Action<HTMLElement>;
     surfaceAction: Action<HTMLElement>;
     arrowAction: Action<HTMLElement>;
     contentAction: Action<HTMLElement>;
@@ -36,6 +37,7 @@
     outgoingPresentation,
     contentHidden,
     floating,
+    presenceAction,
     surfaceAction,
     arrowAction,
     contentAction,
@@ -92,56 +94,58 @@
   role="tooltip"
   use:floating
 >
-  <div
-    class={css(
-      {
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: '4px',
-        boxSizing: 'border-box',
-        paddingX: '8px',
-        paddingY: '4px',
-        fontSize: '12px',
-        color: 'text.bright',
-        backgroundColor: 'surface.dark',
-        boxShadow: 'medium',
-      },
-      presentation.kind === 'wrapper' ? presentation.tooltipStyle : undefined,
-    )}
-    data-tooltip-surface
-    use:surfaceAction
-  >
-    <div class={css({ position: 'relative' })}>
-      <div
-        style:opacity={contentHidden ? 0 : undefined}
-        class={contentClass(presentation)}
-        data-tooltip-content="current"
-        use:contentAction
-      >
-        {@render renderPresentation(presentation)}
-      </div>
-
-      {#if outgoingPresentation}
-        <div
-          class={[css({ position: 'absolute', top: '0', left: '0' }), contentClass(outgoingPresentation)]}
-          aria-hidden="true"
-          data-tooltip-content="outgoing"
-          use:outgoingContentAction
-        >
-          {@render renderPresentation(outgoingPresentation)}
-        </div>
-      {/if}
-    </div>
-  </div>
-
-  {#if showArrow}
+  <div class={css({ position: 'relative' })} data-tooltip-presence use:presenceAction>
     <div
-      class={css({
-        borderTopLeftRadius: '2px',
-        size: '8px',
-        backgroundColor: 'surface.dark',
-      })}
-      use:arrowAction
-    ></div>
-  {/if}
+      class={css(
+        {
+          position: 'relative',
+          overflow: 'hidden',
+          borderRadius: '4px',
+          boxSizing: 'border-box',
+          paddingX: '8px',
+          paddingY: '4px',
+          fontSize: '12px',
+          color: 'text.bright',
+          backgroundColor: 'surface.dark',
+          boxShadow: 'medium',
+        },
+        presentation.kind === 'wrapper' ? presentation.tooltipStyle : undefined,
+      )}
+      data-tooltip-surface
+      use:surfaceAction
+    >
+      <div class={css({ position: 'relative' })}>
+        <div
+          style:opacity={contentHidden ? 0 : undefined}
+          class={contentClass(presentation)}
+          data-tooltip-content="current"
+          use:contentAction
+        >
+          {@render renderPresentation(presentation)}
+        </div>
+
+        {#if outgoingPresentation}
+          <div
+            class={[css({ position: 'absolute', top: '0', left: '0' }), contentClass(outgoingPresentation)]}
+            aria-hidden="true"
+            data-tooltip-content="outgoing"
+            use:outgoingContentAction
+          >
+            {@render renderPresentation(outgoingPresentation)}
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    {#if showArrow}
+      <div
+        class={css({
+          borderTopLeftRadius: '2px',
+          size: '8px',
+          backgroundColor: 'surface.dark',
+        })}
+        use:arrowAction
+      ></div>
+    {/if}
+  </div>
 </div>

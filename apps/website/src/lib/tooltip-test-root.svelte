@@ -147,6 +147,30 @@
           Motion third
         </button>
         <button
+          class="motion-toolbar-anchor motion-toolbar-lock"
+          data-testid="motion-toolbar-lock"
+          type="button"
+          use:tooltip={{ message: '편집 잠금', delay: 0, placement: 'bottom' }}
+        >
+          Lock
+        </button>
+        <button
+          class="motion-toolbar-anchor motion-toolbar-zen"
+          data-testid="motion-toolbar-zen"
+          type="button"
+          use:tooltip={{ message: '집중 모드 켜기', keys: ['Mod', 'Shift', 'M'], delay: 0, placement: 'bottom' }}
+        >
+          Zen
+        </button>
+        <button
+          class="motion-toolbar-anchor motion-toolbar-close"
+          data-testid="motion-toolbar-close"
+          type="button"
+          use:tooltip={{ message: '창 닫기', delay: 0, placement: 'bottom' }}
+        >
+          Close
+        </button>
+        <button
           class="motion-anchor motion-anchor-side"
           data-testid="motion-side"
           type="button"
@@ -289,6 +313,25 @@
   .motion-prism-close {
     position: absolute;
     top: 56px;
+  }
+
+  .motion-toolbar-anchor {
+    position: fixed;
+    top: 80px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .motion-toolbar-lock {
+    right: 56px;
+  }
+
+  .motion-toolbar-zen {
+    right: 32px;
+  }
+
+  .motion-toolbar-close {
+    right: 8px;
   }
 
   .motion-anchor-first {
