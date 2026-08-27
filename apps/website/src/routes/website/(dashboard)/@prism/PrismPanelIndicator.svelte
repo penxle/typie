@@ -411,19 +411,19 @@
 
   $effect(() => {
     const nextPhase = phase;
+    if (nextPhase !== 'submitting') {
+      if (nextPhase !== 'welcome') untrack(finishSubmission);
+      return;
+    }
     const nextDestination = destination;
     const nextRowSpinnerPlaybackStartedAt = rowSpinnerPlaybackStartedAt;
     untrack(() => {
-      if (nextPhase === 'submitting') {
-        if (mode !== 'fallback') hideRowSpinner(nextDestination);
-        if (nextRowSpinnerPlaybackStartedAt === null) {
-          fallbackToRow();
-          return;
-        }
-        beginSubmission(nextDestination);
-      } else if (nextPhase !== 'welcome') {
-        finishSubmission();
+      if (mode !== 'fallback') hideRowSpinner(nextDestination);
+      if (nextRowSpinnerPlaybackStartedAt === null) {
+        fallbackToRow();
+        return;
       }
+      beginSubmission(nextDestination);
     });
   });
 </script>
