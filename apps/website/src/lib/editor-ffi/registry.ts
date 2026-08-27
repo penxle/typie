@@ -15,6 +15,16 @@ export function snapshot(): Editor[] {
   return [...editors];
 }
 
+export function destroyAll(): void {
+  for (const editor of snapshot()) {
+    try {
+      editor.destroy();
+    } catch (err) {
+      console.error('Failed to destroy an editor.', err);
+    }
+  }
+}
+
 export function fanOutResourceUpdate(update: ResourceUpdate | undefined): void {
   if (!update) return;
   try {

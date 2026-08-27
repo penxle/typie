@@ -31,6 +31,7 @@ type PrismEdgeColor = string | readonly [number, number, number, number];
 
 type PrismWebRuntimeInstance = {
   createRenderer(canvas: HTMLCanvasElement, preferHdr: boolean): PrismWebRenderer;
+  free(): void;
 };
 
 type PrismRendererModule = {
@@ -85,6 +86,7 @@ export type MountedPrismSpinner = {
 };
 
 export type PrismRuntime = {
+  destroy(): void;
   mountObject(element: HTMLElement, options: PrismRuntimeObjectOptions): MountedPrismObject;
   mountSpinner(element: HTMLElement, options?: PrismRuntimeSpinnerOptions): MountedPrismSpinner;
 };
@@ -159,6 +161,8 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
   let modulePromise: Promise<PrismRendererModule> | null = null;
   let rendererRuntimePromise: Promise<PrismWebRuntimeInstance> | null = null;
+  let runtimeDestroyed = false;
+  const mounts = new Set<MountedPrismObject | MountedPrismSpinner>();
 
   function loadModule(): Promise<PrismRendererModule> {
     modulePromise ??= Promise.try(options.loadRenderer);
@@ -179,6 +183,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
   }
 
   function mountObject(element: HTMLElement, initialOptions: PrismRuntimeObjectOptions): MountedPrismObject {
+    if (runtimeDestroyed) throw new Error('Prism runtime is destroyed.');
     requireElement(element);
     requireTarget(initialOptions.target);
     const document = element.ownerDocument ?? globalThis.document;
@@ -885,10 +890,11 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       setTarget(initialOptions.target);
     }
 
-    return {
+    const mounted: MountedPrismObject = {
       destroy() {
         if (destroyed) return;
         destroyed = true;
+        mounts.delete(mounted);
         transitionGeneration += 1;
         if (frameId) cancelAnimationFrame(frameId);
         if (presentationFrameId) cancelAnimationFrame(presentationFrameId);
@@ -937,9 +943,12 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         return ensureController().then(() => readiness);
       },
     };
+    mounts.add(mounted);
+    return mounted;
   }
 
   function mountSpinner(element: HTMLElement, spinnerOptions: PrismRuntimeSpinnerOptions = {}): MountedPrismSpinner {
+    if (runtimeDestroyed) throw new Error('Prism runtime is destroyed.');
     requireElement(element);
     const document = element.ownerDocument ?? globalThis.document;
     const root = document.createElement('span');
@@ -1069,10 +1078,11 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     if (reducedMotion) void ensureAtlas();
     else void loadApng();
 
-    return {
+    const mounted: MountedPrismSpinner = {
       destroy() {
         if (destroyed) return;
         destroyed = true;
+        mounts.delete(mounted);
         apngLoadGeneration += 1;
         apngHdrPlayer.disconnect();
         atlasPlayer?.dispose();
@@ -1101,7 +1111,30 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         }
       },
     };
+    mounts.add(mounted);
+    return mounted;
   }
 
-  return { mountObject, mountSpinner };
+  function destroy(): void {
+    if (runtimeDestroyed) return;
+    runtimeDestroyed = true;
+    for (const mounted of mounts) {
+      try {
+        mounted.destroy();
+      } catch (err) {
+        console.error('Failed to destroy a Prism mount.', err);
+      } finally {
+        mounts.delete(mounted);
+      }
+    }
+
+    const runtimePromise = rendererRuntimePromise;
+    rendererRuntimePromise = null;
+    modulePromise = null;
+    if (runtimePromise) {
+      void runtimePromise.then((runtime) => runtime.free()).catch(() => null);
+    }
+  }
+
+  return { destroy, mountObject, mountSpinner };
 }
