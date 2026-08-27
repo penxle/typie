@@ -7,20 +7,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Size
 import co.typie.editor.Editor
 import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.Viewport
 
 @Composable
 internal fun rememberCommittedEditorRenderZoom(
   editor: Editor?,
-  physicalViewport: Size,
+  viewport: Viewport?,
   layoutSpec: EditorDocumentLayoutSpec,
   requestedRenderZoom: Float,
-  scaleFactor: Double,
 ): Float {
   // Continuous surface scale must not advance before the logical viewport resize it renders.
   // Paginated zoom does not reflow, so it can keep following the requested render zoom directly.
@@ -39,23 +37,9 @@ internal fun rememberCommittedEditorRenderZoom(
       0L
     }
 
-  LaunchedEffect(
-    editor,
-    physicalViewport,
-    layoutSpec,
-    continuousRenderZoom,
-    scaleFactor,
-    localEditAdmissionGeneration,
-  ) {
+  LaunchedEffect(editor, viewport, continuous, continuousRenderZoom, localEditAdmissionGeneration) {
     val activeEditor = editor ?: return@LaunchedEffect
-    if (
-      physicalViewport.width <= 0f ||
-        physicalViewport.height <= 0f ||
-        !scaleFactor.isFinite() ||
-        scaleFactor <= 0.0
-    ) {
-      return@LaunchedEffect
-    }
+    val targetViewport = viewport ?: return@LaunchedEffect
     var resizeCommitted = false
     val resizeEffectCompleted = activeEditor.runEffect {
       resizeCommitted =
@@ -63,17 +47,9 @@ internal fun rememberCommittedEditorRenderZoom(
           enqueue(
             Message.System(
               SystemEvent.Resize(
-                width =
-                  when (layoutSpec) {
-                    is EditorDocumentLayoutSpec.Continuous ->
-                      resolveContinuousLayoutViewportWidth(
-                        viewportWidth = physicalViewport.width,
-                        committedZoom = continuousRenderZoom,
-                      )
-                    is EditorDocumentLayoutSpec.Paginated -> physicalViewport.width
-                  },
-                height = physicalViewport.height,
-                scaleFactor = scaleFactor,
+                width = targetViewport.width,
+                height = targetViewport.height,
+                scaleFactor = targetViewport.scaleFactor,
               )
             )
           )

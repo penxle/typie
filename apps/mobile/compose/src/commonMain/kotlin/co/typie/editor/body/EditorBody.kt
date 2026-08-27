@@ -27,6 +27,7 @@ import co.typie.editor.EditorView
 import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.PublishedBundle
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.ffi.Viewport
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.editorExtensionAreaLineHighlight
 import co.typie.editor.overlay.editorLineHighlightColor
@@ -49,6 +50,7 @@ private val DebugExtensionFillColor = Color(0x2200B8D4)
 internal fun EditorBody(
   load: DocumentEditorLoad,
   publishedBundle: PublishedBundle?,
+  editorViewport: Viewport?,
   visibleArea: EditorVisibleArea,
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
@@ -60,8 +62,7 @@ internal fun EditorBody(
   overlay: @Composable BoxScope.(EditorBodyGeometry, EditorState) -> Unit = { _, _ -> },
 ) {
   val density = LocalDensity.current
-  val zoomController = LocalEditorZoomController.current
-  val displayZoom = zoomController.displayZoom
+  val displayZoom = LocalEditorZoomController.current.displayZoom
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
@@ -76,15 +77,6 @@ internal fun EditorBody(
       pageSizes = pageSizes,
       displayZoom = displayZoom,
     )
-  val logicalViewportWidth =
-    when (layoutSpec) {
-      is EditorDocumentLayoutSpec.Continuous ->
-        resolveContinuousLayoutViewportWidth(
-          viewportWidth = geometry.visibleBodySize.width,
-          committedZoom = zoomController.renderZoom,
-        )
-      is EditorDocumentLayoutSpec.Paginated -> geometry.visibleBodySize.width
-    }
   val cursor = presentedState.cursor
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
@@ -151,8 +143,7 @@ internal fun EditorBody(
                 load = load,
                 publishedBundle = presentedBundle,
                 layoutSpec = layoutSpec,
-                viewportWidth = logicalViewportWidth,
-                viewportHeight = geometry.visibleBodySize.height,
+                viewport = editorViewport,
                 modifier = Modifier.fillMaxWidth(),
                 editorInputEnabled = editorInputEnabled,
                 suppressSoftwareKeyboard = suppressSoftwareKeyboard,

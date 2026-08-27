@@ -32,6 +32,8 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorBody
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ext.isCollapsed
@@ -40,6 +42,7 @@ import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
+import co.typie.editor.ffi.Viewport
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
@@ -314,13 +317,22 @@ class EditorFrameSyncDesktopTest {
 
     try {
       setContent {
+        val renderZoom = requestedRenderZoom.floatValue
         val committedZoom =
           rememberCommittedEditorRenderZoom(
             editor = fixture.editor,
-            physicalViewport = Size(ViewportWidth, ViewportHeight),
+            viewport =
+              Viewport(
+                width =
+                  resolveContinuousLayoutViewportWidth(
+                    viewportWidth = ViewportWidth,
+                    committedZoom = renderZoom,
+                  ),
+                height = ViewportHeight,
+                scaleFactor = 1.0,
+              ),
             layoutSpec = fixture.layoutSpec,
-            requestedRenderZoom = requestedRenderZoom.floatValue,
-            scaleFactor = 1.0,
+            requestedRenderZoom = renderZoom,
           )
         SideEffect { committedRenderZoom = committedZoom }
       }
@@ -1470,13 +1482,31 @@ class EditorFrameSyncDesktopTest {
         val scrollGestureLockState = remember { ScrollGestureLockState() }
         val zoomController = fixture.zoomController
         val measuredViewport = remember { mutableStateOf(Size.Zero) }
+        val physicalViewport = measuredViewport.value
+        val editorViewport =
+          physicalViewport
+            .takeIf { it.width > 0f && it.height > 0f }
+            ?.let {
+              Viewport(
+                width =
+                  when (fixture.layoutSpec) {
+                    is EditorDocumentLayoutSpec.Continuous ->
+                      resolveContinuousLayoutViewportWidth(
+                        viewportWidth = it.width,
+                        committedZoom = zoomController.renderZoom,
+                      )
+                    is EditorDocumentLayoutSpec.Paginated -> it.width
+                  },
+                height = it.height,
+                scaleFactor = 1.0,
+              )
+            }
         val committedRenderZoom =
           rememberCommittedEditorRenderZoom(
             editor = fixture.editor,
-            physicalViewport = measuredViewport.value,
+            viewport = editorViewport,
             layoutSpec = fixture.layoutSpec,
             requestedRenderZoom = zoomController.renderZoom,
-            scaleFactor = 1.0,
           )
         val publishedBundle = fixture.editor.publishedBundle
         val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
@@ -1545,6 +1575,7 @@ class EditorFrameSyncDesktopTest {
               EditorBody(
                 load = fixture.load,
                 publishedBundle = presentedBundle,
+                editorViewport = editorViewport,
                 visibleArea = fixture.visibleArea,
                 layoutSpec = fixture.layoutSpec,
                 autoScrollPolicy = fixture.autoScrollPolicy,

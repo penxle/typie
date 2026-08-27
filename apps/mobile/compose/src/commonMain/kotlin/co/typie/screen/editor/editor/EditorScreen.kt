@@ -60,6 +60,7 @@ import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.decodeDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
+import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
@@ -76,6 +77,7 @@ import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.EditorInputRecorder
 import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.input.buildInputLogPayload
@@ -1498,13 +1500,41 @@ fun EditorScreen(entityId: String) {
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val displayZoom = zoomController.displayZoom
+    val requestedRenderZoom = zoomController.renderZoom
+    val physicalEditorViewport = measuredEditorViewport.value
+    val editorViewport =
+      remember(physicalEditorViewport, layoutSpec, requestedRenderZoom, density) {
+        physicalEditorViewport
+          .takeIf {
+            it.width.isFinite() &&
+              it.width > 0f &&
+              it.height.isFinite() &&
+              it.height > 0f &&
+              density.isFinite() &&
+              density > 0f
+          }
+          ?.let { physicalViewport ->
+            Viewport(
+              width =
+                when (layoutSpec) {
+                  is EditorDocumentLayoutSpec.Continuous ->
+                    resolveContinuousLayoutViewportWidth(
+                      viewportWidth = physicalViewport.width,
+                      committedZoom = requestedRenderZoom,
+                    )
+                  is EditorDocumentLayoutSpec.Paginated -> physicalViewport.width
+                },
+              height = physicalViewport.height,
+              scaleFactor = density.toDouble(),
+            )
+          }
+      }
     val committedRenderZoom =
       rememberCommittedEditorRenderZoom(
         editor = editor,
-        physicalViewport = measuredEditorViewport.value,
+        viewport = editorViewport,
         layoutSpec = layoutSpec,
-        requestedRenderZoom = zoomController.renderZoom,
-        scaleFactor = density.toDouble(),
+        requestedRenderZoom = requestedRenderZoom,
       )
     val typewriterTargetLineHeight =
       resolveBringIntoViewTargetHeight(
@@ -2014,6 +2044,7 @@ fun EditorScreen(entityId: String) {
             EditorBody(
               load = editorLoad,
               publishedBundle = presentedBundle,
+              editorViewport = editorViewport,
               visibleArea = visibleArea,
               layoutSpec = layoutSpec,
               autoScrollPolicy = presentedAutoScrollPolicy,
