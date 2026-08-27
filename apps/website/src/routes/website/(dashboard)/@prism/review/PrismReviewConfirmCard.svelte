@@ -219,6 +219,13 @@
           reviewRounds {
             id
             credits
+            tier
+
+            baseRound {
+              id
+              ordinal
+              createdAt
+            }
           }
         }
       }
@@ -226,7 +233,18 @@
     () => ({ sessionId: sessionId ?? '' }),
     () => ({ skip: sessionId === null || chosenKey === null }),
   );
-  const chosenCredits = $derived(rounds.data?.prismSession.reviewRounds.find((round) => round.id === chosenKey)?.credits ?? null);
+  const chosenRound = $derived(rounds.data?.prismSession.reviewRounds.find((round) => round.id === chosenKey) ?? null);
+  const chosenCredits = $derived(chosenRound?.credits ?? null);
+  // 이어서 본 회차만 기준 회차가 있다 — 새로 시작·첫 리뷰는 열린 카드처럼 절이 없다
+  const chosenBase = $derived(
+    chosenRound?.baseRound
+      ? {
+          latestOrdinal: chosenRound.baseRound.ordinal,
+          tier: chosenRound.tier.toLowerCase() as PrismReviewTierName,
+          createdAt: chosenRound.baseRound.createdAt,
+        }
+      : null,
+  );
   const chosenTitle = $derived(
     parsedDecision.success && parsedDecision.data.decision === 'confirmed'
       ? parsedDecision.data.document.title
@@ -445,7 +463,13 @@
     </Menu>
   {/if}
 
-  {#if lineages.length > 0 && !readonly}
+  {#if readonly && chosenBase !== null}
+    <div class={labelClass}>지난 리뷰</div>
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', borderColor: 'border.strong' })} aria-current="true">
+      <span class={shrinkTitleClass}>{lineageRowLabel(chosenBase)}</span>
+      <TimeAgo style={timeStyle} timestamp={new Date(chosenBase.createdAt).getTime()} />
+    </div>
+  {:else if lineages.length > 0 && !readonly}
     {@const chosenLineage = lineages.find((lineage) => lineage.id === lineageChoice) ?? null}
     <div class={labelClass}>지난 리뷰</div>
     <Menu
