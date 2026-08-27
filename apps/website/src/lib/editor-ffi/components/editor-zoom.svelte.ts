@@ -5,6 +5,9 @@ import {
   computeDocumentZoomBounds,
   computeInitialDocumentZoom,
   RENDER_ZOOM_DEBOUNCE_MS,
+  RENDER_ZOOM_MAX_COMMIT_DELAY_MS,
+  RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS,
+  RENDER_ZOOM_SCALE_RATIO_THRESHOLD,
   renderZoomForDisplay,
   zoomDiffers,
   zoomEquals,
@@ -35,6 +38,8 @@ export class EditorZoomController {
 
   #initializedLayoutKey: string | null = null;
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
+  #renderZoomMismatchStartedAt: number | null = null;
+  #lastRenderZoomCommitAt = -Infinity;
   #wheelRawZoomResetTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelRawZoom: number | null = null;
   #options: EditorZoomControllerOptions;
@@ -108,6 +113,52 @@ export class EditorZoomController {
     this.#wheelRawZoom = null;
   }
 
+  #clearRenderZoomTimer(): void {
+    if (this.#renderZoomTimer) {
+      clearTimeout(this.#renderZoomTimer);
+      this.#renderZoomTimer = null;
+    }
+  }
+
+  #commitLatestRenderZoom(now: number): void {
+    this.#clearRenderZoomTimer();
+    this.#renderZoomMismatchStartedAt = null;
+    const nextRenderZoom = this.#options.layout() ? renderZoomForDisplay(this.displayZoom) : 1;
+    if (zoomDiffers(this.renderZoom, nextRenderZoom)) {
+      this.renderZoom = nextRenderZoom;
+      this.#lastRenderZoomCommitAt = now;
+    }
+  }
+
+  #scheduleRenderZoom(final = false): void {
+    this.#clearRenderZoomTimer();
+    const nextRenderZoom = this.#options.layout() ? renderZoomForDisplay(this.displayZoom) : 1;
+    if (!zoomDiffers(this.renderZoom, nextRenderZoom)) {
+      this.#renderZoomMismatchStartedAt = null;
+      return;
+    }
+
+    const now = Date.now();
+    this.#renderZoomMismatchStartedAt ??= now;
+    const minimumIntervalDeadline = this.#lastRenderZoomCommitAt + RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS;
+    const quietDeadline = now + RENDER_ZOOM_DEBOUNCE_MS;
+    const maximumDelayDeadline = this.#renderZoomMismatchStartedAt + RENDER_ZOOM_MAX_COMMIT_DELAY_MS;
+    const scaleRatio = Math.max(this.displayZoom / this.renderZoom, this.renderZoom / this.displayZoom);
+
+    const requestedDeadline =
+      final || scaleRatio >= RENDER_ZOOM_SCALE_RATIO_THRESHOLD ? now : Math.min(quietDeadline, maximumDelayDeadline);
+    const deadline = Math.max(requestedDeadline, minimumIntervalDeadline);
+
+    const delay = Math.max(0, deadline - now);
+    if (delay === 0) {
+      this.#commitLatestRenderZoom(now);
+      return;
+    }
+    this.#renderZoomTimer = setTimeout(() => {
+      this.#commitLatestRenderZoom(Date.now());
+    }, delay);
+  }
+
   async #syncZoomAnchor(anchor: ZoomAnchor, zoom: number): Promise<void> {
     const viewport = this.#options.getScrollViewport();
     if (!viewport) {
@@ -144,10 +195,8 @@ export class EditorZoomController {
   }
 
   destroy(): void {
-    if (this.#renderZoomTimer) {
-      clearTimeout(this.#renderZoomTimer);
-      this.#renderZoomTimer = null;
-    }
+    this.#clearRenderZoomTimer();
+    this.#renderZoomMismatchStartedAt = null;
     this.#resetWheelRawZoom();
   }
 
@@ -156,10 +205,7 @@ export class EditorZoomController {
       this.#resetWheelRawZoom();
     }
 
-    if (this.#renderZoomTimer) {
-      clearTimeout(this.#renderZoomTimer);
-      this.#renderZoomTimer = null;
-    }
+    this.#clearRenderZoomTimer();
 
     const layout = this.#options.layout();
     if (!layout) {
@@ -168,7 +214,9 @@ export class EditorZoomController {
       }
       if (zoomDiffers(this.renderZoom, 1)) {
         this.renderZoom = 1;
+        this.#lastRenderZoomCommitAt = Date.now();
       }
+      this.#renderZoomMismatchStartedAt = null;
       return;
     }
 
@@ -178,32 +226,16 @@ export class EditorZoomController {
       layout,
       viewportWidth,
     });
-    const nextRenderZoom = renderZoomForDisplay(clamped);
-
     if (zoomDiffers(this.displayZoom, clamped)) {
       this.displayZoom = clamped;
     }
 
     if (commitRender) {
-      if (zoomDiffers(this.renderZoom, nextRenderZoom)) {
-        this.renderZoom = nextRenderZoom;
-      }
+      this.#commitLatestRenderZoom(Date.now());
       return;
     }
 
-    this.#renderZoomTimer = setTimeout(() => {
-      this.#renderZoomTimer = null;
-      if (!this.#options.layout()) {
-        if (zoomDiffers(this.renderZoom, 1)) {
-          this.renderZoom = 1;
-        }
-        return;
-      }
-      const latestRenderZoom = renderZoomForDisplay(this.displayZoom);
-      if (zoomDiffers(this.renderZoom, latestRenderZoom)) {
-        this.renderZoom = latestRenderZoom;
-      }
-    }, RENDER_ZOOM_DEBOUNCE_MS);
+    this.#scheduleRenderZoom();
   }
 
   syncInitialZoom(): void {
@@ -301,6 +333,7 @@ export class EditorZoomController {
   }
 
   commitRenderZoom(): void {
-    this.setZoom(this.displayZoom, { commitRender: true });
+    this.#resetWheelRawZoom();
+    this.#scheduleRenderZoom(true);
   }
 }

@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  RENDER_ZOOM_MAX_COMMIT_DELAY_MS,
+  RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS,
+  RENDER_ZOOM_SCALE_RATIO_THRESHOLD,
+} from '$lib/editor-ffi/zoom';
 import { EditorZoomController } from './editor-zoom.svelte';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
 import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
@@ -36,19 +41,19 @@ describe('EditorZoomController continuous timing', () => {
     expect(controller.renderZoom).toBe(1);
   });
 
-  it('commits continuous render zoom only at the existing debounce boundary', () => {
+  it('commits a small continuous render zoom change at the existing debounce boundary', () => {
     vi.useFakeTimers();
     const controller = createController({ type: 'continuous', maxWidth: 600 });
 
-    controller.setZoom(0.8);
-    expect(controller.displayZoom).toBe(0.8);
+    controller.setZoom(0.9);
+    expect(controller.displayZoom).toBe(0.9);
     expect(controller.renderZoom).toBe(1);
 
     vi.advanceTimersByTime(119);
     expect(controller.renderZoom).toBe(1);
 
     vi.advanceTimersByTime(1);
-    expect(controller.renderZoom).toBe(0.8);
+    expect(controller.renderZoom).toBe(0.9);
   });
 
   it('commits continuous render zoom immediately at gesture end', () => {
@@ -60,6 +65,84 @@ describe('EditorZoomController continuous timing', () => {
 
     expect(controller.renderZoom).toBe(0.8);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('commits a large scale difference without waiting for the quiet period', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(1 / RENDER_ZOOM_SCALE_RATIO_THRESHOLD);
+
+    expect(controller.renderZoom).toBeCloseTo(1 / RENDER_ZOOM_SCALE_RATIO_THRESHOLD);
+  });
+
+  it('keeps the minimum interval while coalescing rapid large scale changes', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(1 / RENDER_ZOOM_SCALE_RATIO_THRESHOLD);
+    const firstRenderZoom = controller.renderZoom;
+    controller.setZoom(1.2);
+    vi.advanceTimersByTime(RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS - 1);
+    controller.setZoom(1.3);
+
+    expect(controller.renderZoom).toBe(firstRenderZoom);
+
+    vi.advanceTimersByTime(1);
+    expect(controller.renderZoom).toBe(1.3);
+  });
+
+  it('replaces a blocked threshold commit with the latest input without extending the maximum delay', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(0.84);
+    vi.advanceTimersByTime(20);
+    controller.setZoom(1.2);
+    vi.advanceTimersByTime(80);
+    controller.setZoom(0.9);
+    vi.advanceTimersByTime(100);
+    controller.setZoom(0.91);
+    vi.advanceTimersByTime(100);
+    controller.setZoom(0.9);
+    vi.advanceTimersByTime(19);
+
+    expect(controller.renderZoom).toBe(0.84);
+
+    vi.advanceTimersByTime(1);
+    expect(controller.renderZoom).toBe(0.9);
+  });
+
+  it('commits continuous input by the maximum delay even when the quiet period keeps moving', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(0.95);
+    vi.advanceTimersByTime(100);
+    controller.setZoom(0.96);
+    vi.advanceTimersByTime(100);
+    controller.setZoom(0.95);
+    vi.advanceTimersByTime(RENDER_ZOOM_MAX_COMMIT_DELAY_MS - 201);
+
+    expect(controller.renderZoom).toBe(1);
+
+    vi.advanceTimersByTime(1);
+    expect(controller.renderZoom).toBe(0.95);
+  });
+
+  it('defers a gesture-end commit until the minimum interval after an intermediate commit', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(1 / RENDER_ZOOM_SCALE_RATIO_THRESHOLD);
+    const firstRenderZoom = controller.renderZoom;
+    controller.setZoom(1.1);
+    controller.commitRenderZoom();
+
+    expect(controller.renderZoom).toBe(firstRenderZoom);
+
+    vi.advanceTimersByTime(RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS);
+    expect(controller.renderZoom).toBe(1.1);
   });
 });
 

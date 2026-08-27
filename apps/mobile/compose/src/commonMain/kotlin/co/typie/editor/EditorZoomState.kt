@@ -22,6 +22,9 @@ private const val FitWidthZoomSnapThreshold = 0.02f
 private const val UnitZoomSnapThreshold = 0.02f
 private const val ZoomEpsilon = 0.0001f
 private const val RenderZoomDebounceMs = 120L
+private const val RenderZoomMinCommitIntervalMs = 160L
+private const val RenderZoomMaxCommitDelayMs = 300L
+private const val RenderZoomScaleRatioThreshold = 1.18f
 
 @Stable
 internal class EditorZoomController(
@@ -40,7 +43,10 @@ internal class EditorZoomController(
   private var initializedLayoutKey: String? = null
   private var currentLayoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(0f)
   private var currentViewportWidth: Float = 0f
-  private var renderZoomJob: Job? = null
+  private var renderZoomQuietJob: Job? = null
+  private var renderZoomMaxDelayJob: Job? = null
+  private var renderZoomCooldownJob: Job? = null
+  private var renderZoomCommitPending = false
 
   fun syncLayout(layoutSpec: EditorDocumentLayoutSpec, viewportWidth: Float) {
     currentLayoutSpec = layoutSpec
@@ -86,9 +92,7 @@ internal class EditorZoomController(
   }
 
   fun commitRenderZoom() {
-    renderZoomJob?.cancel()
-    renderZoomJob = null
-    syncRenderZoomNow()
+    requestRenderZoomCommit()
   }
 
   fun resolveSnapKey(zoom: Float = displayZoom): EditorZoomSnapKey? {
@@ -128,25 +132,88 @@ internal class EditorZoomController(
       displayZoom = resolvedZoom
     }
 
-    renderZoomJob?.cancel()
-    renderZoomJob = null
-
     if (commitRender) {
+      clearRenderZoomSchedule()
       syncRenderZoomNow()
       return changed
     }
 
-    renderZoomJob = scope?.launch {
-      delay(renderZoomDebounceMs)
-      syncRenderZoomNow()
-    }
+    scheduleRenderZoom()
     return changed
+  }
+
+  private fun scheduleRenderZoom() {
+    renderZoomQuietJob?.cancel()
+    renderZoomQuietJob = null
+    renderZoomCommitPending = false
+
+    val nextRenderZoom = renderZoomForDisplay(displayZoom)
+    if (!zoomDiffers(renderZoom, nextRenderZoom)) {
+      clearRenderZoomSchedule()
+      return
+    }
+
+    if (renderZoomMaxDelayJob?.isActive != true) {
+      renderZoomMaxDelayJob = scope?.launch {
+        delay(RenderZoomMaxCommitDelayMs)
+        renderZoomMaxDelayJob = null
+        requestRenderZoomCommit()
+      }
+    }
+
+    val scaleRatio = maxOf(displayZoom / renderZoom, renderZoom / displayZoom)
+    if (scaleRatio >= RenderZoomScaleRatioThreshold) {
+      requestRenderZoomCommit()
+      return
+    }
+
+    renderZoomQuietJob = scope?.launch {
+      delay(renderZoomDebounceMs)
+      renderZoomQuietJob = null
+      requestRenderZoomCommit()
+    }
+  }
+
+  private fun requestRenderZoomCommit() {
+    renderZoomQuietJob?.cancel()
+    renderZoomQuietJob = null
+
+    val nextRenderZoom = renderZoomForDisplay(displayZoom)
+    if (!zoomDiffers(renderZoom, nextRenderZoom)) {
+      clearRenderZoomSchedule()
+      return
+    }
+
+    if (renderZoomCooldownJob?.isActive == true) {
+      renderZoomCommitPending = true
+      return
+    }
+
+    clearRenderZoomSchedule()
+    syncRenderZoomNow()
+  }
+
+  private fun clearRenderZoomSchedule() {
+    renderZoomQuietJob?.cancel()
+    renderZoomQuietJob = null
+    renderZoomMaxDelayJob?.cancel()
+    renderZoomMaxDelayJob = null
+    renderZoomCommitPending = false
   }
 
   private fun syncRenderZoomNow() {
     val nextRenderZoom = renderZoomForDisplay(displayZoom)
     if (!zoomEquals(renderZoom, nextRenderZoom)) {
       renderZoom = nextRenderZoom
+      renderZoomCooldownJob?.cancel()
+      renderZoomCooldownJob = scope?.launch {
+        delay(RenderZoomMinCommitIntervalMs)
+        renderZoomCooldownJob = null
+        if (renderZoomCommitPending) {
+          renderZoomCommitPending = false
+          requestRenderZoomCommit()
+        }
+      }
     }
   }
 

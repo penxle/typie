@@ -119,7 +119,7 @@ class EditorZoomControllerTest {
     )
 
     state.setDisplayZoom(
-      zoom = 1.4f,
+      zoom = 1.1f,
       layoutSpec =
         EditorDocumentLayoutSpec.Paginated(
           pageWidth = 720f,
@@ -132,7 +132,7 @@ class EditorZoomControllerTest {
       viewportWidth = 720f,
     )
 
-    assertEquals(1.4f, state.displayZoom, 0.0001f)
+    assertEquals(1.1f, state.displayZoom, 0.0001f)
     assertEquals(1f, state.renderZoom, 0.0001f)
 
     advanceTimeBy(119)
@@ -141,7 +141,7 @@ class EditorZoomControllerTest {
 
     advanceTimeBy(1)
     runCurrent()
-    assertEquals(1.4f, state.renderZoom, 0.0001f)
+    assertEquals(1.1f, state.renderZoom, 0.0001f)
   }
 
   @Test
@@ -150,16 +150,16 @@ class EditorZoomControllerTest {
     val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
     state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
 
-    state.setDisplayZoom(zoom = 0.75f, layoutSpec = layout, viewportWidth = 500f)
+    state.setDisplayZoom(zoom = 0.9f, layoutSpec = layout, viewportWidth = 500f)
 
-    assertEquals(0.75f, state.displayZoom, 0.0001f)
+    assertEquals(0.9f, state.displayZoom, 0.0001f)
     assertEquals(1f, state.renderZoom, 0.0001f)
     advanceTimeBy(119)
     runCurrent()
     assertEquals(1f, state.renderZoom, 0.0001f)
     advanceTimeBy(1)
     runCurrent()
-    assertEquals(0.75f, state.renderZoom, 0.0001f)
+    assertEquals(0.9f, state.renderZoom, 0.0001f)
   }
 
   @Test
@@ -176,14 +176,107 @@ class EditorZoomControllerTest {
       )
 
     state.syncLayout(layoutSpec = layoutSpec, viewportWidth = 720f)
-    state.setDisplayZoom(zoom = 1.4f, layoutSpec = layoutSpec, viewportWidth = 720f)
+    state.setDisplayZoom(zoom = 1.1f, layoutSpec = layoutSpec, viewportWidth = 720f)
 
-    assertEquals(1.4f, state.displayZoom, 0.0001f)
+    assertEquals(1.1f, state.displayZoom, 0.0001f)
     assertEquals(1f, state.renderZoom, 0.0001f)
 
     state.commitRenderZoom()
 
-    assertEquals(1.4f, state.renderZoom, 0.0001f)
+    assertEquals(1.1f, state.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `large scale difference commits without waiting for the quiet period`() = runTest {
+    val state = EditorZoomController(scope = backgroundScope)
+    val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
+    state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
+
+    state.setDisplayZoom(zoom = 0.84f, layoutSpec = layout, viewportWidth = 500f)
+
+    assertEquals(0.84f, state.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `rapid large scale changes keep the minimum render commit interval`() = runTest {
+    val state = EditorZoomController(scope = backgroundScope)
+    val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
+    state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
+
+    state.setDisplayZoom(zoom = 0.84f, layoutSpec = layout, viewportWidth = 500f)
+    state.setDisplayZoom(zoom = 1.2f, layoutSpec = layout, viewportWidth = 500f)
+    advanceTimeBy(159)
+    state.setDisplayZoom(zoom = 1.3f, layoutSpec = layout, viewportWidth = 500f)
+
+    assertEquals(0.84f, state.renderZoom, 0.0001f)
+
+    advanceTimeBy(1)
+    runCurrent()
+    assertEquals(1.3f, state.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `latest small change replaces a blocked threshold commit without extending maximum delay`() =
+    runTest {
+      val state = EditorZoomController(scope = backgroundScope)
+      val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
+      state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
+
+      state.setDisplayZoom(zoom = 0.84f, layoutSpec = layout, viewportWidth = 500f)
+      advanceTimeBy(20)
+      state.setDisplayZoom(zoom = 1.2f, layoutSpec = layout, viewportWidth = 500f)
+      advanceTimeBy(80)
+      state.setDisplayZoom(zoom = 0.9f, layoutSpec = layout, viewportWidth = 500f)
+      advanceTimeBy(100)
+      state.setDisplayZoom(zoom = 0.91f, layoutSpec = layout, viewportWidth = 500f)
+      advanceTimeBy(100)
+      state.setDisplayZoom(zoom = 0.9f, layoutSpec = layout, viewportWidth = 500f)
+      advanceTimeBy(19)
+      runCurrent()
+
+      assertEquals(0.84f, state.renderZoom, 0.0001f)
+
+      advanceTimeBy(1)
+      runCurrent()
+      assertEquals(0.9f, state.renderZoom, 0.0001f)
+    }
+
+  @Test
+  fun `continuous input commits by the maximum render delay`() = runTest {
+    val state = EditorZoomController(scope = backgroundScope)
+    val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
+    state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
+
+    state.setDisplayZoom(zoom = 0.95f, layoutSpec = layout, viewportWidth = 500f)
+    advanceTimeBy(100)
+    state.setDisplayZoom(zoom = 0.96f, layoutSpec = layout, viewportWidth = 500f)
+    advanceTimeBy(100)
+    state.setDisplayZoom(zoom = 0.95f, layoutSpec = layout, viewportWidth = 500f)
+    advanceTimeBy(99)
+    runCurrent()
+
+    assertEquals(1f, state.renderZoom, 0.0001f)
+
+    advanceTimeBy(1)
+    runCurrent()
+    assertEquals(0.95f, state.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `gesture end waits for the minimum interval after an intermediate commit`() = runTest {
+    val state = EditorZoomController(scope = backgroundScope)
+    val layout = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f)
+    state.syncLayout(layoutSpec = layout, viewportWidth = 500f)
+
+    state.setDisplayZoom(zoom = 0.84f, layoutSpec = layout, viewportWidth = 500f)
+    state.setDisplayZoom(zoom = 1.1f, layoutSpec = layout, viewportWidth = 500f)
+    state.commitRenderZoom()
+
+    assertEquals(0.84f, state.renderZoom, 0.0001f)
+
+    advanceTimeBy(160)
+    runCurrent()
+    assertEquals(1.1f, state.renderZoom, 0.0001f)
   }
 
   @Test
