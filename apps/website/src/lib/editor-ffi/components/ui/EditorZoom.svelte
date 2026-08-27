@@ -48,7 +48,7 @@
 
   $effect(() => {
     editor.displayZoom = displayZoom;
-    editor.setRenderZoom(renderZoom);
+    editor.commitRenderZoom(renderZoom);
   });
 
   $effect(() => {
@@ -68,7 +68,7 @@
     return () => {
       zoom.destroy();
       editor.displayZoom = 1;
-      editor.setRenderZoom(1);
+      editor.commitRenderZoom(1);
     };
   });
 

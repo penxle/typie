@@ -1329,10 +1329,18 @@ export class Editor {
     });
   }
 
-  setRenderZoom(renderZoom: number): void {
+  commitRenderZoom(renderZoom: number): void {
     const safeRenderZoom = Number.isFinite(renderZoom) && renderZoom > 0 ? renderZoom : 1;
-    if (zoomDiffers(this.renderZoom, safeRenderZoom)) {
-      this.renderZoom = safeRenderZoom;
+    if (!zoomDiffers(this.renderZoom, safeRenderZoom)) return;
+
+    const previousRenderZoom = this.renderZoom;
+    const physicalViewportWidth = this.#viewport.width * Math.min(previousRenderZoom, 1);
+    this.renderZoom = safeRenderZoom;
+    if (isContinuousLayout(this.#applied.rootAttrs)) {
+      // Resize installs and reconciles the continuous layout synchronously. Make its matching
+      // surface scale visible first so geometry and scale replace each surface only once.
+      // Reactive publication remains deferred until the updated snapshot is installed.
+      this.resizeViewportNow(physicalViewportWidth / Math.min(safeRenderZoom, 1), this.#viewport.height, this.#viewport.scale_factor);
     }
   }
 

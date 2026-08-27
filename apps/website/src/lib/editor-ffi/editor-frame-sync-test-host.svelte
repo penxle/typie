@@ -23,7 +23,6 @@
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { setupEditorScroll } from './scroll.svelte';
-  import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
   import type { Editor } from './editor.svelte';
   import type { DocumentZoomLayout } from './zoom';
@@ -86,22 +85,6 @@
 
   $effect(() => {
     editor.readOnly = readOnly;
-  });
-
-  $effect(() => {
-    const layout = zoomLayout;
-    const width = viewportWidth;
-    const renderZoom = editor.renderZoom;
-    if (!withZoom || layout?.type !== 'continuous' || width <= 0) return;
-    untrack(() => {
-      const height = editor.viewport.height;
-      if (height <= 0) return;
-      editor.resizeViewportNow(
-        resolveContinuousLayoutViewportWidth({ viewportWidth: width, committedZoom: renderZoom }),
-        height,
-        editor.scaleFactor,
-      );
-    });
   });
 
   $effect(() => {

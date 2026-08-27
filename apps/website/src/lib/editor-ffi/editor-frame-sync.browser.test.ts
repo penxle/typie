@@ -279,7 +279,7 @@ async function mountEditor(
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
   if (options.displayZoom !== undefined) {
     editor.displayZoom = options.displayZoom;
-    editor.setRenderZoom(options.displayZoom);
+    editor.commitRenderZoom(options.displayZoom);
   }
   const target = document.createElement('div');
   document.body.append(target);
@@ -1315,6 +1315,8 @@ describe('web editor frame synchronization', () => {
   it('delays continuous reflow until the render commit and replaces it coherently', async () => {
     const { editor, scrollRoot } = await mountEditor(continuousDoc('continuous zoom '.repeat(40)), { withZoom: true });
     await waitForPresentation(editor);
+    const attachSurface = editor.attachSurface.bind(editor);
+    const attachSurfaceSpy = vi.spyOn(editor, 'attachSurface').mockImplementation((...args) => attachSurface(...args));
     const initialPageWidth = editor.appliedSnapshot.pageSizes[0]?.width;
     const initialCanvas = editor.published?.frames.get(0)?.canvas;
     expect(initialPageWidth).toBeCloseTo(360);
@@ -1350,7 +1352,22 @@ describe('web editor frame synchronization', () => {
     expect(editor.pageEls[0]?.getBoundingClientRect().width).toBeCloseTo(360, 0);
     expect(editor.published?.frames.get(0)?.canvas.width).toBeGreaterThan(0);
     expect(editor.published?.frames.get(0)?.canvas.height).toBeGreaterThan(0);
+    expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
     expectActualCanvas(editor, 0, false);
+  });
+
+  it('derives a continuous render commit from the editor viewport target', async () => {
+    const { editor } = await mountEditor(continuousDoc('continuous zoom '.repeat(40)));
+    await waitForPresentation(editor);
+
+    editor.resizeViewportNow(300, 180, 1);
+    await waitForPresentation(editor);
+    expect(editor.viewport.width).toBeCloseTo(300);
+
+    editor.commitRenderZoom(0.75);
+
+    expect(editor.viewport.width).toBeCloseTo(400);
+    expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeCloseTo(400);
   });
 
   it('makes the entire zoomed continuous track horizontally reachable without oversized line highlight paint', async () => {

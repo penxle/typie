@@ -5,7 +5,10 @@ import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 internal class LocalEditQuiescence
@@ -46,6 +49,9 @@ internal class EditorLocalEditCoordinator {
   )
 
   private val state = MutableStateFlow(State())
+  private val mutableAdmissionGeneration = MutableStateFlow(0L)
+
+  val admissionGeneration: StateFlow<Long> = mutableAdmissionGeneration.asStateFlow()
 
   fun register(): LocalEdit? {
     while (true) {
@@ -118,7 +124,10 @@ internal class EditorLocalEditCoordinator {
       val current = state.value
       val next =
         current.copy(accepting = true, failures = current.failures.filterKeys { it > through })
-      if (state.compareAndSet(current, next)) return
+      if (state.compareAndSet(current, next)) {
+        if (!current.accepting) mutableAdmissionGeneration.update { it + 1L }
+        return
+      }
     }
   }
 
