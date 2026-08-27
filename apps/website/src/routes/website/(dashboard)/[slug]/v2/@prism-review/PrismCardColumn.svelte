@@ -40,13 +40,6 @@
   const presentation = $derived(lanePresentation(margin.presentationProgress));
   const presentationAnimating = $derived(margin.presentationProgress < 1);
 
-  // 갈래가 바뀌면 카드가 새로 마운트되어 top 0에서 시작한다 — 전환이 켜진 채면 전 카드가 위에서 미끄러진다.
-  // 첫 배치와 같은 취급으로 되돌리면 relayout의 이중 rAF가 제자리에 세운 뒤 다시 켠다.
-  $effect(() => {
-    void margin.segment;
-    untrack(() => (animated = false));
-  });
-
   const emptyCopy = $derived(
     margin.segment === 'settled'
       ? '지난 회차에서 정리된 피드백이 여기 모여요'
@@ -55,16 +48,10 @@
         : '이번 회차에서는 짚은 곳이 없어요',
   );
 
-  // items는 적용 스냅숏마다 새로 지어지고 desiredTops도 그때마다 새 객체다 — 신원으로 재배치를 걸면
-  // 타이핑 한 번마다 전 카드의 offsetHeight를 읽는다. 배치는 카드 집합과 좌표가 실제로 바뀔 때만 돈다
+  // cards는 적용 스냅숏마다 새 배열이므로 id 집합만 본다. desiredTops의 새 객체는
+  // MarginLayer가 한 번의 측정을 마쳤다는 뜻이므로 신원으로 외부 재배치를 건다.
   const cardsKey = $derived(cards.map((item) => item.id).join(' '));
-  const desiredKey = $derived(
-    Object.entries(desiredTops)
-      .map(([id, top]) => `${id}:${top}`)
-      .join(' '),
-  );
 
-  let columnEl = $state<HTMLDivElement>();
   let cardEls = $state<Record<string, HTMLDivElement | undefined>>({});
   let tops = $state<Record<string, number>>({});
   let spacer = $state(0);
@@ -72,6 +59,8 @@
   let preparedKey: string | null = null;
   let preparationFrame: number | undefined;
   let preparationPaintFrame: number | undefined;
+  let animationFrame: number | undefined;
+  let animationPaintFrame: number | undefined;
 
   const TOGGLE_WINDOW_MS = 270;
   let heightOverrides: Record<string, number> = {};
@@ -81,6 +70,35 @@
   // relayout은 여러 경로에서 반복되므로 준비된 활성만 한 번 소비하고, mode 변화로 같은 활성을 다시 등록하지 않는다.
   let pendingRevealSequence: number | null = null;
   let revealedSequence = 0;
+
+  const cancelAnimationEnable = () => {
+    if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+    if (animationPaintFrame !== undefined) cancelAnimationFrame(animationPaintFrame);
+    animationFrame = undefined;
+    animationPaintFrame = undefined;
+  };
+
+  const disablePlacementAnimation = () => {
+    cancelAnimationEnable();
+    animated = false;
+  };
+
+  const scheduleAnimationEnable = () => {
+    cancelAnimationEnable();
+    animationFrame = requestAnimationFrame(() => {
+      animationFrame = undefined;
+      animationPaintFrame = requestAnimationFrame(() => {
+        animationPaintFrame = undefined;
+        animated = true;
+      });
+    });
+  };
+
+  // 갈래가 바뀌면 카드가 새로 마운트되어 top 0에서 시작한다 — 첫 배치가 칠해질 때까지 전환을 끈다.
+  $effect(() => {
+    void margin.segment;
+    untrack(disablePlacementAnimation);
+  });
 
   const cancelPreparation = () => {
     if (preparationFrame !== undefined) cancelAnimationFrame(preparationFrame);
@@ -152,9 +170,7 @@
     }
 
     // 같은 커밋에서 전환을 켜면 top 0→N 이동 자체가 애니메이션되어 전 카드가 위에서 미끄러진다
-    if (!animated && entries.length > 0) {
-      requestAnimationFrame(() => requestAnimationFrame(() => (animated = true)));
-    }
+    if (!animated && entries.length > 0) scheduleAnimationEnable();
 
     updateEdgeCounts();
     // 카드 이동·성장이 0.25s 곡선을 달리는 동안의 셈은 이동 전 좌표다 — 곡선이 끝난 뒤 한 번 다시 센다
@@ -229,11 +245,17 @@
   $effect(() => {
     void preparationKey;
     void cardsKey;
-    void desiredKey;
-    void tick().then(relayout);
+    void desiredTops;
+    untrack(() => {
+      disablePlacementAnimation();
+      void tick().then(relayout);
+    });
   });
 
-  $effect(() => () => cancelPreparation());
+  $effect(() => () => {
+    cancelPreparation();
+    cancelAnimationEnable();
+  });
 
   $effect(() => {
     const currentActivation = margin.activation;
@@ -274,15 +296,13 @@
     return () => scroll?.setContentBottomOverflow(0);
   });
 
-  // 원고 리플로우는 컨테이너로, 카드 성장은 카드 자신으로 감지한다.
-  // 토글 창 안의 발화는 무시한다 — 성장 중간 높이로 재배치하면 확정된 목표가 흔들린다
+  // 카드가 소유한 크기 변화만 애니메이션한다. 원고 presentation 변화는 외부 placement 경로가
+  // transition을 끄고 재배치하므로 여기서 컨테이너까지 함께 관찰해 원인을 섞지 않는다.
   $effect(() => {
     const observer = new ResizeObserver(() => {
       if (performance.now() < suppressUntil) return;
       relayout();
     });
-    const container = columnEl?.parentElement;
-    if (container) observer.observe(container);
     for (const el of Object.values(cardEls)) {
       if (el) observer.observe(el);
     }
@@ -425,7 +445,7 @@
       {emptyCopy}
     </p>
   {:else if anchored}
-    <div bind:this={columnEl} class={css({ position: 'relative', flexGrow: '1', overflowY: 'clip' })}>
+    <div class={css({ position: 'relative', flexGrow: '1', overflowY: 'clip' })}>
       <div style:opacity={presentation.opacity} class={css(edgeLineRecipe.raw({ edge: 'top' }))}>
         <button class={css(edgeRowRecipe.raw({ shown: hiddenAbove > 0 }))} onclick={() => jumpEdge('up')} type="button">
           <div class={css(edgeBlurRecipe.raw({ layer: 'outermost', shown: hiddenAbove > 0 }))}></div>
