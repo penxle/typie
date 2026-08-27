@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
+  import { token } from '@typie/styled-system/tokens';
   import { getThemeContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
@@ -169,6 +170,7 @@
 
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
+  const layoutBackground = $derived(token(isPaginated ? 'colors.surface.subtle' : 'colors.surface.default'));
   const pageWidth = $derived(ctx.editor?.pageSizes[0]?.width ?? 0);
   const displayZoom = $derived(isPaginated ? (ctx.editor?.displayZoom ?? 1) : 1);
   const pageGap = $derived(PAGE_GAP * displayZoom);
@@ -272,17 +274,16 @@
 />
 
 <div
+  style:--editor-layout-background={layoutBackground}
   class={css(
     {
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
       minHeight: '0',
+      backgroundColor: '[var(--editor-layout-background)]',
       ...(!useWindowScroll && {
         overflow: 'hidden',
-      }),
-      ...(isPaginated && {
-        backgroundColor: 'surface.subtle',
       }),
     },
     style,
