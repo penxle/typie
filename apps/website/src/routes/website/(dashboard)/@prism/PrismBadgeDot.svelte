@@ -9,7 +9,7 @@
     right: '-1px',
     size: '6px',
     borderRadius: 'full',
-    backgroundColor: 'accent.danger.default',
+    backgroundColor: 'accent.info.default',
   })}
   aria-hidden="true"
 ></span>
