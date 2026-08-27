@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { getAppContext } from '@typie/ui/context';
+  import { tryAppContext } from '@typie/ui/context';
   import { getEditorContext } from '../editor.svelte';
   import { presentedPageElement, resolvePageSpans } from '../geometry';
 
   const { editor } = getEditorContext();
-  const app = getAppContext();
+  const app = tryAppContext();
 
   const cursor = $derived.by(() => {
     const current = editor?.cursor;
