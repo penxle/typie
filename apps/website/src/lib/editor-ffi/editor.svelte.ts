@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/sveltekit';
+import { createStableContext } from '@typie/ui/context';
 import { debounce } from '@typie/ui/utils';
-import { createContext, tick, untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
@@ -239,7 +240,7 @@ export class EditorContext {
   linkEditorOpen = $state(false);
 }
 
-const [getEditorContext, setEditorContext] = createContext<EditorContext>();
+const [getEditorContext, setEditorContext] = createStableContext<EditorContext>('editor-ffi.EditorContext');
 
 export { getEditorContext };
 export const setupEditorContext = () => setEditorContext(new EditorContext());
