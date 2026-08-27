@@ -27,7 +27,7 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import XIcon from '~icons/lucide/x';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
-  import { CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
+  import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
@@ -1020,7 +1020,7 @@
   {/if}
 
   <div class={flex({ height: 'full', flex: '1', overflowX: 'auto' })}>
-    <div class={flex({ flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
+    <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
       <!-- 헤더의 리뷰 버튼도 여백 컨텍스트를 읽는다 — 헤더까지 감싼다 -->
       <PrismReviewMargin
         available={marginAvailable}
@@ -1455,11 +1455,6 @@
                     {#if showFindReplace}
                       <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
                     {/if}
-                    {#if liveEditorFailed}
-                      <EditorFailureOverlay id={`document-editor-${pane.id}`} actionLabel="다시 불러오기" onAction={retryLiveEditor} />
-                    {:else if previewEditorRetry}
-                      <EditorFailureOverlay id={`document-preview-${pane.id}`} actionLabel="다시 불러오기" onAction={previewEditorRetry} />
-                    {/if}
                   </div>
                 </div>
 
@@ -1473,6 +1468,26 @@
               </DocumentComments>
             {/if}
           </div>
+
+          {#if liveEditorFailed && ctx.editorAreaEl}
+            <EditorFailureOverlay
+              id={`document-editor-${pane.id}`}
+              actionLabel="다시 불러오기"
+              contentPosition="viewport"
+              minimumWidth={CONTINUOUS_MIN_WIDTH + CONTINUOUS_VIEW_PADDING * 2}
+              onAction={retryLiveEditor}
+              surfaceElement={ctx.editorAreaEl}
+            />
+          {:else if previewEditorRetry && ctx.editorAreaEl}
+            <EditorFailureOverlay
+              id={`document-preview-${pane.id}`}
+              actionLabel="다시 불러오기"
+              contentPosition="viewport"
+              minimumWidth={CONTINUOUS_MIN_WIDTH + CONTINUOUS_VIEW_PADDING * 2}
+              onAction={previewEditorRetry}
+              surfaceElement={ctx.editorAreaEl}
+            />
+          {/if}
         {/snippet}
       </PrismReviewMargin>
 
