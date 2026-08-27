@@ -390,7 +390,7 @@
     const turn = transcript.live;
 
     if (turn && live) {
-      if (live.boundary > 0) return null;
+      if (live.boundary > 0 && (turn.last === 'text' || live.boundary < live.text.length)) return null;
       if (reconnecting) return RECONNECTING_WAIT;
       if (late) return { label: '응답이 늦어지고 있어요', text: '응답이 늦어지고 있어요' };
       if (turn.last === 'thinking' && turn.thinkingChars > 0) return { label: '생각하는 중', text: '생각하는 중' };
