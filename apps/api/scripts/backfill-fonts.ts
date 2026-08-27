@@ -127,8 +127,9 @@ if (verify) {
     }
 
     const hashBase = `fonts/${row.path}/${row.hash}`;
-    const manifestOk = await objectExistsNonEmpty(`${hashBase}/manifest.v1`);
-    if (manifestOk) {
+    const manifestV1Ok = await objectExistsNonEmpty(`${hashBase}/manifest.v1`);
+    const manifestV2Ok = await objectExistsNonEmpty(`${hashBase}/manifest.v2`);
+    if (manifestV1Ok && manifestV2Ok) {
       if (!(await objectExistsNonEmpty(`${hashBase}/base`))) {
         incomplete.push({ id: row.id, path: row.path, reason: 'base missing or empty' });
       }
@@ -144,8 +145,9 @@ if (verify) {
       }
     } else {
       const hasChunkObjects = await objectExistsNonEmpty(`${hashBase}/chunks/0`);
-      if (hasChunkObjects) {
-        incomplete.push({ id: row.id, path: row.path, reason: 'manifest.v1 missing or empty' });
+      if (hasChunkObjects || manifestV1Ok || manifestV2Ok) {
+        const missing = [!manifestV1Ok && 'manifest.v1', !manifestV2Ok && 'manifest.v2'].filter(Boolean);
+        incomplete.push({ id: row.id, path: row.path, reason: `${missing.join(', ')} missing or empty` });
       } else {
         cffSuspect.push({ id: row.id, path: row.path });
       }
@@ -191,11 +193,12 @@ let scanned = 0;
 
 const scanTargets = await mapWithConcurrency(rows, SCAN_CONCURRENCY, async (row): Promise<BackfillTarget | null> => {
   const manifestV1Ok = row.hash !== '' && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/manifest.v1`));
+  const manifestV2Ok = row.hash !== '' && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/manifest.v2`));
   const baseOk = row.hash !== '' && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/base`));
   const chunkProbeNeeded = row.hash !== '' && !manifestV1Ok;
   const hasChunk0 = chunkProbeNeeded && (await objectExistsNonEmpty(`fonts/${row.path}/${row.hash}/chunks/0`));
-  const needsV2 = row.hash === '' || !baseOk || (!manifestV1Ok && !hasChunk0);
-  const needsManifest = baseOk && !manifestV1Ok && hasChunk0;
+  const needsV2 = row.hash === '' || !baseOk || !manifestV2Ok || (!manifestV1Ok && !hasChunk0);
+  const needsManifest = !needsV2 && baseOk && !manifestV1Ok && hasChunk0;
   scanned++;
   logProgress('스캔', scanned, rows.length, scanStart);
   return needsV2 || needsManifest
