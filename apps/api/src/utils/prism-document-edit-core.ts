@@ -120,23 +120,29 @@ export const XML_MESSAGES: Partial<Record<string, (d: Detail) => string>> = {
   unknown_modifier: (d) => `\`${s(d.prefix)}:${s(d.name)}\`는 없는 수정자예요`,
   modifier_not_carry_kind: (d) => `\`${s(d.name)}\`은 \`carry:\`로 쓸 수 없어요`,
   carry_on_non_textblock: (d) => `\`carry:*\`는 문단과 접기 제목에만 쓸 수 있어요(\`<${s(d.element)}>\` 불가)`,
-  value_not_integer: (d) => `\`${s(d.value)}\`는 정수가 아니에요`,
-  value_out_of_range: (d) => `\`${s(d.modifier)}\` 값 \`${s(d.value)}\`는 허용 범위 밖이에요`,
-  enum_value_unknown: (d) => `\`${s(d.value)}\`는 쓸 수 없는 값이에요`,
+  value_not_integer: (d) => (s(d.value) === '' ? '빈 값은 정수가 아니에요' : `\`${s(d.value)}\`는 정수가 아니에요`),
+  value_out_of_range: (d) =>
+    s(d.value) === '' ? `\`${s(d.modifier)}\` 값은 비어 있을 수 없어요` : `\`${s(d.modifier)}\` 값 \`${s(d.value)}\`는 허용 범위 밖이에요`,
+  enum_value_unknown: (d) => (s(d.value) === '' ? '빈 값은 쓸 수 없어요' : `\`${s(d.value)}\`는 쓸 수 없는 값이에요`),
   node_attr_missing: (d) => `\`<${s(d.element)}>\`에는 \`attr:${s(d.field)}\`가 있어야 해요`,
   node_attr_unknown: (d) => `\`<${s(d.element)}>\`에는 \`attr:${s(d.field)}\`가 없어요`,
   node_attr_not_unsigned_integer: (d) => `\`<${s(d.element)}>\`의 \`attr:${s(d.field)}\`는 0 이상의 정수여야 해요`,
-  layout_mode_invalid: (d) => `\`attr:layout_mode\`는 \`continuous\` 또는 \`paginated\`여야 해요(\`${s(d.value)}\` 불가)`,
+  layout_mode_invalid: (d) =>
+    `\`attr:layout_mode\`는 \`continuous\` 또는 \`paginated\`여야 해요(${s(d.value) === '' ? '빈 값' : `\`${s(d.value)}\``} 불가)`,
   atom_attr_not_allowed: (d) => `\`<${s(d.element)}>\`에는 \`${s(d.attr)}\`를 쓸 수 없어요`,
   atom_has_content: (d) => `\`<${s(d.element)}>\`는 비어 있어야 해요 — \`<${s(d.element)}/>\`로 쓰세요`,
   inline_modifier_attr_not_allowed: (d) => `\`<${s(d.element)}>\`에는 \`${s(d.attr)}\`를 쓸 수 없어요`,
   inline_modifier_attr_missing: (d) => `\`<${s(d.element)}>\`에는 \`${s(d.attr)}="…"\`가 있어야 해요`,
   text_in_container: (d) => `\`<${s(d.element)}>\` 안의 글자는 \`<paragraph>\`로 감싸야 해요`,
   block_inside_textblock: (d) => `\`<${s(d.parent)}>\` 안에는 \`<${s(d.child)}>\`를 넣을 수 없어요`,
-  content_rule: (d) =>
-    `\`<${s(d.parent)}>\` 안에 올 수 있는 것은 ${list(d.allowed)}이에요 — 지금은 ${
-      Array.isArray(d.got) && d.got.length === 0 ? '비어 있어요' : `${list(d.got)}이 있어요`
-    }`,
+  content_rule: (d) => {
+    const allowed =
+      Array.isArray(d.allowed) && d.allowed.length === 0
+        ? `\`<${s(d.parent)}>\` 안에는 내용을 넣을 수 없어요`
+        : `\`<${s(d.parent)}>\` 안에 올 수 있는 것은 ${list(d.allowed)}이에요`;
+    const got = Array.isArray(d.got) && d.got.length === 0 ? '비어 있어요' : `${list(d.got)}이 있어요`;
+    return `${allowed} — 지금은 ${got}`;
+  },
   context_not_allowed: (d) => `\`<${s(d.element)}>\`는 이 자리에 올 수 없어요`,
   trailing_page_break: () => '문서의 마지막 문단은 쪽 나눔으로 끝날 수 없어요 — 뒤에 문단을 하나 두세요',
   table_not_rectangular: (d) => `표의 모든 행은 셀 수가 같아야 해요 — 이 행은 ${s(d.expected)}개 중 ${s(d.got)}개예요`,

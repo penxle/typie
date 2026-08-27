@@ -115,3 +115,121 @@ test('changedOf는 집계 6필드를 두 묶음으로 사영한다', () => {
     { blocks: { inserted: 1, deleted: 2, moved: 3, updated: 4 }, chars: { inserted: 5, deleted: 6 } },
   );
 });
+
+const REPRESENTATIVE: Record<string, Record<string, unknown>> = {
+  declaration: {},
+  comment_or_dtd: {},
+  close_without_open: { name: 'bold', open: 'italic' },
+  close_tag_unterminated: { name: 'bold' },
+  self_close_unterminated: {},
+  attr_missing_equals: { attr: 'value' },
+  attr_unquoted: { attr: 'value' },
+  attr_duplicate: { attr: 'value' },
+  illegal_char_in_tag: {},
+  tag_unterminated: { name: 'paragraph' },
+  name_expected: {},
+  unterminated_quote: {},
+  lt_in_attr_value: {},
+  forbidden_control_char: { codepoint: 11 },
+  unknown_entity: {},
+  bad_numeric_reference: {},
+  element_unclosed: { name: 'paragraph' },
+  root_missing: {},
+  root_not_root: { name: 'paragraph' },
+  trailing_content: {},
+  multiple_roots: {},
+  unknown_element: { name: 'em', hint: 'italic' },
+  unknown_attribute: { element: 'paragraph', attr: 'class' },
+  base_on_non_root: {},
+  unknown_modifier: { prefix: 'mod', name: 'font_color' },
+  modifier_not_carry_kind: { name: 'alignment' },
+  carry_on_non_textblock: { element: 'blockquote' },
+  value_not_integer: { value: '1.5' },
+  value_out_of_range: { modifier: 'font_weight', value: '150' },
+  enum_value_unknown: { value: 'middle' },
+  node_attr_missing: { element: 'image', field: 'id' },
+  node_attr_unknown: { element: 'paragraph', field: 'id' },
+  node_attr_not_unsigned_integer: { element: 'table', field: 'proportion' },
+  layout_mode_invalid: { value: 'fixed' },
+  atom_attr_not_allowed: { element: 'hard_break', attr: 'value' },
+  atom_has_content: { element: 'hard_break' },
+  inline_modifier_attr_not_allowed: { element: 'bold', attr: 'value' },
+  inline_modifier_attr_missing: { element: 'link', attr: 'href' },
+  text_in_container: { element: 'blockquote' },
+  block_inside_textblock: { parent: 'paragraph', child: 'blockquote' },
+  content_rule: { parent: 'table_row', allowed: ['table_cell'], got: ['paragraph'], rule: 'TableCell+' },
+  context_not_allowed: { element: 'page_break' },
+  trailing_page_break: {},
+  table_not_rectangular: { expected: 3, got: 2 },
+  block_modifier_not_allowed: { modifier: 'alignment', element: 'blockquote' },
+  inline_modifier_not_allowed: { modifier: 'link', leaf: 'hard_break' },
+  newline_in_text: {},
+  tab_in_text: {},
+  forbidden_char_in_document: { codepoint: 0xff_fe },
+  dot_invalid: { value: 'zz' },
+  dot_duplicate: { dot: '1_5' },
+  dot_not_in_document: { dot: '1_5' },
+  dot_type_incompatible: { dot: '1_5', new_type: 'blockquote' },
+  root_dot_mismatch: {},
+  opaque_needs_dot: { element: 'image' },
+  opaque_has_children: { element: 'image' },
+  opaque_id_changed: { element: 'image', dot: '1_5' },
+  base_missing: {},
+  base_undecodable: {},
+  base_not_in_history: {},
+  projection_degraded: {},
+  internal: { message: 'text is not an element' },
+};
+
+const BOUNDARY_ROWS: { types?: string[]; detail: Record<string, unknown> }[] = [
+  { detail: {} },
+  { types: ['close_without_open'], detail: { open: null } },
+  { types: ['unknown_element'], detail: { hint: null } },
+  { types: ['content_rule'], detail: { got: [] } },
+  { types: ['content_rule'], detail: { allowed: [] } },
+  { types: ['content_rule'], detail: { allowed: ['paragraph', 'table'], got: ['paragraph', 'table'] } },
+  { types: ['table_not_rectangular'], detail: { expected: 1, got: 0 } },
+  { types: ['forbidden_control_char', 'forbidden_char_in_document'], detail: { codepoint: 0 } },
+  { types: ['forbidden_control_char', 'forbidden_char_in_document'], detail: { codepoint: 0x10_ff_ff } },
+  { types: ['value_not_integer', 'enum_value_unknown', 'layout_mode_invalid', 'dot_invalid'], detail: { value: '' } },
+  { types: ['value_out_of_range'], detail: { value: '' } },
+  { types: ['node_attr_unknown'], detail: { field: '' } },
+  { types: ['unknown_modifier'], detail: { name: '' } },
+];
+
+const DEFECT_PATTERNS = [/undefined/, /\bnull\b/, /NaN/, /<>/, / {2}/, / 이 있어요/, /은 이에요/, /^\s|\s$/, /`<>`/, /``/];
+
+const COORDS = [
+  { line: undefined, column: undefined, dot: undefined },
+  { line: 3, column: 7, dot: '1_5' },
+];
+
+test('62종 문면은 파서가 내는 경계 입력에서도 깨지지 않는다', () => {
+  const byName = (a: string, b: string) => a.localeCompare(b);
+  assert.deepEqual(Object.keys(REPRESENTATIVE).toSorted(byName), XML_DETAIL_TYPES.toSorted(byName));
+  const defects: string[] = [];
+  for (const type of XML_DETAIL_TYPES) {
+    for (const row of BOUNDARY_ROWS) {
+      if (row.types && !row.types.includes(type)) {
+        continue;
+      }
+      for (const coords of COORDS) {
+        const detail = JSON.stringify({ type, ...REPRESENTATIVE[type], ...row.detail });
+        const rendered = messageOf({ ...coords, detail, message: 'x' });
+        for (const pattern of DEFECT_PATTERNS) {
+          if (pattern.test(rendered)) {
+            defects.push(`${detail} ${String(pattern)} => ${rendered}`);
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(defects, []);
+});
+
+test('detail 필드가 통째로 빠져도 문면은 예외 없이 나온다', () => {
+  for (const type of XML_DETAIL_TYPES) {
+    const rendered = messageOf({ line: undefined, column: undefined, dot: undefined, detail: JSON.stringify({ type }), message: 'x' });
+    assert.ok(rendered.length > 0, type);
+  }
+});

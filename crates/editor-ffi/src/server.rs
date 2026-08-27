@@ -631,17 +631,15 @@ impl EditorServer {
         let base_set: hashbrown::HashSet<editor_crdt::Dot> = tree.base.iter().copied().collect();
         let live: hashbrown::HashSet<editor_crdt::Dot> =
             full.graph().current_heads().copied().collect();
-        let (base_state, stale) = if base_set == live {
-            (full, None)
-        } else {
-            match state_at_heads(full.graph(), &base_set, &overlay) {
-                Ok(s) => (s, Some(full)),
-                Err(_) => {
-                    let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::BaseNotInHistory);
-                    return Ok(failed(xml_error_info(&e)?).into_ffi()?);
-                }
-            }
-        };
+        // A file whose base is behind the live heads is refused rather than merged:
+        // a move is an alias plus a re-insertion of the block's characters, so
+        // merging it over a concurrent rewrite of the same block leaves the block
+        // twice. The caller re-opens and edits the current document instead.
+        if base_set != live {
+            let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::BaseNotInHistory);
+            return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+        }
+        let base_state = full;
         if base_state.projection_degraded() {
             let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::ProjectionDegraded);
             return Ok(failed(xml_error_info(&e)?).into_ffi()?);
@@ -657,21 +655,7 @@ impl EditorServer {
         let (bundle, xml) = if new_css.is_empty() {
             (Vec::new(), String::new())
         } else {
-            let post = match stale {
-                None => outcome.state,
-                Some(stale) => {
-                    let mut merged = stale.graph().clone();
-                    for cs in new_css.iter().cloned() {
-                        merged.receive_changeset_mut(cs)?;
-                    }
-                    let projected =
-                        editor_state::ProjectedState::from_graph_with_overlay(merged, &overlay)
-                            .map_err(|e| EditorError::General {
-                                msg: format!("{e:?}"),
-                            })?;
-                    editor_state::State::new(projected, None)
-                }
-            };
+            let post = outcome.state;
             let mut heads: Vec<editor_crdt::Dot> = post.graph().current_heads().copied().collect();
             heads.sort();
             let xml = match editor_xml::to_xml(&post, &heads) {
@@ -2646,7 +2630,7 @@ mod tests {
     }
 
     #[test]
-    fn edit_from_xml_on_a_stale_base_returns_the_merged_file() {
+    fn edit_from_xml_on_a_stale_base_is_refused_until_the_file_is_reopened() {
         let server = EditorServer::new_test();
         let graph = xml_test_graph("가나");
         let opened = render(&server, graph.clone());
@@ -2666,28 +2650,41 @@ mod tests {
         assert!(!concurrent.bundle.is_empty());
         let live_graph = server.apply(graph, concurrent.bundle).unwrap();
 
-        let saved = server
+        let stale = server
             .edit_from_xml(
                 live_graph.clone(),
                 Vec::new(),
                 opened.replace("가나", "가나다"),
             )
             .unwrap();
+        let error = stale
+            .error
+            .expect("a base behind the live heads must be refused");
+        assert_eq!(error.detail, r#"{"type":"base_not_in_history"}"#);
+        assert!(stale.bundle.is_empty());
+        assert_eq!(stale.xml, "");
+
+        let reopened = render(&server, live_graph.clone());
+        assert!(reopened.contains(">동시<"), "{reopened}");
+        let saved = server
+            .edit_from_xml(
+                live_graph.clone(),
+                Vec::new(),
+                reopened.replace("가나", "가나다"),
+            )
+            .unwrap();
         assert!(saved.error.is_none(), "{:?}", saved.error);
-        assert!(!saved.bundle.is_empty());
-        assert!(saved.xml.contains(">가나다<"), "{}", saved.xml);
         assert!(
-            saved.xml.contains(">동시<"),
-            "the saved file must carry what landed while it was open: {}",
+            saved.xml.contains(">가나다<") && saved.xml.contains(">동시<"),
+            "{}",
             saved.xml
         );
-
         let merged = server.apply(live_graph, saved.bundle).unwrap();
         let again = server.edit_from_xml(merged, Vec::new(), saved.xml).unwrap();
         assert!(again.error.is_none(), "{:?}", again.error);
         assert!(
             again.bundle.is_empty(),
-            "the merged file must read back as no change"
+            "the rewritten file must read back as no change"
         );
     }
 
@@ -2835,5 +2832,163 @@ mod tests {
             missing_dot.detail,
             r#"{"type":"dot_not_in_document","dot":"1_9"}"#
         );
+    }
+
+    fn labeled_plain_doc(labels: &[&str]) -> editor_model::PlainDoc {
+        use std::collections::BTreeMap;
+        let paragraph = |text: &str| editor_model::PlainNodeEntry {
+            node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
+            modifiers: BTreeMap::new(),
+            carry: Vec::new(),
+            children: vec![editor_model::PlainNodeEntry {
+                node: editor_model::PlainNode::Text(editor_model::PlainTextNode {
+                    text: text.into(),
+                }),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: Vec::new(),
+            }],
+        };
+        editor_model::PlainDoc {
+            root: editor_model::PlainNodeEntry {
+                node: editor_model::PlainNode::Root(editor_model::PlainRootNode::default()),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: labels.iter().map(|l| paragraph(l)).collect(),
+            },
+        }
+    }
+
+    fn plain_paragraph_texts(doc: &editor_model::PlainDoc) -> Vec<String> {
+        doc.root
+            .children
+            .iter()
+            .filter(|e| matches!(e.node, editor_model::PlainNode::Paragraph(_)))
+            .map(|e| {
+                e.children
+                    .iter()
+                    .filter_map(|c| match &c.node {
+                        editor_model::PlainNode::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect::<String>()
+            })
+            .collect()
+    }
+
+    fn xml_paragraph_texts(xml: &str) -> Vec<String> {
+        xml.lines()
+            .filter(|l| l.trim_start().starts_with("<paragraph"))
+            .map(|l| {
+                let s = l.find('>').unwrap() + 1;
+                match l.rfind("</paragraph>") {
+                    Some(e) => l[s..e].to_string(),
+                    None => String::new(),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_second_edit_over_rewritten_move_dots_does_not_duplicate_the_moved_run() {
+        let server = EditorServer::new_test();
+        let labels: Vec<String> = (1..=16)
+            .map(|i| format!("A{i:02}"))
+            .chain((1..=16).map(|i| format!("B{i:02}")))
+            .chain(std::iter::once("Z".to_string()))
+            .collect();
+        let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+        let graph0 = server.to_graph(labeled_plain_doc(&refs)).unwrap();
+        let opened = render(&server, graph0.clone());
+        let lines: Vec<&str> = opened.lines().collect();
+        assert_eq!(lines.len(), 35);
+
+        let mut swapped: Vec<&str> = vec![lines[0]];
+        swapped.extend_from_slice(&lines[17..33]);
+        swapped.extend_from_slice(&lines[1..17]);
+        swapped.extend_from_slice(&lines[33..]);
+        let target1 = swapped.join("\n") + "\n";
+
+        let saved1 = server
+            .edit_from_xml(graph0.clone(), Vec::new(), target1)
+            .unwrap();
+        assert!(saved1.error.is_none(), "{:?}", saved1.error);
+        let graph1 = server.apply(graph0, saved1.bundle.clone()).unwrap();
+        let after1 = plain_paragraph_texts(&server.to_plain(graph1.clone()).unwrap());
+        let want1: Vec<String> = (1..=16)
+            .map(|i| format!("B{i:02}"))
+            .chain((1..=16).map(|i| format!("A{i:02}")))
+            .chain(std::iter::once("Z".to_string()))
+            .collect();
+        assert_eq!(after1, want1, "first save (swap) replayed through apply");
+        assert_eq!(
+            xml_paragraph_texts(&saved1.xml),
+            want1,
+            "rewritten file after first save"
+        );
+
+        let lines1: Vec<&str> = saved1.xml.lines().collect();
+        assert_eq!(lines1.len(), 35, "{}", saved1.xml);
+        let mut with_sections: Vec<String> = vec![lines1[0].to_string()];
+        with_sections.push(
+            "  <paragraph carry:bold=\"\"><font_weight value=\"700\">1</font_weight></paragraph>"
+                .into(),
+        );
+        with_sections.push("  <paragraph></paragraph>".into());
+        for l in &lines1[17..33] {
+            with_sections.push((*l).to_string());
+        }
+        with_sections.push("  <paragraph></paragraph>".into());
+        with_sections.push("  <horizontal_rule attr:variant=\"line\"/>".into());
+        with_sections.push(
+            "  <paragraph carry:bold=\"\"><font_weight value=\"700\">2</font_weight></paragraph>"
+                .into(),
+        );
+        with_sections.push("  <paragraph></paragraph>".into());
+        for l in &lines1[1..17] {
+            with_sections.push((*l).to_string());
+        }
+        with_sections.push("  <paragraph></paragraph>".into());
+        with_sections.push("  <horizontal_rule attr:variant=\"line\"/>".into());
+        with_sections.push(
+            "  <paragraph carry:bold=\"\"><font_weight value=\"700\">3</font_weight></paragraph>"
+                .into(),
+        );
+        for l in &lines1[33..] {
+            with_sections.push((*l).to_string());
+        }
+        let target2 = with_sections.join("\n") + "\n";
+
+        let saved2 = server
+            .edit_from_xml(graph1.clone(), Vec::new(), target2)
+            .unwrap();
+        assert!(saved2.error.is_none(), "{:?}", saved2.error);
+        let graph2 = server.apply(graph1, saved2.bundle.clone()).unwrap();
+        let after2 = plain_paragraph_texts(&server.to_plain(graph2.clone()).unwrap());
+        for label in &labels {
+            let n = after2.iter().filter(|t| *t == label).count();
+            assert_eq!(
+                n, 1,
+                "{label} appears {n} times after the second save: {after2:?}"
+            );
+        }
+        assert_eq!(
+            xml_paragraph_texts(&saved2.xml)
+                .iter()
+                .filter(|t| t.starts_with('A'))
+                .count(),
+            16
+        );
+        assert_eq!(
+            saved2.blocks_inserted,
+            9,
+            "{:?}",
+            (
+                saved2.blocks_inserted,
+                saved2.blocks_deleted,
+                saved2.blocks_moved
+            )
+        );
+        assert_eq!(saved2.blocks_deleted, 0);
     }
 }

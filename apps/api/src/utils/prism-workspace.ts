@@ -30,6 +30,7 @@ import {
   moveEntitiesCore,
   recoverEntityCore,
   renameFolderCore,
+  updateDocumentCore,
   updateDocumentsOptionCore,
   updateEntityIconCore,
   updateFolderOptionCore,
@@ -64,11 +65,12 @@ import {
   ReadNoteInput,
   ReadSharingInput,
   RecoverEntitiesInput,
-  RenameFoldersInput,
   SearchEntitiesInput,
   SetGoalsInput,
   snippetOf,
   TRASH_PAGE_SIZE,
+  UpdateDocumentsInput,
+  UpdateFoldersInput,
   UpdateIconsInput,
   UpdateNotesInput,
   UpdateSharingInput,
@@ -750,8 +752,8 @@ const createDocuments = async (ctx: PrismToolContext, input: unknown) => {
   return { ok: true, documents: refsInOrder(entityIds, await entityRefsOf(ctx.executor, ctx.siteId, entityIds)) };
 };
 
-const renameFolders = async (ctx: PrismToolContext, input: unknown) => {
-  const parsed = RenameFoldersInput.safeParse(input);
+const updateFolders = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = UpdateFoldersInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
   const folders = await folderEntityIds(
     ctx,
@@ -793,6 +795,28 @@ const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
   );
 
   return { ok: true, count: entityIds.length };
+};
+
+const updateDocuments = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = UpdateDocumentsInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+  if (parsed.data.items.some((item) => item.title === undefined && item.subtitle === undefined)) {
+    return toolFailure('error', '제목이나 부제 중 하나는 줘야 해요.');
+  }
+
+  const documentIds = await resolveDocumentIds(
+    ctx,
+    parsed.data.items.map((item) => item.documentId),
+  );
+  if (documentIds === null) return toolFailure('error', NOT_FOUND_DOCUMENT);
+
+  for (const item of parsed.data.items) {
+    const documentId = documentIds.get(item.documentId);
+    if (documentId === undefined) return toolFailure('error', NOT_FOUND_DOCUMENT);
+    await updateDocumentCore(ctx.executor, { userId: ctx.userId, documentId, title: item.title, subtitle: item.subtitle }, ctx.afterCommit);
+  }
+
+  return { ok: true, count: parsed.data.items.length };
 };
 
 const duplicateDocuments = async (ctx: PrismToolContext, input: unknown) => {
@@ -1080,7 +1104,8 @@ export const workspaceTools: Record<string, PrismToolHandler> = {
   'list-icons': listIcons,
   'create-folders': createFolders,
   'create-documents': createDocuments,
-  'rename-folders': renameFolders,
+  'update-documents': updateDocuments,
+  'update-folders': updateFolders,
   'move-entities': moveEntities,
   'duplicate-documents': duplicateDocuments,
   'create-notes': createNotes,
