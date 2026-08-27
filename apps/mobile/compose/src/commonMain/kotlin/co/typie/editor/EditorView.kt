@@ -47,8 +47,7 @@ internal fun EditorView(
   load: DocumentEditorLoad,
   publishedBundle: PublishedBundle?,
   layoutSpec: EditorDocumentLayoutSpec,
-  viewportWidth: Float,
-  viewportHeight: Float,
+  viewport: Viewport?,
   modifier: Modifier = Modifier,
   editorInputEnabled: Boolean = true,
   suppressSoftwareKeyboard: Boolean = false,
@@ -64,21 +63,15 @@ internal fun EditorView(
   val displayZoom = zoomController.displayZoom
   val themeVariant = currentEditorThemeVariant()
   val canCreateEditor = runtime.canCreateEditor
-  val environment =
-    EditorAttachEnvironment(
-      width = viewportWidth,
-      height = viewportHeight,
-      scaleFactor = density.density.toDouble(),
-      themeVariant = themeVariant,
-    )
+  val environment = viewport?.let {
+    EditorAttachEnvironment(viewport = it, themeVariant = themeVariant)
+  }
   val currentLoad by rememberUpdatedState(load)
   val currentEnvironment by rememberUpdatedState(environment)
   var editorThemeVariant by remember(load) { mutableStateOf<ThemeVariant?>(null) }
 
   LaunchedEffect(load, canCreateEditor, environment) {
-    if (!environment.isValid) {
-      return@LaunchedEffect
-    }
+    val initialEnvironment = environment ?: return@LaunchedEffect
     if (!canCreateEditor) {
       return@LaunchedEffect
     }
@@ -86,11 +79,14 @@ internal fun EditorView(
     if (runtime.editor == null) {
       uiState.clear()
       try {
-        if (editorThemeVariant == null) editorThemeVariant = environment.themeVariant
-        val editor = load.awaitEditor(environment.toViewport(), environment.themeVariant)
+        if (editorThemeVariant == null) editorThemeVariant = initialEnvironment.themeVariant
+        val editor =
+          load.awaitEditor(
+            viewport = initialEnvironment.viewport,
+            themeVariant = initialEnvironment.themeVariant,
+          )
         while (currentLoad === load && !load.isClosed) {
-          val target = currentEnvironment
-          if (!target.isValid) return@LaunchedEffect
+          val target = currentEnvironment ?: return@LaunchedEffect
           val shouldUpdateTheme = editorThemeVariant != target.themeVariant
           if (shouldUpdateTheme) {
             EditorRegistry.commitResourceUpdate {
@@ -102,9 +98,9 @@ internal fun EditorView(
               enqueue(
                 Message.System(
                   SystemEvent.Resize(
-                    width = target.width,
-                    height = target.height,
-                    scaleFactor = target.scaleFactor,
+                    width = target.viewport.width,
+                    height = target.viewport.height,
+                    scaleFactor = target.viewport.scaleFactor,
                   )
                 )
               )
@@ -281,14 +277,4 @@ internal fun EditorView(
   }
 }
 
-private data class EditorAttachEnvironment(
-  val width: Float,
-  val height: Float,
-  val scaleFactor: Double,
-  val themeVariant: ThemeVariant,
-) {
-  val isValid: Boolean
-    get() = width > 0f && height > 0f
-
-  fun toViewport() = Viewport(width = width, height = height, scaleFactor = scaleFactor)
-}
+private data class EditorAttachEnvironment(val viewport: Viewport, val themeVariant: ThemeVariant)
