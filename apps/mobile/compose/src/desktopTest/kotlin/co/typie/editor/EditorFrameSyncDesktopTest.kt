@@ -7,12 +7,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.compositeOver
@@ -54,6 +56,7 @@ import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.ext.ScrollGestureLockState
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
+import co.typie.screen.editor.editor.layout.rememberCommittedEditorRenderZoom
 import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayGeometry
 import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayPlacements
 import co.typie.screen.editor.editor.state.EditorScreenState
@@ -264,6 +267,8 @@ class EditorFrameSyncDesktopTest {
   @Test
   fun continuousZoomOutReflowsAtTheCommittedLogicalViewportWidth() = runComposeUiTest {
     val fixture = FrameSyncFixture(continuous = true, continuousMaxWidth = 600)
+    val expectedPageWidth = ViewportWidth / 0.75f
+    val expectedFrameWidth = (expectedPageWidth * 0.75f).roundToInt()
     fixture.zoomController.syncLayout(
       layoutSpec = fixture.layoutSpec,
       viewportWidth = ViewportWidth,
@@ -285,15 +290,59 @@ class EditorFrameSyncDesktopTest {
         fixture.zoomController.commitRenderZoom()
       }
 
-      waitUntil(timeoutMillis = 1_000) {
-        fixture.editor.appliedState.pageSizes.single().width > ViewportWidth
+      waitUntil(timeoutMillis = 10_000) {
+        val published = fixture.editor.publishedBundle ?: return@waitUntil false
+        val pageWidth = published.snapshot.pageSizes.singleOrNull()?.width ?: return@waitUntil false
+        abs(pageWidth - expectedPageWidth) <= 0.01f &&
+          published.frames[0]?.pixelSize?.width == expectedFrameWidth
       }
-      assertEquals(
-        ViewportWidth / 0.75f,
-        fixture.editor.appliedState.pageSizes.single().width,
-        0.01f,
-      )
+      val published = assertNotNull(fixture.editor.publishedBundle)
+      assertEquals(expectedPageWidth, published.snapshot.pageSizes.single().width, 0.01f)
+      assertEquals(expectedFrameWidth, assertNotNull(published.frames[0]).pixelSize.width)
     } finally {
+      fixture.close()
+    }
+  }
+
+  @Test
+  fun continuousRenderZoomStaysCommittedUntilViewportResizeIsAdmitted() = runComposeUiTest {
+    val fixture = FrameSyncFixture(continuous = true, continuousMaxWidth = 600)
+    val requestedRenderZoom = mutableFloatStateOf(1f)
+    val initialRevision = fixture.editor.appliedRevision
+    var committedRenderZoom = Float.NaN
+    var quiescence: LocalEditQuiescence? = null
+
+    try {
+      setContent {
+        val committedZoom =
+          rememberCommittedEditorRenderZoom(
+            editor = fixture.editor,
+            physicalViewport = Size(ViewportWidth, ViewportHeight),
+            layoutSpec = fixture.layoutSpec,
+            requestedRenderZoom = requestedRenderZoom.floatValue,
+            scaleFactor = 1.0,
+          )
+        SideEffect { committedRenderZoom = committedZoom }
+      }
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.appliedRevision > initialRevision && committedRenderZoom == 1f
+      }
+
+      quiescence = fixture.editor.quiesceLocalEdits()
+      runOnIdle { requestedRenderZoom.floatValue = 0.75f }
+      waitForIdle()
+
+      assertEquals(1f, committedRenderZoom)
+      assertEquals(ViewportWidth, fixture.editor.appliedState.pageSizes.single().width, 0.01f)
+
+      quiescence.resume()
+      quiescence = null
+      waitUntil(timeoutMillis = 1_000) {
+        committedRenderZoom == 0.75f &&
+          abs(fixture.editor.appliedState.pageSizes.single().width - ViewportWidth / 0.75f) <= 0.01f
+      }
+    } finally {
+      quiescence?.resume()
       fixture.close()
     }
   }
@@ -1420,6 +1469,15 @@ class EditorFrameSyncDesktopTest {
         val interactionScope = remember { EditorInteractionScope(fixture.scope) }
         val scrollGestureLockState = remember { ScrollGestureLockState() }
         val zoomController = fixture.zoomController
+        val measuredViewport = remember { mutableStateOf(Size.Zero) }
+        val committedRenderZoom =
+          rememberCommittedEditorRenderZoom(
+            editor = fixture.editor,
+            physicalViewport = measuredViewport.value,
+            layoutSpec = fixture.layoutSpec,
+            requestedRenderZoom = zoomController.renderZoom,
+            scaleFactor = 1.0,
+          )
         val publishedBundle = fixture.editor.publishedBundle
         val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
         val geometry =
@@ -1468,7 +1526,7 @@ class EditorFrameSyncDesktopTest {
         ) {
           EditorSurfaceHost(
             editor = fixture.editor,
-            scaleFactor = 1.0,
+            scaleFactor = committedRenderZoom.toDouble(),
             onDeactivate = fixture.bringIntoViewRequests::cancel,
             onFailure = { throw it },
           )
@@ -1480,7 +1538,7 @@ class EditorFrameSyncDesktopTest {
             viewportScrollableState = viewportScrollableState,
             viewportContentWidth = geometry.pageColumnWidth,
             viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
-            onMeasuredViewportSizeChange = {},
+            onMeasuredViewportSizeChange = { measuredViewport.value = it },
             header = {},
             body = { presentedBundle ->
               val presentedState = presentedBundle?.snapshot ?: EditorState.Initial

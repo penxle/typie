@@ -26,7 +26,7 @@
   } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
   import { touchPanLock } from '../touch-pan-lock';
-  import { resolveContinuousLayoutViewportWidth, zoomDiffers } from '../zoom';
+  import { resolveContinuousLayoutViewportWidth } from '../zoom';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
@@ -228,7 +228,6 @@
 
   let readyFired = false;
   let viewportEditor: (typeof ctx)['editor'];
-  let viewportRenderZoom = 1;
   let viewportLayoutType: 'continuous' | 'paginated' | undefined;
 
   $effect(() => {
@@ -245,10 +244,7 @@
       : physicalWidth;
 
     untrack(() => {
-      const committedLayoutChanged =
-        viewportEditor === editor &&
-        (viewportLayoutType !== layoutMode?.type || (isContinuous && zoomDiffers(viewportRenderZoom, renderZoom)));
-      viewportRenderZoom = renderZoom;
+      const committedLayoutChanged = viewportEditor === editor && viewportLayoutType !== layoutMode?.type;
       viewportLayoutType = layoutMode?.type;
       if (viewportEditor === editor && !committedLayoutChanged) {
         editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);

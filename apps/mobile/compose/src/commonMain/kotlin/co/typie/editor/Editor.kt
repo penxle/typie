@@ -68,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -294,6 +295,9 @@ internal constructor(
   }
 
   internal fun quiesceLocalEdits(): LocalEditQuiescence = localEdits.quiesce()
+
+  internal val localEditAdmissionGeneration: StateFlow<Long>
+    get() = localEdits.admissionGeneration
 
   suspend fun update(
     admit: () -> Boolean = { true },

@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -59,7 +60,6 @@ import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.decodeDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
-import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
@@ -155,6 +155,7 @@ import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.layout.attachViewportZoomAnchor
+import co.typie.screen.editor.editor.layout.rememberCommittedEditorRenderZoom
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
@@ -1121,6 +1122,7 @@ fun EditorScreen(entityId: String) {
   ) { innerPadding ->
     val layoutPageSizes = layoutPublishedState.pageSizes
     val density = LocalDensity.current.density
+    val measuredEditorViewport = remember(entityId) { mutableStateOf(Size.Zero) }
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1496,6 +1498,14 @@ fun EditorScreen(entityId: String) {
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
     val displayZoom = zoomController.displayZoom
+    val committedRenderZoom =
+      rememberCommittedEditorRenderZoom(
+        editor = editor,
+        physicalViewport = measuredEditorViewport.value,
+        layoutSpec = layoutSpec,
+        requestedRenderZoom = zoomController.renderZoom,
+        scaleFactor = density.toDouble(),
+      )
     val typewriterTargetLineHeight =
       resolveBringIntoViewTargetHeight(
         state = publishedEditorState,
@@ -1792,7 +1802,7 @@ fun EditorScreen(entityId: String) {
       runtime.session?.editor?.let { activeEditor ->
         EditorSurfaceHost(
           editor = activeEditor,
-          scaleFactor = density.toDouble() * zoomController.renderZoom.toDouble(),
+          scaleFactor = density.toDouble() * committedRenderZoom.toDouble(),
           onDeactivate = bringIntoViewRequests::cancel,
           onPublicationFailure = bringIntoViewRequests::discardFailedForVersion,
           onFailure = { error -> runtime.fail(activeEditor, error) },
@@ -1827,32 +1837,7 @@ fun EditorScreen(entityId: String) {
           } else {
             null
           },
-        onMeasuredViewportSizeChange = { viewport ->
-          val editor = runtime.editor
-          if (editor != null && viewport.width > 0f && viewport.height > 0f) {
-            editor.launchEffect(coroutineScope = scope) {
-              editor.update {
-                enqueue(
-                  Message.System(
-                    SystemEvent.Resize(
-                      width =
-                        when (layoutSpec) {
-                          is EditorDocumentLayoutSpec.Continuous ->
-                            resolveContinuousLayoutViewportWidth(
-                              viewportWidth = viewport.width,
-                              committedZoom = zoomController.renderZoom,
-                            )
-                          is EditorDocumentLayoutSpec.Paginated -> viewport.width
-                        },
-                      height = viewport.height,
-                      scaleFactor = density.toDouble(),
-                    )
-                  )
-                )
-              }
-            }
-          }
-        },
+        onMeasuredViewportSizeChange = { measuredEditorViewport.value = it },
         header = {
           EditorHeaderFrame(
             geometry = headerGeometry,
