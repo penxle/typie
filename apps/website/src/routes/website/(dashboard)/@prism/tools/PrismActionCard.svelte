@@ -31,8 +31,9 @@
       await resolve({ approve });
     } catch (err) {
       const error = unwrapError(err);
-      if (!(error instanceof TypieError && error.code === 'prism_tool_settled')) sendFailed = true;
-    } finally {
+      if (error instanceof TypieError && error.code === 'prism_tool_settled') return;
+
+      sendFailed = true;
       busy = false;
     }
   };
