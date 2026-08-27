@@ -14,6 +14,7 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { otherToolbarKind, readPrimaryToolbar, writePrimaryToolbar } from './toolbar-kind';
+  import ToolbarHorizontalScrollbar from './ToolbarHorizontalScrollbar.svelte';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ComponentProps } from 'svelte';
   import type { ToolbarKind } from './toolbar-kind';
@@ -31,8 +32,32 @@
   const ctx = getEditorContext();
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
+  const primaryToolbarId = `document-toolbar-primary-${paneId}`;
+  const expandedToolbarId = `document-toolbar-expanded-${paneId}`;
 
   let stored = $state<ToolbarKind | null>(null);
+  let primaryScrollContainer = $state<HTMLElement>();
+  let expandedScrollContainer = $state<HTMLElement>();
+
+  const row = css.raw({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    paddingLeft: '20px',
+    paddingRight: '12px',
+    paddingY: '8px',
+    overflowX: 'auto',
+    scrollbar: 'hidden',
+    width: 'full',
+  });
+
+  const rowShell = css.raw({
+    flexShrink: '0',
+    borderBottomWidth: '1px',
+    borderColor: 'border.subtle',
+    position: 'relative',
+    backgroundColor: 'surface.default',
+  });
 
   $effect(() => {
     if (documentId === null) return;
@@ -66,22 +91,6 @@
     stored = next;
     mixpanel.track('swap_primary_toolbar', { primary: next });
   };
-
-  const row = css.raw({
-    display: 'flex',
-    flexShrink: '0',
-    alignItems: 'center',
-    gap: '10px',
-    paddingLeft: '20px',
-    paddingRight: '12px',
-    paddingY: '8px',
-    overflowX: 'auto',
-    scrollbarWidth: '[thin]',
-    borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
-    position: 'relative',
-    backgroundColor: 'surface.default',
-  });
 </script>
 
 {#snippet items(kind: ToolbarKind)}
@@ -92,77 +101,85 @@
   {/if}
 {/snippet}
 
-<div class={css(row, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="toolbar" tabindex="-1">
-  <ToolbarButton
-    active={open}
-    icon={expanded === 'insert' ? PlusIcon : TypeIcon}
-    label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
-    onclick={toggle}
-    onpointerdown={(e) => e.preventDefault()}
-  />
-
-  <VerticalDivider style={css.raw({ height: '12px' })} />
-
-  <div
-    class={flex({
-      alignItems: 'center',
-      gap: '4px',
-      opacity: editingDisabled ? '50' : '100',
-      pointerEvents: editingDisabled ? 'none' : 'auto',
-    })}
-  >
+<div class={css(rowShell, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="presentation">
+  <div bind:this={primaryScrollContainer} id={primaryToolbarId} class={css(row)} role="toolbar" tabindex="-1">
     <ToolbarButton
-      style={css.raw({ borderRightRadius: '0' })}
-      icon={UndoIcon}
-      keys={['Mod', 'Z']}
-      label="실행 취소"
-      onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
-    />
-
-    <ToolbarButton
-      style={css.raw({ borderLeftRadius: '0' })}
-      icon={RedoIcon}
-      keys={['Mod', 'Shift', 'Z']}
-      label="다시 실행"
-      onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
-    />
-  </div>
-
-  <VerticalDivider style={css.raw({ height: '12px' })} />
-
-  {@render items(primary)}
-
-  <div class={css({ flexGrow: '1' })}></div>
-
-  <div
-    class={flex({
-      alignItems: 'center',
-      opacity: editingDisabled ? '50' : '100',
-      pointerEvents: editingDisabled ? 'none' : 'auto',
-    })}
-  >
-    <ToolbarButton
-      icon={SearchIcon}
-      keys={['Mod', 'F']}
-      label="찾기 및 바꾸기"
-      onclick={() => onSearchClick?.()}
-      onpointerdown={(e) => e.preventDefault()}
-    />
-  </div>
-</div>
-
-{#if open}
-  <div class={css(row, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="toolbar" tabindex="-1">
-    <ToolbarButton
-      disabled={documentId === null}
-      icon={ArrowUpDownIcon}
-      label="기본 툴바와 맞바꾸기"
-      onclick={swap}
+      active={open}
+      icon={expanded === 'insert' ? PlusIcon : TypeIcon}
+      label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
+      onclick={toggle}
       onpointerdown={(e) => e.preventDefault()}
     />
 
     <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    {@render items(expanded)}
+    <div
+      class={flex({
+        alignItems: 'center',
+        gap: '4px',
+        opacity: editingDisabled ? '50' : '100',
+        pointerEvents: editingDisabled ? 'none' : 'auto',
+      })}
+    >
+      <ToolbarButton
+        style={css.raw({ borderRightRadius: '0' })}
+        icon={UndoIcon}
+        keys={['Mod', 'Z']}
+        label="실행 취소"
+        onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
+      />
+
+      <ToolbarButton
+        style={css.raw({ borderLeftRadius: '0' })}
+        icon={RedoIcon}
+        keys={['Mod', 'Shift', 'Z']}
+        label="다시 실행"
+        onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
+      />
+    </div>
+
+    <VerticalDivider style={css.raw({ height: '12px' })} />
+
+    {@render items(primary)}
+
+    <div class={css({ flexGrow: '1' })}></div>
+
+    <div
+      class={flex({
+        alignItems: 'center',
+        opacity: editingDisabled ? '50' : '100',
+        pointerEvents: editingDisabled ? 'none' : 'auto',
+      })}
+    >
+      <ToolbarButton
+        icon={SearchIcon}
+        keys={['Mod', 'F']}
+        label="찾기 및 바꾸기"
+        onclick={() => onSearchClick?.()}
+        onpointerdown={(e) => e.preventDefault()}
+      />
+    </div>
+  </div>
+
+  <ToolbarHorizontalScrollbar controls={primaryToolbarId} scrollContainer={primaryScrollContainer} />
+</div>
+
+{#if open}
+  <div class={css(rowShell, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="presentation">
+    <div bind:this={expandedScrollContainer} id={expandedToolbarId} class={css(row)} role="toolbar" tabindex="-1">
+      <ToolbarButton
+        disabled={documentId === null}
+        icon={ArrowUpDownIcon}
+        label="기본 툴바와 맞바꾸기"
+        onclick={swap}
+        onpointerdown={(e) => e.preventDefault()}
+      />
+
+      <VerticalDivider style={css.raw({ height: '12px' })} />
+
+      {@render items(expanded)}
+    </div>
+
+    <ToolbarHorizontalScrollbar controls={expandedToolbarId} scrollContainer={expandedScrollContainer} />
   </div>
 {/if}
