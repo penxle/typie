@@ -37,6 +37,8 @@
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import PrismPanel from './@prism/PrismPanel.svelte';
+  import PrismPanelBoundary from './@prism/PrismPanelBoundary.svelte';
+  import PrismPanelShell from './@prism/PrismPanelShell.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
@@ -635,7 +637,11 @@
         {/if}
       </div>
 
-      <PrismPanel bind:this={prismPanel} user$key={query.data.me} />
+      <PrismPanelShell>
+        <PrismPanelBoundary>
+          <PrismPanel bind:this={prismPanel} user$key={query.data.me} />
+        </PrismPanelBoundary>
+      </PrismPanelShell>
     </div>
   </div>
 {/if}
