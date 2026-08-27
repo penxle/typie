@@ -1,7 +1,9 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getAppContext } from '@typie/ui/context';
+  import { onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { getPaneGroup } from './context.svelte';
   import EntityPane from './EntityPane.svelte';
   import { computeLayout } from './geometry';
@@ -17,6 +19,14 @@
 
   const app = getAppContext();
   const context = getPaneGroup();
+  const openDocuments = getOpenDocuments();
+
+  const syncOpenDocumentPanes = () => {
+    openDocuments.setExpectedPanes(context.panes.filter((pane) => pane.kind === 'entity').map((pane) => pane.id));
+  };
+
+  $effect.pre(syncOpenDocumentPanes);
+  onDestroy(() => openDocuments.invalidate());
 
   let rootRef = $state<HTMLDivElement>();
   let rootWidth = $state(0);

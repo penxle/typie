@@ -2,9 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { tick } from 'svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
-  import { getPane } from '../@pane/context.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
   import type { DocumentV2_query$key } from '$mearie';
 
@@ -24,19 +22,12 @@
         ...DocumentEditorV2_query
 
         entity(slug: $slug) {
-          id
-          slug
-          icon
-          iconColor
-
           node {
             __typename
 
             ... on Document {
               id
               title
-              nullableTitle
-              subtitle
               documentType: type
               createdAt
               updatedAt
@@ -85,33 +76,11 @@
 
   const ctx = setupEditorContext();
 
-  const openDocuments = getOpenDocuments();
-  const pane = getPane();
-
   const entity = $derived(query.data.entity);
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
 
   $effect(() => {
     ctx.documentId = documentId;
-  });
-
-  $effect(() => {
-    const node = entity?.node;
-    if (!node || node.__typename !== 'Document') return;
-
-    const paneKey = `${pane.id}:${node.id}`;
-    openDocuments.upsert(paneKey, {
-      kind: 'document',
-      documentId: node.id,
-      entityId: entity.id,
-      title: node.nullableTitle ?? null,
-      subtitle: node.subtitle ?? null,
-      icon: entity.icon,
-      iconColor: entity.iconColor,
-      active: focused,
-    });
-
-    return () => openDocuments.remove(paneKey);
   });
 
   let mounted = $state(true);
