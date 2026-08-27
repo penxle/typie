@@ -1303,6 +1303,7 @@ describe('web editor frame synchronization', () => {
       }
       return result;
     });
+    let previousSample: WebFrameSample | undefined;
 
     for (let event = 0; event < 12; event += 1) {
       scrollRoot.dispatchEvent(
@@ -1315,17 +1316,26 @@ describe('web editor frame synchronization', () => {
         }),
       );
       await nextAnimationFrame();
-      expect(attachSurfaceSpy).not.toHaveBeenCalled();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, event, null);
+      const mismatch = describeWebFrameMismatch(sample, previousSample);
+      expect(mismatch, mismatch).toBeUndefined();
+      previousSample = sample;
       expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+      expectActualCanvas(editor, 0);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await expect.poll(() => editor.renderZoom).toBeCloseTo(editor.displayZoom);
     for (let frame = 0; frame < 60 && editor.published?.frames.get(0)?.canvas === displayed; frame += 1) {
       await nextAnimationFrame();
+      const sample = readWebFrameSample(editor, scrollRoot, 0, 12 + frame, null);
+      const mismatch = describeWebFrameMismatch(sample, previousSample);
+      expect(mismatch, mismatch).toBeUndefined();
+      previousSample = sample;
       expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
     }
+    await waitForPresentation(editor);
     expect(editor.published?.frames.get(0)?.canvas).not.toBe(displayed);
-    expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
+    expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0).length).toBeGreaterThan(0);
     expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
   });
@@ -1344,7 +1354,7 @@ describe('web editor frame synchronization', () => {
     const viewportRect = scrollRoot.getBoundingClientRect();
     scrollRoot.dispatchEvent(
       new WheelEvent('wheel', {
-        deltaY: 69,
+        deltaY: 24,
         metaKey: navigator.platform.toUpperCase().includes('MAC'),
         ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
         clientX: viewportRect.left + viewportRect.width / 2,
@@ -1371,6 +1381,54 @@ describe('web editor frame synchronization', () => {
     expect(editor.published?.frames.get(0)?.canvas.width).toBeGreaterThan(0);
     expect(editor.published?.frames.get(0)?.canvas.height).toBeGreaterThan(0);
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
+    expectActualCanvas(editor, 0, false);
+  });
+
+  it('commits a large continuous scale gap with coherent layout and surface publication', async () => {
+    const { editor, scrollRoot } = await mountEditor(continuousDoc('continuous threshold zoom '.repeat(40)), { withZoom: true });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+    const initialPageWidth = editor.appliedSnapshot.pageSizes[0]?.width;
+    const initialCanvas = editor.published?.frames.get(0)?.canvas;
+    expect(initialPageWidth).toBeCloseTo(360);
+    expect(initialCanvas).toBeDefined();
+    const initialSample = readWebFrameSample(editor, scrollRoot, 0, -1, null);
+    const initialMismatch = describeWebFrameMismatch(initialSample);
+    expect(initialMismatch, initialMismatch).toBeUndefined();
+
+    const viewportRect = scrollRoot.getBoundingClientRect();
+    scrollRoot.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: 69,
+        metaKey: navigator.platform.toUpperCase().includes('MAC'),
+        ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+        clientX: viewportRect.left + viewportRect.width / 2,
+        clientY: viewportRect.top + viewportRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await nextAnimationFrame();
+
+    expect(editor.displayZoom).toBeLessThan(1);
+    expect(editor.renderZoom).toBeCloseTo(editor.displayZoom);
+    expect(editor.viewport.width).toBeGreaterThan(360);
+    expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeGreaterThan(initialPageWidth ?? Infinity);
+    const intermediateSample = readWebFrameSample(editor, scrollRoot, 0, 0, null);
+    const intermediateMismatch = describeWebFrameMismatch(intermediateSample, initialSample);
+    expect(intermediateMismatch, intermediateMismatch).toBeUndefined();
+    expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    expectActualCanvas(editor, 0, false);
+
+    await waitForPresentation(editor);
+
+    const settledSample = readWebFrameSample(editor, scrollRoot, 0, 1, null);
+    const settledMismatch = describeWebFrameMismatch(settledSample, intermediateSample);
+    expect(settledMismatch, settledMismatch).toBeUndefined();
+    expect(editor.published?.frames.get(0)?.canvas).not.toBe(initialCanvas);
+    expect(editor.pageEls[0]?.getBoundingClientRect().width).toBeCloseTo(360, 0);
     expectActualCanvas(editor, 0, false);
   });
 

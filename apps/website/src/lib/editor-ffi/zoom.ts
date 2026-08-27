@@ -6,6 +6,9 @@ export const MAX_DOCUMENT_ZOOM = 2;
 export const FIT_WIDTH_ZOOM_SNAP_THRESHOLD = 0.02;
 export const UNIT_ZOOM_SNAP_THRESHOLD = 0.02;
 export const RENDER_ZOOM_DEBOUNCE_MS = 120;
+export const RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS = 160;
+export const RENDER_ZOOM_MAX_COMMIT_DELAY_MS = 300;
+export const RENDER_ZOOM_SCALE_RATIO_THRESHOLD = 1.18;
 export const ZOOM_EPSILON = 0.0001;
 
 export type ZoomBounds = {
