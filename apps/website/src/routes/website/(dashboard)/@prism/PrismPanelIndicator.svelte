@@ -3,6 +3,7 @@
   import { PRISM_ICON_DURATION_SECONDS } from '@typie/prism-ui';
   import { token } from '@typie/styled-system/tokens';
   import { onDestroy, onMount, untrack } from 'svelte';
+  import PrismIcon from '~icons/typie/prism';
   import PrismObject from '$lib/prism-ui/PrismObject.svelte';
   import { createPrismIndicatorPath, samplePrismIndicatorPath } from './lib/prism-indicator-path.ts';
   import PrismPanelWelcomeMessage from './PrismPanelWelcomeMessage.svelte';
@@ -20,8 +21,10 @@
 
   type Props = {
     destination?: HTMLElement;
+    onPrismAvailabilityChange?: (available: boolean) => void;
     onSpinnerOwnerChange?: (owner: PrismSpinnerOwner) => void;
     phase: PrismIndicatorPhase;
+    prismEnabled?: boolean;
     reducedMotion?: boolean;
     themeVariant?: ThemeVariant;
     welcomeAdmission?: boolean;
@@ -31,8 +34,10 @@
 
   let {
     destination,
+    onPrismAvailabilityChange,
     onSpinnerOwnerChange,
     phase,
+    prismEnabled = true,
     reducedMotion = typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -42,6 +47,7 @@
   let actor = $state<HTMLDivElement>();
   let actorMounted = $state(true);
   let actorVisible = $state(true);
+  let prismRendererMounted = $state(!reducedMotion);
   const edgeColor = $derived(themeVariant ? themeData.variants[themeVariant]['ui.border.default'] : undefined);
   let mode = $state<Mode>('idle');
   let path: PrismIndicatorPath | null = null;
@@ -67,8 +73,11 @@
   let admissionFrame = 0;
   let followerFrame = 0;
   let returnStartProgress = 0;
+  let prismAvailable: boolean | undefined;
   let spinnerOwner: PrismSpinnerOwner | undefined;
-  const showWelcomeMessage = $derived(phase === 'welcome' && (target === 'prism' || reducedMotion || snapshot.readiness === 'unavailable'));
+  const welcomeMessageEligible = $derived(!prismEnabled || target === 'prism' || reducedMotion || snapshot.readiness === 'unavailable');
+  let welcomeMessageAdmitted = $state(false);
+  const showWelcomeMessage = $derived(phase === 'welcome' && (welcomeMessageEligible || welcomeMessageAdmitted));
 
   const center = (element: HTMLElement): PrismIndicatorPoint => {
     const bounds = element.getBoundingClientRect();
@@ -79,6 +88,12 @@
     if (spinnerOwner === owner) return;
     spinnerOwner = owner;
     onSpinnerOwnerChange?.(owner);
+  };
+
+  const setPrismAvailable = (available: boolean) => {
+    if (prismAvailable === available) return;
+    prismAvailable = available;
+    onPrismAvailabilityChange?.(available);
   };
 
   const clearDwell = () => {
@@ -96,6 +111,7 @@
   const scheduleWelcomeMorph = () => {
     if (
       phase !== 'welcome' ||
+      !prismEnabled ||
       !welcomeAdmission ||
       mode !== 'idle' ||
       target !== 'icon' ||
@@ -111,6 +127,7 @@
       welcomeFrame = 0;
       if (
         phase !== 'welcome' ||
+        !prismEnabled ||
         !welcomeAdmission ||
         mode !== 'idle' ||
         target !== 'icon' ||
@@ -288,7 +305,7 @@
     clearDwell();
     if (mode !== 'idle' && mode !== 'candidate') return;
     if (mode === 'idle') {
-      if (reducedMotion || snapshot.readiness !== 'ready') {
+      if (!prismEnabled || reducedMotion || snapshot.readiness !== 'ready') {
         fallbackToRow();
         return;
       }
@@ -307,7 +324,7 @@
       actorVisible = true;
       if (actor) actor.style.transform = 'translate3d(0px, 0px, 0px)';
       targetDurationMs = undefined;
-      target = reducedMotion || snapshot.readiness === 'unavailable' ? 'icon' : 'prism';
+      target = !prismEnabled || reducedMotion || snapshot.readiness === 'unavailable' ? 'icon' : 'prism';
       return;
     }
 
@@ -341,9 +358,14 @@
 
   const handleSnapshot = (next: PrismRuntimeSnapshot) => {
     snapshot = next;
+    setPrismAvailable(!reducedMotion && next.readiness === 'ready');
     if (next.readiness === 'unavailable') {
       settleStaticPresentation();
+      prismRendererMounted = false;
       return;
+    }
+    if (!prismEnabled && next.readiness === 'ready' && next.owner === 'svg' && next.settledTarget === 'icon') {
+      prismRendererMounted = false;
     }
     scheduleWelcomeMorph();
     if (mode === 'morphing') {
@@ -388,6 +410,7 @@
 
   onDestroy(() => {
     destroyed = true;
+    setPrismAvailable(false);
     window.removeEventListener('load', observeLoadedBrowser);
     if (stabilityIdle !== 0) cancelIdleCallback(stabilityIdle);
     if (stabilityFrame !== 0) cancelAnimationFrame(stabilityFrame);
@@ -399,11 +422,34 @@
 
   $effect(() => {
     const useStaticPresentation = reducedMotion;
-    if (useStaticPresentation) untrack(settleStaticPresentation);
+    setPrismAvailable(!useStaticPresentation && snapshot.readiness === 'ready');
+    if (useStaticPresentation) {
+      prismRendererMounted = false;
+      untrack(settleStaticPresentation);
+    } else if (prismEnabled && snapshot.readiness !== 'unavailable') {
+      prismRendererMounted = true;
+    }
   });
 
   $effect(() => {
-    if (welcomeAdmission) untrack(scheduleWelcomeMorph);
+    if (phase !== 'welcome') welcomeMessageAdmitted = false;
+    else if (welcomeMessageEligible) welcomeMessageAdmitted = true;
+  });
+
+  $effect(() => {
+    const enabled = prismEnabled;
+    const admitted = welcomeAdmission;
+    untrack(() => {
+      if (!enabled) {
+        const alreadySettledAtIcon = target === 'icon' && snapshot.owner === 'svg' && snapshot.settledTarget === 'icon';
+        targetDurationMs = undefined;
+        target = 'icon';
+        if (alreadySettledAtIcon && snapshot.readiness !== 'loading') prismRendererMounted = false;
+      } else if (admitted) {
+        prismRendererMounted = true;
+        scheduleWelcomeMorph();
+      }
+    });
   });
 
   $effect(() => {
@@ -429,15 +475,19 @@
         class="actor"
         data-prism-indicator-actor
       >
-        <PrismObject
-          {edgeColor}
-          {interactive}
-          onStateChange={handleSnapshot}
-          preload={!reducedMotion}
-          {reducedMotion}
-          {target}
-          {targetDurationMs}
-        />
+        {#if prismRendererMounted}
+          <PrismObject
+            {edgeColor}
+            {interactive}
+            onStateChange={handleSnapshot}
+            preload={!reducedMotion}
+            {reducedMotion}
+            {target}
+            {targetDurationMs}
+          />
+        {:else}
+          <PrismIcon aria-hidden="true" data-prism-indicator-static-icon height="44" width="44" />
+        {/if}
       </div>
     {/if}
   </span>
@@ -445,7 +495,7 @@
 
 <PrismPanelWelcomeMessage
   delayMs={snapshot.readiness === 'unavailable' ? 0 : WELCOME_MESSAGE_DELAY_MS}
-  immediate={reducedMotion}
+  immediate={reducedMotion || !prismEnabled}
   visible={showWelcomeMessage}
 />
 
