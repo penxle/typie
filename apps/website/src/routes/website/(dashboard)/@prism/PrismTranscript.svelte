@@ -96,6 +96,15 @@
   });
 
   const entryClass = flex({ flexDirection: 'column' });
+  // 도구 호출 행은 턴 경계가 아니라 턴 내부 한 줄이다 — 앞뒤 간격을 마크다운 문단 간격(flowGap)에 맞춘다.
+  const contentClass = css({
+    display: 'flex',
+    flexDirection: 'column',
+    flexGrow: '1',
+    '& > * + *': { marginTop: '18px' },
+    '& > [data-role="tool-calls"] + *': { marginTop: '10px' },
+    '& > * + [data-role="tool-calls"]': { marginTop: '10px' },
+  });
 
   const LATE_MS = 30_000;
 
@@ -445,7 +454,7 @@
     })}
     onscroll={onScroll}
   >
-    <div bind:this={content} class={flex({ flexDirection: 'column', gap: '18px', flexGrow: '1' })}>
+    <div bind:this={content} class={contentClass}>
       {#if loading && pending === null}
         <div
           class={css({
@@ -461,6 +470,7 @@
       {#each rendered as item (item.key)}
         <div
           class={entryClass}
+          data-role={item.kind === 'entry' ? item.entry.role : 'assistant'}
           in:rise={{
             skip: !settled || item.kind === 'markdown' || item.entry.role === 'user',
             block: item.kind === 'markdown' || item.entry.role !== 'tool-calls',
