@@ -1,0 +1,28 @@
+[package]
+name = "editor-xml"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+base64.workspace = true
+editor-codec = { path = "../editor-codec" }
+editor-commands = { path = "../editor-commands" }
+editor-crdt = { path = "../editor-crdt" }
+editor-model = { path = "../editor-model" }
+editor-state = { path = "../editor-state" }
+editor-transaction = { path = "../editor-transaction" }
+hashbrown.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+thiserror.workspace = true
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
+proptest.workspace = true

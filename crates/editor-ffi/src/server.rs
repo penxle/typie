@@ -97,6 +97,64 @@ pub struct GraphWithAnchors {
     pub anchors: Vec<editor_state::StableSelection>,
 }
 
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlErrorInfo {
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub dot: Option<String>,
+    pub detail: String,
+    pub message: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlVerdict {
+    pub error: Option<XmlErrorInfo>,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlRender {
+    pub error: Option<XmlErrorInfo>,
+    pub xml: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlEditResult {
+    pub error: Option<XmlErrorInfo>,
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub bundle: Vec<u8>,
+    pub blocks_inserted: u32,
+    pub blocks_deleted: u32,
+    pub blocks_moved: u32,
+    pub blocks_updated: u32,
+    pub chars_inserted: u32,
+    pub chars_deleted: u32,
+}
+
+fn xml_error_info(e: &editor_xml::XmlError) -> Result<XmlErrorInfo, FfiError> {
+    let detail =
+        serde_json::to_string(&e.detail).map_err(|err| FfiError::Serialization(err.to_string()))?;
+    Ok(XmlErrorInfo {
+        line: e.pos.map(|p| p.line),
+        column: e.pos.map(|p| p.column),
+        dot: e.dot.clone(),
+        detail,
+        message: e.message.clone(),
+    })
+}
+
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct EditorServer {
     icu: editor_resource::IcuResources,
@@ -494,6 +552,118 @@ impl EditorServer {
         )
         .map_err(|e| FfiError::Serialization(e.to_string()))?;
         Ok(bytes)
+    }
+
+    /// The file the model reads. The state is built the way `edit_from_xml`
+    /// builds it — sweep tombstones included — so that the dots it writes are
+    /// the dots the edit will look for.
+    pub fn to_xml(
+        &self,
+        graph: Vec<u8>,
+        sweep_tombstones: Vec<String>,
+    ) -> EditorResult<Complex<XmlRender>> {
+        fn failed(error: XmlErrorInfo) -> XmlRender {
+            XmlRender {
+                error: Some(error),
+                xml: String::new(),
+            }
+        }
+
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&graph[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
+        let full = crate::graph::build_state_tolerant(css)?;
+        let live: hashbrown::HashSet<editor_crdt::Dot> =
+            full.graph().current_heads().copied().collect();
+        let state = state_at_heads(full.graph(), &live, &overlay)?;
+        if state.projection_degraded() {
+            let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::ProjectionDegraded);
+            return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+        }
+        let mut heads: Vec<editor_crdt::Dot> = state.graph().current_heads().copied().collect();
+        heads.sort();
+        match editor_xml::to_xml(&state, &heads) {
+            Ok(xml) => Ok(XmlRender { error: None, xml }.into_ffi()?),
+            Err(e) => Ok(failed(xml_error_info(&e)?).into_ffi()?),
+        }
+    }
+
+    pub fn verify_xml(&self, xml: String) -> EditorResult<Complex<XmlVerdict>> {
+        let error = match editor_xml::from_xml(&xml) {
+            Ok(_) => None,
+            Err(e) => Some(xml_error_info(&e)?),
+        };
+        Ok(XmlVerdict { error }.into_ffi()?)
+    }
+
+    pub fn edit_from_xml(
+        &self,
+        graph: Vec<u8>,
+        sweep_tombstones: Vec<String>,
+        xml: String,
+    ) -> EditorResult<Complex<XmlEditResult>> {
+        fn failed(error: XmlErrorInfo) -> XmlEditResult {
+            XmlEditResult {
+                error: Some(error),
+                bundle: Vec::new(),
+                blocks_inserted: 0,
+                blocks_deleted: 0,
+                blocks_moved: 0,
+                blocks_updated: 0,
+                chars_inserted: 0,
+                chars_deleted: 0,
+            }
+        }
+
+        let tree = match editor_xml::from_xml(&xml) {
+            Ok(t) => t,
+            Err(e) => return Ok(failed(xml_error_info(&e)?).into_ffi()?),
+        };
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&graph[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
+        let full = crate::graph::build_state_tolerant(css)?;
+        let base_set: hashbrown::HashSet<editor_crdt::Dot> = tree.base.iter().copied().collect();
+        let base_state = match state_at_heads(full.graph(), &base_set, &overlay) {
+            Ok(s) => s,
+            Err(_) => {
+                let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::BaseNotInHistory);
+                return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+            }
+        };
+        if base_state.projection_degraded() {
+            let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::ProjectionDegraded);
+            return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+        }
+        let outcome = match editor_xml::edit(base_state, &tree) {
+            Ok(o) => o,
+            Err(e) => return Ok(failed(xml_error_info(&e)?).into_ffi()?),
+        };
+        let new_css = outcome.state.graph().local_changesets_since(&base_set)?;
+        let bundle = if new_css.is_empty() {
+            Vec::new()
+        } else {
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                new_css,
+            ))
+            .map_err(|e| FfiError::Serialization(e.to_string()))?
+        };
+        let c = outcome.changed;
+        Ok(XmlEditResult {
+            error: None,
+            bundle,
+            blocks_inserted: c.blocks_inserted,
+            blocks_deleted: c.blocks_deleted,
+            blocks_moved: c.blocks_moved,
+            blocks_updated: c.blocks_updated,
+            chars_inserted: c.chars_inserted,
+            chars_deleted: c.chars_deleted,
+        }
+        .into_ffi()?)
     }
 
     pub fn zombie_dots(&self, graph: Vec<u8>) -> EditorResult<Vec<String>> {
@@ -2271,5 +2441,270 @@ mod tests {
             .unwrap();
         assert!(result.degraded);
         assert_eq!(result.selection.version, 2);
+    }
+
+    fn xml_test_graph(text: &str) -> Vec<u8> {
+        let state = make_state_with_text(text);
+        EditorServer::new_test().to_graph(state.to_plain()).unwrap()
+    }
+
+    fn render(server: &EditorServer, graph: Vec<u8>) -> String {
+        let out = server.to_xml(graph, Vec::new()).unwrap();
+        assert!(out.error.is_none(), "{:?}", out.error);
+        out.xml
+    }
+
+    fn attr_of(xml: &str, tag: &str, attr: &str) -> String {
+        let line = xml
+            .lines()
+            .find(|line| line.trim_start().starts_with(tag))
+            .unwrap_or_else(|| panic!("no {tag} in {xml}"));
+        line.split(&format!("{attr}=\""))
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("the attribute has a value")
+            .to_string()
+    }
+
+    /// A thousand paragraphs and a hundred thousand characters, the same shape
+    /// the crate-level smoke test uses.
+    fn big_plain_doc() -> editor_model::PlainDoc {
+        use std::collections::BTreeMap;
+
+        let paragraph = |nth: usize| editor_model::PlainNodeEntry {
+            node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
+            modifiers: BTreeMap::new(),
+            carry: Vec::new(),
+            children: vec![editor_model::PlainNodeEntry {
+                node: editor_model::PlainNode::Text(editor_model::PlainTextNode {
+                    text: (0..100)
+                        .map(|i| char::from(b'a' + ((nth + i) % 26) as u8))
+                        .collect(),
+                }),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: Vec::new(),
+            }],
+        };
+        editor_model::PlainDoc {
+            root: editor_model::PlainNodeEntry {
+                node: editor_model::PlainNode::Root(editor_model::PlainRootNode::default()),
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children: (0..1000).map(paragraph).collect(),
+            },
+        }
+    }
+
+    #[test]
+    #[ignore = "perf smoke; run with --release -- --ignored perf"]
+    fn perf_smoke_of_the_xml_boundary_on_a_large_document() {
+        let server = EditorServer::new_test();
+        let graph = server.to_graph(big_plain_doc()).unwrap();
+        println!("graph: {} bytes", graph.len());
+
+        let css = editor_codec::decode_changeset_stream(&graph[..])
+            .unwrap()
+            .into_graph_input();
+        let started = std::time::Instant::now();
+        let built = crate::graph::build_state_tolerant(css).unwrap();
+        println!(
+            "one state build: {:?} ({} blocks)",
+            started.elapsed(),
+            built.to_plain().root.children.len()
+        );
+
+        let started = std::time::Instant::now();
+        let rendered = server.to_xml(graph.clone(), Vec::new()).unwrap();
+        println!(
+            "to_xml: {:?} ({} bytes)",
+            started.elapsed(),
+            rendered.xml.len()
+        );
+        assert!(rendered.error.is_none(), "{:?}", rendered.error);
+
+        let started = std::time::Instant::now();
+        let result = server
+            .edit_from_xml(graph, Vec::new(), rendered.xml)
+            .unwrap();
+        println!("edit_from_xml (unchanged): {:?}", started.elapsed());
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn xml_render_carries_a_null_error_beside_the_document() {
+        let rendered = serde_json::to_string(&XmlRender {
+            error: None,
+            xml: "<root/>".to_string(),
+        })
+        .unwrap();
+        assert_eq!(rendered, r#"{"error":null,"xml":"<root/>"}"#);
+    }
+
+    #[test]
+    fn to_xml_reads_the_same_swept_document_edit_from_xml_writes_into() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+        let paragraph = attr_of(&render(&server, graph.clone()), "<paragraph", "dot");
+        let swept = vec![paragraph.clone()];
+
+        let rendered = server.to_xml(graph.clone(), swept.clone()).unwrap();
+        assert!(rendered.error.is_none(), "{:?}", rendered.error);
+        assert!(
+            !rendered.xml.contains(&format!("dot=\"{paragraph}\"")),
+            "the swept paragraph must not reach the file: {}",
+            rendered.xml
+        );
+
+        let result = server.edit_from_xml(graph, swept, rendered.xml).unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn edit_from_xml_reports_a_base_this_history_does_not_hold() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+        let xml = render(&server, graph.clone());
+        let base = attr_of(&xml, "<root", "base");
+        let stranger = editor_xml::encode_base(&[Dot::new(9, 9)]).unwrap();
+
+        let result = server
+            .edit_from_xml(graph, Vec::new(), xml.replace(&base, &stranger))
+            .unwrap();
+
+        let error = result.error.expect("a base outside the history must fail");
+        assert_eq!(error.detail, r#"{"type":"base_not_in_history"}"#);
+        assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn xml_refuses_a_degraded_projection_on_both_sides() {
+        let server = EditorServer::new_test();
+        let graph = enc_css(&degraded_prone_css());
+        let xml = render(&server, graph.clone());
+
+        let rendered = {
+            let _guard = editor_model::override_repair_budget(1);
+            server.to_xml(graph.clone(), Vec::new()).unwrap()
+        };
+        let error = rendered
+            .error
+            .expect("a degraded projection must be refused");
+        assert_eq!(error.detail, r#"{"type":"projection_degraded"}"#);
+        assert!(rendered.xml.is_empty());
+
+        let result = {
+            let _guard = editor_model::override_repair_budget(1);
+            server.edit_from_xml(graph, Vec::new(), xml).unwrap()
+        };
+        let error = result.error.expect("a degraded base must be refused");
+        assert_eq!(error.detail, r#"{"type":"projection_degraded"}"#);
+        assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn edit_from_xml_applies_a_text_replacement_back_into_the_graph() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+
+        let xml = render(&server, graph.clone());
+        assert!(xml.contains(">alpha beta<"), "{xml}");
+        let edited = xml.replace(">alpha beta<", ">alpha gamma<");
+
+        let result = server
+            .edit_from_xml(graph.clone(), Vec::new(), edited)
+            .unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert!(!result.bundle.is_empty());
+
+        let merged = server.apply(graph, result.bundle).unwrap();
+        assert_eq!(server.materialize(merged).unwrap().text, "alpha gamma");
+    }
+
+    #[test]
+    fn edit_from_xml_returns_an_empty_bundle_when_the_xml_is_unchanged() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+        let xml = render(&server, graph.clone());
+
+        let result = server.edit_from_xml(graph, Vec::new(), xml).unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert!(result.bundle.is_empty());
+        assert_eq!(result.blocks_inserted, 0);
+        assert_eq!(result.blocks_deleted, 0);
+        assert_eq!(result.blocks_moved, 0);
+        assert_eq!(result.blocks_updated, 0);
+        assert_eq!(result.chars_inserted, 0);
+        assert_eq!(result.chars_deleted, 0);
+    }
+
+    #[test]
+    fn edit_from_xml_reports_a_syntax_error_with_a_position_and_structured_detail() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+
+        let result = server
+            .edit_from_xml(
+                graph,
+                Vec::new(),
+                "<root><paragraph bad=x>alpha beta</paragraph></root>".to_string(),
+            )
+            .unwrap();
+        let error = result.error.expect("malformed xml must produce an error");
+        assert_eq!(error.detail, r#"{"type":"attr_unquoted","attr":"bad"}"#);
+        assert!(error.line.is_some());
+        assert!(error.column.is_some());
+        assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn verify_xml_agrees_with_edit_from_xml_on_well_formed_and_malformed_input() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("alpha beta");
+        let xml = render(&server, graph);
+
+        assert!(server.verify_xml(xml).unwrap().error.is_none());
+
+        let verdict = server
+            .verify_xml("<root><paragraph bad=x>alpha beta</paragraph></root>".to_string())
+            .unwrap();
+        assert_eq!(
+            verdict.error.expect("malformed xml").detail,
+            r#"{"type":"attr_unquoted","attr":"bad"}"#
+        );
+    }
+
+    #[test]
+    fn xml_error_detail_is_serialized_as_a_type_tagged_object() {
+        let out_of_range = xml_error_info(&editor_xml::XmlError::new(
+            editor_xml::XmlErrorDetail::ValueOutOfRange {
+                modifier: "font_size".to_string(),
+                value: "99".to_string(),
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            out_of_range.detail,
+            r#"{"type":"value_out_of_range","modifier":"font_size","value":"99"}"#
+        );
+
+        let newline = xml_error_info(&editor_xml::XmlError::new(
+            editor_xml::XmlErrorDetail::NewlineInText,
+        ))
+        .unwrap();
+        assert_eq!(newline.detail, r#"{"type":"newline_in_text"}"#);
+
+        let missing_dot = xml_error_info(&editor_xml::XmlError::new(
+            editor_xml::XmlErrorDetail::DotNotInDocument {
+                dot: "1_9".to_string(),
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            missing_dot.detail,
+            r#"{"type":"dot_not_in_document","dot":"1_9"}"#
+        );
     }
 }

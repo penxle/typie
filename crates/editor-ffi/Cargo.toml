@@ -64,6 +64,7 @@ editor-server = { path = "../editor-server", optional = true }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 editor-view = { path = "../editor-view" }
+editor-xml = { path = "../editor-xml" }
 android_logger = { workspace = true, optional = true }
 cfg-if.workspace = true
 console_error_panic_hook = { workspace = true, optional = true }

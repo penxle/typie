@@ -95,7 +95,7 @@ pub use stable_position::{
 };
 pub use stable_selection::{StableSelection, remap_selection};
 pub use state::*;
-pub use to_plain::to_plain;
+pub use to_plain::{to_plain, to_plain_subtree};
 pub use traversal::{
     LeafGroup, blocks_in_range, document_content_selection, first_cursor_position,
     last_cursor_position, leaf_groups_in_range, leaf_spans_in_range, leaves_in_block_range,

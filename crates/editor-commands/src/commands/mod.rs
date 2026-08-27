@@ -41,6 +41,7 @@ mod lift_paragraph_forward;
 mod lift_selected_blocks_from_blockquote_with_variant;
 mod lift_selected_blocks_from_callout;
 mod lift_trailing_empty_list_item_paragraph;
+mod materialize_block;
 mod materialize_gap_paragraph;
 mod materialize_synthetic_selection_blocks;
 mod merge_adjacent_list_backward;
@@ -139,6 +140,7 @@ pub use lift_paragraph_forward::lift_paragraph_forward;
 pub use lift_selected_blocks_from_blockquote_with_variant::lift_selected_blocks_from_blockquote_with_variant;
 pub use lift_selected_blocks_from_callout::lift_selected_blocks_from_callout;
 pub use lift_trailing_empty_list_item_paragraph::lift_trailing_empty_list_item_paragraph;
+pub use materialize_block::materialize_block;
 pub use materialize_gap_paragraph::materialize_gap_paragraph;
 pub use materialize_synthetic_selection_blocks::{
     materialize_synthetic_selected_block_children, materialize_synthetic_selection_blocks,

@@ -17,6 +17,19 @@ pub(crate) fn to_plain_authored(projected: &ProjectedDoc) -> PlainDoc {
     to_plain_impl(projected, true)
 }
 
+/// The `block` subtree alone in the same shape [`to_plain`] gives the whole
+/// document — a block node, or an atom leaf holding a block slot. `None` when
+/// `block` is neither.
+pub fn to_plain_subtree(state: &crate::state::State, block: Dot) -> Option<PlainNodeEntry> {
+    let view = state.view();
+    if let Some(nv) = view.node(block) {
+        return Some(emit_block(state.projected.projected(), &nv, false));
+    }
+    let node = view.leaf(block)?.node()?;
+    let own = view.leaf_state_by_dot_slow(block).map(|s| s.own);
+    Some(emit_atom(node.to_plain(), own))
+}
+
 fn to_plain_impl(projected: &ProjectedDoc, authored_only: bool) -> PlainDoc {
     let view = DocView::new(projected);
     let root = match view.root() {
@@ -169,6 +182,45 @@ mod tests {
         let state = State::from_plain(plain).expect("load template");
         let out = state.to_plain();
         out.root.children[0].carry.clone()
+    }
+
+    #[test]
+    fn subtree_of_root_equals_the_whole_document() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: (p1, 0)
+        };
+        let root = state.view().root().expect("root").id();
+        assert_eq!(
+            crate::to_plain::to_plain_subtree(&state, root),
+            Some(state.to_plain().root)
+        );
+    }
+
+    #[test]
+    fn subtree_of_a_block_atom_is_the_entry_to_plain_reports() {
+        let (state, ..) = editor_macros::state! {
+            doc {
+                root {
+                    p1: paragraph { text("a") }
+                    image(id: Some("IMG1".to_string())) [alignment(editor_model::Alignment::Center)]
+                    paragraph { }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let dot = {
+            let view = state.view();
+            match view.root().expect("root").child_at(1).expect("image slot") {
+                editor_model::ChildView::Leaf(leaf) => leaf.dot(),
+                editor_model::ChildView::Block(_) => panic!("an image projects as an atom leaf"),
+            }
+        };
+        assert!(state.view().node(dot).is_none());
+        assert_eq!(
+            crate::to_plain::to_plain_subtree(&state, dot),
+            Some(state.to_plain().root.children[1].clone())
+        );
     }
 
     #[test]

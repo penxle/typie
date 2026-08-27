@@ -942,6 +942,7 @@ dependencies = [
  "editor-state",
  "editor-transaction",
  "editor-view",
+ "editor-xml",
  "env_filter 0.1.4",
  "env_logger",
  "hashbrown 0.17.1",
@@ -1185,6 +1186,27 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
+]
+
+[[package]]
+name = "editor-xml"
+version = "0.0.1"
+dependencies = [
+ "base64 0.23.1",
+ "editor-codec",
+ "editor-commands",
+ "editor-crdt",
+ "editor-macros",
+ "editor-model",
+ "editor-state",
+ "editor-transaction",
+ "hashbrown 0.17.1",
+ "proptest",
+ "serde",
+ "serde_json",
+ "strum",
+ "thiserror",
  "workspace-hack",
 ]
 
