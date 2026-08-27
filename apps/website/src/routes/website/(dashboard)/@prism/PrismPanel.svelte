@@ -17,8 +17,6 @@
   import PencilIcon from '~icons/lucide/pencil';
   import PlusIcon from '~icons/lucide/plus';
   import TrashIcon from '~icons/lucide/trash-2';
-  import PrismIcon from '~icons/typie/prism';
-  import PrismOffIcon from '~icons/typie/prism-off';
   import { page } from '$app/state';
   import { cache, wsStatus } from '$lib/graphql';
   import { unwrapError } from '$lib/graphql/error';
@@ -358,7 +356,6 @@
   let indicatorPhase = $state<'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome'>(
     selected.current === null ? 'welcome' : 'hidden',
   );
-  let prismObjectAvailable = $state(false);
   let indicatorSpinnerPlaybackStartedAt = $state<number | null>();
   let indicatorWaitSeen = $state(false);
   const chipsVisible = $derived(emptySession && draft.length === 0);
@@ -375,21 +372,6 @@
     backgroundColor: 'surface.muted',
     transition: '[background-color 150ms ease]',
     _hover: { backgroundColor: 'interactive.hover' },
-  });
-  const prismToggleClass = css({
-    position: 'absolute',
-    top: '12px',
-    left: '12px',
-    zIndex: '2',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '4px',
-    size: '24px',
-    color: 'text.faint',
-    transition: '[transform 160ms cubic-bezier(0.23, 1, 0.32, 1)]',
-    _supportHover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-    _active: { transform: 'scale(0.95)' },
   });
   let listOpen = $state(false);
   const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
@@ -973,26 +955,10 @@
     {/if}
 
     <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
-      {#if !chat.loading && emptySession && prismObjectAvailable}
-        {@const prismEnabled = app.preference.current.prismWelcomeObjectEnabled}
-        {@const prismToggleLabel = prismEnabled ? '3D 프리즘 끄기' : '3D 프리즘 켜기'}
-        <button
-          class={prismToggleClass}
-          aria-label="3D 프리즘"
-          aria-pressed={prismEnabled}
-          onclick={() => (app.preference.current.prismWelcomeObjectEnabled = !prismEnabled)}
-          type="button"
-          use:tooltip={{ message: prismToggleLabel }}
-        >
-          <Icon icon={prismEnabled ? PrismOffIcon : PrismIcon} size={16} />
-        </button>
-      {/if}
-
       {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
         {#key chat.generation}
           <PrismPanelIndicator
             destination={indicatorDestination}
-            onPrismAvailabilityChange={(available) => (prismObjectAvailable = available)}
             phase={indicatorPhase}
             prismEnabled={app.preference.current.prismWelcomeObjectEnabled}
             rowSpinnerPlaybackStartedAt={indicatorSpinnerPlaybackStartedAt}

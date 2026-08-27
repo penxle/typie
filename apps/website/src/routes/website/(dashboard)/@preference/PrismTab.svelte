@@ -3,12 +3,13 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Switch } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import PrismCreditIcon from '~icons/typie/prism-credit';
-  import { SettingsCard, SettingsRow } from '$lib/components';
+  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import PurchasePrismCreditModal from './PurchasePrismCreditModal.svelte';
@@ -20,6 +21,7 @@
   };
 
   let { user$key }: Props = $props();
+  const app = getAppContext();
 
   const user = createFragment(
     graphql(`
@@ -255,6 +257,20 @@
             handleToggle();
           }}
         />
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsDivider />
+
+    <SettingsRow>
+      {#snippet label()}
+        새 대화의 3D 프리즘
+      {/snippet}
+      {#snippet description()}
+        새 프리즘 대화에서 3D 프리즘을 표시해요.
+      {/snippet}
+      {#snippet value()}
+        <Switch bind:checked={app.preference.current.prismWelcomeObjectEnabled} />
       {/snippet}
     </SettingsRow>
   </SettingsCard>
