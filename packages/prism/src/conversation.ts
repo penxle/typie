@@ -77,6 +77,13 @@ export const pendingRootRequests = (t: Transcript): ToolRequestMessage[] =>
 export const runningWorkflows = (t: Transcript): WorkflowMessage[] =>
   t.messages.filter((m): m is WorkflowMessage => m.role === 'workflow' && m.status === 'running');
 
+// 도구 호출 없이 봉인된 턴 뒤에는 다음 턴이 없다 — 최종 턴과 run 종결은 한 트랜잭션이라 남은 것은 run.completed의 전달뿐이다.
+export const awaitingRunClose = (t: Transcript): boolean => {
+  if (t.run !== 'running' || t.turn !== 'idle') return false;
+  const last = t.messages.at(-1);
+  return last?.role === 'assistant' && last.toolCalls.length === 0;
+};
+
 const toolMessage = (event: ProjectedEventFrame, name: string, phase: 'executed' | 'rejected', ok: boolean | null): TranscriptMessage => ({
   role: 'tool',
   key: `e${event.seq}`,
