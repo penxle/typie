@@ -1,7 +1,8 @@
 import { logger } from '@typie/lib';
 import { parked } from '@typie/prism';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
 import { db, PrismSessions, PrismWorkflows } from '#/db/index.ts';
+import { lane } from '#/env.ts';
 import { PrismApiError } from '#/external/prism.ts';
 import { pubsub } from '#/pubsub.ts';
 import { cancelActiveRun, closeRun } from '#/utils/prism-workflows.ts';
@@ -11,11 +12,13 @@ import { agentParked, loadParkedEvents } from './prism-ingest.ts';
 
 const log = logger.getChild('prism-cron');
 
+const ownedByThisLane = or(isNull(PrismSessions.lane), eq(PrismSessions.lane, lane));
+
 const sweepSessions = async () => {
   const sessions = await db
     .select({ id: PrismSessions.id })
     .from(PrismSessions)
-    .where(and(isNotNull(PrismSessions.openRunSeq), isNull(PrismSessions.deletedAt)));
+    .where(and(isNotNull(PrismSessions.openRunSeq), isNull(PrismSessions.deletedAt), ownedByThisLane));
 
   for (const session of sessions) {
     try {
@@ -33,7 +36,7 @@ const sweepWorkflows = async () => {
     .select({ id: PrismWorkflows.id })
     .from(PrismWorkflows)
     .innerJoin(PrismSessions, eq(PrismSessions.id, PrismWorkflows.sessionId))
-    .where(and(eq(PrismWorkflows.state, 'RUNNING'), isNull(PrismSessions.deletedAt)));
+    .where(and(eq(PrismWorkflows.state, 'RUNNING'), isNull(PrismSessions.deletedAt), ownedByThisLane));
 
   for (const workflow of workflows) {
     try {
@@ -55,7 +58,7 @@ const closeDeleted = async () => {
       openRunSeq: PrismSessions.openRunSeq,
     })
     .from(PrismSessions)
-    .where(and(isNotNull(PrismSessions.openRunSeq), isNotNull(PrismSessions.deletedAt)));
+    .where(and(isNotNull(PrismSessions.openRunSeq), isNotNull(PrismSessions.deletedAt), ownedByThisLane));
 
   for (const session of sessions) {
     const openRunSeq = session.openRunSeq;

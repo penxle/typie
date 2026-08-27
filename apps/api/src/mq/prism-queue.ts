@@ -1,11 +1,10 @@
-import os from 'node:os';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { dev, env, stack } from '#/env.ts';
+import { env, lane } from '#/env.ts';
 import { logKeyOf } from '#/utils/prism-ingest-core.ts';
 import type { IngestTarget } from '#/utils/prism-ingest-core.ts';
 
-export const PRISM_LANE = `${dev ? os.hostname() : stack}-prism`;
+export const PRISM_LANE = `${lane}-prism`;
 export const PRISM_INGEST_JOB = 'prism:ingest';
 
 export const prismRedis = () => new Redis({ host: env.REDIS_URL, tls: {}, maxRetriesPerRequest: null });
