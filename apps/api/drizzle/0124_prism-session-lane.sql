@@ -1,0 +1,1 @@
+ALTER TABLE "prism_sessions" ADD COLUMN "lane" text;

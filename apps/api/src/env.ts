@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -57,3 +58,4 @@ export const env = schema.parse(process.env.ENV_JSON ? JSON.parse(process.env.EN
 export const stack = process.env.PUBLIC_ENVIRONMENT ?? process.env.DOPPLER_ENVIRONMENT ?? 'local';
 export const dev = process.env.NODE_ENV !== 'production';
 export const production = stack === 'prod';
+export const lane = dev ? os.hostname() : stack;

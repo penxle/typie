@@ -37,7 +37,7 @@ import {
   TableCode,
   validateDbId,
 } from '#/db/index.ts';
-import { env } from '#/env.ts';
+import { env, lane } from '#/env.ts';
 import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
 import { ensureIngest } from '#/mq/prism-queue.ts';
 import { pubsub } from '#/pubsub.ts';
@@ -539,6 +539,7 @@ builder.mutationFields((t) => ({
         .values({
           userId: ctx.session.userId,
           prismAgentId: agentId,
+          lane,
           openRunSeq: runSeq,
           ...(input.toolPolicy && { toolPolicy: input.toolPolicy }),
         })

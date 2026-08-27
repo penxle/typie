@@ -700,6 +700,7 @@ export const PrismSessions = pgTable(
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     prismAgentId: text('prism_agent_id').notNull().unique(),
+    lane: text('lane'),
     openRunSeq: integer('open_run_seq'),
     cursor: integer('cursor').notNull().default(0),
     toolPolicy: E._PrismToolPolicy('tool_policy').notNull().default('STANDARD'),

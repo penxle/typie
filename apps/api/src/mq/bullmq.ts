@@ -1,13 +1,11 @@
-import os from 'node:os';
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
-import { dev, env, stack } from '#/env.ts';
+import { env, lane } from '#/env.ts';
 import { crons, jobs } from './tasks/index.ts';
 
 const log = logger.getChild('mq');
-const lane = dev ? os.hostname() : stack;
 const taskMap = Object.fromEntries([...jobs, ...crons].map((job) => [job.name, job.fn]));
 const cronNames = new Set(crons.map((c) => c.name));
 
