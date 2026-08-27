@@ -46,7 +46,7 @@ describe('Typie Prism wrappers', () => {
         edgeColor: 'rgb(120 120 120)',
         preload: false,
         reducedMotion: true,
-        target: 'prism',
+        target: 'icon',
       });
       expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
       expect(runtime.object.update).toHaveBeenCalledWith({ edgeColor: 'rgb(120 120 120)', reducedMotion: true });
@@ -74,7 +74,7 @@ describe('Typie Prism wrappers', () => {
     const target = document.createElement('div');
     const component = mount(PrismObject, {
       target,
-      props: { preload: true, target: 'spinner' as PrismTarget, targetDurationMs: 2200 },
+      props: { preload: true, spinnerPlaybackStartedAt: 1234, target: 'spinner' as PrismTarget, targetDurationMs: 2200 },
     });
     try {
       await tick();
@@ -82,10 +82,10 @@ describe('Typie Prism wrappers', () => {
         edgeColor: undefined,
         preload: true,
         reducedMotion: false,
-        target: 'spinner',
+        target: 'icon',
       });
       expect(runtime.object.whenReady).toHaveBeenCalledOnce();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { totalDurationMs: 2200 });
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { spinnerPlaybackStartedAt: 1234, totalDurationMs: 2200 });
     } finally {
       await unmount(component);
     }

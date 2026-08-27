@@ -20,7 +20,13 @@ import {
   spinnerPhaseToWorldPhase,
 } from './internal/prism-spinner-morph.ts';
 import { PrismSpinnerPreRenderedHdrPlayer, PrismSpinnerPreRenderedPlayer } from './internal/prism-spinner-prerendered.ts';
-import { PRISM_SPINNER_ATLAS_DURATION_MS, PRISM_SPINNER_ATLAS_FRAME_COUNT, resolvePrismSpinnerAssets } from './spinner-player.ts';
+import {
+  PRISM_SPINNER_ATLAS_DURATION_MS,
+  PRISM_SPINNER_ATLAS_FRAME_COUNT,
+  resolvePrismSpinnerApngSource,
+  resolvePrismSpinnerAssets,
+  samplePrismSpinnerPlayback,
+} from './spinner-player.ts';
 import type { PrismIconMorphSample } from './internal/prism-icon-morph.ts';
 import type { PrismModeOwner, PrismModeReadiness } from './internal/prism-mode-route.ts';
 import type { PrismWebRenderer } from './internal/prism-wgpu-renderer.ts';
@@ -58,12 +64,14 @@ export type PrismRuntimeSpinnerOptions = {
 };
 
 export type PrismTargetRequestOptions = {
+  spinnerPlaybackStartedAt?: number;
   totalDurationMs?: number;
 };
 
 export type PrismRuntimeSnapshot = {
   journeyProgress: number | null;
   owner: PrismModeOwner | 'apng';
+  playbackStartedAt?: number;
   readiness: PrismModeReadiness;
   requestedTarget: PrismTarget;
   settledTarget: PrismTarget | null;
@@ -162,7 +170,17 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
   let modulePromise: Promise<PrismRendererModule> | null = null;
   let rendererRuntimePromise: Promise<PrismWebRuntimeInstance> | null = null;
   let runtimeDestroyed = false;
+  let spinnerPreloadStarted = false;
   const mounts = new Set<MountedPrismObject | MountedPrismSpinner>();
+
+  function preloadSpinner(): void {
+    if (runtimeDestroyed || spinnerPreloadStarted) return;
+    spinnerPreloadStarted = true;
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = resolvePrismSpinnerApngSource(devicePixelRatio);
+    void image.decode().catch(() => null);
+  }
 
   function loadModule(): Promise<PrismRendererModule> {
     modulePromise ??= Promise.try(options.loadRenderer);
@@ -230,6 +248,8 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     let presentationFrameId = 0;
     let resolveWarmup: (() => void) | null = null;
     let transitionGeneration = 0;
+    let spinnerBridgeFrameId = 0;
+    let spinnerPlaybackStartedAt: number | null = null;
     let readiness: PrismModeReadiness = 'loading';
     let atlasReadiness: PrismModeReadiness = 'loading';
     let atlasPromise: Promise<void> | null = null;
@@ -268,6 +288,13 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         requestedTarget,
         settledTarget,
       };
+    }
+
+    function cancelSpinnerBridge(): void {
+      if (spinnerBridgeFrameId !== 0) {
+        cancelAnimationFrame(spinnerBridgeFrameId);
+        spinnerBridgeFrameId = 0;
+      }
     }
 
     function notify(): void {
@@ -311,6 +338,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
     function settleStaticPresentation(): void {
       transitionGeneration += 1;
+      cancelSpinnerBridge();
       if (frameId) cancelAnimationFrame(frameId);
       if (presentationFrameId) cancelAnimationFrame(presentationFrameId);
       frameId = 0;
@@ -330,6 +358,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       journey = null;
       journeyProgress = null;
       settledTarget = 'icon';
+      spinnerPlaybackStartedAt = null;
       sizeScaleOverride = null;
       setOwnerVisibility(svg, canvas, atlas, 'svg');
       notify();
@@ -476,6 +505,40 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       return phaseWithinTurn + Math.round(unquantized - phaseWithinTurn);
     }
 
+    function startSpinnerApngBridge(handoff: ReturnType<typeof nextForwardSpinnerFrame>, now: number): void {
+      if (spinnerPlaybackStartedAt === null) return;
+      cancelSpinnerBridge();
+      const generation = transitionGeneration;
+      const initialWorldTurn = Math.round(handoff.worldPhase - spinnerPhaseToWorldPhase(handoff.framePhase, 0));
+      const step = (frameNow: number): void => {
+        spinnerBridgeFrameId = 0;
+        if (
+          destroyed ||
+          generation !== transitionGeneration ||
+          spinnerPlaybackStartedAt === null ||
+          requestedTarget !== 'spinner' ||
+          route.snapshot.owner !== 'atlas'
+        ) {
+          return;
+        }
+        const elapsedMs = Math.max(frameNow - spinnerPlaybackStartedAt, 0);
+        const playback = samplePrismSpinnerPlayback(elapsedMs);
+        const worldPhase = spinnerPhaseToWorldPhase(playback.phase, initialWorldTurn + Math.floor(playback.turns));
+        atlasPlayer.setPhase(playback.phase);
+        atlasWorldPhase = worldPhase;
+        atlasStartedAt = frameNow;
+        route.syncKinematics({ phase: worldPhase, velocity: playback.turnsPerSecond });
+        if (playback.complete) {
+          settledTarget = 'spinner';
+          finishJourney();
+          notify();
+          return;
+        }
+        spinnerBridgeFrameId = requestAnimationFrame(step);
+      };
+      step(now);
+    }
+
     function handOffWebGpuToAtlas(now = performance.now()): void {
       if (!controller || atlasReadiness !== 'ready' || route.snapshot.owner !== 'webgpu') return;
       const handoff = nextForwardSpinnerFrame(controller.rotationPhase, 0, PRISM_SPINNER_ATLAS_FRAME_COUNT);
@@ -496,7 +559,8 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
     function handOffAtlasToWebGpu(now = performance.now()): void {
       if (!controller || route.snapshot.owner !== 'atlas') return;
-      const phase = currentAtlasWorldPhase(now);
+      cancelSpinnerBridge();
+      const phase = spinnerPlaybackStartedAt === null ? currentAtlasWorldPhase(now) : route.snapshot.phase;
       atlasPlayer.pause(now);
       controller.update({
         period: PRISM_SPINNER_ATLAS_DURATION_MS / 1000,
@@ -728,15 +792,18 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       now?: number,
     ): void {
       if (!controller || destroyed) return;
+      const frameNow = now ?? performance.now();
+      const bridgeToApng = spinnerPlaybackStartedAt !== null && targetProgress === 1 && handoff !== null;
       if (targetProgress === 1 && handoff && atlasReadiness === 'ready') {
         controller.setRotationPhase(handoff.worldPhase);
-        atlasPlayer.playFromPhase(handoff.framePhase);
+        if (spinnerPlaybackStartedAt === null) atlasPlayer.playFromPhase(handoff.framePhase, frameNow);
+        else atlasPlayer.setPhase(handoff.framePhase);
         atlasWorldPhase = handoff.worldPhase;
-        atlasStartedAt = performance.now();
+        atlasStartedAt = frameNow;
         controller.setMorphPoseQuaternion(null);
         controller.setActive(false);
         route.completeSpinner(sample, 'atlas');
-        settledTarget = 'spinner';
+        settledTarget = bridgeToApng ? null : 'spinner';
       } else if (targetProgress === 1) {
         controller.update({
           period: PRISM_SPINNER_ATLAS_DURATION_MS / 1000,
@@ -760,6 +827,10 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       }
       setOwnerVisibility(svg, canvas, atlas, route.snapshot.owner);
       notify();
+      if (bridgeToApng && route.snapshot.owner === 'atlas') {
+        startSpinnerApngBridge(handoff, frameNow);
+        return;
+      }
       settleRoute(now);
     }
 
@@ -777,10 +848,13 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const generation = ++transitionGeneration;
       const distance = Math.max(Math.abs(currentAction.targetProgress - currentAction.startProgress), 0.0001);
       const durationSeconds = actionDurationSeconds(currentAction, PRISM_ICON_DURATION_SECONDS * distance);
+      const bridgeOpening = currentAction.targetProgress === 1 && spinnerPlaybackStartedAt !== null;
+      const bridgeEndpoint = bridgeOpening ? samplePrismSpinnerPlayback(journey?.totalDurationMs ?? durationSeconds * 1000) : null;
       const trajectory = createFixedPrismSpinnerTrajectory({
         frameCount: PRISM_SPINNER_ATLAS_FRAME_COUNT,
+        ...(bridgeEndpoint && { handoffFrameIndex: bridgeEndpoint.frameIndex }),
         prismVelocity: 1 / PRISM_PERIOD_SECONDS,
-        spinnerVelocity: 1000 / PRISM_SPINNER_ATLAS_DURATION_MS,
+        spinnerVelocity: bridgeEndpoint?.turnsPerSecond ?? 1000 / PRISM_SPINNER_ATLAS_DURATION_MS,
         startAngularVelocity: currentAction.startAngularVelocity,
         startOrientation: currentAction.startOrientation,
         startPhase: currentAction.startPhase,
@@ -822,6 +896,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
     function settleRoute(now?: number): void {
       if (destroyed || frameId || readiness !== 'ready' || staticPresentationRequired()) return;
+      if (spinnerBridgeFrameId !== 0) return;
       const state = route.snapshot;
       if (requestedTarget === 'spinner' && state.spinnerProgress >= 1 - 0.0001) {
         stopPointerInteraction();
@@ -845,14 +920,24 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     function setTarget(target: PrismTarget, requestOptions?: PrismTargetRequestOptions): void {
       requireTarget(target);
       const durationMs = targetDuration(requestOptions);
-      if (destroyed || target === requestedTarget) return;
+      const playbackStartedAt = requestOptions?.spinnerPlaybackStartedAt;
+      if (playbackStartedAt !== undefined && (!Number.isFinite(playbackStartedAt) || playbackStartedAt < 0)) {
+        throw new RangeError('Spinner playback start time must be finite and non-negative.');
+      }
+      if (playbackStartedAt !== undefined && target !== 'spinner') {
+        throw new RangeError('Spinner playback start time can only be used with the spinner target.');
+      }
+      if (destroyed) return;
+      if (target === requestedTarget) return;
       stopPointerInteraction();
+      cancelSpinnerBridge();
       // Keep the current light phase and interaction appearance until the
       // WebGPU prism is fully hidden. Resetting them here makes the light jump
       // before the prism-to-icon trajectory has even started.
       if (target !== 'icon') resetPointerInteractionAppearance();
       requestedTarget = target;
       settledTarget = null;
+      spinnerPlaybackStartedAt = target === 'spinner' ? (playbackStartedAt ?? null) : null;
       if (durationMs === null) {
         journey = null;
         journeyProgress = null;
@@ -862,7 +947,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         journey = {
           completedDistance: 0,
           endSizeScale: targetSizeScale(target),
-          startedAt: null,
+          startedAt: spinnerPlaybackStartedAt,
           startSizeScale: currentSizeScale,
           totalDistance: Math.max(remainingDistance(target), 0.0001),
           totalDurationMs: durationMs,
@@ -885,6 +970,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
 
     setOwnerVisibility(svg, canvas, atlas, 'svg');
     notify();
+    if (initialOptions.preload) preloadSpinner();
     if (initialOptions.target !== 'icon') {
       requestedTarget = 'icon';
       setTarget(initialOptions.target);
@@ -896,6 +982,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         destroyed = true;
         mounts.delete(mounted);
         transitionGeneration += 1;
+        cancelSpinnerBridge();
         if (frameId) cancelAnimationFrame(frameId);
         if (presentationFrameId) cancelAnimationFrame(presentationFrameId);
         if (interactionFrameId) cancelAnimationFrame(interactionFrameId);
@@ -978,19 +1065,21 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     let destroyed = false;
     let reducedMotion = Boolean(spinnerOptions.reducedMotion);
     let apngLoadGeneration = 0;
+    let playbackStartedAt: number | undefined;
     const apngHdrPlayer = new PrismSpinnerPreRenderedHdrPlayer(hdrCanvas);
     let atlasPlayer: PrismSpinnerPreRenderedPlayer | null = null;
     let atlasPromise: Promise<void> | null = null;
     const snapshot: PrismRuntimeSnapshot = {
       journeyProgress: null,
       owner: 'apng',
+      playbackStartedAt,
       readiness: 'loading',
       requestedTarget: 'spinner',
       settledTarget: null,
     };
 
     function notify(): void {
-      const next = { ...snapshot };
+      const next = { ...snapshot, playbackStartedAt };
       for (const listener of listeners) listener(next);
     }
 
@@ -1030,12 +1119,11 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     async function loadApng(): Promise<void> {
       const assets = resolvePrismSpinnerAssets(devicePixelRatio);
       const generation = ++apngLoadGeneration;
+      playbackStartedAt = undefined;
       atlasPlayer?.dispose();
       atlasPlayer = null;
       atlasPromise = null;
       apngHdrPlayer.connect(assets.hdr);
-      const source = new URL(assets.sdrUrl);
-      source.searchParams.set('animation-run', String(generation));
       const loadedAt = new Promise<number>((resolve, reject) => {
         const cleanup = () => {
           image.removeEventListener('load', onLoad);
@@ -1052,11 +1140,12 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         image.addEventListener('load', onLoad);
         image.addEventListener('error', onError);
       });
-      image.src = source.href;
+      image.src = resolvePrismSpinnerApngSource(devicePixelRatio, generation);
       try {
         const startedAt = await loadedAt;
         await image.decode();
         if (destroyed || generation !== apngLoadGeneration) return;
+        playbackStartedAt = startedAt;
         apngHdrPlayer.play(startedAt);
         if (reducedMotion) {
           await ensureAtlas();
@@ -1068,6 +1157,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         notify();
       } catch {
         if (destroyed || generation !== apngLoadGeneration) return;
+        playbackStartedAt = undefined;
         apngHdrPlayer.disconnect();
         await ensureAtlas();
       }
@@ -1090,12 +1180,12 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         root.remove();
       },
       get snapshot() {
-        return { ...snapshot };
+        return { ...snapshot, playbackStartedAt };
       },
       subscribe(listener) {
         if (!destroyed) {
           listeners.add(listener);
-          listener({ ...snapshot });
+          listener({ ...snapshot, playbackStartedAt });
         }
         return () => listeners.delete(listener);
       },

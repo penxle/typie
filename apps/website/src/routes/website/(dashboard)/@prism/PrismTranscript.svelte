@@ -30,7 +30,7 @@
     unavailableMessage?: string;
     reconnecting: boolean;
     policy: ToolPolicy;
-    spinnerOwner?: 'panel' | 'row';
+    onSpinnerPlaybackChange?: (startedAt: number | null) => void;
     waitSpinnerAnchor?: HTMLElement;
     onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
@@ -45,7 +45,7 @@
     unavailableMessage,
     reconnecting,
     policy,
-    spinnerOwner = 'row',
+    onSpinnerPlaybackChange,
     waitSpinnerAnchor = $bindable(),
     onResolve,
     onRetry,
@@ -523,7 +523,7 @@
       {/if}
 
       {#if waitState !== null}
-        <PrismWaitRow label={waitState.label} {spinnerOwner} text={waitText} bind:spinnerAnchor={waitSpinnerAnchor} />
+        <PrismWaitRow label={waitState.label} {onSpinnerPlaybackChange} text={waitText} bind:spinnerAnchor={waitSpinnerAnchor} />
       {/if}
     </div>
   </div>
