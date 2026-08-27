@@ -12,7 +12,7 @@
   import PrismCardPopover from './PrismCardPopover.svelte';
   import PrismOverviewRuler from './PrismOverviewRuler.svelte';
   import PrismRail from './PrismRail.svelte';
-  import { RAIL_TEXT_GAP, RAIL_WIDTH } from './rail-layout.ts';
+  import { RAIL_TEXT_GAP, RAIL_WIDTH, railTone } from './rail-layout.ts';
   import type { MarginItem } from './context.svelte.ts';
   import type { RailSpan, RailTone } from './rail-layout.ts';
 
@@ -39,8 +39,7 @@
   // 확장 영역 위에 얹힌 헤더(제목·부제목) 블록의 높이 — 세그먼트를 그 높이에 세운다
   let headerHeight = $state(0);
 
-  const toneOf = (item: MarginItem): RailTone =>
-    item.kind === 'strength' ? 'strength' : item.thread?.state === 'CLOSED' ? 'closed' : 'open';
+  const toneOf = (item: MarginItem): RailTone => railTone(item.kind, item.thread?.state ?? null);
 
   const layoutLeftWithin = (element: HTMLElement, ancestor: HTMLElement): number | null => {
     let left = 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutRailHitTargets, layoutRails, maxRailLanes, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH } from './rail-layout.ts';
+import { layoutRailHitTargets, layoutRails, maxRailLanes, RAIL_CHIP_SIZE, RAIL_TEXT_GAP, RAIL_WIDTH, railTone } from './rail-layout.ts';
 import type { PlacedRail, RailSpan } from './rail-layout.ts';
 
 const span = (id: string, top: number, height: number): RailSpan => ({
@@ -27,6 +27,19 @@ const chipBox = (rail: PlacedRail): Box => ({
   top: rail.chipTop,
   right: rail.chipLeft + RAIL_CHIP_SIZE,
   bottom: rail.chipTop + RAIL_CHIP_SIZE,
+});
+
+describe('railTone', () => {
+  it('강점은 강점 색을 유지한다', () => {
+    expect(railTone('strength', null)).toBe('strength');
+  });
+
+  it('열린 피드백만 이슈 색이고 나머지 상태는 무채색이다', () => {
+    expect(railTone('issue', 'OPEN')).toBe('open');
+    expect(railTone('issue', 'CLOSED')).toBe('closed');
+    expect(railTone('issue', 'RESOLVED')).toBe('closed');
+    expect(railTone('issue', 'WITHDRAWN')).toBe('closed');
+  });
 });
 
 describe('layoutRails', () => {
