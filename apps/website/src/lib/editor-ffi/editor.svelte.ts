@@ -401,6 +401,7 @@ export class Editor {
   #pointerStyle = $state<PointerStyle>('default');
   #lastPointerClient: { x: number; y: number } | null = null;
   #pointerStyleDomRefreshQueued = false;
+  #presentationGeometryFrame: number | null = null;
 
   #linkHover = $state<{ link: LinkRect; page: number; clientX: number; clientY: number } | undefined>();
   #modifierHeld = $state(false);
@@ -461,6 +462,7 @@ export class Editor {
   scrollContainerEl = $state<HTMLDivElement>();
   scrollViewport = $state<ScrollViewport>();
   scrollRootEl = $state<HTMLElement | null>();
+  presentationGeometryRevision = $state(0);
   displayZoom = $state(1);
   renderZoom = $state(1);
 
@@ -580,6 +582,10 @@ export class Editor {
 
   #stopRuntime(): void {
     this.#clearScheduledTick();
+    if (this.#presentationGeometryFrame !== null) {
+      cancelAnimationFrame(this.#presentationGeometryFrame);
+      this.#presentationGeometryFrame = null;
+    }
     if (this.#characterCountsDebounceTimer !== null) {
       clearTimeout(this.#characterCountsDebounceTimer);
       this.#characterCountsDebounceTimer = null;
@@ -1555,6 +1561,14 @@ export class Editor {
   safeDisplayZoom(): number {
     const zoom = this.rootAttrs?.layout_mode ? this.displayZoom : 1;
     return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  }
+
+  requestPresentationGeometryUpdate(): void {
+    if (this.terminal || this.#presentationGeometryFrame !== null) return;
+    this.#presentationGeometryFrame = requestAnimationFrame(() => {
+      this.#presentationGeometryFrame = null;
+      if (!this.terminal) this.presentationGeometryRevision += 1;
+    });
   }
 
   captureSelectionViewportAnchor(revision: number): CapturedViewportAnchor | undefined {

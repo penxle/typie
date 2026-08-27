@@ -2,7 +2,9 @@
   import { css } from '@typie/styled-system/css';
   import { Button, SegmentButtons } from '@typie/ui/components';
   import { untrack } from 'svelte';
+  import { PAGE_GAP } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { resolveCachedPageSpans } from '$lib/editor-ffi/geometry';
   import { resolveContinuousViewPadding } from '$lib/editor-ffi/zoom';
   import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
@@ -13,6 +15,7 @@
   import PrismOverviewRuler from './PrismOverviewRuler.svelte';
   import PrismRail from './PrismRail.svelte';
   import { RAIL_TEXT_GAP, RAIL_WIDTH, railTone } from './rail-layout.ts';
+  import type { TrackedRange } from '@typie/editor-ffi/browser';
   import type { MarginItem } from './context.svelte.ts';
   import type { RailSpan, RailTone } from './rail-layout.ts';
 
@@ -51,11 +54,11 @@
     return current === ancestor ? left : null;
   };
 
-  // items는 적용 스냅숏마다 새로 지어지고 published도 프레임 교체마다 새 번들이다 — 신원으로 재측정을 걸면
-  // 타이핑 한 번마다 rect를 읽어 강제 리플로우가 난다. 측정은 판 번호와 항목 집합이 실제로 바뀔 때만 돈다.
-  // anchored는 일부러 뺐다 — measure가 읽지 않으면서 적용 스냅숏마다 뒤집히는 값이다
-  const publishedRevision = $derived(ctx.editor?.publishedRevision);
+  // items는 적용 스냅숏마다 새로 지어지고 published도 프레임 교체마다 새 번들이다 — 신원이 아니라
+  // 판 번호와 항목 집합이 실제로 바뀔 때만 논리 range를 다시 읽는다. presentation 변화는 이 캐시를 재투영한다.
+  // anchored는 일부러 뺐다 — measure가 읽지 않으면서 적용 스냅숏마다 뒤집히는 값이다.
   const itemsKey = $derived(margin.items.map((item) => `${item.id}:${item.number}:${toneOf(item)}:${item.rangeIds.join(',')}`).join(' '));
+  let trackedRanges = new Map<string, TrackedRange>();
 
   const measure = () => {
     const editor = ctx.editor;
@@ -66,15 +69,30 @@
     const areaRect = area.getBoundingClientRect();
     const zoom = editor.safeDisplayZoom();
 
-    // 타이핑 한 번에 한 번씩 도는 자리다 — 조회는 색인으로, 페이지 rect는 페이지당 한 번만 읽는다.
-    // 스냅숏의 사본은 tracked_ranges 필드가 설 때만 갈려 리플로우를 못 따라간다 — 코어에서 지금 것을 받는다
-    const ranges = new Map(editor.freshTrackedRanges().map((range) => [range.id, range]));
+    const trackRect = editor.documentTrackEl?.getBoundingClientRect();
+    const pageSpans = trackRect
+      ? resolveCachedPageSpans(snapshot.pageSizes, {
+          displayZoom: zoom,
+          scaleFactor: editor.scaleFactor,
+          pageGap: editor.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP * zoom : 0,
+        })
+      : null;
     const pageTops: (number | null | undefined)[] = [];
     const pageTopOf = (page: number): number | null => {
       const cached = pageTops[page];
       if (cached !== undefined) return cached;
       const el = editor.pageEls[page];
-      const top = el ? el.getBoundingClientRect().top - areaRect.top : null;
+      if (!el) {
+        pageTops[page] = null;
+        return null;
+      }
+      const span = pageSpans?.[page];
+      if (trackRect && span) {
+        const top = trackRect.top - areaRect.top + span.top;
+        pageTops[page] = top;
+        return top;
+      }
+      const top = el.getBoundingClientRect().top - areaRect.top;
       pageTops[page] = top;
       return top;
     };
@@ -94,7 +112,7 @@
       let first = Infinity;
 
       for (const rangeId of item.rangeIds) {
-        const range = ranges.get(rangeId);
+        const range = trackedRanges.get(rangeId);
         if (!range || range.rects.length === 0) continue;
 
         let top = Infinity;
@@ -140,10 +158,21 @@
     }
   };
 
-  // 좌표는 판이 바뀔 때만 다시 잰다 — 스크롤은 브라우저가 콘텐츠와 함께 옮긴다
+  // 의미 좌표는 판이 바뀔 때만 갱신한다. presentation 측정은 아래 effect 한 곳에서 수행한다.
   $effect(() => {
-    void publishedRevision;
+    const editor = ctx.editor;
+    void editor?.publishedRevision;
+    untrack(() => {
+      trackedRanges = new Map(editor?.freshTrackedRanges().map((range) => [range.id, range]));
+    });
+  });
+
+  // 항목 집합이나 현재 presentation geometry가 바뀌면 캐시된 의미 좌표를 화면에 다시 투영한다.
+  // 스크롤은 브라우저가 콘텐츠와 함께 옮기므로 별도 측정 원인이 아니다.
+  $effect(() => {
+    const editor = ctx.editor;
     void itemsKey;
+    void editor?.presentationGeometryRevision;
     untrack(measure);
   });
 
@@ -190,15 +219,6 @@
     { label: `지난 회차 ${margin.segmentCounts.settled}`, value: 'settled' as const },
     { label: `자리 잃음 ${margin.segmentCounts.lost}`, value: 'lost' as const },
   ]);
-
-  // 리플로우·줌·인셋 전환은 확장 영역의 크기로 나타난다
-  $effect(() => {
-    const area = ctx.editor?.extensionAreaEl;
-    if (!area) return;
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(area);
-    return () => observer.disconnect();
-  });
 </script>
 
 {#if margin.ready}

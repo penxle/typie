@@ -276,6 +276,37 @@
   $effect(() => {
     ctx.editor?.setThemeVariant(theme.currentThemeVariant);
   });
+
+  // 화면 좌표 소비자는 줌 자체가 아니라 현재 제시된 문서 geometry를 관찰한다.
+  // 선언 입력과 페이지 요소 설치가 한 프레임에 여러 번 바뀌어도 Editor가 한 번만 발행한다.
+  $effect(() => {
+    const editor = ctx.editor;
+    if (!editor) return;
+    void editor.publishedRevision;
+    void editor.safeDisplayZoom();
+    void editor.scaleFactor;
+    void editor.extensionAreaEl;
+    void editor.documentTrackEl;
+    void clientWidth;
+    void clientHeight;
+    void windowViewportHeight;
+    void contentInsetLeft;
+    void contentInsetRight;
+    for (const pageEl of Object.values(editor.pageEls)) void pageEl;
+    untrack(() => editor.requestPresentationGeometryUpdate());
+  });
+
+  // 바깥 CSS나 내재 크기 변화처럼 선언 입력으로 드러나지 않는 geometry 변화의 폴백이다.
+  $effect(() => {
+    const editor = ctx.editor;
+    const area = editor?.extensionAreaEl;
+    const track = editor?.documentTrackEl;
+    if (!editor || !area) return;
+    const observer = new ResizeObserver(() => editor.requestPresentationGeometryUpdate());
+    observer.observe(area);
+    if (track) observer.observe(track);
+    return () => observer.disconnect();
+  });
 </script>
 
 <svelte:window
