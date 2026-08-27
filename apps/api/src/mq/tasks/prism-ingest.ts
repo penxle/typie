@@ -1,12 +1,11 @@
 import { setTimeout as timeout } from 'node:timers/promises';
 import { logger } from '@typie/lib';
-import { applyDelta, awaitingUser, effectiveResolver, parked, pendingServerRequests, sealTurn } from '@typie/prism';
+import { applyDelta, awaitingUser, effectiveResolver, parked, pendingRequests, sealTurn } from '@typie/prism';
 import { DelayedError } from 'bullmq';
 import dayjs from 'dayjs';
 import { and, asc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { db, first, firstOrThrow, PrismRuns, PrismSessionEvents, PrismSessions, PrismWorkflowEvents, PrismWorkflows } from '#/db/index.ts';
-import { env } from '#/env.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
 import { pumpSse } from '#/external/prism-stream.ts';
 import { pubsub } from '#/pubsub.ts';
@@ -16,12 +15,10 @@ import { chargePrismCredit } from '#/utils/prism-credit.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, shouldStop } from '#/utils/prism-ingest-core.ts';
 import { serveTool } from '#/utils/prism-serve.ts';
-import { toolResolverOf } from '#/utils/prism-tool-calls.ts';
+import { resolvedToolCallIds, toolResolverOf } from '#/utils/prism-tool-calls.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
 import { ensureIngest, shutdown } from '../prism-queue.ts';
-import { pushCopy, pushKey } from './prism-core.ts';
-import { shouldPushAsk } from './prism-push-gate.ts';
-import type { EventFrame, ParkedEvent, ParkedOptions, StreamFrame, ToolPolicy, TurnLive } from '@typie/prism';
+import type { EventFrame, ParkedEvent, ParkedOptions, ParkedScope, StreamFrame, TurnLive } from '@typie/prism';
 import type { Job } from 'bullmq';
 import type { Transaction } from '#/db/index.ts';
 import type { ProjectedScope } from '#/utils/prism-events.ts';
@@ -54,17 +51,27 @@ export const loadParkedEvents = async (target: IngestTarget): Promise<ParkedEven
   const rows =
     target.kind === 'agent'
       ? await db
-          .select({ kind: PrismSessionEvents.kind, context: PrismSessionEvents.context, data: PrismSessionEvents.data })
+          .select({
+            kind: PrismSessionEvents.kind,
+            context: PrismSessionEvents.context,
+            data: PrismSessionEvents.data,
+            occurredAt: PrismSessionEvents.occurredAt,
+          })
           .from(PrismSessionEvents)
           .where(and(eq(PrismSessionEvents.sessionId, target.sessionId), inArray(PrismSessionEvents.kind, [...PARKED_KINDS])))
           .orderBy(asc(PrismSessionEvents.seq))
       : await db
-          .select({ kind: PrismWorkflowEvents.kind, context: PrismWorkflowEvents.context, data: PrismWorkflowEvents.data })
+          .select({
+            kind: PrismWorkflowEvents.kind,
+            context: PrismWorkflowEvents.context,
+            data: PrismWorkflowEvents.data,
+            occurredAt: PrismWorkflowEvents.occurredAt,
+          })
           .from(PrismWorkflowEvents)
           .where(and(eq(PrismWorkflowEvents.workflowId, target.workflowId), inArray(PrismWorkflowEvents.kind, [...PARKED_KINDS])))
           .orderBy(asc(PrismWorkflowEvents.seq));
 
-  return rows.map((row) => ({ kind: row.kind, context: row.context ?? null, data: row.data }));
+  return rows.map((row) => ({ kind: row.kind, context: row.context ?? null, data: row.data, occurredAt: row.occurredAt.valueOf() }));
 };
 
 const loadSettledWorkflows = async (sessionId: string): Promise<Set<string>> => {
@@ -76,35 +83,26 @@ const loadSettledWorkflows = async (sessionId: string): Promise<Set<string>> => 
   return new Set(rows.map((row) => row.prismWorkflowId));
 };
 
+// 서버가 선해소한 user 도구는 tool.resolved가 스트림으로 닿기 전까지 로컬 로그에서 대기로 보인다 — 원장이 해소를 아는 요청은 대기에서 뺀다
+const ledgerResolved = async (sessionId: string, events: ParkedEvent[], scope: ParkedScope): Promise<ReadonlySet<string>> =>
+  resolvedToolCallIds(
+    sessionId,
+    pendingRequests(events, scope).map((request) => request.toolCallId),
+  );
+
 export const agentParked = async (sessionId: string, events: ParkedEvent[], resolverOf?: ParkedOptions['resolverOf']): Promise<boolean> =>
   parked(events, 'agent', { resolverOf }) &&
-  parked(events, 'agent', { settledWorkflows: await loadSettledWorkflows(sessionId), resolverOf });
-
-const pushAsk = async (session: SessionRef, op: Extract<DomainOp, { op: 'ask-push' }>, policy: ToolPolicy) => {
-  if (!shouldPushAsk(op.tool, policy)) return;
-
-  const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
-  if (Date.now() - op.at > PUSH_TTL_SECONDS * 1000) return;
-
-  const { title, body } = pushCopy(op.tool, op.data, session.title);
-
-  const delivery = await sendPushNotificationOnce({
-    key: pushKey.ask(op.toolCallId),
-    userId: session.userId,
-    title,
-    body,
-    link: `${env.WEBSITE_URL}/initial?prism=${session.id}`,
+  parked(events, 'agent', {
+    settledWorkflows: await loadSettledWorkflows(sessionId),
+    resolverOf,
+    resolved: await ledgerResolved(sessionId, events, 'agent'),
   });
 
-  if (delivery === 'failed') throw new Error(`prism ask push failed for ${op.toolCallId}`);
-};
+const workflowParked = async (sessionId: string, events: ParkedEvent[], resolverOf: ParkedOptions['resolverOf']): Promise<boolean> =>
+  parked(events, 'workflow', { resolverOf }) &&
+  parked(events, 'workflow', { resolverOf, resolved: await ledgerResolved(sessionId, events, 'workflow') });
 
-const applyAgentOp = async (
-  tx: Transaction,
-  session: SessionRef,
-  op: DomainOp,
-  policy: ToolPolicy,
-): Promise<(() => Promise<void>) | null> => {
+const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp): Promise<(() => Promise<void>) | null> => {
   switch (op.op) {
     case 'run-started': {
       await tx
@@ -167,16 +165,11 @@ const applyAgentOp = async (
       return null;
     }
 
-    case 'ask-push': {
-      await pushAsk(session, op, policy);
-      return null;
-    }
-
     case 'tool-serve': {
-      const { toolCallId, tool, input, agentId, runSeq } = op;
+      const { toolCallId, tool, input, agentId, runSeq, at } = op;
       return async () => {
         try {
-          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input });
+          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input, at });
         } catch (err) {
           throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
         }
@@ -194,7 +187,6 @@ const applyWorkflowOp = async (
   workflow: typeof PrismWorkflows.$inferSelect,
   session: SessionRef,
   op: DomainOp,
-  policy: ToolPolicy,
 ): Promise<(() => Promise<void>) | null> => {
   switch (op.op) {
     case 'workflow-settle': {
@@ -214,16 +206,11 @@ const applyWorkflowOp = async (
       };
     }
 
-    case 'ask-push': {
-      await pushAsk(session, op, policy);
-      return null;
-    }
-
     case 'tool-serve': {
-      const { toolCallId, tool, input, agentId, runSeq } = op;
+      const { toolCallId, tool, input, agentId, runSeq, at } = op;
       return async () => {
         try {
-          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input });
+          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input, at });
         } catch (err) {
           throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
         }
@@ -256,7 +243,9 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     .where(eq(PrismSessions.id, session.id))
     .then(firstOrThrow);
 
-  for (const request of pendingServerRequests(parkedEvents, parkedScope, policyRow.toolPolicy)) {
+  // 서브는 커밋 뒤에 도는 thunk라 잡이 그 사이 죽으면 커서만 전진한 채 실행도 알림도 사라진다 — 기동 시 파킹된 요청을 해소 주체와 무관하게 다시 태운다
+  // (원장이 중복 실행을, once-key가 중복 푸시를, prism의 pending 불일치가 이미 해소된 요청을 막는다)
+  for (const request of pendingRequests(parkedEvents, parkedScope)) {
     await serveTool({
       sessionId: session.id,
       agentId: request.agentId,
@@ -264,6 +253,7 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
       toolCallId: request.toolCallId,
       tool: request.tool,
       input: request.input,
+      at: request.at,
     });
   }
 
@@ -346,7 +336,7 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
   const isParked = async (): Promise<boolean> =>
     target.kind === 'agent'
       ? await agentParked(target.sessionId, parkedEvents, resolverOf)
-      : parked(parkedEvents, parkedScope, { resolverOf });
+      : await workflowParked(session.id, parkedEvents, resolverOf);
 
   const stopNow = async (): Promise<boolean> => synced && shouldStop({ synced, open: await isOpen(), parked: await isParked() });
 
@@ -404,7 +394,8 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
   const onEvent = async (raw: EventFrame) => {
     const event = await withResolver(raw);
     const plan = planEvent(parkedScope, event, cursor);
-    if (PARKED_KINDS.has(event.kind)) parkedEvents.push({ kind: event.kind, context: event.context, data: event.data });
+    if (PARKED_KINDS.has(event.kind))
+      parkedEvents.push({ kind: event.kind, context: event.context, data: event.data, occurredAt: event.occurredAt });
 
     const after: (() => Promise<void>)[] = [];
     await db.transaction(async (tx) => {
@@ -433,9 +424,7 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
 
       for (const op of plan.ops) {
         const wake =
-          target.kind === 'agent'
-            ? await applyAgentOp(tx, session, op, policyRow.toolPolicy)
-            : await applyWorkflowOp(tx, requireWorkflow(), session, op, policyRow.toolPolicy);
+          target.kind === 'agent' ? await applyAgentOp(tx, session, op) : await applyWorkflowOp(tx, requireWorkflow(), session, op);
         if (wake !== null) after.push(wake);
       }
 

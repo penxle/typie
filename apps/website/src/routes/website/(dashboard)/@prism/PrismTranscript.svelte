@@ -10,6 +10,7 @@
   import { pop, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
+  import { labelForRequest } from './lib/tool-labels.ts';
   import PrismMarkdown from './PrismMarkdown.svelte';
   import PrismMessage from './PrismMessage.svelte';
   import PrismToolCalls from './PrismToolCalls.svelte';
@@ -61,9 +62,11 @@
     (message.role === 'tool-request' && message.workflowId === undefined && cardOf(message) === undefined && message.status !== 'pending');
 
   const labelOf = (message: TranscriptMessage) =>
-    message.role === 'tool' || message.role === 'tool-request'
-      ? (toolCallLabels[message.role === 'tool' ? message.name : message.tool] ?? null)
-      : null;
+    message.role === 'tool'
+      ? (toolCallLabels[message.name] ?? null)
+      : message.role === 'tool-request'
+        ? labelForRequest(message.tool, message.result)
+        : null;
 
   const dropped = (message: TranscriptMessage) =>
     (message.role === 'tool-request' && message.workflowId !== undefined) ||

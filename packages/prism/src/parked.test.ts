@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { awaitingUser, parked, pendingServerRequests } from './parked.ts';
+import { awaitingUser, parked, pendingRequests } from './parked.ts';
 import { effectiveResolver } from './tools.ts';
 import type { ParkedEvent } from './parked.ts';
 import type { ToolPolicy } from './tools.ts';
@@ -7,7 +7,13 @@ import type { ToolPolicy } from './tools.ts';
 const root = { id: 'chat-1', name: 'chat' };
 const child = { id: 'agent_9', name: 'judgment' };
 
-const ev = (kind: string, context: ParkedEvent['context'], data: Record<string, unknown> = {}): ParkedEvent => ({ kind, context, data });
+let occurredAt = 0;
+const ev = (kind: string, context: ParkedEvent['context'], data: Record<string, unknown> = {}): ParkedEvent => ({
+  kind,
+  context,
+  data,
+  occurredAt: (occurredAt += 1000),
+});
 const run = (agent: { id: string; name: string }, n = 1) => ({ agent, run: n });
 const tool = (agent: { id: string; name: string }, toolCallId: string, n = 1) => ({ agent, run: n, turn: 1, attempt: 1, toolCallId });
 
@@ -106,30 +112,41 @@ describe('parked with injected resolver', () => {
   it('server 도구 미해소는 비파킹', () => {
     expect(parked([runStarted, request('t1', 'search-entities')], 'agent', { resolverOf: resolverOf('STANDARD') })).toBe(false);
   });
+
+  it('원장이 이미 해소한 요청은 tool.resolved가 오기 전에도 대기가 아니다', () => {
+    const events = [runStarted, request('t1', 'save-document')];
+    const options = { resolverOf: resolverOf('STANDARD') };
+    expect(parked(events, 'agent', options)).toBe(true);
+    expect(parked(events, 'agent', { ...options, resolved: new Set(['t1']) })).toBe(false);
+    expect(parked(events, 'agent', { ...options, resolved: new Set(['other']) })).toBe(true);
+    expect(pendingRequests(events, 'agent').map((r) => r.toolCallId)).toEqual(['t1']);
+  });
 });
 
-describe('pendingServerRequests', () => {
-  it('열린 run의 미해소 server 요청만 좌표째 나열한다', () => {
+describe('pendingRequests', () => {
+  it('열린 run의 미해소 요청을 해소 주체와 무관하게 좌표·요청 시각째 나열한다', () => {
+    const served = request('t1', 'search-entities');
+    const ask = request('t2', 'ask-user');
+    const events = [runStarted, served, ask];
+    expect(pendingRequests(events, 'agent')).toEqual([
+      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: 1, at: served.occurredAt },
+      { toolCallId: 't2', tool: 'ask-user', input: { query: '해변' }, agentId: 'agent-1', runSeq: 1, at: ask.occurredAt },
+    ]);
+    expect(pendingRequests(events, 'workflow')).toEqual([
+      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: null, at: served.occurredAt },
+      { toolCallId: 't2', tool: 'ask-user', input: { query: '해변' }, agentId: 'agent-1', runSeq: null, at: ask.occurredAt },
+    ]);
+  });
+
+  it('해소·run 종결은 제외한다', () => {
     const events = [runStarted, request('t1', 'search-entities'), request('t2', 'ask-user')];
-    expect(pendingServerRequests(events, 'agent', 'STANDARD')).toEqual([
-      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: 1 },
-    ]);
-    expect(pendingServerRequests(events, 'workflow', 'STANDARD')).toEqual([
-      { toolCallId: 't1', tool: 'search-entities', input: { query: '해변' }, agentId: 'agent-1', runSeq: null },
-    ]);
+    expect(pendingRequests([...events, ev('tool.resolved', tool(requester, 't1'))], 'agent').map((r) => r.toolCallId)).toEqual(['t2']);
+    expect(pendingRequests([...events, ev('run.completed', run(requester))], 'agent')).toEqual([]);
   });
 
-  it('해소·run 종결·닫힌 run은 제외한다', () => {
-    const resolved = ev('tool.resolved', tool(requester, 't1'));
-    expect(pendingServerRequests([runStarted, request('t1', 'search-entities'), resolved], 'agent', 'STANDARD')).toEqual([]);
-    const terminal = ev('run.completed', run(requester));
-    expect(pendingServerRequests([runStarted, request('t1', 'search-entities'), terminal], 'agent', 'STANDARD')).toEqual([]);
-  });
-
-  it('destructive는 FULL에서만 나열된다', () => {
-    const events = [runStarted, request('t1', 'delete-entities')];
-    expect(pendingServerRequests(events, 'agent', 'STANDARD')).toEqual([]);
-    expect(pendingServerRequests(events, 'agent', 'FULL')).toHaveLength(1);
+  it('destructive·미등재 도구도 정책 판정 없이 나열된다 — 실행이냐 승인이냐는 serveTool이 정한다', () => {
+    const events = [runStarted, request('t1', 'delete-entities'), request('t2', 'unknown-thing')];
+    expect(pendingRequests(events, 'agent').map((r) => r.tool)).toEqual(['delete-entities', 'unknown-thing']);
   });
 });
 

@@ -135,6 +135,7 @@ pub struct XmlEditResult {
     #[serde(with = "serde_bytes")]
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub bundle: Vec<u8>,
+    pub xml: String,
     pub blocks_inserted: u32,
     pub blocks_deleted: u32,
     pub blocks_moved: u32,
@@ -436,7 +437,7 @@ impl EditorServer {
             editor_codec::decode_changeset_stream(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
-        let state = crate::graph::build_state_tolerant(cs)?;
+        let state = crate::graph::build_state_tolerant(cs, &[])?;
         Ok(state.to_plain().into_ffi()?)
     }
 
@@ -448,7 +449,7 @@ impl EditorServer {
             editor_codec::decode_changeset_stream(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
-        let state = crate::graph::build_state_tolerant(cs)?;
+        let state = crate::graph::build_state_tolerant(cs, &[])?;
         Ok(state.to_plain().into_ffi()?)
     }
 
@@ -528,7 +529,9 @@ impl EditorServer {
         let target_set: hashbrown::HashSet<editor_crdt::Dot> = target_vec.into_iter().collect();
         let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
 
-        let state = crate::graph::build_state_tolerant(css)
+        // The overlay hides swept dots for reading; a projection whose diff
+        // becomes persisted ops must not hide them.
+        let state = crate::graph::build_state_tolerant(css, &[])
             .map_err(|e| FfiError::RevertFailed(e.to_string()))?;
         let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
             state.graph().current_heads().copied().collect();
@@ -574,10 +577,7 @@ impl EditorServer {
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
         let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
-        let full = crate::graph::build_state_tolerant(css)?;
-        let live: hashbrown::HashSet<editor_crdt::Dot> =
-            full.graph().current_heads().copied().collect();
-        let state = state_at_heads(full.graph(), &live, &overlay)?;
+        let state = crate::graph::build_state_tolerant(css, &overlay)?;
         if state.projection_degraded() {
             let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::ProjectionDegraded);
             return Ok(failed(xml_error_info(&e)?).into_ffi()?);
@@ -608,6 +608,7 @@ impl EditorServer {
             XmlEditResult {
                 error: Some(error),
                 bundle: Vec::new(),
+                xml: String::new(),
                 blocks_inserted: 0,
                 blocks_deleted: 0,
                 blocks_moved: 0,
@@ -626,13 +627,19 @@ impl EditorServer {
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
         let overlay = crate::graph::parse_sweep_tombstones(&sweep_tombstones);
-        let full = crate::graph::build_state_tolerant(css)?;
+        let full = crate::graph::build_state_tolerant(css, &overlay)?;
         let base_set: hashbrown::HashSet<editor_crdt::Dot> = tree.base.iter().copied().collect();
-        let base_state = match state_at_heads(full.graph(), &base_set, &overlay) {
-            Ok(s) => s,
-            Err(_) => {
-                let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::BaseNotInHistory);
-                return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+        let live: hashbrown::HashSet<editor_crdt::Dot> =
+            full.graph().current_heads().copied().collect();
+        let (base_state, stale) = if base_set == live {
+            (full, None)
+        } else {
+            match state_at_heads(full.graph(), &base_set, &overlay) {
+                Ok(s) => (s, Some(full)),
+                Err(_) => {
+                    let e = editor_xml::XmlError::new(editor_xml::XmlErrorDetail::BaseNotInHistory);
+                    return Ok(failed(xml_error_info(&e)?).into_ffi()?);
+                }
             }
         };
         if base_state.projection_degraded() {
@@ -644,18 +651,43 @@ impl EditorServer {
             Err(e) => return Ok(failed(xml_error_info(&e)?).into_ffi()?),
         };
         let new_css = outcome.state.graph().local_changesets_since(&base_set)?;
-        let bundle = if new_css.is_empty() {
-            Vec::new()
-        } else {
-            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
-                new_css,
-            ))
-            .map_err(|e| FfiError::Serialization(e.to_string()))?
-        };
         let c = outcome.changed;
+        // The saved file is written on the merge of what landed while it was open
+        // with the edit, so a stale base never forks the file off the live branch.
+        let (bundle, xml) = if new_css.is_empty() {
+            (Vec::new(), String::new())
+        } else {
+            let post = match stale {
+                None => outcome.state,
+                Some(stale) => {
+                    let mut merged = stale.graph().clone();
+                    for cs in new_css.iter().cloned() {
+                        merged.receive_changeset_mut(cs)?;
+                    }
+                    let projected =
+                        editor_state::ProjectedState::from_graph_with_overlay(merged, &overlay)
+                            .map_err(|e| EditorError::General {
+                                msg: format!("{e:?}"),
+                            })?;
+                    editor_state::State::new(projected, None)
+                }
+            };
+            let mut heads: Vec<editor_crdt::Dot> = post.graph().current_heads().copied().collect();
+            heads.sort();
+            let xml = match editor_xml::to_xml(&post, &heads) {
+                Ok(xml) => xml,
+                Err(e) => return Ok(failed(xml_error_info(&e)?).into_ffi()?),
+            };
+            let bundle = editor_codec::encode_changesets(
+                editor_codec::ReencodableChangesets::from_local_ops(new_css),
+            )
+            .map_err(|e| FfiError::Serialization(e.to_string()))?;
+            (bundle, xml)
+        };
         Ok(XmlEditResult {
             error: None,
             bundle,
+            xml,
             blocks_inserted: c.blocks_inserted,
             blocks_deleted: c.blocks_deleted,
             blocks_moved: c.blocks_moved,
@@ -670,7 +702,7 @@ impl EditorServer {
         let css = editor_codec::decode_changeset_stream(&graph[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?
             .into_graph_input();
-        let state = crate::graph::build_state_tolerant(css)
+        let state = crate::graph::build_state_tolerant(css, &[])
             .map_err(|e| FfiError::SweepFailed(e.to_string()))?;
         Ok(collect_zombie_dots(&state)
             .into_iter()
@@ -718,7 +750,7 @@ impl EditorServer {
             editor_codec::decode_changeset_stream(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
-        let state = crate::graph::build_state_tolerant(cs)?;
+        let state = crate::graph::build_state_tolerant(cs, &[])?;
         let plain = state.to_plain();
         let text = editor_state::doc_plain_text(&state.view());
         let projection_degraded = state.projection_degraded();
@@ -735,7 +767,7 @@ impl EditorServer {
             editor_codec::decode_changeset_stream(&changeset_payloads[..])
                 .map_err(|e| FfiError::Deserialization(e.to_string()))?
                 .into_graph_input();
-        let state = crate::graph::build_state_tolerant(cs)?;
+        let state = crate::graph::build_state_tolerant(cs, &[])?;
         Ok(editor_state::doc_plain_text(&state.view()))
     }
 
@@ -754,7 +786,7 @@ impl EditorServer {
         let css = editor_codec::decode_changeset_stream(&graph[..])
             .map_err(|e| FfiError::Deserialization(e.to_string()))?
             .into_graph_input();
-        let state = crate::graph::build_state_tolerant(css)?;
+        let state = crate::graph::build_state_tolerant(css, &[])?;
         let (selection, degraded) = editor_state::resolve_v1_selection(&state, &v1)
             .map_err(|msg| EditorError::General { msg })?;
         Ok(ResolvedV1Selection {
@@ -921,7 +953,7 @@ fn collect_zombie_dots(state: &editor_state::State) -> Vec<editor_crdt::Dot> {
 fn sweep_impl(
     css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
 ) -> Result<Vec<editor_crdt::Changeset<editor_model::EditOp>>, FfiError> {
-    let state = crate::graph::build_state_tolerant(css)
+    let state = crate::graph::build_state_tolerant(css, &[])
         .map_err(|e| FfiError::SweepFailed(e.to_string()))?;
     let current_heads: hashbrown::HashSet<editor_crdt::Dot> =
         state.graph().current_heads().copied().collect();
@@ -2282,7 +2314,7 @@ mod tests {
     #[test]
     fn revived_dead_parent_content_is_not_swept() {
         let css = zombie_css();
-        let state = crate::graph::build_state_tolerant(css.clone()).unwrap();
+        let state = crate::graph::build_state_tolerant(css.clone(), &[]).unwrap();
 
         let view = state.view();
         let marker = view.node(editor_crdt::Dot::new(1, 2));
@@ -2328,12 +2360,12 @@ mod tests {
         };
         css.push(editor_crdt::Changeset { ops: vec![span_op] });
 
-        let before = crate::graph::build_state_tolerant(css.clone()).unwrap();
+        let before = crate::graph::build_state_tolerant(css.clone(), &[]).unwrap();
         let before_doc = before.projected.projected().clone();
         let sweep_css = sweep_impl(css.clone()).unwrap();
         let mut merged = css;
         merged.extend(sweep_css);
-        let after = crate::graph::build_state_tolerant(merged).unwrap();
+        let after = crate::graph::build_state_tolerant(merged, &[]).unwrap();
         assert!(
             after.projected.projected() == &before_doc,
             "모디파이어 상태 포함 동등"
@@ -2507,7 +2539,7 @@ mod tests {
             .unwrap()
             .into_graph_input();
         let started = std::time::Instant::now();
-        let built = crate::graph::build_state_tolerant(css).unwrap();
+        let built = crate::graph::build_state_tolerant(css, &[]).unwrap();
         println!(
             "one state build: {:?} ({} blocks)",
             started.elapsed(),
@@ -2525,11 +2557,25 @@ mod tests {
 
         let started = std::time::Instant::now();
         let result = server
-            .edit_from_xml(graph, Vec::new(), rendered.xml)
+            .edit_from_xml(graph.clone(), Vec::new(), rendered.xml.clone())
             .unwrap();
         println!("edit_from_xml (unchanged): {:?}", started.elapsed());
         assert!(result.error.is_none(), "{:?}", result.error);
         assert!(result.bundle.is_empty());
+
+        let changed = rendered
+            .xml
+            .replace("</root>", "  <paragraph>zz</paragraph>\n</root>");
+        let started = std::time::Instant::now();
+        let result = server.edit_from_xml(graph, Vec::new(), changed).unwrap();
+        println!(
+            "edit_from_xml (changed): {:?} ({} bytes back)",
+            started.elapsed(),
+            result.xml.len()
+        );
+        assert!(result.error.is_none(), "{:?}", result.error);
+        assert!(!result.bundle.is_empty());
+        assert!(!result.xml.is_empty());
     }
 
     #[test]
@@ -2560,6 +2606,89 @@ mod tests {
         let result = server.edit_from_xml(graph, swept, rendered.xml).unwrap();
         assert!(result.error.is_none(), "{:?}", result.error);
         assert!(result.bundle.is_empty());
+    }
+
+    #[test]
+    fn edit_from_xml_returns_the_file_rewritten_on_the_new_base() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("가나");
+
+        let opened = server.to_xml(graph.clone(), Vec::new()).unwrap();
+        assert!(opened.error.is_none(), "{:?}", opened.error);
+        let edited = opened.xml.replace("가나", "가나다");
+
+        let saved = server
+            .edit_from_xml(graph.clone(), Vec::new(), edited)
+            .unwrap();
+        assert!(saved.error.is_none(), "{:?}", saved.error);
+        assert!(!saved.bundle.is_empty());
+        assert!(saved.xml.contains("가나다"), "{}", saved.xml);
+        assert_ne!(
+            attr_of(&saved.xml, "<root", "base"),
+            attr_of(&opened.xml, "<root", "base")
+        );
+        assert!(
+            server
+                .verify_xml(saved.xml.clone())
+                .unwrap()
+                .error
+                .is_none()
+        );
+
+        let merged = server.apply(graph, saved.bundle).unwrap();
+        let again = server.edit_from_xml(merged, Vec::new(), saved.xml).unwrap();
+        assert!(again.error.is_none(), "{:?}", again.error);
+        assert!(
+            again.bundle.is_empty(),
+            "the rewritten file must read back as no change"
+        );
+        assert_eq!(again.xml, "");
+    }
+
+    #[test]
+    fn edit_from_xml_on_a_stale_base_returns_the_merged_file() {
+        let server = EditorServer::new_test();
+        let graph = xml_test_graph("가나");
+        let opened = render(&server, graph.clone());
+
+        let concurrent = server
+            .edit_from_xml(
+                graph.clone(),
+                Vec::new(),
+                opened.replacen(
+                    "  <paragraph",
+                    "  <paragraph>동시</paragraph>\n  <paragraph",
+                    1,
+                ),
+            )
+            .unwrap();
+        assert!(concurrent.error.is_none(), "{:?}", concurrent.error);
+        assert!(!concurrent.bundle.is_empty());
+        let live_graph = server.apply(graph, concurrent.bundle).unwrap();
+
+        let saved = server
+            .edit_from_xml(
+                live_graph.clone(),
+                Vec::new(),
+                opened.replace("가나", "가나다"),
+            )
+            .unwrap();
+        assert!(saved.error.is_none(), "{:?}", saved.error);
+        assert!(!saved.bundle.is_empty());
+        assert!(saved.xml.contains(">가나다<"), "{}", saved.xml);
+        assert!(
+            saved.xml.contains(">동시<"),
+            "the saved file must carry what landed while it was open: {}",
+            saved.xml
+        );
+
+        let merged = server.apply(live_graph, saved.bundle).unwrap();
+        let again = server.edit_from_xml(merged, Vec::new(), saved.xml).unwrap();
+        assert!(again.error.is_none(), "{:?}", again.error);
+        assert!(
+            again.bundle.is_empty(),
+            "the merged file must read back as no change"
+        );
     }
 
     #[test]

@@ -3,10 +3,13 @@ import { PrismToolResolver, SiteState } from '@typie/lib/enums';
 import { serveVerdict, TOOL_META, toolFailure } from '@typie/prism';
 import { and, asc, eq } from 'drizzle-orm';
 import { db, first, PrismRuns, PrismSessions, Sites } from '#/db/index.ts';
+import { env } from '#/env.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
+import { pushCopy, pushKey, shouldPushAsk } from './prism-push-core.ts';
 import { recordToolResolution, withToolLedger } from './prism-tool-calls.ts';
 import { DENIED_MESSAGE, ERROR_MESSAGE } from './prism-tool-messages.ts';
-import { prismTools } from './prism-tools.ts';
+import { prismPreflights, prismTools } from './prism-tools.ts';
+import type { AgentState, ToolFailure, ToolPolicy } from '@typie/prism';
 
 const log = logger.getChild('prism-serve');
 
@@ -31,6 +34,66 @@ export const runSite = async (session: { id: string; userId: string }, runSeq: n
   return fallback?.id ?? null;
 };
 
+const pendingAgent = async (agentId: string, toolCallId: string): Promise<AgentState | null> => {
+  let agent;
+  try {
+    agent = await prism.getAgent(agentId);
+  } catch (err) {
+    if (err instanceof PrismApiError && err.status === 404) return null;
+    throw err;
+  }
+
+  return agent.pending && agent.pending.toolCallId === toolCallId ? agent : null;
+};
+
+const pushAsk = async (
+  session: { id: string; userId: string; title: string | null },
+  ask: { toolCallId: string; tool: string; data: unknown; at: number },
+  policy: ToolPolicy,
+): Promise<void> => {
+  if (!shouldPushAsk(ask.tool, policy)) return;
+
+  const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
+  if (Date.now() - ask.at > PUSH_TTL_SECONDS * 1000) return;
+
+  const { title, body } = pushCopy(ask.tool, ask.data, session.title);
+
+  const delivery = await sendPushNotificationOnce({
+    key: pushKey.ask(ask.toolCallId),
+    userId: session.userId,
+    title,
+    body,
+    link: `${env.WEBSITE_URL}/initial?prism=${session.id}`,
+  });
+
+  if (delivery === 'failed') throw new Error(`prism ask push failed for ${ask.toolCallId}`);
+};
+
+type PreflightOutcome = { state: 'gone' | 'clear' } | { state: 'failed'; failure: ToolFailure };
+
+const preflight = async (
+  session: typeof PrismSessions.$inferSelect,
+  args: { agentId: string; runSeq: number | null; toolCallId: string; tool: string; input: unknown },
+): Promise<PreflightOutcome> => {
+  const agent = await pendingAgent(args.agentId, args.toolCallId);
+  if (agent === null) return { state: 'gone' };
+
+  const preverify = prismPreflights[args.tool];
+  if (preverify === undefined) return { state: 'clear' };
+
+  const siteId = await runSite(session, args.runSeq);
+  if (siteId === null) return { state: 'clear' };
+
+  try {
+    const base = { userId: session.userId, session, siteId, toolCallId: args.toolCallId, agent, afterCommit: undefined };
+    const failure = await preverify({ ...base, executor: db }, args.input);
+    return failure === null ? { state: 'clear' } : { state: 'failed', failure };
+  } catch (err) {
+    log.warn('prism tool preflight failed: {tool} {toolCallId} {*}', { tool: args.tool, toolCallId: args.toolCallId, error: err });
+    return { state: 'clear' };
+  }
+};
+
 export const serveTool = async (args: {
   sessionId: string;
   agentId: string;
@@ -38,23 +101,30 @@ export const serveTool = async (args: {
   toolCallId: string;
   tool: string;
   input: unknown;
+  at: number;
 }): Promise<void> => {
   const session = await db.select().from(PrismSessions).where(eq(PrismSessions.id, args.sessionId)).then(first);
   if (!session || session.deletedAt !== null) return;
 
-  const verdict = serveVerdict(args.tool, session.toolPolicy);
-  if (verdict === null) return;
-
-  let agent;
-  try {
-    agent = await prism.getAgent(args.agentId);
-  } catch (err) {
-    if (err instanceof PrismApiError && err.status === 404) return;
-    throw err;
-  }
-  if (!agent.pending || agent.pending.toolCallId !== args.toolCallId) return;
-
   const call = { toolCallId: args.toolCallId, tool: args.tool, resolver: PrismToolResolver.SERVER };
+  const verdict = serveVerdict(args.tool, session.toolPolicy);
+  if (verdict === null) {
+    const outcome = await preflight(session, args);
+    if (outcome.state === 'gone') return;
+
+    if (outcome.state === 'failed') {
+      await recordToolResolution(session, call, outcome.failure);
+      await prism.resolveTool(args.agentId, args.toolCallId, outcome.failure);
+      return;
+    }
+
+    await pushAsk(session, { toolCallId: args.toolCallId, tool: args.tool, data: args.input, at: args.at }, session.toolPolicy);
+    return;
+  }
+
+  const agent = await pendingAgent(args.agentId, args.toolCallId);
+  if (agent === null) return;
+
   let result: unknown;
   if (verdict === 'deny') {
     result = toolFailure('denied', DENIED_MESSAGE);

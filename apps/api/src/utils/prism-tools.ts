@@ -1,6 +1,7 @@
+import { documentEditPreflights, documentEditTools } from './prism-document-edit.ts';
 import { reviewTools } from './prism-review.ts';
 import { workspaceTools } from './prism-workspace.ts';
-import type { AgentState } from '@typie/prism';
+import type { AgentState, ToolFailure } from '@typie/prism';
 import type { Database, PrismSessions, Transaction } from '#/db/index.ts';
 import type { PostCommitRegistrar } from './post-commit.ts';
 
@@ -14,5 +15,7 @@ export type PrismToolContext = {
   afterCommit: PostCommitRegistrar | undefined;
 };
 export type PrismToolHandler = (ctx: PrismToolContext, input: unknown) => Promise<unknown>;
+export type PrismToolPreflight = (ctx: PrismToolContext, input: unknown) => Promise<ToolFailure | null>;
 
-export const prismTools: Record<string, PrismToolHandler> = { ...reviewTools, ...workspaceTools };
+export const prismTools: Record<string, PrismToolHandler> = { ...reviewTools, ...workspaceTools, ...documentEditTools };
+export const prismPreflights: Record<string, PrismToolPreflight> = { ...documentEditPreflights };

@@ -1,5 +1,5 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
-import { TOOL_META, WorkflowUsageSchema } from '@typie/prism';
+import { WorkflowUsageSchema } from '@typie/prism';
 import { z } from 'zod';
 import type { PrismRunState, PrismWorkflowState } from '@typie/lib/enums';
 import type { EventFrame, ParkedScope, ProjectedDeltaFrame, ProjectedStreamFrame, RunUsage, TurnLive } from '@typie/prism';
@@ -49,8 +49,7 @@ export type DomainOp =
   | { op: 'run-terminal'; runSeq: number; state: PrismRunState; at: number; charge: number | null | undefined }
   | { op: 'workflow-link'; descriptor: { prismWorkflowId: string; app: string; name: string; ref: string | null; startedAt: number } }
   | { op: 'titled'; title: string }
-  | { op: 'ask-push'; toolCallId: string; tool: string; data: unknown; at: number }
-  | { op: 'tool-serve'; toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null }
+  | { op: 'tool-serve'; toolCallId: string; tool: string; input: unknown; agentId: string; runSeq: number | null; at: number }
   | { op: 'workflow-settle'; state: PrismWorkflowState; result: unknown; usage: RunUsage | null; error: string | null; at: number };
 
 export type EventPlan = { advance: boolean; ops: DomainOp[]; sealTurn: boolean; clearLive: boolean };
@@ -78,23 +77,14 @@ const chargeOf = (raw: unknown): number | null | undefined => {
   return parsed.success ? parsed.data.milli : null;
 };
 
-const askPush = (event: EventFrame): DomainOp[] => {
-  const toolCallId = event.context?.toolCallId;
-  if (toolCallId === undefined) return [];
-  const tool = event.data.tool;
-  if (typeof tool !== 'string') return [];
-  return [{ op: 'ask-push', toolCallId, tool, data: event.data.data, at: event.occurredAt }];
-};
-
 const toolServe = (event: EventFrame, scope: ParkedScope): DomainOp[] => {
   const context = event.context;
   const toolCallId = context?.toolCallId;
   const agentId = context?.agent?.id;
   const tool = event.data.tool;
   if (toolCallId === undefined || agentId === undefined || typeof tool !== 'string') return [];
-  if (TOOL_META[tool]?.tier === undefined) return [];
   const runSeq = scope === 'agent' && typeof context?.run === 'number' ? context.run : null;
-  return [{ op: 'tool-serve', toolCallId, tool, input: event.data.data, agentId, runSeq }];
+  return [{ op: 'tool-serve', toolCallId, tool, input: event.data.data, agentId, runSeq, at: event.occurredAt }];
 };
 
 const agentOps = (event: EventFrame): DomainOp[] => {
@@ -114,7 +104,7 @@ const agentOps = (event: EventFrame): DomainOp[] => {
     return [{ op: 'workflow-link', descriptor: { prismWorkflowId: id, app, name, ref: ref ?? null, startedAt: event.occurredAt } }];
   }
   if (event.kind === 'assistant.titled' && typeof event.data.title === 'string') return [{ op: 'titled', title: event.data.title }];
-  if (event.kind === 'tool.requested') return [...askPush(event), ...toolServe(event, 'agent')];
+  if (event.kind === 'tool.requested') return toolServe(event, 'agent');
   return [];
 };
 
@@ -134,7 +124,7 @@ const workflowOps = (event: EventFrame): DomainOp[] => {
       },
     ];
   }
-  if (event.kind === 'tool.requested') return [...askPush(event), ...toolServe(event, 'workflow')];
+  if (event.kind === 'tool.requested') return toolServe(event, 'workflow');
   return [];
 };
 

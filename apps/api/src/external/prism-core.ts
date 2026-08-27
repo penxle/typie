@@ -83,6 +83,18 @@ export const createPrismClient = (http: PrismHttp) => {
     if (!res.body) throw new PrismApiError('internal', res.status);
     return res.body;
   };
+  const readFile = async (base: string, path: string): Promise<string | null> => {
+    const encoded = path.split('/').map(encodeURIComponent).join('/');
+    const res = await http.request(`${base}/files/${encoded}`);
+    if (res.status === 404) {
+      const err = mapPrismError(res.status, await res.json().catch(() => null));
+      if (err.code === 'file-not-found') return null;
+      throw err;
+    }
+
+    const file = await jsonOf(await expectOk(res), FileSchema);
+    return file.content;
+  };
   const openAgentEvents = (agentId: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> =>
     openEvents(`${agentPath(agentId)}/events`, cursor, signal);
   const openWorkflowEvents = (workflowId: string, cursor: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> =>
@@ -127,11 +139,11 @@ export const createPrismClient = (http: PrismHttp) => {
     async cancelWorkflow(workflowId: string): Promise<void> {
       await expectOk(await http.request(`${workflowPath(workflowId)}/cancel`, { method: 'POST' }));
     },
+    async getAgentFile(agentId: string, path: string): Promise<string | null> {
+      return readFile(agentPath(agentId), path);
+    },
     async getWorkflowFile(workflowId: string, path: string): Promise<string | null> {
-      const encoded = path.split('/').map(encodeURIComponent).join('/');
-      const res = await expectOk(await http.request(`${workflowPath(workflowId)}/files/${encoded}`));
-      const file = await jsonOf(res, FileSchema);
-      return file.content;
+      return readFile(workflowPath(workflowId), path);
     },
     async getReviewSeeds(): Promise<Record<PrismReviewTierName, ReviewSeedMapping[]>> {
       const catalog = await jsonOf(await expectOk(await http.request('/apps/feedback/catalog')), ReviewCatalogSchema);

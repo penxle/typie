@@ -1,4 +1,7 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
+import { effectiveResolver } from '@typie/prism';
+import type { ToolPolicy } from '@typie/prism';
+
 export const subjectTitle = (subject: string | null): string => `「${subject || '새 대화'}」`;
 
 const askQuestions = (data: unknown): string[] => {
@@ -34,3 +37,5 @@ export const pushCopy = (tool: string, data: unknown, subject: string | null): {
 export const pushKey = {
   ask: (toolCallId: string) => `prism:push:ask:${toolCallId}`,
 };
+
+export const shouldPushAsk = (tool: string, policy: ToolPolicy): boolean => effectiveResolver(tool, policy) === 'user';

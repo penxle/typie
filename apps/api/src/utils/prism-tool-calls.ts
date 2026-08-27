@@ -1,6 +1,6 @@
 import { logger } from '@typie/lib';
 import { PrismToolResolver } from '@typie/lib/enums';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, first, firstOrThrow, PrismToolCalls } from '#/db/index.ts';
 import { runPostCommitEffects } from './post-commit.ts';
 import type { Transaction } from '#/db/index.ts';
@@ -64,3 +64,12 @@ export const toolResolverOf = async (sessionId: string, toolCallId: string): Pro
     .where(and(eq(PrismToolCalls.sessionId, sessionId), eq(PrismToolCalls.toolCallId, toolCallId)))
     .then(first)
     .then((row) => row?.resolver ?? null);
+
+export const resolvedToolCallIds = async (sessionId: string, toolCallIds: string[]): Promise<Set<string>> => {
+  if (toolCallIds.length === 0) return new Set();
+  const rows = await db
+    .select({ toolCallId: PrismToolCalls.toolCallId })
+    .from(PrismToolCalls)
+    .where(and(eq(PrismToolCalls.sessionId, sessionId), inArray(PrismToolCalls.toolCallId, toolCallIds)));
+  return new Set(rows.map((row) => row.toolCallId));
+};

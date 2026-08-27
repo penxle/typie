@@ -520,7 +520,7 @@ const listIcons = async (_ctx: PrismToolContext, input: unknown) => {
 };
 
 const NOT_FOUND_FOLDER = '그 폴더를 찾지 못했어요 — list-entities로 다시 확인하세요.';
-const NOT_FOUND_DOCUMENT = '그 문서를 찾지 못했어요 — search-entities나 list-entities로 문서를 다시 찾아보세요.';
+export const NOT_FOUND_DOCUMENT = '그 문서를 찾지 못했어요 — search-entities나 list-entities로 문서를 다시 찾아보세요.';
 const NOT_FOUND_TARGETS = '일부 대상을 찾지 못했어요 — list-entities로 id를 다시 확인하세요.';
 const NOT_FOUND_NOTE = '그 노트를 찾지 못했어요 — list-notes로 다시 확인하세요.';
 const INVALID_COLOR = '그 색은 없어요 — 목록에 있는 색만 쓸 수 있어요.';
@@ -593,7 +593,7 @@ const resolveDocumentIds = async (ctx: PrismToolContext, ids: string[]): Promise
   return documentIds;
 };
 
-const documentRefOf = async (ctx: PrismToolContext, id: string): Promise<(EntityRef & { kind: 'document' }) | null> => {
+export const documentRefOf = async (ctx: PrismToolContext, id: string): Promise<(EntityRef & { kind: 'document' }) | null> => {
   const entityIds = await resolveEntityIdMap(ctx, [id]);
   const entityId = entityIds?.get(id);
   if (entityId === undefined) return null;

@@ -37,6 +37,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   'read-comments': { resolver: 'server', tier: 'read' },
   'list-trash': { resolver: 'server', tier: 'read' },
   'list-icons': { resolver: 'server', tier: 'read' },
+  'open-document': { resolver: 'server', tier: 'read' },
   'create-folders': { resolver: 'server', tier: 'safe' },
   'create-documents': { resolver: 'server', tier: 'safe' },
   'rename-folders': { resolver: 'server', tier: 'safe' },
@@ -53,6 +54,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   'delete-notes': { resolver: 'user', tier: 'destructive' },
   'delete-goals': { resolver: 'user', tier: 'destructive' },
   'update-sharing': { resolver: 'user', tier: 'destructive' },
+  'save-document': { resolver: 'user', tier: 'destructive' },
 };
 
 export const toolResolver = (tool: string): ToolResolver => TOOL_META[tool]?.resolver ?? 'user';

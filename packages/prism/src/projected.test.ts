@@ -163,6 +163,49 @@ describe('tool data registry', () => {
     expect(() => resolved('update-sharing', { ok: true })).toThrow();
   });
 
+  it('save-document 요청은 경로와 요약만 남긴다', () => {
+    expect(
+      ProjectedEventSchema.parse({
+        kind: 'tool.requested',
+        data: { tool: 'save-document', data: { path: 'documents/D0DOC1.xml', summary: '오탈자를 고쳤어요', extra: 1 } },
+      }).data,
+    ).toEqual({ tool: 'save-document', data: { path: 'documents/D0DOC1.xml', summary: '오탈자를 고쳤어요' } });
+    expect(ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool: 'save-document', data: { path: 5 } } }).data).toEqual({
+      tool: 'save-document',
+      data: { path: '', summary: '' },
+    });
+  });
+
+  it('문서 편집 두 도구의 해소 결과는 성공 봉투와 실패 봉투를 모두 보존한다', () => {
+    const resolved = (tool: string, data: unknown) =>
+      ProjectedEventSchema.parse({ kind: 'tool.resolved', data: { tool, ok: true, data } }).data;
+    const document = {
+      kind: 'document',
+      documentId: 'D0DOC1',
+      entityId: 'E0ENT1',
+      title: '바다',
+      subtitle: null,
+      icon: 'file',
+      iconColor: 'gray',
+    };
+    const changed = { blocks: { inserted: 1, deleted: 0, moved: 0, updated: 2 }, chars: { inserted: 5, deleted: 3 } };
+
+    expect(resolved('open-document', { ok: true, document, path: 'documents/D0DOC1.xml' })).toEqual({
+      tool: 'open-document',
+      ok: true,
+      data: { ok: true, document, path: 'documents/D0DOC1.xml' },
+    });
+    expect(resolved('save-document', { ok: true, unchanged: false, document, path: 'documents/D0DOC1.xml', changed })).toEqual({
+      tool: 'save-document',
+      ok: true,
+      data: { ok: true, unchanged: false, document, path: 'documents/D0DOC1.xml', changed },
+    });
+
+    const failed = { ok: false, code: 'error', message: '먼저 open-document로 문서를 여세요.' };
+    expect(resolved('save-document', failed)).toEqual({ tool: 'save-document', ok: true, data: failed });
+    expect(() => resolved('save-document', { ok: true, unchanged: false, document, path: 'documents/D0DOC1.xml' })).toThrow();
+  });
+
   it('등록 도구의 data 형태 위반은 던진다', () => {
     expect(() =>
       ProjectedEventSchema.parse({ kind: 'tool.requested', data: { tool: 'confirm-review', data: { tier: 'ultra' } } }),

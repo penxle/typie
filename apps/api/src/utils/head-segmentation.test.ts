@@ -4,6 +4,7 @@ import { planHeadWrites } from './head-segmentation.ts';
 import type { FoldedEntry, LatestHead } from './head-segmentation.ts';
 
 const SYSTEM = 'system';
+const PRISM = 'prism';
 const heads = (n: number) => Uint8Array.of(n);
 const entry = (over: Partial<FoldedEntry>): FoldedEntry => ({
   userId: 'u1',
@@ -21,7 +22,7 @@ const latest = (over: Partial<LatestHead> = {}): LatestHead => ({
   hasExcludedContributor: false,
   ...over,
 });
-const base = { baseCharCount: 100, bucketMs: 1000, systemUserId: SYSTEM };
+const base = { baseCharCount: 100, bucketMs: 1000, systemUserId: SYSTEM, prismUserId: PRISM };
 
 test('같은 bucket의 NORMAL 최신 행에는 접는다', () => {
   const writes = planHeadWrites({
@@ -167,4 +168,40 @@ test('미적용 엔트리는 gross가 커도 행을 만들지 않고, 다중 유
     { userId: 'u2', additions: 0, deletions: 30 },
   ]);
   assert.deepEqual(writes[0].contributorUserIds, ['u1', 'u2']);
+});
+
+test('PRISM 엔트리는 크기와 무관하게 앞 세그먼트를 접고 자기 ISOLATED 행을 연다', () => {
+  const writes = planHeadWrites({
+    ...base,
+    latestHead: latest(),
+    entries: [
+      entry({ charCount: 110, grossInsertions: 10, heads: heads(1) }),
+      entry({ userId: PRISM, charCount: 112, grossInsertions: 2, heads: heads(2) }),
+      entry({ charCount: 120, grossInsertions: 8, heads: heads(3) }),
+    ],
+  });
+  assert.deepEqual(
+    writes.map((w) => [w.action, w.kind]),
+    [
+      ['update', 'NORMAL'],
+      ['insert', 'ISOLATED'],
+      ['insert', 'NORMAL'],
+    ],
+  );
+  assert.deepEqual(writes[0].heads, heads(1));
+  assert.equal(writes[1].isolatedAuthorId, PRISM);
+  assert.deepEqual(writes[1].contributorUserIds, [PRISM]);
+  assert.deepEqual(writes[1].contributions, [{ userId: PRISM, additions: 2, deletions: 0 }]);
+});
+
+test('배치가 PRISM 엔트리로 시작하면 접을 세그먼트 없이 ISOLATED 행만 연다', () => {
+  const writes = planHeadWrites({
+    ...base,
+    latestHead: latest(),
+    entries: [entry({ userId: PRISM, charCount: 101, grossInsertions: 1, heads: heads(1) })],
+  });
+  assert.deepEqual(
+    writes.map((w) => [w.action, w.kind]),
+    [['insert', 'ISOLATED']],
+  );
 });

@@ -36,7 +36,7 @@ pub(crate) fn state_from_changesets(
     let css = decoded.into_graph_input();
     let mut stash = crate::editor::CarrierStash::default();
     crate::editor::stash_carriers(&css, &changesets, lossless, &mut stash)?;
-    let state = build_state_tolerant(css)?;
+    let state = build_state_tolerant(css, &[])?;
     Ok((state, stash))
 }
 
@@ -61,7 +61,7 @@ pub(crate) fn state_from_changesets_with_pending(
         crate::editor::stash_carriers(&css, &blob, lossless, &mut stash)?;
         all.append(&mut css);
     }
-    let state = build_state_tolerant(all)?;
+    let state = build_state_tolerant(all, &[])?;
     Ok((state, stash))
 }
 
@@ -74,6 +74,7 @@ pub(crate) fn parse_sweep_tombstones(tombstones: &[String]) -> Vec<editor_crdt::
 
 pub(crate) fn build_state_tolerant(
     css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+    overlay: &[editor_crdt::Dot],
 ) -> EditorResult<editor_state::State> {
     if css.is_empty() {
         return Ok(editor_state::State::new(
@@ -96,8 +97,10 @@ pub(crate) fn build_state_tolerant(
         );
     }
     let projected =
-        editor_state::ProjectedState::from_graph(graph).map_err(|e| EditorError::General {
-            msg: format!("{e:?}"),
+        editor_state::ProjectedState::from_graph_with_overlay(graph, overlay).map_err(|e| {
+            EditorError::General {
+                msg: format!("{e:?}"),
+            }
         })?;
     Ok(editor_state::State::new(projected, None))
 }

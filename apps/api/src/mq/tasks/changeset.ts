@@ -32,7 +32,7 @@ import {
 } from '#/utils/changeset.ts';
 import { calculateBlobSizeFromAssetIds, extractAssetIdsFromPlainDoc } from '#/utils/entity.ts';
 import { planHeadWrites } from '#/utils/head-segmentation.ts';
-import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
+import { PRISM_USER_ID, SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { wasmThread } from '#/utils/wasm-thread.ts';
 import { clearSweepDue, scheduleSweepDue, sweepDocument, sweepDueKey } from '#/utils/zombie-sweep.ts';
 import { enqueueJob } from '../index.ts';
@@ -241,6 +241,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
               : null,
             bucketMs: headBucketAt.valueOf(),
             systemUserId: SYSTEM_USER_ID,
+            prismUserId: PRISM_USER_ID,
           });
 
           const isolatedAuthorIds = [...new Set(writes.flatMap((w) => (w.isolatedAuthorId ? [w.isolatedAuthorId] : [])))];
