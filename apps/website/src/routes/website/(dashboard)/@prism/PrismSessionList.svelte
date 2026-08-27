@@ -155,7 +155,7 @@
 
   const rowTitle = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
 
-  const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.danger.default' });
+  const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.info.default' });
 
   const more = css({
     display: 'flex',
