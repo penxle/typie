@@ -1,4 +1,9 @@
+import type { CardThreadState } from './margin-view.ts';
+
 export type RailTone = 'open' | 'closed' | 'strength';
+
+export const railTone = (kind: 'issue' | 'strength', state: CardThreadState | null): RailTone =>
+  kind === 'strength' ? 'strength' : state === 'OPEN' ? 'open' : 'closed';
 
 export type RailSpan = {
   id: string;
