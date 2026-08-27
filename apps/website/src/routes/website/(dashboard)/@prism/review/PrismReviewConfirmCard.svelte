@@ -10,7 +10,6 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
-  import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import PrismCreditIcon from '~icons/typie/prism-credit';
   import { pushState } from '$app/navigation';
   import { unwrapError } from '$lib/graphql/error';
@@ -18,6 +17,7 @@
   import { readReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
   import { swap } from '../lib/motion.ts';
+  import PrismCallout from '../PrismCallout.svelte';
   import { lineageRowLabel, pickDefaultLineage } from './lineage-view.ts';
   import { TIER_OPTIONS } from './tiers.ts';
   import type { ConfirmHint, PrismReviewTierName } from '@typie/prism';
@@ -334,18 +334,6 @@
     textAlign: 'left',
     transition: '[border-color 150ms ease, color 150ms ease]',
   });
-  const calloutClass = flex({
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '12px',
-    paddingX: '12px',
-    paddingY: '10px',
-    borderWidth: '1px',
-    borderColor: 'accent.warning.default',
-    borderRadius: '10px',
-    backgroundColor: 'accent.warning.subtle',
-  });
-  const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
   const tailClass = flex({
     alignItems: 'center',
     gap: '8px',
@@ -546,11 +534,12 @@
   </div>
 
   {#if open && insufficient}
-    <div class={calloutClass}>
-      <Icon style={css.raw({ flexShrink: '0', color: 'accent.warning.default' })} icon={TriangleAlertIcon} size={14} />
-      <span class={calloutTextClass}>크레딧이 부족해요</span>
-      <Button onclick={() => pushState('', { shallowRoute: '/preference/prism' })} size="sm" variant="secondary">충전하기</Button>
-    </div>
+    <PrismCallout
+      style={{ marginBottom: '12px' }}
+      action={{ label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism' }) }}
+      message="크레딧이 부족해요"
+      tone="warning"
+    />
   {/if}
 
   {#if open}
