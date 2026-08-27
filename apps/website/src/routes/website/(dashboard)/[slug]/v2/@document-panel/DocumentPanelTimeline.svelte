@@ -603,6 +603,7 @@
                                 marginLeft: '-3px',
                                 borderWidth: '1px',
                                 borderColor: 'surface.default',
+                                _first: { marginLeft: '0' },
                               })}
                             >
                               <Img
