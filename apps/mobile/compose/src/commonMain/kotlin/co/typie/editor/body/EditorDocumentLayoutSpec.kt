@@ -79,6 +79,25 @@ internal fun EditorDocumentLayoutSpec.resolvePagesContentHeight(
   }
 }
 
+internal fun EditorDocumentLayoutSpec.resolvePageContentTopPrefixes(
+  pageSizes: List<PageSize>,
+  displayZoom: Float = 1f,
+  density: Float = 0f,
+): FloatArray {
+  val effectiveDisplayZoom = normalizeDisplayZoom(displayZoom)
+  val measuredPageGap =
+    resolveMeasuredPageGapLength(displayZoom = effectiveDisplayZoom, density = density)
+  val prefixes = FloatArray(pageSizes.size + 1)
+  var top = 0f
+  pageSizes.forEachIndexed { index, size ->
+    prefixes[index] = top
+    top += resolveMeasuredPageLength(size.height, effectiveDisplayZoom, density)
+    if (index < pageSizes.lastIndex) top += measuredPageGap
+  }
+  prefixes[pageSizes.size] = top
+  return prefixes
+}
+
 internal fun EditorDocumentLayoutSpec.resolvePageContentTop(
   page: Int,
   pageSizes: List<PageSize>,

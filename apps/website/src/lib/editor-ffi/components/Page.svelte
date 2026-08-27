@@ -48,7 +48,6 @@
     style:height={`${cssHeight}px`}
     style:transform={displayZoom === 1 ? undefined : `scale(${displayZoom})`}
     style:transform-origin={displayZoom === 1 ? undefined : 'top left'}
-    style:will-change={displayZoom === 1 ? undefined : 'transform'}
     class={css({
       position: 'relative',
       isolation: 'isolate',

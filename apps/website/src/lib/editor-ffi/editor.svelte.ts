@@ -6,10 +6,10 @@ import { SvelteMap } from 'svelte/reactivity';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { EditorAttachmentImporter } from './attachment-importer';
-import { IS_MAC } from './constants';
+import { IS_MAC, PAGE_GAP } from './constants';
 import { EditorRequest, EditorUpdate } from './editor-update';
 import { fontDataMissingHandler } from './fonts';
-import { isSelectionCollapsed, presentedPageElement } from './geometry';
+import { isSelectionCollapsed, presentedPageElement, resolveCachedPageSpans, resolvePageAtY, roundToScale } from './geometry';
 import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
@@ -457,6 +457,7 @@ export class Editor {
   inputEl = $state<HTMLTextAreaElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   extensionAreaEl = $state<HTMLDivElement>();
+  documentTrackEl = $state<HTMLDivElement>();
   scrollContainerEl = $state<HTMLDivElement>();
   scrollViewport = $state<ScrollViewport>();
   scrollRootEl = $state<HTMLElement | null>();
@@ -1606,6 +1607,24 @@ export class Editor {
     const pages = this.pageSizes;
     if (pages.length === 0) return null;
     const zoom = this.safeDisplayZoom();
+    const documentTrackRect = this.documentTrackEl?.getBoundingClientRect();
+
+    if (documentTrackRect) {
+      const pageGap = this.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP * zoom : 0;
+      const spans = resolveCachedPageSpans(pages, {
+        displayZoom: zoom,
+        scaleFactor: this.scaleFactor,
+        pageGap,
+      });
+      const relativeClientY = clientY - documentTrackRect.top;
+      const resolved = resolvePageAtY(spans, pages, relativeClientY, zoom);
+      if (!resolved || !presentedPageElement(this, resolved.page)) return null;
+      const size = pages[resolved.page];
+      const slotWidth = roundToScale(size.width * zoom, this.scaleFactor);
+      const pageLeft = documentTrackRect.left + Math.max(0, (documentTrackRect.width - slotWidth) / 2);
+      const localX = Math.max(0, Math.min((clientX - pageLeft) / zoom, size.width));
+      return { page: resolved.page, x: localX, y: resolved.y };
+    }
 
     let lo = 0;
     let hi = pages.length - 1;

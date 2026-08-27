@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '../editor.svelte';
-  import { resolvePageSpans, roundToScale } from '../geometry';
+  import { resolveCachedPageSpans, roundToScale } from '../geometry';
   import TableOverlay from './TableOverlay.svelte';
 
   type PageAnchor = {
@@ -17,7 +17,7 @@
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
   const pageAnchors = $derived.by(() => {
     const pageSizes = ctx.editor?.pageSizes ?? [];
-    return resolvePageSpans(pageSizes, { scaleFactor, displayZoom }).map<PageAnchor>(({ page, top, bottom }) => ({
+    return resolveCachedPageSpans(pageSizes, { scaleFactor, displayZoom }).map<PageAnchor>(({ page, top, bottom }) => ({
       top,
       slotWidth: roundToScale(pageSizes[page].width * displayZoom, scaleFactor),
       slotHeight: bottom - top,

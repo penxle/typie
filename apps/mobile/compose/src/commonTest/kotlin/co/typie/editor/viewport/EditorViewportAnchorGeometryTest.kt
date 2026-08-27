@@ -32,6 +32,49 @@ class EditorViewportAnchorGeometryTest {
   }
 
   @Test
+  fun `viewport center clamps to the last page bottom`() {
+    val frame = frame(visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 20f)))
+
+    val point =
+      viewportCenterAnchorPoint(
+        frame = frame,
+        scrollOffset = Offset(x = 0f, y = 1000f),
+        contentOriginY = 0f,
+      )
+
+    assertEquals(900f, point?.y)
+  }
+
+  @Test
+  fun `paginated viewport center chooses the nearest page across a gap`() {
+    val frame =
+      frame(
+        pageSizes =
+          listOf(PageSize(width = 600f, height = 100f), PageSize(width = 600f, height = 100f)),
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 600f,
+            pageHeight = 100f,
+            pageMarginTop = 0f,
+            pageMarginBottom = 0f,
+            pageMarginLeft = 0f,
+            pageMarginRight = 0f,
+          ),
+        visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 20f)),
+      )
+
+    val beforeMidpoint =
+      viewportCenterAnchorPoint(frame, Offset(x = 0f, y = 100f), contentOriginY = 0f)
+    val afterMidpoint =
+      viewportCenterAnchorPoint(frame, Offset(x = 0f, y = 104f), contentOriginY = 0f)
+
+    assertEquals(0, beforeMidpoint?.pageIdx)
+    assertEquals(100f, beforeMidpoint?.y)
+    assertEquals(1, afterMidpoint?.pageIdx)
+    assertEquals(0f, afterMidpoint?.y)
+  }
+
+  @Test
   fun `continuous viewport anchor origin includes the body top spacer`() {
     assertEquals(40f, resolveViewportAnchorContentOriginY(frame()))
   }
@@ -49,21 +92,24 @@ class EditorViewportAnchorGeometryTest {
     assertEquals(90f, geometry?.pointY)
   }
 
-  private fun frame(): EditorScrollFrame {
-    val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
+  private fun frame(
+    pageSizes: List<PageSize> = listOf(PageSize(width = 600f, height = 900f)),
+    layoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+    visibleArea: EditorVisibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f)),
+  ): EditorScrollFrame {
     return EditorScrollFrame(
       state =
         EditorState(
           version = 1L,
           cursor = null,
           selection = null,
-          pageSizes = listOf(PageSize(width = 600f, height = 900f)),
+          pageSizes = pageSizes,
           externalElements = emptyList(),
           rootAttrs = null,
           rootModifiers = null,
           ime = null,
         ),
-      layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+      layoutSpec = layoutSpec,
       displayZoom = 1f,
       visibleArea = visibleArea,
       autoScrollPolicy = resolveEditorAutoScrollPolicy(visibleArea = visibleArea),

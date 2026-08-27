@@ -88,6 +88,7 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     if (options.behavior === 'instant' && options.left !== undefined) scrollLeft = options.left;
   });
   const requestPublication = vi.fn();
+  const measureViewport = vi.fn(() => new DOMRect(0, 0, 600, 400));
   const editor = {
     destroyed: false,
     appliedSnapshot: snapshot,
@@ -108,7 +109,7 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
       },
     },
     scrollViewport: {
-      getRect: () => new DOMRect(0, 0, 600, 400),
+      getRect: measureViewport,
       getScrollTop: () => scrollTop,
       getScrollLeft: () => scrollLeft,
       getScrollWidth: () => 600,
@@ -133,6 +134,7 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     editor,
     getScrollLeft: () => scrollLeft,
     getScrollTop: () => scrollTop,
+    measureViewport,
     requestPublication,
     setScrollLeft: (value: number) => {
       scrollLeft = value;
@@ -817,6 +819,32 @@ describe('EditorScrollScope', () => {
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 300, top: 220, behavior: 'instant' });
   });
 
+  it('measures the document track once without reading every page during direct scroll reconciliation', () => {
+    const snapshot = trackedSnapshot('unused', {
+      page_idx: 0,
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+    });
+    const { editor, scope, setScrollTop } = setup(snapshot);
+    const measureTrack = vi.fn(() => new DOMRect(0, 0, 600, 2400));
+    const measureFirstPage = vi.fn(() => new DOMRect(0, 0, 600, 1200));
+    const measureSecondPage = vi.fn(() => new DOMRect(0, 1200, 600, 1200));
+    Object.assign(editor, {
+      documentTrackEl: { getBoundingClientRect: measureTrack },
+      pageEls: {
+        0: { getBoundingClientRect: measureFirstPage },
+        1: { getBoundingClientRect: measureSecondPage },
+      },
+    });
+
+    setScrollTop(10);
+    scope.observeViewportScroll();
+
+    expect(measureTrack).toHaveBeenCalledOnce();
+    expect(editor.clientToLocal).not.toHaveBeenCalled();
+    expect(measureFirstPage).not.toHaveBeenCalled();
+    expect(measureSecondPage).not.toHaveBeenCalled();
+  });
+
   it('derives a wider candidate page x position from candidate geometry', () => {
     const current = {
       ...trackedSnapshot('unused', { page_idx: 0, rect: { x: 0, y: 0, width: 1, height: 1 } }),
@@ -926,6 +954,8 @@ describe('EditorScrollScope', () => {
     }));
 
     expect(scope.prepareViewportAnchorPublication(initial).type).toBe('ready');
+    const measureExtension = vi.fn(() => new DOMRect(0, 0, 600, 1200));
+    editor.extensionAreaEl = { getBoundingClientRect: measureExtension } as unknown as HTMLDivElement;
     capture = { identity: nextAnchor, geometry: nextGeometry };
     Object.assign(editor, {
       published: { snapshot: next, frames: editor.published?.frames ?? new Map() },
@@ -935,6 +965,7 @@ describe('EditorScrollScope', () => {
     const publication = scope.prepareViewportAnchorPublication(next);
     scope.applyViewportAnchorPublication(publication);
 
+    expect(measureExtension).toHaveBeenCalledOnce();
     expect(scrollTo).not.toHaveBeenCalled();
     expect(getScrollTop()).toBe(0);
 
@@ -1239,6 +1270,23 @@ describe('EditorScrollScope', () => {
 
     expect(scrollTo).not.toHaveBeenCalled();
     expect(getScrollTop()).toBe(580);
+  });
+
+  it('measures viewport geometry once when resizing during a smooth reveal', () => {
+    const snapshot = trackedSnapshot('target', {
+      page_idx: 0,
+      rect: { x: 0, y: 900, width: 1, height: 20 },
+    });
+    const { measureViewport, scope } = setup(snapshot);
+    scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
+    const request = scope.pendingRequest;
+    if (!request) throw new Error('Expected a pending reveal');
+    expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
+    measureViewport.mockClear();
+
+    scope.reconcileViewportResize();
+
+    expect(measureViewport).toHaveBeenCalledOnce();
   });
 
   it('finishes an in-flight smooth reveal at its current position when a no-op publication is within scroll tolerance', () => {

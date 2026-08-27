@@ -18,6 +18,7 @@ internal fun pageRectsToContentRect(
   rects: Iterable<PageRect>,
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
+  pageContentTops: FloatArray? = null,
   displayZoom: Float = 1f,
   density: Float = 0f,
   contentOriginX: Float = 0f,
@@ -26,13 +27,18 @@ internal fun pageRectsToContentRect(
   val zoom = normalizeDisplayZoom(displayZoom)
   return unionRects(
     rects.mapNotNull { pageRect ->
+      if (pageRect.pageIdx !in pageSizes.indices) return@mapNotNull null
       val pageTop =
-        layoutSpec.resolvePageContentTop(
-          page = pageRect.pageIdx,
-          pageSizes = pageSizes,
-          displayZoom = zoom,
-          density = density,
-        ) ?: return@mapNotNull null
+        if (pageContentTops == null) {
+          layoutSpec.resolvePageContentTop(
+            page = pageRect.pageIdx,
+            pageSizes = pageSizes,
+            displayZoom = zoom,
+            density = density,
+          )
+        } else {
+          pageContentTops.getOrNull(pageRect.pageIdx)
+        } ?: return@mapNotNull null
       val rect = pageRect.rect
       val left = contentOriginX + rect.x * zoom
       val top = contentOriginY + pageTop + rect.y * zoom

@@ -147,6 +147,7 @@
     {onclick}
   >
     <div
+      bind:this={editor.documentTrackEl}
       style:row-gap={`${isPaginated ? PAGE_GAP * editor.displayZoom : 0}px`}
       style="position: relative; display: flex; flex-direction: column; align-items: center; flex: 1 0 auto; width: 100%;"
       data-editor-document-track

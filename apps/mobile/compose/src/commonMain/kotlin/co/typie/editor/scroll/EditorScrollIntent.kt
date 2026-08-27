@@ -2,7 +2,11 @@ package co.typie.editor.scroll
 
 import co.typie.editor.EditorState
 import co.typie.editor.VerticalSpan
+import co.typie.editor.body.EditorBodyGeometry
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveEditorBodyGeometry
+import co.typie.editor.body.resolveMeasuredPageLength
+import co.typie.editor.body.resolvePageContentTopPrefixes
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.pageRectsToContentRect
 import co.typie.editor.runtime.EditorBoundsInContainer
@@ -18,6 +22,54 @@ internal data class EditorScrollFrame(
   val density: Float,
   val editorBounds: EditorBoundsInContainer,
 ) {
+  val bodyGeometry: EditorBodyGeometry by
+    lazy(LazyThreadSafetyMode.NONE) {
+      resolveEditorBodyGeometry(
+        visibleArea = visibleArea,
+        layoutSpec = layoutSpec,
+        pageSizes = state.pageSizes,
+        displayZoom = displayZoom,
+      )
+    }
+
+  val pageContentTopPrefixes: FloatArray by
+    lazy(LazyThreadSafetyMode.NONE) {
+      layoutSpec.resolvePageContentTopPrefixes(
+        pageSizes = state.pageSizes,
+        displayZoom = displayZoom,
+        density = density,
+      )
+    }
+
+  val pagesContentHeight: Float
+    get() = pageContentTopPrefixes.lastOrNull() ?: 0f
+
+  fun pageContentTop(page: Int): Float? {
+    if (page !in state.pageSizes.indices) return null
+    return pageContentTopPrefixes[page]
+  }
+
+  fun pageAtContentY(y: Float): Int? {
+    if (state.pageSizes.isEmpty() || !y.isFinite()) return null
+    var low = 0
+    var high = state.pageSizes.lastIndex
+    while (low < high) {
+      val middle = (low + high + 1) ushr 1
+      if (pageContentTopPrefixes[middle] <= y) low = middle else high = middle - 1
+    }
+    if (low == state.pageSizes.lastIndex) return low
+
+    val pageBottom =
+      pageContentTopPrefixes[low] +
+        resolveMeasuredPageLength(
+          length = state.pageSizes[low].height,
+          displayZoom = displayZoom,
+          density = density,
+        )
+    val nextPageTop = pageContentTopPrefixes[low + 1]
+    return if (y >= (pageBottom + nextPageTop) / 2f) low + 1 else low
+  }
+
   fun withState(state: EditorState): EditorScrollFrame {
     return copy(
       state = state,
@@ -109,14 +161,7 @@ internal fun resolveEditorScrollIntent(
   if (!contentOriginY.isFinite()) return EditorScrollIntentResult.Unresolved
 
   val rect =
-    resolveBringIntoViewTargetRect(
-      state = frame.state,
-      layoutSpec = frame.layoutSpec,
-      contentOriginY = contentOriginY,
-      displayZoom = frame.displayZoom,
-      density = frame.density,
-      target = target,
-    )
+    resolveBringIntoViewTargetRect(frame = frame, contentOriginY = contentOriginY, target = target)
   if (rect == null) {
     return EditorScrollIntentResult.NoScroll
   }
@@ -152,14 +197,8 @@ internal fun resolveInstantRevealPreparationViewports(
   maximumScrollY: Float,
 ): List<VerticalSpan> {
   val rect =
-    resolveBringIntoViewTargetRect(
-      state = frame.state,
-      layoutSpec = frame.layoutSpec,
-      contentOriginY = contentOriginY,
-      displayZoom = frame.displayZoom,
-      density = frame.density,
-      target = target,
-    ) ?: return emptyList()
+    resolveBringIntoViewTargetRect(frame = frame, contentOriginY = contentOriginY, target = target)
+      ?: return emptyList()
   return resolveInstantRevealPreparationViewports(
     currentScroll = currentScroll,
     viewportHeight = frame.visibleArea.viewport.height,
@@ -290,11 +329,8 @@ internal fun isEditorScrollTargetVisible(
   if (!editorBounds.isValid) return null
   val rect =
     resolveBringIntoViewTargetRect(
-      state = frame.state,
-      layoutSpec = frame.layoutSpec,
+      frame = frame,
       contentOriginY = frame.headerHeight + editorBounds.y,
-      displayZoom = frame.displayZoom,
-      density = frame.density,
       target = target,
     ) ?: return null
   val visibleTopInContent = currentScroll + visibleArea.visibleViewportTop
@@ -312,6 +348,19 @@ internal fun resolveBringIntoViewTargetHeight(
   displayZoom: Float,
   density: Float = 0f,
 ): Float? {
+  if (target == EditorBringIntoViewTarget.CurrentSelectionHead) {
+    val pageRect = resolveCurrentSelectionHeadPageRect(state) ?: return null
+    if (pageRect.pageIdx !in state.pageSizes.indices) return null
+    val rect = pageRect.rect
+    if (
+      !rect.x.isFinite() || !rect.y.isFinite() || !rect.width.isFinite() || !rect.height.isFinite()
+    ) {
+      return null
+    }
+    val zoom = displayZoom.takeIf { it.isFinite() && it > 0f } ?: 1f
+    return abs(rect.height * zoom).takeIf(Float::isFinite)
+  }
+
   val targetRects =
     resolveBringIntoViewTargetPageRects(state = state, target = target) ?: return null
   return pageRectsToContentRect(
@@ -325,22 +374,20 @@ internal fun resolveBringIntoViewTargetHeight(
 }
 
 private fun resolveBringIntoViewTargetRect(
-  state: EditorState,
-  layoutSpec: EditorDocumentLayoutSpec,
+  frame: EditorScrollFrame,
   contentOriginY: Float,
-  displayZoom: Float,
-  density: Float,
   target: EditorBringIntoViewTarget,
 ): VerticalSpan? {
   val targetRects =
-    resolveBringIntoViewTargetPageRects(state = state, target = target) ?: return null
+    resolveBringIntoViewTargetPageRects(state = frame.state, target = target) ?: return null
   val contentRect =
     pageRectsToContentRect(
       rects = targetRects,
-      layoutSpec = layoutSpec,
-      pageSizes = state.pageSizes,
-      displayZoom = displayZoom,
-      density = density,
+      layoutSpec = frame.layoutSpec,
+      pageSizes = frame.state.pageSizes,
+      pageContentTops = frame.pageContentTopPrefixes,
+      displayZoom = frame.displayZoom,
+      density = frame.density,
       contentOriginY = contentOriginY,
     ) ?: return null
   return VerticalSpan(top = contentRect.top, bottom = contentRect.bottom)

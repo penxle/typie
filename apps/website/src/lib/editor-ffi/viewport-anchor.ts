@@ -1,6 +1,7 @@
 import { clamp } from '@typie/ui/utils';
 import stringify from 'fast-json-stable-stringify';
 import { CURSOR_VISIBLE_MARGIN } from './constants';
+import { resolvePageAtY } from './geometry';
 import { resolveGuardedScrollTop } from './scroll';
 import type { ResolvedViewportAnchor, ViewportAnchor, ViewportAnchorPoint } from '@typie/editor-ffi/browser';
 import type { EditorSnapshot } from './editor.svelte';
@@ -34,6 +35,13 @@ export type EditorViewportAnchorLayout = {
 };
 
 export type EditorViewportScrollPosition = { left: number; top: number };
+
+export type EditorViewportCenterMetrics = {
+  scrollLeft: number;
+  scrollTop: number;
+  clientWidth: number;
+  clientHeight: number;
+};
 
 export class EditorViewportAnchorState {
   #active: ActiveViewportAnchor | null = null;
@@ -256,31 +264,36 @@ export function resolveViewportAnchorGeometry(
 export function viewportCenterAnchorPoint(
   snapshot: EditorSnapshot,
   layout: EditorViewportAnchorLayout,
-  scrollTop: number,
-  clientHeight: number,
+  metrics: EditorViewportCenterMetrics,
   visibleArea: EditorVisibleArea,
 ): ViewportAnchorPoint | null {
-  if (layout.pages.length === 0 || !Number.isFinite(scrollTop) || !Number.isFinite(clientHeight) || clientHeight <= 0) return null;
+  const { scrollLeft, scrollTop, clientWidth, clientHeight } = metrics;
+  if (
+    layout.pages.length === 0 ||
+    !Number.isFinite(scrollLeft) ||
+    !Number.isFinite(scrollTop) ||
+    !Number.isFinite(clientWidth) ||
+    !Number.isFinite(clientHeight) ||
+    clientWidth <= 0 ||
+    clientHeight <= 0
+  ) {
+    return null;
+  }
   const topInset = Math.max(0, visibleArea.topInset);
   const visibleHeight = Math.max(0, clientHeight - topInset - Math.max(0, visibleArea.bottomInset));
   const viewportCenter = topInset + visibleHeight / 2;
+  const contentX = scrollLeft + clientWidth / 2;
   const contentY = scrollTop + viewportCenter;
 
-  let page = layout.pages.at(-1);
-  for (let index = 0; index < layout.pages.length; index += 1) {
-    const next = layout.pages[index + 1];
-    if (!next || contentY < next.top) {
-      page = layout.pages[index];
-      break;
-    }
-  }
-  if (!page) return null;
-  const size = snapshot.pageSizes[page.page];
-  if (!size) return null;
+  const resolved = resolvePageAtY(layout.pages, snapshot.pageSizes, contentY, layout.zoom);
+  if (!resolved) return null;
+  const page = layout.pages[resolved.page];
+  const size = snapshot.pageSizes[resolved.page];
+  if (!page || !size) return null;
   return {
-    page_idx: page.page,
-    x: size.width / 2,
-    y: (contentY - page.top) / layout.zoom,
+    page_idx: resolved.page,
+    x: Math.max(0, Math.min((contentX - page.left) / layout.zoom, size.width)),
+    y: resolved.y,
   };
 }
 

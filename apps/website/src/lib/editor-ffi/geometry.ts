@@ -7,14 +7,16 @@ export function roundToScale(value: number, scaleFactor: number): number {
   return Math.round(value * scaleFactor) / scaleFactor;
 }
 
+type PageSpanOptions = {
+  origin?: number;
+  displayZoom?: number;
+  scaleFactor?: number;
+  pageGap?: number;
+};
+
 export function resolvePageSpans(
   pageSizes: readonly { height: number }[],
-  {
-    origin = 0,
-    displayZoom = 1,
-    scaleFactor = 1,
-    pageGap = 0,
-  }: { origin?: number; displayZoom?: number; scaleFactor?: number; pageGap?: number } = {},
+  { origin = 0, displayZoom = 1, scaleFactor = 1, pageGap = 0 }: PageSpanOptions = {},
 ) {
   let top = origin;
   return pageSizes.map((size, page) => {
@@ -22,6 +24,62 @@ export function resolvePageSpans(
     top = span.bottom + pageGap;
     return span;
   });
+}
+
+type CachedPageSpanOptions = Omit<PageSpanOptions, 'origin'>;
+
+type PageSpanCacheEntry = Required<CachedPageSpanOptions> & {
+  spans: ReturnType<typeof resolvePageSpans>;
+};
+
+const pageSpanCache = new WeakMap<readonly { height: number }[], PageSpanCacheEntry>();
+
+export function resolveCachedPageSpans(pageSizes: readonly { height: number }[], options: CachedPageSpanOptions = {}) {
+  const displayZoom = options.displayZoom ?? 1;
+  const scaleFactor = options.scaleFactor ?? 1;
+  const pageGap = options.pageGap ?? 0;
+  const cached = pageSpanCache.get(pageSizes);
+  if (cached?.displayZoom === displayZoom && cached.scaleFactor === scaleFactor && cached.pageGap === pageGap) {
+    return cached.spans;
+  }
+
+  const spans = resolvePageSpans(pageSizes, { displayZoom, scaleFactor, pageGap });
+  pageSpanCache.set(pageSizes, { displayZoom, scaleFactor, pageGap, spans });
+  return spans;
+}
+
+export function resolvePageAtY(
+  pages: readonly { page: number; top: number; bottom: number }[],
+  pageSizes: readonly { height: number }[],
+  contentY: number,
+  zoom: number,
+): { page: number; y: number } | null {
+  if (pages.length === 0 || !Number.isFinite(contentY) || !Number.isFinite(zoom) || zoom <= 0) return null;
+
+  let low = 0;
+  let high = pages.length - 1;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (pages[middle].bottom <= contentY) low = middle + 1;
+    else high = middle;
+  }
+
+  let span = pages[low];
+  let size = pageSizes[span.page];
+  if (!size) return null;
+  let y = (contentY - span.top) / zoom;
+  if (y < 0 && low > 0) {
+    const previous = pages[low - 1];
+    if (contentY < (previous.bottom + span.top) / 2) {
+      span = previous;
+      size = pageSizes[span.page];
+      if (!size) return null;
+      y = size.height;
+    } else {
+      y = 0;
+    }
+  }
+  return { page: span.page, y: Math.max(0, Math.min(y, size.height)) };
 }
 
 export function pageRectsToRevealTargetSpan(

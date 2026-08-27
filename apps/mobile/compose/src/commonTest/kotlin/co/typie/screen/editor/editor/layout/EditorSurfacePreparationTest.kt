@@ -278,6 +278,33 @@ class EditorSurfacePreparationTest {
       )
     }
 
+  @Test
+  fun `surface planning reads long document page sizes linearly`() = runTest {
+    val pageCount = 128
+    val pageSizes = CountingPageSizes(List(pageCount) { PageSize(width = 600f, height = 1_000f) })
+    val baseFrame = frame()
+    val longDocumentFrame =
+      baseFrame.copy(
+        state = baseFrame.state.copy(pageSizes = pageSizes),
+        editorBounds =
+          EditorBoundsInContainer(x = 0f, y = 0f, width = 600f, height = pageCount * 1_000f),
+      )
+
+    val preparation =
+      resolveEditorSurfacePreparation(
+        editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)),
+        scrollFrame = longDocumentFrame,
+        currentScroll = 0f,
+        bringIntoViewRequest = null,
+      )
+
+    assertEquals(setOf(0), preparation?.requiredPages)
+    assertTrue(
+      pageSizes.readCount <= pageCount * 5,
+      "Expected linear page-size reads, but read ${pageSizes.readCount} values for $pageCount pages",
+    )
+  }
+
   private fun frame(): EditorScrollFrame {
     val visibleArea = EditorVisibleArea(viewport = Size(width = 600f, height = 400f))
     return EditorScrollFrame(
@@ -326,5 +353,18 @@ class EditorSurfacePreparationTest {
             )
         )
     )
+  }
+
+  private class CountingPageSizes(private val values: List<PageSize>) : AbstractList<PageSize>() {
+    var readCount = 0
+      private set
+
+    override val size: Int
+      get() = values.size
+
+    override fun get(index: Int): PageSize {
+      readCount += 1
+      return values[index]
+    }
   }
 }
