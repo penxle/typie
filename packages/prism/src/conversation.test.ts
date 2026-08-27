@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyFrame, emptyTranscript, pendingRootRequests, runningWorkflows } from './conversation.ts';
+import { applyFrame, awaitingRunClose, emptyTranscript, pendingRootRequests, runningWorkflows } from './conversation.ts';
 import type { ProjectedEventData, ProjectedStreamFrame } from './projected.ts';
 
 const agent = { id: 'typie-1', name: 'assistant' };
@@ -295,6 +295,35 @@ describe('tool-request 변형', () => {
     ]);
     t = applyFrame(t, ev(4, 'run.completed', run, {}));
     expect(t.messages.at(-1)).toMatchObject({ status: 'resolved' });
+  });
+});
+
+describe('awaitingRunClose', () => {
+  const opened = () => reduce([ev(1, 'run.started', run, { message: '안녕' }), ev(2, 'turn.started', turn, {})]);
+
+  it('도구 호출 없이 봉인된 턴 뒤 run.completed 전까지만 참이다', () => {
+    let t = opened();
+    expect(awaitingRunClose(t)).toBe(false);
+    t = applyFrame(t, ev(3, 'turn.completed', turn, { text: '답', toolCalls: [] }));
+    expect(awaitingRunClose(t)).toBe(true);
+    t = applyFrame(t, ev(4, 'run.completed', run, {}));
+    expect(awaitingRunClose(t)).toBe(false);
+  });
+
+  it('도구를 원한 턴(parsed·malformed 모두)은 다음 턴이 오므로 거짓이다', () => {
+    for (const call of [
+      { kind: 'parsed', id: 'c1', name: 'read', input: {} },
+      { kind: 'malformed', id: 'c1', name: 'read' },
+    ]) {
+      const t = applyFrame(opened(), ev(3, 'turn.completed', turn, { text: null, toolCalls: [call] }));
+      expect(awaitingRunClose(t)).toBe(false);
+    }
+  });
+
+  it('다음 턴이 시작되면 거짓으로 돌아간다', () => {
+    let t = applyFrame(opened(), ev(3, 'turn.completed', turn, { text: '답', toolCalls: [] }));
+    t = applyFrame(t, ev(4, 'turn.started', { ...turn, turn: 2 }, {}));
+    expect(awaitingRunClose(t)).toBe(false);
   });
 });
 

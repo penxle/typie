@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
+  import { awaitingRunClose, effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
@@ -411,6 +411,9 @@
 
     if (pending !== null && transcript.run !== 'running') return { label: '보내는 중', text: null };
     if (transcript.retrying) return { label: '다시 시도하는 중', text: null };
+
+    // 도구 호출 없이 봉인된 마지막 턴 뒤에 남은 것은 run.completed의 전달뿐이다 — 드레인이 먼저 끝나면 그 잔여 창(계측 ~0.4s)에 스피너가 깜빡인다.
+    if (awaitingRunClose(transcript)) return null;
 
     return { label: '응답을 기다리는 중', text: null };
   });
