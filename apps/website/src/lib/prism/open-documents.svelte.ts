@@ -1,4 +1,5 @@
-import { getContext, setContext, untrack } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
+import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export type OpenDocument = {
@@ -12,7 +13,9 @@ export type OpenDocument = {
   active: boolean;
 };
 
-const key: unique symbol = Symbol('OpenDocuments');
+const [getOpenDocuments, setOpenDocuments] = createStableContext<OpenDocumentRegistry>('prism.OpenDocuments');
+
+export { getOpenDocuments };
 
 export class OpenDocumentRegistry {
   #entries = new SvelteMap<string, OpenDocument | null>();
@@ -112,14 +115,6 @@ export class OpenDocumentRegistry {
 
 export const setupOpenDocuments = () => {
   const registry = new OpenDocumentRegistry();
-  setContext(key, registry);
-  return registry;
-};
-
-export const getOpenDocuments = (): OpenDocumentRegistry => {
-  const registry = getContext<OpenDocumentRegistry>(key);
-  if (!registry) {
-    throw new Error('OpenDocumentRegistry not found');
-  }
+  setOpenDocuments(registry);
   return registry;
 };

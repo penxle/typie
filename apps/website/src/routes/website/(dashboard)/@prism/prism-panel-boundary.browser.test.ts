@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import PrismPanelBoundaryTestHost, { prismPanelBoundaryHarness } from './PrismPanelBoundaryTestHost.svelte';
 
 vi.mock('@sentry/sveltekit', () => ({ captureException: vi.fn() }));
-vi.mock('@typie/ui/context', () => ({ getAppContext: vi.fn() }));
+vi.mock('@typie/ui/context', () => ({ getAppContext: vi.fn(), tryAppContext: vi.fn() }));
 
 const app = {
   preference: {

@@ -5,7 +5,7 @@
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, deactivateFocusTrap, focusTrap, portal, updateFocusTrapContainers } from '../actions';
-  import { getAppContext } from '../context';
+  import { tryAppContext } from '../context';
   import { createHoverFocusHandler, pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -50,7 +50,7 @@
   let buttonEl = $state<HTMLButtonElement>();
   let menuEl = $state<HTMLUListElement>();
 
-  const app = getAppContext();
+  const app = tryAppContext();
 
   const { anchor, floating } = createFloatingActions({
     placement,

@@ -1,8 +1,8 @@
-import { getContext, setContext } from 'svelte';
 import { MediaQuery } from 'svelte/reactivity';
 import Cookies from 'universal-cookie';
 import { browser } from '$app/environment';
 import { page } from '$app/state';
+import { createStableContext } from './stable-context';
 import type { CookieChangeOptions } from 'universal-cookie';
 
 export type Theme = 'light' | 'dark' | 'auto';
@@ -147,16 +147,14 @@ export class ThemeState {
   }
 }
 
-const key: unique symbol = Symbol('ThemeContext');
+const [getThemeContext, setThemeContext] = createStableContext<ThemeState>('ui.ThemeContext');
 
-export const getThemeContext = () => {
-  return getContext<ThemeState>(key);
-};
+export { getThemeContext };
 
 export const setupThemeContext = () => {
   const themeState = $state<ThemeState>(new ThemeState());
 
-  setContext(key, themeState);
+  setThemeContext(themeState);
 
   return themeState;
 };

@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import type { CommentAnchor } from '$lib/editor-ffi/comments';
 import type { CommentComposerV2_user$key, CommentPopoverV2_thread$key, DocumentPanelV2CommentItem_thread$key } from '$mearie';
 
@@ -34,6 +34,7 @@ export type CommentController = {
   unresolveThread: (threadId: string) => Promise<void>;
 };
 
-const KEY = Symbol('DocumentComments');
-export const setupCommentContext = (c: CommentController) => setContext(KEY, c);
-export const getCommentContext = () => getContext<CommentController>(KEY);
+const [getCommentContext, setCommentContext] = createStableContext<CommentController>('document-comments.DocumentComments');
+
+export { getCommentContext };
+export const setupCommentContext = (controller: CommentController) => setCommentContext(controller);

@@ -1,4 +1,4 @@
-import { createContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import { FocusReturnSession } from '$lib/focus-return-session';
 
 type DocumentPanelFocusReturn = {
@@ -7,7 +7,9 @@ type DocumentPanelFocusReturn = {
   discard: () => void;
 };
 
-const [getDocumentPanelFocusReturn, setDocumentPanelFocusReturn] = createContext<DocumentPanelFocusReturn>();
+const [getDocumentPanelFocusReturn, setDocumentPanelFocusReturn] = createStableContext<DocumentPanelFocusReturn>(
+  'document-panel.DocumentPanelFocusReturn',
+);
 
 export { getDocumentPanelFocusReturn };
 

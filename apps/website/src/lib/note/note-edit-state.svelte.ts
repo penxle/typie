@@ -1,5 +1,6 @@
+import { createStableContext } from '@typie/ui/context/stable';
 import { Toast } from '@typie/ui/notification';
-import { getContext, setContext, untrack } from 'svelte';
+import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 type NoteFieldSnapshot = {
@@ -419,17 +420,6 @@ export class NoteEdits {
   }
 }
 
-const NOTE_EDITS_CONTEXT = Symbol('NoteEdits');
+const [getNoteEditsContext, setNoteEditsContext] = createStableContext<NoteEdits>('note.NoteEdits');
 
-export function setNoteEditsContext(noteEdits: NoteEdits): NoteEdits {
-  setContext(NOTE_EDITS_CONTEXT, noteEdits);
-  return noteEdits;
-}
-
-export function getNoteEditsContext(): NoteEdits {
-  const noteEdits = getContext<NoteEdits>(NOTE_EDITS_CONTEXT);
-  if (!noteEdits) {
-    throw new Error('NoteEdits not found');
-  }
-  return noteEdits;
-}
+export { getNoteEditsContext, setNoteEditsContext };
