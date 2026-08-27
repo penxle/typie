@@ -141,56 +141,6 @@ const setSourceRect = (target: HTMLElement) => {
 };
 
 describe('Prism panel indicator', () => {
-  test('reports whether the 3D prism renderer is actually available', async () => {
-    const target = document.createElement('div');
-    const availability: boolean[] = [];
-    const props = reactiveProps({
-      onPrismAvailabilityChange: (available: boolean) => {
-        availability.push(available);
-      },
-      phase: 'welcome' as const,
-    });
-    const component = mount(PrismPanelIndicator, { target, props });
-    try {
-      await tick();
-      expect(availability.at(-1)).toBe(false);
-
-      runtime.emit({ readiness: 'ready' });
-      await tick();
-      expect(availability.at(-1)).toBe(true);
-
-      runtime.emit({ readiness: 'unavailable' });
-      await tick();
-      expect(availability.at(-1)).toBe(false);
-      expect(runtime.mountObject).toHaveBeenCalledOnce();
-    } finally {
-      await unmount(component);
-    }
-  });
-
-  test('never reports the 3D prism as available with reduced motion', async () => {
-    const target = document.createElement('div');
-    const availability: boolean[] = [];
-    const props = reactiveProps({
-      onPrismAvailabilityChange: (available: boolean) => {
-        availability.push(available);
-      },
-      phase: 'welcome' as const,
-      reducedMotion: true,
-    });
-    const component = mount(PrismPanelIndicator, { target, props });
-    try {
-      await tick();
-      runtime.emit({ readiness: 'ready' });
-      await tick();
-
-      expect(availability.at(-1)).toBe(false);
-      expect(availability).not.toContain(true);
-    } finally {
-      await unmount(component);
-    }
-  });
-
   test('uses the theme-state edge color before the view-transition DOM catches up', async () => {
     const target = document.createElement('div');
     const previousTheme = document.documentElement.dataset.theme;
@@ -285,11 +235,7 @@ describe('Prism panel indicator', () => {
 
   test('keeps the welcome prism static when the 3D object preference is disabled', async () => {
     const target = document.createElement('div');
-    const availability: boolean[] = [];
     const props = reactiveProps({
-      onPrismAvailabilityChange: (available: boolean) => {
-        availability.push(available);
-      },
       phase: 'welcome' as const,
       prismEnabled: false,
     });
@@ -305,7 +251,6 @@ describe('Prism panel indicator', () => {
       await tick();
 
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
-      expect(availability.at(-1)).toBe(true);
       expect(runtime.object.destroy).toHaveBeenCalledOnce();
       expect(target.querySelector('[data-prism-indicator-static-icon]')).not.toBeNull();
     } finally {

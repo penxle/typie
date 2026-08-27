@@ -20,7 +20,6 @@
 
   type Props = {
     destination?: HTMLElement;
-    onPrismAvailabilityChange?: (available: boolean) => void;
     phase: PrismIndicatorPhase;
     prismEnabled?: boolean;
     reducedMotion?: boolean;
@@ -33,7 +32,6 @@
 
   let {
     destination,
-    onPrismAvailabilityChange,
     phase,
     prismEnabled = true,
     reducedMotion = typeof window !== 'undefined' &&
@@ -71,7 +69,6 @@
   let destroyed = false;
   let admissionFrame = 0;
   let followerFrame = 0;
-  let prismAvailable: boolean | undefined;
   let hiddenRowSpinner: HTMLElement | undefined;
   const welcomeMessageEligible = $derived(!prismEnabled || target === 'prism' || reducedMotion || snapshot.readiness === 'unavailable');
   let welcomeMessageAdmitted = $state(false);
@@ -92,12 +89,6 @@
   const showRowSpinner = () => {
     hiddenRowSpinner?.style.removeProperty('opacity');
     hiddenRowSpinner = undefined;
-  };
-
-  const setPrismAvailable = (available: boolean) => {
-    if (prismAvailable === available) return;
-    prismAvailable = available;
-    onPrismAvailabilityChange?.(available);
   };
 
   const clearDwell = () => {
@@ -331,7 +322,6 @@
 
   const handleSnapshot = (next: PrismRuntimeSnapshot) => {
     snapshot = next;
-    setPrismAvailable(!reducedMotion && next.readiness === 'ready');
     if (next.readiness === 'unavailable') {
       settleStaticPresentation();
       prismRendererMounted = false;
@@ -378,7 +368,6 @@
 
   onDestroy(() => {
     destroyed = true;
-    setPrismAvailable(false);
     window.removeEventListener('load', observeLoadedBrowser);
     if (stabilityIdle !== 0) cancelIdleCallback(stabilityIdle);
     if (stabilityFrame !== 0) cancelAnimationFrame(stabilityFrame);
@@ -391,7 +380,6 @@
 
   $effect(() => {
     const useStaticPresentation = reducedMotion;
-    setPrismAvailable(!useStaticPresentation && snapshot.readiness === 'ready');
     if (useStaticPresentation) {
       prismRendererMounted = false;
       untrack(settleStaticPresentation);
