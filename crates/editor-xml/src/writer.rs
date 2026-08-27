@@ -222,7 +222,7 @@ fn write_inline(nv: &NodeView<'_>, out: &mut String) -> Result<(), XmlError> {
     Ok(())
 }
 
-fn open_modifiers(
+pub(crate) fn open_modifiers(
     own: &BTreeMap<ModifierType, Modifier>,
     out: &mut String,
 ) -> Result<(), XmlError> {
@@ -238,7 +238,7 @@ fn open_modifiers(
     Ok(())
 }
 
-fn close_modifiers(own: &BTreeMap<ModifierType, Modifier>, out: &mut String) {
+pub(crate) fn close_modifiers(own: &BTreeMap<ModifierType, Modifier>, out: &mut String) {
     for ty in ModifierType::iter().collect::<Vec<_>>().into_iter().rev() {
         if own.contains_key(&ty) {
             out.push_str("</");
@@ -248,7 +248,7 @@ fn close_modifiers(own: &BTreeMap<ModifierType, Modifier>, out: &mut String) {
     }
 }
 
-fn indent(out: &mut String, depth: usize) {
+pub(crate) fn indent(out: &mut String, depth: usize) {
     for _ in 0..depth {
         out.push_str("  ");
     }

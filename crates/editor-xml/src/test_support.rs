@@ -261,13 +261,12 @@ fn arb_fold(depth: u32) -> BoxedStrategy<PlainNodeEntry> {
 fn arb_table() -> BoxedStrategy<PlainNodeEntry> {
     let cell = (
         prop::option::weighted(0.4, prop::sample::select(vec![80u32, 160])),
-        prop::option::weighted(0.2, Just("#eeeeee".to_string())),
         prop::collection::vec(arb_paragraph(false), 1..3),
     )
-        .prop_map(|(col_width, background_color, children)| PlainNodeEntry {
+        .prop_map(|(col_width, children)| PlainNodeEntry {
             node: PlainNode::TableCell(PlainTableCellNode {
                 col_width,
-                background_color,
+                background_color: None,
             }),
             modifiers: BTreeMap::new(),
             carry: Vec::new(),

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { EditDocumentInput, toRustOps } from './prism-document-edit-core.ts';
 import { DOCUMENT_FORMAT_GUIDE, DOCUMENT_FORMAT_PATH } from './prism-document-format.ts';
 import { wasm } from './wasm-ffi.ts';
 
@@ -60,7 +61,6 @@ const NODE_ATTRS = [
   'border_style',
   'proportion',
   'col_width',
-  'background_color',
   'id',
 ];
 
@@ -148,4 +148,64 @@ test('안내에 있는 잘못된 형태는 실제로 거절된다', async () => 
   await rejected('<paragraph><font_size value="99">x</font_size></paragraph><paragraph/>');
   await rejected('<paragraph><background_color value="none">x</background_color></paragraph><paragraph/>');
   await rejected('<image/><paragraph/>');
+});
+
+const jsonExamples = (guide: string): string[] => [...guide.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]);
+
+test('안내의 연산 예시는 빈 문서에 차례로 적용되고 결과가 검증기를 통과한다', async () => {
+  const examples = jsonExamples(DOCUMENT_FORMAT_GUIDE);
+  assert.equal(examples.length, 5);
+
+  let xml = await wasm.use((host) => {
+    const plain = host.default_doc_with_preset({ layout_mode: { type: 'continuous', max_width: 600 } }, []);
+    const rendered = host.to_xml(host.to_graph(plain), []);
+    assert.equal(rendered.error, undefined);
+    return rendered.xml;
+  });
+  for (const example of examples) {
+    const parsed = EditDocumentInput.safeParse({ path: 'documents/x.xml', ops: JSON.parse(example) });
+    assert.ok(parsed.success, example);
+    const result = await wasm.edit_xml(xml, JSON.stringify(toRustOps(parsed.data.ops)));
+    assert.equal(result.error, undefined, `${example}\n${JSON.stringify(result.error)}`);
+    xml = result.xml;
+  }
+  const outline = await wasm.outline_xml(xml, 'root', 8, 0, 500, false);
+  assert.deepEqual(
+    outline.rows.map((r) => `${r.path} ${r.name}`),
+    [
+      '1 table',
+      '1.1 table_row',
+      '1.1.1 table_cell',
+      '1.1.1.1 paragraph',
+      '1.1.2 table_cell',
+      '1.1.2.1 paragraph',
+      '2 blockquote',
+      '2.1 paragraph',
+      '3 paragraph',
+    ],
+  );
+  const preview = (path: string) => outline.rows.find((r) => r.path === path)?.preview;
+  assert.equal(preview('2.1'), '셋째');
+  assert.equal(preview('1.1.1.1'), '왼쪽');
+  assert.equal(preview('1.1.2.1'), '오른쪽');
+  const verdict = await wasm.verify_xml(xml);
+  assert.equal(verdict.error, undefined);
+});
+
+test('안내는 도구 이름·주소 문법·연산 다섯을 말한다', () => {
+  for (const word of [
+    'outline-document',
+    'edit-document',
+    '`root`',
+    '서수 경로',
+    'first_child',
+    'last_child',
+    '`insert`',
+    '`delete`',
+    '`move`',
+    '`replace`',
+    '`set`',
+  ]) {
+    assert.ok(DOCUMENT_FORMAT_GUIDE.includes(word), word);
+  }
 });

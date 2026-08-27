@@ -183,6 +183,61 @@ pub struct XmlEditResult {
     pub chars_deleted: u32,
 }
 
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlOutlineAttr {
+    pub key: String,
+    pub value: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlOutlineRow {
+    pub path: String,
+    pub name: String,
+    pub dot: Option<String>,
+    pub attrs: Vec<XmlOutlineAttr>,
+    pub preview: Option<String>,
+    pub chars: Option<u32>,
+    pub children: u32,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlOutline {
+    pub error: Option<XmlErrorInfo>,
+    pub head: Option<XmlOutlineRow>,
+    pub rows: Vec<XmlOutlineRow>,
+    pub total: u32,
+    pub xml: Option<String>,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlOpErrorInfo {
+    pub op: Option<u32>,
+    pub address: Option<String>,
+    pub info: XmlErrorInfo,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct XmlEdit {
+    pub error: Option<XmlOpErrorInfo>,
+    pub xml: String,
+    pub affected: Vec<XmlOutline>,
+}
+
 fn xml_error_info(e: &editor_xml::XmlError) -> Result<XmlErrorInfo, FfiError> {
     let detail =
         serde_json::to_string(&e.detail).map_err(|err| FfiError::Serialization(err.to_string()))?;
@@ -193,6 +248,32 @@ fn xml_error_info(e: &editor_xml::XmlError) -> Result<XmlErrorInfo, FfiError> {
         detail,
         message: e.message.clone(),
     })
+}
+
+fn outline_row_ffi(row: editor_xml::OutlineRow) -> XmlOutlineRow {
+    XmlOutlineRow {
+        path: row.path,
+        name: row.name,
+        dot: row.dot,
+        attrs: row
+            .attrs
+            .into_iter()
+            .map(|(key, value)| XmlOutlineAttr { key, value })
+            .collect(),
+        preview: row.preview,
+        chars: row.chars,
+        children: row.children,
+    }
+}
+
+fn outline_ffi(result: editor_xml::OutlineResult) -> XmlOutline {
+    XmlOutline {
+        error: None,
+        head: result.head.map(outline_row_ffi),
+        rows: result.rows.into_iter().map(outline_row_ffi).collect(),
+        total: result.total,
+        xml: result.xml,
+    }
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
@@ -635,6 +716,85 @@ impl EditorServer {
             Err(e) => Some(xml_error_info(&e)?),
         };
         Ok(XmlVerdict { error }.into_ffi()?)
+    }
+
+    pub fn outline_xml(
+        &self,
+        xml: String,
+        under: String,
+        depth: u32,
+        offset: u32,
+        limit: u32,
+        full: bool,
+    ) -> EditorResult<Complex<XmlOutline>> {
+        fn failed(error: XmlErrorInfo) -> XmlOutline {
+            XmlOutline {
+                error: Some(error),
+                head: None,
+                rows: Vec::new(),
+                total: 0,
+                xml: None,
+            }
+        }
+
+        let tree = match editor_xml::from_xml(&xml) {
+            Ok(t) => t,
+            Err(e) => return Ok(failed(xml_error_info(&e)?).into_ffi()?),
+        };
+        let under: editor_xml::Address = match under.parse() {
+            Ok(a) => a,
+            Err(detail) => {
+                return Ok(failed(xml_error_info(&editor_xml::XmlError::new(detail))?).into_ffi()?);
+            }
+        };
+        let scope = editor_xml::OutlineScope {
+            under,
+            depth,
+            offset,
+            limit,
+            full,
+        };
+        match editor_xml::outline(&tree, &scope) {
+            Ok(result) => Ok(outline_ffi(result).into_ffi()?),
+            Err(e) => Ok(failed(xml_error_info(&e)?).into_ffi()?),
+        }
+    }
+
+    pub fn edit_xml(&self, xml: String, ops_json: String) -> EditorResult<Complex<XmlEdit>> {
+        fn failed(error: XmlOpErrorInfo) -> XmlEdit {
+            XmlEdit {
+                error: Some(error),
+                xml: String::new(),
+                affected: Vec::new(),
+            }
+        }
+
+        let ops: Vec<editor_xml::Op> = match serde_json::from_str(&ops_json) {
+            Ok(ops) => ops,
+            Err(e) => {
+                let info = xml_error_info(&editor_xml::XmlError::internal(format!("ops: {e}")))?;
+                return Ok(failed(XmlOpErrorInfo {
+                    op: None,
+                    address: None,
+                    info,
+                })
+                .into_ffi()?);
+            }
+        };
+        match editor_xml::edit_file(&xml, &ops) {
+            Ok(edited) => Ok(XmlEdit {
+                error: None,
+                xml: edited.xml,
+                affected: edited.affected.into_iter().map(outline_ffi).collect(),
+            }
+            .into_ffi()?),
+            Err(e) => Ok(failed(XmlOpErrorInfo {
+                op: e.op.map(|i| i as u32),
+                address: e.address,
+                info: xml_error_info(&e.error)?,
+            })
+            .into_ffi()?),
+        }
     }
 
     pub fn edit_from_xml(
@@ -2719,6 +2879,65 @@ mod tests {
         let out = server.to_xml(graph, Vec::new()).unwrap();
         assert!(out.error.is_none(), "{:?}", out.error);
         out.xml
+    }
+
+    #[test]
+    fn outline_xml_lists_blocks_and_reports_a_bad_under() {
+        let server = EditorServer::new_test();
+        let xml = render(&server, xml_test_graph("hello"));
+        let out = server
+            .outline_xml(xml.clone(), "root".into(), 1, 0, 200, false)
+            .unwrap();
+        assert!(out.error.is_none());
+        assert_eq!(out.rows.len(), 1);
+        assert_eq!(out.rows[0].path, "1");
+        assert_eq!(out.rows[0].preview.as_deref(), Some("hello"));
+        assert_eq!(out.rows[0].chars, Some(5));
+        let full = server
+            .outline_xml(xml.clone(), "1".into(), 1, 0, 200, true)
+            .unwrap();
+        assert!(full.xml.unwrap().starts_with("<paragraph dot="));
+        let bad = server
+            .outline_xml(xml.clone(), "9_9".into(), 1, 0, 200, false)
+            .unwrap();
+        let info = bad.error.unwrap();
+        assert!(info.detail.contains("address_unresolved"));
+        let invalid = server
+            .outline_xml(xml, "0".into(), 1, 0, 200, false)
+            .unwrap();
+        assert!(invalid.error.unwrap().detail.contains("address_invalid"));
+    }
+
+    #[test]
+    fn edit_xml_applies_a_batch_and_names_the_failing_op() {
+        let server = EditorServer::new_test();
+        let xml = render(&server, xml_test_graph("hello"));
+        let ok = server
+            .edit_xml(
+                xml.clone(),
+                r#"[{"op":"insert","xml":"<paragraph>world</paragraph>","at":{"after":"1"}}]"#
+                    .into(),
+            )
+            .unwrap();
+        assert!(ok.error.is_none(), "{:?}", ok.error);
+        assert!(ok.xml.contains("<paragraph>world</paragraph>"));
+        assert_eq!(ok.affected.len(), 1);
+        assert_eq!(ok.affected[0].rows.len(), 2);
+        assert!(server.verify_xml(ok.xml.clone()).unwrap().error.is_none());
+
+        let bad = server
+            .edit_xml(
+                xml.clone(),
+                r#"[{"op":"delete","targets":["1"]},{"op":"delete","targets":["9_9"]}]"#.into(),
+            )
+            .unwrap();
+        let err = bad.error.unwrap();
+        assert_eq!(err.op, Some(1));
+        assert!(err.info.detail.contains("address_unresolved"));
+        assert_eq!(bad.xml, "");
+
+        let malformed = server.edit_xml(xml, "not json".into()).unwrap();
+        assert!(malformed.error.unwrap().info.detail.contains("internal"));
     }
 
     fn attr_of(xml: &str, tag: &str, attr: &str) -> String {

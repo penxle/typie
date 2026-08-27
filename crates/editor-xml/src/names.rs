@@ -259,13 +259,10 @@ pub fn node_attrs(node: &PlainNode) -> Attrs {
         PlainNode::TableRow(PlainTableRowNode {}) => {}
         PlainNode::TableCell(PlainTableCellNode {
             col_width,
-            background_color,
+            background_color: _,
         }) => {
             if let Some(w) = col_width {
                 out.insert("col_width".into(), w.to_string());
-            }
-            if let Some(c) = background_color {
-                out.insert("background_color".into(), c.clone());
             }
         }
         PlainNode::Image(PlainImageNode { id, proportion }) => {
@@ -324,7 +321,7 @@ pub fn node_from_attrs(t: NodeType, attrs: &Attrs) -> Result<PlainNode, XmlError
         ],
         NodeType::Blockquote | NodeType::Callout | NodeType::HorizontalRule => &["variant"],
         NodeType::Table => &["border_style", "proportion"],
-        NodeType::TableCell => &["col_width", "background_color"],
+        NodeType::TableCell => &["col_width"],
         NodeType::Image => &["id", "proportion"],
         NodeType::File | NodeType::Embed | NodeType::Archived => &["id"],
         _ => &[],
@@ -390,7 +387,7 @@ pub fn node_from_attrs(t: NodeType, attrs: &Attrs) -> Result<PlainNode, XmlError
         NodeType::TableRow => PlainNode::TableRow(PlainTableRowNode {}),
         NodeType::TableCell => PlainNode::TableCell(PlainTableCellNode {
             col_width: get("col_width").map(|_| num("col_width")).transpose()?,
-            background_color: get("background_color").map(str::to_owned),
+            background_color: None,
         }),
         NodeType::Image => PlainNode::Image(PlainImageNode {
             id: get("id").map(str::to_owned),

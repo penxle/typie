@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Pos {
     pub line: u32,
     pub column: u32,
@@ -142,6 +142,29 @@ pub enum XmlErrorDetail {
     BaseUndecodable,
     #[error("`base` heads are not in this document's history")]
     BaseNotInHistory,
+
+    #[error("`{value}` is not an address; use a dot, an ordinal path like 3.1.2, or root")]
+    AddressInvalid { value: String },
+    #[error("no block at `{value}`")]
+    AddressUnresolved { value: String },
+    #[error("<root> cannot be deleted, replaced, moved or set")]
+    RootNotEditable,
+    #[error("nothing can be placed before or after <root>")]
+    RootHasNoSiblings,
+    #[error("<{element}> cannot hold block children")]
+    TargetNotContainer { element: String },
+    #[error("{target} cannot be moved into itself")]
+    MoveIntoSelf { target: String },
+    #[error("{inner} is inside {outer}; give only the outer one")]
+    TargetsNested { outer: String, inner: String },
+    #[error("replace takes exactly one element, got {count}")]
+    FragmentNotSingle { count: usize },
+    #[error("`{key}` cannot be set; only attr:, mod: and carry: keys can")]
+    SetKeyUnknown { key: String },
+    #[error("fragment has no block element")]
+    FragmentEmpty,
+    #[error("fragment must start with a block element")]
+    FragmentNotBlock,
 
     #[error("document projection is degraded; refusing to edit through xml")]
     ProjectionDegraded,
