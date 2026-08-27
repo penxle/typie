@@ -432,7 +432,7 @@ describe('Prism panel indicator', () => {
   test('keeps the welcome message until the indicator leaves the welcome phase', async () => {
     const target = document.createElement('div');
     const props = reactiveProps({
-      phase: 'welcome' as 'submitting' | 'welcome',
+      phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
       reducedMotion: true,
       welcomeMessageVisible: true,
     });
@@ -472,12 +472,9 @@ describe('Prism panel indicator', () => {
 
   test('keeps the SVG icon idle and hands submission directly to the row spinner with reduced motion', async () => {
     const target = document.createElement('div');
-    const owners: string[] = [];
+    const rowSpinner = destination();
     const props = reactiveProps({
-      destination: destination() as HTMLElement | undefined,
-      onSpinnerOwnerChange: (owner: string) => {
-        owners.push(owner);
-      },
+      destination: rowSpinner as HTMLElement | undefined,
       phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
       reducedMotion: true,
     });
@@ -486,8 +483,7 @@ describe('Prism panel indicator', () => {
       await tick();
       setSourceRect(target);
       expect(runtime.object.whenReady).not.toHaveBeenCalled();
-      expect(runtime.mountObject).not.toHaveBeenCalled();
-      expect(target.querySelector('[data-prism-indicator-static-icon]')).not.toBeNull();
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('icon');
 
       await vi.advanceTimersByTimeAsync(700);
       runtime.emit({ readiness: 'ready' });
@@ -499,13 +495,14 @@ describe('Prism panel indicator', () => {
 
       props.phase = 'submitting';
       await tick();
-      expect(owners.at(-1)).toBe('row');
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
+      expect(rowSpinner.style.opacity).toBe('');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', expect.anything());
 
       props.phase = 'failed';
       await tick();
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).not.toBe('hidden');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
+      expect(rowSpinner.style.opacity).toBe('0');
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
     } finally {
       await unmount(component);
@@ -514,12 +511,8 @@ describe('Prism panel indicator', () => {
 
   test('hands submission directly to the row spinner when the 3D object preference is disabled', async () => {
     const target = document.createElement('div');
-    const owners: string[] = [];
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
-      onSpinnerOwnerChange: (owner: string) => {
-        owners.push(owner);
-      },
       phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
       prismEnabled: false,
     });
@@ -533,8 +526,7 @@ describe('Prism panel indicator', () => {
       props.phase = 'submitting';
       await tick();
 
-      expect(owners.at(-1)).toBe('row');
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', expect.anything());
 
       runtime.object.setTarget.mockClear();
@@ -552,6 +544,7 @@ describe('Prism panel indicator', () => {
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
       phase: 'welcome' as 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000,
     });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
@@ -562,7 +555,10 @@ describe('Prism panel indicator', () => {
       await tick();
       stepAnimationFrame();
       await tick();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { totalDurationMs: 2200 });
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', {
+        spinnerPlaybackStartedAt: 1000,
+        totalDurationMs: 2200,
+      });
 
       const actor = target.querySelector<HTMLElement>('[data-prism-indicator-actor]');
       runtime.emit({ journeyProgress: 0.25, owner: 'webgpu', requestedTarget: 'spinner', settledTarget: null });
@@ -574,7 +570,7 @@ describe('Prism panel indicator', () => {
       expect(actor?.style.transform).not.toBe(quarterTransform);
       expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
 
-      runtime.emit({ journeyProgress: 1, owner: 'atlas', settledTarget: 'spinner' });
+      runtime.emit({ journeyProgress: 1, owner: 'atlas', settledTarget: null });
       expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
     } finally {
       await unmount(component);
@@ -586,6 +582,7 @@ describe('Prism panel indicator', () => {
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
       phase: 'welcome' as 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000,
     });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
@@ -600,7 +597,7 @@ describe('Prism panel indicator', () => {
       const source = target.querySelector<HTMLElement>('[data-prism-indicator-source]');
       if (!source) throw new Error('missing indicator source');
       source.getBoundingClientRect = () => rect(220, 300);
-      runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: 'spinner' });
+      runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: null });
 
       expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.transform).toBe('translate3d(-180px, -220px, 0px)');
     } finally {
@@ -610,13 +607,10 @@ describe('Prism panel indicator', () => {
 
   test('hands an in-flight submission to the row spinner when the renderer becomes unavailable', async () => {
     const target = document.createElement('div');
-    const owners: string[] = [];
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
-      onSpinnerOwnerChange: (owner: string) => {
-        owners.push(owner);
-      },
       phase: 'welcome' as 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000,
     });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
@@ -632,52 +626,19 @@ describe('Prism panel indicator', () => {
       runtime.emit({ readiness: 'unavailable' });
       await tick();
 
-      expect(owners.at(-1)).toBe('row');
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
     } finally {
       await unmount(component);
     }
   });
 
-  test('keeps the admitted actor through an early answer and removes it after arrival', async () => {
+  test.each(['answered', 'failed'] as const)('removes a partial morph immediately when the request is %s', async (terminalPhase) => {
     const target = document.createElement('div');
+    const rowSpinner = destination();
     const props = reactiveProps({
-      destination: undefined as HTMLElement | undefined,
-      phase: 'welcome' as 'answered' | 'submitting' | 'welcome',
-    });
-    const component = mount(PrismPanelIndicator, { target, props });
-    try {
-      await tick();
-      setSourceRect(target);
-      runtime.emit({ readiness: 'ready' });
-      props.destination = destination();
-      props.phase = 'submitting';
-      await tick();
-      stepAnimationFrame();
-      await tick();
-
-      runtime.emit({ journeyProgress: 0.5, owner: 'webgpu', requestedTarget: 'spinner', settledTarget: null });
-      const actor = target.querySelector<HTMLElement>('[data-prism-indicator-actor]');
-      expect(actor?.style.transform).not.toBe('translate3d(0px, 0px, 0px)');
-
-      props.phase = 'answered';
-      props.destination = undefined;
-      await tick();
-      expect(runtime.object.destroy).not.toHaveBeenCalled();
-
-      runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: 'spinner' });
-      await tick();
-      expect(runtime.object.destroy).toHaveBeenCalledOnce();
-    } finally {
-      await unmount(component);
-    }
-  });
-
-  test('reverses a partial morph and its current screen position together', async () => {
-    const target = document.createElement('div');
-    const props = reactiveProps({
-      destination: destination() as HTMLElement | undefined,
-      phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
+      destination: rowSpinner as HTMLElement | undefined,
+      phase: 'welcome' as 'answered' | 'failed' | 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000,
     });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
@@ -691,30 +652,25 @@ describe('Prism panel indicator', () => {
 
       runtime.emit({ journeyProgress: 0.4, owner: 'webgpu', requestedTarget: 'spinner', settledTarget: null });
       const actor = target.querySelector<HTMLElement>('[data-prism-indicator-actor]');
-      const departureTransform = actor?.style.transform;
-      expect(departureTransform).not.toBe('translate3d(0px, 0px, 0px)');
+      expect(actor?.style.transform).not.toBe('translate3d(0px, 0px, 0px)');
 
-      props.phase = 'failed';
+      props.phase = terminalPhase;
       await tick();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism', { totalDurationMs: 880 });
-
-      runtime.emit({ journeyProgress: 0, requestedTarget: 'prism' });
-      expect(actor?.style.transform).toBe(departureTransform);
-      runtime.emit({ journeyProgress: 0.5 });
-      expect(actor?.style.transform).not.toBe(departureTransform);
-      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
-      runtime.emit({ journeyProgress: 1, settledTarget: 'prism' });
-      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
+      expect(runtime.object.destroy).toHaveBeenCalledOnce();
+      expect(rowSpinner.style.opacity).toBe('0');
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism', expect.anything());
     } finally {
       await unmount(component);
     }
   });
 
-  test('returns an arrived spinner along the same path without a position jump', async () => {
+  test('reveals the row APNG atomically when the atlas bridge reaches frame zero', async () => {
     const target = document.createElement('div');
+    const rowSpinner = destination();
     const props = reactiveProps({
-      destination: destination() as HTMLElement | undefined,
-      phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
+      destination: rowSpinner as HTMLElement | undefined,
+      phase: 'welcome' as 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000,
     });
     const component = mount(PrismPanelIndicator, { target, props });
     try {
@@ -725,36 +681,61 @@ describe('Prism panel indicator', () => {
       await tick();
       stepAnimationFrame();
       await tick();
-      runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: 'spinner' });
+      expect(rowSpinner.style.opacity).toBe('0');
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', {
+        spinnerPlaybackStartedAt: 1000,
+        totalDurationMs: 2200,
+      });
 
       const actor = target.querySelector<HTMLElement>('[data-prism-indicator-actor]');
+      runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: null });
       expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
-      runtime.object.setTarget.mockClear();
 
-      props.phase = 'failed';
+      runtime.emit({ settledTarget: 'spinner' });
       await tick();
-      expect(actor?.style.transform).toBe('translate3d(-160px, -220px, 0px)');
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism', { totalDurationMs: 2200 });
-
-      runtime.emit({ journeyProgress: 0, requestedTarget: 'prism', settledTarget: null });
-      runtime.emit({ journeyProgress: 0.5 });
-      expect(actor?.style.transform).not.toBe('translate3d(-160px, -220px, 0px)');
-      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
-      runtime.emit({ journeyProgress: 1, settledTarget: 'prism' });
-      expect(actor?.style.transform).toBe('translate3d(0px, 0px, 0px)');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
+      expect(rowSpinner.style.opacity).toBe('');
     } finally {
       await unmount(component);
     }
   });
 
-  test('uses row APNG ownership atomically when submission starts before readiness', async () => {
+  test('falls back to the existing row spinner when its APNG run fails', async () => {
     const target = document.createElement('div');
-    const owners: string[] = [];
+    const rowSpinner = destination();
+    const props = reactiveProps({
+      destination: rowSpinner as HTMLElement | undefined,
+      phase: 'welcome' as 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000 as number | null,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      setSourceRect(target);
+      runtime.emit({ readiness: 'ready' });
+      props.phase = 'submitting';
+      await tick();
+      stepAnimationFrame();
+      await tick();
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', {
+        spinnerPlaybackStartedAt: 1000,
+        totalDurationMs: 2200,
+      });
+
+      props.rowSpinnerPlaybackStartedAt = null;
+      await tick();
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
+      expect(rowSpinner.style.opacity).toBe('');
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('never starts a late morph after an early failure', async () => {
+    const target = document.createElement('div');
     const props = reactiveProps({
       destination: destination() as HTMLElement | undefined,
-      onSpinnerOwnerChange: (owner: string) => {
-        owners.push(owner);
-      },
       phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
     });
     const component = mount(PrismPanelIndicator, { target, props });
@@ -764,16 +745,15 @@ describe('Prism panel indicator', () => {
       props.phase = 'submitting';
       await tick();
       stepAnimationFrame();
-      expect(owners.at(-1)).toBe('row');
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
 
       runtime.emit({ readiness: 'ready' });
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', { totalDurationMs: 2200 });
 
       props.phase = 'failed';
       await tick();
-      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).not.toBe('hidden');
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
+      expect(target.querySelector('[data-prism-indicator-actor]')).toBeNull();
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
     } finally {
       await unmount(component);
     }

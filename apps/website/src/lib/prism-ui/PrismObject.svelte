@@ -11,6 +11,7 @@
     onStateChange?: (snapshot: PrismRuntimeSnapshot) => void;
     preload?: boolean;
     reducedMotion?: boolean;
+    spinnerPlaybackStartedAt?: number;
     target: PrismTarget;
     targetDurationMs?: number;
   };
@@ -22,6 +23,7 @@
     onStateChange,
     preload = false,
     reducedMotion = false,
+    spinnerPlaybackStartedAt,
     target,
     targetDurationMs,
     ...rest
@@ -35,7 +37,7 @@
       ...(interactive && { interactive: true }),
       preload,
       reducedMotion,
-      target,
+      target: 'icon',
     });
     const unsubscribe = mounted.subscribe((snapshot) => onStateChange?.(snapshot));
     if (preload) void mounted.whenReady();
@@ -49,8 +51,13 @@
   $effect(() => {
     const nextTarget = target;
     const duration = targetDurationMs;
-    if (duration === undefined) mounted?.setTarget(nextTarget);
-    else mounted?.setTarget(nextTarget, { totalDurationMs: duration });
+    const playbackStartedAt = spinnerPlaybackStartedAt;
+    const requestOptions = {
+      ...(nextTarget === 'spinner' && playbackStartedAt !== undefined && { spinnerPlaybackStartedAt: playbackStartedAt }),
+      ...(duration !== undefined && { totalDurationMs: duration }),
+    };
+    if (Object.keys(requestOptions).length === 0) mounted?.setTarget(nextTarget);
+    else mounted?.setTarget(nextTarget, requestOptions);
   });
 
   $effect(() => {

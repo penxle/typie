@@ -12,7 +12,6 @@
   import type { PrismIndicatorPath, PrismIndicatorPoint } from './lib/prism-indicator-path.ts';
 
   export type PrismIndicatorPhase = 'answered' | 'failed' | 'hidden' | 'submitting' | 'welcome';
-  export type PrismSpinnerOwner = 'panel' | 'row';
 
   const PRISM_TO_SPINNER_DURATION_MS = 2200;
   const PRISM_TO_SPINNER_PRESENTATION_END_PROGRESS = 5 / 11;
@@ -22,31 +21,30 @@
   type Props = {
     destination?: HTMLElement;
     onPrismAvailabilityChange?: (available: boolean) => void;
-    onSpinnerOwnerChange?: (owner: PrismSpinnerOwner) => void;
     phase: PrismIndicatorPhase;
     prismEnabled?: boolean;
     reducedMotion?: boolean;
+    rowSpinnerPlaybackStartedAt?: number | null;
     themeVariant?: ThemeVariant;
     welcomeAdmission?: boolean;
   };
 
-  type Mode = 'arrived' | 'candidate' | 'fallback' | 'idle' | 'morphing' | 'returning';
+  type Mode = 'arrived' | 'candidate' | 'fallback' | 'idle' | 'morphing';
 
   let {
     destination,
     onPrismAvailabilityChange,
-    onSpinnerOwnerChange,
     phase,
     prismEnabled = true,
     reducedMotion = typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    rowSpinnerPlaybackStartedAt,
     themeVariant,
     welcomeAdmission = true,
   }: Props = $props();
   let actor = $state<HTMLDivElement>();
   let actorMounted = $state(true);
-  let actorVisible = $state(true);
   let prismRendererMounted = $state(!reducedMotion);
   const edgeColor = $derived(themeVariant ? themeData.variants[themeVariant]['ui.border.default'] : undefined);
   let mode = $state<Mode>('idle');
@@ -61,6 +59,7 @@
   let source: HTMLSpanElement;
   let target = $state<PrismTarget>('icon');
   let targetDurationMs: number | undefined = $state();
+  let targetSpinnerPlaybackStartedAt: number | undefined = $state();
   const interactive = $derived(!reducedMotion && mode === 'idle' && target === 'prism' && snapshot.settledTarget === 'prism');
   let dwellTimer: ReturnType<typeof setTimeout> | undefined;
   let dwellElapsed = false;
@@ -72,9 +71,8 @@
   let destroyed = false;
   let admissionFrame = 0;
   let followerFrame = 0;
-  let returnStartProgress = 0;
   let prismAvailable: boolean | undefined;
-  let spinnerOwner: PrismSpinnerOwner | undefined;
+  let hiddenRowSpinner: HTMLElement | undefined;
   const welcomeMessageEligible = $derived(!prismEnabled || target === 'prism' || reducedMotion || snapshot.readiness === 'unavailable');
   let welcomeMessageAdmitted = $state(false);
   const showWelcomeMessage = $derived(phase === 'welcome' && (welcomeMessageEligible || welcomeMessageAdmitted));
@@ -84,10 +82,16 @@
     return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
   };
 
-  const setSpinnerOwner = (owner: PrismSpinnerOwner) => {
-    if (spinnerOwner === owner) return;
-    spinnerOwner = owner;
-    onSpinnerOwnerChange?.(owner);
+  const hideRowSpinner = (element: HTMLElement | undefined) => {
+    if (!element || hiddenRowSpinner === element) return;
+    hiddenRowSpinner?.style.removeProperty('opacity');
+    hiddenRowSpinner = element;
+    hiddenRowSpinner.style.setProperty('opacity', '0');
+  };
+
+  const showRowSpinner = () => {
+    hiddenRowSpinner?.style.removeProperty('opacity');
+    hiddenRowSpinner = undefined;
   };
 
   const setPrismAvailable = (available: boolean) => {
@@ -206,9 +210,9 @@
     cancelAdmission();
     stopFollowing();
     mode = 'fallback';
-    actorVisible = false;
+    actorMounted = false;
     if (actor) actor.style.transform = 'translate3d(0px, 0px, 0px)';
-    setSpinnerOwner('row');
+    showRowSpinner();
   };
 
   const settleStaticPresentation = () => {
@@ -225,14 +229,12 @@
     }
     if (phase === 'answered' || phase === 'hidden') {
       actorMounted = false;
-      setSpinnerOwner('row');
+      hideRowSpinner(destination);
       return;
     }
 
     mode = 'idle';
-    actorVisible = true;
     if (actor) actor.style.transform = 'translate3d(0px, 0px, 0px)';
-    if (spinnerOwner === 'panel') setSpinnerOwner('row');
   };
 
   const followDestination = () => {
@@ -258,25 +260,22 @@
     if (!path || mode !== 'morphing') return;
     placeAt(path.p3);
     mode = 'arrived';
-    if (phase === 'answered') {
-      actorMounted = false;
-      setSpinnerOwner('row');
-      return;
-    }
     followDestination();
-  };
-
-  const startMorphReturn = (durationMs: number | undefined, screenProgress: number) => {
-    returnStartProgress = screenProgress;
-    mode = 'returning';
-    targetDurationMs = durationMs;
-    target = 'prism';
   };
 
   const admit = (nextDestination: HTMLElement) => {
     admissionFrame = 0;
     if (mode !== 'candidate' || phase !== 'submitting') return;
     if (reducedMotion || snapshot.readiness !== 'ready') {
+      fallbackToRow();
+      return;
+    }
+
+    const playbackStartedAt = rowSpinnerPlaybackStartedAt;
+    if (playbackStartedAt === undefined) {
+      return;
+    }
+    if (playbackStartedAt === null) {
       fallbackToRow();
       return;
     }
@@ -289,9 +288,7 @@
     }
 
     mode = 'morphing';
-    returnStartProgress = 0;
-    actorVisible = true;
-    setSpinnerOwner('panel');
+    targetSpinnerPlaybackStartedAt = playbackStartedAt;
     targetDurationMs = PRISM_TO_SPINNER_DURATION_MS;
     target = 'spinner';
   };
@@ -305,55 +302,31 @@
     clearDwell();
     if (mode !== 'idle' && mode !== 'candidate') return;
     if (mode === 'idle') {
-      if (!prismEnabled || reducedMotion || snapshot.readiness !== 'ready') {
+      if (!actorMounted || !prismEnabled || reducedMotion || snapshot.readiness !== 'ready') {
         fallbackToRow();
         return;
       }
       mode = 'candidate';
-      setSpinnerOwner('panel');
     }
     scheduleAdmission(nextDestination);
   };
 
-  const fail = () => {
-    clearDwell();
-    cancelAdmission();
-
-    if (mode === 'fallback' || mode === 'candidate' || mode === 'idle') {
-      mode = 'idle';
-      actorVisible = true;
-      if (actor) actor.style.transform = 'translate3d(0px, 0px, 0px)';
-      targetDurationMs = undefined;
-      target = !prismEnabled || reducedMotion || snapshot.readiness === 'unavailable' ? 'icon' : 'prism';
-      return;
-    }
-
-    if (mode === 'morphing') {
-      const progress = Math.max(0, Math.min(1, snapshot.journeyProgress ?? 0));
-      startMorphReturn(progress === 0 ? undefined : PRISM_TO_SPINNER_DURATION_MS * progress, presentationProgress(progress));
-      return;
-    }
-    if (mode === 'arrived') {
-      stopFollowing();
-      startMorphReturn(2200, 1);
-    }
-  };
-
-  const answer = () => {
-    clearDwell();
-    cancelAdmission();
-    if (mode === 'morphing') return;
-    stopFollowing();
-    actorMounted = false;
-    setSpinnerOwner('row');
-  };
-
-  const hide = () => {
+  const finishSubmission = () => {
     clearDwell();
     cancelAdmission();
     stopFollowing();
+    targetDurationMs = undefined;
+    targetSpinnerPlaybackStartedAt = undefined;
+    path = null;
+    mode = 'idle';
     actorMounted = false;
-    setSpinnerOwner('row');
+    hideRowSpinner(destination);
+  };
+
+  const completeHandoff = () => {
+    stopFollowing();
+    actorMounted = false;
+    showRowSpinner();
   };
 
   const handleSnapshot = (next: PrismRuntimeSnapshot) => {
@@ -379,19 +352,14 @@
         }
       }
       placeAtProgress(presentationProgress(progress));
-      if (progress === 1) arrive();
+      if (progress === 1) {
+        if (next.settledTarget === 'spinner') completeHandoff();
+        else arrive();
+      }
       return;
     }
-
-    if (mode === 'returning') {
-      const progress = next.settledTarget === 'prism' ? 1 : Math.max(0, Math.min(1, next.journeyProgress ?? 0));
-      placeAtProgress(returnStartProgress * (1 - presentationProgress(progress)));
-      if (progress === 1) {
-        placeAtProgress(0);
-        mode = 'idle';
-        actorVisible = true;
-      }
-    }
+    if (mode === 'arrived' && next.settledTarget === 'spinner') completeHandoff();
+    if (mode === 'candidate') scheduleAdmission(destination);
   };
 
   onMount(() => {
@@ -418,6 +386,7 @@
     clearDwell();
     cancelAdmission();
     stopFollowing();
+    showRowSpinner();
   });
 
   $effect(() => {
@@ -455,11 +424,18 @@
   $effect(() => {
     const nextPhase = phase;
     const nextDestination = destination;
+    const nextRowSpinnerPlaybackStartedAt = rowSpinnerPlaybackStartedAt;
     untrack(() => {
-      if (nextPhase === 'submitting') beginSubmission(nextDestination);
-      else if (nextPhase === 'failed') fail();
-      else if (nextPhase === 'answered') answer();
-      else if (nextPhase === 'hidden') hide();
+      if (nextPhase === 'submitting') {
+        if (mode !== 'fallback') hideRowSpinner(nextDestination);
+        if (nextRowSpinnerPlaybackStartedAt === null) {
+          fallbackToRow();
+          return;
+        }
+        beginSubmission(nextDestination);
+      } else if (nextPhase !== 'welcome') {
+        finishSubmission();
+      }
     });
   });
 </script>
@@ -470,7 +446,6 @@
       <div
         bind:this={actor}
         style:color={token('colors.border.default')}
-        style:visibility={actorVisible ? undefined : 'hidden'}
         style:transform="translate3d(0px, 0px, 0px)"
         class="actor"
         data-prism-indicator-actor
@@ -482,6 +457,7 @@
             onStateChange={handleSnapshot}
             preload={!reducedMotion}
             {reducedMotion}
+            spinnerPlaybackStartedAt={targetSpinnerPlaybackStartedAt}
             {target}
             {targetDurationMs}
           />

@@ -3,17 +3,23 @@
   import { flex } from '@typie/styled-system/patterns';
   import PrismSpinner from '$lib/prism-ui/PrismSpinner.svelte';
   import { expand, rise } from './lib/motion.ts';
+  import type { PrismRuntimeSnapshot } from '@typie/prism-ui';
   import type { SystemStyleObject } from '@typie/styled-system/types';
 
   type Props = {
     label: string;
+    onSpinnerPlaybackChange?: (startedAt: number | null) => void;
     spinnerAnchor?: HTMLElement;
-    spinnerOwner?: 'panel' | 'row';
     text: string | null;
     style?: SystemStyleObject;
   };
 
-  let { label, spinnerAnchor = $bindable(), spinnerOwner = 'row', text, style }: Props = $props();
+  let { label, onSpinnerPlaybackChange, spinnerAnchor = $bindable(), text, style }: Props = $props();
+
+  const handleSpinnerStateChange = (snapshot: PrismRuntimeSnapshot) => {
+    if (snapshot.playbackStartedAt !== undefined) onSpinnerPlaybackChange?.(snapshot.playbackStartedAt);
+    else if (snapshot.readiness !== 'loading') onSpinnerPlaybackChange?.(null);
+  };
 
   const rowStyle = flex.raw({ alignItems: 'center', gap: '8px', minHeight: '20px', fontSize: '12px', color: 'text.faint' });
   const shimmerClass = css({
@@ -33,9 +39,7 @@
     class={css({ display: 'grid', flexShrink: '0', size: '18px', placeItems: 'center' })}
     data-prism-spinner-anchor
   >
-    {#if spinnerOwner === 'row'}
-      <PrismSpinner {label} />
-    {/if}
+    <PrismSpinner {label} onStateChange={handleSpinnerStateChange} />
   </span>
   {#if text !== null}
     <span class={shimmerClass} transition:rise>{text}</span>

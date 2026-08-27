@@ -192,6 +192,7 @@ export type FixedPrismSpinnerTrajectory = {
 
 type FixedPrismSpinnerTrajectoryOptions = {
   frameCount: number;
+  handoffFrameIndex?: number;
   prismVelocity: number;
   spinnerVelocity: number;
   startAngularVelocity?: Vector3;
@@ -628,6 +629,13 @@ function orientationCurveScore(curve: PrismSpinnerOrientationCurve): number {
 
 export function createFixedPrismSpinnerTrajectory(options: FixedPrismSpinnerTrajectoryOptions): FixedPrismSpinnerTrajectory {
   const frameCount = requireFrameCount(options.frameCount);
+  const handoffFrameIndex = options.handoffFrameIndex;
+  if (
+    handoffFrameIndex !== undefined &&
+    (!Number.isSafeInteger(handoffFrameIndex) || handoffFrameIndex < 0 || handoffFrameIndex >= frameCount)
+  ) {
+    throw new RangeError('Spinner handoff frame index must be within the atlas frame count.');
+  }
   const startProgress = clamp(Number(options.startProgress) || 0);
   const targetProgress = clamp(Number(options.targetProgress) || 0);
   const durationSeconds = Math.max(Number(options.totalDurationSeconds) || 0, EPSILON);
@@ -646,7 +654,15 @@ export function createFixedPrismSpinnerTrajectory(options: FixedPrismSpinnerTraj
     let endPhase = startPhase + durationSeconds * (startVelocity + endVelocity) * 0.5;
     let handoff: SpinnerHandoff | null = null;
     if (targetProgress >= 1 - EPSILON) {
-      handoff = nextForwardSpinnerFrame(startPhase, durationSeconds * (startVelocity + endVelocity) * 0.5, frameCount);
+      handoff =
+        handoffFrameIndex === undefined
+          ? nextForwardSpinnerFrame(startPhase, durationSeconds * (startVelocity + endVelocity) * 0.5, frameCount)
+          : nextForwardSpinnerFrameAtIndex(
+              startPhase,
+              durationSeconds * (startVelocity + endVelocity) * 0.5,
+              frameCount,
+              handoffFrameIndex,
+            );
       endPhase = handoff.worldPhase;
     }
     const velocityControls = createEndpointVelocityControls(startPhase, endPhase, startVelocity, endVelocity, durationSeconds);
@@ -695,7 +711,9 @@ export function createFixedPrismSpinnerTrajectory(options: FixedPrismSpinnerTraj
     for (let travelOffset = -16; travelOffset <= 40; travelOffset += 2) {
       const extraTravel = travelOffset * 0.04;
       const handoff = opening
-        ? nextForwardSpinnerFrame(matchPhase, Math.max(remainingNaturalTravel + extraTravel, 0.02), frameCount)
+        ? handoffFrameIndex === undefined
+          ? nextForwardSpinnerFrame(matchPhase, Math.max(remainingNaturalTravel + extraTravel, 0.02), frameCount)
+          : nextForwardSpinnerFrameAtIndex(matchPhase, Math.max(remainingNaturalTravel + extraTravel, 0.02), frameCount, handoffFrameIndex)
         : null;
       let endPhase = handoff?.worldPhase ?? startPhase + Math.max(naturalTotalTravel + extraTravel, 0.02);
       while (endPhase <= matchPhase + EPSILON) endPhase += 0.5;
@@ -975,6 +993,22 @@ export function nextForwardSpinnerFrame(startWorldPhase: number, naturalTravel: 
   return candidates.reduce((best, candidate) =>
     Math.abs(candidate.worldPhase - desired) < Math.abs(best.worldPhase - desired) ? candidate : best,
   );
+}
+
+function nextForwardSpinnerFrameAtIndex(
+  startWorldPhase: number,
+  naturalTravel: number,
+  frameCount: number,
+  frameIndex: number,
+): SpinnerHandoff {
+  const count = requireFrameCount(frameCount);
+  const start = startWorldPhase || 0;
+  const desired = start + Math.max(naturalTravel || 0, 0);
+  const framePhase = spinnerPhaseForFrameIndex(frameIndex, count);
+  const basePhase = spinnerPhaseToWorldPhase(framePhase, 0);
+  const firstForwardTurn = Math.floor(start + EPSILON - basePhase) + 1;
+  const turn = Math.max(firstForwardTurn, Math.round(desired - basePhase));
+  return { frameIndex, framePhase, worldPhase: basePhase + turn };
 }
 
 export function nextForwardSpinnerSilhouettePhase(startWorldPhase: number, naturalTravel: number): number {

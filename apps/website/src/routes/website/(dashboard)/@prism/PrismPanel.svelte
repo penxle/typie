@@ -359,7 +359,7 @@
     selected.current === null ? 'welcome' : 'hidden',
   );
   let prismObjectAvailable = $state(false);
-  let indicatorSpinnerOwner = $state<'panel' | 'row'>('row');
+  let indicatorSpinnerPlaybackStartedAt = $state<number | null>();
   let indicatorWaitSeen = $state(false);
   const chipsVisible = $derived(emptySession && draft.length === 0);
   const chipClass = css({
@@ -432,13 +432,9 @@
     untrack(() => {
       indicatorDestination = undefined;
       indicatorPhase = selected.current === null ? 'welcome' : 'hidden';
-      indicatorSpinnerOwner = 'row';
+      indicatorSpinnerPlaybackStartedAt = undefined;
       indicatorWaitSeen = false;
     });
-  });
-
-  $effect.pre(() => {
-    if (!app.preference.current.prismPanelOpen) indicatorSpinnerOwner = 'row';
   });
 
   $effect(() => {
@@ -733,10 +729,9 @@
 
   const onSend = async (text: string) => {
     const creating = chat.sessionId === null;
-    if (creating) {
-      indicatorWaitSeen = false;
-      indicatorPhase = 'submitting';
-    }
+    indicatorWaitSeen = false;
+    indicatorSpinnerPlaybackStartedAt = undefined;
+    indicatorPhase = 'submitting';
 
     try {
       const result = await chat.send(text);
@@ -761,7 +756,7 @@
         Toast.error('메시지를 보내지 못했어요. 잠시 후 다시 시도해 주세요');
       }
 
-      if (creating) indicatorPhase = 'failed';
+      indicatorPhase = 'failed';
 
       throw err;
     }
@@ -998,9 +993,9 @@
           <PrismPanelIndicator
             destination={indicatorDestination}
             onPrismAvailabilityChange={(available) => (prismObjectAvailable = available)}
-            onSpinnerOwnerChange={(owner) => (indicatorSpinnerOwner = owner)}
             phase={indicatorPhase}
             prismEnabled={app.preference.current.prismWelcomeObjectEnabled}
+            rowSpinnerPlaybackStartedAt={indicatorSpinnerPlaybackStartedAt}
             themeVariant={theme.currentThemeVariant}
             {welcomeAdmission}
           />
@@ -1013,11 +1008,11 @@
           loading={chat.loading}
           onResolve={resolveTool}
           onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
+          onSpinnerPlaybackChange={(startedAt) => (indicatorSpinnerPlaybackStartedAt = startedAt)}
           pending={chat.pending}
           {policy}
           reconnecting={disconnected}
           sessionId={chat.sessionId}
-          spinnerOwner={indicatorSpinnerOwner}
           transcript={chat.transcript}
           unavailableMessage={accessUnavailableMessage}
           bind:waitSpinnerAnchor={indicatorDestination}
