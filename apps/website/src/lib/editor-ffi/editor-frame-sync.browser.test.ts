@@ -629,6 +629,24 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it('resolves pointer coordinates from the document track without measuring individual pages', async () => {
+    const { editor } = await mountEditor(paginatedDocWithPageBreaks(3));
+    await waitForPresentation(editor);
+    await tick();
+    const firstPage = editor.pageEls[0];
+    expect(firstPage).toBeDefined();
+    expect(editor.documentTrackEl).toBe(document.querySelector('[data-editor-document-track]'));
+    if (!firstPage) throw new Error('Expected the first page element');
+    const firstPageRect = firstPage.getBoundingClientRect();
+    const pageMeasurements = Object.values(editor.pageEls).flatMap((page) => (page ? [vi.spyOn(page, 'getBoundingClientRect')] : []));
+    for (const measurePage of pageMeasurements) measurePage.mockClear();
+
+    const local = editor.clientToLocal(firstPageRect.left + 10, firstPageRect.top + 20);
+
+    expect(local).toMatchObject({ page: 0, x: 10, y: 20 });
+    for (const measurePage of pageMeasurements) expect(measurePage).not.toHaveBeenCalled();
+  });
+
   it('reveals search matches instantly while preserving smooth tracked-item reveals by default', async () => {
     const { editor } = await mountEditor(doc('match between match'));
     const reveals: Parameters<Editor['scrollIntoView']>[0][] = [];

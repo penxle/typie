@@ -1,12 +1,49 @@
 import { describe, expect, it } from 'vitest';
-import { EditorViewportAnchorState, resolveViewportAnchorGeometry } from './viewport-anchor';
+import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
 import type { ViewportAnchor } from '@typie/editor-ffi/browser';
+import type { EditorSnapshot } from './editor.svelte';
 
 const identity: ViewportAnchor = { type: 'node', node: '1:1', offset_x: 0, offset_y: 0 };
 const viewportIdentity: ViewportAnchor = { type: 'node', node: '2:1', offset_x: 0, offset_y: 0 };
 const visibleArea = { topInset: 0, bottomInset: 0 };
 
 describe('EditorViewportAnchorState', () => {
+  it('resolves the viewport center on both axes without DOM geometry', () => {
+    const snapshot = {
+      pageSizes: [{ width: 600, height: 1200 }],
+    } as EditorSnapshot;
+
+    expect(
+      viewportCenterAnchorPoint(
+        snapshot,
+        { pages: [{ page: 0, left: 100, top: 20, bottom: 1220 }], zoom: 2 },
+        { scrollLeft: 300, scrollTop: 220, clientWidth: 400, clientHeight: 200 },
+        { topInset: 20, bottomInset: 40 },
+      ),
+    ).toEqual({ page_idx: 0, x: 200, y: 145 });
+  });
+
+  it('uses the gap midpoint and clamps viewport centers to page bounds', () => {
+    const snapshot = {
+      pageSizes: [
+        { width: 600, height: 100 },
+        { width: 600, height: 100 },
+      ],
+    } as EditorSnapshot;
+    const layout = {
+      pages: [
+        { page: 0, left: 0, top: 0, bottom: 100 },
+        { page: 1, left: 0, top: 124, bottom: 224 },
+      ],
+      zoom: 1,
+    };
+
+    const metrics = (scrollTop: number) => ({ scrollLeft: 0, scrollTop, clientWidth: 600, clientHeight: 20 });
+    expect(viewportCenterAnchorPoint(snapshot, layout, metrics(100), visibleArea)).toMatchObject({ page_idx: 0, y: 100 });
+    expect(viewportCenterAnchorPoint(snapshot, layout, metrics(104), visibleArea)).toMatchObject({ page_idx: 1, y: 0 });
+    expect(viewportCenterAnchorPoint(snapshot, layout, metrics(300), visibleArea)).toMatchObject({ page_idx: 1, y: 100 });
+  });
+
   it('resolves page-local points through the displayed page origin and zoom on both axes', () => {
     const resolved = resolveViewportAnchorGeometry(
       { point: { page_idx: 0, x: 40, y: 50 }, rect: undefined },

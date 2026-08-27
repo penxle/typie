@@ -17,6 +17,7 @@ import co.typie.editor.runtime.EditorBoundsInContainer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorScrollResolverTest {
@@ -638,6 +639,54 @@ class EditorScrollResolverTest {
   }
 
   @Test
+  fun `selection head target height does not scan preceding pages`() {
+    val pageSizes = CountingPageSizes(List(128) { PageSize(width = 300f, height = 620f) })
+    val height =
+      resolveBringIntoViewTargetHeight(
+        state =
+          state(
+            cursor =
+              CursorMetrics(
+                pageIdx = pageSizes.lastIndex,
+                caret = FfiRect(0f, 580f, 0f, 20f),
+                line = FfiRect(0f, 580f, 0f, 20f),
+              ),
+            pageSizes = pageSizes,
+          ),
+        layoutSpec = paginatedLayout(),
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        displayZoom = 1f,
+      )
+
+    assertEquals(20f, requireNotNull(height), 0.0001f)
+    assertTrue(
+      pageSizes.readCount <= 2,
+      "Expected constant page-size reads, got ${pageSizes.readCount}",
+    )
+  }
+
+  @Test
+  fun `selection head target height preserves rect normalization and validation`() {
+    val negativeHeight =
+      resolveBringIntoViewTargetHeight(
+        state = unitSelectionState(FfiRect(0f, 20f, 0f, -16f)),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        displayZoom = 1.5f,
+      )
+    val invalid =
+      resolveBringIntoViewTargetHeight(
+        state = unitSelectionState(FfiRect(Float.NaN, 20f, 0f, 16f)),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 300f),
+        target = EditorBringIntoViewTarget.CurrentSelectionHead,
+        displayZoom = 1f,
+      )
+
+    assertEquals(24f, requireNotNull(negativeHeight), 0.0001f)
+    assertNull(invalid)
+  }
+
+  @Test
   fun `tracked item target height resolves from the vertical union across pages`() {
     val target = EditorBringIntoViewTarget.TrackedItem("comment-1")
     val rects =
@@ -763,4 +812,17 @@ class EditorScrollResolverTest {
       rects = rects,
       text = "comment",
     )
+
+  private class CountingPageSizes(private val values: List<PageSize>) : AbstractList<PageSize>() {
+    var readCount = 0
+      private set
+
+    override val size: Int
+      get() = values.size
+
+    override fun get(index: Int): PageSize {
+      readCount += 1
+      return values[index]
+    }
+  }
 }

@@ -448,6 +448,7 @@
           use:touchPanLock={ctx.editor.gesture.panLockActive}
         >
           <div
+            bind:this={ctx.editor.documentTrackEl}
             style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
             style:animation={contentAnimation}
             class={css({

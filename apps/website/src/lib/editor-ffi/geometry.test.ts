@@ -4,6 +4,8 @@ import {
   isSelectionCollapsed,
   pageRectsToRevealTargetSpan,
   pageRectsToVirtualElement,
+  resolveCachedPageSpans,
+  resolvePageAtY,
   resolvePageSpans,
   selectionHeadRect,
 } from './geometry';
@@ -32,17 +34,38 @@ describe('boundingClientRect', () => {
 describe('resolvePageSpans', () => {
   it('accumulates the same device-scale-rounded height used by each page slot', () => {
     expect(
-      resolvePageSpans([{ height: 221 }, { height: 221 }, { height: 221 }], {
+      resolvePageSpans([{ height: 223 }, { height: 223 }, { height: 223 }], {
         origin: 10,
         displayZoom: 0.75,
         scaleFactor: 2,
         pageGap: 9,
       }),
     ).toEqual([
-      { page: 0, top: 10, bottom: 176 },
-      { page: 1, top: 185, bottom: 351 },
-      { page: 2, top: 360, bottom: 526 },
+      { page: 0, top: 10, bottom: 177.5 },
+      { page: 1, top: 186.5, bottom: 354 },
+      { page: 2, top: 363, bottom: 530.5 },
     ]);
+  });
+
+  it('reuses page projections while their geometry inputs are unchanged', () => {
+    const pageSizes = [{ height: 221 }, { height: 221 }];
+    const options = { displayZoom: 0.75, scaleFactor: 2, pageGap: 9 };
+
+    const first = resolveCachedPageSpans(pageSizes, options);
+
+    expect(resolveCachedPageSpans(pageSizes, options)).toBe(first);
+    expect(resolveCachedPageSpans(pageSizes, { ...options, displayZoom: 1 })).not.toBe(first);
+    expect(resolveCachedPageSpans([...pageSizes], options)).not.toBe(first);
+  });
+
+  it('chooses the nearest page across gaps and clamps outside the document', () => {
+    const pageSizes = [{ height: 100 }, { height: 100 }];
+    const pages = resolvePageSpans(pageSizes, { pageGap: 24 });
+
+    expect(resolvePageAtY(pages, pageSizes, -20, 1)).toEqual({ page: 0, y: 0 });
+    expect(resolvePageAtY(pages, pageSizes, 110, 1)).toEqual({ page: 0, y: 100 });
+    expect(resolvePageAtY(pages, pageSizes, 114, 1)).toEqual({ page: 1, y: 0 });
+    expect(resolvePageAtY(pages, pageSizes, 300, 1)).toEqual({ page: 1, y: 100 });
   });
 });
 

@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { SvelteSet } from 'svelte/reactivity';
   import { PAGE_GAP } from '../constants';
-  import { resolvePageSpans, roundToScale } from '../geometry';
+  import { resolveCachedPageSpans, roundToScale } from '../geometry';
   import ExternalElement from './ExternalElement.svelte';
   import type { Editor } from '../editor.svelte';
 
@@ -19,7 +19,7 @@
   const isPaginated = $derived(layoutMode?.type === 'paginated');
   const displayZoom = $derived(editor.safeDisplayZoom());
   const pageSpans = $derived(
-    resolvePageSpans(editor.pageSizes, {
+    resolveCachedPageSpans(editor.pageSizes, {
       displayZoom,
       scaleFactor: editor.scaleFactor,
       pageGap: isPaginated ? PAGE_GAP * displayZoom : 0,

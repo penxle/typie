@@ -53,10 +53,7 @@ import co.typie.editor.Editor
 import co.typie.editor.PublishedBundle
 import co.typie.editor.SurfacePageSpan
 import co.typie.editor.VerticalSpan
-import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolveMeasuredPageLength
-import co.typie.editor.body.resolvePageContentTop
-import co.typie.editor.body.resolvePagesContentHeight
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
 import co.typie.editor.interaction.EditorScreenPointerSequence
@@ -755,14 +752,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
 }
 
 private fun resolveMaximumScrollX(frame: EditorScrollFrame): Float {
-  val bodyGeometry =
-    resolveEditorBodyGeometry(
-      visibleArea = frame.visibleArea,
-      layoutSpec = frame.layoutSpec,
-      pageSizes = frame.state.pageSizes,
-      displayZoom = frame.displayZoom,
-    )
-  return (bodyGeometry.pageColumnWidth - frame.visibleArea.viewport.width).coerceAtLeast(0f)
+  return (frame.bodyGeometry.pageColumnWidth - frame.visibleArea.viewport.width).coerceAtLeast(0f)
 }
 
 internal fun resolveEditorSurfacePreparation(
@@ -774,24 +764,12 @@ internal fun resolveEditorSurfacePreparation(
 ): EditorSurfacePreparation? {
   val state = scrollFrame.state
   val viewportHeight = scrollFrame.visibleArea.viewport.height
-  val bodyGeometry =
-    resolveEditorBodyGeometry(
-      visibleArea = scrollFrame.visibleArea,
-      layoutSpec = scrollFrame.layoutSpec,
-      pageSizes = state.pageSizes,
-      displayZoom = scrollFrame.displayZoom,
-    )
+  val bodyGeometry = scrollFrame.bodyGeometry
   val headerHeight = scrollFrame.headerHeight.takeIf(Float::isFinite) ?: 0f
   val resolvedContentOrigin = headerHeight + bodyGeometry.topSpacerHeight
   val pageSpans =
     state.pageSizes.mapIndexedNotNull { page, size ->
-      val pageTop =
-        scrollFrame.layoutSpec.resolvePageContentTop(
-          page = page,
-          pageSizes = state.pageSizes,
-          displayZoom = scrollFrame.displayZoom,
-          density = scrollFrame.density,
-        ) ?: return@mapIndexedNotNull null
+      val pageTop = scrollFrame.pageContentTop(page) ?: return@mapIndexedNotNull null
       val top = resolvedContentOrigin + pageTop
       SurfacePageSpan(
         page = page,
@@ -805,12 +783,7 @@ internal fun resolveEditorSurfacePreparation(
             ),
       )
     }
-  val pagesContentHeight =
-    scrollFrame.layoutSpec.resolvePagesContentHeight(
-      pageSizes = state.pageSizes,
-      displayZoom = scrollFrame.displayZoom,
-      density = scrollFrame.density,
-    )
+  val pagesContentHeight = scrollFrame.pagesContentHeight
   val contentExtent =
     headerHeight +
       maxOf(

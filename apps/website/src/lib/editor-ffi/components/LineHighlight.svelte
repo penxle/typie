@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { tryAppContext } from '@typie/ui/context';
   import { getEditorContext } from '../editor.svelte';
-  import { presentedPageElement, resolvePageSpans } from '../geometry';
+  import { presentedPageElement, resolveCachedPageSpans } from '../geometry';
 
   const { editor } = getEditorContext();
   const app = tryAppContext();
@@ -17,6 +17,8 @@
 
   const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
   const displayZoom = $derived(editor?.safeDisplayZoom() ?? 1);
+  const scaleFactor = $derived(editor?.scaleFactor ?? 1);
+  const pageSpans = $derived(!isPaginated && editor ? resolveCachedPageSpans(editor.pageSizes, { displayZoom, scaleFactor }) : []);
 
   const container = $derived.by(() => {
     if (!cursor || !editor) return;
@@ -27,7 +29,7 @@
   const top = $derived.by(() => {
     if (!cursor || !editor) return 0;
     if (isPaginated) return cursor.line.y;
-    const pageTop = resolvePageSpans(editor.pageSizes, { displayZoom })[cursor.page_idx]?.top ?? 0;
+    const pageTop = pageSpans[cursor.page_idx]?.top ?? 0;
     return pageTop + cursor.line.y * displayZoom;
   });
 
