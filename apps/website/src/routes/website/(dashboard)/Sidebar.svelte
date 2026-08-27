@@ -23,6 +23,7 @@
   import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
+  import { createEntityTreeRevealRequest, entityTreeRevealState } from './@tree/entity-reveal.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
@@ -618,6 +619,7 @@
               return;
             }
 
+            const ancestorFolderIds = [...app.state.ancestors];
             const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createFolder({
               input: {
@@ -631,7 +633,7 @@
 
             mixpanel.track('create_folder', { via: 'tree' });
 
-            app.state.newFolderId = resp.createFolder.id;
+            entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, ancestorFolderIds, true));
           }}
           type="button"
           use:tooltip={{ message: '새 폴더 생성' }}
@@ -652,6 +654,7 @@
               return;
             }
 
+            const ancestorFolderIds = [...app.state.ancestors];
             const { lowerOrder, upperOrder } = getAdjacentOrders();
 
             const resp = await createDocument({
@@ -665,6 +668,8 @@
             });
 
             mixpanel.track('create_document', { via: 'tree' });
+            const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, ancestorFolderIds, false);
+            entityTreeRevealState.set(revealRequest);
             await goto(`/${resp.createDocument.entity.slug}`);
           }}
           type="button"

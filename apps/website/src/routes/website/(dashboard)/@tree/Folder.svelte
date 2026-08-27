@@ -19,6 +19,7 @@
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
+  import { entityTreeRevealState, shouldOpenEntityTreeFolder } from './entity-reveal.svelte';
   import FolderTooltip from './FolderTooltip.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Folder_folder$key } from '$mearie';
@@ -187,22 +188,23 @@
     }
   });
 
+  $effect.pre(() => {
+    if (shouldOpenEntityTreeFolder(folder.data.entity.id)) {
+      open = true;
+    }
+  });
+
   $effect(() => {
-    if (app.state.newFolderId !== folder.data.id) {
+    const request = entityTreeRevealState.current;
+    if (request?.targetEntityId !== folder.data.entity.id) {
       return;
     }
 
-    editing = true;
-    app.state.newFolderId = undefined;
-
-    if (detailsEl) {
-      const rect = detailsEl.getBoundingClientRect();
-      const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
-
-      if (!isInViewport) {
-        detailsEl.scrollIntoView({ behavior: 'instant', block: 'nearest' });
-      }
+    if (request.rename) {
+      editing = true;
     }
+    detailsEl?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+    entityTreeRevealState.consume(request);
   });
 </script>
 

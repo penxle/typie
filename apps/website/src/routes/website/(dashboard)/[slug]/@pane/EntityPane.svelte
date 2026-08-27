@@ -10,6 +10,7 @@
   import XIcon from '~icons/lucide/x';
   import { fb } from '$lib/analytics';
   import { graphql } from '$mearie';
+  import { resolveActiveTreeAncestorIds } from '../../@tree/entity-reveal.svelte';
   import DocumentV2 from '../v2/Document.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
@@ -94,7 +95,10 @@
 
   $effect(() => {
     if (focused && entity) {
-      app.state.ancestors = entity.ancestors.map((ancestor) => ancestor.id);
+      app.state.ancestors = resolveActiveTreeAncestorIds(
+        entity.state,
+        entity.ancestors.map((ancestor) => ancestor.id),
+      );
     }
   });
 

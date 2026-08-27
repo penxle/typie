@@ -70,7 +70,6 @@ type AppState = {
     limit: { totalCharacterCount: number; totalBlobSize: string };
   };
 
-  newFolderId?: string;
   nextCurrentSiteId?: string;
 
   openMenuCount: number;

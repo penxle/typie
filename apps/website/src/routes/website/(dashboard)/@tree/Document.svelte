@@ -9,6 +9,7 @@
   import { untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
+  import { navigating } from '$app/state';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
@@ -16,6 +17,7 @@
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import DocumentTooltip from './DocumentTooltip.svelte';
+  import { entityTreeRevealState, shouldConsumeDocumentRevealRequest } from './entity-reveal.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
 
@@ -88,6 +90,15 @@
     if (active) {
       element?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
     }
+  });
+
+  $effect(() => {
+    const request = entityTreeRevealState.current;
+    if (!request || !shouldConsumeDocumentRevealRequest(request, document.data.entity.id, active, navigating.to === null)) {
+      return;
+    }
+
+    entityTreeRevealState.consume(request);
   });
 </script>
 

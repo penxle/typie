@@ -30,6 +30,7 @@
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
   import { maxDepth } from '../@tree/utils';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
@@ -525,6 +526,8 @@
 
     mixpanel.track('create_child_document', { via });
     open();
+    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [entity.id], false);
+    entityTreeRevealState.set(revealRequest);
     await goto(`/${resp.createDocument.entity.slug}`);
   }}
 >
@@ -552,7 +555,7 @@
 
       // NOTE: 메뉴 닫힘/포커스 복귀 사이클 이후 실행되도록 다음 tick으로 미룬다.
       await tick();
-      app.state.newFolderId = resp.createFolder.id;
+      entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, [entity.id], true));
     }}
   >
     하위 폴더 생성

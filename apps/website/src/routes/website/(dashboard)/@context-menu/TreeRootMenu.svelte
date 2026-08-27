@@ -10,6 +10,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
   import { showPasteToast } from './paste-toast';
 
   let { siteId, lastRootEntityOrder }: { siteId: string; lastRootEntityOrder: string | null } = $props();
@@ -248,6 +249,8 @@
 
     const resp = await createDocument({ input: { siteId, v2: true } });
     mixpanel.track('create_document', { via: 'tree_root_menu' });
+    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [], false);
+    entityTreeRevealState.set(revealRequest);
     await goto(`/${resp.createDocument.entity.slug}`);
   }}
 >
@@ -263,7 +266,7 @@
 
     const resp = await createFolder({ input: { siteId, name: '새 폴더' } });
     mixpanel.track('create_folder', { via: 'tree_root_menu' });
-    app.state.newFolderId = resp.createFolder.id;
+    entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, [], true));
   }}
 >
   새 폴더 생성
