@@ -664,6 +664,51 @@ describe('Prism panel indicator', () => {
     }
   });
 
+  test.each([
+    { path: 'morph', readiness: 'ready' as const },
+    { path: 'fallback', readiness: 'loading' as const },
+  ])('leaves a row spinner that appears after the answer visible ($path path)', async ({ readiness }) => {
+    const target = document.createElement('div');
+    const firstRow = destination();
+    const props = reactiveProps({
+      destination: firstRow as HTMLElement | undefined,
+      phase: 'welcome' as 'answered' | 'submitting' | 'welcome',
+      rowSpinnerPlaybackStartedAt: 1000 as number | undefined,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      setSourceRect(target);
+      runtime.emit({ readiness });
+      props.phase = 'submitting';
+      await tick();
+      stepAnimationFrame();
+      await tick();
+      if (readiness === 'ready') {
+        expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', expect.anything());
+        runtime.emit({ journeyProgress: 1, owner: 'atlas', requestedTarget: 'spinner', settledTarget: 'spinner' });
+        await tick();
+      }
+      expect(firstRow.style.opacity).toBe('');
+
+      props.destination = undefined;
+      props.rowSpinnerPlaybackStartedAt = undefined;
+      props.phase = 'answered';
+      await tick();
+
+      const laterRow = destination();
+      props.destination = laterRow;
+      await tick();
+      expect(laterRow.style.opacity).toBe('');
+
+      props.rowSpinnerPlaybackStartedAt = 2000;
+      await tick();
+      expect(laterRow.style.opacity).toBe('');
+    } finally {
+      await unmount(component);
+    }
+  });
+
   test('reveals the row APNG atomically when the atlas bridge reaches frame zero', async () => {
     const target = document.createElement('div');
     const rowSpinner = destination();
