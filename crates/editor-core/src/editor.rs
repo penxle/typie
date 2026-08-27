@@ -3571,6 +3571,73 @@ mod tests {
     }
 
     #[test]
+    fn shaped_glyph_chunk_requests_support_multiple_weights_of_one_family() {
+        let (state, _) = state! {
+            doc {
+                root { p1: paragraph { text("A") } }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: "Inter".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![
+                    editor_resource::FontWeight {
+                        value: 400,
+                        hash: "inter-400".into(),
+                    },
+                    editor_resource::FontWeight {
+                        value: 700,
+                        hash: "inter-700".into(),
+                    },
+                ],
+            }]))
+            .unwrap();
+        for weight in [400, 700] {
+            source
+                .add_font_manifest(
+                    "Inter",
+                    weight,
+                    editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]])
+                        .with_glyph_chunks(10, vec![vec![7]])
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        let family_id = editor
+            .resource
+            .lock()
+            .unwrap()
+            .font_registry
+            .intern_id("Inter")
+            .unwrap();
+
+        crate::font::request_shaped_glyphs(
+            &mut editor,
+            [400, 700]
+                .into_iter()
+                .map(|weight| editor_view::glyph_run::ShapedGlyphObservation {
+                    family_id,
+                    weight,
+                    glyph_ids: vec![7],
+                })
+                .collect(),
+        );
+
+        assert!(matches!(
+            editor.pending_events.as_slice(),
+            [
+                EditorEvent::FontDataMissing { family: first_family, weight: 400, .. },
+                EditorEvent::FontDataMissing { family: second_family, weight: 700, .. },
+            ] if first_family == "Inter" && second_family == "Inter"
+        ));
+    }
+
+    #[test]
     fn font_data_missing_events_for_the_same_font_are_coalesced() {
         let (state, _) = state! {
             doc { root { p1: paragraph { text("A") } } }
