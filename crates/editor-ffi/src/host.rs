@@ -195,7 +195,7 @@ impl EditorHost {
         let prepared = editor_resource::prepare_font_base(&data)?;
         let snapshot = self
             .lock_source()?
-            .insert_font_base(&family, weight, prepared);
+            .insert_font_base(&family, weight, prepared)?;
         Ok(snapshot.map(|snapshot| {
             ResourceUpdate::new(
                 snapshot,
@@ -238,7 +238,7 @@ impl EditorHost {
         let manifest = editor_resource::FontManifest::from_bytes(&bytes)?;
         let snapshot = self
             .lock_source()?
-            .add_font_manifest(&family, weight, manifest);
+            .add_font_manifest(&family, weight, manifest)?;
         Ok(snapshot.map(|snapshot| {
             ResourceUpdate::new(
                 snapshot,
@@ -355,6 +355,35 @@ mod tests {
         assert!(
             bytes.is_empty(),
             "heads of a graph built from zero changesets must be exactly 0 bytes"
+        );
+    }
+
+    #[test]
+    fn font_manifest_v2_must_match_base_num_glyphs_in_either_arrival_order() {
+        let manifest = editor_resource::FontManifest::from_coverages(&[vec![0, 0]])
+            .with_glyph_chunks(0, vec![vec![]])
+            .unwrap();
+        let manifest = editor_resource::compress_zstd(&manifest.to_bytes());
+        let base = editor_resource::compress_zstd(include_bytes!(
+            "../../editor-resource/assets/placeholder.ttf"
+        ));
+
+        let manifest_first = make_host();
+        manifest_first
+            .add_font_manifest("Test".into(), 400, manifest.clone())
+            .unwrap();
+        assert!(
+            manifest_first
+                .add_font_base("Test".into(), 400, base.clone())
+                .is_err()
+        );
+
+        let base_first = make_host();
+        base_first.add_font_base("Test".into(), 400, base).unwrap();
+        assert!(
+            base_first
+                .add_font_manifest("Test".into(), 400, manifest)
+                .is_err()
         );
     }
 

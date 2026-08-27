@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  fontDataUrls,
   FontLoaderState,
   loadOnce,
   PRELOAD_CONCURRENCY,
@@ -9,6 +10,13 @@ import {
   RETRY_MAX_ATTEMPTS,
   scheduleRetry,
 } from './fonts';
+
+it('manifest는 v2를 먼저 요청하고 v1로 fallback한다', () => {
+  expect(fontDataUrls('https://cdn/font/hash', { type: 'manifest' })).toEqual([
+    'https://cdn/font/hash/manifest.v2',
+    'https://cdn/font/hash/manifest.v1',
+  ]);
+});
 
 describe('FontLoaderState.generationOf', () => {
   it('미등록 폰트 키는 세대 0을 반환한다', () => {

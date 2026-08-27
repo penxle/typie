@@ -53,6 +53,7 @@ pub(crate) fn measure_fold_title(
         None,
         resource,
     );
+    ctx.observe_lines(&lines);
     let children: Vec<Arc<MeasuredNode>> = lines
         .into_iter()
         .map(|l| Arc::new(MeasuredNode::from_line(inner_width, l)))

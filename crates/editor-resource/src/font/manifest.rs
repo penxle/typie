@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::error::ResourceError;
 
-const MANIFEST_VERSION: u8 = 1;
+const MANIFEST_VERSION_V1: u8 = 1;
+const MANIFEST_VERSION_V2: u8 = 2;
+const MANIFEST_MAX_BYTES: usize = 1024 * 1024;
 const MAX_CHUNKS: u16 = 255;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -10,6 +12,8 @@ pub struct FontManifest {
     pub chunk_count: u16,
     chunk_map: Vec<u8>,
     chunk_map_sup: Vec<u32>,
+    num_glyphs: Option<u16>,
+    glyph_chunks: Vec<Vec<u16>>,
 }
 
 impl FontManifest {
@@ -18,6 +22,8 @@ impl FontManifest {
             chunk_count,
             chunk_map,
             chunk_map_sup,
+            num_glyphs: None,
+            glyph_chunks: Vec::new(),
         }
     }
 
@@ -60,7 +66,60 @@ impl FontManifest {
             chunk_count,
             chunk_map,
             chunk_map_sup,
+            num_glyphs: None,
+            glyph_chunks: Vec::new(),
         }
+    }
+
+    pub fn with_glyph_chunks(
+        mut self,
+        num_glyphs: u16,
+        glyph_chunks: Vec<Vec<u16>>,
+    ) -> Result<Self, ResourceError> {
+        Self::validate_glyph_chunks(self.chunk_count, num_glyphs, &glyph_chunks)?;
+        self.num_glyphs = Some(num_glyphs);
+        self.glyph_chunks = glyph_chunks;
+        Ok(self)
+    }
+
+    pub fn num_glyphs(&self) -> Option<u16> {
+        self.num_glyphs
+    }
+
+    pub fn chunk_id_for_glyph(&self, gid: u16) -> Option<u16> {
+        self.glyph_chunks
+            .iter()
+            .position(|glyphs| glyphs.binary_search(&gid).is_ok())
+            .map(|chunk_id| chunk_id as u16)
+    }
+
+    pub fn glyphs_in_chunk(&self, chunk_id: u16) -> Option<&[u16]> {
+        self.num_glyphs?;
+        self.glyph_chunks.get(chunk_id as usize).map(Vec::as_slice)
+    }
+
+    fn validate_glyph_chunks(
+        chunk_count: u16,
+        num_glyphs: u16,
+        glyph_chunks: &[Vec<u16>],
+    ) -> Result<(), ResourceError> {
+        let err = |m: &str| ResourceError::InvalidFont(format!("manifest: {m}"));
+        if glyph_chunks.len() != chunk_count as usize {
+            return Err(err("glyph chunk count mismatch"));
+        }
+        for glyphs in glyph_chunks {
+            let mut previous = None;
+            for &gid in glyphs {
+                if gid >= num_glyphs {
+                    return Err(err("glyph id out of range"));
+                }
+                if previous.is_some_and(|previous| gid <= previous) {
+                    return Err(err("glyph ids not strictly sorted"));
+                }
+                previous = Some(gid);
+            }
+        }
+        Ok(())
     }
 
     fn build_bmp_chunk_map(entries: &[(u32, u8)]) -> Vec<u8> {
@@ -185,14 +244,37 @@ impl FontManifest {
 
 impl FontManifest {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(11 + self.chunk_map.len() + self.chunk_map_sup.len() * 4);
-        out.push(MANIFEST_VERSION);
+        let glyph_entry_count: usize = self.glyph_chunks.iter().map(Vec::len).sum();
+        let glyph_tail_len = self
+            .num_glyphs
+            .map(|_| 2 + (self.glyph_chunks.len() + 1) * 4 + glyph_entry_count * 2)
+            .unwrap_or(0);
+        let mut out = Vec::with_capacity(
+            11 + self.chunk_map.len() + self.chunk_map_sup.len() * 4 + glyph_tail_len,
+        );
+        out.push(if self.num_glyphs.is_some() {
+            MANIFEST_VERSION_V2
+        } else {
+            MANIFEST_VERSION_V1
+        });
         out.extend_from_slice(&self.chunk_count.to_le_bytes());
         out.extend_from_slice(&(self.chunk_map.len() as u32).to_le_bytes());
         out.extend_from_slice(&self.chunk_map);
         out.extend_from_slice(&(self.chunk_map_sup.len() as u32).to_le_bytes());
         for v in &self.chunk_map_sup {
             out.extend_from_slice(&v.to_le_bytes());
+        }
+        if let Some(num_glyphs) = self.num_glyphs {
+            out.extend_from_slice(&num_glyphs.to_le_bytes());
+            let mut offset = 0u32;
+            out.extend_from_slice(&offset.to_le_bytes());
+            for glyphs in &self.glyph_chunks {
+                offset += glyphs.len() as u32;
+                out.extend_from_slice(&offset.to_le_bytes());
+            }
+            for &gid in self.glyph_chunks.iter().flatten() {
+                out.extend_from_slice(&gid.to_le_bytes());
+            }
         }
         out
     }
@@ -202,7 +284,11 @@ impl FontManifest {
         if data.len() < 11 {
             return Err(err("too short"));
         }
-        if data[0] != MANIFEST_VERSION {
+        if data.len() > MANIFEST_MAX_BYTES {
+            return Err(err("over size limit"));
+        }
+        let version = data[0];
+        if version != MANIFEST_VERSION_V1 && version != MANIFEST_VERSION_V2 {
             return Err(err("unknown version"));
         }
         let chunk_count = u16::from_le_bytes(data[1..3].try_into().unwrap());
@@ -222,7 +308,7 @@ impl FontManifest {
         let sup_end = sup_start
             .checked_add(sup_count.checked_mul(4).ok_or_else(|| err("overflow"))?)
             .ok_or_else(|| err("overflow"))?;
-        if data.len() != sup_end {
+        if data.len() < sup_end || (version == MANIFEST_VERSION_V1 && data.len() != sup_end) {
             return Err(err("sup length mismatch"));
         }
         let chunk_map_sup: Vec<u32> = data[sup_start..sup_end]
@@ -268,10 +354,52 @@ impl FontManifest {
             prev = Some(pair[0]);
         }
 
+        let (num_glyphs, glyph_chunks) = if version == MANIFEST_VERSION_V2 {
+            let num_glyphs_end = sup_end.checked_add(2).ok_or_else(|| err("overflow"))?;
+            let offsets_len = (usize::from(chunk_count) + 1)
+                .checked_mul(4)
+                .ok_or_else(|| err("overflow"))?;
+            let offsets_end = num_glyphs_end
+                .checked_add(offsets_len)
+                .ok_or_else(|| err("overflow"))?;
+            if data.len() < offsets_end {
+                return Err(err("glyph table truncated"));
+            }
+            let num_glyphs = u16::from_le_bytes(data[sup_end..num_glyphs_end].try_into().unwrap());
+            let offsets: Vec<usize> = data[num_glyphs_end..offsets_end]
+                .chunks_exact(4)
+                .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
+                .collect();
+            let entry_count = *offsets.last().expect("glyph offsets include the end");
+            let glyphs_end = offsets_end
+                .checked_add(entry_count.checked_mul(2).ok_or_else(|| err("overflow"))?)
+                .ok_or_else(|| err("overflow"))?;
+            if data.len() != glyphs_end {
+                return Err(err("glyph table length mismatch"));
+            }
+            if offsets.first() != Some(&0) || offsets.windows(2).any(|pair| pair[0] > pair[1]) {
+                return Err(err("invalid glyph offsets"));
+            }
+            let glyphs: Vec<u16> = data[offsets_end..glyphs_end]
+                .chunks_exact(2)
+                .map(|bytes| u16::from_le_bytes(bytes.try_into().unwrap()))
+                .collect();
+            let glyph_chunks: Vec<Vec<u16>> = offsets
+                .windows(2)
+                .map(|pair| glyphs[pair[0]..pair[1]].to_vec())
+                .collect();
+            Self::validate_glyph_chunks(chunk_count, num_glyphs, &glyph_chunks)?;
+            (Some(num_glyphs), glyph_chunks)
+        } else {
+            (None, Vec::new())
+        };
+
         Ok(Self {
             chunk_count,
             chunk_map,
             chunk_map_sup,
+            num_glyphs,
+            glyph_chunks,
         })
     }
 }
@@ -305,6 +433,8 @@ mod tests {
             chunk_count,
             chunk_map,
             chunk_map_sup: sup.to_vec(),
+            num_glyphs: None,
+            glyph_chunks: Vec::new(),
         }
     }
 
@@ -482,6 +612,100 @@ mod tests {
         ] {
             assert_eq!(restored.chunk_id(cp), original.chunk_id(cp), "cp={cp:#x}");
         }
+    }
+
+    #[test]
+    fn v2_roundtrip_preserves_glyph_chunk_membership() {
+        let original =
+            FontManifest::from_coverages(&[vec![0x41, 0x41], vec![0x42, 0x42], vec![0x43, 0x43]])
+                .with_glyph_chunks(12, vec![vec![2, 7], vec![4, 7, 9], vec![]])
+                .unwrap();
+
+        let bytes = original.to_bytes();
+        assert_eq!(bytes[0], 2);
+
+        let restored = FontManifest::from_bytes(&bytes).unwrap();
+        assert_eq!(restored, original);
+        assert_eq!(restored.num_glyphs(), Some(12));
+        assert_eq!(restored.chunk_id_for_glyph(2), Some(0));
+        assert_eq!(restored.chunk_id_for_glyph(4), Some(1));
+        assert_eq!(restored.chunk_id_for_glyph(7), Some(0));
+        assert_eq!(restored.chunk_id_for_glyph(11), None);
+        assert_eq!(restored.glyphs_in_chunk(0), Some(&[2, 7][..]));
+        assert_eq!(restored.glyphs_in_chunk(1), Some(&[4, 7, 9][..]));
+        assert_eq!(restored.glyphs_in_chunk(2), Some(&[][..]));
+    }
+
+    #[test]
+    fn v1_roundtrip_has_no_glyph_chunk_membership() {
+        let original = FontManifest::from_coverages(&[vec![0x41, 0x41]]);
+        let bytes = original.to_bytes();
+        assert_eq!(bytes[0], 1);
+
+        let restored = FontManifest::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.num_glyphs(), None);
+        assert_eq!(restored.chunk_id_for_glyph(1), None);
+        assert_eq!(restored.glyphs_in_chunk(0), None);
+    }
+
+    #[test]
+    fn v2_rejects_invalid_glyph_chunk_tables() {
+        let manifest = FontManifest::from_coverages(&[vec![0x41, 0x41]]);
+
+        assert!(
+            manifest
+                .clone()
+                .with_glyph_chunks(4, vec![vec![1], vec![2]])
+                .is_err(),
+            "chunk count mismatch"
+        );
+        assert!(
+            manifest
+                .clone()
+                .with_glyph_chunks(4, vec![vec![2, 1]])
+                .is_err(),
+            "glyph ids must be strictly sorted"
+        );
+        assert!(
+            manifest.with_glyph_chunks(4, vec![vec![4]]).is_err(),
+            "glyph ids must be below numGlyphs"
+        );
+    }
+
+    #[test]
+    fn v2_parser_rejects_malformed_glyph_table() {
+        let good = FontManifest::from_coverages(&[vec![0x41, 0x41]])
+            .with_glyph_chunks(4, vec![vec![1, 2]])
+            .unwrap()
+            .to_bytes();
+        let map_len = u32::from_le_bytes(good[3..7].try_into().unwrap()) as usize;
+        let sup_count_offset = 7 + map_len;
+        let sup_count = u32::from_le_bytes(
+            good[sup_count_offset..sup_count_offset + 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let glyph_tail = sup_count_offset + 4 + sup_count * 4;
+        let offsets = glyph_tail + 2;
+        let glyphs = offsets + 8;
+
+        assert!(FontManifest::from_bytes(&good[..good.len() - 1]).is_err());
+
+        let mut bad_first_offset = good.clone();
+        bad_first_offset[offsets..offsets + 4].copy_from_slice(&1u32.to_le_bytes());
+        assert!(FontManifest::from_bytes(&bad_first_offset).is_err());
+
+        let mut bad_last_offset = good.clone();
+        bad_last_offset[offsets + 4..offsets + 8].copy_from_slice(&3u32.to_le_bytes());
+        assert!(FontManifest::from_bytes(&bad_last_offset).is_err());
+
+        let mut duplicate_gid = good.clone();
+        duplicate_gid[glyphs + 2..glyphs + 4].copy_from_slice(&1u16.to_le_bytes());
+        assert!(FontManifest::from_bytes(&duplicate_gid).is_err());
+
+        let mut out_of_range_gid = good;
+        out_of_range_gid[glyphs + 2..glyphs + 4].copy_from_slice(&4u16.to_le_bytes());
+        assert!(FontManifest::from_bytes(&out_of_range_gid).is_err());
     }
 
     #[test]

@@ -13,6 +13,7 @@ pub(super) struct FontEntry {
     pub(super) data: Arc<FontData>,
     pub(super) base_hash: u64,
     pub(super) split_offset: usize,
+    pub(super) num_glyphs: Option<u16>,
 }
 
 #[derive(Clone)]
@@ -24,6 +25,8 @@ pub struct FontRegistry {
     pub(super) font_entries: HashMap<(u16, u16), FontEntry>,
     pub(super) font_versions: HashMap<(u16, u16), u64>,
     pub(super) loaded_chunks: HashMap<(u16, u16), Vec<bool>>,
+    glyph_chunk_owners: HashMap<(u16, u16), Vec<u16>>,
+    loaded_glyphs: HashMap<(u16, u16), Vec<bool>>,
     manifests: HashMap<(u16, u16), FontManifest>,
     font_hashes: HashMap<(u16, u16), String>,
     placeholder_family_id: Option<u16>,
@@ -40,6 +43,8 @@ impl FontRegistry {
             font_entries: HashMap::default(),
             font_versions: HashMap::default(),
             loaded_chunks: HashMap::default(),
+            glyph_chunk_owners: HashMap::default(),
+            loaded_glyphs: HashMap::default(),
             manifests: HashMap::default(),
             font_hashes: HashMap::default(),
             placeholder_family_id: None,
@@ -89,6 +94,9 @@ impl FontRegistry {
         self.font_entries.retain(|key, _| surviving.contains(key));
         self.font_versions.retain(|key, _| surviving.contains(key));
         self.loaded_chunks.retain(|key, _| surviving.contains(key));
+        self.glyph_chunk_owners
+            .retain(|key, _| surviving.contains(key));
+        self.loaded_glyphs.retain(|key, _| surviving.contains(key));
         self.font_hashes.retain(|key, _| surviving.contains(key));
 
         self.families.clear();
@@ -109,6 +117,8 @@ impl FontRegistry {
                 let key = (family_id, w.value);
                 if !surviving.contains(&key) {
                     self.loaded_chunks.insert(key, Vec::new());
+                    self.glyph_chunk_owners.insert(key, Vec::new());
+                    self.loaded_glyphs.insert(key, Vec::new());
                     self.font_versions.insert(key, 0);
                 }
                 self.font_hashes.insert(key, w.hash.clone());
@@ -230,6 +240,18 @@ impl FontRegistry {
         }
         self.loaded_chunks
             .insert(key, vec![false; manifest.chunk_count as usize]);
+        let mut glyph_chunk_owners = vec![u16::MAX; manifest.num_glyphs().unwrap_or(0) as usize];
+        for chunk_id in manifest.all_chunk_ids() {
+            for &gid in manifest.glyphs_in_chunk(chunk_id).unwrap_or_default() {
+                let owner = &mut glyph_chunk_owners[gid as usize];
+                if *owner == u16::MAX {
+                    *owner = chunk_id;
+                }
+            }
+        }
+        self.loaded_glyphs
+            .insert(key, vec![false; glyph_chunk_owners.len()]);
+        self.glyph_chunk_owners.insert(key, glyph_chunk_owners);
         self.manifests.insert(key, manifest);
         true
     }
@@ -249,6 +271,23 @@ impl FontRegistry {
             .unwrap_or(false)
     }
 
+    pub fn missing_chunk_for_glyph(&self, family_id: u16, weight: u16, gid: u16) -> Option<u16> {
+        let key = (family_id, weight);
+        let owner = *self.glyph_chunk_owners.get(&key)?.get(gid as usize)?;
+        if owner == u16::MAX
+            || self
+                .loaded_glyphs
+                .get(&key)
+                .and_then(|loaded| loaded.get(gid as usize))
+                .copied()
+                .unwrap_or(false)
+        {
+            None
+        } else {
+            Some(owner)
+        }
+    }
+
     pub fn insert_base(
         &mut self,
         family_id: u16,
@@ -256,6 +295,7 @@ impl FontRegistry {
         data: Arc<FontData>,
         base_hash: u64,
         split_offset: usize,
+        num_glyphs: u16,
     ) {
         let key = (family_id, weight);
         self.font_entries.insert(
@@ -264,14 +304,20 @@ impl FontRegistry {
                 data,
                 base_hash,
                 split_offset,
+                num_glyphs: Some(num_glyphs),
             },
         );
         self.font_versions.insert(key, 0);
         if let Some(manifest) = self.manifests.get(&key) {
             self.loaded_chunks
                 .insert(key, vec![false; manifest.chunk_count as usize]);
+            self.loaded_glyphs.insert(
+                key,
+                vec![false; manifest.num_glyphs().unwrap_or(0) as usize],
+            );
         } else {
             self.loaded_chunks.insert(key, Vec::new());
+            self.loaded_glyphs.insert(key, Vec::new());
         }
         self.font_generation += 1;
     }
@@ -364,6 +410,16 @@ impl FontRegistry {
         {
             bv[chunk_id as usize] = true;
         }
+        if let Some(glyphs) = self
+            .manifests
+            .get(&key)
+            .and_then(|manifest| manifest.glyphs_in_chunk(chunk_id))
+            && let Some(loaded) = self.loaded_glyphs.get_mut(&key)
+        {
+            for &gid in glyphs {
+                loaded[gid as usize] = true;
+            }
+        }
         self.font_generation += 1;
         Ok(true)
     }
@@ -379,6 +435,12 @@ impl FontRegistry {
         self.font_entries
             .get(&(family_id, weight))
             .map(|e| e.data.as_ref().as_ref())
+    }
+
+    pub fn font_num_glyphs(&self, family_id: u16, weight: u16) -> Option<u16> {
+        self.font_entries
+            .get(&(family_id, weight))
+            .and_then(|entry| entry.num_glyphs)
     }
 
     #[cfg(any(test, feature = "test-utils"))]
@@ -414,6 +476,7 @@ impl FontRegistry {
                 data: Arc::new(FontData::new(buffer)),
                 base_hash: rapidhash::v3::rapidhash_v3(data),
                 split_offset: 0,
+                num_glyphs: None,
             },
         );
         self.font_versions
@@ -439,11 +502,16 @@ impl FontRegistry {
                 data: Arc::new(FontData::new(buffer)),
                 base_hash,
                 split_offset: 0,
+                num_glyphs: None,
             },
         );
         self.font_versions.insert(key, 0);
         self.loaded_chunks
             .insert(key, vec![true; chunk_count as usize]);
+        if let Some(manifest) = self.manifests.get(&key) {
+            self.loaded_glyphs
+                .insert(key, vec![true; manifest.num_glyphs().unwrap_or(0) as usize]);
+        }
         self.font_generation += 1;
     }
 }
@@ -489,6 +557,7 @@ mod tests {
                 data: Arc::new(FontData::new(buffer)),
                 base_hash,
                 split_offset,
+                num_glyphs: None,
             },
         );
         reg.font_versions.insert(key, 0);
@@ -877,6 +946,36 @@ mod tests {
     }
 
     #[test]
+    fn missing_chunk_for_glyph_uses_canonical_owner_and_loaded_duplicates() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        reg.set_manifest(
+            fid,
+            400,
+            FontManifest::from_coverages(&[vec![0x41, 0x41], vec![0x42, 0x42], vec![0x43, 0x43]])
+                .with_glyph_chunks(12, vec![vec![2, 7], vec![7, 9], vec![]])
+                .unwrap(),
+        );
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 2), Some(0));
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 7), Some(0));
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 9), Some(1));
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 11), None);
+
+        let chunk = prepare_font_chunk(make_chunk_data(&[(0, &[1])])).unwrap();
+        reg.add_font_chunk(fid, 400, 1, &chunk).unwrap();
+
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 2), Some(0));
+        assert_eq!(
+            reg.missing_chunk_for_glyph(fid, 400, 7),
+            None,
+            "loading any chunk that contains the glyph makes it render-ready"
+        );
+        assert_eq!(reg.missing_chunk_for_glyph(fid, 400, 9), None);
+    }
+
+    #[test]
     fn set_fonts_preserves_manifest_when_hash_unchanged() {
         let mut reg = FontRegistry::new();
         let family = |hash: &str| FontFamily {
@@ -1034,6 +1133,7 @@ mod tests {
             Arc::new(FontData::new(data.clone())),
             rapidhash::v3::rapidhash_v3(&data),
             8,
+            0,
         );
         assert!(reg.font_generation() > catalog_generation);
 

@@ -68,6 +68,7 @@ export type ProcessedFont = {
   base: Uint8Array;
   chunks: Uint8Array[];
   manifest: Uint8Array;
+  manifestV2: Uint8Array;
 };
 
 export const isUnsupportedFontFormat = (err: unknown): boolean => err instanceof Error && err.message.includes('unsplittable font');
@@ -184,6 +185,7 @@ export async function processFont(name: string, ttfData: Uint8Array): Promise<Pr
     base: output.base,
     chunks: output.chunks,
     manifest: output.manifest,
+    manifestV2: output.manifestV2,
   };
 }
 

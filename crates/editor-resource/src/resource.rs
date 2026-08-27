@@ -1,7 +1,7 @@
 use hashbrown::HashMap;
 use parley::{FontContext, LayoutContext};
 use skrifa::Tag;
-use skrifa::raw::FontRef;
+use skrifa::raw::{FontRef, TableProvider};
 use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
@@ -28,6 +28,13 @@ pub struct PreparedFontBase {
     font_data: Arc<FontData>,
     base_hash: u64,
     split_offset: usize,
+    num_glyphs: u16,
+}
+
+fn font_num_glyphs(font: &FontRef<'_>) -> Result<u16, ResourceError> {
+    font.maxp()
+        .map(|maxp| maxp.num_glyphs())
+        .map_err(|e| ResourceError::InvalidFont(format!("failed to read maxp table: {e:?}")))
 }
 
 /// Decompress and parse a base font ahead of taking the `ResourceSource` lock.
@@ -36,6 +43,7 @@ pub fn prepare_font_base(data: &[u8]) -> Result<PreparedFontBase, ResourceError>
 
     let font = FontRef::new(&raw_ttf)
         .map_err(|e| ResourceError::InvalidFont(format!("failed to parse TTF: {e:?}")))?;
+    let num_glyphs = font_num_glyphs(&font)?;
 
     let glyf_tag = Tag::new(b"glyf");
     let cbdt_tag = Tag::new(b"CBDT");
@@ -60,6 +68,7 @@ pub fn prepare_font_base(data: &[u8]) -> Result<PreparedFontBase, ResourceError>
         font_data,
         base_hash,
         split_offset,
+        num_glyphs,
     })
 }
 
@@ -218,14 +227,23 @@ impl ResourceSource {
         family: &str,
         weight: u16,
         prepared: PreparedFontBase,
-    ) -> Option<Arc<ResourceSnapshot>> {
+    ) -> Result<Option<Arc<ResourceSnapshot>>, ResourceError> {
+        if let Some(manifest_num_glyphs) = self
+            .current
+            .fonts
+            .intern_id(family)
+            .and_then(|family_id| self.current.fonts.manifest(family_id, weight))
+            .and_then(FontManifest::num_glyphs)
+        {
+            validate_font_num_glyphs(manifest_num_glyphs, prepared.num_glyphs)?;
+        }
         if self.current.fonts.font_base_matches(
             family,
             weight,
             prepared.base_hash,
             prepared.split_offset,
         ) {
-            return None;
+            return Ok(None);
         }
         let mut fonts = self.current.fonts.as_ref().clone();
         let family_id = fonts.intern(family);
@@ -235,10 +253,11 @@ impl ResourceSource {
             prepared.font_data,
             prepared.base_hash,
             prepared.split_offset,
+            prepared.num_glyphs,
         );
         let mut next = self.current.with_revision_from();
         next.fonts = Arc::new(fonts);
-        Some(self.commit(next))
+        Ok(Some(self.commit(next)))
     }
 
     pub fn add_font_chunk(
@@ -265,16 +284,37 @@ impl ResourceSource {
         family: &str,
         weight: u16,
         manifest: FontManifest,
-    ) -> Option<Arc<ResourceSnapshot>> {
+    ) -> Result<Option<Arc<ResourceSnapshot>>, ResourceError> {
+        if let Some(manifest_num_glyphs) = manifest.num_glyphs()
+            && let Some(base_num_glyphs) = self
+                .current
+                .fonts
+                .intern_id(family)
+                .and_then(|family_id| self.current.fonts.font_num_glyphs(family_id, weight))
+        {
+            validate_font_num_glyphs(manifest_num_glyphs, base_num_glyphs)?;
+        }
         let mut fonts = self.current.fonts.as_ref().clone();
         let family_id = fonts.intern(family);
         if !fonts.set_manifest(family_id, weight, manifest) {
-            return None;
+            return Ok(None);
         }
         let mut next = self.current.with_revision_from();
         next.fonts = Arc::new(fonts);
-        Some(self.commit(next))
+        Ok(Some(self.commit(next)))
     }
+}
+
+fn validate_font_num_glyphs(
+    manifest_num_glyphs: u16,
+    base_num_glyphs: u16,
+) -> Result<(), ResourceError> {
+    if manifest_num_glyphs == base_num_glyphs {
+        return Ok(());
+    }
+    Err(ResourceError::InvalidFont(format!(
+        "manifest numGlyphs {manifest_num_glyphs} does not match base font maxp numGlyphs {base_num_glyphs}"
+    )))
 }
 
 pub struct PreparedFonts {
@@ -624,6 +664,7 @@ mod tests {
                 crate::font::PLACEHOLDER_WEIGHT,
                 FontManifest::from_coverages(&[vec![0, 0]]),
             )
+            .expect("manifest is compatible")
             .expect("manifest changed");
         let before = source.snapshot();
         let family_id = before
@@ -711,9 +752,11 @@ mod tests {
         let mut source = ResourceSource::new_test();
         source
             .add_font_manifest("test", 400, FontManifest::from_coverages(&[vec![0, 0]]))
+            .expect("manifest is valid")
             .expect("manifest changed");
         let base_snapshot = source
             .insert_font_base("test", 400, prepared)
+            .expect("base font is compatible")
             .expect("base font changed");
         let family_id = base_snapshot
             .fonts()
@@ -741,11 +784,13 @@ mod tests {
         let before = source.snapshot();
         let before_revision = before.revision();
 
-        let result = source.insert_font_base(
-            "test",
-            400,
-            prepare_font_base(&compressed).expect("same base font is valid"),
-        );
+        let result = source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(&compressed).expect("same base font is valid"),
+            )
+            .expect("base font is compatible");
         let after = source.snapshot();
 
         assert!(result.is_none());
@@ -763,6 +808,36 @@ mod tests {
     }
 
     #[test]
+    fn v2_manifest_num_glyphs_must_match_base_in_either_arrival_order() {
+        let compressed = crate::zstd::compress_zstd(PLACEHOLDER_TTF);
+        let manifest_first_base = prepare_font_base(&compressed).unwrap();
+        let actual_num_glyphs = manifest_first_base.num_glyphs;
+        let mismatched = actual_num_glyphs.wrapping_add(1);
+        assert_ne!(mismatched, actual_num_glyphs);
+        let manifest = FontManifest::from_coverages(&[vec![0, 0]])
+            .with_glyph_chunks(mismatched, vec![vec![]])
+            .unwrap();
+
+        let mut manifest_first = ResourceSource::new_test();
+        manifest_first
+            .add_font_manifest("test", 400, manifest.clone())
+            .unwrap()
+            .unwrap();
+        assert!(
+            manifest_first
+                .insert_font_base("test", 400, manifest_first_base)
+                .is_err()
+        );
+
+        let mut base_first = ResourceSource::new_test();
+        base_first
+            .insert_font_base("test", 400, prepare_font_base(&compressed).unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(base_first.add_font_manifest("test", 400, manifest).is_err());
+    }
+
+    #[test]
     fn resource_update_different_font_base_remains_replacement() {
         let mut source = ResourceSource::new_test();
         source
@@ -772,6 +847,7 @@ mod tests {
                 prepare_font_base(&crate::zstd::compress_zstd(PLACEHOLDER_TTF))
                     .expect("base font is valid"),
             )
+            .expect("base font is compatible")
             .expect("base font changed");
         let before = source.snapshot();
         let mut different_ttf = PLACEHOLDER_TTF.to_vec();
@@ -784,6 +860,7 @@ mod tests {
                 prepare_font_base(&crate::zstd::compress_zstd(&different_ttf))
                     .expect("different base font is valid"),
             )
+            .expect("different base font is compatible")
             .expect("different base font replaced the current font");
         let after = source.snapshot();
         let family_id = after.fonts().intern_id("test").expect("font family exists");
@@ -954,6 +1031,7 @@ mod tests {
         let mut source = ResourceSource::new_test();
         let snapshot = source
             .insert_font_base("test", 400, prepared)
+            .expect("font is compatible")
             .expect("font changed");
         let family_id = snapshot
             .fonts()

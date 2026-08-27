@@ -1,5 +1,12 @@
 pub type FontId = u16;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapedGlyphObservation {
+    pub family_id: FontId,
+    pub weight: u16,
+    pub glyph_ids: Vec<u16>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Glyph {
     pub id: u32,

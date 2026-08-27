@@ -67,6 +67,7 @@ pub(crate) fn measure_paragraph_block(
         Some(&mut measurer.seg_cache),
         resource,
     );
+    ctx.observe_lines(&lines);
 
     let mut children: Vec<Arc<MeasuredNode>> = lines
         .into_iter()

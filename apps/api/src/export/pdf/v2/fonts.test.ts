@@ -27,7 +27,11 @@ test('manifestEscalationKey does not escalate for base/chunk requirements withou
   assert.equal(key, null);
 });
 
-test('registerFonts marks manifests that fail to build without touching families that succeed', async () => {
+test('registerFonts marks manifests that fail to register without touching families that succeed', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    return url.includes('/good/') ? new Response(new Uint8Array([1])) : new Response(null, { status: 404 });
+  });
   // eslint-disable-next-line @typescript-eslint/no-empty-function -- host mock only needs to satisfy the call shape
   const host = { set_fonts: () => {}, add_font_manifest: () => {} } as unknown as EditorHost;
 
@@ -43,7 +47,8 @@ test('registerFonts marks manifests that fail to build without touching families
   assert.equal(reg.baseUrlOf('Good', 400), 'https://cdn/good');
 });
 
-test('registerFonts frees resource updates created before the editor exists', async () => {
+test('registerFonts frees resource updates created before the editor exists', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(new Uint8Array([1])));
   let freeCount = 0;
   const fontsUpdate = { free: () => freeCount++ } as unknown as ResourceUpdate;
   const manifestUpdate = { free: () => freeCount++ } as unknown as ResourceUpdate;
@@ -58,6 +63,66 @@ test('registerFonts frees resource updates created before the editor exists', as
   await registerFonts(host, families);
 
   assert.equal(freeCount, 2);
+});
+
+test('registerFonts requests v2 first and falls back to persisted v1', async (t) => {
+  const requested: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    requested.push(url);
+    return url.endsWith('/manifest.v2') ? new Response(null, { status: 404 }) : new Response(new Uint8Array([1]));
+  });
+  let applied = 0;
+  let setFontsCalls = 0;
+  const host = {
+    set_fonts: () => {
+      setFontsCalls++;
+    },
+    add_font_manifest: () => {
+      applied++;
+    },
+  } as unknown as EditorHost;
+  const families: EditorFontFamily[] = [
+    { name: 'Good', source: 'DEFAULT', weights: [{ value: 400, hash: 'h1', chunks: [], baseUrl: 'https://cdn/fallback' }] },
+  ];
+
+  await registerFonts(host, families);
+
+  assert.deepEqual(requested, ['https://cdn/fallback/manifest.v2', 'https://cdn/fallback/manifest.v1']);
+  assert.equal(setFontsCalls, 1);
+  assert.equal(applied, 1);
+});
+
+test('registerFonts fetches manifests for different weights concurrently', async (t) => {
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    activeFetches++;
+    maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    activeFetches--;
+    return new Response(new Uint8Array([1]));
+  });
+  let setFontsCalls = 0;
+  let manifestCalls = 0;
+  const host = {
+    set_fonts: () => {
+      setFontsCalls++;
+    },
+    add_font_manifest: () => {
+      manifestCalls++;
+    },
+  } as unknown as EditorHost;
+  const families: EditorFontFamily[] = [
+    { name: 'First', source: 'DEFAULT', weights: [{ value: 400, hash: 'parallel-1', chunks: [], baseUrl: 'https://cdn/parallel-1' }] },
+    { name: 'Second', source: 'DEFAULT', weights: [{ value: 400, hash: 'parallel-2', chunks: [], baseUrl: 'https://cdn/parallel-2' }] },
+  ];
+
+  await registerFonts(host, families);
+
+  assert.equal(maxActiveFetches, 2);
+  assert.equal(setFontsCalls, 1);
+  assert.equal(manifestCalls, 2);
 });
 
 test('handleFontDataMissing applies and frees resource updates returned by the host', async () => {

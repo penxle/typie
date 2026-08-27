@@ -9,6 +9,7 @@ use editor_state::{
     resolve_caret_modifiers,
 };
 
+use crate::glyph_run::ShapedGlyphObservation;
 use crate::measure::Measurer;
 use crate::measure::context::{MeasureContext, measure_context};
 use crate::measure::nodes::dispatch::content_remeasurement_target;
@@ -61,6 +62,7 @@ pub struct View {
     viewport: Viewport,
     view_state: ViewState,
     measurer: Measurer,
+    shaped_glyph_observations: Vec<ShapedGlyphObservation>,
 }
 
 struct LayoutResult {
@@ -86,7 +88,12 @@ impl View {
             layout_state: None,
             fingerprint: None,
             measurer: Measurer::new(),
+            shaped_glyph_observations: Vec::new(),
         }
+    }
+
+    pub fn take_shaped_glyph_observations(&mut self) -> Vec<ShapedGlyphObservation> {
+        std::mem::take(&mut self.shaped_glyph_observations)
     }
 
     pub fn layout(&mut self, state: &State) {
@@ -331,6 +338,8 @@ impl View {
                 self.measurer
                     .measure(&node_view, seed.content_width, &ctx, &mut resource)
             };
+            self.shaped_glyph_observations
+                .extend(ctx.take_shaped_glyph_observations());
             let (paginator, _, _) = self.build_pipeline(state);
             let new_node = paginator.place_subtree(
                 &measured,
@@ -531,14 +540,19 @@ impl View {
             self.layout = None;
             return;
         };
-        let measured = {
+        let (measured, shaped_glyph_observations) = {
             let mut resource = self.resource.lock().unwrap();
             let ctx = measure_context_with_pending_caret(&self.view_state, state, &mut resource);
             let root_arc = self
                 .measurer
                 .measure(&root, content_width, &ctx, &mut resource);
-            Arc::unwrap_or_clone(root_arc)
+            (
+                Arc::unwrap_or_clone(root_arc),
+                ctx.take_shaped_glyph_observations(),
+            )
         };
+        self.shaped_glyph_observations
+            .extend(shaped_glyph_observations);
         let paginated = paginator.paginate(MeasuredTree { root: measured });
         let pages = paginated.pages;
         let prev = self.layout.take();

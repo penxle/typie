@@ -1,4 +1,7 @@
-use crate::measure::text::measure::LineStrutExpansion;
+use std::cell::RefCell;
+
+use crate::glyph_run::ShapedGlyphObservation;
+use crate::measure::text::measure::{LineStrutExpansion, MeasuredLine};
 use crate::view_state::{GapPhantom, PendingOverlay};
 use editor_crdt::Dot;
 use hashbrown::HashMap;
@@ -10,6 +13,7 @@ pub(crate) struct MeasureContext {
     pub gap_phantom: Option<GapPhantom>,
     pub pending_overlay: Option<PendingOverlay>,
     pub pending_caret_expansion: Option<LineStrutExpansion>,
+    pub(crate) shaped_glyph_observations: RefCell<Vec<ShapedGlyphObservation>>,
 }
 
 impl MeasureContext {
@@ -45,6 +49,56 @@ impl MeasureContext {
             .filter(|overlay| &overlay.position.node == node)?;
         Some((&overlay.position, self.pending_caret_expansion.as_ref()?))
     }
+
+    pub fn observe_glyphs(
+        &self,
+        family_id: u16,
+        weight: u16,
+        glyph_ids: impl IntoIterator<Item = u32>,
+    ) {
+        let mut glyph_ids: Vec<u16> = glyph_ids
+            .into_iter()
+            .filter_map(|gid| u16::try_from(gid).ok())
+            .filter(|&gid| gid != 0)
+            .collect();
+        glyph_ids.sort_unstable();
+        glyph_ids.dedup();
+        if glyph_ids.is_empty() {
+            return;
+        }
+        self.shaped_glyph_observations
+            .borrow_mut()
+            .push(ShapedGlyphObservation {
+                family_id,
+                weight,
+                glyph_ids,
+            });
+    }
+
+    pub fn observe_lines(&self, lines: &[MeasuredLine]) {
+        for line in lines {
+            for run in &line.glyph_runs {
+                self.observe_glyphs(
+                    run.family_id,
+                    run.weight,
+                    run.glyphs.iter().map(|glyph| glyph.id),
+                );
+            }
+            for annotation in &line.ruby_annotations {
+                for run in &annotation.glyph_runs {
+                    self.observe_glyphs(
+                        run.family_id,
+                        run.weight,
+                        run.glyphs.iter().map(|glyph| glyph.id),
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn take_shaped_glyph_observations(&self) -> Vec<ShapedGlyphObservation> {
+        std::mem::take(&mut *self.shaped_glyph_observations.borrow_mut())
+    }
 }
 
 pub(crate) fn measure_context(vs: &crate::view_state::ViewState) -> MeasureContext {
@@ -57,6 +111,7 @@ pub(crate) fn measure_context(vs: &crate::view_state::ViewState) -> MeasureConte
         }),
         pending_overlay: vs.pending_overlay.clone(),
         pending_caret_expansion: None,
+        shaped_glyph_observations: RefCell::default(),
     }
 }
 
@@ -167,5 +222,22 @@ mod tests {
                 modifiers,
             })
         );
+    }
+
+    #[test]
+    fn shaped_glyph_observations_are_deduplicated_per_run_and_drained() {
+        let ctx = MeasureContext::default();
+
+        ctx.observe_glyphs(3, 400, [7, 2, 7, 0]);
+
+        assert_eq!(
+            ctx.take_shaped_glyph_observations(),
+            vec![crate::glyph_run::ShapedGlyphObservation {
+                family_id: 3,
+                weight: 400,
+                glyph_ids: vec![2, 7],
+            }]
+        );
+        assert!(ctx.take_shaped_glyph_observations().is_empty());
     }
 }

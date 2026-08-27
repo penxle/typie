@@ -489,6 +489,7 @@ mod tests {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
                 base_hash: 0,
                 split_offset: 8,
+                num_glyphs: None,
             },
         );
         reg.font_versions.insert(key, 0);
@@ -517,6 +518,7 @@ mod tests {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
                 base_hash: 0,
                 split_offset: 8,
+                num_glyphs: None,
             },
         );
         reg.font_versions.insert(key, 0);
@@ -651,6 +653,7 @@ mod tests {
                 data: Arc::new(FontData::new(vec![0u8; 20])),
                 base_hash: 0,
                 split_offset: 8,
+                num_glyphs: None,
             },
         );
         reg.font_versions.insert(key, 0);

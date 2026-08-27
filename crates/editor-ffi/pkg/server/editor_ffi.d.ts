@@ -136,6 +136,7 @@ export interface BuiltFont {
     base: Uint8Array;
     chunks: Uint8Array[];
     manifest: Uint8Array;
+    manifestV2: Uint8Array;
 }
 
 export interface CapturedViewportAnchor {
