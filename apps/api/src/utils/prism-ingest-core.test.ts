@@ -11,7 +11,7 @@ import {
   planEvent,
   shouldStop,
 } from './prism-ingest-core.ts';
-import type { EventFrame, ProjectedDeltaFrame, TurnLive } from '@typie/prism';
+import type { EventFrame, ProjectedDeltaFrame, ProjectedStreamFrame, TurnContext, TurnLive } from '@typie/prism';
 import type { DomainOp } from './prism-ingest-core.ts';
 
 const agent = { id: 'chat-1', name: 'chat' };
@@ -316,7 +316,7 @@ test('프레임 게이트는 이벤트 seq 중복을 거르고 델타·sync는 �
       context: {},
       source: workflowId === undefined ? ('SESSION' as const) : ('WORKFLOW' as const),
       workflowId,
-      kind: 'run.completed' as const,
+      kind: 'turn.started' as const,
       data: {},
     },
   });
@@ -331,4 +331,66 @@ test('프레임 게이트는 이벤트 seq 중복을 거르고 델타·sync는 �
     gate.accept({ type: 'delta', delta: { context: { agent, run: 1, turn: 1, attempt: 1 }, channel: 'text', offset: 0, data: 'x' } }),
     true,
   );
+});
+
+test('프레임 게이트는 봉인된 턴의 델타를 버린다 — 늦은 벌·attempt 무시·다음 턴·형제 agent 통과', () => {
+  const gate = createFrameGate(0, new Map());
+  const sibling = { id: 'chat-2', name: 'chat' };
+  const delta = (context: TurnContext, workflowId?: string): ProjectedStreamFrame => ({
+    type: 'delta',
+    delta: { context, channel: 'text', offset: 0, data: 'x', ...(workflowId !== undefined && { workflowId }) },
+  });
+  const event = (seq: number, kind: string, context: EventFrame['context'], workflowId?: string): ProjectedStreamFrame =>
+    ({
+      type: 'event',
+      event: {
+        seq,
+        occurredAt: 0,
+        context,
+        source: workflowId === undefined ? 'SESSION' : 'WORKFLOW',
+        ...(workflowId !== undefined && { workflowId }),
+        kind,
+        data: {},
+      },
+    }) as ProjectedStreamFrame;
+  const t1: TurnContext = { agent, run: 1, turn: 1, attempt: 1 };
+
+  assert.equal(gate.accept(delta(t1)), true);
+  assert.equal(gate.accept(event(1, 'turn.completed', t1)), true);
+  assert.equal(gate.accept(delta(t1)), false);
+  assert.equal(gate.accept(delta({ ...t1, attempt: 2 })), false);
+  assert.equal(gate.accept(delta({ ...t1, turn: 2 })), true);
+  assert.equal(gate.accept(delta({ agent: sibling, run: 1, turn: 1, attempt: 1 })), true);
+
+  assert.equal(gate.accept(event(2, 'turn.retried', { ...t1, turn: 2 })), true);
+  assert.equal(gate.accept(delta({ ...t1, turn: 2, attempt: 2 })), true);
+
+  assert.equal(gate.accept(event(3, 'run.completed', { agent, run: 1 })), true);
+  assert.equal(gate.accept(delta({ ...t1, turn: 3 })), false);
+  assert.equal(gate.accept(delta({ agent: sibling, run: 1, turn: 2, attempt: 1 })), false);
+  assert.equal(gate.accept(delta({ agent, run: 2, turn: 1, attempt: 1 })), true);
+  assert.equal(gate.accept(event(4, 'run.failed', {})), true);
+  assert.equal(gate.accept(delta({ agent, run: 2, turn: 1, attempt: 1 })), true);
+
+  assert.equal(gate.accept(delta(t1, 'wf_1')), true);
+  assert.equal(gate.accept(event(1, 'turn.completed', t1, 'wf_1')), true);
+  assert.equal(gate.accept(delta(t1, 'wf_1')), false);
+  assert.equal(gate.accept(delta({ ...t1, turn: 2 }, 'wf_1')), true);
+  assert.equal(gate.accept(delta(t1, 'wf_2')), true);
+
+  assert.equal(gate.accept(event(2, 'workflow.completed', {}, 'wf_1')), true);
+  assert.equal(gate.accept(delta({ ...t1, turn: 2 }, 'wf_1')), false);
+  assert.equal(gate.accept(delta({ ...t1, turn: 5 }, 'wf_1')), false);
+  assert.equal(gate.accept(delta(t1, 'wf_2')), true);
+});
+
+test('프레임 게이트는 seq로 거른 중복 이벤트로는 봉인을 갱신하지 않는다', () => {
+  const gate = createFrameGate(5, new Map());
+  const t2: TurnContext = { agent, run: 1, turn: 2, attempt: 1 };
+  const late: ProjectedStreamFrame = {
+    type: 'event',
+    event: { seq: 5, occurredAt: 0, context: t2, source: 'SESSION', kind: 'turn.completed', data: { text: null, toolCalls: [] } },
+  };
+  assert.equal(gate.accept(late), false);
+  assert.equal(gate.accept({ type: 'delta', delta: { context: t2, channel: 'text', offset: 0, data: 'x' } }), true);
 });

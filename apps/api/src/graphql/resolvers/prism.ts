@@ -943,6 +943,8 @@ builder.subscriptionFields((t) => ({
           }
 
           for (const delta of liveSnapshotFrames(fields)) {
+            // 재생에서 이미 봉인된 턴의 스냅샷(이전 펌프 인스턴스가 남긴 stale 필드)은 게이트가 거른다
+            if (!gate.accept({ type: 'delta', delta })) continue;
             if (delta.channel === 'text') {
               watermarks.set(fieldKeyOf(delta), { context: delta.context, length: delta.offset + delta.data.length });
             }

@@ -2,7 +2,15 @@
 import { WorkflowUsageSchema } from '@typie/prism';
 import { z } from 'zod';
 import type { PrismRunState, PrismWorkflowState } from '@typie/lib/enums';
-import type { EventFrame, ParkedScope, ProjectedDeltaFrame, ProjectedStreamFrame, RunUsage, TurnLive } from '@typie/prism';
+import type {
+  EventFrame,
+  ParkedScope,
+  ProjectedDeltaFrame,
+  ProjectedEventFrame,
+  ProjectedStreamFrame,
+  RunUsage,
+  TurnLive,
+} from '@typie/prism';
 
 export type IngestTarget = { kind: 'agent'; sessionId: string } | { kind: 'workflow'; workflowId: string };
 
@@ -186,21 +194,59 @@ export const liveSnapshotFrames = (fields: Record<string, TurnLive>): ProjectedD
   return frames;
 };
 
+const SEALING_KINDS: ReadonlySet<string> = new Set([
+  'run.completed',
+  'run.failed',
+  'run.canceled',
+  'workflow.completed',
+  'workflow.failed',
+  'workflow.canceled',
+]);
+
+// prism 허브 #seal의 거울 — 봉인된 턴의 델타는 어디서 왔든(늦은 펌프·stalled 이중 펌프·stale 스냅샷) 여기서 버린다.
+// turn.completed는 그 (scope, agent, run)의 턴을 attempt 무시로 봉인하고, 실행 종결은 run(좌표가 없으면 scope 전체)을 닫는다.
 export const createFrameGate = (cursor: number, workflows: Map<string, number>) => {
   let session = cursor;
   const seen = new Map(workflows);
+  const sealed = new Map<string, number>();
+  const closed = new Set<string>();
+
+  const seal = (event: ProjectedEventFrame) => {
+    const scope = event.source === 'SESSION' ? '' : (event.workflowId ?? '');
+    const { agent, run, turn } = event.context;
+    if (event.kind === 'turn.completed') {
+      if (agent === undefined || typeof turn !== 'number') return;
+      const key = `${scope}|${agent.id}|${run ?? ''}`;
+      sealed.set(key, Math.max(sealed.get(key) ?? 0, turn));
+      return;
+    }
+    if (!SEALING_KINDS.has(event.kind)) return;
+    // 워크플로 종결은 좌표 없이 오며 최종이다. 세션 run 종결은 run 좌표가 있을 때만 그 run을 닫는다 — 다음 run의 델타까지 막지 않도록.
+    if (typeof run === 'number') closed.add(`${scope}|${run}`);
+    else if (event.source === 'WORKFLOW') closed.add(scope);
+  };
+
+  const stale = (delta: ProjectedDeltaFrame): boolean => {
+    const scope = delta.workflowId ?? '';
+    const { agent, run, turn } = delta.context;
+    if (closed.has(scope) || closed.has(`${scope}|${run}`)) return true;
+    return turn <= (sealed.get(`${scope}|${agent.id}|${run}`) ?? 0);
+  };
+
   return {
     accept(frame: ProjectedStreamFrame): boolean {
+      if (frame.type === 'delta') return !stale(frame.delta);
       if (frame.type !== 'event') return true;
       const { event } = frame;
       if (event.source === 'SESSION') {
         if (event.seq <= session) return false;
         session = event.seq;
-        return true;
+      } else {
+        const key = event.workflowId ?? '';
+        if (event.seq <= (seen.get(key) ?? 0)) return false;
+        seen.set(key, event.seq);
       }
-      const key = event.workflowId ?? '';
-      if (event.seq <= (seen.get(key) ?? 0)) return false;
-      seen.set(key, event.seq);
+      seal(event);
       return true;
     },
   };
