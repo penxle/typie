@@ -1,7 +1,6 @@
 <script lang="ts">
   import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
   import { TypieError } from '@typie/lib/errors';
-  import { reanchorAll } from '@typie/prism';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { onDestroy, untrack } from 'svelte';
@@ -24,8 +23,7 @@
   } from './margin-motion.ts';
   import { describeThread, resolveMode } from './margin-view.ts';
   import PrismReviewHighlightLayer from './PrismReviewHighlightLayer.svelte';
-  import type { Selection } from '@typie/editor-ffi/browser';
-  import type { Anchor } from '@typie/prism';
+  import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
   import type { DetailRound } from '../../../@prism/review/round-view.ts';
@@ -58,10 +56,9 @@
   const documentId = $derived(app.state.prismAccess ? documentIdProp : null);
   const entityId = $derived(app.state.prismAccess ? entityIdProp : null);
 
-  type Seat = { id: string; selection: Selection; tone: 'issue' | 'strength' };
-  type Placed = { rangeIds: string[]; seats: Seat[] };
+  type Seat = { id: string; selection: StableSelection; tone: 'issue' | 'strength' };
   type Spec = {
-    anchors: readonly Anchor[];
+    anchors: readonly { selection?: unknown }[];
     tone: 'issue' | 'strength';
     rangeId: (at: number) => string;
     item: Omit<MarginPlacement, 'rangeIds'>;
@@ -240,10 +237,7 @@
             reaction
             isNew
             anchors {
-              start
-              end
-              head
-              tail
+              selection
             }
             comments {
               id
@@ -272,10 +266,7 @@
             reaction
             isNew
             anchors {
-              start
-              end
-              head
-              tail
+              selection
             }
             comments {
               id
@@ -303,10 +294,7 @@
               quote
               body
               anchors {
-                start
-                end
-                head
-                tail
+                selection
               }
             }
             patterns {
@@ -394,15 +382,13 @@
   let raw = $state.raw<MarginPlacement[]>([]);
   // 지금 선 항목이 어느 회차의 것인지 — 회차를 갈아 끼운 직후엔 고른 회차와 어긋난다
   let builtRoundId = $state<string | null>(null);
-  let placed = new Map<string, Placed>();
 
-  // 재앵커링은 본문 길이에 비례하는 비용이라 타이핑 한 번에 전 항목을 다시 계산할 수 없다.
-  // stale이 오면 그 이벤트가 죽인 항목만 다시 앉히고, 살아남은 자리는 코어가 들고 있는 현재 좌표로 그대로 옮긴다.
-  const buildItems = (stale?: ReadonlySet<string>, retryLost = false) => {
+  // 앵커는 서버가 리뷰 시점에 캡처한 selection이라 회차당 정적이다 — 회차 전환·데이터 도착 때만 전량 재설치하고,
+  // 편집 뒤의 자리는 코어가 매 판 해소한다(자리를 잃은 range는 tracked_ranges()에서 빠지고, 되돌리기로 돌아오면 다시 선다).
+  const buildItems = () => {
     const current = editor;
     if (round === null || !current || current.terminal) {
       current?.clearPrismReviewRanges();
-      placed = new Map();
       raw = [];
       ready = false;
       builtRoundId = null;
@@ -444,72 +430,20 @@
       })),
     ];
 
-    const redoing = specs.filter((spec) => {
-      if (stale === undefined) return true;
-      const prior = placed.get(spec.item.id);
-      if (prior === undefined) return true;
-      // 자리를 잃은 항목은 stale 집합에 다시 나타날 수 없다 — 되돌리기로 원문이 돌아와도 스스로는 못 깨어난다.
-      // 그래서 다시 시도해야 하지만, 재앵커링은 원고 길이에 비례하는 비용이라 타건마다 돌릴 수 없다.
-      // 이 복구는 타건이 멎은 뒤에만 선다(retryLost).
-      if (prior.rangeIds.length === 0) return retryLost;
-      return prior.rangeIds.some((id) => stale.has(id));
-    });
-
-    const resolved =
-      redoing.length > 0
-        ? reanchorAll(
-            current.proseTextAnnotated(),
-            redoing.flatMap((spec) => spec.anchors),
-          )
-        : [];
-
-    // 자리 장부는 반응성 밖이다 — 화면은 raw·items가 그리고 이 맵은 다음 재앵커링의 입력일 뿐이다
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const next = stale === undefined ? new Map<string, Placed>() : new Map(placed);
-    let cursor = 0;
-    for (const spec of redoing) {
-      const rangeIds: string[] = [];
-      const seats: Seat[] = [];
-      for (const at of spec.anchors.keys()) {
-        const range = resolved[cursor + at];
-        if (range === null) continue;
-        const sel = current.proseToSelectionAnnotated(range.start, range.end);
-        if (!sel) continue;
-        const id = spec.rangeId(at);
-        rangeIds.push(id);
-        seats.push({ id, selection: sel, tone: spec.tone });
-      }
-      cursor += spec.anchors.length;
-      next.set(spec.item.id, { rangeIds, seats });
-    }
-
-    const redone = new Set(redoing.map((spec) => spec.item.id));
-    const alive = new Map(current.appliedSnapshot.trackedRanges.map((range) => [range.id, range]));
-
     const installs: Seat[] = [];
     const nextRaw: MarginPlacement[] = [];
     for (const spec of specs) {
-      const place = next.get(spec.item.id);
-      if (place === undefined) {
-        nextRaw.push({ ...spec.item, rangeIds: [] });
-        continue;
+      const rangeIds: string[] = [];
+      for (const [at, anchor] of spec.anchors.entries()) {
+        if (anchor.selection === null || anchor.selection === undefined) continue;
+        const id = spec.rangeId(at);
+        rangeIds.push(id);
+        installs.push({ id, selection: anchor.selection as StableSelection, tone: spec.tone });
       }
-
-      // 처음 넣은 좌표는 그 사이 편집만큼 밀려 있다 — 코어가 아직 들고 있는 자리는 그 좌표를 그대로 쓴다
-      const seats = redone.has(spec.item.id)
-        ? place.seats
-        : place.seats.map((seat) => {
-            const range = alive.get(seat.id);
-            return range === undefined ? seat : { ...seat, selection: { anchor: range.anchor, head: range.head } };
-          });
-
-      next.set(spec.item.id, { rangeIds: place.rangeIds, seats });
-      installs.push(...seats);
-      nextRaw.push({ ...spec.item, rangeIds: place.rangeIds });
+      nextRaw.push({ ...spec.item, rangeIds });
     }
 
     current.setPrismReviewRanges(installs);
-    placed = next;
     raw = nextRaw;
     ready = true;
     builtRoundId = round.id;
@@ -556,27 +490,6 @@
     void placementKey;
     untrack(() => buildItems());
   });
-
-  // 지적받은 대목이 편집되면 코어가 range를 떨군다 — 그 지적만 한 번 다시 앉혀 본다
-  $effect(() => {
-    const current = editor;
-    if (!current) return;
-    return current.on('tracked_ranges_stale', (_, { ids }) => {
-      const dead = new Set(ids);
-      if (raw.some((item) => item.rangeIds.some((rangeId) => dead.has(rangeId)))) untrack(() => buildItems(dead));
-      untrack(scheduleLostRetry);
-    });
-  });
-
-  // 되돌리기로 원문이 돌아오면 자리를 잃은 지적이 다시 앉을 수 있다. 다만 그 판정은 원고 전문을 다시 훑는
-  // 비용이라 타건 경로에 둘 수 없다 — 손이 멎은 뒤에 한 번만 돌린다.
-  const LOST_RETRY_IDLE = 2000;
-  let lostRetry: ReturnType<typeof setTimeout> | undefined;
-  const scheduleLostRetry = () => {
-    clearTimeout(lostRetry);
-    if (raw.every((item) => item.rangeIds.length > 0)) return;
-    lostRetry = setTimeout(() => untrack(() => buildItems(new Set(), true)), LOST_RETRY_IDLE);
-  };
 
   // 닫는다고 목록에서 빠지지 않는다 — 이번 회차의 피드백은 닫혀도 회색으로 제자리에 남는다.
   // 다른 갈래로 옮겨 가는 것은 재리뷰 사영(회차 경계)에서만 일어난다.
@@ -871,7 +784,6 @@
   const insets = $derived({ ...marginInsets(presentationTarget), contentMotion });
 
   onDestroy(() => {
-    clearTimeout(lostRetry);
     editor?.clearPrismReviewRanges();
   });
 </script>

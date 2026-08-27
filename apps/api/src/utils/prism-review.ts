@@ -42,7 +42,7 @@ import {
 } from './prism-review-core.ts';
 import { ensureRoundThreads, projectRoundThreads } from './prism-review-threads.ts';
 import type { PrismReviewTier } from '@typie/lib/enums';
-import type { Anchor, PrismReviewTierName, ReviewOutcome, ReviewSeedMapping } from '@typie/prism';
+import type { PrismReviewTierName, ResolvedAnchor, ReviewOutcome, ReviewSeedMapping } from '@typie/prism';
 import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { PrismAppHooks, PrismWorkflowRow, WorkflowOutcome } from './prism-apps.ts';
@@ -83,6 +83,7 @@ const upsertDocumentVersion = async (
       subtitle: snap.subtitle,
       content: snap.content,
       characterCount: snap.characterCount,
+      heads: snap.heads,
     })
     .onConflictDoNothing({ target: [PrismReviewDocumentVersions.documentId, PrismReviewDocumentVersions.version] })
     .returning({ id: PrismReviewDocumentVersions.id, characterCount: PrismReviewDocumentVersions.characterCount })
@@ -302,7 +303,7 @@ const continueLineage = async (lineageId: string, documentId: string, tier: Pris
 
 // 회차 행이 선 뒤에 읽는다 — 잠금 이후의 읽기가 이번 회차의 확정 입력이다
 const followupMaterials = async (roundId: string, lineageId: string, base: BaseRound, tier: PrismReviewTierName) => {
-  // 결과만 있고 스레드가 안 선 base(배포 전 종료·settle 실패)를 이으면 지난 리뷰가 통째로 비어 실린다
+  // 결과만 있고 사영되지 않은 base(배포 전 종료)를 이으면 지난 리뷰가 통째로 비어 실린다
   await ensureRoundThreads(base.id);
 
   const threads = await db
@@ -334,7 +335,7 @@ const followupMaterials = async (roundId: string, lineageId: string, base: BaseR
           .orderBy(asc(PrismReviewThreadComments.createdAt));
 
   // base 회차의 좌석이 없으면 가장 높은 회차의 좌석 — latestSeat과 같은 정의다
-  const anchorsOf = (threadId: string): Anchor[] => {
+  const anchorsOf = (threadId: string): ResolvedAnchor[] => {
     const mine = seats.filter((seat) => seat.threadId === threadId);
     return (mine.find((seat) => seat.roundId === base.id) ?? mine.at(-1))?.anchors ?? [];
   };

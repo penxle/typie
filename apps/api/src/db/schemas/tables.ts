@@ -4,7 +4,7 @@ import { TableCode } from './codes.ts';
 import * as E from './enums.ts';
 import { createDbId } from './id.ts';
 import { bytea, datetime } from './types.ts';
-import type { Anchor, Context, ReviewOutcome, RunUsage } from '@typie/prism';
+import type { ConclusionAnchors, Context, ResolvedAnchor, ReviewOutcome, RunUsage } from '@typie/prism';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { CouponCondition, PlanRules } from './json.ts';
 
@@ -848,6 +848,7 @@ export const PrismReviewDocumentVersions = pgTable(
     subtitle: text('subtitle'),
     content: text('content').notNull(),
     characterCount: integer('character_count').notNull(),
+    heads: bytea('heads').notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
@@ -898,6 +899,10 @@ export const PrismReviewRounds = pgTable(
       .notNull()
       .references(() => PrismReviewDocumentVersions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     result: jsonb('result').$type<ReviewOutcome>(),
+    // 총평(강점·격상) 앵커의 리뷰 시점 캡처 — result와 평행 배열. 사영 전 회차는 null
+    conclusionAnchors: jsonb('conclusion_anchors').$type<ConclusionAnchors>(),
+    // 사영(좌석·처분·총평 앵커)이 이 회차를 지나간 시각 — 좌석 수와 무관한 "사영됐는가"의 유일한 판정. 앉힐 것이 없던 회차도 찍힌다
+    projectedAt: datetime('projected_at'),
     reaction: E._PrismReaction('reaction'),
     reactionNote: text('reaction_note'),
     createdAt: datetime('created_at')
@@ -951,7 +956,7 @@ export const PrismReviewThreadSeats = pgTable(
       .notNull()
       .references(() => PrismReviewRounds.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     issueIndex: integer('issue_index').notNull(),
-    anchors: jsonb('anchors').$type<Anchor[]>().notNull(),
+    anchors: jsonb('anchors').$type<ResolvedAnchor[]>().notNull(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

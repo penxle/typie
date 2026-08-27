@@ -72,16 +72,9 @@ pub(crate) fn parse_sweep_tombstones(tombstones: &[String]) -> Vec<editor_crdt::
         .collect()
 }
 
-pub(crate) fn build_state_tolerant(
+pub(crate) fn graph_tolerant(
     css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
-    overlay: &[editor_crdt::Dot],
-) -> EditorResult<editor_state::State> {
-    if css.is_empty() {
-        return Ok(editor_state::State::new(
-            editor_state::ProjectedState::empty(),
-            None,
-        ));
-    }
+) -> editor_crdt::OpGraph<editor_model::EditOp> {
     let (graph, dropped) =
         editor_crdt::OpGraph::<editor_model::EditOp>::new().receive_changesets_ordered(css);
     if !dropped.is_empty() {
@@ -96,6 +89,20 @@ pub(crate) fn build_state_tolerant(
             ids.join(", ")
         );
     }
+    graph
+}
+
+pub(crate) fn build_state_tolerant(
+    css: Vec<editor_crdt::Changeset<editor_model::EditOp>>,
+    overlay: &[editor_crdt::Dot],
+) -> EditorResult<editor_state::State> {
+    if css.is_empty() {
+        return Ok(editor_state::State::new(
+            editor_state::ProjectedState::empty(),
+            None,
+        ));
+    }
+    let graph = graph_tolerant(css);
     let projected =
         editor_state::ProjectedState::from_graph_with_overlay(graph, overlay).map_err(|e| {
             EditorError::General {

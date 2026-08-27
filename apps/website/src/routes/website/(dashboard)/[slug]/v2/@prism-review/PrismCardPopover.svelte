@@ -33,7 +33,12 @@
     // published는 프레임마다 갈리므로 재계산의 방아쇠로 쓰고, 자리는 코어가 든 지금 것으로 잡는다 —
     // 스냅숏 사본의 rects는 tracked_ranges 필드가 설 때만 갈려 리플로우 뒤 옛 자리를 가리킨다
     if (!active || active.rangeIds.length === 0 || !editor?.published) return null;
-    return editor.trackedRangeForSnapshot(active.rangeIds[0], editor.appliedSnapshot) ?? null;
+    // 설치한 id 중 자리를 잃은 것은 코어가 비운다 — 살아 있는 첫 range를 잡는다(첫 대목만 지워진 다중 앵커 지적)
+    for (const id of active.rangeIds) {
+      const found = editor.trackedRangeForSnapshot(id, editor.appliedSnapshot);
+      if (found) return found;
+    }
+    return null;
   });
 
   // 카드는 큰 블록이다 — 짧으면 전환이 있었는지조차 보이지 않는다. quintOut ≈ cubic-bezier(0.22, 1, 0.36, 1)

@@ -951,6 +951,7 @@ dependencies = [
  "objc2",
  "objc2-core-foundation",
  "objc2-metal",
+ "proptest",
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",

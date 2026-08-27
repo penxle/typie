@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@typie/editor-ffi": "workspace:*",
     "ts-pattern": "^5.9.0",
     "zod": "^4.4.3"
   },

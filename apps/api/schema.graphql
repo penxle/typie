@@ -1273,10 +1273,7 @@ enum PrismReaction {
 }
 
 type PrismReviewAnchor {
-  end: Int!
-  head: String!
-  start: Int!
-  tail: String!
+  selection: JSON
 }
 
 enum PrismReviewCommentAuthor {

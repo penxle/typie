@@ -7,6 +7,7 @@ import {
   PrismReviewTier,
 } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
+import { anchorQuote } from '@typie/prism';
 import dayjs from 'dayjs';
 import { and, asc, count, desc, eq, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import { clearLoaders } from '#/context.ts';
@@ -35,7 +36,6 @@ import {
   roundState,
   summarizeOutcome,
   threadIsNew,
-  threadQuote,
 } from '#/utils/prism-review-core.ts';
 import {
   clearRoundMemos,
@@ -45,7 +45,6 @@ import {
   publishThread,
   recordView,
   roundSeats,
-  roundVersionContent,
   threadComments,
   viewedRoundOf,
   viewSeat,
@@ -80,8 +79,9 @@ const PrismReviewIssueBrief = builder.simpleObject('PrismReviewIssueBrief', {
   fields: (t) => ({ index: t.int(), trait: t.string() }),
 });
 
+// 리뷰 시점에 캡처한 StableSelection — 코멘트 selection과 같은 형식. 자리를 못 찾은 앵커는 null
 const PrismReviewAnchor = builder.simpleObject('PrismReviewAnchor', {
-  fields: (t) => ({ start: t.int(), end: t.int(), head: t.string(), tail: t.string() }),
+  fields: (t) => ({ selection: t.field({ type: 'JSON', nullable: true }) }),
 });
 
 const PrismReviewStrength = builder.simpleObject('PrismReviewStrength', {
@@ -183,14 +183,14 @@ PrismReviewThread.implement({
       },
     }),
     quote: t.string({
-      // 좌석 회차의 판본에서 자른다 — 카드는 앵커가 살아 있든 자리를 잃었든 이 인용을 보여 준다
+      // 카드는 앵커가 살아 있든 자리를 잃었든 이 인용을 보여 준다
       resolve: async (self, _, ctx) => {
         const seat = await viewSeat(ctx, self.id);
         if (seat === null) {
           return '';
         }
 
-        return threadQuote(await roundVersionContent(ctx, seat.roundId), seat.anchors);
+        return anchorQuote(seat.anchors);
       },
     }),
     state: t.expose('state', { type: PrismReviewThreadState }),
@@ -277,12 +277,7 @@ PrismReviewRound.implement({
     detail: t.field({
       type: PrismReviewDetail,
       nullable: true,
-      // 인용을 뽑으려면 리뷰 시점 원고 판본이 필요하다 — 전문이 없으면 그 조회도 하지 않는다.
-      // 여백 쿼리는 threads.quote와 detail을 함께 고르므로 같은 판본을 요청 안에서 한 번만 읽는다.
-      resolve: async (self, _, ctx) => {
-        if (!hasDetail(self.result)) return null;
-        return detailOutcome(self.result, await roundVersionContent(ctx, self.id));
-      },
+      resolve: (self) => (hasDetail(self.result) ? detailOutcome(self.result, self.conclusionAnchors) : null),
     }),
     reaction: t.expose('reaction', { type: PrismReaction, nullable: true }),
     reactionNote: t.exposeString('reactionNote', { nullable: true }),
