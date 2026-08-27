@@ -375,7 +375,6 @@
     backgroundColor: 'surface.muted',
     transition: '[background-color 150ms ease]',
     _hover: { backgroundColor: 'interactive.hover' },
-    _disabled: { opacity: '60', pointerEvents: 'none' },
   });
   let listOpen = $state(false);
   const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
@@ -406,7 +405,7 @@
     if (nextDraft !== undefined) draft = nextDraft;
     app.preference.current.prismPanelOpen = true;
     await tick();
-    if (accessReason === null) composer?.focus();
+    composer?.focus();
   };
 
   let seenTitle: string | null = null;
@@ -594,7 +593,7 @@
       });
     }
 
-    if (transition && interactive && accessReason === null) composer?.focus();
+    if (transition && interactive) composer?.focus();
   });
 
   const markSeen = (sessionId: string) => {
@@ -777,7 +776,6 @@
   };
 
   const onChipInsert = (text: string) => {
-    if (accessReason !== null) return;
     draft = text;
     composer?.focus();
   };
@@ -1144,21 +1142,10 @@
               <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
               <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
                 {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
-                  <span
-                    class={css({ display: 'flex' })}
-                    use:tooltip={{ message: accessUnavailableMessage ?? null, placement: 'bottom', delay: 0, arrow: false }}
-                  >
-                    <button
-                      class={chipClass}
-                      disabled={accessReason !== null}
-                      onclick={() => onChipInsert(chip.insert)}
-                      tabindex={chipsVisible && accessReason === null ? 0 : -1}
-                      type="button"
-                    >
-                      <Icon icon={chip.icon} size={14} />
-                      {chip.label}
-                    </button>
-                  </span>
+                  <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
+                    <Icon icon={chip.icon} size={14} />
+                    {chip.label}
+                  </button>
                 {/each}
               </div>
             </div>
@@ -1176,11 +1163,11 @@
             bind:this={composer}
             {blocked}
             {commands}
-            disabled={accessReason !== null}
             {onSend}
             {onStop}
-            policy={{ current: policy, disabled: accessReason !== null, onChange: onPolicyChange }}
+            policy={{ current: policy, onChange: onPolicyChange }}
             running={chat.transcript.run === 'running'}
+            sendDisabled={accessReason !== null}
             status={composerStatus}
             bind:text={draft}
           />

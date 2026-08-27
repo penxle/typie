@@ -18,17 +18,17 @@
 
   type Props = {
     running: boolean;
-    disabled: boolean;
+    sendDisabled: boolean;
     blocked: boolean;
     commands: PrismCommand[] | null;
     status: { text: string; stop: string | null } | null;
-    policy: { current: ToolPolicy; disabled: boolean; onChange: (policy: ToolPolicy) => void };
+    policy: { current: ToolPolicy; onChange: (policy: ToolPolicy) => void };
     onSend: (text: string) => Promise<void>;
     onStop: () => Promise<void>;
     text?: string;
   };
 
-  let { running, disabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
+  let { running, sendDisabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
 
   const policyOptions: { value: ToolPolicy; label: string; description: string; icon: Component }[] = [
     { value: 'READ_ONLY', label: '읽기 전용', description: '스페이스를 읽기만 하고 바꾸지 않아요.', icon: BookOpenIcon },
@@ -129,7 +129,7 @@
   const submit = async () => {
     const value = text.trim();
 
-    if (busy || running || disabled || blocked || value.length === 0) {
+    if (busy || running || sendDisabled || blocked || value.length === 0) {
       return;
     }
 
@@ -295,7 +295,7 @@
             outline: 'none',
             _disabled: { opacity: '50' },
           })}
-          disabled={disabled || blocked}
+          disabled={blocked}
           oninput={() => (slashDismissed = false)}
           onkeydown={onKeydown}
           placeholder={blocked ? '확인을 마치면 이어서 대화할 수 있어요' : '메시지를 입력하세요'}
@@ -304,7 +304,7 @@
           use:autosize={{ value: text }}></textarea>
 
         <div class={flex({ alignItems: 'center', gap: '8px', minHeight: '28px' })}>
-          <Menu style={policyAnchorStyle} disabled={policy.disabled} offset={8} placement="top-start">
+          <Menu style={policyAnchorStyle} offset={8} placement="top-start">
             {#snippet button()}
               <Icon style={css.raw({ color: 'text.subtle' })} icon={currentPolicy.icon} size={14} />
               <span>{currentPolicy.label}</span>
@@ -359,9 +359,10 @@
                 flexShrink: '0',
                 transition: '[transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, color 150ms ease]',
                 _active: { transform: 'scale(0.97)' },
+                _disabled: { backgroundColor: 'surface.muted', color: 'text.faint' },
               })}
               aria-label="보내기"
-              disabled={disabled || busy || empty}
+              disabled={sendDisabled || busy || empty}
               onclick={() => submit()}
               type="button"
             >
