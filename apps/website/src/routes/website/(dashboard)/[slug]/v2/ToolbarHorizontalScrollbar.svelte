@@ -73,7 +73,8 @@
   function handlePointerLeave() {
     if (!rowHovered) return;
     rowHovered = false;
-    showTemporarily();
+    clearTimeout(hideTimer);
+    transientVisible = false;
   }
 
   $effect(() => {
@@ -171,6 +172,7 @@
 {#if geometry.canScroll}
   <div
     style:opacity={visible ? 1 : 0}
+    style:transition-duration={visible ? '300ms' : '600ms'}
     class={css({
       position: 'absolute',
       zIndex: '1',
@@ -181,7 +183,6 @@
       pointerEvents: 'auto',
       touchAction: 'none',
       transition: 'opacity',
-      transitionDuration: '300ms',
     })}
     aria-controls={controls}
     aria-label="툴바 가로 스크롤"
@@ -223,7 +224,7 @@
           height: '3px',
           pointerEvents: 'none',
           borderRadius: 'full',
-          backgroundColor: dragging || thumbHovered ? 'surface.inverse/45' : 'surface.inverse/22',
+          backgroundColor: dragging || thumbHovered ? 'surface.inverse/30' : 'surface.inverse/18',
           transition: 'colors',
         })}
       ></div>
