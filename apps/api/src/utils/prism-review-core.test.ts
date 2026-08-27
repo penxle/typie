@@ -3,6 +3,7 @@ import test from 'node:test';
 import dayjs from 'dayjs';
 import {
   aiCommentId,
+  assembleOutcomeAnchors,
   buildPreviousContext,
   ConfirmInputSchema,
   confirmResult,
@@ -11,6 +12,7 @@ import {
   hasDetail,
   lineageLocked,
   manuscriptPath,
+  outcomeAnchorSites,
   pickVersion,
   planProjection,
   roundState,
@@ -18,8 +20,10 @@ import {
   seedUploads,
   summarizeOutcome,
   threadIsNew,
+  unresolvedOutcomeAnchors,
 } from './prism-review-core.ts';
 import type { ReviewOutcome } from '@typie/prism';
+import type { AnchorHit } from './prism-review-core.ts';
 
 test('summarizeOutcome: feedback은 집계, issues는 건수만, rejected는 문면, null은 전부 비움', () => {
   const summarized = summarizeOutcome({
@@ -30,7 +34,7 @@ test('summarizeOutcome: feedback은 집계, issues는 건수만, rejected는 문
       understanding: '리드',
       patterns: [{ theme: null, body: 'p', issues: [] }],
       priorities: [],
-      strengths: [{ anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }], body: null }],
+      strengths: [{ anchors: [{ head: 'h', tail: 't' }], body: null }],
     },
     verdicts: [{ trait: 't', point: 3, note: null }],
   });
@@ -107,7 +111,7 @@ const feedback = {
   conclusion: {
     understanding: '리드',
     progress: '나아진 점',
-    strengths: [{ anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }], body: '강점 설명' }],
+    strengths: [{ anchors: [{ head: '가나다', tail: '다라마' }], body: '강점 설명' }],
     patterns: [{ theme: '주제', body: '습관', issues: ['stylistic-1', 'judgment-1'] }],
     priorities: [{ body: '순서', issues: ['judgment-1'] }],
   },
@@ -115,16 +119,17 @@ const feedback = {
     { trait: '인물', point: 3, note: '메모' },
     { trait: '구성', point: 9, note: null },
   ],
-  elevations: [{ trait: '문체', body: '격상 설명', anchors: [{ start: 0, end: 5, head: '', tail: '' }] }],
+  elevations: [{ trait: '문체', body: '격상 설명', anchors: [{ head: '', tail: '' }] }],
 } satisfies ReviewOutcome;
 
+const strengthAnchors = [{ head: '가나다', tail: '다라마', selection: null, text: '가나다라마' }];
+const conclusionAnchors = { strengths: [strengthAnchors], elevations: [[{ head: '', tail: '', selection: null, text: '가나다라마' }]] };
+
 test('detailOutcome: 총평 전문을 인용·해소된 참조로 사영한다', () => {
-  const detail = detailOutcome(feedback, '가나다라마');
+  const detail = detailOutcome(feedback, conclusionAnchors);
   assert.equal(detail?.understanding, '리드');
   assert.equal(detail?.progress, '나아진 점');
-  assert.deepEqual(detail?.strengths, [
-    { quote: '가나다라마', body: '강점 설명', anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }] },
-  ]);
+  assert.deepEqual(detail?.strengths, [{ quote: '가나다라마', body: '강점 설명', anchors: strengthAnchors }]);
   assert.deepEqual(detail?.verdicts, [
     { trait: '인물', note: '메모' },
     { trait: '구성', note: null },
@@ -143,16 +148,15 @@ test('detailOutcome: 총평 전문을 인용·해소된 참조로 사영한다',
   assert.deepEqual(detail?.priorities, [{ body: '순서', issues: [{ index: 0, trait: '인물' }] }]);
 });
 
-test('detailOutcome: 강점 인용은 못 찾으면 머리·꼬리로 서고, 격상 인용은 없으면 빠진다', () => {
-  const detail = detailOutcome({ ...feedback, elevations: [{ trait: '문체', body: '격상', anchors: [] }] }, '');
+test('detailOutcome: 회차 앵커가 없으면 강점 인용은 머리·꼬리로 서고, 격상 인용은 없으면 빠진다', () => {
+  const detail = detailOutcome({ ...feedback, elevations: [{ trait: '문체', body: '격상', anchors: [] }] }, null);
   assert.deepEqual(detail?.strengths, [
-    { quote: '가나다 ⋯ 다라마', body: '강점 설명', anchors: [{ start: 0, end: 5, head: '가나다', tail: '다라마' }] },
+    { quote: '가나다 ⋯ 다라마', body: '강점 설명', anchors: [{ head: '가나다', tail: '다라마', selection: null, text: null }] },
   ]);
   assert.deepEqual(detail?.elevations, [{ trait: '문체', quote: null, body: '격상' }]);
 });
 
 test('detailOutcome: 참조는 번호로도 오고, 못 찾은 참조는 접히고, 같은 지적은 한 번만 선다', () => {
-  // 구 결과의 번호 참조 — 타입은 문자열이지만 저장된 jsonb에는 숫자가 남아 있다.
   const legacy = {
     ...feedback,
     conclusion: {
@@ -162,7 +166,7 @@ test('detailOutcome: 참조는 번호로도 오고, 못 찾은 참조는 접히�
     },
   } as unknown as ReviewOutcome;
 
-  const detail = detailOutcome(legacy, '가나다라마');
+  const detail = detailOutcome(legacy, conclusionAnchors);
   assert.deepEqual(detail?.patterns[0].issues, [
     { index: 1, trait: '문장' },
     { index: 0, trait: '인물' },
@@ -170,12 +174,9 @@ test('detailOutcome: 참조는 번호로도 오고, 못 찾은 참조는 접히�
 });
 
 test('detailOutcome: 총평이 없는 결과는 전부 null이다', () => {
-  assert.equal(detailOutcome({ version: 1, kind: 'issues', issues: [] }, '본문'), null);
-  assert.equal(
-    detailOutcome({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '안내', basis: null } }, '본문'),
-    null,
-  );
-  assert.equal(detailOutcome(null, '본문'), null);
+  assert.equal(detailOutcome({ version: 1, kind: 'issues', issues: [] }, null), null);
+  assert.equal(detailOutcome({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '안내', basis: null } }, null), null);
+  assert.equal(detailOutcome(null, null), null);
 });
 
 test('hasDetail: 설 섹션이 하나라도 있어야 참이다', () => {
@@ -214,7 +215,7 @@ test('planProjection - 이슈마다 번호와 계열을 붙인다', () => {
         trait: '동어 반복',
         pass: 'stylistic',
         body: '본문 설명',
-        anchors: [{ start: 0, end: 3, head: '가나다', tail: '가나다' }],
+        anchors: [{ head: '가나다', tail: '가나다' }],
       },
       { trait: '시점 흔들림', pass: 'judgment', body: null, anchors: [] },
     ],
@@ -226,7 +227,6 @@ test('planProjection - 이슈마다 번호와 계열을 붙인다', () => {
   assert.equal(threads[0].issueIndex, 0);
   assert.equal(threads[0].issueId, 'i-1');
   assert.equal(threads[0].pass, 'STYLISTIC');
-  assert.deepEqual(threads[0].anchors, [{ start: 0, end: 3, head: '가나다', tail: '가나다' }]);
   assert.equal(threads[1].issueIndex, 1);
   assert.equal(threads[1].issueId, null);
   assert.equal(threads[1].pass, 'JUDGMENT');
@@ -276,7 +276,7 @@ test('buildPreviousContext: 소문자 사상·USER 답글만·fresh는 base 확�
         body: null,
         state: 'OPEN',
         issueId: 'i-1',
-        anchors: [{ start: 0, end: 3, head: '가나', tail: '나다' }],
+        anchors: [{ head: '가나', tail: '나다', selection: null, text: null }],
         comments: [
           { author: 'AI', body: '지난 코멘트', createdAt: new Date('2026-08-19T00:00:00Z') },
           { author: 'USER', body: '새 답글', createdAt: new Date('2026-08-21T00:00:00Z') },
@@ -335,8 +335,8 @@ test('planProjection: thread 표지 없는 이슈는 fresh, 있는 이슈는 car
     version: 1,
     kind: 'issues',
     issues: [
-      { trait: 'a', pass: 'judgment', body: null, anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }] },
-      { id: 'i-2', trait: 'b', pass: 'stylistic', body: 'x', anchors: [{ start: 2, end: 3, head: 'h', tail: 't' }], thread: 'PRTH9' },
+      { trait: 'a', pass: 'judgment', body: null, anchors: [{ head: 'h', tail: 't' }] },
+      { id: 'i-2', trait: 'b', pass: 'stylistic', body: 'x', anchors: [{ head: 'h', tail: 't' }], thread: 'PRTH9' },
     ],
     dispositions: [
       { threadId: 'PRTH9', verdict: 'kept', comment: null },
@@ -344,10 +344,8 @@ test('planProjection: thread 표지 없는 이슈는 fresh, 있는 이슈는 car
     ],
   };
   assert.deepEqual(planProjection(outcome), {
-    fresh: [
-      { issueIndex: 0, issueId: null, trait: 'a', pass: 'JUDGMENT', body: null, anchors: [{ start: 0, end: 1, head: 'h', tail: 't' }] },
-    ],
-    carried: [{ threadId: 'PRTH9', issueIndex: 1, anchors: [{ start: 2, end: 3, head: 'h', tail: 't' }] }],
+    fresh: [{ issueIndex: 0, issueId: null, trait: 'a', pass: 'JUDGMENT', body: null }],
+    carried: [{ threadId: 'PRTH9', issueIndex: 1 }],
     dispositions: outcome.dispositions,
   });
   assert.deepEqual(planProjection({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: 'm', basis: null } }), {
@@ -373,4 +371,134 @@ test('threadIsNew·lineageLocked·aiCommentId', () => {
     false,
   );
   assert.equal(aiCommentId('PRTH1', 'PRRR2'), 'PRTH1.PRRR2');
+});
+
+test('outcomeAnchorSites: 지적→강점→격상 순으로 평탄화하고, issues 결과는 지적만, 거부는 비어 있다', () => {
+  const sites = outcomeAnchorSites({
+    ...feedback,
+    issues: [
+      {
+        ...feedback.issues[0],
+        anchors: [
+          { head: 'a', tail: 'b' },
+          { head: 'c', tail: 'd' },
+        ],
+      },
+      { ...feedback.issues[1], anchors: [] },
+    ],
+  });
+  assert.deepEqual(
+    sites.map((site) => [site.kind, site.item, site.at, site.anchor.head]),
+    [
+      ['issue', 0, 0, 'a'],
+      ['issue', 0, 1, 'c'],
+      ['strength', 0, 0, '가나다'],
+      ['elevation', 0, 0, ''],
+    ],
+  );
+  assert.deepEqual(
+    outcomeAnchorSites({
+      version: 1,
+      kind: 'issues',
+      issues: [{ trait: 't', pass: 'judgment', body: null, anchors: [{ head: 'h', tail: 't' }] }],
+    }).map((site) => site.kind),
+    ['issue'],
+  );
+  assert.deepEqual(outcomeAnchorSites({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: 'm', basis: null } }), []);
+  assert.deepEqual(outcomeAnchorSites(null), []);
+});
+
+test('assembleOutcomeAnchors: 사이트별 결과를 결과와 평행한 배열로 되돌리고, 빈 자리는 null 앵커다', () => {
+  const outcome: ReviewOutcome = {
+    ...feedback,
+    issues: [
+      {
+        ...feedback.issues[0],
+        anchors: [
+          { head: 'a', tail: 'b' },
+          { head: 'c', tail: 'd' },
+        ],
+      },
+      { ...feedback.issues[1], anchors: [] },
+    ],
+  };
+  const sites = outcomeAnchorSites(outcome);
+  const selection = {
+    version: 2,
+    anchor: { chain: [], child: undefined, affinity: 'downstream' },
+    head: { chain: [], child: undefined, affinity: 'upstream' },
+  };
+  const hits: (AnchorHit | null)[] = [
+    null,
+    { selection: selection as AnchorHit['selection'], text: 'cd' },
+    { selection: selection as AnchorHit['selection'], text: '가나다라마' },
+    null,
+  ];
+  assert.deepEqual(assembleOutcomeAnchors(outcome, sites, hits), {
+    issues: [
+      [
+        { head: 'a', tail: 'b', selection: null, text: null },
+        { head: 'c', tail: 'd', selection, text: 'cd' },
+      ],
+      [],
+    ],
+    conclusion: {
+      strengths: [[{ head: '가나다', tail: '다라마', selection, text: '가나다라마' }]],
+      elevations: [[{ head: '', tail: '', selection: null, text: null }]],
+    },
+  });
+  // 실패 정책: 전부 null이어도 형태는 결과와 평행하다 — 사영은 이 값으로 계속 진행한다
+  assert.deepEqual(unresolvedOutcomeAnchors(outcome), {
+    issues: [
+      [
+        { head: 'a', tail: 'b', selection: null, text: null },
+        { head: 'c', tail: 'd', selection: null, text: null },
+      ],
+      [],
+    ],
+    conclusion: {
+      strengths: [[{ head: '가나다', tail: '다라마', selection: null, text: null }]],
+      elevations: [[{ head: '', tail: '', selection: null, text: null }]],
+    },
+  });
+  assert.deepEqual(unresolvedOutcomeAnchors({ version: 1, kind: 'issues', issues: [] }), {
+    issues: [],
+    conclusion: { strengths: [], elevations: [] },
+  });
+  assert.deepEqual(unresolvedOutcomeAnchors(null), { issues: [], conclusion: { strengths: [], elevations: [] } });
+});
+
+test('assembleOutcomeAnchors: hits가 sites보다 짧거나 결과가 거부여도 형태는 결과와 평행하다', () => {
+  const outcome: ReviewOutcome = {
+    ...feedback,
+    issues: [
+      {
+        ...feedback.issues[0],
+        anchors: [
+          { head: 'a', tail: 'b' },
+          { head: 'c', tail: 'd' },
+        ],
+      },
+    ],
+  };
+  const sites = outcomeAnchorSites(outcome);
+  const selection = {
+    version: 2,
+    anchor: { chain: [], child: undefined, affinity: 'downstream' },
+    head: { chain: [], child: undefined, affinity: 'upstream' },
+  };
+  // hits가 첫 사이트만 덮는다 — 나머지는 null 앵커
+  const partial = assembleOutcomeAnchors(outcome, sites, [{ selection: selection as AnchorHit['selection'], text: 'ab' }]);
+  assert.deepEqual(partial.issues[0], [
+    { head: 'a', tail: 'b', selection, text: 'ab' },
+    { head: 'c', tail: 'd', selection: null, text: null },
+  ]);
+  assert.deepEqual(partial.conclusion.strengths, [[{ head: '가나다', tail: '다라마', selection: null, text: null }]]);
+  assert.deepEqual(partial.conclusion.elevations, [[{ head: '', tail: '', selection: null, text: null }]]);
+  const rejected: ReviewOutcome = { version: 1, kind: 'rejected', rejected: { category: 'diary', message: 'm', basis: null } };
+  assert.deepEqual(assembleOutcomeAnchors(rejected, outcomeAnchorSites(rejected), []), {
+    issues: [],
+    conclusion: { strengths: [], elevations: [] },
+  });
+  assert.deepEqual(unresolvedOutcomeAnchors(rejected), { issues: [], conclusion: { strengths: [], elevations: [] } });
 });

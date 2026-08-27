@@ -872,6 +872,9 @@ importers:
 
   packages/prism:
     dependencies:
+      '@typie/editor-ffi':
+        specifier: workspace:*
+        version: link:../../crates/editor-ffi
       ts-pattern:
         specifier: ^5.9.0
         version: 5.9.0

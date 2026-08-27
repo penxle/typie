@@ -106,3 +106,4 @@ objc2-metal.workspace = true
 editor-core = { path = "../editor-core", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
+proptest = { workspace = true }

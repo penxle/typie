@@ -464,6 +464,26 @@ export interface Position {
     affinity: Affinity;
 }
 
+export interface ProseAnchor {
+    index: number;
+    selection: StableSelection;
+    text: string;
+}
+
+export interface ProseAnchorCapture {
+    text_matches: boolean;
+    anchors: ProseAnchor[];
+}
+
+export interface ProseRange {
+    start: number;
+    end: number;
+}
+
+export interface ProseRanges {
+    ranges: ProseRange[];
+}
+
 export interface ProseTrackedRangeRegistration {
     id: string;
     group: string;
@@ -949,6 +969,11 @@ declare class EditorServer {
     apply(existing: Uint8Array, _new: Uint8Array): Uint8Array;
     build_font(ttf_data: Uint8Array, chunk_codepoints: ChunkCodepoints): BuiltFont;
     build_font_manifest(coverages: ChunkCodepoints): Uint8Array;
+    /**
+     * 스냅샷 heads 시점 상태를 재구성해 원고 텍스트 좌표를 `StableSelection`으로 굳힌다.
+     * `expected_text`는 그 시점에 추출한 `prose_text_annotated()` — 다르면 좌표계가 어긋난 것이라 캡처하지 않는다.
+     */
+    capture_prose_anchors(graph: Uint8Array, heads: Uint8Array, expected_text: string, ranges: ProseRanges): ProseAnchorCapture;
     /**
      * Fold a batch onto `existing` for the collect job while attributing
      * per-bundle character counts — with the expensive `State` build amortized.

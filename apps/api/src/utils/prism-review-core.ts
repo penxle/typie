@@ -1,10 +1,13 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
 import { anchorQuote } from '@typie/prism';
 import { z } from 'zod';
+import type { StableSelection } from '@typie/editor-ffi/server';
 import type { PrismReviewRoundState, PrismReviewThreadState, PrismReviewTier, PrismWorkflowState } from '@typie/lib/enums';
 import type {
   Anchor,
+  ConclusionAnchors,
   PrismReviewTierName,
+  ResolvedAnchor,
   ReviewIssue,
   ReviewOutcome,
   ReviewPreviousContext,
@@ -65,7 +68,7 @@ export type IssueBrief = { index: number; trait: string };
 export type OutcomeDetail = {
   understanding: string | null;
   progress: string | null;
-  strengths: { quote: string; body: string | null; anchors: Anchor[] }[];
+  strengths: { quote: string; body: string | null; anchors: ResolvedAnchor[] }[];
   verdicts: { trait: string; note: string | null }[];
   elevations: { trait: string; quote: string | null; body: string }[];
   patterns: { theme: string | null; body: string; issues: IssueBrief[] }[];
@@ -85,14 +88,55 @@ const briefsOfRefs = (refs: readonly (number | string)[], issues: ReviewIssue[])
   });
 };
 
-// 강점은 인용과 설명뿐이라 인용을 원문에서 못 찾으면 항목이 빈다 — 앵커가 들고 있는 머리·꼬리로 세운다(앵커마다, ⋯로 잇는다).
-const strengthQuote = (content: string, anchors: Anchor[]): string => {
-  const quote = anchorQuote(content, anchors);
-  if (quote.length > 0) return quote;
-  return anchors.map((anchor) => (anchor.head === anchor.tail ? anchor.head : `${anchor.head} ⋯ ${anchor.tail}`)).join(' ⋯ ');
+const unresolved = (anchor: Anchor): ResolvedAnchor => ({ head: anchor.head, tail: anchor.tail, selection: null, text: null });
+
+export type AnchorSite = { kind: 'issue' | 'strength' | 'elevation'; item: number; at: number; anchor: Anchor };
+export type AnchorHit = { selection: StableSelection; text: string };
+export type OutcomeAnchors = { issues: ResolvedAnchor[][]; conclusion: ConclusionAnchors };
+
+// 해석·캡처는 결과 전체를 한 번에 한다 — 사이트 목록이 그 입력이고, 재조립이 결과와 평행한 배열로 되돌린다
+export const outcomeAnchorSites = (outcome: ReviewOutcome | null): AnchorSite[] => {
+  if (outcome === null || outcome.kind === 'rejected') return [];
+
+  const sites: AnchorSite[] = outcome.issues.flatMap((issue, item) =>
+    issue.anchors.map((anchor, at) => ({ kind: 'issue' as const, item, at, anchor })),
+  );
+  if (outcome.kind !== 'feedback') return sites;
+
+  sites.push(
+    ...(outcome.conclusion.strengths ?? []).flatMap((strength, item) =>
+      strength.anchors.map((anchor, at) => ({ kind: 'strength' as const, item, at, anchor })),
+    ),
+    ...(outcome.elevations ?? []).flatMap((elevation, item) =>
+      elevation.anchors.map((anchor, at) => ({ kind: 'elevation' as const, item, at, anchor })),
+    ),
+  );
+  return sites;
 };
 
-export const detailOutcome = (outcome: ReviewOutcome | null, content: string): OutcomeDetail | null => {
+export const assembleOutcomeAnchors = (
+  outcome: ReviewOutcome | null,
+  sites: readonly AnchorSite[],
+  hits: readonly (AnchorHit | null)[],
+): OutcomeAnchors => {
+  const issues = outcome === null || outcome.kind === 'rejected' ? [] : outcome.issues.map((issue) => issue.anchors.map(unresolved));
+  const strengths =
+    outcome?.kind === 'feedback' ? (outcome.conclusion.strengths ?? []).map((strength) => strength.anchors.map(unresolved)) : [];
+  const elevations = outcome?.kind === 'feedback' ? (outcome.elevations ?? []).map((elevation) => elevation.anchors.map(unresolved)) : [];
+  const buckets = { issue: issues, strength: strengths, elevation: elevations };
+
+  for (const [index, site] of sites.entries()) {
+    const hit = hits[index] ?? null;
+    if (hit === null) continue;
+    buckets[site.kind][site.item][site.at] = { head: site.anchor.head, tail: site.anchor.tail, selection: hit.selection, text: hit.text };
+  }
+
+  return { issues, conclusion: { strengths, elevations } };
+};
+
+export const unresolvedOutcomeAnchors = (outcome: ReviewOutcome | null): OutcomeAnchors => assembleOutcomeAnchors(outcome, [], []);
+
+export const detailOutcome = (outcome: ReviewOutcome | null, conclusionAnchors: ConclusionAnchors | null): OutcomeDetail | null => {
   if (outcome === null || outcome.kind !== 'feedback') return null;
 
   const { conclusion, issues } = outcome;
@@ -100,18 +144,14 @@ export const detailOutcome = (outcome: ReviewOutcome | null, content: string): O
   return {
     understanding: conclusion.understanding,
     progress: conclusion.progress ?? null,
-    strengths: (conclusion.strengths ?? []).map((strength) => ({
-      quote: strengthQuote(content, strength.anchors),
-      body: strength.body,
-      anchors: strength.anchors,
-    })),
-    verdicts: (outcome.verdicts ?? []).map((verdict) => ({
-      trait: verdict.trait,
-      note: verdict.note,
-    })),
-    elevations: (outcome.elevations ?? []).map((elevation) => ({
+    strengths: (conclusion.strengths ?? []).map((strength, index) => {
+      const anchors = conclusionAnchors?.strengths[index] ?? strength.anchors.map(unresolved);
+      return { quote: anchorQuote(anchors), body: strength.body, anchors };
+    }),
+    verdicts: (outcome.verdicts ?? []).map((verdict) => ({ trait: verdict.trait, note: verdict.note })),
+    elevations: (outcome.elevations ?? []).map((elevation, index) => ({
       trait: elevation.trait,
-      quote: anchorQuote(content, elevation.anchors) || null,
+      quote: anchorQuote(conclusionAnchors?.elevations[index] ?? elevation.anchors.map(unresolved)) || null,
       body: elevation.body,
     })),
     patterns: conclusion.patterns.map((pattern) => ({
@@ -159,7 +199,7 @@ export type PreviousThreadSource = {
   body: string | null;
   state: PrismReviewThreadState;
   issueId: string | null;
-  anchors: Anchor[];
+  anchors: ResolvedAnchor[];
   comments: { author: 'USER' | 'AI'; body: string; createdAt: Date }[];
 };
 
@@ -228,13 +268,13 @@ export type ProjectedThread = {
   trait: string;
   pass: 'JUDGMENT' | 'STYLISTIC';
   body: string | null;
-  anchors: Anchor[];
 };
 
-export type CarriedSeat = { threadId: string; issueIndex: number; anchors: Anchor[] };
+export type CarriedSeat = { threadId: string; issueIndex: number };
 export type ProjectionPlan = { fresh: ProjectedThread[]; carried: CarriedSeat[]; dispositions: ReviewThreadDisposition[] };
 
 // thread 표지 없는 이슈만 새 스레드가 된다 — 표지 이슈는 지난 스레드의 계속이라 좌석만 늘린다
+// 좌석 앵커는 여기 실리지 않는다 — 사영이 OutcomeAnchors.issues[issueIndex]에서 가져온다(출처는 하나)
 export const planProjection = (outcome: ReviewOutcome | null): ProjectionPlan => {
   if (outcome === null || outcome.kind === 'rejected') return { fresh: [], carried: [], dispositions: [] };
 
@@ -249,10 +289,9 @@ export const planProjection = (outcome: ReviewOutcome | null): ProjectionPlan =>
         trait: issue.trait,
         pass: issue.pass === 'judgment' ? 'JUDGMENT' : 'STYLISTIC',
         body: issue.body,
-        anchors: issue.anchors,
       });
     } else {
-      carried.push({ threadId: issue.thread, issueIndex: index, anchors: issue.anchors });
+      carried.push({ threadId: issue.thread, issueIndex: index });
     }
   }
 
@@ -279,6 +318,3 @@ export const threadIsNew = (bornRoundId: string, viewRoundId: string, completedR
   bornRoundId === viewRoundId && completedRoundsInLineage >= 2;
 
 export const aiCommentId = (threadId: string, roundId: string): string => `${threadId}.${roundId}`;
-
-// 인용은 저장하지 않는다 — 리뷰 시점 판본에서 조회 때마다 자른다
-export const threadQuote = (content: string, anchors: Anchor[]): string => anchorQuote(content, anchors);

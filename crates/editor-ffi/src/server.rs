@@ -88,6 +88,45 @@ pub struct ResolvedV1Selection {
 
 #[ffi]
 #[allow(dead_code)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct ProseRange {
+    // 원고 텍스트(prose_text_annotated)의 UTF-16 코드 유닛 좌표 — JS 문자열 인덱스 그대로
+    pub start: u32,
+    pub end: u32,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ProseRanges {
+    pub ranges: Vec<ProseRange>,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ProseAnchor {
+    // 입력 ranges의 인덱스 — 캡처에 실패한 range는 목록에서 빠진다
+    pub index: u32,
+    pub selection: editor_state::StableSelection,
+    pub text: String,
+}
+
+#[ffi]
+#[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ProseAnchorCapture {
+    // false면 heads 시점 원고가 expected_text와 다르다 — 좌표계가 다른 텍스트에 offset을 대지 않는다
+    pub text_matches: bool,
+    pub anchors: Vec<ProseAnchor>,
+}
+
+#[ffi]
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct GraphWithAnchors {
@@ -776,6 +815,83 @@ impl EditorServer {
         Ok(ResolvedV1Selection {
             selection,
             degraded,
+        }
+        .into_ffi()?)
+    }
+
+    /// 스냅샷 heads 시점 상태를 재구성해 원고 텍스트 좌표를 `StableSelection`으로 굳힌다.
+    /// `expected_text`는 그 시점에 추출한 `prose_text_annotated()` — 다르면 좌표계가 어긋난 것이라 캡처하지 않는다.
+    pub fn capture_prose_anchors(
+        &self,
+        graph: Vec<u8>,
+        heads: Vec<u8>,
+        expected_text: String,
+        ranges: Complex<ProseRanges>,
+    ) -> EditorResult<Complex<ProseAnchorCapture>> {
+        let ranges: ProseRanges = ranges.from_ffi()?;
+        let css: Vec<editor_crdt::Changeset<editor_model::EditOp>> =
+            editor_codec::decode_changeset_stream(&graph[..])
+                .map_err(|e| FfiError::Deserialization(e.to_string()))?
+                .into_graph_input();
+        let target: hashbrown::HashSet<editor_crdt::Dot> = editor_codec::decode_dots(&heads[..])
+            .map_err(|e| FfiError::Deserialization(e.to_string()))?
+            .into_iter()
+            .collect();
+
+        let state = if css.is_empty() {
+            crate::graph::build_state_tolerant(css, &[])?
+        } else {
+            let graph = crate::graph::graph_tolerant(css);
+            let current: hashbrown::HashSet<editor_crdt::Dot> =
+                graph.current_heads().copied().collect();
+            if current == target {
+                let projected = editor_state::ProjectedState::from_graph_with_overlay(graph, &[])
+                    .map_err(|e| EditorError::General {
+                    msg: format!("{e:?}"),
+                })?;
+                editor_state::State::new(projected, None)
+            } else {
+                state_at_heads(&graph, &target, &[])?
+            }
+        };
+        if state.projection_degraded() {
+            return Err(EditorError::General {
+                msg: "target projection is degraded".to_string(),
+            });
+        }
+
+        let view = state.view();
+        let prose = editor_state::prose_annotated(&view);
+        if prose.text() != expected_text {
+            return Ok(ProseAnchorCapture {
+                text_matches: false,
+                anchors: Vec::new(),
+            }
+            .into_ffi()?);
+        }
+
+        let anchors = ranges
+            .ranges
+            .iter()
+            .enumerate()
+            .filter_map(|(index, range)| {
+                let sel =
+                    prose.to_selection_utf16(&view, range.start as usize..range.end as usize)?;
+                let resolved = sel.resolve(&view)?;
+                if resolved.is_collapsed() {
+                    return None;
+                }
+                Some(ProseAnchor {
+                    index: index as u32,
+                    selection: editor_state::StableSelection::capture(&sel, &view),
+                    text: resolved.collect_text(),
+                })
+            })
+            .collect();
+
+        Ok(ProseAnchorCapture {
+            text_matches: true,
+            anchors,
         }
         .into_ffi()?)
     }
@@ -2459,6 +2575,141 @@ mod tests {
         assert_eq!(result.selection.version, 2);
     }
 
+    fn prose_graph(text: &str) -> (editor_state::State, Vec<u8>, Vec<u8>) {
+        let state = make_state_with_text(text);
+        let graph = enc_css(&state.graph().changesets_as_vec());
+        let heads: Vec<Dot> = state.graph().current_heads().copied().collect();
+        (state, graph, enc_dots(&heads))
+    }
+
+    fn resolve_captured_text(graph: &[u8], anchor: &ProseAnchor) -> String {
+        let state = crate::graph::build_state_tolerant(dec_css(graph), &[]).unwrap();
+        let view = state.view();
+        let ctx = editor_state::StableResolveCtx::from_live(&view, state.projected.seq_checkout());
+        anchor
+            .selection
+            .resolve(&ctx)
+            .unwrap()
+            .resolve(&view)
+            .unwrap()
+            .collect_text()
+    }
+
+    #[test]
+    fn capture_prose_anchors_captures_at_past_heads_and_survives_later_edits() {
+        let (mut state, before, heads) = prose_graph("hello world");
+        // heads 뒤의 편집: 맨 앞 삽입 + 안쪽 삭제("wor" → "wr")
+        state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Char('X'),
+            }))
+            .unwrap();
+        state
+            .projected_mut()
+            .apply(EditOp::Seq(ListOp::Del { pos: 9, len: 1 }))
+            .unwrap();
+        state.projected_mut().commit();
+        let after = enc_css(&state.graph().changesets_as_vec());
+
+        let server = EditorServer::new_test();
+        let captured = server
+            .capture_prose_anchors(
+                after.clone(),
+                heads.clone(),
+                "hello world".into(),
+                ProseRanges {
+                    ranges: vec![
+                        ProseRange { start: 0, end: 5 },
+                        ProseRange { start: 6, end: 11 },
+                    ],
+                },
+            )
+            .unwrap();
+        assert!(captured.text_matches);
+        assert_eq!(captured.anchors.len(), 2);
+        assert_eq!(captured.anchors[0].index, 0);
+        assert_eq!(captured.anchors[0].text, "hello");
+        assert_eq!(captured.anchors[1].text, "world");
+        // 앞 삽입은 밖에, 안쪽 삭제는 편집분만 반영된다
+        assert_eq!(resolve_captured_text(&after, &captured.anchors[0]), "hello");
+        assert_eq!(resolve_captured_text(&after, &captured.anchors[1]), "wrld");
+
+        // heads == 현재 heads 경로와 조상 재구성 경로가 같은 앵커를 낸다
+        let same = server
+            .capture_prose_anchors(
+                before,
+                heads,
+                "hello world".into(),
+                ProseRanges {
+                    ranges: vec![ProseRange { start: 0, end: 5 }],
+                },
+            )
+            .unwrap();
+        assert_eq!(same.anchors[0].selection, captured.anchors[0].selection);
+    }
+
+    #[test]
+    fn capture_prose_anchors_gates_on_expected_text() {
+        let (_, graph, heads) = prose_graph("hello world");
+        let server = EditorServer::new_test();
+        let captured = server
+            .capture_prose_anchors(
+                graph,
+                heads,
+                "hello there".into(),
+                ProseRanges {
+                    ranges: vec![ProseRange { start: 0, end: 5 }],
+                },
+            )
+            .unwrap();
+        assert!(!captured.text_matches);
+        assert!(captured.anchors.is_empty());
+    }
+
+    #[test]
+    fn capture_prose_anchors_rejects_unknown_heads() {
+        let (_, graph, _) = prose_graph("hello world");
+        // 별개 문서의 heads로는 이걸 못 만든다 — actor·clock이 결정적이라 그 dot이 이 그래프에도 실재한다.
+        let unknown_heads = enc_dots(&[Dot::new(9, 9)]);
+        let server = EditorServer::new_test();
+        assert!(
+            server
+                .capture_prose_anchors(
+                    graph,
+                    unknown_heads,
+                    "hello world".into(),
+                    ProseRanges { ranges: vec![] },
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn capture_prose_anchors_skips_unresolvable_ranges_only() {
+        let (_, graph, heads) = prose_graph("a😀b");
+        let server = EditorServer::new_test();
+        let captured = server
+            .capture_prose_anchors(
+                graph,
+                heads,
+                "a😀b".into(),
+                ProseRanges {
+                    ranges: vec![
+                        ProseRange { start: 1, end: 2 }, // 서로게이트 한가운데 — UTF-16 오프셋 변환 자체가 실패
+                        ProseRange { start: 1, end: 1 }, // 빈 구간 — 변환은 되지만 셀렉션이 collapsed
+                        ProseRange { start: 1, end: 3 },
+                    ],
+                },
+            )
+            .unwrap();
+        assert!(captured.text_matches);
+        assert_eq!(captured.anchors.len(), 1);
+        assert_eq!(captured.anchors[0].index, 2);
+        assert_eq!(captured.anchors[0].text, "😀");
+    }
+
     fn xml_test_graph(text: &str) -> Vec<u8> {
         let state = make_state_with_text(text);
         EditorServer::new_test().to_graph(state.to_plain()).unwrap()
@@ -2990,5 +3241,118 @@ mod tests {
             )
         );
         assert_eq!(saved2.blocks_deleted, 0);
+    }
+
+    mod prose_anchor_equivalence {
+        use std::collections::BTreeMap;
+
+        use editor_model::{
+            PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        };
+        use proptest::prelude::*;
+
+        use super::*;
+
+        fn entry(node: PlainNode, children: Vec<PlainNodeEntry>) -> PlainNodeEntry {
+            PlainNodeEntry {
+                node,
+                modifiers: BTreeMap::new(),
+                carry: Vec::new(),
+                children,
+            }
+        }
+
+        fn paragraph(text: &str) -> PlainNodeEntry {
+            let children = if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![entry(
+                    PlainNode::Text(PlainTextNode { text: text.into() }),
+                    Vec::new(),
+                )]
+            };
+            entry(PlainNode::Paragraph(PlainParagraphNode {}), children)
+        }
+
+        fn doc(paragraphs: &[String]) -> PlainDoc {
+            PlainDoc {
+                root: PlainNodeEntry {
+                    node: PlainNode::Root(PlainRootNode::default()),
+                    modifiers: BTreeMap::new(),
+                    carry: Vec::new(),
+                    children: paragraphs.iter().map(|p| paragraph(p)).collect(),
+                },
+            }
+        }
+
+        fn paragraphs() -> impl Strategy<Value = Vec<String>> {
+            prop::collection::vec(
+                prop::collection::vec(
+                    prop::sample::select(vec!['a', 'b', '가', '나', ' ', '😀']),
+                    0..6,
+                )
+                .prop_map(|chars| chars.into_iter().collect::<String>()),
+                1..4,
+            )
+        }
+
+        // Some(c)=마지막 문단 끝에 c 삽입, None=마지막 글자 삭제(있을 때만)
+        fn edits() -> impl Strategy<Value = Vec<Option<char>>> {
+            prop::collection::vec(
+                prop::option::of(prop::sample::select(vec!['x', '다'])),
+                0..5,
+            )
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+            #[test]
+            fn reprojection_at_heads_equals_snapshot_projection(paragraphs in paragraphs(), edits in edits()) {
+                let mut state = editor_state::State::from_plain(&doc(&paragraphs)).unwrap();
+                let snapshot_text = editor_state::prose_annotated(&state.view()).text().to_string();
+                let before = enc_css(&state.graph().changesets_as_vec());
+                let heads: hashbrown::HashSet<Dot> = state.graph().current_heads().copied().collect();
+
+                // seq 위치 가정: 문단 블록 1 + 글자 수. 어긋나면 state.projected.seq()로 실제 배치를 확인한다.
+                let mut total: usize = paragraphs.iter().map(|p| 1 + p.chars().count()).sum();
+                let mut last_len = paragraphs.last().map(|p| p.chars().count()).unwrap_or(0);
+                for edit in edits {
+                    match edit {
+                        Some(c) => {
+                            state.projected_mut().apply(EditOp::Seq(ListOp::Ins { pos: total, item: SeqItem::Char(c) })).unwrap();
+                            total += 1;
+                            last_len += 1;
+                        }
+                        None if last_len > 0 => {
+                            state.projected_mut().apply(EditOp::Seq(ListOp::Del { pos: total - 1, len: 1 })).unwrap();
+                            total -= 1;
+                            last_len -= 1;
+                        }
+                        None => {}
+                    }
+                }
+                state.projected_mut().commit();
+                let after = enc_css(&state.graph().changesets_as_vec());
+
+                // ① 스냅샷 추출 경로(create_editor_from_graph → state_from_changesets)의 텍스트
+                let (snapshot_state, _) = crate::graph::state_from_changesets(before.clone()).unwrap();
+                let snapshot_prose = editor_state::prose_annotated(&snapshot_state.view());
+                prop_assert_eq!(snapshot_prose.text(), snapshot_text.as_str());
+
+                // ② heads 조상 재구성 경로의 텍스트
+                let after_state = crate::graph::build_state_tolerant(dec_css(&after), &[]).unwrap();
+                let at_heads = state_at_heads(after_state.graph(), &heads, &[]).unwrap();
+                prop_assert!(!at_heads.projection_degraded());
+                let at_heads_prose = editor_state::prose_annotated(&at_heads.view());
+                prop_assert_eq!(at_heads_prose.text(), snapshot_text.as_str());
+
+                // ③ FFI 게이트가 그 텍스트를 받아들인다
+                let server = EditorServer::new_test();
+                let capture = server
+                    .capture_prose_anchors(after, enc_dots(&heads.iter().copied().collect::<Vec<_>>()), snapshot_text.clone(), ProseRanges { ranges: vec![] })
+                    .unwrap();
+                prop_assert!(capture.text_matches);
+            }
+        }
     }
 }

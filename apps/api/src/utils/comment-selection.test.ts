@@ -192,6 +192,31 @@ test('normalizeStablePosition keeps a v2 position that already carries its child
   assert.deepEqual(normalizeStablePosition(position), { kind: 'keep' });
 });
 
+test('normalizeStableSelection restores child on a v2 selection whose child key arrived present-but-undefined', () => {
+  const selection = {
+    version: 2,
+    anchor: { chain: [{ type: 'real', dot: '0_AzL8n0Y58m8' }], child: undefined, affinity: 'downstream' },
+    head: { chain: [{ type: 'synthetic', owner: '1_1', role: 'table', depth: 1 }], child: undefined, affinity: 'upstream' },
+  };
+
+  // child: undefined와 child: null을 가르는 것이 이 테스트의 전부라 임포트 모드와 무관하게 strict 비교로 못박는다
+  assert.deepStrictEqual(normalizeStableSelection(selection), {
+    version: 2,
+    anchor: { chain: selection.anchor.chain, child: null, affinity: 'downstream' },
+    head: { chain: selection.head.chain, child: null, affinity: 'upstream' },
+  });
+});
+
+test('normalizeStableSelection returns a v2 selection that already carries its child as-is', () => {
+  const selection = {
+    version: 2,
+    anchor: { chain: [{ type: 'real', dot: '0_AzL8n0Y58m8' }], child: { dot: '1_2', bind: 'left' }, affinity: 'downstream' },
+    head: { chain: [{ type: 'real', dot: '0_AzL8n0Y58m8' }], child: null, affinity: 'downstream' },
+  };
+
+  assert.equal(normalizeStableSelection(selection), selection);
+});
+
 test('extractSelectionDots reads v2 chain-segment selections (real dots, synthetic owners, child)', () => {
   const selection = {
     version: 2,

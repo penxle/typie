@@ -1,6 +1,7 @@
+import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import {
   db,
   first,
@@ -14,15 +15,21 @@ import {
 } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { PRISM_USER_ID } from '#/utils/system-actor.ts';
-import { aiCommentId, planProjection } from './prism-review-core.ts';
+import { readMergedGraph } from './changeset.ts';
+import { resolveOutcomeAnchors } from './prism-review-anchors.ts';
+import { aiCommentId, outcomeAnchorSites, planProjection, unresolvedOutcomeAnchors } from './prism-review-core.ts';
+import { wasmThread } from './wasm-thread.ts';
 import type { PrismWorkflowState } from '@typie/lib/enums';
-import type { Anchor, ReviewOutcome } from '@typie/prism';
+import type { ResolvedAnchor, ReviewOutcome } from '@typie/prism';
 import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
 
 const log = logger.getChild('prism-review');
 
-export type Seat = { roundId: string; issueIndex: number; anchors: Anchor[] };
+// settle 트랜잭션이 wasm 풀 대기에 묶이는 시간의 상한 — 넘기면 실패 정책으로 앵커 없이 착지한다
+const CAPTURE_TIMEOUT_MS = 60_000;
+
+export type Seat = { roundId: string; issueIndex: number; anchors: ResolvedAnchor[] };
 export type LineageRound = {
   id: string;
   round: number;
@@ -34,7 +41,6 @@ type ThreadComment = typeof PrismReviewThreadComments.$inferSelect;
 
 // 요청(또는 구독 소켓) 단위 메모 — 스코프 객체는 GraphQL ctx다
 type Memo = {
-  versions: Map<string, Promise<string>>;
   seats: Map<string, Promise<Map<string, Seat>>>;
   views: Map<string, string>;
   comments: Map<string, Promise<ThreadComment[]>>;
@@ -47,7 +53,7 @@ const memos = new WeakMap<object, Memo>();
 const memoOf = (scope: object): Memo => {
   let memo = memos.get(scope);
   if (!memo) {
-    memo = { versions: new Map(), seats: new Map(), views: new Map(), comments: new Map(), lineages: new Map(), latest: new Map() };
+    memo = { seats: new Map(), views: new Map(), comments: new Map(), lineages: new Map(), latest: new Map() };
     memos.set(scope, memo);
   }
 
@@ -57,25 +63,6 @@ const memoOf = (scope: object): Memo => {
 // 구독 ctx는 소켓만큼 오래 산다 — 요청 단위로 접으려고 만든 메모가 거기서는 첫 이벤트의 값을 영구히 붙든다.
 export const clearRoundMemos = (scope: object): void => {
   memos.delete(scope);
-};
-
-// 회차의 리뷰 시점 원고 — 인용을 자를 때만 필요하다. 한 회차의 스레드가 전부 같은 판본을 쓰므로
-// 요청 안에서 한 번만 읽는다.
-export const roundVersionContent = (scope: object, roundId: string): Promise<string> => {
-  const memo = memoOf(scope);
-  const cached = memo.versions.get(roundId);
-  if (cached) return cached;
-
-  const loading = db
-    .select({ content: PrismReviewDocumentVersions.content })
-    .from(PrismReviewRounds)
-    .innerJoin(PrismReviewDocumentVersions, eq(PrismReviewRounds.documentVersionId, PrismReviewDocumentVersions.id))
-    .where(eq(PrismReviewRounds.id, roundId))
-    .then(firstOrThrow)
-    .then((row) => row.content);
-
-  memo.versions.set(roundId, loading);
-  return loading;
 };
 
 // 계보의 회차 목록 — 회차수·잠금·'신규' 판별이 모두 이걸 본다. 스레드마다 다시 읽으면 N+1이라 요청 안에서 한 번만 읽는다.
@@ -194,8 +181,9 @@ export const preloadThreadComments = async (scope: object, threadIds: readonly s
   for (const id of threadIds) memo.comments.set(id, Promise.resolve(rows.filter((row) => row.threadId === id)));
 };
 
-// 발행은 호출자 몫 — settle 경로는 트랜잭션 안이다. 재적용은 회차 행 잠금으로 직렬화하고,
-// 그 안에서 좌석 unique·OPEN 조건부 갱신·결정적 코멘트 id가 중복을 막는다.
+// 발행은 호출자 몫 — settle 경로는 트랜잭션 안이다. 사영은 회차당 한 번이다: projectedAt이 찍힌 회차는 건드리지 않고,
+// 판정은 행 잠금 뒤의 값으로 한다(동시 진입·중복 settle이 두 번 사영·발행하지 않게). 그 안에서 좌석 unique·OPEN 조건부 갱신·
+// 결정적 코멘트 id가 중복을 막는다. 반환은 알릴 것이 있었을 때만 — 앉힐 지적·처분이 있었거나 총평 앵커를 처음 굳혔을 때
 export const projectRoundThreads = async (executor: Database | Transaction, roundId: string): Promise<{ documentId: string } | null> => {
   const round = await executor
     .select({
@@ -203,15 +191,63 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
       documentId: PrismReviewRounds.documentId,
       lineageId: PrismReviewRounds.lineageId,
       result: PrismReviewRounds.result,
+      conclusionAnchors: PrismReviewRounds.conclusionAnchors,
+      projectedAt: PrismReviewRounds.projectedAt,
+      content: PrismReviewDocumentVersions.content,
+      heads: PrismReviewDocumentVersions.heads,
     })
     .from(PrismReviewRounds)
+    .innerJoin(PrismReviewDocumentVersions, eq(PrismReviewDocumentVersions.id, PrismReviewRounds.documentVersionId))
     .where(eq(PrismReviewRounds.id, roundId))
-    .for('update')
     .then(first);
-  if (!round) return null;
+  if (!round || round.result === null || round.projectedAt !== null) return null;
 
   const plan = planProjection(round.result);
-  if (plan.fresh.length === 0 && plan.carried.length === 0 && plan.dispositions.length === 0) return null;
+  const planEmpty = plan.fresh.length === 0 && plan.carried.length === 0 && plan.dispositions.length === 0;
+  // 총평 앵커는 좌석과 무관하게 회차당 한 번만 굳힌다 — 지적 없는 회차도 강점은 있고, 한 번 앉은 값은 재사영이 지우지 않는다
+  const needsConclusion = round.conclusionAnchors === null && outcomeAnchorSites(round.result).length > 0;
+
+  // 원고 크기 비례 작업은 행 잠금 앞에 — 잠금 보유 시간에 해석·캡처 시간이 들어가지 않게 한다.
+  // 좌석에 앉힐 지적이 없고 총평도 이미 굳었으면 wasm을 부르지 않는다.
+  const anchors =
+    needsConclusion || plan.fresh.length > 0 || plan.carried.length > 0
+      ? await resolveOutcomeAnchors(
+          round.result,
+          { content: round.content, heads: round.heads },
+          {
+            readGraph: () => readMergedGraph(round.documentId),
+            capture: (graph, heads, expectedText, ranges) =>
+              wasmThread.captureProseAnchors(graph, heads, expectedText, ranges, CAPTURE_TIMEOUT_MS).then(({ result }) => result),
+            report: (failure) => {
+              if (failure.kind === 'text_mismatch') {
+                log.warn('review anchors dropped: snapshot text differs at heads {roundId}', { roundId: round.id });
+                Sentry.captureMessage(`prism review anchors: snapshot text mismatch ${round.id}`, {
+                  level: 'warning',
+                  extra: { roundId: round.id },
+                });
+              } else {
+                log.warn('review anchors dropped: capture failed {roundId} {*}', { roundId: round.id, error: failure.error });
+                Sentry.captureException(failure.error, { extra: { roundId: round.id } });
+              }
+            },
+          },
+        )
+      : unresolvedOutcomeAnchors(round.result);
+
+  const locked = await executor
+    .select({ projectedAt: PrismReviewRounds.projectedAt, conclusionAnchors: PrismReviewRounds.conclusionAnchors })
+    .from(PrismReviewRounds)
+    .where(eq(PrismReviewRounds.id, round.id))
+    .for('update')
+    .then(firstOrThrow);
+  if (locked.projectedAt !== null) return null;
+
+  await executor
+    .update(PrismReviewRounds)
+    .set({ projectedAt: dayjs(), ...(locked.conclusionAnchors === null && { conclusionAnchors: anchors.conclusion }) })
+    .where(eq(PrismReviewRounds.id, round.id));
+
+  if (planEmpty) return needsConclusion ? { documentId: round.documentId } : null;
 
   const seated = await executor
     .select({ issueIndex: PrismReviewThreadSeats.issueIndex })
@@ -238,7 +274,7 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
 
     await executor
       .insert(PrismReviewThreadSeats)
-      .values({ threadId: thread.id, roundId: round.id, issueIndex: fresh.issueIndex, anchors: fresh.anchors })
+      .values({ threadId: thread.id, roundId: round.id, issueIndex: fresh.issueIndex, anchors: anchors.issues[fresh.issueIndex] ?? [] })
       .onConflictDoNothing({ target: [PrismReviewThreadSeats.roundId, PrismReviewThreadSeats.issueIndex] });
   }
 
@@ -258,7 +294,12 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
 
     await executor
       .insert(PrismReviewThreadSeats)
-      .values({ threadId: carried.threadId, roundId: round.id, issueIndex: carried.issueIndex, anchors: carried.anchors })
+      .values({
+        threadId: carried.threadId,
+        roundId: round.id,
+        issueIndex: carried.issueIndex,
+        anchors: anchors.issues[carried.issueIndex] ?? [],
+      })
       .onConflictDoNothing({ target: [PrismReviewThreadSeats.threadId, PrismReviewThreadSeats.roundId] });
   }
 
@@ -294,20 +335,18 @@ export const projectRoundThreads = async (executor: Database | Transaction, roun
   return { documentId: round.documentId };
 };
 
-// 배포 전에 끝난 회차와 사영 중 죽은 회차를 첫 조회가 메운다. 좌석이 하나라도 있으면 사영된 회차다.
-// 검사와 사영이 한 트랜잭션이어야 스레드만 서고 좌석이 빠진 채로 커밋되지 않는다
+// 배포 전에 끝난 회차(결과만 있고 사영 흔적이 없는 행)를 첫 조회가 메운다. settle은 결과 기록과 사영이 한 트랜잭션이라
+// 사영 중에 죽어도 결과 없는 회차로 되돌아간다 — 여기서 메울 것은 흔적 없는 회차뿐이다.
+// 바깥 읽기는 지름길이고 확정 판정은 projectRoundThreads가 잠금 뒤에 다시 한다
 export const ensureRoundThreads = async (roundId: string): Promise<void> => {
-  const projected = await db.transaction(async (tx) => {
-    const existing = await tx
-      .select({ count: count() })
-      .from(PrismReviewThreadSeats)
-      .where(eq(PrismReviewThreadSeats.roundId, roundId))
-      .then(firstOrThrow);
+  const round = await db
+    .select({ projectedAt: PrismReviewRounds.projectedAt })
+    .from(PrismReviewRounds)
+    .where(eq(PrismReviewRounds.id, roundId))
+    .then(first);
+  if (!round || round.projectedAt !== null) return;
 
-    if (existing.count > 0) return null;
-    return projectRoundThreads(tx, roundId);
-  });
-
+  const projected = await db.transaction((tx) => projectRoundThreads(tx, roundId));
   if (projected !== null) pubsub.publish('prism:review', projected.documentId, { roundId });
 };
 

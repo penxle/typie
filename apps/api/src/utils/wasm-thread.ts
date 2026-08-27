@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import type { CollectResult, ConsolidateResult } from '@typie/editor-ffi/server';
+import type { CollectResult, ConsolidateResult, ProseAnchorCapture, ProseRange } from '@typie/editor-ffi/server';
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 const COOLDOWN_MS = 60_000;
@@ -43,7 +43,7 @@ type Pending = {
 
 export type Thread = {
   readonly healthy: boolean;
-  call(method: string, args: Uint8Array[], timeoutMs?: number): Promise<CallResult>;
+  call(method: string, args: unknown[], timeoutMs?: number): Promise<CallResult>;
   waitHealthy(): Promise<void>;
   shutdown(): void;
 };
@@ -257,7 +257,7 @@ export class WasmThread implements Thread {
     return true;
   }
 
-  async call(method: string, args: Uint8Array[], timeoutMs: number = this.#callTimeoutMs): Promise<CallResult> {
+  async call(method: string, args: unknown[], timeoutMs: number = this.#callTimeoutMs): Promise<CallResult> {
     if (this.#shuttingDown) {
       throw new Error('wasm thread pool is shutting down');
     }
@@ -425,7 +425,12 @@ export const wasmThread = {
     getPool().withThread((thread) => thread.call('consolidate', [stream])) as Promise<{ result: ConsolidateResult; execMs: number }>,
   extractProse: (graph: Uint8Array) =>
     getPool().withThread((thread) => thread.call('extract_prose', [graph])) as Promise<{
-      result: { text: string | null; characterCount: number };
+      result: { text: string | null; characterCount: number; heads: Uint8Array };
+      execMs: number;
+    }>,
+  captureProseAnchors: (graph: Uint8Array, heads: Uint8Array, expectedText: string, ranges: ProseRange[], timeoutMs?: number) =>
+    getPool().withThread((thread) => thread.call('capture_prose_anchors', [graph, heads, expectedText, ranges], timeoutMs)) as Promise<{
+      result: ProseAnchorCapture;
       execMs: number;
     }>,
 };

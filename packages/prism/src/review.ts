@@ -3,8 +3,7 @@ import { z } from 'zod';
 export const PRISM_REVIEW_TIERS = ['low', 'medium', 'high'] as const;
 export type PrismReviewTierName = (typeof PRISM_REVIEW_TIERS)[number];
 
-export type ReviewRange = { start: number; end: number };
-export type Anchor = ReviewRange & { head: string; tail: string };
+export type Anchor = { head: string; tail: string };
 export type Pass = 'judgment' | 'stylistic';
 export type ReviewVerdict = 'resolved' | 'kept' | 'withdrawn';
 

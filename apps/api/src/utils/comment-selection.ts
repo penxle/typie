@@ -1,6 +1,7 @@
 // 저장되는 StablePosition은 child 키가 항상 존재해야 한다(부재 시 모바일 kotlinx 디코드가
-// MissingFieldException으로 실패). wasm 경계는 Option::None을 undefined로 내보내 JSON 직렬화에서
-// 키가 소실되므로 저장 전에 child: null로 복원하고, #4690 이전 binding 구형식도 함께 변환한다.
+// MissingFieldException으로 실패). wasm 경계는 Option::None을 undefined로 내보내는데 — 키가 통째로 빠지기도 하고,
+// structured clone(worker postMessage)을 거치면 키는 있고 값만 undefined다 — 어느 쪽이든 JSON 직렬화에서 키가
+// 소실되므로 저장 전에 child: null로 복원하고, #4690 이전 binding 구형식도 함께 변환한다.
 
 type NormalizedStablePosition = {
   chain: unknown;
@@ -33,7 +34,7 @@ export const normalizeStablePosition = (position: unknown): StablePositionNormal
     return { kind: 'unrecognized' };
   }
 
-  if ('child' in position) {
+  if (position.child !== undefined) {
     return { kind: 'keep' };
   }
 

@@ -2519,35 +2519,27 @@ export class Editor {
     this.activeAiFeedbackId = null;
   }
 
-  setPrismReviewRanges(items: { id: string; selection: Selection; tone: 'issue' | 'strength' }[]): void {
+  setPrismReviewRanges(items: { id: string; selection: StableSelection; tone: 'issue' | 'strength' }[]): void {
     if (this.terminal) return;
 
     this.clearPrismReviewRanges();
 
     for (const item of items) {
-      // 해소되지 않는 selection은 tick에서 터져 에디터를 종료시킨다.
-      // freezeSelection이 그 판정(양 끝 resolve)을 큐를 거치지 않고 내주고, 그 결과가 곧 앵커다.
-      const frozen = this.freezeSelection(item.selection);
-      if (!frozen) continue;
-
       const result = this.#tryEnqueue({
         type: 'tracked_range',
         // 코멘트와 같은 결의 앵커다 — 그 대목을 고치는 것은 피드백을 처리하는 중이지 무효화가 아니다.
         // 맞춤법이 가리키는 것은 그 단어라 고치면 사라지는 것이 맞지만, 여기가 가리키는 것은 대목이다.
+        // 서버가 리뷰 시점에 캡처한 selection이 곧 앵커다 — 해소는 코어가 매 판 한다.
         op: {
           type: 'add_frozen',
           id: item.id,
           group: item.tone === 'issue' ? 'prism-issue' : 'prism-strength',
-          selection: frozen,
+          selection: item.selection,
           metadata: '',
         },
       });
 
-      if (result.type === 'failed') {
-        this.#reportError(result.error, `Failed to add prism review range: ${item.id}`);
-        continue;
-      }
-      if (result.type === 'ignored') continue;
+      if (result.type === 'failed') this.#reportError(result.error, `Failed to add prism review range: ${item.id}`);
     }
   }
 

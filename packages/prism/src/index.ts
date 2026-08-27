@@ -1,3 +1,4 @@
+export type { ConclusionAnchors, ResolvedAnchor } from './anchors.ts';
 export { anchorQuote } from './anchors.ts';
 export type {
   RunState,
@@ -16,8 +17,8 @@ export type { ParkedEvent, ParkedOptions, ParkedScope, PendingRequest } from './
 export { awaitingUser, parked, pendingRequests } from './parked.ts';
 export type { ProjectedDeltaFrame, ProjectedEventData, ProjectedEventFrame, ProjectedSource, ProjectedStreamFrame } from './projected.ts';
 export { ProjectedEventSchema, ProjectedWorkflowEventSchema } from './projected.ts';
-export type { ReanchorRange } from './reanchor.ts';
-export { reanchorAll } from './reanchor.ts';
+export type { ResolvedRange } from './resolve.ts';
+export { resolveAnchors } from './resolve.ts';
 export * from './review.ts';
 export * from './tools.ts';
 export type {
