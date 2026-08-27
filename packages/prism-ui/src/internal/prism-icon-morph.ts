@@ -18,6 +18,7 @@ const PRISM_ICON_TO_VIEWPORT_SCALE = PRISM_ICON_CSS_SIZE / (PRISM_OBJECT_VIEWPOR
 const PRISM_ICON_CAMERA_DISTANCE_UNSCALED = 32 / 15;
 const PRISM_SETTLED_CAMERA_DISTANCE = 4.2;
 const PRISM_SETTLED_PROJECTION_DISTANCE = 2.96;
+const PRISM_ICON_MORPH_VELOCITY_LIMIT = 1.2;
 const TAU = Math.PI * 2;
 
 export const PRISM_ICON_DURATION_SECONDS = 2.2;
@@ -318,7 +319,7 @@ function integratePhaseVelocity(controls: readonly number[], time: number): numb
 }
 
 function openingVelocityControls(startVelocity: number, endVelocity: number): number[] {
-  const rideVelocity = Math.max(startVelocity, endVelocity, 1.2);
+  const rideVelocity = Math.max(startVelocity, endVelocity, PRISM_ICON_MORPH_VELOCITY_LIMIT);
   return [
     startVelocity,
     startVelocity,
@@ -344,15 +345,23 @@ function closingVelocityControls(
   startPhase: number,
 ): {
   controls: readonly number[];
+  durationSeconds: number;
   endPhase: number;
 } {
+  const cruiseControlCount = 8;
+  const controlCount = cruiseControlCount + 2;
   let endPhase = nextPrismIconIdlePhase(startPhase);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const travel = endPhase - startPhase;
-    const peak = ((8 * travel) / durationSeconds - 2 * startVelocity) / 3.05;
-    const controls = [startVelocity, startVelocity, peak, peak, peak * 0.7, peak * 0.35, 0, 0];
-    if (controls.every(Number.isFinite) && controls.slice(0, 6).every((value) => value > 0)) {
-      return { controls, endPhase };
+    const velocityLimit = Math.max(startVelocity, PRISM_ICON_MORPH_VELOCITY_LIMIT);
+    const resolvedDurationSeconds = Math.max(
+      durationSeconds,
+      (controlCount * travel) / (startVelocity + cruiseControlCount * velocityLimit),
+    );
+    const cruiseVelocity = ((controlCount * travel) / resolvedDurationSeconds - startVelocity) / cruiseControlCount;
+    const controls = [startVelocity, ...Array.from({ length: cruiseControlCount }, () => cruiseVelocity), 0];
+    if (controls.every(Number.isFinite) && controls.slice(0, -1).every((value) => value > 0) && cruiseVelocity <= velocityLimit + EPSILON) {
+      return { controls, durationSeconds: resolvedDurationSeconds, endPhase };
     }
     endPhase += 1;
   }
@@ -499,15 +508,17 @@ export function createPrismIconMorphTrajectory(options: {
   const startEdgeHighlightProgress =
     requestedHighlightProgress > EPSILON && requestedHighlightProgress < 1 - EPSILON ? requestedHighlightProgress : 1;
 
+  let durationSeconds = options.durationSeconds;
   const endVelocity = options.targetProgress === 1 ? options.prismVelocity : 0;
   let phaseVelocityControls: readonly number[];
   let endPhase: number;
   if (options.targetProgress === 1) {
     phaseVelocityControls = openingVelocityControls(options.startVelocity, endVelocity);
-    endPhase = options.startPhase + options.durationSeconds * integratePhaseVelocity(phaseVelocityControls, 1);
+    endPhase = options.startPhase + durationSeconds * integratePhaseVelocity(phaseVelocityControls, 1);
   } else {
-    const closing = closingVelocityControls(options.startVelocity, options.durationSeconds, options.startPhase);
+    const closing = closingVelocityControls(options.startVelocity, durationSeconds, options.startPhase);
     phaseVelocityControls = closing.controls;
+    durationSeconds = closing.durationSeconds;
     endPhase = closing.endPhase;
   }
   if (endPhase <= options.startPhase || !Number.isFinite(endPhase) || !phaseVelocityControls.every(Number.isFinite)) {
@@ -518,7 +529,7 @@ export function createPrismIconMorphTrajectory(options: {
     correctionEndTime: 1,
     correctionStartDerivative: [0, 0, 0],
     correctionStartVector: [0, 0, 0],
-    durationSeconds: options.durationSeconds,
+    durationSeconds,
     endPhase,
     iconSize: options.iconSize,
     phaseVelocityControls,
@@ -535,7 +546,7 @@ export function createPrismIconMorphTrajectory(options: {
 
   const activeTrajectory = options.startProgress !== options.targetProgress || options.startVelocity > 0 || endVelocity > 0;
   if (activeTrajectory) {
-    const boundaryStep = Math.min(1, 1 / (options.durationSeconds * PHASE_VALIDATION_RATE));
+    const boundaryStep = Math.min(1, 1 / (durationSeconds * PHASE_VALIDATION_RATE));
     const firstPhase = phaseAt(preliminary, boundaryStep);
     const penultimatePhase = phaseAt(preliminary, 1 - boundaryStep);
     if (firstPhase <= options.startPhase || endPhase <= penultimatePhase || ![firstPhase, penultimatePhase].every(Number.isFinite)) {
@@ -548,9 +559,9 @@ export function createPrismIconMorphTrajectory(options: {
   const correctionStartVector = quaternionRotationVector(quaternionMultiply(startOrientation, quaternionConjugate(baseStart)));
   const derivativeStep = 0.00001;
   const baseFuture = baseOrientationAt(preliminary, derivativeStep);
-  const baseAngularVelocity = angularVelocityBetween(baseStart, baseFuture, derivativeStep * options.durationSeconds);
+  const baseAngularVelocity = angularVelocityBetween(baseStart, baseFuture, derivativeStep * durationSeconds);
   const startAngularVelocity = options.startAngularVelocity ?? baseAngularVelocity;
-  const desiredFuture = advanceOrientation(startOrientation, startAngularVelocity, derivativeStep * options.durationSeconds);
+  const desiredFuture = advanceOrientation(startOrientation, startAngularVelocity, derivativeStep * durationSeconds);
   const futureCorrection = quaternionRotationVector(quaternionMultiply(desiredFuture, quaternionConjugate(baseFuture)));
   const correctionStartDerivative: Vector3 = [
     (futureCorrection[0] - correctionStartVector[0]) / derivativeStep,
