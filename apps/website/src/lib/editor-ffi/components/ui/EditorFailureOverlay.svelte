@@ -17,9 +17,12 @@
     id: string;
     actionLabel: string;
     onAction: () => void;
-  } & ({ contentPosition?: 'surface'; surfaceElement?: never } | { contentPosition: 'viewport'; surfaceElement: HTMLElement });
+  } & (
+    | { contentPosition?: 'surface'; surfaceElement?: never; minimumWidth?: never }
+    | { contentPosition: 'viewport'; surfaceElement: HTMLElement; minimumWidth?: number }
+  );
 
-  let { id, actionLabel, onAction, contentPosition = 'surface', surfaceElement }: Props = $props();
+  let { id, actionLabel, onAction, contentPosition = 'surface', surfaceElement, minimumWidth }: Props = $props();
 
   let overlayElement: HTMLElement | undefined = $state();
   let actionButton: HTMLElement | undefined = $state();
@@ -86,6 +89,7 @@
   style:left={visibleBounds ? `${visibleBounds.left}px` : undefined}
   style:width={visibleBounds ? `${visibleBounds.width}px` : undefined}
   style:height={visibleBounds ? `${visibleBounds.height}px` : undefined}
+  style:min-width={minimumWidth ? `${minimumWidth}px` : undefined}
   style:visibility={overlayVisible ? undefined : 'hidden'}
   style:pointer-events={overlayVisible ? undefined : 'none'}
   class={css({
@@ -122,27 +126,27 @@
           class={flex({
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '20px',
+            gap: '14px',
             borderRadius: '12px',
-            padding: { base: '24px', lg: '48px' },
+            padding: { base: '24px', lg: '32px' },
             boxSizing: 'border-box',
             width: 'full',
             minWidth: '0',
-            maxWidth: '400px',
+            maxWidth: '340px',
             flexShrink: '0',
             marginY: 'auto',
             backgroundColor: 'surface.default',
             textAlign: 'center',
-            boxShadow: 'medium',
+            boxShadow: 'small',
             zIndex: '1',
             pointerEvents: 'auto',
           })}
           in:scale|global={{ start: 0.96, duration: 150 }}
         >
-          <Logo class={css({ height: '32px' })} />
-          <h2 id={titleId} class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>앗! 문제가 발생했어요</h2>
+          <Logo class={css({ width: '24px', height: '24px' })} />
+          <h2 id={titleId} class={css({ fontSize: '20px', fontWeight: 'bold' })}>앗! 문제가 발생했어요</h2>
           <p id={messageId} class={css({ fontSize: '14px', color: 'text.faint' })}>잠시 후 다시 시도해주세요.</p>
-          <Button style={css.raw({ width: 'full' })} onclick={onAction} size="lg" bind:element={actionButton}>{actionLabel}</Button>
+          <Button onclick={onAction} size="md" bind:element={actionButton}>{actionLabel}</Button>
         </div>
       </div>
     </div>
