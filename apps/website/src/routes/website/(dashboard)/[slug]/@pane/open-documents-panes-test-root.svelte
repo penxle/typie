@@ -34,6 +34,10 @@
     paneGroup.state.current.root = pane('p2', 'D2');
     paneGroup.state.current.focusedPaneId = 'p2';
   }
+
+  export function refreshPane() {
+    paneGroup.state.current.root = pane('p1', 'D1');
+  }
 </script>
 
 {#if root}
