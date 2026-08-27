@@ -5,10 +5,12 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
   import FileXIcon from '~icons/lucide/file-x';
   import XIcon from '~icons/lucide/x';
   import { fb } from '$lib/analytics';
+  import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
   import { resolveActiveTreeAncestorIds } from '../../@tree/entity-reveal.svelte';
   import DocumentV2 from '../v2/Document.svelte';
@@ -36,6 +38,8 @@
           id
           slug
           state
+          icon
+          iconColor
 
           ancestors {
             id
@@ -51,6 +55,8 @@
             ... on Document {
               id
               layoutMode
+              nullableTitle
+              subtitle
             }
           }
         }
@@ -81,11 +87,41 @@
 
   const app = getAppContext();
   const paneGroup = getPaneGroup();
+  const openDocuments = getOpenDocuments();
+
+  openDocuments.expectPane(pane.id);
+  onDestroy(() => openDocuments.expectPane(pane.id));
 
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
   const entity = $derived(query.data?.entity);
   const documentLayoutMode = $derived(entity?.node.__typename === 'Document' ? entity.node.layoutMode : null);
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
+
+  $effect(() => {
+    if (query.loading) {
+      openDocuments.expectPane(pane.id);
+      return;
+    }
+
+    if (!query.data) return;
+
+    const currentEntity = query.data.entity;
+    const node = currentEntity?.node;
+    if (currentEntity?.state === EntityState.ACTIVE && node?.__typename === 'Document') {
+      openDocuments.upsert(pane.id, {
+        kind: 'document',
+        documentId: node.id,
+        entityId: currentEntity.id,
+        title: node.nullableTitle ?? null,
+        subtitle: node.subtitle ?? null,
+        icon: currentEntity.icon,
+        iconColor: currentEntity.iconColor,
+        active: focused,
+      });
+    } else {
+      openDocuments.resolvePane(pane.id);
+    }
+  });
 
   $effect(() => {
     if (entity && entity.slug !== pane.slug) {

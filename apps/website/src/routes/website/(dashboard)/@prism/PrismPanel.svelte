@@ -281,25 +281,41 @@
     return { text: awaitingAnswer ? workflowCopy.waiting : workflowCopy.running, stop: workflowCopy.stop };
   });
 
-  const resolveTool = async (agentId: string, toolCallId: string, input: unknown) => {
-    const sessionId = chat.sessionId;
+  const resolveToolForSession = async (
+    sessionId: string | null,
+    transcriptAgentId: string | null,
+    agentId: string,
+    toolCallId: string,
+    input: unknown,
+  ) => {
     if (sessionId === null) {
       throw new Error('prism session is not ready');
     }
 
-    const root = agentId.length === 0 || agentId === chat.transcript.agentId;
+    const root = agentId.length === 0 || agentId === transcriptAgentId;
     await resolvePrismTool({ input: { sessionId, agentId: root ? undefined : agentId, toolCallId, input } });
+  };
+
+  const resolveTool = async (agentId: string, toolCallId: string, input: unknown) => {
+    await resolveToolForSession(chat.sessionId, chat.transcript.agentId, agentId, toolCallId, input);
   };
 
   const autoResolver = new AutoResolver({
     resolve: async (toolCallId) => {
+      const sessionId = chat.sessionId;
+      if (sessionId === null) {
+        return;
+      }
+
+      const transcriptAgentId = chat.transcript.agentId;
       const request = pendingRootRequests(chat.transcript).find((entry) => entry.toolCallId === toolCallId);
       const resolver = request === undefined ? undefined : clientResolvers[request.tool];
       if (request === undefined || resolver === undefined) {
         return;
       }
 
-      await resolveTool(request.agentId, toolCallId, resolver({ openDocuments }));
+      const input = await resolver({ openDocuments });
+      await resolveToolForSession(sessionId, transcriptAgentId, request.agentId, toolCallId, input);
     },
     settled: (err) => {
       const error = unwrapError(err);

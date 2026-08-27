@@ -16,8 +16,8 @@ export type ClientResolverDeps = {
   openDocuments: OpenDocumentRegistry;
 };
 
-export const clientResolvers: Record<string, ((deps: ClientResolverDeps) => unknown) | undefined> = {
-  'list-open-documents': ({ openDocuments }) => openDocuments.snapshot(),
+export const clientResolvers: Record<string, ((deps: ClientResolverDeps) => unknown | Promise<unknown>) | undefined> = {
+  'list-open-documents': ({ openDocuments }) => openDocuments.snapshotWhenReady(),
 };
 
 export type { ActionBodyProps } from './action-cards.ts';
