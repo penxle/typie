@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PublishedBundle
 import co.typie.editor.VerticalSpan
@@ -133,7 +134,11 @@ class EditorViewportAnchorReconcilerTest {
       val candidateFrame = initialFrame.copy(state = initialFrame.state.copy(version = 2L))
       val anchorState =
         EditorViewportAnchorState().apply {
-          attachSelection(selectionAnchor, anchorGeometry(240f), scrollY = 100f)
+          attachSelection(
+            selectionAnchor,
+            anchorGeometry(240f),
+            scrollOffset = Offset(x = 0f, y = 100f),
+          )
         }
       val viewportState = viewportState(scrollY = 350f)
       val editor = editor(selectionY = 200f)
@@ -177,11 +182,11 @@ class EditorViewportAnchorReconcilerTest {
         )
           as EditorViewportAnchorPublication.Ready
 
-      assertEquals(349.75f, publication.scrollY)
+      assertEquals(349.75f, publication.scrollOffset.y)
     }
 
   @Test
-  fun `scroll observed during transform is reconciled after the transform ends`() = runTest {
+  fun `transform-owned scroll does not reactivate a visible preferred selection`() = runTest {
     val visibleArea = visibleArea()
     val frame = frame(visibleArea)
     val anchorState = EditorViewportAnchorState()
@@ -193,15 +198,87 @@ class EditorViewportAnchorReconcilerTest {
 
     viewportState.beginTransform()
     viewportState.scrollToTransformTarget(
-      offset = Offset(x = 0f, y = 350f),
+      offset = Offset(x = 0f, y = 120f),
       retainUntilMeasuredBounds = false,
     )
+    attachViewportZoomAnchor(
+      editor = editor,
+      anchorState = anchorState,
+      revision = frame.state.version,
+      anchor = EditorViewportAnchor(page = 0, x = 0f, y = 500f),
+      displayPosition = Offset(x = 0f, y = 500f),
+      scrollOffset = viewportState.scrollOffset,
+      contentOriginY = 0f,
+    )
+    assertEquals(viewportAnchor, anchorState.identity)
     reconcile(editor, anchorState, frame, viewportState, visibleArea)
     viewportState.endTransform()
     reconcile(editor, anchorState, frame, viewportState, visibleArea)
 
     assertEquals(viewportAnchor, anchorState.identity)
   }
+
+  @Test
+  fun `repeated zoom attachments reuse the captured identity until their stable input changes`() =
+    runTest {
+      val anchorState = EditorViewportAnchorState()
+      var firstEditorCaptures = 0
+      val firstEditor =
+        Editor(
+          FakeFfiEditor(
+            captureViewportAnchorAtProvider = { _, _ ->
+              firstEditorCaptures += 1
+              CapturedViewportAnchor(identity = viewportAnchor, geometry = selectionGeometry(500f))
+            }
+          ),
+          this,
+          StandardTestDispatcher(testScheduler),
+        )
+      var secondEditorCaptures = 0
+      val secondEditor =
+        Editor(
+          FakeFfiEditor(
+            captureViewportAnchorAtProvider = { _, _ ->
+              secondEditorCaptures += 1
+              CapturedViewportAnchor(identity = viewportAnchor, geometry = selectionGeometry(500f))
+            }
+          ),
+          this,
+          StandardTestDispatcher(testScheduler),
+        )
+      val anchor = EditorViewportAnchor(page = 0, x = 10f, y = 20f)
+
+      fun attach(
+        editor: Editor = firstEditor,
+        revision: Long = 1L,
+        point: EditorViewportAnchor = anchor,
+        displayPosition: Offset = Offset(x = 100f, y = 200f),
+        scrollOffset: Offset = Offset.Zero,
+      ) {
+        attachViewportZoomAnchor(
+          editor = editor,
+          anchorState = anchorState,
+          revision = revision,
+          anchor = point,
+          displayPosition = displayPosition,
+          scrollOffset = scrollOffset,
+          contentOriginY = 0f,
+        )
+      }
+
+      attach()
+      attach(displayPosition = Offset(x = 120f, y = 230f), scrollOffset = Offset(x = 10f, y = 20f))
+      assertEquals(1, firstEditorCaptures)
+      assertEquals(110f, anchorState.pointAttachmentX)
+      assertEquals(210f, anchorState.pointAttachmentY)
+
+      attach(revision = 2L)
+      attach(revision = 2L, point = anchor.copy(x = 11f))
+      attach(editor = secondEditor, revision = 2L, point = anchor.copy(x = 11f))
+
+      assertEquals(3, firstEditorCaptures)
+      assertEquals(1, secondEditorCaptures)
+    }
 
   @Test
   fun `publication proceeds when a live anchor has no candidate geometry`() = runTest {
@@ -212,7 +289,7 @@ class EditorViewportAnchorReconcilerTest {
         attach(
           identity = selectionAnchor,
           geometry = co.typie.editor.viewport.EditorViewportAnchorGeometry(pointY = 200f),
-          scrollY = 100f,
+          scrollOffset = Offset(x = 0f, y = 100f),
         )
       }
     val captured =
@@ -248,7 +325,10 @@ class EditorViewportAnchorReconcilerTest {
       )
 
     assertEquals(
-      EditorViewportAnchorPublication.Ready(scrollY = 100f, geometry = null),
+      EditorViewportAnchorPublication.Ready(
+        scrollOffset = Offset(x = 0f, y = 100f),
+        geometry = null,
+      ),
       publication,
     )
   }
@@ -392,7 +472,7 @@ class EditorViewportAnchorReconcilerTest {
       assertEquals(Offset(x = 0f, y = 100f), viewportState.scrollOffset)
 
       (publication as EditorViewportAnchorPublication.Ready).geometry?.let { geometry ->
-        anchorState.acceptGeometry(geometry, viewportState.scrollOffset.y)
+        anchorState.acceptGeometry(geometry, viewportState.scrollOffset)
       }
       reconcile(editor, anchorState, movedFrame, viewportState, visibleArea)
 
@@ -465,7 +545,11 @@ class EditorViewportAnchorReconcilerTest {
       initialFrame.copy(state = initialFrame.state.copy(version = 2L, selection = null))
     val anchorState =
       EditorViewportAnchorState().apply {
-        attachSelection(selectionAnchor, anchorGeometry(200f), scrollY = 100f)
+        attachSelection(
+          selectionAnchor,
+          anchorGeometry(200f),
+          scrollOffset = Offset(x = 0f, y = 100f),
+        )
       }
     val editor =
       Editor(
@@ -499,7 +583,7 @@ class EditorViewportAnchorReconcilerTest {
 
     assertEquals(viewportAnchor, anchorState.identity)
     assertEquals(null, anchorState.preferredSelectionIdentity)
-    assertEquals(100f, (publication as EditorViewportAnchorPublication.Ready).scrollY)
+    assertEquals(100f, (publication as EditorViewportAnchorPublication.Ready).scrollOffset.y)
   }
 
   @Test
@@ -521,7 +605,11 @@ class EditorViewportAnchorReconcilerTest {
     val candidateFrame = initialFrame.copy(state = initialFrame.state.copy(version = 2L))
     val anchorState =
       EditorViewportAnchorState().apply {
-        attachSelection(selectionAnchor, anchorGeometry(200f), scrollY = 100f)
+        attachSelection(
+          selectionAnchor,
+          anchorGeometry(200f),
+          scrollOffset = Offset(x = 0f, y = 100f),
+        )
       }
     val editor =
       Editor(

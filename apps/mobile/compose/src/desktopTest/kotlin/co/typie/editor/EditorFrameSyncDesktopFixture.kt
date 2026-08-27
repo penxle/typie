@@ -46,6 +46,7 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 @OptIn(ExperimentalTestApi::class)
 internal class FrameSyncFixture(
   continuous: Boolean = false,
+  continuousMaxWidth: Int = PageWidth.toInt(),
   initialDoc: PlainDoc? = null,
   viewportHeight: Float = ViewportHeight,
 ) {
@@ -54,7 +55,7 @@ internal class FrameSyncFixture(
   val scope = CoroutineScope(SupervisorJob() + continuationDispatcher)
   val layoutSpec: EditorDocumentLayoutSpec =
     if (continuous) {
-      EditorDocumentLayoutSpec.Continuous(maxWidth = PageWidth)
+      EditorDocumentLayoutSpec.Continuous(maxWidth = continuousMaxWidth.toFloat())
     } else {
       EditorDocumentLayoutSpec.Paginated(
         pageWidth = PageWidth,
@@ -69,6 +70,7 @@ internal class FrameSyncFixture(
   val autoScrollPolicy =
     resolveEditorAutoScrollPolicy(visibleArea = visibleArea, baseBottomSpace = PageMargin)
   val viewportState = EditorViewportState()
+  val zoomController = EditorZoomController()
   val uiState = EditorUiState()
   val bringIntoViewRequests = EditorBringIntoViewRequests()
   private var drawSequence = 0L
@@ -86,7 +88,12 @@ internal class FrameSyncFixture(
       kotlinx.coroutines.runBlocking {
         Editor.createFromDoc(
           doc =
-            initialDoc ?: if (continuous) emptyContinuousDocument() else emptyPaginatedDocument(),
+            initialDoc
+              ?: if (continuous) {
+                emptyContinuousDocument(maxWidth = continuousMaxWidth)
+              } else {
+                emptyPaginatedDocument()
+              },
           viewport = Viewport(ViewportWidth, viewportHeight, 1.0),
           scope = scope,
           dispatcher = Dispatchers.Default.limitedParallelism(1),
@@ -362,8 +369,8 @@ private fun emptyPaginatedDocument(): PlainDoc =
     )
   )
 
-private fun emptyContinuousDocument(): PlainDoc =
-  emptyDocument(LayoutMode.Continuous(maxWidth = PageWidth.toInt()))
+private fun emptyContinuousDocument(maxWidth: Int = PageWidth.toInt()): PlainDoc =
+  emptyDocument(LayoutMode.Continuous(maxWidth = maxWidth))
 
 internal fun continuousDocumentWithOffscreenTable(): PlainDoc {
   val document = emptyContinuousDocument()

@@ -111,7 +111,7 @@ class EditorSurfacePreparationTest {
           identity = identity,
           geometry =
             EditorViewportAnchorGeometry(pointY = 2_100.5f, rect = VerticalSpan(2_100f, 2_101f)),
-          scrollY = provisionalScroll,
+          scrollOffset = Offset(x = 0f, y = provisionalScroll),
           revealOrigin =
             EditorViewportAnchorRevealOrigin(scrollY = 0f, target = target, policy = policy),
         )
@@ -136,7 +136,7 @@ class EditorSurfacePreparationTest {
         publishedBundle = PublishedBundle(snapshot = provisionalFrame.state, frames = emptyMap()),
       )
 
-    assertEquals(expectedScroll, preparation?.anchorPublication?.scrollY)
+    assertEquals(expectedScroll, preparation?.anchorPublication?.scrollOffset?.y)
     assertEquals(
       preparation!!.contentOriginY + 2_100f,
       preparation.anchorPublication?.geometry?.rect?.top,
@@ -182,7 +182,7 @@ class EditorSurfacePreparationTest {
         attach(
           identity = identity,
           geometry = EditorViewportAnchorGeometry(pointY = 200f, rect = VerticalSpan(190f, 210f)),
-          scrollY = 100f,
+          scrollOffset = Offset(x = 0f, y = 100f),
         )
       }
     val corrected =
@@ -270,7 +270,10 @@ class EditorSurfacePreparationTest {
       val resolved = requireNotNull(preparation)
       assertEquals(setOf(0), resolved.requiredPages)
       assertEquals(
-        EditorViewportAnchorPublication.Ready(scrollY = resolved.maximumScrollY, geometry = null),
+        EditorViewportAnchorPublication.Ready(
+          scrollOffset = Offset(x = 0f, y = resolved.maximumScrollY),
+          geometry = null,
+        ),
         resolved.anchorPublication,
       )
     }

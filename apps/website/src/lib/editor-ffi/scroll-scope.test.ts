@@ -70,7 +70,7 @@ describe('EditorRequest', () => {
   });
 });
 
-function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; position: number | undefined }) {
+function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; position: number | undefined }, displayZoom = 1) {
   const typewriterPreferences = typewriter ?? { enabled: false, position: undefined };
   let animationTime = 0;
   let nextAnimationFrameId = 1;
@@ -82,8 +82,10 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
   });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => animationFrames.delete(id));
   let scrollTop = 0;
+  let scrollLeft = 0;
   const scrollTo = vi.fn((options: ScrollToOptions) => {
     if (options.behavior === 'instant' && options.top !== undefined) scrollTop = options.top;
+    if (options.behavior === 'instant' && options.left !== undefined) scrollLeft = options.left;
   });
   const requestPublication = vi.fn();
   const editor = {
@@ -108,10 +110,12 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     scrollViewport: {
       getRect: () => new DOMRect(0, 0, 600, 400),
       getScrollTop: () => scrollTop,
+      getScrollLeft: () => scrollLeft,
+      getScrollWidth: () => 600,
       getScrollHeight: () => 1200,
       scrollTo,
     },
-    safeDisplayZoom: () => 1,
+    safeDisplayZoom: () => displayZoom,
     clientToLocal: vi.fn(() => null),
     captureSelectionViewportAnchor: vi.fn(() => void 0),
     captureViewportAnchorAt: vi.fn(() => void 0),
@@ -127,8 +131,12 @@ function setup(snapshot: EditorSnapshot, typewriter?: { enabled: boolean; positi
     },
     animationFrameCount: () => animationFrames.size,
     editor,
+    getScrollLeft: () => scrollLeft,
     getScrollTop: () => scrollTop,
     requestPublication,
+    setScrollLeft: (value: number) => {
+      scrollLeft = value;
+    },
     setScrollTop: (value: number) => {
       scrollTop = value;
     },
@@ -195,6 +203,17 @@ describe('EditorScrollScope', () => {
     expect(scope.resolveScrollTop(request, candidateMetrics, candidateSnapshot)).toBe(320);
     expect(scope.resolvePreparationViewports(request, candidateMetrics, candidateSnapshot)).toEqual([{ top: 320, bottom: 720 }]);
     expect(scope.bottomPaddingFor(candidateSnapshot)).toBe(160);
+  });
+
+  it('scales the continuous trailing engine margin in typewriter padding', () => {
+    const rect = { page_idx: 0, rect: { x: 0, y: 500, width: 1, height: 40 } };
+    const snapshot = {
+      ...selectionSnapshot(false, rect),
+      rootAttrs: { layout_mode: { type: 'continuous', max_width: 600 } },
+    } as EditorSnapshot;
+    const { scope } = setup(snapshot, { enabled: true, position: 0.5 }, 2);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(120);
   });
 
   it('uses typewriter reveal at the endpoint matching a keyboard-extended range head', () => {
@@ -758,8 +777,116 @@ describe('EditorScrollScope', () => {
 
     expect(publication).toMatchObject({ type: 'ready', targetScrollTop: 220 });
     scope.applyViewportAnchorPublication(publication);
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 0, top: 220, behavior: 'instant' });
     expect(scrollTop).toBe(220);
+  });
+
+  it('settles a retained zoom focal on both axes with one scroll operation', () => {
+    const current = selectionSnapshot(false, { page_idx: 0, rect: { x: 0, y: 0, width: 1, height: 1 } });
+    const candidate = { ...current, revision: 2 };
+    const { editor, scope } = setup(current);
+    const anchor = { type: 'node' as const, node: 'zoom', offset_x: 0, offset_y: 0 };
+    let scrollLeft = 100;
+    let scrollTop = 100;
+    const scrollTo = vi.fn((options: ScrollToOptions) => {
+      scrollLeft = options.left ?? scrollLeft;
+      scrollTop = options.top ?? scrollTop;
+    });
+    editor.scrollViewport = {
+      ...editor.scrollViewport,
+      getScrollLeft: () => scrollLeft,
+      getScrollTop: () => scrollTop,
+      getScrollWidth: () => 1200,
+      getScrollHeight: () => 1200,
+      scrollTo,
+    } as NonNullable<Editor['scrollViewport']>;
+    editor.captureViewportAnchorAt = vi.fn(() => ({
+      identity: anchor,
+      geometry: { point: { page_idx: 0, x: 200, y: 200 }, rect: undefined },
+    }));
+    editor.resolveViewportAnchor = vi.fn(() => ({
+      type: 'resolved' as const,
+      geometry: { point: { page_idx: 0, x: 400, y: 320 }, rect: undefined },
+    }));
+
+    scope.attachViewportAnchorAt({ page: 0, x: 200, y: 200 });
+    const publication = scope.prepareViewportAnchorPublication(candidate);
+
+    expect(publication).toMatchObject({ type: 'ready', targetScrollLeft: 300, targetScrollTop: 220 });
+    scope.applyViewportAnchorPublication(publication);
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 300, top: 220, behavior: 'instant' });
+  });
+
+  it('derives a wider candidate page x position from candidate geometry', () => {
+    const current = {
+      ...trackedSnapshot('unused', { page_idx: 0, rect: { x: 0, y: 0, width: 1, height: 1 } }),
+      pageSizes: [{ width: 400, height: 1200 }],
+    } as EditorSnapshot;
+    const candidate = { ...current, revision: 2, pageSizes: [{ width: 800, height: 1200 }] } as EditorSnapshot;
+    const { editor, scope } = setup(current);
+    const anchor = { type: 'node' as const, node: 'zoom', offset_x: 0, offset_y: 0 };
+    editor.pageEls = {
+      0: { getBoundingClientRect: () => new DOMRect(100, 0, 400, 1200) },
+    } as unknown as Editor['pageEls'];
+    editor.extensionAreaEl = {
+      getBoundingClientRect: () => new DOMRect(0, 0, 600, 1200),
+      style: { paddingLeft: '20px', paddingRight: '20px' },
+    } as unknown as HTMLDivElement;
+    editor.scrollRootEl = {} as HTMLElement;
+    editor.captureViewportAnchorAt = vi.fn(() => ({
+      identity: anchor,
+      geometry: { point: { page_idx: 0, x: 200, y: 200 }, rect: undefined },
+    }));
+    editor.resolveViewportAnchor = vi.fn(() => ({
+      type: 'resolved' as const,
+      geometry: { point: { page_idx: 0, x: 400, y: 200 }, rect: undefined },
+    }));
+
+    scope.attachViewportAnchorAt({ page: 0, x: 200, y: 200 });
+
+    expect(scope.prepareViewportAnchorPublication(candidate)).toMatchObject({
+      type: 'ready',
+      targetScrollLeft: 120,
+    });
+  });
+
+  it('does not treat a zoom-owned scroll as a direct scroll that reactivates a visible selection', () => {
+    const current = selectionSnapshot(true, {
+      page_idx: 0,
+      rect: { x: 150, y: 90, width: 1, height: 20 },
+    });
+    const candidate = { ...current, revision: 2 } as EditorSnapshot;
+    const { editor, scope, setScrollLeft } = setup(current);
+    const selection = { type: 'node' as const, node: 'selection', offset_x: 0, offset_y: 0 };
+    const zoom = { type: 'node' as const, node: 'zoom', offset_x: 0, offset_y: 0 };
+    const selectionGeometry = {
+      point: { page_idx: 0, x: 150, y: 100 },
+      rect: { page_idx: 0, rect: { x: 150, y: 90, width: 1, height: 20 } },
+    };
+    editor.scrollViewport = {
+      ...editor.scrollViewport,
+      getScrollWidth: () => 1200,
+    } as NonNullable<Editor['scrollViewport']>;
+    editor.captureSelectionViewportAnchor = vi.fn(() => ({ identity: selection, geometry: selectionGeometry }));
+    editor.captureViewportAnchorAt = vi.fn(() => ({
+      identity: zoom,
+      geometry: { point: { page_idx: 0, x: 200, y: 200 }, rect: undefined },
+    }));
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: identity.node === zoom.node ? { point: { page_idx: 0, x: 400, y: 200 }, rect: undefined } : selectionGeometry,
+    }));
+
+    expect(scope.prepareViewportAnchorPublication(current).type).toBe('ready');
+    setScrollLeft(100);
+    scope.attachViewportAnchorAt({ page: 0, x: 200, y: 200 });
+    scope.observeViewportScroll();
+
+    expect(scope.prepareViewportAnchorPublication(candidate)).toMatchObject({
+      type: 'ready',
+      targetScrollLeft: 300,
+    });
+    expect(editor.resolveViewportAnchor).toHaveBeenLastCalledWith(candidate.revision, zoom);
   });
 
   it('attaches a changed selection without scrolling then guards it after the viewport shrinks', () => {
@@ -839,7 +966,8 @@ describe('EditorScrollScope', () => {
 
     expect(scope.prepareViewportAnchorPublication(initial)).toEqual({
       type: 'ready',
-      geometry: { pointY: 200 },
+      geometry: { pointX: 0, pointY: 200 },
+      targetScrollLeft: null,
       targetScrollTop: 0,
     });
   });
@@ -880,7 +1008,8 @@ describe('EditorScrollScope', () => {
 
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
-      geometry: { pointY: 500 },
+      geometry: { pointX: 0, pointY: 500 },
+      targetScrollLeft: null,
       targetScrollTop: 0,
     });
     expect(scrollTo).not.toHaveBeenCalled();
@@ -909,7 +1038,7 @@ describe('EditorScrollScope', () => {
     capture = { identity: { ...selection }, geometry };
     expect(scope.prepareViewportAnchorPublication(initial)).toMatchObject({
       type: 'ready',
-      geometry: { pointY: 100 },
+      geometry: { pointX: 0, pointY: 100 },
     });
   });
 
@@ -936,6 +1065,7 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
       geometry: null,
+      targetScrollLeft: null,
       targetScrollTop: null,
     });
   });
@@ -956,9 +1086,9 @@ describe('EditorScrollScope', () => {
 
     const publication = scope.prepareViewportAnchorPublication(candidate);
 
-    expect(publication).toEqual({ type: 'ready', geometry: null, targetScrollTop: 0 });
+    expect(publication).toEqual({ type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: 0 });
     scope.applyViewportAnchorPublication(publication);
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 0, top: 0, behavior: 'instant' });
     expect(getScrollTop()).toBe(0);
   });
 
@@ -979,6 +1109,7 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
       geometry: null,
+      targetScrollLeft: null,
       targetScrollTop: null,
     });
   });
@@ -998,12 +1129,13 @@ describe('EditorScrollScope', () => {
     advanceAnimation();
     scope.applyViewportAnchorPublication({
       type: 'ready',
-      geometry: { pointY: 320 },
+      geometry: { pointX: 0, pointY: 320 },
+      targetScrollLeft: null,
       targetScrollTop: 220,
     });
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 220, behavior: 'instant' });
     for (let frame = 0; frame < 100 && animationFrameCount() > 0; frame++) advanceAnimation();
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 580, behavior: 'instant' });
     expect(scope.pendingRequest).toBeNull();
@@ -1055,12 +1187,13 @@ describe('EditorScrollScope', () => {
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
     scope.applyViewportAnchorPublication({
       type: 'ready',
-      geometry: { pointY: 320 },
+      geometry: { pointX: 0, pointY: 320 },
+      targetScrollLeft: null,
       targetScrollTop: 220,
     });
     expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
 
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 220, behavior: 'instant' });
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 0, top: 220, behavior: 'instant' });
     expect(scope.pendingRequest).toBeNull();
   });
 

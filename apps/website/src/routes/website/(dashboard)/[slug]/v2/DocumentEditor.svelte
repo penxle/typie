@@ -295,9 +295,8 @@
     const editor = ctx.editor;
     const layout = editor?.rootAttrs?.layout_mode;
     if (!editor || !layout) return Infinity;
-    return layout.type === 'paginated'
-      ? (editor.pageSizes[0]?.width ?? 0) * editor.safeDisplayZoom()
-      : layout.max_width + CONTINUOUS_VIEW_PADDING * 2;
+    const pageWidth = editor.pageSizes[0]?.width;
+    return pageWidth ? pageWidth * editor.safeDisplayZoom() : Infinity;
   });
 
   const title = $derived(document?.title ?? '');

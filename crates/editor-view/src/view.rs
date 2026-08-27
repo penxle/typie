@@ -1294,6 +1294,20 @@ mod invalidation_tests {
     }
 
     #[test]
+    fn continuous_resize_reflows_only_when_effective_content_width_changes() {
+        let mut projected = ProjectedState::empty();
+        projected.commit();
+        let state = State::new(projected, None);
+        let mut view = make_view(500.0);
+
+        view.layout(&state);
+
+        assert!(view.resize(Viewport::new(625.0, 800.0, 1.0), &state));
+        assert!(view.resize(Viewport::new(700.0, 700.0, 2.0), &state));
+        assert!(!view.resize(Viewport::new(800.0, 700.0, 2.0), &state));
+    }
+
+    #[test]
     fn taking_layout_dirty_does_not_clone_a_current_layout_snapshot() {
         let mut projected = ProjectedState::empty();
         projected.commit();

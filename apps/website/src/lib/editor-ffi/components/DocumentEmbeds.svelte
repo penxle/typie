@@ -17,7 +17,7 @@
   const mountedNodes = new SvelteSet<string>();
   const layoutMode = $derived(editor.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
-  const displayZoom = $derived(isPaginated ? editor.displayZoom : 1);
+  const displayZoom = $derived(editor.safeDisplayZoom());
   const pageSpans = $derived(
     resolvePageSpans(editor.pageSizes, {
       displayZoom,
@@ -72,8 +72,8 @@
         <div
           style:width={`${cssWidth}px`}
           style:height={`${cssHeight}px`}
-          style:transform={isPaginated && displayZoom !== 1 ? `scale(${displayZoom})` : undefined}
-          style:transform-origin={isPaginated && displayZoom !== 1 ? 'top left' : undefined}
+          style:transform={displayZoom === 1 ? undefined : `scale(${displayZoom})`}
+          style:transform-origin={displayZoom === 1 ? undefined : 'top left'}
           class={css({ position: 'relative' })}
         >
           <ExternalElement {element} />

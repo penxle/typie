@@ -33,8 +33,8 @@ internal fun resolveEditorBodyGeometry(
       is EditorDocumentLayoutSpec.Continuous ->
         when {
           // Continuous.maxWidth caps content; engine page sizes also include its page margins.
-          maxPageWidth > 0f -> maxPageWidth
-          else -> visibleBodySize.width
+          maxPageWidth > 0f -> maxPageWidth * effectiveDisplayZoom
+          else -> visibleBodySize.width * effectiveDisplayZoom
         }
       is EditorDocumentLayoutSpec.Paginated ->
         when {

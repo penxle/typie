@@ -2,8 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { Button, SegmentButtons } from '@typie/ui/components';
   import { untrack } from 'svelte';
-  import { CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { resolveContinuousViewPadding } from '$lib/editor-ffi/zoom';
   import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
   import { lanePresentation, targetColumnLeft } from './margin-motion.ts';
@@ -121,11 +121,12 @@
     desiredTops = nextTops;
     marks = nextMarks;
 
-    // 첫 페이지의 화면 좌표에서 본문 왼쪽을 얻는다 — 페이지 모드는 page_margin_left, 연속 모드는 CONTINUOUS_VIEW_PADDING만큼 안쪽이다
+    // 첫 페이지의 화면 좌표에서 본문 왼쪽을 얻는다 — 페이지 모드는 page_margin_left,
+    // 연속 모드는 CONTINUOUS_VIEW_PADDING에 현재 줌을 적용한 만큼 안쪽이다
     const pageEl = editor.pageEls[0];
     const layout = editor.rootAttrs?.layout_mode;
     if (pageEl && layout) {
-      const inset = layout.type === 'paginated' ? layout.page_margin_left * zoom : CONTINUOUS_VIEW_PADDING;
+      const inset = layout.type === 'paginated' ? layout.page_margin_left * zoom : resolveContinuousViewPadding(zoom);
       const pageRect = pageEl.getBoundingClientRect();
       const pageLayoutLeft = layoutLeftWithin(pageEl, area);
       if (pageLayoutLeft !== null) {

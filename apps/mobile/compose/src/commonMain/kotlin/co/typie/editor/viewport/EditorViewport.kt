@@ -18,6 +18,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveEditorPageWidth
 import co.typie.editor.body.resolveMeasuredPageLength
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ffi.Size as PageSize
@@ -167,10 +168,24 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     )
   }
 
-  fun scrollTo(offset: Offset, isAutoScroll: Boolean = false) {
+  fun scrollTo(offset: Offset, isAutoScroll: Boolean = false, maximumScrollOffset: Offset? = null) {
     invalidateRetainedTransformScrollTargetAfterTransform()
     pendingRestoredScrollOffset = null
-    val resolvedScrollOffset = offset.coerceToBounds()
+    val resolvedScrollOffset =
+      if (
+        maximumScrollOffset != null &&
+          maximumScrollOffset.x.isFinite() &&
+          maximumScrollOffset.y.isFinite() &&
+          maximumScrollOffset.x >= 0f &&
+          maximumScrollOffset.y >= 0f
+      ) {
+        Offset(
+          x = offset.x.coerceIn(0f, maximumScrollOffset.x),
+          y = offset.y.coerceIn(0f, maximumScrollOffset.y),
+        )
+      } else {
+        offset.coerceToBounds()
+      }
     if (scrollOffset == resolvedScrollOffset) {
       return
     }
@@ -377,7 +392,7 @@ private fun Offset.consumeCrossAxisDelta(requested: Offset): Offset =
 private fun Offset.isDominantRightPan(): Boolean = x > 0f && abs(x) > abs(y)
 
 internal fun resolveZoomAnchorDisplayPosition(
-  layoutSpec: EditorDocumentLayoutSpec.Paginated,
+  layoutSpec: EditorDocumentLayoutSpec,
   anchor: EditorViewportAnchor,
   displayZoom: Float,
   viewportWidth: Float,
@@ -396,7 +411,12 @@ internal fun resolveZoomAnchorDisplayPosition(
     }
   val pageTrackWidth =
     resolveMeasuredPageLength(
-      length = layoutSpec.pageWidth,
+      length =
+        when (layoutSpec) {
+          is EditorDocumentLayoutSpec.Continuous ->
+            resolveEditorPageWidth(pageSizes) ?: pageSizes[anchor.page].width
+          is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageWidth
+        },
       displayZoom = effectiveDisplayZoom,
       density = density,
     )

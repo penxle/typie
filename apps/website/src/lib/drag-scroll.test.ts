@@ -21,6 +21,7 @@ const createViewport = (rect: ViewportRect = DEFAULT_VIEWPORT_RECT) => {
     getRect: () => rect,
     getScrollTop: () => scrollTop,
     getScrollLeft: () => scrollLeft,
+    getScrollWidth: () => 1000,
     getScrollHeight: () => 1000,
     scrollBy: (x, y) => {
       scrollLeft += x;

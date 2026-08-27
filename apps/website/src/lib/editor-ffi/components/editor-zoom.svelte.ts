@@ -1,9 +1,9 @@
 import { tick } from 'svelte';
 import {
+  clampDocumentLayoutZoom,
   clampDocumentZoom,
-  clampPaginatedZoom,
-  computeInitialPaginatedZoom,
-  computePaginatedZoomBounds,
+  computeDocumentZoomBounds,
+  computeInitialDocumentZoom,
   RENDER_ZOOM_DEBOUNCE_MS,
   renderZoomForDisplay,
   zoomDiffers,
@@ -11,6 +11,7 @@ import {
 } from '$lib/editor-ffi/zoom';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
+import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
 
 type ZoomAnchor = {
   page: number;
@@ -22,17 +23,17 @@ type ZoomAnchor = {
 
 type EditorZoomControllerOptions = {
   editor: Editor;
-  isPaginated: () => boolean;
-  pageWidth: () => number;
+  layout: () => DocumentZoomLayout | null;
   viewportWidth: () => number;
   getScrollViewport: () => ScrollViewport | null | undefined;
+  attachViewportAnchor?: (point: Pick<ZoomAnchor, 'page' | 'x' | 'y'>) => void;
 };
 
 export class EditorZoomController {
   static readonly WHEEL_RAW_ZOOM_RESET_MS = 150;
   static readonly KEYBOARD_ZOOM_STEP = 0.1;
 
-  #initializedPaginatedPageWidth: number | null = null;
+  #initializedLayoutKey: string | null = null;
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelRawZoomResetTimer: ReturnType<typeof setTimeout> | null = null;
   #wheelRawZoom: number | null = null;
@@ -46,11 +47,7 @@ export class EditorZoomController {
   }
 
   async #stepZoomByKeyboard(delta: number): Promise<void> {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
+    if (!this.#options.layout()) return;
     const anchor = this.#createZoomAnchorFromViewportCenter();
     const nextZoom = this.displayZoom + delta;
     await this.#setZoomWithAnchor(nextZoom, anchor);
@@ -143,6 +140,7 @@ export class EditorZoomController {
     if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
       viewport.scrollBy(deltaX, deltaY);
     }
+    this.#options.attachViewportAnchor?.(anchor);
   }
 
   destroy(): void {
@@ -158,9 +156,13 @@ export class EditorZoomController {
       this.#resetWheelRawZoom();
     }
 
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
+    if (this.#renderZoomTimer) {
+      clearTimeout(this.#renderZoomTimer);
+      this.#renderZoomTimer = null;
+    }
+
+    const layout = this.#options.layout();
+    if (!layout) {
       if (zoomDiffers(this.displayZoom, 1)) {
         this.displayZoom = 1;
       }
@@ -170,21 +172,16 @@ export class EditorZoomController {
       return;
     }
 
-    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : pageWidth;
-    const clamped = clampPaginatedZoom({
+    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
+    const clamped = clampDocumentLayoutZoom({
       zoom: nextZoom,
-      pageWidth,
+      layout,
       viewportWidth,
     });
     const nextRenderZoom = renderZoomForDisplay(clamped);
 
     if (zoomDiffers(this.displayZoom, clamped)) {
       this.displayZoom = clamped;
-    }
-
-    if (this.#renderZoomTimer) {
-      clearTimeout(this.#renderZoomTimer);
-      this.#renderZoomTimer = null;
     }
 
     if (commitRender) {
@@ -196,7 +193,7 @@ export class EditorZoomController {
 
     this.#renderZoomTimer = setTimeout(() => {
       this.#renderZoomTimer = null;
-      if (!this.#options.isPaginated()) {
+      if (!this.#options.layout()) {
         if (zoomDiffers(this.renderZoom, 1)) {
           this.renderZoom = 1;
         }
@@ -210,42 +207,34 @@ export class EditorZoomController {
   }
 
   syncInitialZoom(): void {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
+    const layout = this.#options.layout();
     const viewportWidth = this.#options.viewportWidth();
 
-    if (!isPaginated) {
-      this.#initializedPaginatedPageWidth = null;
+    if (!layout) {
+      this.#initializedLayoutKey = null;
       this.setZoom(1, { commitRender: true });
       return;
     }
 
-    if (pageWidth <= 0 || viewportWidth <= 0) {
-      return;
-    }
+    if (viewportWidth <= 0) return;
 
-    const shouldApplyInitialZoom =
-      this.#initializedPaginatedPageWidth === null || zoomDiffers(this.#initializedPaginatedPageWidth, pageWidth);
-    if (!shouldApplyInitialZoom) {
-      return;
-    }
+    const width = layout.type === 'continuous' ? layout.maxWidth : layout.pageWidth;
+    const key = `${layout.type}:${width}`;
+    if (this.#initializedLayoutKey === key) return;
 
-    this.#initializedPaginatedPageWidth = pageWidth;
-    const initialZoom = computeInitialPaginatedZoom(pageWidth, viewportWidth);
+    this.#initializedLayoutKey = key;
+    const initialZoom = computeInitialDocumentZoom(layout, viewportWidth);
     this.setZoom(initialZoom, { commitRender: true });
   }
 
   clampCurrentZoomToBounds(): void {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
+    const layout = this.#options.layout();
+    if (!layout) return;
 
-    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : pageWidth;
-    const clamped = clampPaginatedZoom({
+    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
+    const clamped = clampDocumentLayoutZoom({
       zoom: this.displayZoom,
-      pageWidth,
+      layout,
       viewportWidth,
     });
     if (zoomDiffers(clamped, this.displayZoom)) {
@@ -254,11 +243,8 @@ export class EditorZoomController {
   }
 
   async handleWheel(event: WheelEvent): Promise<void> {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
+    const layout = this.#options.layout();
+    if (!layout) return;
 
     const zoomDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
     if (zoomDelta === 0) {
@@ -274,15 +260,15 @@ export class EditorZoomController {
     }
     this.#scheduleWheelRawZoomReset();
 
-    const bounds = computePaginatedZoomBounds(pageWidth);
+    const bounds = computeDocumentZoomBounds(layout);
     const wheelBaseZoom = this.#wheelRawZoom ?? this.displayZoom;
     const nextRawZoom = clampDocumentZoom(wheelBaseZoom * Math.exp(-zoomDelta / 240), bounds);
     this.#wheelRawZoom = nextRawZoom;
 
-    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : pageWidth;
-    const nextZoom = clampPaginatedZoom({
+    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
+    const nextZoom = clampDocumentLayoutZoom({
       zoom: nextRawZoom,
-      pageWidth,
+      layout,
       viewportWidth,
     });
     if (zoomEquals(nextZoom, this.displayZoom)) {
@@ -302,23 +288,19 @@ export class EditorZoomController {
   }
 
   async resetByKeyboard(): Promise<void> {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
+    if (!this.#options.layout()) return;
     const anchor = this.#createZoomAnchorFromViewportCenter();
     await this.#setZoomWithAnchor(1, anchor);
   }
 
   async zoomToClientPoint(nextZoom: number, clientX: number, clientY: number): Promise<void> {
-    const isPaginated = this.#options.isPaginated();
-    const pageWidth = this.#options.pageWidth();
-    if (!isPaginated || pageWidth <= 0) {
-      return;
-    }
+    if (!this.#options.layout()) return;
 
     const anchor = this.#createZoomAnchorFromClient(clientX, clientY);
     await this.#setZoomWithAnchor(nextZoom, anchor);
+  }
+
+  commitRenderZoom(): void {
+    this.setZoom(this.displayZoom, { commitRender: true });
   }
 }

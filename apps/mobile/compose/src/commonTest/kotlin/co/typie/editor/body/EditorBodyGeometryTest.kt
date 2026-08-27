@@ -47,6 +47,24 @@ class EditorBodyGeometryTest {
   }
 
   @Test
+  fun `continuous geometry scales the committed engine page width for display`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 500f, height = 900f),
+            headerHeight = 120f,
+            topInset = 120f,
+          ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = listOf(PageSize(width = 500f, height = 800f)),
+        displayZoom = 1.5f,
+      )
+
+    assertEquals(750f, geometry.pageColumnWidth)
+  }
+
+  @Test
   fun `geometry falls back to the visible width before page metrics arrive`() {
     val geometry =
       resolveEditorBodyGeometry(

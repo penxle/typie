@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorZoomController } from './editor-zoom.svelte';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
+import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
 
 type WheelEventDouble = WheelEvent & {
   preventDefault: ReturnType<typeof vi.fn>;
 };
 
 const controllers: EditorZoomController[] = [];
+const defaultLayout: DocumentZoomLayout = { type: 'paginated', pageWidth: 1000 };
 
-const createController = (): EditorZoomController => {
+const createController = (layout: DocumentZoomLayout = defaultLayout): EditorZoomController => {
   const editor = {
     clientToLocal: vi.fn(() => null),
     pageSizes: [],
@@ -16,14 +18,50 @@ const createController = (): EditorZoomController => {
   } as unknown as Editor;
   const controller = new EditorZoomController({
     editor,
-    isPaginated: () => true,
-    pageWidth: () => 1000,
+    layout: () => layout,
     viewportWidth: () => 1000,
     getScrollViewport: () => null,
   });
   controllers.push(controller);
   return controller;
 };
+
+describe('EditorZoomController continuous timing', () => {
+  it('starts continuous layout at unit zoom', () => {
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.syncInitialZoom();
+
+    expect(controller.displayZoom).toBe(1);
+    expect(controller.renderZoom).toBe(1);
+  });
+
+  it('commits continuous render zoom only at the existing debounce boundary', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(0.8);
+    expect(controller.displayZoom).toBe(0.8);
+    expect(controller.renderZoom).toBe(1);
+
+    vi.advanceTimersByTime(119);
+    expect(controller.renderZoom).toBe(1);
+
+    vi.advanceTimersByTime(1);
+    expect(controller.renderZoom).toBe(0.8);
+  });
+
+  it('commits continuous render zoom immediately at gesture end', () => {
+    vi.useFakeTimers();
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+
+    controller.setZoom(0.8);
+    controller.commitRenderZoom();
+
+    expect(controller.renderZoom).toBe(0.8);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 const wheelEvent = ({
   metaKey = false,
@@ -193,6 +231,16 @@ describe('EditorZoomController.handleWheel', () => {
     await controller.handleWheel(event);
 
     expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(controller.displayZoom).toBeGreaterThan(1);
+  });
+
+  it('admits modified wheel zoom in continuous layout', async () => {
+    const controller = createController({ type: 'continuous', maxWidth: 600 });
+    const event = wheelEvent({ ctrlKey: true });
+
+    await controller.handleWheel(event);
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(controller.displayZoom).toBeGreaterThan(1);
   });
 });

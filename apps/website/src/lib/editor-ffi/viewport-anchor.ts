@@ -9,12 +9,14 @@ import type { EditorVisibleArea } from './scroll';
 import type { EditorScrollIntoViewTarget, EditorScrollRevealPolicy } from './scroll.svelte';
 
 export type EditorViewportAnchorGeometry = {
+  pointX: number;
   pointY: number;
   rect?: { top: number; bottom: number };
 };
 
 type ActiveViewportAnchor = {
   identity: ViewportAnchor;
+  pointAttachmentX: number;
   pointAttachmentY: number;
   rect?: { top: number; bottom: number };
   revealOrigin?: EditorViewportAnchorRevealOrigin;
@@ -27,9 +29,11 @@ export type EditorViewportAnchorRevealOrigin = {
 };
 
 export type EditorViewportAnchorLayout = {
-  pages: readonly (VerticalSpan & { page: number })[];
+  pages: readonly (VerticalSpan & { page: number; left: number })[];
   zoom: number;
 };
+
+export type EditorViewportScrollPosition = { left: number; top: number };
 
 export class EditorViewportAnchorState {
   #active: ActiveViewportAnchor | null = null;
@@ -38,11 +42,17 @@ export class EditorViewportAnchorState {
   #attachActive(
     identity: ViewportAnchor,
     geometry: EditorViewportAnchorGeometry,
-    scrollTop: number,
+    scroll: EditorViewportScrollPosition,
     revealOrigin?: EditorViewportAnchorRevealOrigin,
   ): void {
-    if (!Number.isFinite(geometry.pointY) || !Number.isFinite(scrollTop)) return;
-    this.#active = { identity, pointAttachmentY: geometry.pointY - scrollTop, rect: geometry.rect, revealOrigin };
+    if (![geometry.pointX, geometry.pointY, scroll.left, scroll.top].every(Number.isFinite)) return;
+    this.#active = {
+      identity,
+      pointAttachmentX: geometry.pointX - scroll.left,
+      pointAttachmentY: geometry.pointY - scroll.top,
+      rect: geometry.rect,
+      revealOrigin,
+    };
   }
 
   get identity(): ViewportAnchor | null {
@@ -51,6 +61,10 @@ export class EditorViewportAnchorState {
 
   get pointAttachmentY(): number | null {
     return this.#active?.pointAttachmentY ?? null;
+  }
+
+  get pointAttachmentX(): number | null {
+    return this.#active?.pointAttachmentX ?? null;
   }
 
   get preferredSelectionIdentity(): ViewportAnchor | null {
@@ -66,37 +80,37 @@ export class EditorViewportAnchorState {
     return this.#preferredSelection === null || stringify(this.#preferredSelection) !== stringify(identity);
   }
 
-  attach(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scrollTop: number): void {
-    this.#attachActive(identity, geometry, scrollTop);
+  attach(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
+    this.#attachActive(identity, geometry, scroll);
   }
 
   attachSelection(
     identity: ViewportAnchor,
     geometry: EditorViewportAnchorGeometry,
-    scrollTop: number,
+    scroll: EditorViewportScrollPosition,
     revealOrigin?: EditorViewportAnchorRevealOrigin,
   ): void {
     this.#preferredSelection = identity;
-    this.#attachActive(identity, geometry, scrollTop, revealOrigin);
+    this.#attachActive(identity, geometry, scroll, revealOrigin);
   }
 
-  attachViewport(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scrollTop: number): void {
-    this.#attachActive(identity, geometry, scrollTop);
+  attachViewport(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
+    this.#attachActive(identity, geometry, scroll);
   }
 
   adoptSelection(
     identity: ViewportAnchor,
     geometry: EditorViewportAnchorGeometry,
-    scrollTop: number,
+    scroll: EditorViewportScrollPosition,
     clientHeight: number,
     visibleArea: EditorVisibleArea,
     preserveActiveAnchor: boolean,
   ): void {
     if (!this.needsSelectionAdoption(identity)) return;
     const activate =
-      !preserveActiveAnchor && (this.#active !== null || this.canRetainAfterDirectScroll(geometry, scrollTop, clientHeight, visibleArea));
+      !preserveActiveAnchor && (this.#active !== null || this.canRetainAfterDirectScroll(geometry, scroll.top, clientHeight, visibleArea));
     this.#preferredSelection = identity;
-    if (activate) this.#attachActive(identity, geometry, scrollTop);
+    if (activate) this.#attachActive(identity, geometry, scroll);
   }
 
   clearPreferredSelection(): void {
@@ -105,7 +119,7 @@ export class EditorViewportAnchorState {
 
   tryReactivatePreferredSelection(
     geometry: EditorViewportAnchorGeometry,
-    scrollTop: number,
+    scroll: EditorViewportScrollPosition,
     clientHeight: number,
     visibleArea: EditorVisibleArea,
   ): boolean {
@@ -119,21 +133,33 @@ export class EditorViewportAnchorState {
       !Number.isFinite(rect.top) ||
       !Number.isFinite(rect.bottom) ||
       rect.bottom < rect.top ||
-      rect.top - scrollTop < guard.top ||
-      rect.bottom - scrollTop > guard.bottom
+      rect.top - scroll.top < guard.top ||
+      rect.bottom - scroll.top > guard.bottom
     ) {
       return false;
     }
-    this.#attachActive(identity, geometry, scrollTop);
+    this.#attachActive(identity, geometry, scroll);
     return true;
   }
 
-  publicationScroll(geometry: EditorViewportAnchorGeometry, currentScrollTop: number, maximumScrollTop: number): number {
-    const attachment = this.#active?.pointAttachmentY;
-    if (attachment === undefined || !Number.isFinite(geometry.pointY) || !Number.isFinite(maximumScrollTop) || maximumScrollTop < 0) {
-      return currentScrollTop;
+  publicationScroll(
+    geometry: EditorViewportAnchorGeometry,
+    currentScroll: EditorViewportScrollPosition,
+    maximumScroll: EditorViewportScrollPosition,
+  ): EditorViewportScrollPosition {
+    const active = this.#active;
+    if (
+      !active ||
+      ![geometry.pointX, geometry.pointY, maximumScroll.left, maximumScroll.top].every(Number.isFinite) ||
+      maximumScroll.left < 0 ||
+      maximumScroll.top < 0
+    ) {
+      return currentScroll;
     }
-    return clamp(geometry.pointY - attachment, 0, maximumScrollTop);
+    return {
+      left: clamp(geometry.pointX - active.pointAttachmentX, 0, maximumScroll.left),
+      top: clamp(geometry.pointY - active.pointAttachmentY, 0, maximumScroll.top),
+    };
   }
 
   publicationRevealScroll(
@@ -143,20 +169,26 @@ export class EditorViewportAnchorState {
     scrollHeight: number,
     visibleArea: EditorVisibleArea,
     resolveReveal?: (origin: EditorViewportAnchorRevealOrigin) => number | null,
-  ): number {
-    const exact = this.publicationScroll(geometry, currentScrollTop, Math.max(0, scrollHeight - clientHeight));
+    currentScrollLeft = 0,
+    maximumScrollLeft = 0,
+  ): EditorViewportScrollPosition {
+    const exact = this.publicationScroll(
+      geometry,
+      { left: currentScrollLeft, top: currentScrollTop },
+      { left: maximumScrollLeft, top: Math.max(0, scrollHeight - clientHeight) },
+    );
     if (!rectHeightChanged(this.#active?.rect, geometry.rect)) return exact;
     const revealOrigin = this.#active?.revealOrigin;
     if (revealOrigin) {
       const reveal = resolveReveal?.(revealOrigin);
-      if (reveal !== null && reveal !== undefined) return clamp(reveal, 0, Math.max(0, scrollHeight - clientHeight));
+      if (reveal !== null && reveal !== undefined) return { ...exact, top: clamp(reveal, 0, Math.max(0, scrollHeight - clientHeight)) };
     }
-    return this.resizeScroll(geometry, exact, clientHeight, scrollHeight, visibleArea);
+    return { ...exact, top: this.resizeScroll(geometry, exact.top, clientHeight, scrollHeight, visibleArea) };
   }
 
-  acceptGeometry(geometry: EditorViewportAnchorGeometry, scrollTop: number): void {
+  acceptGeometry(geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
     const active = this.#active;
-    if (active) this.#attachActive(active.identity, geometry, scrollTop, active.revealOrigin);
+    if (active) this.#attachActive(active.identity, geometry, scroll, active.revealOrigin);
   }
 
   finishRevealConvergence(): void {
@@ -206,8 +238,9 @@ export function resolveViewportAnchorGeometry(
 ): EditorViewportAnchorGeometry | null {
   const page = layout.pages[resolved.point.page_idx];
   if (!page || !Number.isFinite(layout.zoom) || layout.zoom <= 0) return null;
+  const pointX = page.left + resolved.point.x * layout.zoom;
   const pointY = page.top + resolved.point.y * layout.zoom;
-  if (!Number.isFinite(pointY)) return null;
+  if (!Number.isFinite(pointX) || !Number.isFinite(pointY)) return null;
 
   const rectPage = resolved.rect ? layout.pages[resolved.rect.page_idx] : undefined;
   const rect =
@@ -217,7 +250,7 @@ export function resolveViewportAnchorGeometry(
           bottom: rectPage.top + (resolved.rect.rect.y + resolved.rect.rect.height) * layout.zoom,
         }
       : undefined;
-  return { pointY, rect };
+  return { pointX, pointY, rect };
 }
 
 export function viewportCenterAnchorPoint(

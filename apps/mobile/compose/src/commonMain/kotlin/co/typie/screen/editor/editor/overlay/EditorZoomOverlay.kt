@@ -36,24 +36,24 @@ private val ZoomOverlayShape = AppShapes.rounded(8.dp)
 @Composable
 internal fun EditorZoomOverlay(modifier: Modifier = Modifier) {
   val zoomController = LocalEditorZoomController.current
-  val isPaginated = zoomController.isPaginated
+  val enabled = zoomController.isZoomEnabled
   val displayZoom = zoomController.displayZoom
 
   var visible by remember { mutableStateOf(false) }
   var lastZoom by remember { mutableStateOf<Float?>(null) }
-  var wasPaginated by remember { mutableStateOf(false) }
+  var wasEnabled by remember { mutableStateOf(false) }
   var showRequest by remember { mutableIntStateOf(0) }
 
-  LaunchedEffect(isPaginated, displayZoom) {
-    val enteredPaginated = isPaginated && !wasPaginated
-    wasPaginated = isPaginated
+  LaunchedEffect(enabled, displayZoom) {
+    val entered = enabled && !wasEnabled
+    wasEnabled = enabled
     val previousZoom = lastZoom
     lastZoom = displayZoom
     val shouldShow = previousZoom == null || zoomDiffers(previousZoom, displayZoom)
 
-    if (isPaginated && (enteredPaginated || shouldShow)) {
+    if (enabled && (entered || shouldShow)) {
       showRequest += 1
-    } else if (!isPaginated) {
+    } else if (!enabled) {
       visible = false
     }
   }
@@ -68,7 +68,7 @@ internal fun EditorZoomOverlay(modifier: Modifier = Modifier) {
     visible = false
   }
 
-  if (!isPaginated) {
+  if (!enabled) {
     return
   }
 

@@ -1,5 +1,6 @@
 package co.typie.editor.viewport
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.VerticalSpan
 import co.typie.editor.ffi.ViewportAnchor
@@ -18,14 +19,33 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `publication keeps the anchor at the exact attached viewport point`() {
     val state = EditorViewportAnchorState()
-    state.attach(identity, geometry(pointY = 200f), scrollY = 100f)
+    state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
 
     assertEquals(
-      220f,
+      Offset(x = 0f, y = 220f),
       state.publicationScroll(
         geometry = geometry(pointY = 320f),
-        currentScrollY = 100f,
-        maximumScrollY = 500f,
+        currentScrollOffset = Offset(x = 0f, y = 100f),
+        maximumScrollOffset = Offset(x = 0f, y = 500f),
+      ),
+    )
+  }
+
+  @Test
+  fun `publication keeps the anchor attachment on both axes`() {
+    val state = EditorViewportAnchorState()
+    state.attach(
+      identity = identity,
+      geometry = geometry(pointX = 100f, pointY = 200f),
+      scrollOffset = Offset(x = 20f, y = 100f),
+    )
+
+    assertEquals(
+      Offset(x = 180f, y = 220f),
+      state.publicationScroll(
+        geometry = geometry(pointX = 260f, pointY = 320f),
+        currentScrollOffset = Offset(x = 20f, y = 100f),
+        maximumScrollOffset = Offset(x = 500f, y = 500f),
       ),
     )
   }
@@ -33,14 +53,14 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `geometry change below the anchor does not move the viewport`() {
     val state = EditorViewportAnchorState()
-    state.attach(identity, geometry(pointY = 200f), scrollY = 100f)
+    state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
 
     assertEquals(
-      100f,
+      Offset(x = 0f, y = 100f),
       state.publicationScroll(
         geometry = geometry(pointY = 200f),
-        currentScrollY = 100f,
-        maximumScrollY = 500f,
+        currentScrollOffset = Offset(x = 0f, y = 100f),
+        maximumScrollOffset = Offset(x = 0f, y = 500f),
       ),
     )
   }
@@ -49,7 +69,11 @@ class EditorViewportAnchorStateTest {
   fun `direct scroll retains identity inside cursor guard and replaces it outside`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
-    state.attach(identity, geometry(pointY = 200f, top = 190f, bottom = 210f), scrollY = 100f)
+    state.attach(
+      identity,
+      geometry(pointY = 200f, top = 190f, bottom = 210f),
+      scrollOffset = Offset(x = 0f, y = 100f),
+    )
 
     assertTrue(
       state.canRetainAfterDirectScroll(
@@ -71,7 +95,11 @@ class EditorViewportAnchorStateTest {
   fun `oversized rect uses its point instead of trying to fit the whole rect`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
-    state.attach(identity, geometry(pointY = 150f, top = 0f, bottom = 1_000f), scrollY = 0f)
+    state.attach(
+      identity,
+      geometry(pointY = 150f, top = 0f, bottom = 1_000f),
+      scrollOffset = Offset.Zero,
+    )
 
     assertTrue(
       state.canRetainAfterDirectScroll(
@@ -94,7 +122,11 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `resize moves minimally only after the anchor leaves cursor guard`() {
     val state = EditorViewportAnchorState()
-    state.attach(identity, geometry(pointY = 260f, top = 250f, bottom = 270f), scrollY = 100f)
+    state.attach(
+      identity,
+      geometry(pointY = 260f, top = 250f, bottom = 270f),
+      scrollOffset = Offset(x = 0f, y = 100f),
+    )
     val shrunken =
       EditorVisibleArea(viewport = Size(width = 300f, height = 300f), bottomOcclusionInset = 100f)
 
@@ -112,12 +144,16 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `clamped publication records the achieved attachment`() {
     val state = EditorViewportAnchorState()
-    state.attach(identity, geometry(pointY = 200f), scrollY = 100f)
+    state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
     val candidate = geometry(pointY = 800f)
 
     val clamped =
-      state.publicationScroll(geometry = candidate, currentScrollY = 100f, maximumScrollY = 500f)
-    state.acceptGeometry(candidate, scrollY = clamped)
+      state.publicationScroll(
+        geometry = candidate,
+        currentScrollOffset = Offset(x = 0f, y = 100f),
+        maximumScrollOffset = Offset(x = 0f, y = 500f),
+      )
+    state.acceptGeometry(candidate, scrollOffset = clamped)
 
     assertEquals(300f, state.pointAttachmentY)
   }
@@ -135,16 +171,16 @@ class EditorViewportAnchorStateTest {
     state.attachSelection(
       identity,
       geometry(pointY = 500.5f, top = 500f, bottom = 501f),
-      scrollY = 161f,
+      scrollOffset = Offset(x = 0f, y = 161f),
       revealOrigin = revealOrigin,
     )
 
     assertEquals(
-      240f,
+      Offset(x = 0f, y = 240f),
       state.publicationRevealScroll(
         geometry = geometry(pointY = 600f, top = 500f, bottom = 700f),
-        currentScrollY = 161f,
-        maximumScrollY = 600f,
+        currentScrollOffset = Offset(x = 0f, y = 161f),
+        maximumScrollOffset = Offset(x = 0f, y = 600f),
         visibleArea = visibleArea,
         resolveReveal = { origin ->
           assertEquals(revealOrigin, origin)
@@ -155,22 +191,35 @@ class EditorViewportAnchorStateTest {
   }
 
   @Test
-  fun `preferred selection rect becomes active again after direct scroll returns it inside guard`() {
+  fun `preferred selection rect becomes active again at the current two dimensional scroll`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
-    val selectionGeometry = geometry(pointY = 200f, top = 190f, bottom = 210f)
-    state.attachSelection(identity, selectionGeometry, scrollY = 100f)
-    state.attachViewport(viewportIdentity, geometry(pointY = 500f), scrollY = 350f)
+    val selectionGeometry = geometry(pointX = 100f, pointY = 200f, top = 190f, bottom = 210f)
+    state.attachSelection(identity, selectionGeometry, scrollOffset = Offset(x = 20f, y = 100f))
+    state.attachViewport(
+      viewportIdentity,
+      geometry(pointX = 300f, pointY = 500f),
+      scrollOffset = Offset(x = 80f, y = 350f),
+    )
 
     assertTrue(
       state.tryReactivatePreferredSelection(
         geometry = selectionGeometry,
-        scrollY = 120f,
+        scrollOffset = Offset(x = 120f, y = 120f),
         visibleArea = visibleArea,
       )
     )
     assertEquals(identity, state.identity)
+    assertEquals(-20f, state.pointAttachmentX)
     assertEquals(80f, state.pointAttachmentY)
+    assertEquals(
+      Offset(x = 160f, y = 120f),
+      state.publicationScroll(
+        geometry = selectionGeometry.copy(pointX = 140f),
+        currentScrollOffset = Offset(x = 120f, y = 120f),
+        maximumScrollOffset = Offset(x = 500f, y = 500f),
+      ),
+    )
   }
 
   @Test
@@ -180,21 +229,25 @@ class EditorViewportAnchorStateTest {
     state.attachSelection(
       identity,
       geometry(pointY = 200f, top = 0f, bottom = 1_000f),
-      scrollY = 100f,
+      scrollOffset = Offset(x = 0f, y = 100f),
     )
-    state.attachViewport(viewportIdentity, geometry(pointY = 500f), scrollY = 350f)
+    state.attachViewport(
+      viewportIdentity,
+      geometry(pointY = 500f),
+      scrollOffset = Offset(x = 0f, y = 350f),
+    )
 
     assertFalse(
       state.tryReactivatePreferredSelection(
         geometry = geometry(pointY = 200f, top = 0f, bottom = 1_000f),
-        scrollY = 100f,
+        scrollOffset = Offset(x = 0f, y = 100f),
         visibleArea = visibleArea,
       )
     )
     assertFalse(
       state.tryReactivatePreferredSelection(
         geometry = geometry(pointY = 200f),
-        scrollY = 100f,
+        scrollOffset = Offset(x = 0f, y = 100f),
         visibleArea = visibleArea,
       )
     )
@@ -204,7 +257,11 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `selection adoption compares stable anchor identity`() {
     val state = EditorViewportAnchorState()
-    state.attachSelection(identity, geometry(pointY = 200f), scrollY = 100f)
+    state.attachSelection(
+      identity,
+      geometry(pointY = 200f),
+      scrollOffset = Offset(x = 0f, y = 100f),
+    )
 
     assertFalse(state.needsSelectionAdoption(identity))
     assertTrue(state.needsSelectionAdoption(viewportIdentity))
@@ -214,12 +271,16 @@ class EditorViewportAnchorStateTest {
   fun `preferred selection can change without replacing the active viewport anchor`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
-    state.attachViewport(viewportIdentity, geometry(pointY = 500f), scrollY = 350f)
+    state.attachViewport(
+      viewportIdentity,
+      geometry(pointY = 500f),
+      scrollOffset = Offset(x = 0f, y = 350f),
+    )
 
     state.adoptSelection(
       identity = identity,
       geometry = geometry(pointY = 200f),
-      scrollY = 350f,
+      scrollOffset = Offset(x = 0f, y = 350f),
       visibleArea = visibleArea,
       preserveActiveAnchor = true,
     )
@@ -229,12 +290,14 @@ class EditorViewportAnchorStateTest {
   }
 
   private fun geometry(
+    pointX: Float = 0f,
     pointY: Float,
     top: Float? = null,
     bottom: Float? = null,
   ): EditorViewportAnchorGeometry =
     EditorViewportAnchorGeometry(
       pointY = pointY,
+      pointX = pointX,
       rect = if (top != null && bottom != null) VerticalSpan(top, bottom) else null,
     )
 }

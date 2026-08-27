@@ -23,7 +23,7 @@
   const cssHeight = $derived(roundToScale(height, scaleFactor));
   const layoutMode = $derived(editor.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
-  const displayZoom = $derived(isPaginated ? editor.displayZoom : 1);
+  const displayZoom = $derived(editor.safeDisplayZoom());
   const slotWidth = $derived(roundToScale(width * displayZoom, scaleFactor));
   const slotHeight = $derived(roundToScale(height * displayZoom, scaleFactor));
   const showCropMarker = $derived(layoutMode?.type === 'paginated' && !editor.readOnly);
@@ -46,9 +46,9 @@
   <div
     style:width={`${cssWidth}px`}
     style:height={`${cssHeight}px`}
-    style:transform={isPaginated && displayZoom !== 1 ? `scale(${displayZoom})` : undefined}
-    style:transform-origin={isPaginated && displayZoom !== 1 ? 'top left' : undefined}
-    style:will-change={isPaginated && displayZoom !== 1 ? 'transform' : undefined}
+    style:transform={displayZoom === 1 ? undefined : `scale(${displayZoom})`}
+    style:transform-origin={displayZoom === 1 ? undefined : 'top left'}
+    style:will-change={displayZoom === 1 ? undefined : 'transform'}
     class={css({
       position: 'relative',
       isolation: 'isolate',

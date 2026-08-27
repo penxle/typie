@@ -5,13 +5,14 @@
   import ZoomOverlay from './ZoomOverlay.svelte';
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
+  import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
 
   type Props = {
     editor: Editor;
     active?: boolean;
-    isPaginated: boolean;
-    pageWidth: number;
+    layout: DocumentZoomLayout | null;
     viewportWidth: number;
+    attachViewportAnchor?: (point: { page: number; x: number; y: number }) => void;
     children?: Snippet;
   };
 
@@ -26,23 +27,24 @@
     clientY: number;
   };
 
-  let { editor, active = true, isPaginated, pageWidth, viewportWidth, children }: Props = $props();
+  let { editor, active = true, layout, viewportWidth, attachViewportAnchor, children }: Props = $props();
 
   let pinchSession = $state<PinchSession | null>(null);
-  let pinchUpdateInFlight = $state(false);
   let pinchQueuedUpdate = $state<PinchUpdate | null>(null);
+  let pinchFlushPromise: Promise<void> | null = null;
   const scrollContainer = $derived(editor.scrollContainerEl);
 
   const zoom = new EditorZoomController({
     editor,
-    isPaginated: () => isPaginated,
-    pageWidth: () => pageWidth,
+    layout: () => layout,
     viewportWidth: () => viewportWidth,
     getScrollViewport: () => editor.scrollViewport,
+    attachViewportAnchor: (point) => attachViewportAnchor?.(point),
   });
 
-  const displayZoom = $derived(isPaginated ? zoom.displayZoom : 1);
-  const renderZoom = $derived(isPaginated ? zoom.renderZoom : 1);
+  const zoomEnabled = $derived(layout !== null);
+  const displayZoom = $derived(zoomEnabled ? zoom.displayZoom : 1);
+  const renderZoom = $derived(zoomEnabled ? zoom.renderZoom : 1);
 
   $effect(() => {
     editor.displayZoom = displayZoom;
@@ -50,15 +52,13 @@
   });
 
   $effect(() => {
-    void isPaginated;
-    void pageWidth;
+    void layout;
     void viewportWidth;
     zoom.syncInitialZoom();
   });
 
   $effect(() => {
-    void isPaginated;
-    void pageWidth;
+    void layout;
     void viewportWidth;
     void zoom.displayZoom;
     zoom.clampCurrentZoomToBounds();
@@ -85,7 +85,7 @@
   };
 
   const handleBrowserZoomShortcut = (event: KeyboardEvent): void => {
-    if (!active || !isPaginated) {
+    if (!active || !zoomEnabled) {
       return;
     }
 
@@ -122,28 +122,26 @@
 
   function queuePinchUpdate(update: PinchUpdate): void {
     pinchQueuedUpdate = update;
-    void flushPinchUpdates();
+    pinchFlushPromise ??= flushPinchUpdates().finally(() => {
+      pinchFlushPromise = null;
+    });
   }
 
   async function flushPinchUpdates(): Promise<void> {
-    if (pinchUpdateInFlight) {
-      return;
-    }
-
-    pinchUpdateInFlight = true;
-    try {
-      while (pinchQueuedUpdate) {
-        const next = pinchQueuedUpdate;
-        pinchQueuedUpdate = null;
-        await zoom.zoomToClientPoint(next.zoom, next.clientX, next.clientY);
-      }
-    } finally {
-      pinchUpdateInFlight = false;
+    while (pinchQueuedUpdate) {
+      const next = pinchQueuedUpdate;
+      pinchQueuedUpdate = null;
+      await zoom.zoomToClientPoint(next.zoom, next.clientX, next.clientY);
     }
   }
 
+  async function commitPinchZoom(): Promise<void> {
+    await pinchFlushPromise;
+    zoom.commitRenderZoom();
+  }
+
   function tryStartPinch(touches: TouchList): boolean {
-    if (!isPaginated || touches.length !== 2) {
+    if (!zoomEnabled || touches.length !== 2) {
       return false;
     }
 
@@ -171,7 +169,7 @@
   }
 
   function handleTouchStartForPinch(event: TouchEvent): void {
-    if (pinchSession || !isPaginated || event.touches.length !== 2) {
+    if (pinchSession || !zoomEnabled || event.touches.length !== 2) {
       return;
     }
 
@@ -179,7 +177,7 @@
   }
 
   function handleTouchMoveForPinch(event: TouchEvent): void {
-    if (!isPaginated || event.touches.length !== 2) {
+    if (!zoomEnabled || event.touches.length !== 2) {
       return;
     }
 
@@ -212,6 +210,7 @@
   function handleTouchEndForPinch(event: TouchEvent): void {
     if (event.touches.length < 2) {
       pinchSession = null;
+      void commitPinchZoom();
       return;
     }
 
@@ -223,6 +222,7 @@
 
   function handleTouchCancelForPinch(): void {
     pinchSession = null;
+    void commitPinchZoom();
   }
 
   $effect(() => {
@@ -266,7 +266,7 @@
   });
 
   $effect(() => {
-    if (active && isPaginated) {
+    if (active && zoomEnabled) {
       return;
     }
 
@@ -281,4 +281,4 @@
   {@render children?.()}
 </div>
 
-<ZoomOverlay {displayZoom} {isPaginated} {scrollContainer} />
+<ZoomOverlay {displayZoom} enabled={zoomEnabled} {scrollContainer} />

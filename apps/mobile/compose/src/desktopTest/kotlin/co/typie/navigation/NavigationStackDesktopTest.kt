@@ -78,12 +78,19 @@ class NavigationStackDesktopTest {
       ) { route ->
         Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
           Box(Modifier.fillMaxSize().testTag("surface-$route"))
+          NavigationForeground(sharePointerInputWithSiblings = true) {
+            Box(Modifier.fillMaxSize().testTag("shared-foreground-$route"))
+          }
           NavigationForeground { Box(Modifier.fillMaxSize().testTag("foreground-$route")) }
         }
       }
     }
     waitForIdle()
 
+    assertEquals(
+      onNodeWithTag("surface-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+      onNodeWithTag("shared-foreground-${Route.Home}").fetchSemanticsNode().boundsInRoot,
+    )
     assertEquals(
       onNodeWithTag("surface-${Route.Home}").fetchSemanticsNode().boundsInRoot,
       onNodeWithTag("foreground-${Route.Home}").fetchSemanticsNode().boundsInRoot,

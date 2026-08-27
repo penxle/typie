@@ -59,6 +59,7 @@ import co.typie.editor.body.EditorBody
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.decodeDocumentLayoutSpec
 import co.typie.editor.body.resolveBaseBottomSpace
+import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.external.EditorExternalElementState
@@ -116,7 +117,9 @@ import co.typie.editor.sync.ws.SyncWs
 import co.typie.editor.sync.ws.SyncWsException
 import co.typie.editor.sync.ws.WsSyncTransport
 import co.typie.editor.sync.ws.replacementSnapshotInFlight
+import co.typie.editor.viewport.EditorViewportAnchorState
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
+import co.typie.editor.viewport.resolveViewportAnchorContentOriginY
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ime
 import co.typie.ext.rememberTextInputState
@@ -151,6 +154,7 @@ import co.typie.screen.editor.editor.header.EditorHeaderFrame
 import co.typie.screen.editor.editor.header.resolveEditorHeaderGeometry
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
+import co.typie.screen.editor.editor.layout.attachViewportZoomAnchor
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
@@ -277,6 +281,7 @@ fun EditorScreen(entityId: String) {
     }
   var assetQueryGeneration by remember(entityId) { mutableStateOf(0L) }
   val zoomController = rememberEditorZoomController(key = entityId)
+  val viewportAnchorState = remember(entityId) { EditorViewportAnchorState() }
   val screenState = rememberEditorScreenState(key = entityId)
   val subPaneState = remember(entityId) { EditorSubPaneState() }
   val toolbarSessionState = rememberEditorToolbarSessionState(key = entityId)
@@ -1616,7 +1621,7 @@ fun EditorScreen(entityId: String) {
         layoutSpec = layoutSpec,
         viewportWidth = visibleArea.visibleBodySize.width,
         bodyTrackWidth = bodyTrackWidth,
-        displayZoom = if (layoutSpec is EditorDocumentLayoutSpec.Paginated) displayZoom else 1f,
+        displayZoom = displayZoom,
       )
     val publishedRevision = editor?.publishedRevision
     val editorGeometryValid =
@@ -1694,18 +1699,30 @@ fun EditorScreen(entityId: String) {
         popoverOverlayState.entry == null
     SideEffect {
       val viewportZoomConfig =
-        (layoutSpec as? EditorDocumentLayoutSpec.Paginated)?.let { paginatedLayoutSpec ->
-          EditorViewportZoomSemanticConfig(
-            layoutSpec = paginatedLayoutSpec,
-            zoomController = zoomController,
-            viewportState = screenState.viewportState,
-            uiState = uiState,
-            pageSizes = layoutPageSizes,
-            viewportWidth = visibleArea.visibleBodySize.width,
-            density = density,
-            onZoomSnap = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) },
-          )
-        }
+        EditorViewportZoomSemanticConfig(
+          layoutSpec = layoutSpec,
+          zoomController = zoomController,
+          viewportState = screenState.viewportState,
+          uiState = uiState,
+          pageSizes = layoutPageSizes,
+          viewportWidth = visibleArea.visibleBodySize.width,
+          density = density,
+          onZoomSnap = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+          onAttachViewportAnchor = attach@{ anchor, displayPosition, scrollOffset ->
+              val activeEditor = editor ?: return@attach
+              val bundle = publishedBundle ?: return@attach
+              val frame = scrollFrame.withState(bundle.snapshot)
+              attachViewportZoomAnchor(
+                editor = activeEditor,
+                anchorState = viewportAnchorState,
+                revision = bundle.snapshot.version,
+                anchor = anchor,
+                displayPosition = displayPosition,
+                scrollOffset = scrollOffset,
+                contentOriginY = resolveViewportAnchorContentOriginY(frame),
+              )
+            },
+        )
       interactionScope.update(
         editor = editor,
         bringIntoViewRequests = bringIntoViewRequests,
@@ -1792,6 +1809,7 @@ fun EditorScreen(entityId: String) {
         editorInteractionEnabled = editorInteractionEnabled,
         platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,
+        viewportAnchorState = viewportAnchorState,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         onViewportIndirectInput = { uiState.contextMenu.hide() },
         onRequestEditing =
@@ -1817,7 +1835,15 @@ fun EditorScreen(entityId: String) {
                 enqueue(
                   Message.System(
                     SystemEvent.Resize(
-                      width = viewport.width,
+                      width =
+                        when (layoutSpec) {
+                          is EditorDocumentLayoutSpec.Continuous ->
+                            resolveContinuousLayoutViewportWidth(
+                              viewportWidth = viewport.width,
+                              committedZoom = zoomController.renderZoom,
+                            )
+                          is EditorDocumentLayoutSpec.Paginated -> viewport.width
+                        },
                       height = viewport.height,
                       scaleFactor = density.toDouble(),
                     )
