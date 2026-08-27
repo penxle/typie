@@ -1,4 +1,4 @@
-import { getAppContext } from '@typie/ui/context';
+import { tryAppContext } from '@typie/ui/context';
 import { untrack } from 'svelte';
 import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { pageRectsToRevealTargetSpan, resolvePageSpans, selectionHeadRect } from './geometry';
@@ -102,7 +102,7 @@ function createBringIntoViewRequest({ target, policy, behavior = 'instant' }: Ed
 }
 
 export function setupEditorScroll(ctx: EditorContext): void {
-  const app = getAppContext();
+  const app = tryAppContext();
 
   $effect(() => {
     const editor = ctx.editor;
