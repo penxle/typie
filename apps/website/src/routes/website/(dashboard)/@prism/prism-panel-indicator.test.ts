@@ -141,6 +141,56 @@ const setSourceRect = (target: HTMLElement) => {
 };
 
 describe('Prism panel indicator', () => {
+  test('reports whether the 3D prism renderer is actually available', async () => {
+    const target = document.createElement('div');
+    const availability: boolean[] = [];
+    const props = reactiveProps({
+      onPrismAvailabilityChange: (available: boolean) => {
+        availability.push(available);
+      },
+      phase: 'welcome' as const,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      expect(availability.at(-1)).toBe(false);
+
+      runtime.emit({ readiness: 'ready' });
+      await tick();
+      expect(availability.at(-1)).toBe(true);
+
+      runtime.emit({ readiness: 'unavailable' });
+      await tick();
+      expect(availability.at(-1)).toBe(false);
+      expect(runtime.mountObject).toHaveBeenCalledOnce();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('never reports the 3D prism as available with reduced motion', async () => {
+    const target = document.createElement('div');
+    const availability: boolean[] = [];
+    const props = reactiveProps({
+      onPrismAvailabilityChange: (available: boolean) => {
+        availability.push(available);
+      },
+      phase: 'welcome' as const,
+      reducedMotion: true,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      runtime.emit({ readiness: 'ready' });
+      await tick();
+
+      expect(availability.at(-1)).toBe(false);
+      expect(availability).not.toContain(true);
+    } finally {
+      await unmount(component);
+    }
+  });
+
   test('uses the theme-state edge color before the view-transition DOM catches up', async () => {
     const target = document.createElement('div');
     const previousTheme = document.documentElement.dataset.theme;
@@ -233,6 +283,124 @@ describe('Prism panel indicator', () => {
     }
   });
 
+  test('keeps the welcome prism static when the 3D object preference is disabled', async () => {
+    const target = document.createElement('div');
+    const availability: boolean[] = [];
+    const props = reactiveProps({
+      onPrismAvailabilityChange: (available: boolean) => {
+        availability.push(available);
+      },
+      phase: 'welcome' as const,
+      prismEnabled: false,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      await vi.advanceTimersByTimeAsync(700);
+      runtime.emit({ readiness: 'ready' });
+      stepIdleCallback();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      await tick();
+
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
+      expect(availability.at(-1)).toBe(true);
+      expect(runtime.object.destroy).toHaveBeenCalledOnce();
+      expect(target.querySelector('[data-prism-indicator-static-icon]')).not.toBeNull();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('remounts the 3D renderer when the static welcome prism is enabled again', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, prismEnabled: false });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      runtime.emit({ readiness: 'ready' });
+      await tick();
+      expect(runtime.object.destroy).toHaveBeenCalledOnce();
+
+      props.prismEnabled = true;
+      await tick();
+
+      expect(runtime.mountObject).toHaveBeenCalledTimes(2);
+      expect(target.querySelector('[data-prism-indicator-static-icon]')).toBeNull();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('shows the welcome message immediately when the 3D object preference is disabled', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, prismEnabled: false });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+      expect(animate).not.toHaveBeenCalled();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('keeps an admitted welcome message visible while the 3D object preference is enabled', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, prismEnabled: false });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+
+      animate.mockClear();
+      props.prismEnabled = true;
+      await tick();
+
+      expect(target.querySelector('[data-prism-indicator-message]')).not.toBeNull();
+      expect(animate).not.toHaveBeenCalled();
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('returns the welcome prism to the icon when the 3D object preference is disabled', async () => {
+    const target = document.createElement('div');
+    const props = reactiveProps({ phase: 'welcome' as const, prismEnabled: true });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      await vi.advanceTimersByTimeAsync(700);
+      runtime.emit({ readiness: 'ready' });
+      stepIdleCallback();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      stepAnimationFrame();
+      await tick();
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
+
+      runtime.object.setTarget.mockClear();
+      props.prismEnabled = false;
+      await tick();
+
+      expect(runtime.object.setTarget).toHaveBeenCalledWith('icon');
+      expect(runtime.object.destroy).not.toHaveBeenCalled();
+
+      runtime.emit({ journeyProgress: null, owner: 'svg', requestedTarget: 'icon', settledTarget: 'icon' });
+      await tick();
+
+      expect(runtime.object.destroy).toHaveBeenCalledOnce();
+      expect(target.querySelector('[data-prism-indicator-static-icon]')).not.toBeNull();
+      stepAnimationFrame();
+      await tick();
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
+    } finally {
+      await unmount(component);
+    }
+  });
+
   test('reveals the welcome message only after the icon-to-prism morph starts and keeps it outside the moving actor', async () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0);
     const target = document.createElement('div');
@@ -318,7 +486,8 @@ describe('Prism panel indicator', () => {
       await tick();
       setSourceRect(target);
       expect(runtime.object.whenReady).not.toHaveBeenCalled();
-      expect(runtime.object.setTarget).toHaveBeenCalledWith('icon');
+      expect(runtime.mountObject).not.toHaveBeenCalled();
+      expect(target.querySelector('[data-prism-indicator-static-icon]')).not.toBeNull();
 
       await vi.advanceTimersByTimeAsync(700);
       runtime.emit({ readiness: 'ready' });
@@ -337,6 +506,41 @@ describe('Prism panel indicator', () => {
       props.phase = 'failed';
       await tick();
       expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).not.toBe('hidden');
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('hands submission directly to the row spinner when the 3D object preference is disabled', async () => {
+    const target = document.createElement('div');
+    const owners: string[] = [];
+    const props = reactiveProps({
+      destination: destination() as HTMLElement | undefined,
+      onSpinnerOwnerChange: (owner: string) => {
+        owners.push(owner);
+      },
+      phase: 'welcome' as 'failed' | 'submitting' | 'welcome',
+      prismEnabled: false,
+    });
+    const component = mount(PrismPanelIndicator, { target, props });
+    try {
+      await tick();
+      setSourceRect(target);
+      runtime.emit({ readiness: 'ready' });
+      await tick();
+
+      props.phase = 'submitting';
+      await tick();
+
+      expect(owners.at(-1)).toBe('row');
+      expect(target.querySelector<HTMLElement>('[data-prism-indicator-actor]')?.style.visibility).toBe('hidden');
+      expect(runtime.object.setTarget).not.toHaveBeenCalledWith('spinner', expect.anything());
+
+      runtime.object.setTarget.mockClear();
+      props.phase = 'failed';
+      await tick();
+
       expect(runtime.object.setTarget).not.toHaveBeenCalledWith('prism');
     } finally {
       await unmount(component);
