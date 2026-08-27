@@ -30,11 +30,12 @@ import {
   ReadNoteInput,
   ReadSharingInput,
   RecoverEntitiesInput,
-  RenameFoldersInput,
   SearchEntitiesInput,
   SetGoalsInput,
   snippetOf,
   TRASH_PAGE_SIZE,
+  UpdateDocumentsInput,
+  UpdateFoldersInput,
   UpdateIconsInput,
   UpdateNotesInput,
   UpdateSharingInput,
@@ -191,13 +192,29 @@ test('입력 미러: entity·document 계열', () => {
   assert.equal(CreateDocumentsInput.safeParse({}).success, false);
   assert.equal(CreateDocumentsInput.safeParse({ items: [] }).success, false);
 
-  assert.deepEqual(RenameFoldersInput.parse({ items: [{ folderId: 'FLDR0', name: '초고' }] }), {
+  assert.deepEqual(UpdateFoldersInput.parse({ items: [{ folderId: 'FLDR0', name: '초고' }] }), {
     items: [{ folderId: 'FLDR0', name: '초고' }],
   });
-  assert.equal(RenameFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '' }] }).success, false);
-  assert.equal(RenameFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '가'.repeat(101) }] }).success, false);
-  assert.equal(RenameFoldersInput.safeParse({ items: [{ name: '초고' }] }).success, false);
-  assert.equal(RenameFoldersInput.safeParse({ folderId: 'FLDR0', name: '초고' }).success, false);
+  assert.equal(UpdateFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '' }] }).success, false);
+  assert.equal(UpdateFoldersInput.safeParse({ items: [{ folderId: 'FLDR0', name: '가'.repeat(101) }] }).success, false);
+  assert.equal(UpdateFoldersInput.safeParse({ items: [{ name: '초고' }] }).success, false);
+  assert.equal(UpdateFoldersInput.safeParse({ folderId: 'FLDR0', name: '초고' }).success, false);
+
+  assert.deepEqual(UpdateDocumentsInput.parse({ items: [{ documentId: 'DOC0', title: ' 바다 ' }] }), {
+    items: [{ documentId: 'DOC0', title: '바다' }],
+  });
+  assert.deepEqual(UpdateDocumentsInput.parse({ items: [{ documentId: 'DOC0', title: '', subtitle: '부제' }] }), {
+    items: [{ documentId: 'DOC0', title: null, subtitle: '부제' }],
+  });
+  assert.deepEqual(UpdateDocumentsInput.parse({ items: [{ documentId: 'DOC0', title: '' }] }), {
+    items: [{ documentId: 'DOC0', title: null }],
+  });
+  assert.deepEqual(UpdateDocumentsInput.parse({ items: [{ documentId: 'DOC0', subtitle: ' '.repeat(3) }] }), {
+    items: [{ documentId: 'DOC0', subtitle: null }],
+  });
+  assert.equal(UpdateDocumentsInput.safeParse({ items: [{ documentId: 'DOC0' }] }).success, true);
+  assert.equal(UpdateDocumentsInput.safeParse({ items: [{ title: '바다' }] }).success, false);
+  assert.equal(UpdateDocumentsInput.safeParse({ documentId: 'DOC0', title: '바다' }).success, false);
 
   assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'] }), { ids: ['E1'] });
   assert.equal(MoveEntitiesInput.safeParse({ ids: [] }).success, false);

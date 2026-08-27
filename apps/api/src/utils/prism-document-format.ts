@@ -80,6 +80,8 @@ export const DOCUMENT_FORMAT_GUIDE = `# 문서 파일 형식
 | \`link\` | \`href\` | URL(빈 값 불가). 글자만 감쌀 수 있고 \`hard_break\`·\`tab\`은 감쌀 수 없어요 |
 | \`ruby\` | \`text\` | 읽기(빈 값 불가). 글자만 감쌀 수 있어요 |
 
+검색은 서식 요소를 가로지르지 않는 짧은 조각으로 하세요 — \`안녕<bold>하세요</bold>\`는 "안녕하세요"로 찾히지 않아요. 안 잡히면 그 근처를 \`read\`로 창을 열어 읽으세요.
+
 \`\`\`xml
 <paragraph>보통 글자와 <bold>굵은 글자</bold>, <bold><italic>굵고 기울인 글자</italic></bold>, <font_size value="1600">큰 글자</font_size>, <text_color value="red">빨간 글자</text_color>, <link href="https://typie.co">링크</link>, <ruby text="かんじ">漢字</ruby>, 그리고<hard_break/>줄바꿈 뒤의 글자</paragraph>
 \`\`\`

@@ -1,4 +1,4 @@
-import { EntityState, EntityType, NoteState } from '@typie/lib/enums';
+import { EntityAvailability, EntityState, EntityType, NoteState } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
@@ -33,7 +33,7 @@ import { assertActiveSubscription, hasActiveSubscription } from './plan.ts';
 import { runAfterCommit } from './post-commit.ts';
 import { enqueueSearchSyncForEntityIds } from './search-index.ts';
 import { wasm as wasmFfi } from './wasm-ffi.ts';
-import type { DocumentContentRating, EntityAvailability, EntityVisibility } from '@typie/lib/enums';
+import type { DocumentContentRating, EntityVisibility } from '@typie/lib/enums';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { TemplatePreset } from './entity.ts';
 import type { PostCommitRegistrar } from './post-commit.ts';
@@ -553,6 +553,52 @@ export const renameFolderCore = async (executor: Database | Transaction, args: R
   });
 
   return renamedFolder;
+};
+
+type UpdateDocumentCoreArgs = {
+  userId: string;
+  documentId: string;
+  title?: string | null;
+  subtitle?: string | null;
+};
+
+export const updateDocumentCore = async (
+  executor: Database | Transaction,
+  args: UpdateDocumentCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
+  const document = await executor
+    .select({ entityId: Documents.entityId, siteId: Entities.siteId, availability: Entities.availability })
+    .from(Documents)
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+    .where(eq(Documents.id, args.documentId))
+    .then(firstOrThrow);
+
+  if (document.availability === EntityAvailability.PRIVATE) {
+    await assertSitePermission({ userId: args.userId, siteId: document.siteId });
+  }
+
+  await assertActiveSubscription({ userId: args.userId });
+
+  const updatedDocument = await executor
+    .update(Documents)
+    .set({
+      ...(args.title !== undefined && { title: args.title }),
+      ...(args.subtitle !== undefined && { subtitle: args.subtitle }),
+      updatedAt: dayjs(),
+    })
+    .where(eq(Documents.id, args.documentId))
+    .returning()
+    .then(firstOrThrow);
+
+  await runAfterCommit(afterCommit, async () => {
+    pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
+
+    const { enqueueJob } = await import('#/mq/index.ts');
+    await enqueueJob('search:index:document', args.documentId);
+  });
+
+  return updatedDocument;
 };
 
 type MoveEntitiesCoreArgs = {

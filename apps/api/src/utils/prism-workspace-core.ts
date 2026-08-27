@@ -75,7 +75,14 @@ export const CreateFoldersInput = z.object({
 });
 export const DeleteEntitiesInput = z.object({ ids: batch(z.string()) });
 export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional() })) });
-export const RenameFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
+export const UpdateFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
+const titleField = z
+  .string()
+  .transform((value) => value.trim())
+  .transform((value) => (value === '' ? null : value));
+export const UpdateDocumentsInput = z.object({
+  items: batch(z.object({ documentId: z.string(), title: titleField.optional(), subtitle: titleField.optional() })),
+});
 export const MoveEntitiesInput = z.object({ ids: batch(z.string()), folderId: z.string().optional() });
 export const DuplicateDocumentsInput = z.object({ ids: batch(z.string()) });
 export const UpdateIconsInput = z.object({

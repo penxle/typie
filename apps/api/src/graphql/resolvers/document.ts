@@ -48,11 +48,12 @@ import { readMergedGraph } from '#/utils/changeset.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { publishBundle } from '#/utils/document-bundle.ts';
 import { extractAssetIdsFromPlainDoc, extractPlainDocLayoutMode } from '#/utils/entity.ts';
-import { createDocumentCore, duplicateDocumentCore, updateDocumentsOptionCore } from '#/utils/entity-actions.ts';
+import { createDocumentCore, duplicateDocumentCore, updateDocumentCore, updateDocumentsOptionCore } from '#/utils/entity-actions.ts';
 import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
 import { getKoreanAge } from '#/utils/index.ts';
 import { assertDocumentPermission, assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
+import { runPostCommitEffects } from '#/utils/post-commit.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import {
@@ -75,6 +76,7 @@ import {
 import { resolveDocumentAssetsByIds } from './document-assets-by-ids.ts';
 import type { PlainDoc } from '@typie/editor-ffi/server';
 import type { Context, SessionContext } from '#/context.ts';
+import type { PostCommitEffect } from '#/utils/post-commit.ts';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed, DocumentArchivedNode],
@@ -816,37 +818,33 @@ builder.mutationFields((t) => ({
       locked: t.input.boolean({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      const document = await db
-        .select({ entityId: Documents.entityId, siteId: Entities.siteId, availability: Entities.availability })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(eq(Documents.id, input.documentId))
-        .then(firstOrThrow);
+      const effects: PostCommitEffect[] = [];
 
-      if (document.availability === EntityAvailability.PRIVATE) {
-        await assertSitePermission({
-          userId: ctx.session.userId,
-          siteId: document.siteId,
-        });
+      const updatedDocument = await db.transaction(async (tx) => {
+        const document = await updateDocumentCore(
+          tx,
+          { userId: ctx.session.userId, documentId: input.documentId, title: input.title, subtitle: input.subtitle },
+          (effect) => {
+            effects.push(effect);
+          },
+        );
+
+        if (input.locked == null) {
+          return document;
+        }
+
+        return await tx
+          .update(Documents)
+          .set({ locked: input.locked })
+          .where(eq(Documents.id, input.documentId))
+          .returning()
+          .then(firstOrThrow);
+      });
+
+      const errors = await runPostCommitEffects(effects);
+      if (errors.length > 0) {
+        throw errors[0];
       }
-
-      await assertActiveSubscription({ userId: ctx.session.userId });
-
-      const updatedDocument = await db
-        .update(Documents)
-        .set({
-          ...(input.title !== undefined && { title: input.title }),
-          ...(input.subtitle !== undefined && { subtitle: input.subtitle }),
-          ...(input.locked != null && { locked: input.locked }),
-          updatedAt: dayjs(),
-        })
-        .where(eq(Documents.id, input.documentId))
-        .returning()
-        .then(firstOrThrow);
-
-      pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
-
-      await enqueueJob('search:index:document', input.documentId);
 
       return updatedDocument;
     },

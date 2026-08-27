@@ -1790,4 +1790,268 @@ mod tests {
             "the surviving paragraph keeps every leaf it had"
         );
     }
+
+    fn paragraph_subtree(text: &str) -> editor_model::Subtree {
+        editor_model::Subtree {
+            node: editor_model::PlainNode::Paragraph(editor_model::PlainParagraphNode {}),
+            modifiers: Vec::new(),
+            carry: Vec::new(),
+            children: vec![editor_model::Subtree {
+                node: editor_model::PlainNode::Text(editor_model::PlainTextNode {
+                    text: text.into(),
+                }),
+                modifiers: Vec::new(),
+                carry: Vec::new(),
+                children: Vec::new(),
+                source_dots: Vec::new(),
+            }],
+            source_dots: Vec::new(),
+        }
+    }
+
+    fn paragraph_texts(state: &State) -> Vec<String> {
+        fn walk(entry: &editor_model::PlainNodeEntry, out: &mut Vec<String>) {
+            if matches!(entry.node, editor_model::PlainNode::Paragraph(_)) {
+                let text: String = entry
+                    .children
+                    .iter()
+                    .filter_map(|c| match &c.node {
+                        editor_model::PlainNode::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                out.push(text);
+            }
+            for c in &entry.children {
+                walk(c, out);
+            }
+        }
+        let mut out = Vec::new();
+        walk(&state.to_plain().root, &mut out);
+        out
+    }
+
+    #[test]
+    fn swapping_two_runs_of_paragraphs_moves_them_without_duplicating() {
+        let (state, _z) = state! {
+            doc { root { z: paragraph { text("Z") } } }
+            selection: (z, 0)
+        };
+        let root = state.view().root().unwrap().id();
+        let mut tr = editor_transaction::Transaction::new(&state);
+        let labels: Vec<String> = (1..=16)
+            .map(|i| format!("A{i:02}"))
+            .chain((1..=16).map(|i| format!("B{i:02}")))
+            .collect();
+        for (i, label) in labels.iter().enumerate() {
+            tr.insert_subtree(root, i, paragraph_subtree(label))
+                .unwrap();
+        }
+        let state = tr.commit().0;
+        assert_eq!(paragraph_texts(&state).len(), 33);
+
+        let xml = to_xml(&state, &live_heads(&state)).unwrap();
+        let lines: Vec<&str> = xml.lines().collect();
+        assert_eq!(lines.len(), 35, "root + 33 paragraphs + /root");
+        let mut swapped: Vec<&str> = vec![lines[0]];
+        swapped.extend_from_slice(&lines[17..33]);
+        swapped.extend_from_slice(&lines[1..17]);
+        swapped.extend_from_slice(&lines[33..]);
+        let target = swapped.join("\n") + "\n";
+
+        let out = edit(state, &from_xml(&target).unwrap()).unwrap();
+
+        let expected: Vec<String> = (1..=16)
+            .map(|i| format!("B{i:02}"))
+            .chain((1..=16).map(|i| format!("A{i:02}")))
+            .chain(std::iter::once("Z".to_string()))
+            .collect();
+        assert_eq!(paragraph_texts(&out.state), expected);
+        assert_eq!(out.changed.blocks_inserted, 0);
+        assert_eq!(out.changed.blocks_deleted, 0);
+    }
+
+    fn swap_document() -> (State, String) {
+        let (state, _z) = state! {
+            doc { root { z: paragraph { text("Z") } } }
+            selection: (z, 0)
+        };
+        let root = state.view().root().unwrap().id();
+        let mut tr = editor_transaction::Transaction::new(&state);
+        let labels: Vec<String> = (1..=16)
+            .map(|i| format!("A{i:02}"))
+            .chain((1..=16).map(|i| format!("B{i:02}")))
+            .collect();
+        for (i, label) in labels.iter().enumerate() {
+            tr.insert_subtree(root, i, paragraph_subtree(label))
+                .unwrap();
+        }
+        let state = tr.commit().0;
+        let xml = to_xml(&state, &live_heads(&state)).unwrap();
+        let lines: Vec<&str> = xml.lines().collect();
+        let mut swapped: Vec<&str> = vec![lines[0]];
+        swapped.extend_from_slice(&lines[17..33]);
+        swapped.extend_from_slice(&lines[1..17]);
+        swapped.extend_from_slice(&lines[33..]);
+        (state, swapped.join("\n") + "\n")
+    }
+
+    fn swapped_expected() -> Vec<String> {
+        (1..=16)
+            .map(|i| format!("B{i:02}"))
+            .chain((1..=16).map(|i| format!("A{i:02}")))
+            .chain(std::iter::once("Z".to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn swapping_two_runs_past_the_anchor_bound_moves_every_child_once() {
+        let (state, target) = swap_document();
+        let out = edit_bounded(state, &from_xml(&target).unwrap(), 1).unwrap();
+        assert_eq!(paragraph_texts(&out.state), swapped_expected());
+        assert_eq!(out.changed.blocks_inserted, 0);
+        assert_eq!(out.changed.blocks_deleted, 0);
+    }
+
+    #[test]
+    fn swapping_two_runs_merges_with_a_concurrent_insert_without_duplicating() {
+        let (base, target) = swap_document();
+        let heads: hashbrown::HashSet<Dot> = base.graph().current_heads().copied().collect();
+        let server = edit(base.clone(), &from_xml(&target).unwrap())
+            .unwrap()
+            .state;
+        let server_css = server.graph().local_changesets_since(&heads).unwrap();
+
+        let peer = State::from_changesets(base.graph().changesets_as_vec(), None).unwrap();
+        let root = peer.view().root().unwrap().id();
+        let mut tr = editor_transaction::Transaction::new(&peer);
+        tr.insert_subtree(root, 5, paragraph_subtree("PEER"))
+            .unwrap();
+        let peer = tr.commit().0;
+        let peer_css = peer.graph().local_changesets_since(&heads).unwrap();
+
+        let mut merged = peer.graph().clone();
+        for cs in server_css {
+            merged = merged.receive_changeset(cs).unwrap();
+        }
+        let mut other = server.graph().clone();
+        for cs in peer_css {
+            other = other.receive_changeset(cs).unwrap();
+        }
+        let a = paragraph_texts(&State::from_changesets(merged.changesets_as_vec(), None).unwrap());
+        let b = paragraph_texts(&State::from_changesets(other.changesets_as_vec(), None).unwrap());
+        assert_eq!(a, b, "both merge orders agree");
+        for label in swapped_expected() {
+            let n = a.iter().filter(|t| **t == label).count();
+            assert_eq!(n, 1, "{label} appears {n} times in {a:?}");
+        }
+        assert_eq!(a.iter().filter(|t| **t == "PEER").count(), 1);
+    }
+
+    fn rebuilt(state: &State) -> State {
+        State::from_changesets(state.graph().changesets_as_vec(), None).unwrap()
+    }
+
+    fn assert_each_once(texts: &[String], labels: &[String]) {
+        for label in labels {
+            let n = texts.iter().filter(|t| *t == label).count();
+            assert_eq!(n, 1, "{label} appears {n} times in {texts:?}");
+        }
+    }
+
+    #[test]
+    fn swapping_two_runs_survives_a_replay_from_changesets() {
+        let (state, target) = swap_document();
+        let out = edit(state, &from_xml(&target).unwrap()).unwrap();
+        let expected = swapped_expected();
+        assert_eq!(paragraph_texts(&out.state), expected, "transaction state");
+        let replayed = paragraph_texts(&rebuilt(&out.state));
+        assert_eq!(replayed, expected, "replayed from changesets");
+    }
+
+    #[test]
+    fn swapping_two_runs_authored_by_two_actors_survives_a_replay() {
+        let (seed, _z) = state! {
+            doc { root { z: paragraph { text("Z") } } }
+            selection: (z, 0)
+        };
+        let heads: hashbrown::HashSet<Dot> = seed.graph().current_heads().copied().collect();
+        let root = seed.view().root().unwrap().id();
+
+        let actor_a = State::from_changesets(seed.graph().changesets_as_vec(), None).unwrap();
+        let mut tr = editor_transaction::Transaction::new(&actor_a);
+        for i in 1..=16 {
+            tr.insert_subtree(root, i - 1, paragraph_subtree(&format!("A{i:02}")))
+                .unwrap();
+        }
+        let actor_a = tr.commit().0;
+        let css_a = actor_a.graph().local_changesets_since(&heads).unwrap();
+
+        let actor_b = State::from_changesets(seed.graph().changesets_as_vec(), None).unwrap();
+        let mut tr = editor_transaction::Transaction::new(&actor_b);
+        for i in 1..=16 {
+            tr.insert_subtree(root, i - 1, paragraph_subtree(&format!("B{i:02}")))
+                .unwrap();
+        }
+        let actor_b = tr.commit().0;
+        let css_b = actor_b.graph().local_changesets_since(&heads).unwrap();
+
+        let mut graph = seed.graph().clone();
+        for cs in css_a.into_iter().chain(css_b) {
+            graph = graph.receive_changeset(cs).unwrap();
+        }
+        let base = State::from_changesets(graph.changesets_as_vec(), None).unwrap();
+        let texts = paragraph_texts(&base);
+        assert_eq!(texts.len(), 33, "{texts:?}");
+
+        let xml = to_xml(&base, &live_heads(&base)).unwrap();
+        let lines: Vec<&str> = xml.lines().collect();
+        assert_eq!(lines.len(), 35);
+        let mut swapped: Vec<&str> = vec![lines[0]];
+        swapped.extend_from_slice(&lines[17..33]);
+        swapped.extend_from_slice(&lines[1..17]);
+        swapped.extend_from_slice(&lines[33..]);
+        let target = swapped.join("\n") + "\n";
+        let want: Vec<String> = lines[17..33]
+            .iter()
+            .chain(lines[1..17].iter())
+            .chain(lines[33..34].iter())
+            .map(|l| {
+                let s = l.find('>').unwrap() + 1;
+                let e = l.rfind("</").unwrap();
+                l[s..e].to_string()
+            })
+            .collect();
+
+        let out = edit(base, &from_xml(&target).unwrap()).unwrap();
+        assert_eq!(paragraph_texts(&out.state), want, "transaction state");
+        let replayed = paragraph_texts(&rebuilt(&out.state));
+        assert_each_once(&replayed, &want);
+        assert_eq!(replayed, want, "replayed from changesets");
+    }
+
+    #[test]
+    fn swapping_two_runs_twice_survives_a_replay() {
+        let (state, target) = swap_document();
+        let once = edit(state, &from_xml(&target).unwrap()).unwrap().state;
+        let once = rebuilt(&once);
+        let xml = to_xml(&once, &live_heads(&once)).unwrap();
+        let lines: Vec<&str> = xml.lines().collect();
+        assert_eq!(lines.len(), 35);
+        let mut swapped: Vec<&str> = vec![lines[0]];
+        swapped.extend_from_slice(&lines[17..33]);
+        swapped.extend_from_slice(&lines[1..17]);
+        swapped.extend_from_slice(&lines[33..]);
+        let target2 = swapped.join("\n") + "\n";
+        let out = edit(once, &from_xml(&target2).unwrap()).unwrap();
+        let expected: Vec<String> = (1..=16)
+            .map(|i| format!("A{i:02}"))
+            .chain((1..=16).map(|i| format!("B{i:02}")))
+            .chain(std::iter::once("Z".to_string()))
+            .collect();
+        assert_eq!(paragraph_texts(&out.state), expected, "transaction state");
+        let replayed = paragraph_texts(&rebuilt(&out.state));
+        assert_each_once(&replayed, &expected);
+        assert_eq!(replayed, expected, "replayed from changesets");
+    }
 }
