@@ -393,7 +393,8 @@
     insetY: '-8px',
     zIndex: '[-1]',
     pointerEvents: 'none',
-    backgroundColor: 'surface.default/45',
+    backgroundColor: '[var(--editor-layout-background)]',
+    opacity: '45',
     maskImage: '[linear-gradient(to bottom, transparent, black 38%, black 62%, transparent)]',
   });
 
