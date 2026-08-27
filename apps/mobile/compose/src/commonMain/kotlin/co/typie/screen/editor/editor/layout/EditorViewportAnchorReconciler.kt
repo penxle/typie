@@ -3,6 +3,7 @@ package co.typie.screen.editor.editor.layout
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.PublishedBundle
 import co.typie.editor.ffi.ViewportAnchorResolution
 import co.typie.editor.scroll.EditorBringIntoViewTarget
@@ -21,7 +22,7 @@ import co.typie.editor.viewport.viewportCenterAnchorPoint
 internal sealed interface EditorViewportAnchorPublication {
   data object Withhold : EditorViewportAnchorPublication
 
-  data class Ready(val scrollY: Float, val geometry: EditorViewportAnchorGeometry?) :
+  data class Ready(val scrollOffset: Offset, val geometry: EditorViewportAnchorGeometry?) :
     EditorViewportAnchorPublication
 }
 
@@ -33,6 +34,7 @@ internal fun reconcileViewportAnchorPublication(
   measuredScrollFrame: EditorScrollFrame,
   currentScrollOffset: Offset,
   maximumScrollY: Float,
+  maximumScrollX: Float = 0f,
   contentOriginY: Float,
   smoothRevealActive: Boolean = false,
 ): EditorViewportAnchorPublication {
@@ -48,7 +50,7 @@ internal fun reconcileViewportAnchorPublication(
     anchorState.adoptSelection(
       identity = selectionCapture.identity,
       geometry = geometry,
-      scrollY = currentScrollY,
+      scrollOffset = currentScrollOffset,
       visibleArea = candidateFrame.visibleArea,
       preserveActiveAnchor = smoothRevealActive,
     )
@@ -69,7 +71,11 @@ internal fun reconcileViewportAnchorPublication(
   }
   val unanchoredPublication =
     EditorViewportAnchorPublication.Ready(
-      scrollY = currentScrollY.coerceIn(0f, maximumScrollY),
+      scrollOffset =
+        Offset(
+          x = currentScrollOffset.x.coerceIn(0f, maximumScrollX),
+          y = currentScrollY.coerceIn(0f, maximumScrollY),
+        ),
       geometry = null,
     )
   if (publishedBundle == null || publishedBundle.snapshot.version == candidateState.version) {
@@ -98,11 +104,11 @@ internal fun reconcileViewportAnchorPublication(
           contentOriginY = contentOriginY,
         ) ?: return EditorViewportAnchorPublication.Withhold
       EditorViewportAnchorPublication.Ready(
-        scrollY =
+        scrollOffset =
           anchorState.publicationRevealScroll(
             geometry = geometry,
-            currentScrollY = currentScrollY,
-            maximumScrollY = maximumScrollY,
+            currentScrollOffset = currentScrollOffset,
+            maximumScrollOffset = Offset(x = maximumScrollX, y = maximumScrollY),
             visibleArea = measuredScrollFrame.visibleArea,
             resolveReveal = { origin ->
               when (
@@ -162,7 +168,7 @@ private fun resolveCandidateViewportAnchor(
     anchorState.clear()
     return null
   }
-  anchorState.attach(fallback.identity, oldGeometry, currentScrollOffset.y)
+  anchorState.attach(fallback.identity, oldGeometry, currentScrollOffset)
   return editor.resolveViewportAnchor(candidateFrame.state.version, fallback.identity)
 }
 
@@ -183,7 +189,10 @@ internal fun reconcileViewportAnchorObservation(
     anchorState.clear()
     return
   }
-  if (viewportState.isTransforming) return
+  if (viewportState.isTransforming) {
+    anchorState.consumeScrollChange(viewportState.lastScrollRevision)
+    return
+  }
   val scrollChanged = anchorState.consumeScrollChange(viewportState.lastScrollRevision)
   val visibleAreaChanged = anchorState.consumeVisibleAreaChange(visibleArea)
 
@@ -196,7 +205,7 @@ internal fun reconcileViewportAnchorObservation(
         anchorState = anchorState,
         revision = revision,
         frame = presentationFrame,
-        scrollY = viewportState.scrollOffset.y,
+        scrollOffset = viewportState.scrollOffset,
         visibleArea = visibleArea,
         requireGuard = handoffTarget != EditorBringIntoViewTarget.CurrentSelectionHead,
         revealOrigin = selectionRevealOrigin,
@@ -208,7 +217,7 @@ internal fun reconcileViewportAnchorObservation(
         anchorState = anchorState,
         revision = revision,
         frame = presentationFrame,
-        scrollY = viewportState.scrollOffset.y,
+        scrollOffset = viewportState.scrollOffset,
         visibleArea = visibleArea,
         requireGuard = true,
         contentOriginY = contentOriginY,
@@ -258,7 +267,7 @@ internal fun reconcileViewportAnchorObservation(
         contentOriginY,
       )
   if (scrollChanged && handoffTarget != null) {
-    geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset.y) }
+    geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset) }
   } else if (scrollChanged) {
     val preferredSelectionGeometry =
       if (!viewportState.lastScrollWasAuto) {
@@ -274,11 +283,11 @@ internal fun reconcileViewportAnchorObservation(
       }
     when {
       viewportState.lastScrollWasAuto ->
-        geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset.y) }
+        geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset) }
       preferredSelectionGeometry != null &&
         anchorState.tryReactivatePreferredSelection(
           geometry = preferredSelectionGeometry,
-          scrollY = viewportState.scrollOffset.y,
+          scrollOffset = viewportState.scrollOffset,
           visibleArea = visibleArea,
         ) -> geometry = preferredSelectionGeometry
       geometry != null &&
@@ -286,7 +295,7 @@ internal fun reconcileViewportAnchorObservation(
           geometry = geometry,
           scrollY = viewportState.scrollOffset.y,
           visibleArea = visibleArea,
-        ) -> anchorState.acceptGeometry(geometry, viewportState.scrollOffset.y)
+        ) -> anchorState.acceptGeometry(geometry, viewportState.scrollOffset)
       else -> {
         geometry =
           attachViewportCenterAnchor(
@@ -310,7 +319,7 @@ internal fun reconcileViewportAnchorObservation(
         visibleArea = visibleArea,
       )
     viewportState.scrollToY(targetY = targetY, isAutoScroll = true)
-    anchorState.acceptGeometry(geometry, viewportState.scrollOffset.y)
+    anchorState.acceptGeometry(geometry, viewportState.scrollOffset)
   }
 }
 
@@ -319,7 +328,7 @@ internal fun attachSelectionViewportAnchor(
   anchorState: EditorViewportAnchorState,
   revision: Long,
   frame: EditorScrollFrame,
-  scrollY: Float,
+  scrollOffset: Offset,
   visibleArea: EditorVisibleArea,
   requireGuard: Boolean,
   revealOrigin: EditorViewportAnchorRevealOrigin? = null,
@@ -329,10 +338,12 @@ internal fun attachSelectionViewportAnchor(
   val geometry =
     capture.geometry.toEditorViewportAnchorGeometry(frame = frame, contentOriginY = contentOriginY)
       ?: return null
-  if (requireGuard && !anchorState.canRetainAfterDirectScroll(geometry, scrollY, visibleArea)) {
+  if (
+    requireGuard && !anchorState.canRetainAfterDirectScroll(geometry, scrollOffset.y, visibleArea)
+  ) {
     return null
   }
-  anchorState.attachSelection(capture.identity, geometry, scrollY, revealOrigin)
+  anchorState.attachSelection(capture.identity, geometry, scrollOffset, revealOrigin)
   return geometry
 }
 
@@ -349,8 +360,40 @@ internal fun attachViewportCenterAnchor(
   val geometry =
     capture.geometry.toEditorViewportAnchorGeometry(frame = frame, contentOriginY = contentOriginY)
       ?: return null
-  anchorState.attachViewport(capture.identity, geometry, scrollOffset.y)
+  anchorState.attachViewport(capture.identity, geometry, scrollOffset)
   return geometry
+}
+
+internal fun attachViewportZoomAnchor(
+  editor: Editor,
+  anchorState: EditorViewportAnchorState,
+  revision: Long,
+  anchor: EditorViewportAnchor,
+  displayPosition: Offset,
+  scrollOffset: Offset,
+  contentOriginY: Float,
+) {
+  if (
+    !displayPosition.x.isFinite() || !displayPosition.y.isFinite() || !contentOriginY.isFinite()
+  ) {
+    return
+  }
+  val identity =
+    anchorState.captureViewportIdentity(
+      editor = editor,
+      revision = revision,
+      point =
+        co.typie.editor.ffi.ViewportAnchorPoint(pageIdx = anchor.page, x = anchor.x, y = anchor.y),
+    ) ?: return
+  anchorState.attachViewport(
+    identity = identity,
+    geometry =
+      EditorViewportAnchorGeometry(
+        pointX = displayPosition.x,
+        pointY = contentOriginY + displayPosition.y,
+      ),
+    scrollOffset = scrollOffset,
+  )
 }
 
 private fun resolvePreferredSelectionViewportAnchorGeometry(

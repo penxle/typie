@@ -5,8 +5,9 @@ import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.EditorZoomController
 import co.typie.editor.EditorZoomSnapKey
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.documentZoomWidth
 import co.typie.editor.clampDocumentZoom
-import co.typie.editor.computePaginatedZoomBounds
+import co.typie.editor.computeDocumentZoomBounds
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorPinchSample
 import co.typie.editor.runtime.EditorUiState
@@ -17,7 +18,7 @@ import kotlin.math.exp
 private const val PointerSignalZoomDivisor = 240f
 
 internal data class EditorViewportZoomSemanticConfig(
-  val layoutSpec: EditorDocumentLayoutSpec.Paginated,
+  val layoutSpec: EditorDocumentLayoutSpec,
   val zoomController: EditorZoomController,
   val viewportState: EditorViewportState,
   val uiState: EditorUiState,
@@ -25,6 +26,10 @@ internal data class EditorViewportZoomSemanticConfig(
   val viewportWidth: Float,
   val density: Float,
   val onZoomSnap: () -> Unit,
+  val onAttachViewportAnchor:
+    (anchor: EditorViewportAnchor, displayPosition: Offset, scrollOffset: Offset) -> Unit =
+    { _, _, _ ->
+    },
 )
 
 internal class EditorViewportZoomSemantic {
@@ -60,15 +65,21 @@ internal class EditorViewportZoomSemantic {
         startScrollOffset = currentConfig.viewportState.scrollOffset,
         startDisplayZoom = startZoom,
         startAnchorDisplayPosition = startAnchorDisplayPosition,
+        pageSizes = currentConfig.pageSizes,
+        lastSample = sample,
       )
     return true
   }
 
   fun updatePinch(sample: EditorPinchSample): Boolean {
     val currentConfig = config?.takeIf { it.isUsable } ?: return false
-    val session = pinchSession ?: return false
+    var session = pinchSession ?: return false
     if (!sample.isUsable) {
       return false
+    }
+    if (currentConfig.pageSizes !== session.pageSizes) {
+      session = currentConfig.rebasePinchSession(session) ?: return false
+      pinchSession = session
     }
 
     val previousZoom = currentConfig.zoomController.displayZoom
@@ -82,12 +93,19 @@ internal class EditorViewportZoomSemantic {
         ?: return false
     val focalDelta =
       (sample.focalInRootPx - session.startSample.focalInRootPx) / currentConfig.density
+    val targetScrollOffset =
+      session.startScrollOffset + (nextAnchorDisplayPosition - session.startAnchorDisplayPosition) -
+        focalDelta
     currentConfig.viewportState.scrollToTransformTarget(
-      offset =
-        session.startScrollOffset +
-          (nextAnchorDisplayPosition - session.startAnchorDisplayPosition) - focalDelta,
+      offset = targetScrollOffset,
       retainUntilMeasuredBounds = previousZoom != nextZoom,
     )
+    currentConfig.onAttachViewportAnchor(
+      session.anchor,
+      nextAnchorDisplayPosition,
+      targetScrollOffset,
+    )
+    pinchSession = session.copy(lastSample = sample)
     return true
   }
 
@@ -136,7 +154,7 @@ internal class EditorViewportZoomSemantic {
     val nextRawZoom =
       clampDocumentZoom(
         zoom = baseZoom * scaleFactor,
-        bounds = computePaginatedZoomBounds(currentConfig.layoutSpec.pageWidth),
+        bounds = computeDocumentZoomBounds(currentConfig.layoutSpec),
       )
     indirectRawZoom = nextRawZoom
 
@@ -144,10 +162,13 @@ internal class EditorViewportZoomSemantic {
     val nextAnchorDisplayPosition =
       currentConfig.resolveAnchorDisplayPosition(anchor = anchor, displayZoom = nextZoom)
         ?: return false
+    val targetScrollOffset =
+      effectiveScrollTarget + (nextAnchorDisplayPosition - previousAnchorDisplayPosition)
     viewportState.scrollToTransformTarget(
-      offset = effectiveScrollTarget + (nextAnchorDisplayPosition - previousAnchorDisplayPosition),
+      offset = targetScrollOffset,
       retainUntilMeasuredBounds = previousZoom != nextZoom,
     )
+    currentConfig.onAttachViewportAnchor(anchor, nextAnchorDisplayPosition, targetScrollOffset)
     return true
   }
 
@@ -206,10 +227,34 @@ private data class PinchSession(
   val startScrollOffset: Offset,
   val startDisplayZoom: Float,
   val startAnchorDisplayPosition: Offset,
+  val pageSizes: List<PageSize>,
+  val lastSample: EditorPinchSample,
 )
 
+private fun EditorViewportZoomSemanticConfig.rebasePinchSession(
+  session: PinchSession
+): PinchSession? {
+  val anchor = resolveAnchor(session.lastSample.focalInRootPx) ?: return null
+  val displayZoom = zoomController.displayZoom
+  val anchorDisplayPosition =
+    resolveAnchorDisplayPosition(anchor = anchor, displayZoom = displayZoom) ?: return null
+  return PinchSession(
+    anchor = anchor,
+    startSample = session.lastSample,
+    startScrollOffset = viewportState.scrollOffset,
+    startDisplayZoom = displayZoom,
+    startAnchorDisplayPosition = anchorDisplayPosition,
+    pageSizes = pageSizes,
+    lastSample = session.lastSample,
+  )
+}
+
 private val EditorViewportZoomSemanticConfig.isUsable: Boolean
-  get() = density > 0f && viewportWidth > 0f && layoutSpec.pageWidth > 0f && pageSizes.isNotEmpty()
+  get() =
+    density > 0f &&
+      viewportWidth > 0f &&
+      layoutSpec.documentZoomWidth() > 0f &&
+      pageSizes.isNotEmpty()
 
 private val EditorPinchSample.isUsable: Boolean
   get() =

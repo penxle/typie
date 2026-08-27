@@ -26,6 +26,7 @@ export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () =>
 
     void editor.publicationVersion;
     void editor.appliedSnapshot;
+    void editor.viewport.width;
     void editor.viewport.height;
     void editor.viewport.scale_factor;
     const displayZoom = editor.displayZoom;
@@ -227,5 +228,5 @@ function samePages(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 }
 
 function displayZoom(snapshot: EditorSnapshot, zoom: number): number {
-  return snapshot.rootAttrs?.layout_mode.type === 'paginated' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return snapshot.rootAttrs?.layout_mode && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 }

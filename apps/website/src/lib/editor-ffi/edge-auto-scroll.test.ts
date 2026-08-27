@@ -46,6 +46,7 @@ const setup = () => {
     getRect: () => VIEWPORT_RECT,
     getScrollTop: () => scrollTop,
     getScrollLeft: () => 0,
+    getScrollWidth: () => 10_000,
     getScrollHeight: () => 10_000,
     scrollBy: (_x, y) => {
       scrollTop += y;

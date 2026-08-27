@@ -26,6 +26,7 @@
   } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
   import { touchPanLock } from '../touch-pan-lock';
+  import { resolveContinuousLayoutViewportWidth, zoomDiffers } from '../zoom';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';
@@ -43,6 +44,7 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
+  import type { DocumentZoomLayout } from '../zoom';
 
   type Props = {
     document$key: Editor_document$key;
@@ -172,7 +174,16 @@
   const isPaginated = $derived(layoutMode?.type === 'paginated');
   const layoutBackground = $derived(token(isPaginated ? 'colors.surface.subtle' : 'colors.surface.default'));
   const pageWidth = $derived(ctx.editor?.pageSizes[0]?.width ?? 0);
-  const displayZoom = $derived(isPaginated ? (ctx.editor?.displayZoom ?? 1) : 1);
+  const zoomLayout: DocumentZoomLayout | null = $derived.by(() => {
+    if (layoutMode?.type === 'continuous' && layoutMode.max_width > 0) {
+      return { type: 'continuous', maxWidth: layoutMode.max_width };
+    }
+    if (layoutMode?.type === 'paginated' && pageWidth > 0) {
+      return { type: 'paginated', pageWidth };
+    }
+    return null;
+  });
+  const displayZoom = $derived(zoomLayout ? (ctx.editor?.displayZoom ?? 1) : 1);
   const pageGap = $derived(PAGE_GAP * displayZoom);
   const editorMinWidth = $derived(isPaginated ? 'max-content' : `${CONTINUOUS_MIN_WIDTH}px`);
   const continuousMaxFrameWidth = $derived(
@@ -217,18 +228,29 @@
 
   let readyFired = false;
   let viewportEditor: (typeof ctx)['editor'];
+  let viewportRenderZoom = 1;
+  let viewportLayoutType: 'continuous' | 'paginated' | undefined;
 
   $effect(() => {
     const editor = ctx.editor;
     const width = clientWidth;
     const height = useWindowScroll ? windowViewportHeight : clientHeight;
     const viewportScaleFactor = scaleFactor;
-    const isContinuous = !isPaginated;
+    const isContinuous = layoutMode?.type === 'continuous';
+    const renderZoom = editor?.renderZoom ?? 1;
     if (!editor || !width || !height) return;
-    const effectiveWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
+    const physicalWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
+    const effectiveWidth = isContinuous
+      ? resolveContinuousLayoutViewportWidth({ viewportWidth: physicalWidth, committedZoom: renderZoom })
+      : physicalWidth;
 
     untrack(() => {
-      if (viewportEditor === editor) {
+      const committedLayoutChanged =
+        viewportEditor === editor &&
+        (viewportLayoutType !== layoutMode?.type || (isContinuous && zoomDiffers(viewportRenderZoom, renderZoom)));
+      viewportRenderZoom = renderZoom;
+      viewportLayoutType = layoutMode?.type;
+      if (viewportEditor === editor && !committedLayoutChanged) {
         editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
       } else {
         viewportEditor = editor;
@@ -366,12 +388,18 @@
     {/if}
 
     {#if ctx.editor}
-      <EditorZoom {active} editor={ctx.editor} {isPaginated} {pageWidth} viewportWidth={clientWidth ?? 0}>
+      <EditorZoom
+        {active}
+        attachViewportAnchor={(point) => ctx.scroll?.attachViewportAnchorAt(point)}
+        editor={ctx.editor}
+        layout={zoomLayout}
+        viewportWidth={clientWidth ?? 0}
+      >
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           bind:this={ctx.editor.extensionAreaEl}
           style:cursor
-          style:min-width={editorMinWidth}
+          style:min-width="max-content"
           style:padding-left={`${contentInsetLeft}px`}
           style:padding-right={`${contentInsetRight}px`}
           style:padding-bottom={viewer ? '0px' : `${ctx.scroll?.bottomPadding ?? 0}px`}
@@ -382,6 +410,7 @@
               flexDirection: 'column',
               alignItems: 'center',
               flexGrow: '1',
+              isolation: 'isolate',
               width: 'full',
               userSelect: 'none',
             },
@@ -437,6 +466,7 @@
                 rowGap: 'var(--page-gap)',
               }),
             })}
+            data-editor-document-track
           >
             <EditorPages editor={ctx.editor} {surfaceHost} />
 

@@ -1,6 +1,6 @@
 import { getAppContext } from '@typie/ui/context';
 import { untrack } from 'svelte';
-import { CONTINUOUS_VIEW_PADDING, CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
+import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { pageRectsToRevealTargetSpan, resolvePageSpans, selectionHeadRect } from './geometry';
 import {
   resolveGuardedScrollTop,
@@ -11,6 +11,7 @@ import {
 } from './scroll';
 import { SmoothScrollMotion } from './smooth-scroll-motion';
 import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
+import { resolveContinuousViewPadding } from './zoom';
 import type { PageRect, ViewportAnchorResolution } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
 import type { EditorRequest } from './editor-update';
@@ -36,7 +37,13 @@ export type EditorScrollIntoViewOptions = {
 export type EditorScrollIntentResult = { type: 'unresolved' } | { type: 'no_scroll' } | { type: 'scroll_to'; y: number };
 
 export type EditorViewportAnchorPublication =
-  { type: 'ready'; geometry: EditorViewportAnchorGeometry | null; targetScrollTop: number | null } | { type: 'unavailable' };
+  | {
+      type: 'ready';
+      geometry: EditorViewportAnchorGeometry | null;
+      targetScrollLeft: number | null;
+      targetScrollTop: number | null;
+    }
+  | { type: 'unavailable' };
 
 type TypewriterPreferences = {
   enabled: boolean;
@@ -138,6 +145,7 @@ export class EditorScrollScope {
   #keepVisibleTarget = $state<EditorScrollIntoViewTarget | null>(null);
   #destroyed = false;
   #expectedScrollTop: number | null = null;
+  #expectedScrollLeft: number | null = null;
   #smoothRequest: EditorBringIntoViewRequest | null = null;
   #smoothMotion: SmoothScrollMotion | null = null;
   #smoothAnimationFrame: number | null = null;
@@ -279,7 +287,7 @@ export class EditorScrollScope {
 
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
-    if (!viewport) return { type: 'ready', geometry: null, targetScrollTop: null };
+    if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null };
     const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
     if (selectionCapture && this.#viewportAnchor.needsSelectionAdoption(selectionCapture.identity)) {
       const selectionMetrics = this.#viewportMetrics(snapshot, true);
@@ -289,7 +297,7 @@ export class EditorScrollScope {
       this.#viewportAnchor.adoptSelection(
         selectionCapture.identity,
         selectionGeometry,
-        selectionMetrics.scrollTop,
+        { left: selectionMetrics.scrollLeft, top: selectionMetrics.scrollTop },
         selectionMetrics.clientHeight,
         this.visibleArea,
         this.#smoothMotion !== null,
@@ -303,10 +311,12 @@ export class EditorScrollScope {
 
     const metrics = this.#viewportMetrics(snapshot, true);
     if (!metrics) return { type: 'unavailable' };
+    const clampedScrollLeft = Math.max(0, Math.min(metrics.scrollLeft, metrics.maximumScrollLeft));
     const clampedScrollTop = Math.max(0, Math.min(metrics.scrollTop, metrics.maximumScrollTop));
     const fallbackPublication = (): EditorViewportAnchorPublication => ({
       type: 'ready',
       geometry: null,
+      targetScrollLeft: clampedScrollLeft === metrics.scrollLeft ? null : clampedScrollLeft,
       targetScrollTop: clampedScrollTop === metrics.scrollTop ? null : clampedScrollTop,
     });
 
@@ -320,7 +330,7 @@ export class EditorScrollScope {
 
     const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
     if (!geometry) return { type: 'unavailable' };
-    const targetScrollTop = this.#viewportAnchor.publicationRevealScroll(
+    const targetScroll = this.#viewportAnchor.publicationRevealScroll(
       geometry,
       metrics.scrollTop,
       metrics.clientHeight,
@@ -343,20 +353,26 @@ export class EditorScrollScope {
           ) ?? origin.scrollTop
         );
       },
+      metrics.scrollLeft,
+      metrics.maximumScrollLeft,
     );
     return {
       type: 'ready',
       geometry,
-      targetScrollTop,
+      targetScrollLeft: targetScroll.left === metrics.scrollLeft ? null : targetScroll.left,
+      targetScrollTop: targetScroll.top,
     };
   }
 
   applyViewportAnchorPublication(publication: EditorViewportAnchorPublication): void {
     if (publication.type !== 'ready') return;
     const viewport = this.#editor.scrollViewport;
-    if (publication.targetScrollTop === null) {
+    if (publication.targetScrollLeft === null && publication.targetScrollTop === null) {
       if (viewport && publication.geometry) {
-        this.#viewportAnchor.acceptGeometry(publication.geometry, viewport.getScrollTop());
+        this.#viewportAnchor.acceptGeometry(publication.geometry, {
+          left: viewport.getScrollLeft(),
+          top: viewport.getScrollTop(),
+        });
       } else {
         this.#ensureViewportAnchor();
       }
@@ -364,13 +380,19 @@ export class EditorScrollScope {
     }
     if (!viewport) return;
     const viewportRect = viewport.getRect();
+    const clientWidth = viewportRect.right - viewportRect.left;
     const clientHeight = viewportRect.bottom - viewportRect.top;
+    const maximumScrollLeft = Math.max(0, viewport.getScrollWidth() - clientWidth);
     const maximumScrollTop = Math.max(0, viewport.getScrollHeight() - clientHeight);
-    const target = Math.max(0, Math.min(publication.targetScrollTop, maximumScrollTop));
+    const previousScrollLeft = viewport.getScrollLeft();
     const previousScrollTop = viewport.getScrollTop();
-    if (Math.abs(previousScrollTop - target) > 1) {
-      viewport.scrollTo({ top: target, behavior: 'instant' });
+    const targetLeft = Math.max(0, Math.min(publication.targetScrollLeft ?? previousScrollLeft, maximumScrollLeft));
+    const targetTop = Math.max(0, Math.min(publication.targetScrollTop ?? previousScrollTop, maximumScrollTop));
+    if (Math.abs(previousScrollLeft - targetLeft) > 1 || Math.abs(previousScrollTop - targetTop) > 1) {
+      viewport.scrollTo({ left: targetLeft, top: targetTop, behavior: 'instant' });
+      const actualScrollLeft = viewport.getScrollLeft();
       const actualScrollTop = viewport.getScrollTop();
+      this.#expectedScrollLeft = actualScrollLeft;
       this.#expectedScrollTop = actualScrollTop;
       this.#smoothMotion?.translate(actualScrollTop - previousScrollTop);
     }
@@ -378,17 +400,26 @@ export class EditorScrollScope {
       this.#ensureViewportAnchor();
       return;
     }
-    this.#viewportAnchor.acceptGeometry(publication.geometry, viewport.getScrollTop());
+    this.#viewportAnchor.acceptGeometry(publication.geometry, {
+      left: viewport.getScrollLeft(),
+      top: viewport.getScrollTop(),
+    });
   }
 
   observeViewportScroll(): void {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return;
+    const scrollLeft = viewport.getScrollLeft();
     const scrollTop = viewport.getScrollTop();
-    if (this.#expectedScrollTop !== null && Math.abs(scrollTop - this.#expectedScrollTop) <= 1) {
+    const hasExpectedScroll = this.#expectedScrollLeft !== null || this.#expectedScrollTop !== null;
+    const expectedLeftMatches = this.#expectedScrollLeft === null || Math.abs(scrollLeft - this.#expectedScrollLeft) <= 1;
+    const expectedTopMatches = this.#expectedScrollTop === null || Math.abs(scrollTop - this.#expectedScrollTop) <= 1;
+    if (hasExpectedScroll && expectedLeftMatches && expectedTopMatches) {
+      this.#expectedScrollLeft = null;
       this.#expectedScrollTop = null;
       return;
     }
+    this.#expectedScrollLeft = null;
     this.#expectedScrollTop = null;
     if (this.#smoothMotion) this.cancel();
     this.#viewportAnchor.finishRevealConvergence();
@@ -398,7 +429,12 @@ export class EditorScrollScope {
     if (
       preferred &&
       metrics &&
-      this.#viewportAnchor.tryReactivatePreferredSelection(preferred, metrics.scrollTop, metrics.clientHeight, this.visibleArea)
+      this.#viewportAnchor.tryReactivatePreferredSelection(
+        preferred,
+        { left: metrics.scrollLeft, top: metrics.scrollTop },
+        metrics.clientHeight,
+        this.visibleArea,
+      )
     ) {
       return;
     }
@@ -409,7 +445,7 @@ export class EditorScrollScope {
       metrics &&
       this.#viewportAnchor.canRetainAfterDirectScroll(current, metrics.scrollTop, metrics.clientHeight, this.visibleArea)
     ) {
-      this.#viewportAnchor.acceptGeometry(current, metrics.scrollTop);
+      this.#viewportAnchor.acceptGeometry(current, { left: metrics.scrollLeft, top: metrics.scrollTop });
     } else {
       this.#attachViewportCenter();
     }
@@ -443,7 +479,7 @@ export class EditorScrollScope {
     if (Math.abs(target - metrics.scrollTop) <= 1) return;
     this.#expectedScrollTop = target;
     this.#editor.scrollViewport?.scrollTo({ top: target, behavior: 'instant' });
-    this.#viewportAnchor.acceptGeometry(geometry, target);
+    this.#viewportAnchor.acceptGeometry(geometry, { left: metrics.scrollLeft, top: target });
   }
 
   resolveScrollTop(
@@ -532,7 +568,8 @@ export class EditorScrollScope {
     const viewportRect = viewport.getRect();
     const zoom = this.#editor.safeDisplayZoom();
     const layoutMode = snapshot?.rootAttrs?.layout_mode;
-    const trailingBottomMargin = layoutMode?.type === 'paginated' ? layoutMode.page_margin_bottom * zoom : CONTINUOUS_VIEW_PADDING;
+    const trailingBottomMargin =
+      layoutMode?.type === 'paginated' ? layoutMode.page_margin_bottom * zoom : resolveContinuousViewPadding(zoom);
     return resolveTypewriterBottomPadding({
       clientHeight: viewportRect.bottom - viewportRect.top,
       targetHeight: rect.rect.height * zoom,
@@ -575,6 +612,26 @@ export class EditorScrollScope {
     this.#editor.requestPublication();
   }
 
+  attachViewportAnchorAt(point: { page: number; x: number; y: number }): void {
+    const snapshot = this.#editor.published?.snapshot;
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!snapshot || !metrics) return;
+    const capture = this.#editor.captureViewportAnchorAt(snapshot.revision, {
+      page_idx: point.page,
+      x: point.x,
+      y: point.y,
+    });
+    if (!capture) return;
+    const geometry = resolveViewportAnchorGeometry(capture.geometry, metrics.layout);
+    if (!geometry) return;
+    this.#viewportAnchor.attachViewport(capture.identity, geometry, {
+      left: metrics.scrollLeft,
+      top: metrics.scrollTop,
+    });
+    this.#expectedScrollLeft = metrics.scrollLeft;
+    this.#expectedScrollTop = metrics.scrollTop;
+  }
+
   scrollIntoView(options: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {
     if (this.#destroyed) {
       return;
@@ -611,7 +668,12 @@ export class EditorScrollScope {
         (!requireGuard ||
           this.#viewportAnchor.canRetainAfterDirectScroll(geometry, metrics.scrollTop, metrics.clientHeight, this.visibleArea))
       ) {
-        this.#viewportAnchor.attachSelection(capture.identity, geometry, metrics.scrollTop, revealOrigin);
+        this.#viewportAnchor.attachSelection(
+          capture.identity,
+          geometry,
+          { left: metrics.scrollLeft, top: metrics.scrollTop },
+          revealOrigin,
+        );
         return;
       }
     }
@@ -639,7 +701,7 @@ export class EditorScrollScope {
     if (!capture) return false;
     const geometry = resolveViewportAnchorGeometry(capture.geometry, metrics.layout);
     if (!geometry) return false;
-    this.#viewportAnchor.attachViewport(capture.identity, geometry, metrics.scrollTop);
+    this.#viewportAnchor.attachViewport(capture.identity, geometry, { left: metrics.scrollLeft, top: metrics.scrollTop });
     return true;
   }
 
@@ -678,36 +740,79 @@ export class EditorScrollScope {
     candidateExtent = false,
   ): {
     layout: EditorViewportAnchorLayout;
+    scrollLeft: number;
     scrollTop: number;
+    clientWidth: number;
     clientHeight: number;
+    scrollWidth: number;
     scrollHeight: number;
+    maximumScrollLeft: number;
     maximumScrollTop: number;
   } | null {
     const viewport = this.#editor.scrollViewport;
     if (!snapshot || !viewport) return null;
     const viewportRect = viewport.getRect();
+    const clientWidth = viewportRect.right - viewportRect.left;
     const clientHeight = viewportRect.bottom - viewportRect.top;
+    const scrollLeft = viewport.getScrollLeft();
     const scrollTop = viewport.getScrollTop();
-    if (!Number.isFinite(scrollTop) || !Number.isFinite(clientHeight) || clientHeight <= 0) return null;
-    const zoom = snapshot.rootAttrs?.layout_mode.type === 'paginated' ? this.#editor.safeDisplayZoom() : 1;
-    const origin = this.#editor.extensionAreaEl
-      ? this.#editor.extensionAreaEl.getBoundingClientRect().top - viewportRect.top + scrollTop
-      : 0;
-    const pages = resolvePageSpans(snapshot.pageSizes, {
+    if (![scrollLeft, scrollTop, clientWidth, clientHeight].every(Number.isFinite) || clientWidth <= 0 || clientHeight <= 0) return null;
+    const zoom = this.#editor.safeDisplayZoom();
+    const extensionRect = this.#editor.extensionAreaEl?.getBoundingClientRect();
+    const origin = extensionRect ? extensionRect.top - viewportRect.top + scrollTop : 0;
+    const extensionLeft = extensionRect ? extensionRect.left - viewportRect.left + scrollLeft : 0;
+    const useCandidateHorizontalGeometry = candidateExtent && extensionRect !== undefined;
+    const parsedPaddingLeft = useCandidateHorizontalGeometry
+      ? Number.parseFloat(this.#editor.extensionAreaEl?.style?.paddingLeft ?? '')
+      : NaN;
+    const parsedPaddingRight = useCandidateHorizontalGeometry
+      ? Number.parseFloat(this.#editor.extensionAreaEl?.style?.paddingRight ?? '')
+      : NaN;
+    const extensionPaddingLeft = Number.isFinite(parsedPaddingLeft) ? Math.max(0, parsedPaddingLeft) : 0;
+    const extensionPaddingRight = Number.isFinite(parsedPaddingRight) ? Math.max(0, parsedPaddingRight) : 0;
+    const candidateExtensionWidth = useCandidateHorizontalGeometry
+      ? Math.max(
+          clientWidth,
+          snapshot.pageSizes.reduce((width, page) => Math.max(width, page.width * zoom), 0) + extensionPaddingLeft + extensionPaddingRight,
+        )
+      : clientWidth;
+    const candidateContentWidth = Math.max(0, candidateExtensionWidth - extensionPaddingLeft - extensionPaddingRight);
+    const pageSpans = resolvePageSpans(snapshot.pageSizes, {
       origin,
       displayZoom: zoom,
       scaleFactor: this.#editor.scaleFactor,
       pageGap: snapshot.rootAttrs?.layout_mode.type === 'paginated' ? PAGE_GAP * zoom : 0,
     });
+    const pages = pageSpans.map((span) => {
+      const pageRect = this.#editor.pageEls[span.page]?.getBoundingClientRect();
+      const displayedWidth = snapshot.pageSizes[span.page].width * zoom;
+      const left = useCandidateHorizontalGeometry
+        ? extensionLeft + extensionPaddingLeft + Math.max(0, (candidateContentWidth - displayedWidth) / 2)
+        : pageRect
+          ? pageRect.left - viewportRect.left + scrollLeft
+          : extensionLeft + Math.max(0, ((extensionRect?.width ?? clientWidth) - displayedWidth) / 2);
+      return { ...span, left };
+    });
+    const predictedRight = pages.reduce(
+      (right, page) => Math.max(right, page.left + snapshot.pageSizes[page.page].width * zoom),
+      useCandidateHorizontalGeometry ? Math.max(clientWidth, extensionLeft + candidateExtensionWidth) : clientWidth,
+    );
     const predictedExtent = pages.at(-1)?.bottom ?? origin;
+    const candidateScrollWidth = Math.max(predictedRight, clientWidth);
     const candidateScrollHeight = Math.max(predictedExtent + this.bottomPaddingFor(snapshot), clientHeight);
+    const scrollWidth =
+      candidateExtent && this.#editor.scrollRootEl ? candidateScrollWidth : Math.max(viewport.getScrollWidth(), candidateScrollWidth);
     const scrollHeight =
       candidateExtent && this.#editor.scrollRootEl ? candidateScrollHeight : Math.max(viewport.getScrollHeight(), candidateScrollHeight);
     return {
       layout: { pages, zoom },
+      scrollLeft,
       scrollTop,
+      clientWidth,
       clientHeight,
+      scrollWidth,
       scrollHeight,
+      maximumScrollLeft: Math.max(0, scrollWidth - clientWidth),
       maximumScrollTop: Math.max(0, scrollHeight - clientHeight),
     };
   }

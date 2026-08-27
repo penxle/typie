@@ -10,6 +10,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -62,6 +63,7 @@ internal fun EditorView(
   val incomingContentHandler = LocalEditorIncomingContentHandler.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
+  val renderZoom = zoomController.renderZoom
   val themeVariant = currentEditorThemeVariant()
   val canCreateEditor = runtime.canCreateEditor
   val environment =
@@ -73,10 +75,34 @@ internal fun EditorView(
     )
   val currentLoad by rememberUpdatedState(load)
   val currentEnvironment by rememberUpdatedState(environment)
+  val attachedEditor = runtime.editor
   var editorThemeVariant by remember(load) { mutableStateOf<ThemeVariant?>(null) }
+  var attachedEditorRenderZoom by remember(load, attachedEditor) { mutableFloatStateOf(renderZoom) }
 
-  LaunchedEffect(load, canCreateEditor, environment) {
+  LaunchedEffect(load, canCreateEditor, environment, attachedEditor, layoutSpec, renderZoom) {
     if (!environment.isValid) {
+      return@LaunchedEffect
+    }
+    if (attachedEditor != null && layoutSpec is EditorDocumentLayoutSpec.Continuous) {
+      if (zoomEquals(attachedEditorRenderZoom, renderZoom)) {
+        return@LaunchedEffect
+      }
+      val resizeApplied = attachedEditor.runEffect {
+        attachedEditor.update {
+          enqueue(
+            Message.System(
+              SystemEvent.Resize(
+                width = environment.width,
+                height = environment.height,
+                scaleFactor = environment.scaleFactor,
+              )
+            )
+          )
+        }
+      }
+      if (resizeApplied) {
+        attachedEditorRenderZoom = renderZoom
+      }
       return@LaunchedEffect
     }
     if (!canCreateEditor) {

@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.computeInitialPaginatedZoom
+import co.typie.editor.computeInitialDocumentZoom
 import co.typie.editor.ffi.Size
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.header.EditorHeaderFrame
@@ -62,14 +62,7 @@ internal fun EditorLoadingSkeleton(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
       val availableWidth = maxWidth.value
       val displayZoom =
-        when (layoutSpec) {
-          is EditorDocumentLayoutSpec.Continuous -> 1f
-          is EditorDocumentLayoutSpec.Paginated ->
-            computeInitialPaginatedZoom(
-              pageWidth = layoutSpec.pageWidth,
-              viewportWidth = availableWidth,
-            )
-        }
+        computeInitialDocumentZoom(layoutSpec = layoutSpec, viewportWidth = availableWidth)
       val bodyTrackWidth =
         when (layoutSpec) {
           is EditorDocumentLayoutSpec.Continuous ->

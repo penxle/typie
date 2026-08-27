@@ -272,7 +272,7 @@ export class TouchGestureController {
       height: visualViewport?.height ?? (typeof window === 'undefined' ? 0 : window.innerHeight),
     };
 
-    const displayZoom = snapshot.rootAttrs?.layout_mode.type === 'paginated' ? this.#editor.displayZoom : 1;
+    const displayZoom = snapshot.rootAttrs?.layout_mode ? this.#editor.displayZoom : 1;
     const zoom = Number.isFinite(displayZoom) && displayZoom > 0 ? displayZoom : 1;
     const position = computeTouchContextMenuPosition({ endpoints, pageRects, zoom, viewport });
     if (!position) {

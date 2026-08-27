@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.documentZoomWidth
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -33,10 +34,10 @@ internal class EditorZoomController(
   var renderZoom by mutableFloatStateOf(1f)
     private set
 
-  val isPaginated: Boolean
-    get() = currentLayoutSpec is EditorDocumentLayoutSpec.Paginated
+  val isZoomEnabled: Boolean
+    get() = initializedLayoutKey != null
 
-  private var initializedPaginatedPageWidth: Float = Float.NaN
+  private var initializedLayoutKey: String? = null
   private var currentLayoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(0f)
   private var currentViewportWidth: Float = 0f
   private var renderZoomJob: Job? = null
@@ -45,48 +46,30 @@ internal class EditorZoomController(
     currentLayoutSpec = layoutSpec
     currentViewportWidth = viewportWidth
 
-    when (layoutSpec) {
-      is EditorDocumentLayoutSpec.Continuous -> {
-        initializedPaginatedPageWidth = Float.NaN
-        setZoomInternal(
-          zoom = 1f,
-          layoutSpec = layoutSpec,
-          viewportWidth = viewportWidth,
-          commitRender = true,
-        )
+    if (viewportWidth <= 0f) return
+    val width = layoutSpec.documentZoomWidth()
+    val key =
+      when (layoutSpec) {
+        is EditorDocumentLayoutSpec.Continuous -> "continuous:$width"
+        is EditorDocumentLayoutSpec.Paginated -> "paginated:$width"
       }
-
-      is EditorDocumentLayoutSpec.Paginated -> {
-        if (layoutSpec.pageWidth <= 0f || viewportWidth <= 0f) {
-          return
-        }
-
-        val shouldApplyInitialZoom =
-          initializedPaginatedPageWidth.isNaN() ||
-            abs(initializedPaginatedPageWidth - layoutSpec.pageWidth) >= ZoomEpsilon
-        if (shouldApplyInitialZoom) {
-          initializedPaginatedPageWidth = layoutSpec.pageWidth
-          setZoomInternal(
-            zoom =
-              computeInitialPaginatedZoom(
-                pageWidth = layoutSpec.pageWidth,
-                viewportWidth = viewportWidth,
-              ),
-            layoutSpec = layoutSpec,
-            viewportWidth = viewportWidth,
-            commitRender = true,
-          )
-          return
-        }
-
-        setZoomInternal(
-          zoom = displayZoom,
-          layoutSpec = layoutSpec,
-          viewportWidth = viewportWidth,
-          commitRender = true,
-        )
-      }
+    if (initializedLayoutKey != key) {
+      initializedLayoutKey = key
+      setZoomInternal(
+        zoom = computeInitialDocumentZoom(layoutSpec, viewportWidth),
+        layoutSpec = layoutSpec,
+        viewportWidth = viewportWidth,
+        commitRender = true,
+      )
+      return
     }
+
+    setZoomInternal(
+      zoom = displayZoom,
+      layoutSpec = layoutSpec,
+      viewportWidth = viewportWidth,
+      commitRender = true,
+    )
   }
 
   fun setDisplayZoom(
@@ -109,12 +92,12 @@ internal class EditorZoomController(
   }
 
   fun resolveSnapKey(zoom: Float = displayZoom): EditorZoomSnapKey? {
-    val layout = currentLayoutSpec as? EditorDocumentLayoutSpec.Paginated ?: return null
-    val viewportWidth = resolveViewportWidthFallback(layout.pageWidth)
+    if (!isZoomEnabled) return null
+    val layout = currentLayoutSpec
+    val viewportWidth = resolveViewportWidthFallback(layout.documentZoomWidth())
     val fitWidthZoom =
-      computePaginatedFitWidthZoom(pageWidth = layout.pageWidth, viewportWidth = viewportWidth)
-    val unitZoom =
-      clampDocumentZoom(zoom = 1f, bounds = computePaginatedZoomBounds(layout.pageWidth))
+      computeDocumentFitWidthZoom(layoutSpec = layout, viewportWidth = viewportWidth)
+    val unitZoom = clampDocumentZoom(zoom = 1f, bounds = computeDocumentZoomBounds(layout))
 
     return when {
       zoomEquals(zoom, fitWidthZoom) -> EditorZoomSnapKey.FitWidth
@@ -127,16 +110,7 @@ internal class EditorZoomController(
     zoom: Float,
     layoutSpec: EditorDocumentLayoutSpec,
     viewportWidth: Float,
-  ): Float =
-    when (layoutSpec) {
-      is EditorDocumentLayoutSpec.Continuous -> 1f
-      is EditorDocumentLayoutSpec.Paginated ->
-        clampPaginatedZoom(
-          zoom = zoom,
-          pageWidth = layoutSpec.pageWidth,
-          viewportWidth = viewportWidth,
-        )
-    }
+  ): Float = clampDocumentLayoutZoom(zoom, layoutSpec, viewportWidth)
 
   private fun setZoomInternal(
     zoom: Float,
@@ -170,11 +144,7 @@ internal class EditorZoomController(
   }
 
   private fun syncRenderZoomNow() {
-    val nextRenderZoom =
-      when (currentLayoutSpec) {
-        is EditorDocumentLayoutSpec.Continuous -> 1f
-        is EditorDocumentLayoutSpec.Paginated -> renderZoomForDisplay(displayZoom)
-      }
+    val nextRenderZoom = renderZoomForDisplay(displayZoom)
     if (!zoomEquals(renderZoom, nextRenderZoom)) {
       renderZoom = nextRenderZoom
     }
@@ -196,9 +166,10 @@ internal enum class EditorZoomSnapKey {
   Unit,
 }
 
-internal fun computePaginatedZoomBounds(pageWidth: Float): ClosedFloatingPointRange<Float> {
-  val safePageWidth = if (pageWidth.isFinite() && pageWidth > 0f) pageWidth else 1f
-  val minZoom = (MinDocumentDisplayWidth / safePageWidth).coerceAtLeast(0.01f)
+internal fun computeDocumentZoomBounds(
+  layoutSpec: EditorDocumentLayoutSpec
+): ClosedFloatingPointRange<Float> {
+  val minZoom = (MinDocumentDisplayWidth / layoutSpec.documentZoomWidth()).coerceAtLeast(0.01f)
   val maxZoom = MaxDocumentZoom.coerceAtLeast(minZoom)
   return minZoom..maxZoom
 }
@@ -211,27 +182,41 @@ internal fun clampDocumentZoom(zoom: Float, bounds: ClosedFloatingPointRange<Flo
   return zoom.coerceIn(bounds.start, bounds.endInclusive)
 }
 
-internal fun computePaginatedFitWidthZoom(pageWidth: Float, viewportWidth: Float): Float {
-  val bounds = computePaginatedZoomBounds(pageWidth)
-  val safePageWidth = if (pageWidth.isFinite() && pageWidth > 0f) pageWidth else 1f
+internal fun computeDocumentFitWidthZoom(
+  layoutSpec: EditorDocumentLayoutSpec,
+  viewportWidth: Float,
+): Float {
+  val bounds = computeDocumentZoomBounds(layoutSpec)
+  val width = layoutSpec.documentZoomWidth()
   val safeViewportWidth =
     if (viewportWidth.isFinite() && viewportWidth > 0f) {
       viewportWidth
     } else {
-      safePageWidth
+      width
     }
-  return (safeViewportWidth / safePageWidth).coerceIn(bounds.start, bounds.endInclusive)
+  return (safeViewportWidth / width).coerceIn(bounds.start, bounds.endInclusive)
 }
 
-internal fun computeInitialPaginatedZoom(pageWidth: Float, viewportWidth: Float): Float =
-  computePaginatedFitWidthZoom(pageWidth = pageWidth, viewportWidth = viewportWidth)
-    .coerceAtMost(1f)
+internal fun computeInitialDocumentZoom(
+  layoutSpec: EditorDocumentLayoutSpec,
+  viewportWidth: Float,
+): Float =
+  when (layoutSpec) {
+    is EditorDocumentLayoutSpec.Continuous ->
+      clampDocumentZoom(1f, computeDocumentZoomBounds(layoutSpec))
+    is EditorDocumentLayoutSpec.Paginated ->
+      computeDocumentFitWidthZoom(layoutSpec, viewportWidth).coerceAtMost(1f)
+  }
 
-internal fun clampPaginatedZoom(zoom: Float, pageWidth: Float, viewportWidth: Float): Float {
-  val bounds = computePaginatedZoomBounds(pageWidth)
+internal fun clampDocumentLayoutZoom(
+  zoom: Float,
+  layoutSpec: EditorDocumentLayoutSpec,
+  viewportWidth: Float,
+): Float {
+  val bounds = computeDocumentZoomBounds(layoutSpec)
   val clamped = clampDocumentZoom(zoom = zoom, bounds = bounds)
   val fitWidthZoom =
-    computePaginatedFitWidthZoom(pageWidth = pageWidth, viewportWidth = viewportWidth)
+    computeDocumentFitWidthZoom(layoutSpec = layoutSpec, viewportWidth = viewportWidth)
   val unitZoom = clampDocumentZoom(zoom = 1f, bounds = bounds)
 
   var snapped: Float? = null

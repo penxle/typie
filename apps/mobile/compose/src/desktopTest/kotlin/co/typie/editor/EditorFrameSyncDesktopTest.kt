@@ -262,6 +262,43 @@ class EditorFrameSyncDesktopTest {
   }
 
   @Test
+  fun continuousZoomOutReflowsAtTheCommittedLogicalViewportWidth() = runComposeUiTest {
+    val fixture = FrameSyncFixture(continuous = true, continuousMaxWidth = 600)
+    fixture.zoomController.syncLayout(
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = ViewportWidth,
+    )
+
+    try {
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10_000) {
+        fixture.editor.publishedBundle?.frames?.isNotEmpty() == true
+      }
+      assertEquals(ViewportWidth, fixture.editor.appliedState.pageSizes.single().width, 0.01f)
+
+      runOnIdle {
+        fixture.zoomController.setDisplayZoom(
+          zoom = 0.75f,
+          layoutSpec = fixture.layoutSpec,
+          viewportWidth = ViewportWidth,
+        )
+        fixture.zoomController.commitRenderZoom()
+      }
+
+      waitUntil(timeoutMillis = 1_000) {
+        fixture.editor.appliedState.pageSizes.single().width > ViewportWidth
+      }
+      assertEquals(
+        ViewportWidth / 0.75f,
+        fixture.editor.appliedState.pageSizes.single().width,
+        0.01f,
+      )
+    } finally {
+      fixture.close()
+    }
+  }
+
+  @Test
   fun firstVisibleContinuousSelectionDrawsHandlesWithoutVirtualizationReset() = runComposeUiTest {
     val fixture =
       FrameSyncFixture(continuous = true, initialDoc = continuousDocumentWithOffscreenTable())
@@ -1382,7 +1419,7 @@ class EditorFrameSyncDesktopTest {
       ) {
         val interactionScope = remember { EditorInteractionScope(fixture.scope) }
         val scrollGestureLockState = remember { ScrollGestureLockState() }
-        val zoomController = remember { EditorZoomController() }
+        val zoomController = fixture.zoomController
         val publishedBundle = fixture.editor.publishedBundle
         val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
         val geometry =

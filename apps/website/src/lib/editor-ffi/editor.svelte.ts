@@ -1543,7 +1543,7 @@ export class Editor {
   }
 
   safeDisplayZoom(): number {
-    const zoom = this.rootAttrs?.layout_mode.type === 'paginated' ? this.displayZoom : 1;
+    const zoom = this.rootAttrs?.layout_mode ? this.displayZoom : 1;
     return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
   }
 

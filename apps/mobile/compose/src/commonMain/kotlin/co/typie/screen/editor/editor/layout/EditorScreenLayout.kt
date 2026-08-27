@@ -210,6 +210,7 @@ internal fun EditorScreenLayout(
   magnifierFocalPositionInRoot: Offset? = null,
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
+  viewportAnchorState: EditorViewportAnchorState? = null,
   isCurrentNavigationRoute: Boolean = true,
   editorInteractionEnabled: Boolean = true,
   platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
@@ -245,14 +246,15 @@ internal fun EditorScreenLayout(
   val bringIntoViewRequest = appliedState?.let {
     bringIntoViewRequests.activateForVersion(it.version)
   }
-  val viewportAnchorState = remember { EditorViewportAnchorState() }
+  val ownedViewportAnchorState = remember { EditorViewportAnchorState() }
+  val activeViewportAnchorState = viewportAnchorState ?: ownedViewportAnchorState
   val surfacePreparation = editor?.let {
     resolveAnchoredEditorSurfacePreparation(
       editor = it,
       scrollFrame = scrollFrame.withState(it.appliedState),
       currentScrollOffset = state.viewportState.scrollOffset,
       bringIntoViewRequest = bringIntoViewRequest,
-      anchorState = viewportAnchorState,
+      anchorState = activeViewportAnchorState,
       publishedBundle = it.publishedBundle,
       smoothScrollEnabled = smoothScrollEnabled,
       smoothRevealActive = smoothScrollSession.active,
@@ -386,7 +388,7 @@ internal fun EditorScreenLayout(
             scrollFrame = measuredScrollFrame.withState(currentAppliedState),
             currentScrollOffset = state.viewportState.scrollOffset,
             bringIntoViewRequest = currentRequest,
-            anchorState = viewportAnchorState,
+            anchorState = activeViewportAnchorState,
             publishedBundle = publishedBundle,
             smoothScrollEnabled = smoothScrollEnabled,
             smoothRevealActive = smoothScrollSession.active,
@@ -410,7 +412,7 @@ internal fun EditorScreenLayout(
                 scrollFrame = measuredScrollFrame.withState(latestState),
                 currentScrollOffset = state.viewportState.scrollOffset,
                 bringIntoViewRequest = latestRequest,
-                anchorState = viewportAnchorState,
+                anchorState = activeViewportAnchorState,
                 publishedBundle = publishedBundle,
                 smoothScrollEnabled = smoothScrollEnabled,
                 smoothRevealActive = smoothScrollSession.active,
@@ -422,15 +424,19 @@ internal fun EditorScreenLayout(
           return@let null
         }
 
-        val previousScrollY = state.viewportState.scrollOffset.y
-        state.viewportState.scrollToY(
-          targetY = anchorPublication.scrollY,
+        val previousScrollOffset = state.viewportState.scrollOffset
+        state.viewportState.scrollTo(
+          offset = anchorPublication.scrollOffset,
           isAutoScroll = true,
-          maximumScrollY = currentPreparation.maximumScrollY,
+          maximumScrollOffset =
+            Offset(
+              x = resolveMaximumScrollX(measuredScrollFrame.withState(candidate.snapshot)),
+              y = currentPreparation.maximumScrollY,
+            ),
         )
-        smoothScrollSession.translate(state.viewportState.scrollOffset.y - previousScrollY)
+        smoothScrollSession.translate(state.viewportState.scrollOffset.y - previousScrollOffset.y)
         anchorPublication.geometry?.let { geometry ->
-          viewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset.y)
+          activeViewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset)
         }
         candidate
       }
@@ -608,10 +614,10 @@ internal fun EditorScreenLayout(
                                 ) {
                                   attachSelectionViewportAnchor(
                                     editor = activePresentation.editor,
-                                    anchorState = viewportAnchorState,
+                                    anchorState = activeViewportAnchorState,
                                     revision = activePresentation.bundle.snapshot.version,
                                     frame = activePresentation.frame,
-                                    scrollY = state.viewportState.scrollOffset.y,
+                                    scrollOffset = state.viewportState.scrollOffset,
                                     visibleArea = activePresentation.visibleArea,
                                     requireGuard =
                                       completedRequest.target !=
@@ -626,7 +632,7 @@ internal fun EditorScreenLayout(
                             editor?.let { activeEditor ->
                               attachViewportCenterAnchor(
                                 editor = activeEditor,
-                                anchorState = viewportAnchorState,
+                                anchorState = activeViewportAnchorState,
                                 revision = scrollFrameVersion,
                                 frame = presentationScrollFrame,
                                 scrollOffset = state.viewportState.scrollOffset,
@@ -649,7 +655,7 @@ internal fun EditorScreenLayout(
 
               reconcileViewportAnchorObservation(
                 editor = editor,
-                anchorState = viewportAnchorState,
+                anchorState = activeViewportAnchorState,
                 bundle = placedBundle,
                 frame = presentationScrollFrame,
                 viewportState = state.viewportState,
@@ -688,10 +694,10 @@ internal fun EditorScreenLayout(
       }
     }
 
-    NavigationForeground(sharePointerInputWithSiblings = true, matchHostBounds = true) {
+    NavigationForeground(sharePointerInputWithSiblings = true) {
       EditorViewportOverlayLayout(viewportOverlay)
     }
-    NavigationForeground(matchHostBounds = true) {
+    NavigationForeground {
       EditorScreenForegroundLayout(
         overlay = overlay,
         toolbar = toolbar,
@@ -730,21 +736,33 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       measuredScrollFrame = scrollFrame,
       currentScrollOffset = currentScrollOffset,
       maximumScrollY = initial.maximumScrollY,
+      maximumScrollX = resolveMaximumScrollX(scrollFrame),
       contentOriginY = initial.contentOriginY,
       smoothRevealActive = smoothRevealActive,
     )
       as? EditorViewportAnchorPublication.Ready ?: return null
-  if (anchorPublication.scrollY == currentScrollOffset.y) {
+  if (anchorPublication.scrollOffset == currentScrollOffset) {
     return initial.copy(anchorPublication = anchorPublication)
   }
   return resolveEditorSurfacePreparation(
       editor = editor,
       scrollFrame = scrollFrame,
-      currentScroll = anchorPublication.scrollY,
+      currentScroll = anchorPublication.scrollOffset.y,
       bringIntoViewRequest = bringIntoViewRequest,
       smoothScrollEnabled = smoothScrollEnabled,
     )
     ?.copy(anchorPublication = anchorPublication)
+}
+
+private fun resolveMaximumScrollX(frame: EditorScrollFrame): Float {
+  val bodyGeometry =
+    resolveEditorBodyGeometry(
+      visibleArea = frame.visibleArea,
+      layoutSpec = frame.layoutSpec,
+      pageSizes = frame.state.pageSizes,
+      displayZoom = frame.displayZoom,
+    )
+  return (bodyGeometry.pageColumnWidth - frame.visibleArea.viewport.width).coerceAtLeast(0f)
 }
 
 internal fun resolveEditorSurfacePreparation(

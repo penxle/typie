@@ -4,7 +4,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorState
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.ResolvedViewportAnchor
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.ffi.ViewportAnchorPoint
 import co.typie.editor.runtime.EditorBoundsInContainer
 import co.typie.editor.scroll.EditorScrollFrame
 import co.typie.editor.scroll.EditorVisibleArea
@@ -32,6 +34,19 @@ class EditorViewportAnchorGeometryTest {
   @Test
   fun `continuous viewport anchor origin includes the body top spacer`() {
     assertEquals(40f, resolveViewportAnchorContentOriginY(frame()))
+  }
+
+  @Test
+  fun `resolved anchor geometry includes displayed horizontal page position`() {
+    val geometry =
+      ResolvedViewportAnchor(
+          point = ViewportAnchorPoint(pageIdx = 0, x = 40f, y = 50f),
+          rect = null,
+        )
+        .toEditorViewportAnchorGeometry(frame = frame(), contentOriginY = 40f)
+
+    assertEquals(40f, geometry?.pointX)
+    assertEquals(90f, geometry?.pointY)
   }
 
   private fun frame(): EditorScrollFrame {

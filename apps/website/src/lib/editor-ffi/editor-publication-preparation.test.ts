@@ -44,12 +44,15 @@ describe('editor publication preparation', () => {
       scaleFactor: 1,
       displayZoom: 1,
       activeSurfacePages: new Set<number>(),
+      pageEls: {},
       extensionAreaEl: {
         getBoundingClientRect: () => new DOMRect(0, 0, 600, 1000),
       },
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 1000,
         scrollTo: vi.fn(),
       },
@@ -105,6 +108,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => scrollTop,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 4000,
         scrollTo: vi.fn((options: ScrollToOptions) => {
           scrollTop = options.top ?? scrollTop;
@@ -156,6 +161,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 1000,
         scrollTo: vi.fn(),
       },
@@ -205,6 +212,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 3040,
         scrollTo: vi.fn(),
       },
@@ -249,6 +258,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => scrollTop,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 100_000,
         scrollTo: vi.fn(),
       },
@@ -285,6 +296,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => scrollTop,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 4000,
         scrollTo: vi.fn(),
       },
@@ -320,6 +333,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 2000,
         scrollTo: vi.fn(),
       },
@@ -356,6 +371,8 @@ describe('editor publication preparation', () => {
       scrollViewport: {
         getRect: () => new DOMRect(0, 0, 600, 400),
         getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 600,
         getScrollHeight: () => 2000,
         scrollTo: vi.fn(),
       },

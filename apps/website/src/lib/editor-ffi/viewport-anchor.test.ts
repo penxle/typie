@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EditorViewportAnchorState } from './viewport-anchor';
+import { EditorViewportAnchorState, resolveViewportAnchorGeometry } from './viewport-anchor';
 import type { ViewportAnchor } from '@typie/editor-ffi/browser';
 
 const identity: ViewportAnchor = { type: 'node', node: '1:1', offset_x: 0, offset_y: 0 };
@@ -7,24 +7,39 @@ const viewportIdentity: ViewportAnchor = { type: 'node', node: '2:1', offset_x: 
 const visibleArea = { topInset: 0, bottomInset: 0 };
 
 describe('EditorViewportAnchorState', () => {
+  it('resolves page-local points through the displayed page origin and zoom on both axes', () => {
+    const resolved = resolveViewportAnchorGeometry(
+      { point: { page_idx: 0, x: 40, y: 50 }, rect: undefined },
+      { pages: [{ page: 0, left: 120, top: 300, bottom: 900 }], zoom: 1.5 },
+    );
+
+    expect(resolved).toEqual({ pointX: 180, pointY: 375 });
+  });
+
   it('keeps the anchor at its exact attached viewport point across publication', () => {
     const state = new EditorViewportAnchorState();
-    state.attach(identity, { pointY: 200 }, 100);
+    state.attach(identity, { pointX: 100, pointY: 200 }, { left: 20, top: 100 });
 
-    expect(state.publicationScroll({ pointY: 320 }, 100, 500)).toBe(220);
+    expect(state.publicationScroll({ pointX: 260, pointY: 320 }, { left: 20, top: 100 }, { left: 500, top: 500 })).toEqual({
+      left: 180,
+      top: 220,
+    });
   });
 
   it('does not move when geometry changes below the anchor', () => {
     const state = new EditorViewportAnchorState();
-    state.attach(identity, { pointY: 200 }, 100);
+    state.attach(identity, { pointX: 0, pointY: 200 }, { left: 0, top: 100 });
 
-    expect(state.publicationScroll({ pointY: 200 }, 100, 500)).toBe(100);
+    expect(state.publicationScroll({ pointX: 0, pointY: 200 }, { left: 0, top: 100 }, { left: 0, top: 500 })).toEqual({
+      left: 0,
+      top: 100,
+    });
   });
 
   it('retains a directly scrolled anchor inside the cursor guard and rejects it outside', () => {
     const state = new EditorViewportAnchorState();
-    const geometry = { pointY: 200, rect: { top: 190, bottom: 210 } };
-    state.attach(identity, geometry, 100);
+    const geometry = { pointX: 0, pointY: 200, rect: { top: 190, bottom: 210 } };
+    state.attach(identity, geometry, { left: 0, top: 100 });
 
     expect(state.canRetainAfterDirectScroll(geometry, 80, 300, visibleArea)).toBe(true);
     expect(state.canRetainAfterDirectScroll(geometry, 170, 300, visibleArea)).toBe(false);
@@ -32,8 +47,8 @@ describe('EditorViewportAnchorState', () => {
 
   it('uses the point when the anchor rect is taller than the guard', () => {
     const state = new EditorViewportAnchorState();
-    const geometry = { pointY: 150, rect: { top: 0, bottom: 1000 } };
-    state.attach(identity, geometry, 0);
+    const geometry = { pointX: 0, pointY: 150, rect: { top: 0, bottom: 1000 } };
+    state.attach(identity, geometry, { left: 0, top: 0 });
 
     expect(state.canRetainAfterDirectScroll(geometry, 0, 300, visibleArea)).toBe(true);
     expect(state.resizeScroll(geometry, 0, 300, 1000, visibleArea)).toBe(0);
@@ -41,57 +56,75 @@ describe('EditorViewportAnchorState', () => {
 
   it('moves minimally after resize pushes the anchor outside the cursor guard', () => {
     const state = new EditorViewportAnchorState();
-    const geometry = { pointY: 260, rect: { top: 250, bottom: 270 } };
-    state.attach(identity, geometry, 100);
+    const geometry = { pointX: 0, pointY: 260, rect: { top: 250, bottom: 270 } };
+    state.attach(identity, geometry, { left: 0, top: 100 });
 
     expect(state.resizeScroll(geometry, 100, 300, 1000, { topInset: 0, bottomInset: 100 })).toBe(130);
   });
 
   it('records the achieved attachment after publication clamping', () => {
     const state = new EditorViewportAnchorState();
-    state.attach(identity, { pointY: 200 }, 100);
-    const candidate = { pointY: 800 };
+    state.attach(identity, { pointX: 200, pointY: 200 }, { left: 100, top: 100 });
+    const candidate = { pointX: 800, pointY: 800 };
 
-    const clamped = state.publicationScroll(candidate, 100, 500);
+    const clamped = state.publicationScroll(candidate, { left: 100, top: 100 }, { left: 500, top: 500 });
     state.acceptGeometry(candidate, clamped);
 
-    expect(clamped).toBe(500);
+    expect(clamped).toEqual({ left: 500, top: 500 });
+    expect(state.pointAttachmentX).toBe(300);
     expect(state.pointAttachmentY).toBe(300);
   });
 
   it('finishes a provisional selection reveal where the measured rect would have revealed initially', () => {
     const state = new EditorViewportAnchorState();
-    const provisional = { pointY: 500.5, rect: { top: 500, bottom: 501 } };
-    const measured = { pointY: 600, rect: { top: 500, bottom: 700 } };
-    state.attachSelection(identity, provisional, 161);
+    const provisional = { pointX: 0, pointY: 500.5, rect: { top: 500, bottom: 501 } };
+    const measured = { pointX: 0, pointY: 600, rect: { top: 500, bottom: 700 } };
+    state.attachSelection(identity, provisional, { left: 0, top: 161 });
 
-    expect(state.publicationRevealScroll(measured, 161, 400, 1000, visibleArea)).toBe(360);
+    expect(state.publicationRevealScroll(measured, 161, 400, 1000, visibleArea)).toEqual({ left: 0, top: 360 });
   });
 
   it('reactivates a preferred selection rect after direct scrolling returns it inside the cursor guard', () => {
     const state = new EditorViewportAnchorState();
-    const selectionGeometry = { pointY: 200, rect: { top: 190, bottom: 210 } };
-    state.attachSelection(identity, selectionGeometry, 100);
-    state.attachViewport(viewportIdentity, { pointY: 500 }, 350);
+    const selectionGeometry = { pointX: 0, pointY: 200, rect: { top: 190, bottom: 210 } };
+    state.attachSelection(identity, selectionGeometry, { left: 0, top: 100 });
+    state.attachViewport(viewportIdentity, { pointX: 0, pointY: 500 }, { left: 0, top: 350 });
 
-    expect(state.tryReactivatePreferredSelection(selectionGeometry, 120, 300, visibleArea)).toBe(true);
+    expect(state.tryReactivatePreferredSelection(selectionGeometry, { left: 0, top: 120 }, 300, visibleArea)).toBe(true);
     expect(state.identity).toBe(identity);
     expect(state.pointAttachmentY).toBe(80);
   });
 
+  it('keeps the directly scrolled horizontal position when the preferred selection remains visible', () => {
+    const state = new EditorViewportAnchorState();
+    const selectionGeometry = { pointX: 200, pointY: 200, rect: { top: 190, bottom: 210 } };
+    state.attachSelection(identity, selectionGeometry, { left: 0, top: 100 });
+
+    expect(state.tryReactivatePreferredSelection(selectionGeometry, { left: 120, top: 100 }, 300, visibleArea)).toBe(true);
+    expect(state.pointAttachmentX).toBe(80);
+    expect(state.publicationScroll(selectionGeometry, { left: 120, top: 100 }, { left: 500, top: 500 }).left).toBe(120);
+  });
+
   it('does not reactivate a preferred selection without a compact rect inside the guard', () => {
     const state = new EditorViewportAnchorState();
-    state.attachSelection(identity, { pointY: 200, rect: { top: 0, bottom: 1000 } }, 100);
-    state.attachViewport(viewportIdentity, { pointY: 500 }, 350);
+    state.attachSelection(identity, { pointX: 0, pointY: 200, rect: { top: 0, bottom: 1000 } }, { left: 0, top: 100 });
+    state.attachViewport(viewportIdentity, { pointX: 0, pointY: 500 }, { left: 0, top: 350 });
 
-    expect(state.tryReactivatePreferredSelection({ pointY: 200, rect: { top: 0, bottom: 1000 } }, 100, 300, visibleArea)).toBe(false);
-    expect(state.tryReactivatePreferredSelection({ pointY: 200 }, 100, 300, visibleArea)).toBe(false);
+    expect(
+      state.tryReactivatePreferredSelection(
+        { pointX: 0, pointY: 200, rect: { top: 0, bottom: 1000 } },
+        { left: 0, top: 100 },
+        300,
+        visibleArea,
+      ),
+    ).toBe(false);
+    expect(state.tryReactivatePreferredSelection({ pointX: 0, pointY: 200 }, { left: 0, top: 100 }, 300, visibleArea)).toBe(false);
     expect(state.identity).toBe(viewportIdentity);
   });
 
   it('compares selection adoption by stable anchor identity', () => {
     const state = new EditorViewportAnchorState();
-    state.attachSelection(identity, { pointY: 200 }, 100);
+    state.attachSelection(identity, { pointX: 0, pointY: 200 }, { left: 0, top: 100 });
 
     expect(state.needsSelectionAdoption({ ...identity })).toBe(false);
     expect(state.needsSelectionAdoption(viewportIdentity)).toBe(true);
@@ -99,9 +132,9 @@ describe('EditorViewportAnchorState', () => {
 
   it('updates the preferred selection without replacing the active viewport anchor', () => {
     const state = new EditorViewportAnchorState();
-    state.attachViewport(viewportIdentity, { pointY: 500 }, 350);
+    state.attachViewport(viewportIdentity, { pointX: 0, pointY: 500 }, { left: 0, top: 350 });
 
-    state.adoptSelection(identity, { pointY: 200 }, 350, 300, visibleArea, true);
+    state.adoptSelection(identity, { pointX: 0, pointY: 200 }, { left: 0, top: 350 }, 300, visibleArea, true);
 
     expect(state.identity).toBe(viewportIdentity);
     expect(state.preferredSelectionIdentity).toBe(identity);

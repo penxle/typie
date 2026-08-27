@@ -1,4 +1,5 @@
 import { clamp } from '@typie/ui/utils';
+import { CONTINUOUS_VIEW_PADDING } from './constants';
 
 export const MIN_DOCUMENT_DISPLAY_WIDTH = 100;
 export const MAX_DOCUMENT_ZOOM = 2;
@@ -12,11 +13,16 @@ export type ZoomBounds = {
   max: number;
 };
 
-export function computePaginatedZoomBounds(pageWidth: number, minDisplayWidth = MIN_DOCUMENT_DISPLAY_WIDTH): ZoomBounds {
-  const safePageWidth = Number.isFinite(pageWidth) && pageWidth > 0 ? pageWidth : 1;
-  const minZoom = clamp(minDisplayWidth / safePageWidth, 0.01, Infinity);
-  const maxZoom = clamp(MAX_DOCUMENT_ZOOM, minZoom, Infinity);
-  return { min: minZoom, max: maxZoom };
+export type DocumentZoomLayout = { type: 'continuous'; maxWidth: number } | { type: 'paginated'; pageWidth: number };
+
+export function documentZoomWidth(layout: DocumentZoomLayout): number {
+  const width = layout.type === 'continuous' ? layout.maxWidth + CONTINUOUS_VIEW_PADDING * 2 : layout.pageWidth;
+  return Number.isFinite(width) && width > 0 ? width : 1;
+}
+
+export function computeDocumentZoomBounds(layout: DocumentZoomLayout, minDisplayWidth = MIN_DOCUMENT_DISPLAY_WIDTH): ZoomBounds {
+  const minZoom = clamp(minDisplayWidth / documentZoomWidth(layout), 0.01, Infinity);
+  return { min: minZoom, max: clamp(MAX_DOCUMENT_ZOOM, minZoom, Infinity) };
 }
 
 export function clampDocumentZoom(zoom: number, bounds: ZoomBounds): number {
@@ -26,21 +32,31 @@ export function clampDocumentZoom(zoom: number, bounds: ZoomBounds): number {
   return clamp(zoom, bounds.min, bounds.max);
 }
 
-export function computePaginatedFitWidthZoom(pageWidth: number, viewportWidth: number): number {
-  const bounds = computePaginatedZoomBounds(pageWidth);
-  const safePageWidth = Number.isFinite(pageWidth) && pageWidth > 0 ? pageWidth : 1;
-  const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : safePageWidth;
-  return clamp(safeViewportWidth / safePageWidth, bounds.min, bounds.max);
+export function computeDocumentFitWidthZoom(layout: DocumentZoomLayout, viewportWidth: number): number {
+  const width = documentZoomWidth(layout);
+  const bounds = computeDocumentZoomBounds(layout);
+  const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : width;
+  return clamp(safeViewportWidth / width, bounds.min, bounds.max);
 }
 
-export function computeInitialPaginatedZoom(pageWidth: number, viewportWidth: number): number {
-  return Math.min(computePaginatedFitWidthZoom(pageWidth, viewportWidth), 1);
+export function computeInitialDocumentZoom(layout: DocumentZoomLayout, viewportWidth: number): number {
+  return layout.type === 'continuous'
+    ? clampDocumentZoom(1, computeDocumentZoomBounds(layout))
+    : Math.min(computeDocumentFitWidthZoom(layout, viewportWidth), 1);
 }
 
-export function clampPaginatedZoom({ zoom, pageWidth, viewportWidth }: { zoom: number; pageWidth: number; viewportWidth: number }): number {
-  const bounds = computePaginatedZoomBounds(pageWidth);
+export function clampDocumentLayoutZoom({
+  zoom,
+  layout,
+  viewportWidth,
+}: {
+  zoom: number;
+  layout: DocumentZoomLayout;
+  viewportWidth: number;
+}): number {
+  const bounds = computeDocumentZoomBounds(layout);
   const clamped = clampDocumentZoom(zoom, bounds);
-  const fitWidthZoom = computePaginatedFitWidthZoom(pageWidth, viewportWidth);
+  const fitWidthZoom = computeDocumentFitWidthZoom(layout, viewportWidth);
   const unitZoom = clampDocumentZoom(1, bounds);
 
   let snapped: number | null = null;
@@ -58,6 +74,22 @@ export function clampPaginatedZoom({ zoom, pageWidth, viewportWidth }: { zoom: n
   }
 
   return snapped ?? clamped;
+}
+
+export function resolveContinuousLayoutViewportWidth({
+  viewportWidth,
+  committedZoom,
+}: {
+  viewportWidth: number;
+  committedZoom: number;
+}): number {
+  const safeWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1;
+  const safeZoom = renderZoomForDisplay(committedZoom);
+  return safeWidth / Math.min(safeZoom, 1);
+}
+
+export function resolveContinuousViewPadding(displayZoom: number): number {
+  return CONTINUOUS_VIEW_PADDING * renderZoomForDisplay(displayZoom);
 }
 
 export function renderZoomForDisplay(displayZoom: number): number {

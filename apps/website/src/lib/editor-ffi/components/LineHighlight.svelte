@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { getAppContext } from '@typie/ui/context';
   import { getEditorContext } from '../editor.svelte';
-  import { presentedPageElement } from '../geometry';
+  import { presentedPageElement, resolvePageSpans } from '../geometry';
 
   const { editor } = getEditorContext();
   const app = getAppContext();
@@ -16,12 +16,22 @@
   const lineHighlightEnabled = $derived(app?.preference.current.lineHighlightEnabled ?? false);
 
   const isPaginated = $derived(editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const displayZoom = $derived(editor?.safeDisplayZoom() ?? 1);
 
-  const container = $derived(cursor && editor ? presentedPageElement(editor, cursor.page_idx) : undefined);
+  const container = $derived.by(() => {
+    if (!cursor || !editor) return;
+    if (isPaginated) return presentedPageElement(editor, cursor.page_idx);
+    return editor.extensionAreaEl;
+  });
 
-  const top = $derived(cursor?.line.y ?? 0);
+  const top = $derived.by(() => {
+    if (!cursor || !editor) return 0;
+    if (isPaginated) return cursor.line.y;
+    const pageTop = resolvePageSpans(editor.pageSizes, { displayZoom })[cursor.page_idx]?.top ?? 0;
+    return pageTop + cursor.line.y * displayZoom;
+  });
 
-  const height = $derived(cursor?.line.height ?? 0);
+  const height = $derived((cursor?.line.height ?? 0) * (isPaginated ? 1 : displayZoom));
 
   let element = $state<HTMLDivElement>();
 
@@ -38,11 +48,8 @@
     style:display={show ? 'block' : 'none'}
     style:top={`${top}px`}
     style:height={`${height}px`}
-    style:box-shadow={isPaginated ? undefined : '0 0 0 100vmax currentColor'}
-    style:clip-path={isPaginated ? undefined : 'inset(0 -100vmax)'}
     class={css({
       position: 'absolute',
-      color: { base: 'text.default/4', _dark: 'text.default/10' },
       backgroundColor: { base: 'text.default/4', _dark: 'text.default/10' },
       insetX: '0',
       zIndex: '[-1]',

@@ -60,7 +60,8 @@ internal fun EditorBody(
   overlay: @Composable BoxScope.(EditorBodyGeometry, EditorState) -> Unit = { _, _ -> },
 ) {
   val density = LocalDensity.current
-  val displayZoom = LocalEditorZoomController.current.displayZoom
+  val zoomController = LocalEditorZoomController.current
+  val displayZoom = zoomController.displayZoom
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
@@ -75,6 +76,15 @@ internal fun EditorBody(
       pageSizes = pageSizes,
       displayZoom = displayZoom,
     )
+  val logicalViewportWidth =
+    when (layoutSpec) {
+      is EditorDocumentLayoutSpec.Continuous ->
+        resolveContinuousLayoutViewportWidth(
+          viewportWidth = geometry.visibleBodySize.width,
+          committedZoom = zoomController.renderZoom,
+        )
+      is EditorDocumentLayoutSpec.Paginated -> geometry.visibleBodySize.width
+    }
   val cursor = presentedState.cursor
   val extensionAreaFillSpacerHeight =
     remember(geometry.minimumBodyHeight, bodyContentHeight) {
@@ -141,7 +151,7 @@ internal fun EditorBody(
                 load = load,
                 publishedBundle = presentedBundle,
                 layoutSpec = layoutSpec,
-                viewportWidth = geometry.visibleBodySize.width,
+                viewportWidth = logicalViewportWidth,
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
                 editorInputEnabled = editorInputEnabled,

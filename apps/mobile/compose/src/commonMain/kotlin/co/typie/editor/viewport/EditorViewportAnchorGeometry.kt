@@ -14,6 +14,15 @@ internal fun ResolvedViewportAnchor.toEditorViewportAnchorGeometry(
 ): EditorViewportAnchorGeometry? {
   if (!contentOriginY.isFinite()) return null
   val zoom = frame.displayZoom.takeIf { it.isFinite() && it > 0f } ?: 1f
+  val bodyGeometry =
+    resolveEditorBodyGeometry(
+      visibleArea = frame.visibleArea,
+      layoutSpec = frame.layoutSpec,
+      pageSizes = frame.state.pageSizes,
+      displayZoom = zoom,
+    )
+  val contentWidth = maxOf(frame.visibleArea.viewport.width, bodyGeometry.pageColumnWidth)
+  val pageColumnLeft = (contentWidth - bodyGeometry.pageColumnWidth) / 2f
 
   fun contentY(page: Int, y: Float): Float? {
     val pageTop =
@@ -27,11 +36,13 @@ internal fun ResolvedViewportAnchor.toEditorViewportAnchorGeometry(
   }
 
   val pointY = contentY(point.pageIdx, point.y) ?: return null
+  val pointX = pageColumnLeft + point.x * zoom
+  if (!pointX.isFinite()) return null
   val rectSpan = rect?.let { pageRect ->
     val top = contentY(pageRect.pageIdx, pageRect.rect.y) ?: return@let null
     VerticalSpan(top = top, bottom = top + pageRect.rect.height * zoom)
   }
-  return EditorViewportAnchorGeometry(pointY = pointY, rect = rectSpan)
+  return EditorViewportAnchorGeometry(pointY = pointY, pointX = pointX, rect = rectSpan)
 }
 
 internal fun resolveViewportAnchorContentOriginY(frame: EditorScrollFrame): Float {

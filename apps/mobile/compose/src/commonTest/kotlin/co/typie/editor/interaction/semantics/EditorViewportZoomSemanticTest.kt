@@ -33,6 +33,51 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
+  fun `continuous pinch shares optical update anchor attachment and gesture-end commit`() {
+    val fixture =
+      Fixture(
+        documentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = listOf(PageSize(width = 500f, height = 960f)),
+        viewportWidth = 500f,
+      )
+    val start = EditorPinchSample(focalInRootPx = Offset(100f, 200f), distancePx = 100f)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 75f)))
+
+    assertEquals(0.75f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(1f, fixture.zoomController.renderZoom, 0.0001f)
+    assertTrue(fixture.attachedAnchors.isNotEmpty())
+
+    fixture.semantic.end()
+    assertEquals(0.75f, fixture.zoomController.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `continuous pinch rebases its page local anchor after reflow is published`() {
+    val fixture =
+      Fixture(
+        documentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = listOf(PageSize(width = 500f, height = 960f)),
+        viewportWidth = 500f,
+      )
+    val start = EditorPinchSample(focalInRootPx = Offset(100f, 200f), distancePx = 100f)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 75f)))
+    fixture.updatePresentation(
+      pageSizes = listOf(PageSize(width = 600f, height = 960f)),
+      pageOffsets = mapOf(0 to Offset(x = 40f, y = 0f)),
+      displayZoom = 0.75f,
+    )
+
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 60f)))
+
+    assertEquals(0.6f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(80f, fixture.attachedAnchors.last().first.x, 0.0001f)
+  }
+
+  @Test
   fun `pinch samples resolve an absolute target from a root-stable focal`() {
     val fixture =
       Fixture(
@@ -227,8 +272,7 @@ class EditorViewportZoomSemanticTest {
     editorBoundsInRoot: Rect = Rect(left = 0f, top = 0f, right = 720f, bottom = 2000f),
     measuredViewportSize: Size = Size(width = 100f, height = 120f),
     contentSize: Size = Size(width = 2000f, height = 2000f),
-  ) {
-    val layoutSpec =
+    documentLayoutSpec: EditorDocumentLayoutSpec =
       EditorDocumentLayoutSpec.Paginated(
         pageWidth = 720f,
         pageHeight = 960f,
@@ -236,7 +280,11 @@ class EditorViewportZoomSemanticTest {
         pageMarginBottom = 0f,
         pageMarginLeft = 0f,
         pageMarginRight = 0f,
-      )
+      ),
+  ) {
+    val layoutSpec = documentLayoutSpec
+    val attachedAnchors =
+      mutableListOf<Triple<co.typie.editor.EditorViewportAnchor, Offset, Offset>>()
     val zoomController = EditorZoomController()
     val viewportState =
       EditorViewportState().apply {
@@ -249,30 +297,47 @@ class EditorViewportZoomSemanticTest {
         pageOffsets.forEach { (page, offset) -> updatePageOffset(page = page, offset = offset) }
         updateEditorBounds(boundsInRoot = editorBoundsInRoot, density = 1f)
       }
-    val semantic =
-      EditorViewportZoomSemantic().apply {
-        configure(
-          EditorViewportZoomSemanticConfig(
-            layoutSpec = layoutSpec,
-            zoomController = zoomController,
-            viewportState = viewportState,
-            uiState = uiState,
-            pageSizes = pageSizes,
-            viewportWidth = viewportWidth,
-            density = 1f,
-            onZoomSnap = {},
-          )
-        )
-      }
+    val semantic = EditorViewportZoomSemantic()
 
     init {
       zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = viewportWidth)
+      configure(pageSizes)
     }
 
     fun updateEditorRootOffset(offset: Offset) {
       uiState.updateEditorBounds(
         boundsInRoot = Rect(offset = offset, size = Size(width = viewportWidth, height = 1000f)),
         density = 1f,
+      )
+    }
+
+    fun updatePresentation(
+      pageSizes: List<PageSize>,
+      pageOffsets: Map<Int, Offset>,
+      displayZoom: Float,
+    ) {
+      uiState.updateDisplayZoom(displayZoom)
+      pageOffsets.forEach { (page, offset) ->
+        uiState.updatePageOffset(page = page, offset = offset)
+      }
+      configure(pageSizes)
+    }
+
+    private fun configure(pageSizes: List<PageSize>) {
+      semantic.configure(
+        EditorViewportZoomSemanticConfig(
+          layoutSpec = layoutSpec,
+          zoomController = zoomController,
+          viewportState = viewportState,
+          uiState = uiState,
+          pageSizes = pageSizes,
+          viewportWidth = viewportWidth,
+          density = 1f,
+          onZoomSnap = {},
+          onAttachViewportAnchor = { anchor, displayPosition, scrollOffset ->
+            attachedAnchors += Triple(anchor, displayPosition, scrollOffset)
+          },
+        )
       )
     }
   }

@@ -3,7 +3,7 @@
   import { zoomDiffers } from '$lib/editor-ffi/zoom';
 
   type Props = {
-    isPaginated: boolean;
+    enabled: boolean;
     displayZoom: number;
     scrollContainer?: HTMLElement;
   };
@@ -11,12 +11,12 @@
   const ZOOM_OVERLAY_VISIBLE_MS = 1000;
   const ZOOM_OVERLAY_FADE_MS = 180;
 
-  let { isPaginated, displayZoom, scrollContainer }: Props = $props();
+  let { enabled, displayZoom, scrollContainer }: Props = $props();
 
   let visible = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let lastZoom: number | null = null;
-  let wasPaginated = $state(false);
+  let wasEnabled = $state(false);
   let overlayLeft = $state(20);
   let overlayBottom = $state(20);
 
@@ -32,15 +32,15 @@
   }
 
   $effect(() => {
-    const enteredPaginated = isPaginated && !wasPaginated;
-    wasPaginated = isPaginated;
+    const entered = enabled && !wasEnabled;
+    wasEnabled = enabled;
     const prev = lastZoom;
     lastZoom = displayZoom;
     const shouldShow = prev === null || zoomDiffers(prev, displayZoom);
-    if (isPaginated && (enteredPaginated || shouldShow)) {
+    if (enabled && (entered || shouldShow)) {
       showTemporarily();
     }
-    if (!isPaginated) {
+    if (!enabled) {
       visible = false;
     }
   });
@@ -91,7 +91,7 @@
   const zoomPercent = $derived(Math.round(displayZoom * 100));
 </script>
 
-{#if isPaginated}
+{#if enabled}
   <div
     style:left={`${overlayLeft}px`}
     style:bottom={`${overlayBottom}px`}

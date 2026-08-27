@@ -69,7 +69,7 @@ type WebFrameSample = {
   expectedHighlightY: number;
   actualHighlightY: number | null;
   caretOnCursorPage: boolean;
-  highlightOnCursorPage: boolean;
+  highlightOnExpectedContainer: boolean;
   selectionHeadVisible: boolean;
 };
 
@@ -91,7 +91,7 @@ function matchingWebFrameSample(overrides: Partial<WebFrameSample> = {}): WebFra
     expectedHighlightY: 8,
     actualHighlightY: 8,
     caretOnCursorPage: true,
-    highlightOnCursorPage: true,
+    highlightOnExpectedContainer: true,
     selectionHeadVisible: true,
     ...overrides,
   };
@@ -135,6 +135,17 @@ function doc(text = '', href?: string): PlainDoc {
         line_height: { type: 'line_height', value: 160 },
       } as never,
     ),
+  };
+}
+
+function continuousDoc(text = ''): PlainDoc {
+  const document = doc(text);
+  return {
+    ...document,
+    root: {
+      ...document.root,
+      node: { type: 'root', layout_mode: { type: 'continuous', max_width: 600 } },
+    },
   };
 }
 
@@ -256,7 +267,14 @@ function paginatedDocWithLinkedPage(pageCount: number, linkedPage: number, text:
 
 async function mountEditor(
   plain: PlainDoc,
-  options: { readOnly?: boolean; typewriterEnabled?: boolean; withZoom?: boolean; displayZoom?: number } = {},
+  options: {
+    readOnly?: boolean;
+    typewriterEnabled?: boolean;
+    withZoom?: boolean;
+    displayZoom?: number;
+    contentInsetLeft?: number;
+    contentInsetRight?: number;
+  } = {},
 ) {
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
   if (options.displayZoom !== undefined) {
@@ -275,6 +293,8 @@ async function mountEditor(
       typewriterEnabled: options.typewriterEnabled,
       userId: `frame-sync-${crypto.randomUUID()}`,
       withZoom: options.withZoom,
+      contentInsetLeft: options.contentInsetLeft,
+      contentInsetRight: options.contentInsetRight,
     },
   });
   const result = await harness.promise;
@@ -344,7 +364,7 @@ function readWebFrameSample(
   if (!published || !cursor) throw new Error('Expected a published cursor');
 
   const paginated = published.snapshot.rootAttrs?.layout_mode.type === 'paginated';
-  const zoom = paginated ? editor.displayZoom : 1;
+  const zoom = editor.safeDisplayZoom();
   const pageGap = paginated ? PAGE_GAP * zoom : 0;
   const pageTop = published.snapshot.pageSizes
     .slice(0, cursor.page_idx)
@@ -356,6 +376,7 @@ function readWebFrameSample(
   const caret = document.querySelector<HTMLElement>('[data-editor-caret]');
   const lineHighlight = document.querySelector<HTMLElement>('[data-editor-line-highlight]');
   const cursorPage = editor.pageEls[cursor.page_idx];
+  const expectedHighlightContainer = paginated ? cursorPage : editor.extensionAreaEl;
   const cursorTop = caret?.getBoundingClientRect().top ?? null;
   const cursorBottom = cursorTop === null ? null : cursorTop + cursor.caret.height * zoom;
   const viewportBottom = rootTop + scrollRoot.clientHeight;
@@ -377,7 +398,7 @@ function readWebFrameSample(
     expectedHighlightY: rootTop + highlightDocumentY - scrollTop,
     actualHighlightY: lineHighlight?.getBoundingClientRect().top ?? null,
     caretOnCursorPage: caret?.parentElement === cursorPage,
-    highlightOnCursorPage: lineHighlight?.parentElement === cursorPage,
+    highlightOnExpectedContainer: lineHighlight?.parentElement === expectedHighlightContainer,
     selectionHeadVisible:
       cursorTop !== null &&
       cursorBottom !== null &&
@@ -397,7 +418,7 @@ function delayUntil(deadline: number): Promise<void> {
 }
 
 function describeWebFrameMismatch(sample: WebFrameSample, previous?: WebFrameSample): string | undefined {
-  const nativePresentationMismatch = !sample.hasNativeFrame || !sample.caretOnCursorPage || !sample.highlightOnCursorPage;
+  const nativePresentationMismatch = !sample.hasNativeFrame || !sample.caretOnCursorPage || !sample.highlightOnExpectedContainer;
   const cursorMismatch = sample.actualCursorY === null || Math.abs(sample.actualCursorY - sample.expectedCursorY) > COORDINATE_TOLERANCE_PX;
   const highlightMismatch =
     sample.actualHighlightY === null || Math.abs(sample.actualHighlightY - sample.expectedHighlightY) > COORDINATE_TOLERANCE_PX;
@@ -418,7 +439,7 @@ function describeWebFrameMismatch(sample: WebFrameSample, previous?: WebFrameSam
   return [
     `phase=${sample.phaseMs}ms frame=${sample.frame} direction=${sample.direction} revision=${sample.revision}`,
     `scrollTop=${sample.scrollTop} cursorPage=${sample.cursorPage} hasNativeFrame=${sample.hasNativeFrame}`,
-    `caretOnCursorPage=${sample.caretOnCursorPage} highlightOnCursorPage=${sample.highlightOnCursorPage}`,
+    `caretOnCursorPage=${sample.caretOnCursorPage} highlightOnExpectedContainer=${sample.highlightOnExpectedContainer}`,
     `selectionHeadVisible=${sample.selectionHeadVisible}`,
     `cursor expected=${sample.expectedCursorY} actual=${sample.actualCursorY}`,
     `highlight expected=${sample.expectedHighlightY} actual=${sample.actualHighlightY}`,
@@ -1289,6 +1310,175 @@ describe('web editor frame synchronization', () => {
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
     expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
+  });
+
+  it('delays continuous reflow until the render commit and replaces it coherently', async () => {
+    const { editor, scrollRoot } = await mountEditor(continuousDoc('continuous zoom '.repeat(40)), { withZoom: true });
+    await waitForPresentation(editor);
+    const initialPageWidth = editor.appliedSnapshot.pageSizes[0]?.width;
+    const initialCanvas = editor.published?.frames.get(0)?.canvas;
+    expect(initialPageWidth).toBeCloseTo(360);
+    expect(initialCanvas).toBeDefined();
+    expectActualCanvas(editor, 0, false);
+
+    const viewportRect = scrollRoot.getBoundingClientRect();
+    scrollRoot.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: 69,
+        metaKey: navigator.platform.toUpperCase().includes('MAC'),
+        ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+        clientX: viewportRect.left + viewportRect.width / 2,
+        clientY: viewportRect.top + viewportRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await nextAnimationFrame();
+
+    expect(editor.displayZoom).toBeLessThan(1);
+    expect(editor.renderZoom).toBe(1);
+    expect(editor.viewport.width).toBeCloseTo(360);
+    expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeCloseTo(initialPageWidth ?? 0);
+    expect(editor.published?.frames.get(0)?.canvas).toBe(initialCanvas);
+
+    await expect.poll(() => editor.renderZoom).toBeCloseTo(editor.displayZoom);
+    await expect.poll(() => editor.viewport.width).toBeGreaterThan(360);
+    await waitForPresentation(editor);
+
+    expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeGreaterThan(initialPageWidth ?? Infinity);
+    expect(editor.published?.frames.get(0)?.canvas).not.toBe(initialCanvas);
+    expect(editor.pageEls[0]?.getBoundingClientRect().width).toBeCloseTo(360, 0);
+    expect(editor.published?.frames.get(0)?.canvas.width).toBeGreaterThan(0);
+    expect(editor.published?.frames.get(0)?.canvas.height).toBeGreaterThan(0);
+    expectActualCanvas(editor, 0, false);
+  });
+
+  it('makes the entire zoomed continuous track horizontally reachable without oversized line highlight paint', async () => {
+    const { editor, extensionArea, scrollRoot } = await mountEditor(continuousDoc('continuous zoom'), { withZoom: true });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const viewportRect = scrollRoot.getBoundingClientRect();
+    scrollRoot.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -98,
+        metaKey: navigator.platform.toUpperCase().includes('MAC'),
+        ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+        clientX: viewportRect.left + viewportRect.width / 2,
+        clientY: viewportRect.top + viewportRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await nextAnimationFrame();
+    expect(editor.displayZoom).toBeGreaterThan(1);
+
+    scrollRoot.scrollLeft = 0;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+
+    const pageElement = editor.pageEls[0];
+    const documentTrack = document.querySelector<HTMLElement>('[data-editor-document-track]');
+    const lineHighlight = document.querySelector<HTMLElement>('[data-editor-line-highlight]');
+    expect(pageElement).toBeDefined();
+    expect(documentTrack).not.toBeNull();
+    expect(lineHighlight?.parentElement).toBe(extensionArea);
+    if (!pageElement || !documentTrack || !lineHighlight) throw new Error('Expected continuous zoom geometry');
+
+    const pageRectAtStart = pageElement.parentElement?.getBoundingClientRect();
+    const trackRectAtStart = documentTrack.getBoundingClientRect();
+    expect(pageRectAtStart?.left).toBeCloseTo(viewportRect.left, 0);
+    expect(trackRectAtStart.left).toBeCloseTo(viewportRect.left, 0);
+    expect(trackRectAtStart.width).toBeCloseTo(pageRectAtStart?.width ?? 0, 0);
+    expect(scrollRoot.scrollWidth).toBeCloseTo(trackRectAtStart.width, 0);
+    expect(lineHighlight.getBoundingClientRect().width).toBeCloseTo(extensionArea.getBoundingClientRect().width, 0);
+    expect(getComputedStyle(lineHighlight).boxShadow).toBe('none');
+
+    const maximumScrollLeft = scrollRoot.scrollWidth - scrollRoot.clientWidth;
+    expect(maximumScrollLeft).toBeGreaterThan(0);
+    const horizontalScrollbarThumb = document.querySelector<HTMLElement>(
+      '[role="scrollbar"][aria-orientation="horizontal"] [role="slider"]',
+    );
+    expect(horizontalScrollbarThumb).not.toBeNull();
+    if (!horizontalScrollbarThumb) throw new Error('Expected the horizontal scrollbar thumb');
+    const thumbRect = horizontalScrollbarThumb.getBoundingClientRect();
+    const pointerId = 1;
+    horizontalScrollbarThumb.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: thumbRect.left + thumbRect.width / 2,
+        clientY: thumbRect.top + thumbRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    horizontalScrollbarThumb.dispatchEvent(
+      new PointerEvent('pointermove', {
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        buttons: 1,
+        clientX: thumbRect.left + thumbRect.width / 2 + 40,
+        clientY: thumbRect.top + thumbRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    horizontalScrollbarThumb.dispatchEvent(
+      new PointerEvent('pointerup', {
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        clientX: thumbRect.left + thumbRect.width / 2 + 40,
+        clientY: thumbRect.top + thumbRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await nextAnimationFrame();
+    expect(scrollRoot.scrollLeft).toBeGreaterThan(0);
+    const draggedScrollLeft = scrollRoot.scrollLeft;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await tick();
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    expect(scrollRoot.scrollLeft).toBeCloseTo(draggedScrollLeft, 0);
+
+    scrollRoot.scrollLeft = maximumScrollLeft;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+
+    expect(scrollRoot.scrollLeft).toBeCloseTo(maximumScrollLeft, 0);
+    expect(documentTrack.getBoundingClientRect().right).toBeCloseTo(viewportRect.right, 0);
+  });
+
+  it('fills the continuous editor surface behind reserved review-column insets', async () => {
+    const { editor, extensionArea } = await mountEditor(continuousDoc('continuous review column'), {
+      contentInsetLeft: 100,
+      contentInsetRight: 396,
+    });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const lineHighlight = document.querySelector<HTMLElement>('[data-editor-line-highlight]');
+    expect(lineHighlight).not.toBeNull();
+    if (!lineHighlight) throw new Error('Expected continuous line highlight');
+
+    const surfaceRect = extensionArea.getBoundingClientRect();
+    const highlightRect = lineHighlight.getBoundingClientRect();
+    expect(lineHighlight.parentElement).toBe(extensionArea);
+    expect(highlightRect.left).toBeCloseTo(surfaceRect.left, 0);
+    expect(highlightRect.right).toBeCloseTo(surfaceRect.right, 0);
+    expect(getComputedStyle(lineHighlight).boxShadow).toBe('none');
   });
 
   it('prepares an appended page without mounting candidate geometry before publication', async () => {

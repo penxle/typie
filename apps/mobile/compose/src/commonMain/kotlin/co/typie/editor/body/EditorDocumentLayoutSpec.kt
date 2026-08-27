@@ -10,6 +10,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.floatOrNull
 
 internal const val PaginatedPageGap = 24f
+internal const val ContinuousPageHorizontalMargin = 20f
 
 internal sealed interface EditorDocumentLayoutSpec {
   data class Continuous(val maxWidth: Float) : EditorDocumentLayoutSpec
@@ -22,6 +23,21 @@ internal sealed interface EditorDocumentLayoutSpec {
     val pageMarginLeft: Float,
     val pageMarginRight: Float,
   ) : EditorDocumentLayoutSpec
+}
+
+internal fun EditorDocumentLayoutSpec.documentZoomWidth(): Float =
+  when (this) {
+    is EditorDocumentLayoutSpec.Continuous -> maxWidth + ContinuousPageHorizontalMargin * 2f
+    is EditorDocumentLayoutSpec.Paginated -> pageWidth
+  }.takeIf { it.isFinite() && it > 0f } ?: 1f
+
+internal fun resolveContinuousLayoutViewportWidth(
+  viewportWidth: Float,
+  committedZoom: Float,
+): Float {
+  val safeWidth = viewportWidth.takeIf { it.isFinite() && it > 0f } ?: 1f
+  val safeZoom = committedZoom.takeIf { it.isFinite() && it > 0f } ?: 1f
+  return safeWidth / minOf(safeZoom, 1f)
 }
 
 internal fun LayoutMode.toEditorDocumentLayoutSpec(): EditorDocumentLayoutSpec =
@@ -40,8 +56,9 @@ internal fun LayoutMode.toEditorDocumentLayoutSpec(): EditorDocumentLayoutSpec =
 
 internal fun EditorDocumentLayoutSpec.resolveBaseBottomSpace(displayZoom: Float = 1f): Float =
   when (this) {
-    is EditorDocumentLayoutSpec.Continuous -> 20f
-    is EditorDocumentLayoutSpec.Paginated -> pageMarginBottom * displayZoom
+    is EditorDocumentLayoutSpec.Continuous ->
+      ContinuousPageHorizontalMargin * normalizeDisplayZoom(displayZoom)
+    is EditorDocumentLayoutSpec.Paginated -> pageMarginBottom * normalizeDisplayZoom(displayZoom)
   }
 
 internal fun resolvePaginatedPageGap(displayZoom: Float = 1f): Float =

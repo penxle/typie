@@ -14,6 +14,7 @@
   import EditorPages from './components/EditorPages.svelte';
   import Input from './components/Input.svelte';
   import LineHighlight from './components/LineHighlight.svelte';
+  import Scrollbar from './components/Scrollbar.svelte';
   import SelectionHandles from './components/SelectionHandles.svelte';
   import EditorZoom from './components/ui/EditorZoom.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
@@ -22,8 +23,10 @@
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { setupEditorScroll } from './scroll.svelte';
+  import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
   import type { Editor } from './editor.svelte';
+  import type { DocumentZoomLayout } from './zoom';
 
   type Props = {
     editor: Editor;
@@ -36,6 +39,8 @@
     userId: string;
     withZoom?: boolean;
     headerHeight?: number;
+    contentInsetLeft?: number;
+    contentInsetRight?: number;
   };
 
   let {
@@ -49,6 +54,8 @@
     userId,
     withZoom = false,
     headerHeight = 0,
+    contentInsetLeft = 0,
+    contentInsetRight = 0,
   }: Props = $props();
 
   const app = setupAppContext(userId);
@@ -70,9 +77,31 @@
   let publishedReady = false;
   const isPaginated = $derived(editor.rootAttrs?.layout_mode.type === 'paginated');
   const pageWidth = $derived(editor.pageSizes[0]?.width ?? 0);
+  const zoomLayout: DocumentZoomLayout | null = $derived.by(() => {
+    const layout = editor.rootAttrs?.layout_mode;
+    if (layout?.type === 'continuous' && layout.max_width > 0) return { type: 'continuous', maxWidth: layout.max_width };
+    if (layout?.type === 'paginated' && pageWidth > 0) return { type: 'paginated', pageWidth };
+    return null;
+  });
 
   $effect(() => {
     editor.readOnly = readOnly;
+  });
+
+  $effect(() => {
+    const layout = zoomLayout;
+    const width = viewportWidth;
+    const renderZoom = editor.renderZoom;
+    if (!withZoom || layout?.type !== 'continuous' || width <= 0) return;
+    untrack(() => {
+      const height = editor.viewport.height;
+      if (height <= 0) return;
+      editor.resizeViewportNow(
+        resolveContinuousLayoutViewportWidth({ viewportWidth: width, committedZoom: renderZoom }),
+        height,
+        editor.scaleFactor,
+      );
+    });
   });
 
   $effect(() => {
@@ -123,20 +152,28 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={extensionArea}
+    style:min-width="max-content"
+    style:padding-left={`${contentInsetLeft}px`}
+    style:padding-right={`${contentInsetRight}px`}
     style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
-    style:row-gap={`${isPaginated ? PAGE_GAP * editor.displayZoom : 0}px`}
-    style="position: relative; display: flex; flex-direction: column; align-items: center; min-width: max-content;"
+    style="position: relative; display: flex; flex-direction: column; align-items: center; isolation: isolate; width: 100%;"
     {@attach (el) => {
       editor.extensionAreaEl = el;
     }}
     data-editor-extension-area
     {onclick}
   >
-    <EditorPages {editor} {surfaceHost} />
+    <div
+      style:row-gap={`${isPaginated ? PAGE_GAP * editor.displayZoom : 0}px`}
+      style="position: relative; display: flex; flex-direction: column; align-items: center; flex: 1 0 auto; width: 100%;"
+      data-editor-document-track
+    >
+      <EditorPages {editor} {surfaceHost} />
 
-    <DocumentOverlayLayer />
-    <Caret />
-    <LineHighlight />
+      <DocumentOverlayLayer />
+      <Caret />
+      <LineHighlight />
+    </div>
 
     <ViewportOverlay>
       <Input />
@@ -168,10 +205,20 @@
     <div style:height={`${headerHeight}px`} data-editor-test-header></div>
   {/if}
   {#if withZoom}
-    <EditorZoom active {editor} {isPaginated} {pageWidth} {viewportWidth}>
+    <EditorZoom
+      active
+      attachViewportAnchor={(point) => ctx.scroll?.attachViewportAnchorAt(point)}
+      {editor}
+      layout={zoomLayout}
+      {viewportWidth}
+    >
       {@render editorContent()}
     </EditorZoom>
   {:else}
     {@render editorContent()}
   {/if}
 </div>
+
+{#if withZoom}
+  <Scrollbar />
+{/if}
