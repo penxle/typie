@@ -23,6 +23,7 @@ const localStorageStub = vi.hoisted(() => {
 
 vi.mock('@typie/ui/context', () => ({
   getAppContext: () => ({ preference: { current: { zenModeEnabled: false } } }),
+  tryAppContext: vi.fn(),
 }));
 
 vi.mock('./EntityPane.svelte', async () => {

@@ -11,5 +11,6 @@ export const createStableContext = <T>(name: string) => {
       return getContext<T>(key);
     },
     (context: T) => setContext(key, context),
+    () => getContext<T | undefined>(key),
   ] as const;
 };

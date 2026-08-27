@@ -8,6 +8,7 @@
     "./components": "./src/components/index.ts",
     "./constants": "./src/constants/index.ts",
     "./context": "./src/context/index.ts",
+    "./context/stable": "./src/context/stable-context.ts",
     "./effects": "./src/effects/index.ts",
     "./form": "./src/form/index.ts",
     "./notification": "./src/notification/index.ts",

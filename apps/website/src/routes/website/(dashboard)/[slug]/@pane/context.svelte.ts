@@ -1,3 +1,4 @@
+import { createStableContext } from '@typie/ui/context/stable';
 import { LocalStore } from '@typie/ui/state';
 import { nanoid } from 'nanoid';
 import { getContext, setContext } from 'svelte';
@@ -22,11 +23,9 @@ export type {
   Rect,
 } from './types';
 
-const key: unique symbol = Symbol('PaneGroup');
+const [getPaneGroup, setPaneGroup] = createStableContext<PaneGroup>('pane.PaneGroup');
 
-export const getPaneGroup = () => {
-  return getContext<PaneGroup>(key);
-};
+export { getPaneGroup };
 
 const defaultPaneGroupState: PaneGroupState = {
   root: null,
@@ -344,7 +343,7 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
     },
   };
 
-  setContext(key, context);
+  setPaneGroup(context);
 
   return context;
 };

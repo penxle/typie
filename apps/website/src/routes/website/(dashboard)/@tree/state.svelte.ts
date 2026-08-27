@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { TreeEntity } from './@selection/types';
 
@@ -10,11 +10,9 @@ export type TreeState = {
   element?: HTMLElement;
 };
 
-const key: unique symbol = Symbol('TreeContext');
+const [getTreeContext, setTreeContext] = createStableContext<TreeState>('tree.TreeContext');
 
-export const getTreeContext = () => {
-  return getContext<TreeState>(key);
-};
+export { getTreeContext };
 
 export const setupTreeContext = () => {
   const treeState = $state<TreeState>({
@@ -25,7 +23,7 @@ export const setupTreeContext = () => {
     element: undefined,
   });
 
-  setContext(key, treeState);
+  setTreeContext(treeState);
 
   return treeState;
 };

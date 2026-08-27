@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import type {
   Editor_Widget_CharacterCountChangeWidget_document$key,
   Editor_Widget_DocumentRelatedNoteWidget_document$key,
@@ -26,7 +26,9 @@ type WidgetEnvironment = {
     | undefined;
 };
 
-const key: unique symbol = Symbol('WidgetContext');
+const [getWidgetContext, setWidgetContext] = createStableContext<WidgetContext>('widgets.WidgetContext');
+
+export { getWidgetContext };
 
 export class WidgetContext {
   env = $state<WidgetEnvironment>({
@@ -45,14 +47,6 @@ export class WidgetContext {
 
 export const setupWidgetContext = () => {
   const context = new WidgetContext();
-  setContext(key, context);
-  return context;
-};
-
-export const getWidgetContext = (): WidgetContext => {
-  const context = getContext<WidgetContext>(key);
-  if (!context) {
-    throw new Error('WidgetContext not found');
-  }
+  setWidgetContext(context);
   return context;
 };

@@ -1,5 +1,5 @@
-import { getContext, setContext } from 'svelte';
 import { LocalStore, SessionStore } from '../state';
+import { createStableContext } from './stable-context';
 
 export type AppPreference = {
   sidebarWidth: number;
@@ -96,11 +96,9 @@ export type AppContext = {
   timerState: SessionStore<AppTimerState>;
 };
 
-const key: unique symbol = Symbol('AppContext');
+const [getAppContext, setAppContext, tryAppContext] = createStableContext<AppContext>('ui.AppContext');
 
-export const getAppContext = () => {
-  return getContext<AppContext>(key);
-};
+export { getAppContext, tryAppContext };
 
 export const setupAppContext = (userId: string) => {
   const appState = $state<AppState>({
@@ -184,7 +182,7 @@ export const setupAppContext = (userId: string) => {
     }),
   };
 
-  setContext(key, context);
+  setAppContext(context);
 
   return context;
 };

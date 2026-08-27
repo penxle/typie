@@ -14,6 +14,7 @@ vi.mock('@typie/ui/utils', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@typie/ui/utils')>()),
   animateFlip,
 }));
+vi.mock('./note-mutation', () => ({ getNoteOperationsContext: () => ({ move: vi.fn() }) }));
 vi.mock('./note-sync.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./note-sync.svelte')>()),
   getNoteSyncContext: () => syncContext.current,

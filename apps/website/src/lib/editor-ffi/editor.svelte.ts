@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/sveltekit';
-import { createStableContext } from '@typie/ui/context';
+import { createStableContext } from '@typie/ui/context/stable';
 import { debounce } from '@typie/ui/utils';
 import { tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';

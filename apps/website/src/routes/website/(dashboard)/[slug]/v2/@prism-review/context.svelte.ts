@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import type { DataOf } from '@mearie/svelte';
 import type { DocumentPrismReviewMargin_Round_Query } from '$mearie';
 import type { DetailRound } from '../../../@prism/review/round-view.ts';
@@ -59,16 +59,15 @@ export type MarginController = {
   react: (threadId: string, value: 'UP' | 'DOWN' | null) => Promise<void>;
 };
 
-const KEY = Symbol('PrismReviewMargin');
+const [getRequiredMarginContext, setMarginContext, getOptionalMarginContext] =
+  createStableContext<MarginController>('prism-review.PrismReviewMargin');
 
-export const setupMarginContext = (controller: MarginController) => setContext(KEY, controller);
+export const setupMarginContext = (controller: MarginController) => setMarginContext(controller);
 
 // 여백 안쪽 컴포넌트용 — 컨텍스트 없이 뜨는 일이 없으므로 없으면 결함이다
 export const getMarginContext = (): MarginController => {
-  const controller = getContext<MarginController | undefined>(KEY);
-  if (!controller) throw new Error('PrismReviewMargin context not found');
-  return controller;
+  return getRequiredMarginContext();
 };
 
 // 툴바용 — 미리보기·뷰어 에디터는 이 컨텍스트 없이 뜬다
-export const tryMarginContext = (): MarginController | undefined => getContext<MarginController | undefined>(KEY);
+export const tryMarginContext = (): MarginController | undefined => getOptionalMarginContext();

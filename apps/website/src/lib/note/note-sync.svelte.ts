@@ -1,5 +1,6 @@
 /* eslint-disable svelte/prefer-svelte-reactivity -- Subscription registries must not retrigger the effects that register them. */
-import { getContext, setContext, untrack } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
+import { untrack } from 'svelte';
 
 export type NoteUpdate = {
   kind: 'CREATED' | 'UPDATED' | 'DELETED';
@@ -141,13 +142,6 @@ export class NoteSync {
   }
 }
 
-const NOTE_SYNC_CONTEXT = Symbol('NoteSync');
+const [getNoteSyncContext, setNoteSyncContext] = createStableContext<NoteSync>('note.NoteSync');
 
-export function setNoteSyncContext(noteSync: NoteSync): NoteSync {
-  setContext(NOTE_SYNC_CONTEXT, noteSync);
-  return noteSync;
-}
-
-export function getNoteSyncContext(): NoteSync {
-  return getContext<NoteSync>(NOTE_SYNC_CONTEXT);
-}
+export { getNoteSyncContext, setNoteSyncContext };

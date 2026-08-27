@@ -1,10 +1,12 @@
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import { SvelteMap } from 'svelte/reactivity';
 import type { Editor as FfiEditor } from '$lib/editor-ffi/editor.svelte';
 
 export type RegisteredEditor = FfiEditor;
 
-const key: unique symbol = Symbol('EditorRegistry');
+const [getEditorRegistry, setEditorRegistry] = createStableContext<EditorRegistry>('pane.EditorRegistry');
+
+export { getEditorRegistry };
 
 class EditorRegistry {
   #entries = new SvelteMap<string, RegisteredEditor>();
@@ -29,14 +31,6 @@ class EditorRegistry {
 
 export const setupEditorRegistry = () => {
   const registry = new EditorRegistry();
-  setContext(key, registry);
-  return registry;
-};
-
-export const getEditorRegistry = (): EditorRegistry => {
-  const registry = getContext<EditorRegistry>(key);
-  if (!registry) {
-    throw new Error('EditorRegistry not found');
-  }
+  setEditorRegistry(registry);
   return registry;
 };

@@ -14,7 +14,7 @@ vi.mock(import('@mearie/svelte'), async (importOriginal) => ({
   createQuery: vi.fn(),
 }));
 vi.mock('@sentry/sveltekit', () => ({ captureException: vi.fn() }));
-vi.mock('@typie/ui/context', () => ({ getAppContext: vi.fn() }));
+vi.mock('@typie/ui/context', () => ({ getAppContext: vi.fn(), tryAppContext: vi.fn() }));
 vi.mock('mixpanel-browser', () => ({ default: { track: vi.fn() } }));
 vi.mock('$app/navigation', () => ({ afterNavigate: vi.fn(), beforeNavigate: vi.fn() }));
 vi.mock('$lib/graphql', () => ({ cache: { invalidate: vi.fn() } }));

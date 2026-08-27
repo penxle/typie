@@ -1,7 +1,7 @@
 import { createMutation } from '@mearie/svelte';
 import * as Sentry from '@sentry/sveltekit';
 import { TypieError } from '@typie/lib/errors';
-import { getContext, setContext } from 'svelte';
+import { createStableContext } from '@typie/ui/context/stable';
 import { unwrapError } from '$lib/graphql/error';
 import { graphql } from '$mearie';
 import type { VariablesOf } from '@mearie/svelte';
@@ -324,13 +324,6 @@ export class NoteOperations {
   }
 }
 
-const NOTE_OPERATIONS_CONTEXT = Symbol('NoteOperations');
+const [getNoteOperationsContext, setNoteOperationsContext] = createStableContext<NoteOperations>('note.NoteOperations');
 
-export function setNoteOperationsContext(operations: NoteOperations): NoteOperations {
-  setContext(NOTE_OPERATIONS_CONTEXT, operations);
-  return operations;
-}
-
-export function getNoteOperationsContext(): NoteOperations {
-  return getContext<NoteOperations>(NOTE_OPERATIONS_CONTEXT);
-}
+export { getNoteOperationsContext, setNoteOperationsContext };

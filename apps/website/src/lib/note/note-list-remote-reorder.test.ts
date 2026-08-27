@@ -9,6 +9,7 @@ const { onTerminalDelete, retainRelatedEntity } = vi.hoisted(() => ({
 }));
 
 vi.mock('@sentry/sveltekit', () => ({ captureException: vi.fn() }));
+vi.mock('./note-mutation', () => ({ getNoteOperationsContext: () => ({ move: vi.fn() }) }));
 vi.mock('./note-sync.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./note-sync.svelte')>()),
   getNoteSyncContext: () => ({ onTerminalDelete, retainRelatedEntity }),
