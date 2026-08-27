@@ -458,35 +458,52 @@
   {/if}
 
   {#if lineages.length > 0 && !readonly}
+    {@const chosenLineage = lineages.find((lineage) => lineage.id === lineageChoice) ?? null}
     <div class={labelClass}>지난 리뷰</div>
-    <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: '12px' })}>
+    <Menu
+      style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.subtle', _expanded: { borderColor: 'border.strong' } })}
+      listStyle={css.raw({ maxHeight: '240px', overflowY: 'auto' })}
+      offset={4}
+      placement="bottom-start"
+      setFullWidth
+    >
+      {#snippet button({ open: expanded })}
+        <span class={shrinkTitleClass}>{chosenLineage === null ? '새로 시작' : lineageRowLabel(chosenLineage)}</span>
+        {#if chosenLineage !== null}
+          <TimeAgo style={timeStyle} timestamp={new Date(chosenLineage.createdAt).getTime()} />
+        {/if}
+        <span class={spacerClass}></span>
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
+      {/snippet}
+
       {#each lineages as lineage (lineage.id)}
-        {@const on = lineageChoice === lineage.id}
-        <button
-          class={css(optionStyle, { borderColor: on ? 'border.strong' : 'border.subtle' })}
-          aria-pressed={on}
-          disabled={lineage.locked}
-          onclick={() => (pickedLineage = lineage.id)}
-          type="button"
-        >
-          <span>{lineageRowLabel(lineage)}</span>
-          <span class={spacerClass}></span>
-          {#if lineage.locked}
-            <span class={timeClass}>진행 중</span>
-          {:else}
-            <TimeAgo style={timeStyle} timestamp={new Date(lineage.createdAt).getTime()} />
-          {/if}
-        </button>
+        <MenuItem disabled={lineage.locked} onclick={() => (pickedLineage = lineage.id)}>
+          <div class={flex({ alignItems: 'center', gap: '8px', flexGrow: '1', minWidth: '0' })}>
+            <span class={ellipsisClass}>{lineageRowLabel(lineage)}</span>
+            {#if lineage.locked}
+              <span class={timeClass}>진행 중</span>
+            {:else}
+              <TimeAgo style={timeStyle} timestamp={new Date(lineage.createdAt).getTime()} />
+            {/if}
+            <div class={css({ flexShrink: '0', size: '14px' })}>
+              {#if lineage.id === lineageChoice}
+                <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+              {/if}
+            </div>
+          </div>
+        </MenuItem>
       {/each}
-      <button
-        class={css(optionStyle, { borderColor: lineageChoice === 'fresh' ? 'border.strong' : 'border.subtle' })}
-        aria-pressed={lineageChoice === 'fresh'}
-        onclick={() => (pickedLineage = 'fresh')}
-        type="button"
-      >
-        <span>새로 시작</span>
-      </button>
-    </div>
+      <MenuItem onclick={() => (pickedLineage = 'fresh')}>
+        <div class={flex({ alignItems: 'center', gap: '8px', flexGrow: '1', minWidth: '0' })}>
+          <span class={ellipsisClass}>새로 시작</span>
+          <div class={css({ flexShrink: '0', size: '14px' })}>
+            {#if lineageChoice === 'fresh'}
+              <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+            {/if}
+          </div>
+        </div>
+      </MenuItem>
+    </Menu>
   {/if}
 
   <div class={labelClass}>검토 깊이</div>
