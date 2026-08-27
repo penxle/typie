@@ -1,4 +1,4 @@
-import { getContext, setContext } from 'svelte';
+import { getContext, setContext, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export type OpenDocument = {
@@ -29,11 +29,13 @@ export class OpenDocumentRegistry {
   }
 
   #notifyReady() {
-    if (!this.#ready()) return;
+    untrack(() => {
+      if (!this.#ready()) return;
 
-    for (const waiter of this.#readyWaiters) {
-      waiter();
-    }
+      for (const waiter of this.#readyWaiters) {
+        waiter();
+      }
+    });
   }
 
   setExpectedPanes(paneIds: readonly string[]) {

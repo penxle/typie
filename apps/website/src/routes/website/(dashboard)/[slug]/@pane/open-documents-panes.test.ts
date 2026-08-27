@@ -31,6 +31,7 @@ vi.mock('./EntityPane.svelte', async () => {
 });
 
 type TestRoot = {
+  refreshPane: () => void;
   replacePane: () => void;
 };
 
@@ -68,6 +69,25 @@ describe('Panes open-document readiness', () => {
       await tick();
 
       expect(registry?.snapshot().documents.map((document) => document.documentId)).toEqual(['D2']);
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  it('같은 페인의 데이터가 갱신되어도 열린 문서 분류가 반복되지 않는다', async () => {
+    let registry: OpenDocumentRegistry | undefined;
+    const component = mount(OpenDocumentsPanesTestRoot, {
+      target: document.body,
+      props: { onRegistry: (value) => (registry = value) },
+    }) as TestRoot;
+
+    try {
+      await tick();
+
+      component.refreshPane();
+      await tick();
+
+      expect(registry?.snapshot().documents.map((document) => document.documentId)).toEqual(['D1']);
     } finally {
       await unmount(component);
     }
