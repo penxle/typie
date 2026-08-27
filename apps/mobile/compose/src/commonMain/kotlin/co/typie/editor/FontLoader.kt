@@ -339,42 +339,41 @@ object FontLoader {
     state.loadOnce(stateMutex, key) {
       var lastErr: Throwable? = null
       for (attempt in 1..attempts) {
-        try {
-          val url = urlOf(baseUrl, fd)
-          val bytes = getOrFetch(url)
-          val committed =
-            try {
-              stateMutex.withLock {
-                if (state.isStale(fk, dispatchGen)) {
-                  false
-                } else {
-                  EditorRegistry.commitResourceUpdate {
-                    val update =
-                      when (fd) {
-                        FontData.Manifest ->
-                          PlatformModule.editorHost.addFontManifest(family, weight, bytes)
-                        FontData.Base ->
-                          PlatformModule.editorHost.addFontBase(family, weight, bytes)
-                        is FontData.Chunk ->
-                          PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
-                      }
-                    state.loaded.add(key)
-                    update
+        for (url in urlsOf(baseUrl, fd)) {
+          try {
+            val bytes = getOrFetch(url)
+            val committed =
+              try {
+                stateMutex.withLock {
+                  if (state.isStale(fk, dispatchGen)) {
+                    false
+                  } else {
+                    EditorRegistry.commitResourceUpdate {
+                      val update =
+                        when (fd) {
+                          FontData.Manifest ->
+                            PlatformModule.editorHost.addFontManifest(family, weight, bytes)
+                          FontData.Base ->
+                            PlatformModule.editorHost.addFontBase(family, weight, bytes)
+                          is FontData.Chunk ->
+                            PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
+                        }
+                      state.loaded.add(key)
+                      update
+                    }
+                    true
                   }
-                  true
                 }
+              } catch (e: Exception) {
+                PlatformModule.diskCache.remove(url)
+                throw e
               }
-            } catch (e: Exception) {
-              PlatformModule.diskCache.remove(url)
-              throw e
-            }
-          return@loadOnce committed
-        } catch (e: Exception) {
-          lastErr = e
-          if (attempt < attempts) {
-            delay(LOAD_RETRY_BASE_MS * (1L shl (attempt - 1)))
+            return@loadOnce committed
+          } catch (e: Exception) {
+            lastErr = e
           }
         }
+        if (attempt < attempts) delay(LOAD_RETRY_BASE_MS * (1L shl (attempt - 1)))
       }
       throw lastErr ?: IllegalStateException("load failed without recorded error")
     }
@@ -387,11 +386,11 @@ object FontLoader {
       is FontData.Chunk -> "chunk:$family:$weight:$hash:${fd.id}"
     }
 
-  private fun urlOf(baseUrl: String, fd: FontData): String =
+  private fun urlsOf(baseUrl: String, fd: FontData): List<String> =
     when (fd) {
-      FontData.Manifest -> "$baseUrl/manifest.v1"
-      FontData.Base -> "$baseUrl/base"
-      is FontData.Chunk -> "$baseUrl/chunks/${fd.id}"
+      FontData.Manifest -> listOf("$baseUrl/manifest.v2", "$baseUrl/manifest.v1")
+      FontData.Base -> listOf("$baseUrl/base")
+      is FontData.Chunk -> listOf("$baseUrl/chunks/${fd.id}")
     }
 
   private suspend fun getOrFetch(url: String): ByteArray {

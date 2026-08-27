@@ -1,4 +1,3 @@
-import { wasm } from '#/utils/wasm-ffi.ts';
 import type { Editor, EditorHost } from '@typie/editor-ffi/server';
 import type { EditorFontFamily } from './font-families.ts';
 
@@ -67,17 +66,29 @@ export async function registerFonts(host: EditorHost, families: readonly EditorF
     ?.free();
 
   const failedManifests = new Set<string>();
-  for (const fam of families) {
-    for (const w of fam.weights) {
-      try {
-        const manifest = await wasm.build_font_manifest({ chunks: w.chunks });
-        host.add_font_manifest(fam.name, w.value, manifest)?.free();
-      } catch (err) {
-        failedManifests.add(`${fam.name}:${w.value}`);
-        console.warn(`[pdf-v2] manifest registration failed for ${fam.name}:${w.value}`, err);
-      }
-    }
-  }
+  await Promise.all(
+    families.flatMap((fam) =>
+      fam.weights.map(async (w) => {
+        let registered = false;
+        let lastError: unknown;
+        for (const url of [`${w.baseUrl}/manifest.v2`, `${w.baseUrl}/manifest.v1`]) {
+          try {
+            const manifest = await getOrFetch(url);
+            host.add_font_manifest(fam.name, w.value, manifest)?.free();
+            registered = true;
+            break;
+          } catch (err) {
+            fetchCache.delete(url);
+            lastError = err;
+          }
+        }
+        if (!registered) {
+          failedManifests.add(`${fam.name}:${w.value}`);
+          console.warn(`[pdf-v2] manifest registration failed for ${fam.name}:${w.value}`, lastError);
+        }
+      }),
+    ),
+  );
 
   return { baseUrlOf: (family, weight) => baseUrls.get(`${family}:${weight}`), failedManifests };
 }

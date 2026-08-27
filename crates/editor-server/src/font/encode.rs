@@ -2,10 +2,8 @@ use editor_macros::ffi;
 use editor_resource::compress_zstd;
 use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use skrifa::raw::collections::IntSet;
 use skrifa::raw::tables::glyf::{Glyf, Glyph};
-use skrifa::raw::tables::gsub::{
-    AlternateSubstFormat1, LigatureSubstFormat1, SingleSubst, SubstitutionSubtables,
-};
 use skrifa::raw::tables::loca::Loca;
 use skrifa::raw::{FontRef, TableProvider};
 use skrifa::{GlyphId, MetadataProvider, Tag};
@@ -29,6 +27,9 @@ pub struct BuiltFont {
     #[serde(with = "serde_bytes")]
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub manifest: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub manifest_v2: Vec<u8>,
 }
 
 pub fn get_font_codepoints(ttf_data: &[u8]) -> Result<Vec<u32>, ServerError> {
@@ -85,7 +86,17 @@ pub fn build_font(
         .maxp()
         .map_err(|e| ServerError::InvalidFont(e.to_string()))?
         .num_glyphs();
-    let gsub_alternates = resolve_gsub_alternates(&font);
+    let gsub_closure = if font.table_data(Tag::new(b"GSUB")).is_some() {
+        let gsub = font
+            .gsub()
+            .map_err(|e| ServerError::InvalidFont(e.to_string()))?;
+        let lookups = gsub
+            .collect_lookups(&IntSet::all())
+            .map_err(|e| ServerError::InvalidFont(e.to_string()))?;
+        Some((gsub, lookups))
+    } else {
+        None
+    };
 
     let mut per_glyph: HashMap<u16, (usize, Vec<u8>)> = HashMap::new();
     let mut composite_deps: HashMap<u16, HashSet<u16>> = HashMap::new();
@@ -175,38 +186,104 @@ pub fn build_font(
     }
 
     let mut chunks: Vec<Vec<u8>> = Vec::new();
+    let mut chunk_render_gids: Vec<HashSet<u16>> = Vec::new();
 
     if split_tag.is_some() {
+        let mut chunk_payload_gids: Vec<HashSet<u16>> = Vec::new();
         for cps in chunk_codepoints {
-            let mut gids_needed: HashSet<u16> = HashSet::new();
+            let mut reachable: HashSet<u16> = HashSet::new();
             for &cp in cps {
                 if let Some(&gid) = cp_to_gid.get(&cp) {
-                    gids_needed.insert(gid);
-                    if let Some(alts) = gsub_alternates.get(&gid) {
-                        gids_needed.extend(alts);
-                    }
+                    reachable.insert(gid);
                 }
             }
 
-            let mut colr_expanded: HashSet<u16> = HashSet::new();
-            for &gid in &gids_needed {
-                if let Some(layers) = colr_layers.get(&gid) {
-                    colr_expanded.extend(layers);
+            if let Some((gsub, lookups)) = &gsub_closure {
+                let mut glyphs: IntSet<GlyphId> = reachable
+                    .iter()
+                    .map(|&gid| GlyphId::new(u32::from(gid)))
+                    .collect();
+                gsub.closure_glyphs(lookups, &mut glyphs)
+                    .map_err(|e| ServerError::InvalidFont(e.to_string()))?;
+                reachable.extend(glyphs.iter().map(|gid| gid.to_u32() as u16));
+            }
+
+            let render_gids: HashSet<u16> = reachable
+                .into_iter()
+                .filter(|&gid| {
+                    gid != 0 && (per_glyph.contains_key(&gid) || colr_layers.contains_key(&gid))
+                })
+                .collect();
+            let payload_gids =
+                expand_render_dependencies(&render_gids, &colr_layers, &composite_deps);
+            chunk_render_gids.push(render_gids);
+            chunk_payload_gids.push(payload_gids);
+        }
+
+        let mut globally_reachable: HashSet<u16> = chunk_codepoints
+            .iter()
+            .flatten()
+            .filter_map(|cp| cp_to_gid.get(cp).copied())
+            .collect();
+        if let Some((gsub, lookups)) = &gsub_closure {
+            let mut glyphs: IntSet<GlyphId> = globally_reachable
+                .iter()
+                .map(|&gid| GlyphId::new(u32::from(gid)))
+                .collect();
+            gsub.closure_glyphs(lookups, &mut glyphs)
+                .map_err(|e| ServerError::InvalidFont(e.to_string()))?;
+            globally_reachable.extend(glyphs.iter().map(|gid| gid.to_u32() as u16));
+        }
+        let owned: HashSet<u16> = chunk_render_gids.iter().flatten().copied().collect();
+        let mut unowned: Vec<u16> = globally_reachable
+            .into_iter()
+            .filter(|gid| {
+                *gid != 0
+                    && !owned.contains(gid)
+                    && (per_glyph.contains_key(gid) || colr_layers.contains_key(gid))
+            })
+            .collect();
+        unowned.sort_unstable();
+
+        if !unowned.is_empty() && chunk_payload_gids.is_empty() {
+            return Err(ServerError::InvalidFont(
+                "split font has renderable glyphs but no chunks".into(),
+            ));
+        }
+
+        let mut chunk_payload_sizes: Vec<usize> = chunk_payload_gids
+            .iter()
+            .map(|gids| {
+                gids.iter()
+                    .filter_map(|gid| per_glyph.get(gid))
+                    .map(|(_, data)| data.len())
+                    .sum()
+            })
+            .collect();
+        for gid in unowned {
+            let chunk_id = chunk_payload_gids
+                .iter()
+                .enumerate()
+                .min_by_key(|(chunk_id, _)| (chunk_payload_sizes[*chunk_id], *chunk_id))
+                .map(|(chunk_id, _)| chunk_id)
+                .expect("non-empty chunks were checked above");
+            chunk_render_gids[chunk_id].insert(gid);
+            let dependencies =
+                expand_render_dependencies(&HashSet::from([gid]), &colr_layers, &composite_deps);
+            for dependency in dependencies {
+                if chunk_payload_gids[chunk_id].insert(dependency) {
+                    chunk_payload_sizes[chunk_id] += per_glyph
+                        .get(&dependency)
+                        .map(|(_, data)| data.len())
+                        .unwrap_or(0);
                 }
             }
-            gids_needed.extend(colr_expanded);
+        }
 
-            let mut expanded: HashSet<u16> = HashSet::new();
-            for &gid in &gids_needed {
-                if let Some(deps) = composite_deps.get(&gid) {
-                    expanded.extend(deps);
-                }
-            }
-            gids_needed.extend(expanded);
-
+        for gids_needed in chunk_payload_gids {
             let mut entries: Vec<(usize, &[u8])> = Vec::new();
             let mut sorted_gids: Vec<u16> = gids_needed.iter().copied().collect();
-            sorted_gids.sort();
+            sorted_gids.sort_unstable();
             for gid in sorted_gids {
                 if let Some((offset, data)) = per_glyph.get(&gid) {
                     entries.push((*offset, data.as_slice()));
@@ -263,14 +340,22 @@ pub fn build_font(
     builder.copy_missing_tables(font);
     let base_data = builder.build();
 
-    let hash = compute_hash(&base_data, &chunks);
-
     let coverage: Vec<Vec<u32>> = chunk_codepoints
         .iter()
         .map(|cps| codepoints_to_ranges(cps))
         .collect();
 
     let manifest = build_font_manifest(&coverage)?;
+    let glyph_chunks: Vec<Vec<u16>> = chunk_render_gids
+        .into_iter()
+        .map(|gids| {
+            let mut gids: Vec<u16> = gids.into_iter().collect();
+            gids.sort_unstable();
+            gids
+        })
+        .collect();
+    let manifest_v2 = build_font_manifest_v2(&coverage, num_glyphs, glyph_chunks)?;
+    let hash = compute_hash(&base_data, &chunks, &manifest_v2);
 
     let base = compress_zstd(&base_data);
     let chunks: Vec<serde_bytes::ByteBuf> = chunks
@@ -284,12 +369,50 @@ pub fn build_font(
         base,
         chunks,
         manifest,
+        manifest_v2,
     })
+}
+
+fn expand_render_dependencies(
+    render_gids: &HashSet<u16>,
+    colr_layers: &HashMap<u16, Vec<u16>>,
+    composite_deps: &HashMap<u16, HashSet<u16>>,
+) -> HashSet<u16> {
+    let mut payload_gids = render_gids.clone();
+    for gid in render_gids {
+        if let Some(layers) = colr_layers.get(gid) {
+            payload_gids.extend(layers);
+        }
+    }
+    let outlined_gids: Vec<u16> = payload_gids.iter().copied().collect();
+    for gid in outlined_gids {
+        if let Some(deps) = composite_deps.get(&gid) {
+            payload_gids.extend(deps);
+        }
+    }
+    payload_gids
 }
 
 const MANIFEST_MAX_BYTES: usize = 1024 * 1024;
 
 pub fn build_font_manifest(coverages: &[Vec<u32>]) -> Result<Vec<u8>, ServerError> {
+    validate_coverages(coverages)?;
+    encode_manifest(editor_resource::FontManifest::from_coverages(coverages))
+}
+
+fn build_font_manifest_v2(
+    coverages: &[Vec<u32>],
+    num_glyphs: u16,
+    glyph_chunks: Vec<Vec<u16>>,
+) -> Result<Vec<u8>, ServerError> {
+    validate_coverages(coverages)?;
+    let manifest = editor_resource::FontManifest::from_coverages(coverages)
+        .with_glyph_chunks(num_glyphs, glyph_chunks)
+        .map_err(|e| ServerError::InvalidFont(format!("invalid glyph chunks: {e:?}")))?;
+    encode_manifest(manifest)
+}
+
+fn validate_coverages(coverages: &[Vec<u32>]) -> Result<(), ServerError> {
     if coverages.len() > 255 {
         return Err(ServerError::InvalidFont(format!(
             "too many chunks: {}",
@@ -325,7 +448,11 @@ pub fn build_font_manifest(coverages: &[Vec<u32>]) -> Result<Vec<u8>, ServerErro
             }
         }
     }
-    let bytes = editor_resource::FontManifest::from_coverages(coverages).to_bytes();
+    Ok(())
+}
+
+fn encode_manifest(manifest: editor_resource::FontManifest) -> Result<Vec<u8>, ServerError> {
+    let bytes = manifest.to_bytes();
     if bytes.len() > MANIFEST_MAX_BYTES {
         return Err(ServerError::InvalidFont(format!(
             "manifest too large: {}",
@@ -371,7 +498,7 @@ fn codepoints_to_ranges(cps: &[u32]) -> Vec<u32> {
     ranges
 }
 
-fn compute_hash(base_data: &[u8], chunks: &[Vec<u8>]) -> String {
+fn compute_hash(base_data: &[u8], chunks: &[Vec<u8>], manifest_v2: &[u8]) -> String {
     use std::hash::Hasher;
     let mut hasher = rapidhash::quality::RapidHasher::default();
     hasher.write(&(base_data.len() as u64).to_be_bytes());
@@ -381,6 +508,8 @@ fn compute_hash(base_data: &[u8], chunks: &[Vec<u8>]) -> String {
         hasher.write(&(chunk.len() as u64).to_be_bytes());
         hasher.write(chunk);
     }
+    hasher.write(&(manifest_v2.len() as u64).to_be_bytes());
+    hasher.write(manifest_v2);
     hex::encode(hasher.finish().to_be_bytes())
 }
 
@@ -407,109 +536,6 @@ fn resolve_composite_deps(loca: &Loca, glyf: &Glyf, gid: u16, num_glyphs: u16) -
     }
 
     result
-}
-
-fn resolve_gsub_alternates(font: &FontRef) -> HashMap<u16, HashSet<u16>> {
-    let mut alternates: HashMap<u16, HashSet<u16>> = HashMap::new();
-    let Ok(gsub) = font.gsub() else {
-        return alternates;
-    };
-
-    let Ok(lookup_list) = gsub.lookup_list() else {
-        return alternates;
-    };
-
-    let Ok(feature_list) = gsub.feature_list() else {
-        return alternates;
-    };
-
-    for feature_record in feature_list.feature_records() {
-        let Ok(feature) = feature_record.feature(feature_list.offset_data()) else {
-            continue;
-        };
-        for lookup_idx in feature.lookup_list_indices() {
-            let Ok(lookup) = lookup_list.lookups().get(lookup_idx.get() as usize) else {
-                continue;
-            };
-            let Ok(subtables) = lookup.subtables() else {
-                continue;
-            };
-            match subtables {
-                SubstitutionSubtables::Single(tables) => {
-                    for table in tables.iter() {
-                        let Ok(table) = table else { continue };
-                        match table {
-                            SingleSubst::Format1(t) => {
-                                let Ok(coverage) = t.coverage() else { continue };
-                                let delta = t.delta_glyph_id();
-                                for gid in coverage.iter() {
-                                    let src = gid.to_u32() as u16;
-                                    let dst = (src as i32 + delta as i32) as u16;
-                                    alternates.entry(src).or_default().insert(dst);
-                                }
-                            }
-                            SingleSubst::Format2(t) => {
-                                let Ok(coverage) = t.coverage() else { continue };
-                                let substitutes = t.substitute_glyph_ids();
-                                for (i, gid) in coverage.iter().enumerate() {
-                                    let src = gid.to_u32() as u16;
-                                    if let Some(dst) = substitutes.get(i) {
-                                        let dst = dst.get().to_u32() as u16;
-                                        alternates.entry(src).or_default().insert(dst);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                SubstitutionSubtables::Alternate(tables) => {
-                    for table in tables.iter() {
-                        let Ok(table) = table else { continue };
-                        let table: AlternateSubstFormat1 = table;
-                        let Ok(coverage) = table.coverage() else {
-                            continue;
-                        };
-                        let alt_sets = table.alternate_sets();
-                        for (i, gid) in coverage.iter().enumerate() {
-                            let src = gid.to_u32() as u16;
-                            if let Ok(alt_set) = alt_sets.get(i) {
-                                for alt_gid in alt_set.alternate_glyph_ids() {
-                                    alternates
-                                        .entry(src)
-                                        .or_default()
-                                        .insert(alt_gid.get().to_u32() as u16);
-                                }
-                            }
-                        }
-                    }
-                }
-                SubstitutionSubtables::Ligature(tables) => {
-                    for table in tables.iter() {
-                        let Ok(table) = table else { continue };
-                        let table: LigatureSubstFormat1 = table;
-                        let Ok(coverage) = table.coverage() else {
-                            continue;
-                        };
-                        let lig_sets = table.ligature_sets();
-                        for (i, gid) in coverage.iter().enumerate() {
-                            let src = gid.to_u32() as u16;
-                            if let Ok(lig_set) = lig_sets.get(i) {
-                                for lig in lig_set.ligatures().iter().flatten() {
-                                    alternates
-                                        .entry(src)
-                                        .or_default()
-                                        .insert(lig.ligature_glyph().to_u32() as u16);
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    alternates
 }
 
 #[cfg(test)]
@@ -639,6 +665,94 @@ mod tests {
     }
 
     #[test]
+    fn gsub_closure_glyphs_are_included_in_chunk() {
+        let chunk_codepoints = vec![vec![u32::from('i')]];
+        let converted = convert_to_glyf(&FontRef::new(CFF_FIXTURE).unwrap()).unwrap();
+        let font = FontRef::new(&converted).unwrap();
+        let mut expected: IntSet<GlyphId> = chunk_codepoints[0]
+            .iter()
+            .filter_map(|&cp| font.charmap().map(cp))
+            .collect();
+        let nominal_count = expected.len();
+        let gsub = font.gsub().unwrap();
+        let lookups = gsub.collect_lookups(&IntSet::all()).unwrap();
+        gsub.closure_glyphs(&lookups, &mut expected).unwrap();
+        assert!(
+            expected.len() > nominal_count,
+            "GSUB 치환이 실제로 발생해야 한다"
+        );
+
+        let loca = font.loca(None).unwrap();
+        let expected: HashSet<u16> = expected
+            .iter()
+            .filter(|gid| {
+                let gid = gid.to_u32() as usize;
+                loca.get_raw(gid).unwrap_or(0) < loca.get_raw(gid + 1).unwrap_or(0)
+            })
+            .map(|gid| gid.to_u32() as u16)
+            .collect();
+        let built = build_font(CFF_FIXTURE, &chunk_codepoints).unwrap();
+        let base = decompress_zstd(&built.base).unwrap();
+        let actual = chunk_gids(&built.chunks[0], &base);
+        let manifest_v2 = editor_resource::FontManifest::from_bytes(
+            &decompress_zstd(&built.manifest_v2).unwrap(),
+        )
+        .unwrap();
+
+        assert!(
+            expected.is_subset(&actual),
+            "누락된 GSUB closure 글리프: {:?}",
+            expected.difference(&actual).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            manifest_v2.num_glyphs(),
+            Some(font.maxp().unwrap().num_glyphs())
+        );
+        assert!(
+            expected
+                .iter()
+                .all(|&gid| manifest_v2.chunk_id_for_glyph(gid).is_some()),
+            "v2 manifest must map every render-ready GSUB closure glyph"
+        );
+    }
+
+    #[test]
+    fn devanagari_shaping_glyphs_are_included_in_chunks_and_manifest() {
+        // HarfBuzz output for the pinned fixture. These are the original missing-glyph
+        // reports; the production path remains script-agnostic.
+        let shaped_cases: &[(&str, &[u16])] =
+            &[("शि", &[594, 58]), ("ष्टो", &[547, 78]), ("त्त", &[506])];
+        let mut codepoints = shaped_cases
+            .iter()
+            .flat_map(|(text, _)| text.chars().map(u32::from))
+            .collect::<Vec<_>>();
+        codepoints.sort_unstable();
+        codepoints.dedup();
+        let chunk_codepoints = vec![codepoints];
+
+        let built = build_font(DEVANAGARI_FIXTURE, &chunk_codepoints).unwrap();
+        let base = decompress_zstd(&built.base).unwrap();
+        let payload_gids = chunk_gids(&built.chunks[0], &base);
+        let manifest_v2 = editor_resource::FontManifest::from_bytes(
+            &decompress_zstd(&built.manifest_v2).unwrap(),
+        )
+        .unwrap();
+
+        for (text, expected_gids) in shaped_cases {
+            assert!(
+                expected_gids.iter().all(|gid| payload_gids.contains(gid)),
+                "{text}의 shaping GID가 청크 payload에 모두 있어야 한다"
+            );
+            assert!(
+                expected_gids
+                    .iter()
+                    .all(|&gid| manifest_v2.chunk_id_for_glyph(gid).is_some()),
+                "{text}의 shaping GID가 v2 manifest에서 청크로 해석되어야 한다"
+            );
+        }
+    }
+
+    #[test]
     fn build_font_manifest_matches_from_coverages() {
         let coverages = vec![vec![0x41, 0x43], vec![0xAC00, 0xAC02]];
         let bytes = build_font_manifest(&coverages).unwrap();
@@ -721,6 +835,10 @@ mod tests {
     const CFF_FIXTURE: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/assets/SourceSans3-Regular.otf"
+    ));
+    const DEVANAGARI_FIXTURE: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/NotoSansDevanagariUI-Regular.ttf"
     ));
 
     #[derive(Default)]

@@ -2,6 +2,9 @@
 08df266400933d3178d081a45f94a08814c3e55b4b7dd2e0ff69cb1329f13ab6  crates/editor-server/assets/SourceSans3-Regular.otf
 3d0dfd6a3a644ab3d462a737923ffac41fb0ae007ce9ba83c24e6bfa76aa56c7  crates/editor-server/assets/SourceSans3VF-Upright.otf
 56af9b9c6715597e458284a474dc118a50a4150e9d547c70f7b4a33c3e6a9328  crates/editor-server/assets/OFL-SourceSans.txt
+# source: google/fonts@a559a6efcfed22bf50219f52ecefcf20b9522408
+c0b105d248337435b876d3a3d19b380c9782e452b15f142a0cf7b10f5d29a280  crates/editor-server/assets/NotoSansDevanagariUI-Regular.ttf
+5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6  crates/editor-server/assets/OFL-NotoDevanagari.txt
 # source: MonadABXY/mona-font@2026.05.25
 7085399a265040fd85306b98e17f361d66eecb3b07e88a1d9eb242e41bb0f3d5  crates/editor-server/assets/Mona12ColorEmoji.ttf
 edc25f105101679128588ab4cde86871d21c882e0abef2a0d3f0143cf496e171  crates/editor-server/assets/OFL-Mona.txt

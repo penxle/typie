@@ -270,10 +270,10 @@ function keyOf(family: string, weight: number, hash: string, fd: FontData): stri
   return `chunk:${family}:${weight}:${hash}:${fd.id}`;
 }
 
-function urlOf(baseUrl: string, fd: FontData): string {
-  if (fd.type === 'manifest') return `${baseUrl}/manifest.v1`;
-  if (fd.type === 'base') return `${baseUrl}/base`;
-  return `${baseUrl}/chunks/${fd.id}`;
+export function fontDataUrls(baseUrl: string, fd: FontData): string[] {
+  if (fd.type === 'manifest') return [`${baseUrl}/manifest.v2`, `${baseUrl}/manifest.v1`];
+  if (fd.type === 'base') return [`${baseUrl}/base`];
+  return [`${baseUrl}/chunks/${fd.id}`];
 }
 
 async function load(
@@ -292,32 +292,33 @@ async function load(
   await loadOnce(state, key, async () => {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= attempts; attempt++) {
-      const url = urlOf(baseUrl, fd);
-      try {
-        const data = await getOrFetch(url, lowPriority);
-
-        if (state.isStale(fk, dispatchGen)) return false;
-
+      for (const url of fontDataUrls(baseUrl, fd)) {
         try {
-          const update =
-            fd.type === 'manifest'
-              ? wasm.add_font_manifest(family, weight, data)
-              : fd.type === 'base'
-                ? wasm.add_font_base(family, weight, data)
-                : wasm.add_font_chunk(family, weight, fd.id, data);
-          fanOutResourceUpdate(update);
+          const data = await getOrFetch(url, lowPriority);
+
+          if (state.isStale(fk, dispatchGen)) return false;
+
+          try {
+            const update =
+              fd.type === 'manifest'
+                ? wasm.add_font_manifest(family, weight, data)
+                : fd.type === 'base'
+                  ? wasm.add_font_base(family, weight, data)
+                  : wasm.add_font_chunk(family, weight, fd.id, data);
+            fanOutResourceUpdate(update);
+          } catch (err) {
+            const cache = await getCache();
+            await cache.delete(url);
+            throw err;
+          }
+          state.loaded.add(key);
+          return true;
         } catch (err) {
-          const cache = await getCache();
-          await cache.delete(url);
-          throw err;
+          lastErr = err;
         }
-        state.loaded.add(key);
-        return true;
-      } catch (err) {
-        lastErr = err;
-        if (attempt < attempts) {
-          await sleep(LOAD_RETRY_BASE_MS * Math.pow(2, attempt - 1));
-        }
+      }
+      if (attempt < attempts) {
+        await sleep(LOAD_RETRY_BASE_MS * Math.pow(2, attempt - 1));
       }
     }
     throw lastErr;

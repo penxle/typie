@@ -1620,6 +1620,7 @@ mod tests {
                     weight,
                     prepare_font_base(compressed).expect("test font must be valid"),
                 )
+                .expect("test font must be compatible")
                 .expect("test font must change resources");
         }
         Resource::from_snapshot(source.snapshot())
@@ -2481,6 +2482,7 @@ mod tests {
                 400,
                 prepare_font_base(&compressed).expect("test font must be valid"),
             )
+            .expect("test font must be compatible")
             .expect("test font must change resources");
         let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let family_id = resource

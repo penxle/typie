@@ -168,6 +168,15 @@ pub(crate) fn measure_list_item(
         .unwrap_or((marker_font_size * 0.8, marker_font_size * 0.2));
 
     let marker_shape = shape_marker(node, &marker_style, resource);
+    if let Some(marker_shape) = &marker_shape {
+        for run in &marker_shape.glyph_runs {
+            ctx.observe_glyphs(
+                run.family_id,
+                run.weight,
+                run.glyphs.iter().map(|glyph| glyph.id),
+            );
+        }
+    }
 
     let measured_glyph_width = marker_shape
         .as_ref()

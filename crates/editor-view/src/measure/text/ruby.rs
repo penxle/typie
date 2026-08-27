@@ -397,6 +397,7 @@ mod tests {
                     'A' as u32, 'A' as u32, 'C' as u32, 'C' as u32,
                 ]]),
             )
+            .expect("primary manifest must be compatible")
             .expect("primary manifest must change resources");
         source
             .add_font_manifest(
@@ -404,6 +405,7 @@ mod tests {
                 700,
                 FontManifest::from_coverages(&[vec!['B' as u32, 'B' as u32]]),
             )
+            .expect("fallback manifest must be compatible")
             .expect("fallback manifest must change resources");
 
         let font = compress_zstd(TEST_FONT);
@@ -411,6 +413,7 @@ mod tests {
         for (family, weight) in [("Primary", 400), ("Fallback", 700)] {
             source
                 .insert_font_base(family, weight, prepare_font_base(&font).unwrap())
+                .expect("font base must be compatible")
                 .expect("font base must change resources");
             source
                 .add_font_chunk(

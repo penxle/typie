@@ -490,7 +490,7 @@ builder.mutationFields((t) => ({
       });
 
       const fontName = postScriptName;
-      const { hash, coverages, base, chunks, manifest } = await processFont(fontName, buffer).catch((err: unknown) => {
+      const { hash, coverages, base, chunks, manifest, manifestV2 } = await processFont(fontName, buffer).catch((err: unknown) => {
         if (isUnsupportedFontFormat(err)) {
           throw new TypieError({ code: 'unsupported_font_format' });
         }
@@ -524,6 +524,15 @@ builder.mutationFields((t) => ({
             Bucket: 'typie-usercontents',
             Key: `${s3Base}/${hash}/manifest.v1`,
             Body: manifest,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/${hash}/manifest.v2`,
+            Body: manifestV2,
             ContentType: 'application/octet-stream',
             Tagging: tagging,
           }),

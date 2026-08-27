@@ -295,6 +295,7 @@ mod tests {
         let mut source = editor_resource::ResourceSource::new_test();
         source
             .insert_font_base("test", 400, prepared)
+            .expect("test font must be compatible")
             .expect("test font must change resources");
         editor_resource::Resource::from_snapshot(source.snapshot())
     }

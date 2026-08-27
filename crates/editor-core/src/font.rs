@@ -146,6 +146,8 @@ pub(crate) fn derive_font_updates_from_ops(
 
 pub(crate) fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
     editor.requested_manifests.clear();
+    editor.shaped_font_inflight.clear();
+    editor.view.take_shaped_glyph_observations();
     editor.pending_font_index = None;
     editor.font_activity = true;
     editor.prefetch_backlog.clear();
@@ -180,6 +182,71 @@ pub(crate) fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
         }
         Ok(())
     })
+}
+
+pub(crate) fn emit_shaped_glyph_requests(editor: &mut Editor) {
+    let observations = editor.view.take_shaped_glyph_observations();
+    if observations.is_empty() {
+        return;
+    }
+    request_shaped_glyphs(editor, observations);
+}
+
+pub(crate) fn request_shaped_glyphs(
+    editor: &mut Editor,
+    observations: Vec<editor_view::glyph_run::ShapedGlyphObservation>,
+) {
+    let mut new_chunks: HashMap<(u16, u16), HashSet<u16>> = HashMap::new();
+    let mut family_names: HashMap<u16, String> = HashMap::new();
+    {
+        let resource = editor.resource.lock().unwrap();
+        for observation in observations {
+            for gid in observation.glyph_ids {
+                let Some(chunk_id) = resource.font_registry.missing_chunk_for_glyph(
+                    observation.family_id,
+                    observation.weight,
+                    gid,
+                ) else {
+                    continue;
+                };
+                let key = (observation.family_id, observation.weight, chunk_id);
+                if editor.shaped_font_inflight.insert(key) {
+                    new_chunks
+                        .entry((observation.family_id, observation.weight))
+                        .or_default()
+                        .insert(chunk_id);
+                    family_names
+                        .entry(observation.family_id)
+                        .or_insert_with(|| {
+                            resource
+                                .font_registry
+                                .family_name_opt(observation.family_id)
+                                .expect("glyph chunk owner has an interned family")
+                                .to_string()
+                        });
+                }
+            }
+        }
+    }
+
+    let mut requests: Vec<_> = new_chunks.into_iter().collect();
+    requests.sort_unstable_by_key(|((family_id, weight), _)| (*family_id, *weight));
+    editor.font_activity |= !requests.is_empty();
+    for ((family_id, weight), chunks) in requests {
+        let mut chunks: Vec<u16> = chunks.into_iter().collect();
+        chunks.sort_unstable();
+        editor.push_event(EditorEvent::FontDataMissing {
+            family: family_names
+                .remove(&family_id)
+                .expect("glyph chunk request has an interned family"),
+            weight,
+            required: chunks
+                .into_iter()
+                .map(|id| FontData::Chunk { id })
+                .collect(),
+            prefetch: Vec::new(),
+        });
+    }
 }
 
 fn invalidate_font_affected(editor: &mut Editor, affected_nodes: &[Dot]) {
@@ -339,6 +406,27 @@ pub(crate) fn flush_font_loads(editor: &mut Editor) {
     }
     let notices = std::mem::take(&mut editor.pending_font_loads);
     editor.font_activity = true;
+    let shaped_chunks: Vec<(u16, u16, u16)> = {
+        let resource = editor.resource.lock().unwrap();
+        notices
+            .iter()
+            .filter_map(|notice| {
+                let FontLoadKind::Chunk(chunk_id) = &notice.kind else {
+                    return None;
+                };
+                let family_id = resource.font_registry.intern_id(&notice.family)?;
+                Some((family_id, notice.weight, *chunk_id))
+            })
+            .collect()
+    };
+    let mut shaped_ready = false;
+    for key in shaped_chunks {
+        let was_inflight = editor.shaped_font_inflight.remove(&key);
+        shaped_ready |= was_inflight;
+    }
+    if shaped_ready {
+        editor.invalidate_render();
+    }
     if editor.pending_fonts.is_empty() {
         editor.pending_font_index = None;
         return;
@@ -432,6 +520,9 @@ impl PrefetchBacklog {
 }
 
 fn fonts_quiescent(editor: &Editor) -> bool {
+    if !editor.shaped_font_inflight.is_empty() {
+        return false;
+    }
     if editor
         .requested_manifests
         .values()

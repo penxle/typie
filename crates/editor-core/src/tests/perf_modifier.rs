@@ -97,6 +97,7 @@ fn make_resource() -> Resource {
                     value,
                     FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
                 )
+                .expect("font manifest must be compatible")
                 .expect("font manifest must change resources");
         }
     }

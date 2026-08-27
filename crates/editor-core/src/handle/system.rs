@@ -110,6 +110,7 @@ mod tests {
                 weight,
                 editor_resource::FontManifest::from_coverages(&[vec![start, end]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         source
     }
@@ -261,6 +262,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -306,6 +308,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -354,6 +357,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -423,6 +427,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -478,6 +483,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -720,6 +726,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -792,6 +799,7 @@ mod tests {
                     vec![0x63, 0x63],
                 ]),
             )
+            .expect("primary manifest must be compatible")
             .expect("primary manifest must change resources");
         source
             .add_font_manifest(
@@ -799,6 +807,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
             )
+            .expect("fallback manifest must be compatible")
             .expect("fallback manifest must change resources");
         let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let mut editor = Editor::new_test_with_resource(state, resource);
@@ -856,6 +865,7 @@ mod tests {
         // Step 3: Load Primary base + chunk 0, then fire FontBaseLoaded — 'A' resolves, 'B' still pending.
         source
             .insert_font_base("Primary", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("Primary", 400, 0, fake_chunk())
@@ -894,6 +904,7 @@ mod tests {
         // Step 4: Load Fallback base + chunk 0, then fire FontBaseLoaded — 'B' resolves.
         source
             .insert_font_base("Fallback", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("Fallback", 400, 0, fake_chunk())
@@ -976,6 +987,7 @@ mod tests {
                     vec![0x43, 0x43],
                 ]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let mut editor = Editor::new_test_with_resource(state, resource);
@@ -1006,6 +1018,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -1141,6 +1154,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
             )
+            .expect("Arial manifest must be compatible")
             .expect("Arial manifest must change resources");
         source
             .add_font_manifest(
@@ -1148,9 +1162,11 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
             )
+            .expect("Pretendard manifest must be compatible")
             .expect("Pretendard manifest must change resources");
         source
             .insert_font_base("Arial", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
             .add_font_chunk("Arial", 400, 0, fake_chunk())
@@ -1220,9 +1236,11 @@ mod tests {
                     vec![0x42, 0x42],
                 ]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -1277,6 +1295,7 @@ mod tests {
         // Load base only — chunk 0 still missing.
         let snapshot = source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         editor
             .resource
@@ -1325,6 +1344,7 @@ mod tests {
         // Load base first — cp still pending (chunk not yet loaded).
         let snapshot = source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         editor
             .resource
@@ -1472,6 +1492,7 @@ mod tests {
         let mut source = test_source_single_chunk("TestFont", 400, "h1", 0x41, 0x41);
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -1873,6 +1894,7 @@ mod tests {
         });
         let snapshot = source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         editor
             .resource
@@ -1943,6 +1965,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("primary manifest must be compatible")
             .expect("primary manifest must change resources");
         source
             .add_font_manifest(
@@ -1950,10 +1973,12 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x42, 0x42]]),
             )
+            .expect("fallback manifest must be compatible")
             .expect("fallback manifest must change resources");
         // Primary fully loaded; 'B' is not in Primary so it falls back to Fallback.
         source
             .insert_font_base("Primary", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
             .add_font_chunk("Primary", 400, 0, fake_chunk())
@@ -1968,6 +1993,7 @@ mod tests {
         // Load the fallback's base only — 'B' now resolves needs_base=false via Fallback.
         let snapshot = source
             .insert_font_base("Fallback", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         editor
             .resource
@@ -2031,6 +2057,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("FontA manifest must be compatible")
             .expect("FontA manifest must change resources");
         source
             .add_font_manifest(
@@ -2038,10 +2065,12 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x5a, 0x5a]]),
             )
+            .expect("FontB manifest must be compatible")
             .expect("FontB manifest must change resources");
         // FontA fully loaded so re-inserting 'A' into p1 raises no missing-data event.
         source
             .insert_font_base("FontA", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
             .add_font_chunk("FontA", 400, 0, fake_chunk())
@@ -2111,6 +2140,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
             )
+            .expect("FontA manifest must be compatible")
             .expect("FontA manifest must change resources");
         source
             .add_font_manifest(
@@ -2118,6 +2148,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x58, 0x58]]),
             )
+            .expect("FontF manifest must be compatible")
             .expect("FontF manifest must change resources");
         let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let mut editor = Editor::new_test_with_resource(state, resource);
@@ -2272,6 +2303,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         editor
             .resource
@@ -2304,6 +2336,7 @@ mod tests {
 
         source
             .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("TestFont", 400, 0, fake_chunk())
@@ -2376,6 +2409,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         editor
             .resource
@@ -2459,6 +2493,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x50, 0x50]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
         let mut editor = Editor::new_test_with_resource(state, resource);
@@ -2515,6 +2550,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         editor
             .resource
@@ -2530,6 +2566,7 @@ mod tests {
         });
         source
             .insert_font_base("FB1", 400, fake_base())
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk("FB1", 400, 0, fake_chunk())

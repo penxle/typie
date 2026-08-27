@@ -72,10 +72,11 @@ export const backfillFont = async ({ row, needsV2, needsManifest }: BackfillTarg
     const buffer = await decompressZstd(original);
 
     try {
-      const { hash, coverages, base, chunks, manifest } = await processFont(row.postScriptName, buffer);
+      const { hash, coverages, base, chunks, manifest, manifestV2 } = await processFont(row.postScriptName, buffer);
       await Promise.all([
         putObject(`${s3Base}/${hash}/base`, base, 'application/octet-stream', tagging),
         putObject(`${s3Base}/${hash}/manifest.v1`, manifest, 'application/octet-stream', tagging),
+        putObject(`${s3Base}/${hash}/manifest.v2`, manifestV2, 'application/octet-stream', tagging),
         ...chunks.map((data, id) => putObject(`${s3Base}/${hash}/chunks/${id}`, data, 'application/octet-stream', tagging)),
       ]);
       // DB hash가 v2 완료 마커 — 산출물 업로드가 끝난 뒤에만 기록한다.

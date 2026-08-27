@@ -377,6 +377,7 @@ pub struct Editor {
     pub(crate) prefetch_backlog: crate::font::PrefetchBacklog,
     pub(crate) font_activity: bool,
     pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
+    pub(crate) shaped_font_inflight: HashSet<(u16, u16, u16)>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
     // Anchored IME window (flat offsets). Keyboards compare the exposed window
@@ -429,6 +430,7 @@ impl Editor {
             prefetch_backlog: crate::font::PrefetchBacklog::default(),
             font_activity: false,
             requested_manifests: HashMap::new(),
+            shaped_font_inflight: HashSet::new(),
             composition_paint: None,
             ime_delete_paint: None,
             ime_window_anchor: None,
@@ -1393,6 +1395,7 @@ impl Editor {
             self.view
                 .reconcile(&self.state, layout_dirty, pending_overlay, gap_phantom)
                 || has_new_ops;
+        crate::font::emit_shaped_glyph_requests(self);
         changes.reconciled_op_count = self.pending_ops.len();
     }
 
@@ -1813,6 +1816,47 @@ impl Editor {
             EditorEvent::StateChanged { mut fields } => {
                 fields.sort_unstable();
                 EditorEvent::StateChanged { fields }
+            }
+            EditorEvent::FontDataMissing {
+                family,
+                weight,
+                required,
+                prefetch,
+            } => {
+                if let Some(EditorEvent::FontDataMissing {
+                    required: pending_required,
+                    prefetch: pending_prefetch,
+                    ..
+                }) = self.pending_events.iter_mut().find(|event| {
+                    matches!(
+                        event,
+                        EditorEvent::FontDataMissing {
+                            family: pending_family,
+                            weight: pending_weight,
+                            ..
+                        } if pending_family == &family && *pending_weight == weight
+                    )
+                }) {
+                    for data in required {
+                        pending_prefetch.retain(|pending| pending != &data);
+                        if !pending_required.contains(&data) {
+                            pending_required.push(data);
+                        }
+                    }
+                    for data in prefetch {
+                        if !pending_required.contains(&data) && !pending_prefetch.contains(&data) {
+                            pending_prefetch.push(data);
+                        }
+                    }
+                    return;
+                }
+
+                EditorEvent::FontDataMissing {
+                    family,
+                    weight,
+                    required,
+                    prefetch,
+                }
             }
             other => other,
         };
@@ -2465,6 +2509,7 @@ impl Editor {
             prefetch_backlog: crate::font::PrefetchBacklog::default(),
             font_activity: false,
             requested_manifests: HashMap::new(),
+            shaped_font_inflight: HashSet::new(),
             composition_paint: None,
             ime_delete_paint: None,
             ime_window_anchor: None,
@@ -3423,6 +3468,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x42]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         editor
             .resource
@@ -3450,6 +3496,120 @@ mod tests {
             )
         });
         assert!(has_data_missing);
+    }
+
+    #[test]
+    fn shaped_glyph_chunk_request_is_deduplicated_and_arrival_only_invalidates_render() {
+        let (state, _) = state! {
+            doc {
+                root { p1: paragraph { text("A") } }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: "Inter".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "inter-400".into(),
+                }],
+            }]))
+            .unwrap();
+        source
+            .add_font_manifest(
+                "Inter",
+                400,
+                editor_resource::FontManifest::from_coverages(&[
+                    vec![0x41, 0x41],
+                    vec![0x42, 0x42],
+                ])
+                .with_glyph_chunks(10, vec![vec![2], vec![7]])
+                .unwrap(),
+            )
+            .unwrap();
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        let family_id = editor
+            .resource
+            .lock()
+            .unwrap()
+            .font_registry
+            .intern_id("Inter")
+            .unwrap();
+        let observation = || editor_view::glyph_run::ShapedGlyphObservation {
+            family_id,
+            weight: 400,
+            glyph_ids: vec![7],
+        };
+
+        crate::font::request_shaped_glyphs(&mut editor, vec![observation()]);
+        let first = std::mem::take(&mut editor.pending_events);
+        assert!(matches!(
+            first.as_slice(),
+            [EditorEvent::FontDataMissing { family, weight: 400, required, prefetch }]
+                if family == "Inter"
+                    && matches!(required.as_slice(), [FontData::Chunk { id: 1 }])
+                    && prefetch.is_empty()
+        ));
+
+        crate::font::request_shaped_glyphs(&mut editor, vec![observation()]);
+        assert!(
+            editor.pending_events.is_empty(),
+            "in-flight chunk is requested once"
+        );
+        assert_eq!(editor.shaped_font_inflight.len(), 1);
+
+        editor.queue_font_load("Inter".into(), 400, crate::font::FontLoadKind::Chunk(1));
+        crate::font::flush_font_loads(&mut editor);
+        assert!(matches!(
+            editor.pending_events.as_slice(),
+            [EditorEvent::RenderInvalidated]
+        ));
+        assert!(editor.shaped_font_inflight.is_empty());
+    }
+
+    #[test]
+    fn font_data_missing_events_for_the_same_font_are_coalesced() {
+        let (state, _) = state! {
+            doc { root { p1: paragraph { text("A") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        editor.push_event(EditorEvent::FontDataMissing {
+            family: "Inter".into(),
+            weight: 400,
+            required: vec![FontData::Base, FontData::Chunk { id: 0 }],
+            prefetch: vec![FontData::Chunk { id: 1 }],
+        });
+        editor.push_event(EditorEvent::FontDataMissing {
+            family: "Inter".into(),
+            weight: 400,
+            required: vec![FontData::Chunk { id: 1 }],
+            prefetch: vec![FontData::Chunk { id: 0 }, FontData::Chunk { id: 2 }],
+        });
+
+        assert!(matches!(
+            editor.pending_events.as_slice(),
+            [EditorEvent::FontDataMissing { family, weight: 400, required, prefetch }]
+                if family == "Inter"
+                    && required == &[FontData::Base, FontData::Chunk { id: 0 }, FontData::Chunk { id: 1 }]
+                    && prefetch == &[FontData::Chunk { id: 2 }]
+        ));
+    }
+
+    #[test]
+    fn vector_export_does_not_own_font_loading() {
+        let (state, _) = state! {
+            doc { root { p1: paragraph { text("A") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.shaped_font_inflight.insert((1, 400, 2));
+
+        assert!(!editor.export_page_vector(0, 1.0).is_empty());
     }
 
     #[test]
@@ -3503,6 +3663,7 @@ mod tests {
                 400,
                 editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         editor
             .resource
@@ -3522,6 +3683,7 @@ mod tests {
                 400,
                 prepare_font_base(compressed_test_font()).unwrap(),
             )
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         let snapshot = source
             .add_font_chunk(
@@ -7120,6 +7282,7 @@ mod tests {
                 400,
                 prepare_font_base(compressed_test_font()).unwrap(),
             )
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         editor
             .resource
@@ -7301,6 +7464,7 @@ mod tests {
                 400,
                 FontManifest::from_coverages(&[vec![0x0000, 0xFFFF]]),
             )
+            .expect("font manifest must be compatible")
             .expect("font manifest must change resources");
         source
             .insert_font_base(
@@ -7308,6 +7472,7 @@ mod tests {
                 400,
                 prepare_font_base(compressed_test_font()).unwrap(),
             )
+            .expect("font base must be compatible")
             .expect("font base must change resources");
         source
     }
@@ -7379,6 +7544,7 @@ mod tests {
                 400,
                 prepare_font_base(&replacement).expect("replacement font must be valid"),
             )
+            .expect("replacement font base must be compatible")
             .expect("replacement font base must change resources");
         hot.receive_resource_update(crate::ResourceUpdate::new(
             snapshot,
