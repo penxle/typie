@@ -667,6 +667,12 @@ export interface ViewportAnchorPoint {
     y: number;
 }
 
+export interface XmlEdit {
+    error: XmlOpErrorInfo | undefined;
+    xml: string;
+    affected: XmlOutline[];
+}
+
 export interface XmlEditResult {
     error: XmlErrorInfo | undefined;
     bundle: Uint8Array;
@@ -685,6 +691,35 @@ export interface XmlErrorInfo {
     dot: string | undefined;
     detail: string;
     message: string;
+}
+
+export interface XmlOpErrorInfo {
+    op: number | undefined;
+    address: string | undefined;
+    info: XmlErrorInfo;
+}
+
+export interface XmlOutline {
+    error: XmlErrorInfo | undefined;
+    head: XmlOutlineRow | undefined;
+    rows: XmlOutlineRow[];
+    total: number;
+    xml: string | undefined;
+}
+
+export interface XmlOutlineAttr {
+    key: string;
+    value: string;
+}
+
+export interface XmlOutlineRow {
+    path: string;
+    name: string;
+    dot: string | undefined;
+    attrs: XmlOutlineAttr[];
+    preview: string | undefined;
+    chars: number | undefined;
+    children: number;
 }
 
 export interface XmlRender {
@@ -991,6 +1026,7 @@ declare class EditorServer {
     static create(icu_data: Uint8Array): EditorServer;
     default_doc_with_preset(root: PlainRootNode, modifiers: Modifier[]): PlainDoc;
     edit_from_xml(graph: Uint8Array, sweep_tombstones: string[], xml: string): XmlEditResult;
+    edit_xml(xml: string, ops_json: string): XmlEdit;
     extract_text(doc: PlainDoc): string;
     get_font_codepoints(ttf_data: Uint8Array): Uint32Array;
     get_font_metadata(data: Uint8Array): FontMetadata;
@@ -998,6 +1034,7 @@ declare class EditorServer {
     materialize(changeset_payloads: Uint8Array): Materialized;
     missing_for(all_changesets: Uint8Array, remote_heads_payload: Uint8Array): Uint8Array;
     outline_text_to_svg(font_data: Uint8Array, text: string): string;
+    outline_xml(xml: string, under: string, depth: number, offset: number, limit: number, full: boolean): XmlOutline;
     /**
      * Returns the total ops count in a Changesets bundle. Used by push light validation.
      */

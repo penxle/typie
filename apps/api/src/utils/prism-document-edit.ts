@@ -6,16 +6,27 @@ import { prism, PrismApiError } from '#/external/prism.ts';
 import { readMergedGraph } from './changeset.ts';
 import { publishBundle } from './document-bundle.ts';
 import {
+  AT_MESSAGE,
   changedOf,
   documentIdOf,
   documentPath,
+  EDIT_TOO_LARGE_MESSAGE,
+  EditDocumentInput,
+  FULL_TOO_LARGE_MESSAGE,
   messageOf,
   NO_FILE_MESSAGE,
   OpenDocumentInput,
+  opErrorMessage,
+  OUTLINE_DEFAULT_LIMIT,
+  OUTLINE_FULL_MAX_CHARS,
+  OutlineDocumentInput,
+  renderAffected,
+  renderOutline,
   REWRITE_FAILED_MESSAGE,
   SAVE_TOO_LARGE_MESSAGE,
   SaveDocumentInput,
   TOO_LARGE_MESSAGE,
+  toRustOps,
 } from './prism-document-edit-core.ts';
 import { DOCUMENT_FORMAT_GUIDE, DOCUMENT_FORMAT_PATH } from './prism-document-format.ts';
 import { ERROR_MESSAGE } from './prism-tool-messages.ts';
@@ -46,6 +57,24 @@ const fileErrorMessage = (err: PrismApiError, tooLargeMessage: string, fallbackM
   });
 
   return fallbackMessage;
+};
+
+const agentFileOf = async (
+  ctx: PrismToolContext,
+  path: string,
+  documentId: string,
+  tooLargeMessage: string,
+): Promise<string | ToolFailure> => {
+  let xml: string | null;
+  try {
+    xml = await prism.getAgentFile(ctx.session.prismAgentId, path);
+  } catch (err) {
+    if (!(err instanceof PrismApiError)) throw err;
+    return toolFailure('error', fileErrorMessage(err, tooLargeMessage, ERROR_MESSAGE, documentId));
+  }
+  if (xml === null) return toolFailure('error', NO_FILE_MESSAGE);
+
+  return xml;
 };
 
 const openDocument: PrismToolHandler = async (ctx, input) => {
@@ -107,14 +136,8 @@ export const saveTargetOf = async (ctx: PrismToolContext, input: unknown): Promi
   const document = documentId === null ? null : await documentRefOf(ctx, documentId);
   if (document === null) return toolFailure('error', NOT_FOUND_DOCUMENT);
 
-  let xml: string | null;
-  try {
-    xml = await prism.getAgentFile(ctx.session.prismAgentId, parsed.data.path);
-  } catch (err) {
-    if (!(err instanceof PrismApiError)) throw err;
-    return toolFailure('error', fileErrorMessage(err, SAVE_TOO_LARGE_MESSAGE, ERROR_MESSAGE, document.documentId));
-  }
-  if (xml === null) return toolFailure('error', NO_FILE_MESSAGE);
+  const xml = await agentFileOf(ctx, parsed.data.path, document.documentId, SAVE_TOO_LARGE_MESSAGE);
+  if (typeof xml !== 'string') return xml;
 
   return { document, path: parsed.data.path, summary: parsed.data.summary, xml };
 };
@@ -174,8 +197,109 @@ const saveDocument: PrismToolHandler = async (ctx, input) => {
   return { ok: true, unchanged, document, path, changed };
 };
 
+const outlineDocument: PrismToolHandler = async (ctx, input) => {
+  const parsed = OutlineDocumentInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+
+  const documentId = documentIdOf(parsed.data.path);
+  const document = documentId === null ? null : await documentRefOf(ctx, documentId);
+  if (document === null) return toolFailure('error', NOT_FOUND_DOCUMENT);
+
+  const xml = await agentFileOf(ctx, parsed.data.path, document.documentId, TOO_LARGE_MESSAGE);
+  if (typeof xml !== 'string') return xml;
+
+  const { under = 'root', depth = 1, offset = 0, limit = OUTLINE_DEFAULT_LIMIT, full = false } = parsed.data;
+  const started = performance.now();
+  const outline = await wasmFfi.use((host) => host.outline_xml(xml, under, depth, offset, limit, full));
+  const wasmMs = Math.round(performance.now() - started);
+  if (outline.error) {
+    log.info('outline-document refused: {documentId} {sessionId} {detail}', {
+      documentId: document.documentId,
+      sessionId: ctx.session.id,
+      detail: outline.error.detail,
+    });
+    return toolFailure('error', messageOf(outline.error));
+  }
+
+  if (outline.xml !== undefined && outline.xml.length > OUTLINE_FULL_MAX_CHARS) {
+    log.info('outline-document full refused: {documentId} {sessionId} {chars}', {
+      documentId: document.documentId,
+      sessionId: ctx.session.id,
+      chars: outline.xml.length,
+    });
+    return toolFailure('error', FULL_TOO_LARGE_MESSAGE);
+  }
+
+  log.info('outline-document: {documentId} {sessionId} {rows} {total} {full} {wasmMs}', {
+    documentId: document.documentId,
+    sessionId: ctx.session.id,
+    rows: outline.rows.length,
+    total: outline.total,
+    full,
+    wasmMs,
+  });
+
+  return { ok: true, document, path: parsed.data.path, text: renderOutline(outline, offset) };
+};
+
+const editDocument: PrismToolHandler = async (ctx, input) => {
+  const parsed = EditDocumentInput.safeParse(input);
+  if (!parsed.success) {
+    const at = parsed.error.issues.some((issue) => issue.message === AT_MESSAGE || issue.path.includes('at'));
+    return toolFailure('error', at ? AT_MESSAGE : ERROR_MESSAGE);
+  }
+
+  const documentId = documentIdOf(parsed.data.path);
+  const document = documentId === null ? null : await documentRefOf(ctx, documentId);
+  if (document === null) return toolFailure('error', NOT_FOUND_DOCUMENT);
+
+  const xml = await agentFileOf(ctx, parsed.data.path, document.documentId, TOO_LARGE_MESSAGE);
+  if (typeof xml !== 'string') return xml;
+
+  const started = performance.now();
+  const ops = JSON.stringify(toRustOps(parsed.data.ops));
+  const result = await wasmFfi.use((host) => host.edit_xml(xml, ops));
+  const wasmMs = Math.round(performance.now() - started);
+  if (result.error) {
+    log.info('edit-document refused: {documentId} {sessionId} {op} {address} {detail}', {
+      documentId: document.documentId,
+      sessionId: ctx.session.id,
+      op: result.error.op ?? null,
+      address: result.error.address ?? null,
+      detail: result.error.info.detail,
+    });
+    return toolFailure('error', opErrorMessage(result.error));
+  }
+
+  try {
+    await prism.writeAgentFiles(ctx.session.prismAgentId, [{ path: parsed.data.path, content: result.xml }]);
+  } catch (err) {
+    if (!(err instanceof PrismApiError)) throw err;
+    return toolFailure('error', fileErrorMessage(err, EDIT_TOO_LARGE_MESSAGE, ERROR_MESSAGE, document.documentId));
+  }
+
+  log.info('edit-document: {documentId} {sessionId} {ops} {bytes} {wasmMs} {totalMs}', {
+    documentId: document.documentId,
+    sessionId: ctx.session.id,
+    ops: parsed.data.ops.length,
+    bytes: Buffer.byteLength(result.xml),
+    wasmMs,
+    totalMs: Math.round(performance.now() - started),
+  });
+
+  return {
+    ok: true,
+    document,
+    path: parsed.data.path,
+    applied: parsed.data.ops.length,
+    text: renderAffected(parsed.data.ops.length, result.affected),
+  };
+};
+
 export const documentEditTools: Record<string, PrismToolHandler> = {
   'open-document': openDocument,
+  'outline-document': outlineDocument,
+  'edit-document': editDocument,
   'save-document': saveDocument,
 };
 

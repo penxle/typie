@@ -47,6 +47,39 @@ pub fn from_xml(input: &str) -> Result<XmlTree, XmlError> {
     Ok(tree)
 }
 
+pub fn from_xml_fragment(input: &str) -> Result<Vec<XmlNode>, XmlError> {
+    let tokens = tokenize(input)?;
+    let mut parser = Parser { tokens, index: 0 };
+    let mut nodes = Vec::new();
+    loop {
+        parser.skip_blank_text();
+        match parser.peek().cloned() {
+            None => break,
+            Some(Token::Open { name, pos, .. }) => {
+                if node_type_of(&name).is_some_and(|t| is_inline_atom(t) || t == NodeType::Unknown)
+                {
+                    return Err(XmlError::at(pos, XmlErrorDetail::FragmentNotBlock));
+                }
+                let (node, _) = parser.element(false)?;
+                nodes.push(node);
+            }
+            Some(Token::Text { pos, .. }) => {
+                return Err(XmlError::at(pos, XmlErrorDetail::FragmentNotBlock));
+            }
+            Some(Token::Close { name, pos }) => {
+                return Err(XmlError::at(
+                    pos,
+                    XmlErrorDetail::CloseWithoutOpen { name, open: None },
+                ));
+            }
+        }
+    }
+    if nodes.is_empty() {
+        return Err(XmlError::new(XmlErrorDetail::FragmentEmpty));
+    }
+    Ok(nodes)
+}
+
 struct Parser {
     tokens: Vec<Token>,
     index: usize,
@@ -968,5 +1001,44 @@ mod tests {
                 element: "unknown".into()
             }
         );
+    }
+
+    #[test]
+    fn a_fragment_is_a_sequence_of_block_elements_without_root_or_base() {
+        let nodes = from_xml_fragment(
+            "\n  <paragraph>a</paragraph>\n<blockquote><paragraph/></blockquote>\n",
+        )
+        .unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes[1].node.as_type(), NodeType::Blockquote);
+        assert_eq!(nodes[1].block_children().count(), 1);
+        let one = from_xml_fragment("<paragraph dot=\"1_7\">x</paragraph>").unwrap();
+        assert_eq!(one[0].dot.map(|d| d.to_string()), Some("1_7".to_owned()));
+    }
+
+    #[test]
+    fn fragments_refuse_emptiness_text_inline_and_root() {
+        let detail_of = |s: &str| *from_xml_fragment(s).unwrap_err().detail;
+        assert_eq!(detail_of(""), XmlErrorDetail::FragmentEmpty);
+        assert_eq!(detail_of("  \n "), XmlErrorDetail::FragmentEmpty);
+        assert_eq!(detail_of("just text"), XmlErrorDetail::FragmentNotBlock);
+        assert_eq!(
+            detail_of("<paragraph/>tail"),
+            XmlErrorDetail::FragmentNotBlock
+        );
+        assert_eq!(detail_of("<hard_break/>"), XmlErrorDetail::FragmentNotBlock);
+        assert!(matches!(
+            detail_of("<bold>x</bold>"),
+            XmlErrorDetail::UnknownElement { .. }
+        ));
+        assert_eq!(detail_of("<root/>"), XmlErrorDetail::MultipleRoots);
+        assert!(matches!(
+            detail_of("<paragraph base=\"x\"/>"),
+            XmlErrorDetail::BaseOnNonRoot
+        ));
+        assert!(matches!(
+            detail_of("</paragraph>"),
+            XmlErrorDetail::CloseWithoutOpen { .. }
+        ));
     }
 }

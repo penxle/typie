@@ -1,7 +1,15 @@
 import { z } from 'zod';
-import type { XmlEditResult, XmlErrorInfo } from '@typie/editor-ffi/server';
+import type { XmlEditResult, XmlErrorInfo, XmlOpErrorInfo, XmlOutline, XmlOutlineRow } from '@typie/editor-ffi/server';
 
 const PATH = /^documents\/([^/]+)\.xml$/;
+
+export const OUTLINE_DEFAULT_LIMIT = 200;
+export const OUTLINE_MAX_LIMIT = 500;
+export const OUTLINE_MAX_DEPTH = 8;
+export const OUTLINE_FULL_MAX_CHARS = 30_000;
+export const EDIT_MAX_OPS = 100;
+export const EDIT_MAX_TARGETS = 100;
+export const AFFECTED_ROW_CAP = 200;
 
 export const OpenDocumentInput = z.object({ id: z.string() });
 export const SaveDocumentInput = z.object({
@@ -16,7 +24,43 @@ export const NO_FILE_MESSAGE = '먼저 open-document로 문서를 여세요.';
 export const TOO_LARGE_MESSAGE = '이 문서는 너무 커서 열 수 없어요.';
 export const SAVE_TOO_LARGE_MESSAGE = '이 문서는 너무 커서 저장할 수 없어요.';
 export const REWRITE_FAILED_MESSAGE = '저장하지 못했어요 — 잠시 뒤 다시 저장하세요.';
+export const EDIT_TOO_LARGE_MESSAGE = '고친 파일이 너무 커요 — 연산을 나눠서 하세요.';
+export const FULL_TOO_LARGE_MESSAGE = '이 블록의 xml이 너무 커요 — under를 더 좁히거나 read로 창을 열어 읽으세요.';
+export const AT_MESSAGE = 'at에는 before·after·first_child·last_child 중 하나만 주세요.';
 const INTERNAL_MESSAGE = '이 편집은 적용할 수 없어요 — 문서를 다시 열고 다시 시도하세요';
+
+export const OutlineDocumentInput = z.object({
+  path: z.string().regex(PATH),
+  under: z.string().min(1).optional(),
+  depth: z.number().int().min(1).max(OUTLINE_MAX_DEPTH).optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().min(1).max(OUTLINE_MAX_LIMIT).optional(),
+  full: z.boolean().optional(),
+});
+
+const address = z.string().min(1);
+const At = z
+  .object({ before: address.optional(), after: address.optional(), first_child: address.optional(), last_child: address.optional() })
+  .refine((at) => Object.values(at).filter((v) => v !== undefined).length === 1, { message: AT_MESSAGE });
+const targets = z.array(address).min(1).max(EDIT_MAX_TARGETS);
+
+const EditOpSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('insert'), xml: z.string(), at: At }),
+  z.object({ op: z.literal('delete'), targets }),
+  z.object({ op: z.literal('move'), targets, at: At }),
+  z.object({ op: z.literal('replace'), target: address, xml: z.string() }),
+  z.object({
+    op: z.literal('set'),
+    targets,
+    attrs: z.array(z.object({ key: z.string().min(1), value: z.string().nullable().optional() })).min(1),
+  }),
+]);
+export type EditOp = z.infer<typeof EditOpSchema>;
+
+export const EditDocumentInput = z.object({ path: z.string().regex(PATH), ops: z.array(EditOpSchema).min(1).max(EDIT_MAX_OPS) });
+
+export const toRustOps = (ops: EditOp[]): unknown[] =>
+  ops.map((op) => (op.op === 'set' ? { ...op, attrs: op.attrs.map(({ key, value }) => ({ key, value: value ?? null })) } : op));
 
 type Detail = Record<string, unknown>;
 
@@ -89,6 +133,17 @@ export const XML_DETAIL_TYPES: readonly string[] = [
   'base_undecodable',
   'base_not_in_history',
   'projection_degraded',
+  'address_invalid',
+  'address_unresolved',
+  'root_not_editable',
+  'root_has_no_siblings',
+  'target_not_container',
+  'move_into_self',
+  'targets_nested',
+  'fragment_empty',
+  'fragment_not_block',
+  'fragment_not_single',
+  'set_key_unknown',
   'internal',
 ];
 
@@ -164,6 +219,17 @@ export const XML_MESSAGES: Partial<Record<string, (d: Detail) => string>> = {
   base_undecodable: () => '`base`를 읽을 수 없어요 — 문서를 다시 여세요',
   base_not_in_history: () => '이 파일은 지금 문서와 이어지지 않아요 — 문서를 다시 여세요',
   projection_degraded: () => '지금은 이 문서를 파일로 고칠 수 없어요 — 작가에게 화면에서 직접 고쳐 달라고 전하세요',
+  address_invalid: (d) => `\`${s(d.value)}\`는 주소가 아니에요 — dot이나 \`3.1.2\` 같은 서수 경로, 또는 \`root\`를 쓰세요`,
+  address_unresolved: (d) => `\`${s(d.value)}\`에 해당하는 블록이 없어요 — outline-document로 지금 주소를 확인하세요`,
+  root_not_editable: () => '`<root>`는 지우거나 바꾸거나 옮길 수 없어요',
+  root_has_no_siblings: () => '`<root>` 앞뒤에는 넣을 수 없어요 — first_child나 last_child를 쓰세요',
+  target_not_container: (d) => `\`<${s(d.element)}>\` 안에는 블록을 넣을 수 없어요 — before나 after로 옆에 넣으세요`,
+  move_into_self: (d) => `\`${s(d.target)}\`을 자기 자신이나 그 안으로 옮길 수 없어요`,
+  targets_nested: (d) => `\`${s(d.inner)}\`은 \`${s(d.outer)}\` 안에 있어요 — 바깥 것만 주세요`,
+  fragment_empty: () => 'xml이 비어 있어요 — 블록 요소를 하나 이상 주세요',
+  fragment_not_block: () => 'xml은 블록 요소로 시작해야 해요 — 글자나 인라인 서식은 문단 안에 넣으세요',
+  fragment_not_single: (d) => `replace의 xml은 요소 하나여야 해요 — 지금은 ${s(d.count)}개예요`,
+  set_key_unknown: (d) => `\`${s(d.key)}\`는 set으로 바꿀 수 없어요 — \`attr:\`·\`mod:\`·\`carry:\`로 시작하는 이름만 돼요`,
   internal: () => INTERNAL_MESSAGE,
 };
 
@@ -176,13 +242,77 @@ const parseDetail = (raw: string): Detail => {
   }
 };
 
-export const messageOf = (info: XmlErrorInfo): string => {
+export const bodyOf = (info: XmlErrorInfo): string => {
   const detail = parseDetail(info.detail);
   const type = typeof detail.type === 'string' ? detail.type : '';
   const body = XML_MESSAGES[type]?.(detail) ?? INTERNAL_MESSAGE;
-  const pos = info.line != null && info.column != null ? `줄 ${info.line} 열 ${info.column}: ` : '';
   const dot = info.dot != null && !body.includes(info.dot) ? ` (dot ${info.dot})` : '';
-  return `${pos}${body}${dot}`;
+  return `${body}${dot}`;
+};
+
+export const messageOf = (info: XmlErrorInfo): string => {
+  const pos = info.line != null && info.column != null ? `줄 ${info.line} 열 ${info.column}: ` : '';
+  return `${pos}${bodyOf(info)}`;
+};
+
+export const opErrorMessage = (error: XmlOpErrorInfo): string => {
+  const prefix = error.op == null ? error.address : `ops[${error.op}]`;
+  return prefix === undefined ? messageOf(error.info) : `${prefix}: ${bodyOf(error.info)}`;
+};
+
+export const renderRow = (row: XmlOutlineRow): string => {
+  const dot = row.dot === undefined ? '' : ` dot=${row.dot}`;
+  const attrs = row.attrs.map((attr) => ` ${attr.key}="${attr.value}"`).join('');
+  const preview = row.preview === undefined || row.preview === '' ? '' : ` ${row.preview}`;
+  const chars = row.chars === undefined ? '' : ` (${row.chars}자)`;
+  const children = row.children > 0 ? ` 자식 ${row.children}` : '';
+  return `${row.path} <${row.name}${dot}${attrs}>${preview}${chars}${children}`;
+};
+
+export const renderOutline = (outline: XmlOutline, offset: number): string => {
+  if (outline.xml !== undefined) return outline.xml;
+
+  const lines: string[] = [];
+  if (outline.rows.length === 0) {
+    lines.push(outline.total === 0 ? '[전체 0행] 이 아래에는 블록이 없어요' : `[past end: offset ${offset}, 전체 ${outline.total}행]`);
+  } else {
+    const end = offset + outline.rows.length;
+    const note = end < outline.total ? ` (상한으로 잘림 — offset=${end}로 이어 읽으세요)` : '';
+    lines.push(`[${offset}~${end - 1} / 전체 ${outline.total}행]${note}`);
+  }
+
+  if (outline.head !== undefined) lines.push(renderRow(outline.head));
+  for (const row of outline.rows) lines.push(renderRow(row));
+
+  return lines.join('\n');
+};
+
+export const renderAffected = (applied: number, affected: XmlOutline[]): string => {
+  const lines = [`${applied}개 연산을 적용했어요.`];
+  let shown = 0;
+  let capped = false;
+
+  for (const parent of affected) {
+    if (shown >= AFFECTED_ROW_CAP) {
+      capped = true;
+      break;
+    }
+    lines.push('');
+    if (parent.head !== undefined) lines.push(renderRow(parent.head));
+    for (const row of parent.rows) {
+      if (shown >= AFFECTED_ROW_CAP) {
+        capped = true;
+        break;
+      }
+      lines.push(renderRow(row));
+      shown += 1;
+    }
+    if (capped) break;
+  }
+
+  if (capped) lines.push(`(행이 많아 ${AFFECTED_ROW_CAP}행에서 줄였어요 — 나머지는 outline-document로 보세요)`);
+
+  return lines.join('\n');
 };
 
 export const changedOf = (
