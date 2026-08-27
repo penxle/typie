@@ -24,7 +24,7 @@
   import type { ToolCardProps } from '../tools/index.ts';
   import type { LineageOption } from './lineage-view.ts';
 
-  let { message, sessionId, open, resolve }: ToolCardProps = $props();
+  let { message, sessionId, open, disabled, resolve }: ToolCardProps = $props();
 
   const openDocuments = getOpenDocuments();
   const documents = $derived(openDocuments.snapshot().documents);
@@ -162,7 +162,7 @@
 
   $effect(() => {
     const documentId = selected?.documentId ?? null;
-    if (!open || documentId === null) {
+    if (!open || disabled || documentId === null) {
       return;
     }
 
