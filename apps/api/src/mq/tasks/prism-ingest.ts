@@ -17,7 +17,7 @@ import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, should
 import { serveTool } from '#/utils/prism-serve.ts';
 import { resolvedToolCallIds, toolResolverOf } from '#/utils/prism-tool-calls.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
-import { ensureIngest, shutdown } from '../prism-queue.ts';
+import { ensureIngest, LOCK_LOST, shutdown } from '../prism-queue.ts';
 import type { EventFrame, ParkedEvent, ParkedOptions, ParkedScope, StreamFrame, TurnLive } from '@typie/prism';
 import type { Job } from 'bullmq';
 import type { Transaction } from '#/db/index.ts';
@@ -437,7 +437,10 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
 
       const context = event.context;
       if (context !== null && plan.sealTurn) {
-        await clearLive([...live].filter(([, turn]) => sealTurn(turn, context) === null).map(([field]) => field));
+        // 이 인스턴스가 못 본 델타(이전 펌프 인스턴스가 쓴 필드)도 봉인과 함께 지운다 — Map만 보면 stale 스냅샷이 남는다
+        const fields = new Set([...live].filter(([, turn]) => sealTurn(turn, context) === null).map(([field]) => field));
+        if (context.agent !== undefined) fields.add(liveFieldKey(scope, context.agent.id));
+        await clearLive([...fields]);
       }
 
       if (plan.clearLive) await clearLiveScope();
@@ -591,6 +594,11 @@ export const processIngestJob = async (
 
     const outcome = await runPump(ctx);
     if (outcome === 'relocate') {
+      if (signal?.reason === LOCK_LOST) {
+        // 락을 잃은 잡은 이미 다른 워커가 이어받았다 — 옮길 것도 없고 옮길 락도 없다
+        log.warn('prism ingest yielded after lock loss: {logKey}', { logKey: job.data.logKey });
+        return;
+      }
       await job.moveToDelayed(Date.now() + 500, token);
       throw new DelayedError();
     }

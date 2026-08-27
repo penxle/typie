@@ -25,6 +25,7 @@ export const prismQueue = new Queue<{ logKey: string }>(PRISM_LANE, {
 });
 
 export const shutdown = new AbortController();
+export const LOCK_LOST = 'lock-lost';
 
 export const ensureIngest = async (target: IngestTarget): Promise<void> => {
   const logKey = logKeyOf(target);
