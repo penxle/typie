@@ -21,6 +21,11 @@ test('SSE 파서는 분절 청크를 이어 붙이고, event 없는 프레임(�
 
 test('parseStreamFrame은 프레임 4종을 판별하고, 깨진 프레임은 던진다', () => {
   assert.deepEqual(parseStreamFrame({ event: 'heartbeat', data: '{}' }), { type: 'heartbeat' });
+  assert.deepEqual(parseStreamFrame({ event: 'heartbeat', data: '{"seq":12,"activations":2}' }), {
+    type: 'heartbeat',
+    seq: 12,
+    activations: 2,
+  });
   assert.deepEqual(parseStreamFrame({ event: 'sync', data: '{"seq":9}' }), { type: 'sync', seq: 9 });
   const delta = parseStreamFrame({
     event: 'turn.delta',

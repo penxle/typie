@@ -47,6 +47,7 @@ export const DeltaFrameSchema = z.union([
 export type DeltaFrame = z.infer<typeof DeltaFrameSchema>;
 
 export const SyncDataSchema = z.object({ seq: z.number() });
+export const HeartbeatDataSchema = z.object({ seq: z.number().int().optional(), activations: z.number().int().optional() });
 
 const JsonText = z.string().transform((text, ctx): unknown => {
   try {
@@ -58,7 +59,11 @@ const JsonText = z.string().transform((text, ctx): unknown => {
 });
 
 export const StreamFrameSchema = z.union([
-  z.object({ event: z.literal('heartbeat') }).transform(() => ({ type: 'heartbeat' }) as const),
+  z.object({ event: z.literal('heartbeat'), data: JsonText.pipe(HeartbeatDataSchema).optional() }).transform(({ data }) => ({
+    type: 'heartbeat' as const,
+    ...(data?.seq !== undefined && { seq: data.seq }),
+    ...(data?.activations !== undefined && { activations: data.activations }),
+  })),
   z
     .object({ event: z.literal('sync'), data: JsonText.pipe(SyncDataSchema) })
     .transform(({ data }) => ({ type: 'sync', seq: data.seq }) as const),
@@ -114,12 +119,14 @@ export const WorkflowStateSchema = z.object({
     usage: WorkflowUsageSchema.nullable(),
     startedAt: z.number(),
     finishedAt: z.number().nullable(),
+    activations: z.number().int().optional(),
   }),
   invocations: z.array(InvocationSummarySchema),
 });
 export type WorkflowState = z.infer<typeof WorkflowStateSchema>;
 
 export const AgentStateSchema = z.object({
+  agent: z.object({ activations: z.number().int().optional() }).optional(),
   runs: z.array(RunSummarySchema),
   pending: z.object({ toolCallId: z.string(), tool: z.string(), input: z.unknown(), data: z.unknown() }).nullable(),
   invocations: z.array(InvocationSummarySchema),

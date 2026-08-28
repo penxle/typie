@@ -10,6 +10,8 @@ import {
   parseLogKey,
   planEvent,
   shouldStop,
+  STALE_BEATS,
+  staleBeats,
 } from './prism-ingest-core.ts';
 import type { EventFrame, ProjectedDeltaFrame, ProjectedStreamFrame, TurnContext, TurnLive } from '@typie/prism';
 import type { DomainOp } from './prism-ingest-core.ts';
@@ -393,4 +395,14 @@ test('프레임 게이트는 seq로 거른 중복 이벤트로는 봉인을 갱�
   };
   assert.equal(gate.accept(late), false);
   assert.equal(gate.accept({ type: 'delta', delta: { context: t2, channel: 'text', offset: 0, data: 'x' } }), true);
+});
+
+test('staleBeats — 라이브에서 비콘 seq가 커서를 앞서는 연속 박동만 세고, 이벤트가 따라잡으면 0으로 돌아간다', () => {
+  assert.equal(staleBeats(0, 480, 475, true), 1);
+  assert.equal(staleBeats(1, 480, 475, true), 2);
+  assert.equal(staleBeats(2, 480, 480, true), 0); // 커서가 따라잡음
+  assert.equal(staleBeats(1, 480, 475, false), 0); // 재생 중(sync 전)은 세지 않는다
+  assert.equal(staleBeats(1, undefined, 475, true), 0); // 구 형식 하트비트(비콘 없음)
+  assert.equal(staleBeats(0, 475, 475, true), 0);
+  assert.ok(STALE_BEATS >= 2); // 커밋→발행 사이 한 박동 창은 정상이다
 });

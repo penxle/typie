@@ -13,7 +13,17 @@ import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { prismApps } from '#/utils/prism-apps.ts';
 import { chargePrismCredit } from '#/utils/prism-credit.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
-import { absentDelay, liveFieldKey, PARKED_KINDS, parseLogKey, planEvent, shouldStop } from '#/utils/prism-ingest-core.ts';
+import {
+  absentDelay,
+  liveFieldKey,
+  logKeyOf,
+  PARKED_KINDS,
+  parseLogKey,
+  planEvent,
+  shouldStop,
+  STALE_BEATS,
+  staleBeats,
+} from '#/utils/prism-ingest-core.ts';
 import { serveTool } from '#/utils/prism-serve.ts';
 import { resolvedToolCallIds, toolResolverOf } from '#/utils/prism-tool-calls.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
@@ -30,12 +40,14 @@ const IDLE_MS = 45_000;
 const RECONNECT_DELAY_MS = 1000;
 const LIVE_TTL_SECONDS = 120;
 const LIVE_TTL_REFRESH_MS = 30_000;
+const GENERATION_CHECK_MS = 60_000;
 
 type SessionRef = { id: string; prismAgentId: string; userId: string; title: string | null };
 
 type PumpOutcome = 'done' | 'relocate';
 
 class StopPump extends Error {}
+class StalePump extends Error {}
 
 const sleep = async (ms: number, signal: AbortSignal): Promise<void> => {
   try {
@@ -454,6 +466,15 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     for (const wake of after) await wake();
   };
 
+  const readGeneration = async (): Promise<number | null> => {
+    if (target.kind === 'agent') {
+      const state = await prism.getAgent(session.prismAgentId);
+      return state.agent?.activations ?? null;
+    }
+    const state = await prism.getWorkflow(requireWorkflow().prismWorkflowId);
+    return state.workflow.activations ?? null;
+  };
+
   for (;;) {
     if (signal.aborted) return 'relocate';
 
@@ -466,12 +487,30 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
       absent = 0;
       absentSince = null;
 
+      const generation = await readGeneration();
+      const stale = new AbortController();
+      let staleReason: string | null = null;
+      const watchdog = setInterval(() => {
+        void readGeneration()
+          .then((current) => {
+            if (generation === null || current === null || current === generation || stale.signal.aborted) return;
+            staleReason = `generation ${generation} -> ${current}`;
+            stale.abort();
+          })
+          .catch(() => null);
+      }, GENERATION_CHECK_MS);
+      let beats = 0;
+
       const outcome = await pumpSse({
         stream,
         idleMs: IDLE_MS,
-        signal,
+        signal: AbortSignal.any([signal, stale.signal]),
         onFrame: async (frame) => {
-          if (frame.type === 'heartbeat') return;
+          if (frame.type === 'heartbeat') {
+            beats = staleBeats(beats, frame.seq, cursor, synced);
+            if (beats >= STALE_BEATS) throw new StalePump(`beacon seq ${frame.seq} > cursor ${cursor} for ${beats} beats`);
+            return;
+          }
 
           if (frame.type === 'delta') {
             await onDelta(frame);
@@ -485,15 +524,31 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
 
           if (await stopNow()) throw new StopPump();
         },
-      }).catch((err: unknown) => {
-        if (err instanceof StopPump) return 'stopped' as const;
-        throw err;
-      });
+      })
+        .catch((err: unknown) => {
+          if (err instanceof StopPump) return 'stopped' as const;
+          if (err instanceof StalePump) {
+            staleReason = err.message;
+            return 'stale' as const;
+          }
+          throw err;
+        })
+        .finally(() => clearInterval(watchdog));
 
       if (outcome === 'stopped') return 'done';
-      if (outcome === 'aborted') return 'relocate';
-      if (outcome === 'closed' && target.kind === 'workflow' && ctx.workflow?.state !== 'RUNNING') return 'done';
-      log.warn('prism stream ended before stop condition, reconnecting: {key} (seq {cursor})', { key: target.kind, cursor });
+      if (outcome === 'aborted' && signal.aborted) return 'relocate';
+      if (outcome === 'aborted' || outcome === 'stale') {
+        log.warn('prism stream stale, reconnecting: {key} {logKey} (seq {cursor}) {reason}', {
+          key: target.kind,
+          logKey: logKeyOf(target),
+          cursor,
+          reason: staleReason,
+        });
+      } else if (outcome === 'closed' && target.kind === 'workflow' && ctx.workflow?.state !== 'RUNNING') {
+        return 'done';
+      } else {
+        log.warn('prism stream ended before stop condition, reconnecting: {key} (seq {cursor})', { key: target.kind, cursor });
+      }
     } catch (err) {
       if (signal.aborted) return 'relocate';
       if (!(err instanceof PrismApiError)) throw err;
