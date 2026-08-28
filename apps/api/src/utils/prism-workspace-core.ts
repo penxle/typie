@@ -70,11 +70,13 @@ export type EntityRef =
 export const BATCH_MAX = 50;
 const batch = <T extends z.ZodType>(item: T) => z.array(item).min(1).max(BATCH_MAX);
 
+const placement = { after: z.string().optional(), before: z.string().optional() };
+
 export const CreateFoldersInput = z.object({
-  items: batch(z.object({ name: z.string().min(1).max(100), parentFolderId: z.string().optional() })),
+  items: batch(z.object({ name: z.string().min(1).max(100), parentFolderId: z.string().optional(), ...placement })),
 });
 export const DeleteEntitiesInput = z.object({ ids: batch(z.string()) });
-export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional() })) });
+export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional(), ...placement })) });
 export const UpdateFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
 const titleField = z
   .string()
@@ -83,7 +85,7 @@ const titleField = z
 export const UpdateDocumentsInput = z.object({
   items: batch(z.object({ documentId: z.string(), title: titleField.optional(), subtitle: titleField.optional() })),
 });
-export const MoveEntitiesInput = z.object({ ids: batch(z.string()), folderId: z.string().optional() });
+export const MoveEntitiesInput = z.object({ ids: batch(z.string()), folderId: z.string().optional(), ...placement });
 export const DuplicateDocumentsInput = z.object({ ids: batch(z.string()) });
 export const UpdateIconsInput = z.object({
   items: batch(z.object({ id: z.string(), icon: z.string().optional(), iconColor: z.string().optional() })),
