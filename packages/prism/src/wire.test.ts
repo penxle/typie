@@ -4,6 +4,12 @@ import { AgentStateSchema, StreamFrameSchema, WorkflowStateSchema } from './wire
 describe('StreamFrameSchema', () => {
   it('프레임 4종을 판별한다', () => {
     expect(StreamFrameSchema.parse({ event: 'heartbeat', data: '{}' })).toEqual({ type: 'heartbeat' });
+    expect(StreamFrameSchema.parse({ event: 'heartbeat', data: '{"seq":475,"activations":3}' })).toEqual({
+      type: 'heartbeat',
+      seq: 475,
+      activations: 3,
+    });
+    expect(StreamFrameSchema.parse({ event: 'heartbeat' })).toEqual({ type: 'heartbeat' });
     expect(StreamFrameSchema.parse({ event: 'sync', data: '{"seq":9}' })).toEqual({ type: 'sync', seq: 9 });
 
     const delta = StreamFrameSchema.parse({

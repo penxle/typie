@@ -146,6 +146,11 @@ export const planEvent = (scope: ParkedScope, event: EventFrame, cursor: number)
 export const shouldStop = (state: { synced: boolean; open: boolean; parked: boolean }): boolean =>
   state.synced && (!state.open || state.parked);
 
+export const STALE_BEATS = 2;
+
+export const staleBeats = (count: number, beatSeq: number | undefined, cursor: number, synced: boolean): number =>
+  synced && beatSeq !== undefined && beatSeq > cursor ? count + 1 : 0;
+
 const ABSENT_BASE_MS = 1000;
 const ABSENT_MAX_MS = 30_000;
 const ABSENT_GIVE_UP_MS = 5 * 60_000;
