@@ -109,6 +109,20 @@ test('입력 미러: create-folders', () => {
   assert.equal(CreateFoldersInput.safeParse({ items: [] }).success, false);
   assert.equal(CreateFoldersInput.safeParse({ items: Array.from({ length: 51 }, () => ({ name: '초고' })) }).success, false);
   assert.equal(CreateFoldersInput.safeParse({ name: '초고' }).success, false);
+  assert.deepEqual(
+    CreateFoldersInput.parse({
+      items: [
+        { name: '초고', after: 'DOC0' },
+        { name: '퇴고', before: 'FLDR0', parentFolderId: 'FLDR1' },
+      ],
+    }),
+    {
+      items: [
+        { name: '초고', after: 'DOC0' },
+        { name: '퇴고', before: 'FLDR0', parentFolderId: 'FLDR1' },
+      ],
+    },
+  );
 });
 
 test('입력 미러: delete-entities', () => {
@@ -191,6 +205,9 @@ test('입력 미러: entity·document 계열', () => {
   assert.deepEqual(CreateDocumentsInput.parse({ items: [{ folderId: 'FLDR0' }, {}] }), { items: [{ folderId: 'FLDR0' }, {}] });
   assert.equal(CreateDocumentsInput.safeParse({}).success, false);
   assert.equal(CreateDocumentsInput.safeParse({ items: [] }).success, false);
+  assert.deepEqual(CreateDocumentsInput.parse({ items: [{ after: 'DOC0' }, { before: 'DOC0', folderId: 'FLDR0' }] }), {
+    items: [{ after: 'DOC0' }, { before: 'DOC0', folderId: 'FLDR0' }],
+  });
 
   assert.deepEqual(UpdateFoldersInput.parse({ items: [{ folderId: 'FLDR0', name: '초고' }] }), {
     items: [{ folderId: 'FLDR0', name: '초고' }],
@@ -219,6 +236,12 @@ test('입력 미러: entity·document 계열', () => {
   assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'] }), { ids: ['E1'] });
   assert.equal(MoveEntitiesInput.safeParse({ ids: [] }).success, false);
   assert.equal(MoveEntitiesInput.safeParse({ ids: Array.from({ length: 51 }, (_, i) => `E${i}`) }).success, false);
+  assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'], after: 'DOC0' }), { ids: ['E1'], after: 'DOC0' });
+  assert.deepEqual(MoveEntitiesInput.parse({ ids: ['E1'], before: 'DOC0', folderId: 'FLDR0' }), {
+    ids: ['E1'],
+    before: 'DOC0',
+    folderId: 'FLDR0',
+  });
 
   assert.deepEqual(DuplicateDocumentsInput.parse({ ids: ['DOC0', 'DOC1'] }), { ids: ['DOC0', 'DOC1'] });
   assert.equal(DuplicateDocumentsInput.safeParse({ ids: [] }).success, false);

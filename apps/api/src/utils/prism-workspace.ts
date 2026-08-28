@@ -4,7 +4,7 @@ import { DocumentCommentState, DocumentCommentThreadState, EntityState, NoteStat
 import { TypieError } from '@typie/lib/errors';
 import { toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
@@ -15,6 +15,7 @@ import {
   Entities,
   EntityGoals,
   first,
+  firstOrThrow,
   Folders,
   NoteEntities,
   Notes,
@@ -681,6 +682,94 @@ const scopedNotes = async (ctx: PrismToolContext, noteIds: string[]): Promise<bo
   return rows.length === unique.length;
 };
 
+const NOT_FOUND_ANCHOR = '기준으로 준 문서나 폴더를 찾지 못했어요 — list-entities로 다시 확인하세요.';
+const PLACEMENT_BOTH = 'after와 before는 하나만 주세요.';
+const PLACEMENT_FOLDER_MISMATCH = '기준 항목이 그 폴더 안에 있지 않아요 — folderId를 빼거나 기준 항목이 든 폴더를 주세요.';
+const PLACEMENT_SELF = '옮길 것 자체를 기준으로 삼을 수 없어요.';
+
+type PlacementInput = { after?: string; before?: string };
+type Placement = { parentEntityId: string | null; anchorEntityId: string | null; lowerOrder: string | null; upperOrder: string | null };
+
+const lastOrderIn = async (ctx: PrismToolContext, parentEntityId: string | null): Promise<string | null> =>
+  await ctx.executor
+    .select({ order: Entities.order })
+    .from(Entities)
+    .where(and(eq(Entities.siteId, ctx.siteId), parentEntityId ? eq(Entities.parentId, parentEntityId) : isNull(Entities.parentId)))
+    .orderBy(desc(Entities.order))
+    .limit(1)
+    .then(first)
+    .then((row) => row?.order ?? null);
+
+const placementOf = async (
+  ctx: PrismToolContext,
+  input: PlacementInput,
+  parentEntityId: string | undefined,
+): Promise<Placement | { message: string }> => {
+  if (input.after !== undefined && input.before !== undefined) return { message: PLACEMENT_BOTH };
+  const side = input.after === undefined ? (input.before === undefined ? null : 'before') : 'after';
+  if (side === null) return { parentEntityId: parentEntityId ?? null, anchorEntityId: null, lowerOrder: null, upperOrder: null };
+
+  const anchorId = side === 'after' ? input.after : input.before;
+  if (anchorId === undefined) return { message: NOT_FOUND_ANCHOR };
+  const resolved = await resolveEntityIdMap(ctx, [anchorId]);
+  const anchorEntityId = resolved?.get(anchorId);
+  if (anchorEntityId === undefined) return { message: NOT_FOUND_ANCHOR };
+
+  const anchor = await ctx.executor
+    .select({ parentId: Entities.parentId, order: Entities.order })
+    .from(Entities)
+    .where(eq(Entities.id, anchorEntityId))
+    .then(firstOrThrow);
+  if (parentEntityId !== undefined && parentEntityId !== anchor.parentId) return { message: PLACEMENT_FOLDER_MISMATCH };
+
+  const neighbor = await ctx.executor
+    .select({ order: Entities.order })
+    .from(Entities)
+    .where(
+      and(
+        eq(Entities.siteId, ctx.siteId),
+        anchor.parentId ? eq(Entities.parentId, anchor.parentId) : isNull(Entities.parentId),
+        side === 'after' ? gt(Entities.order, anchor.order) : lt(Entities.order, anchor.order),
+      ),
+    )
+    .orderBy(side === 'after' ? asc(Entities.order) : desc(Entities.order))
+    .limit(1)
+    .then(first);
+
+  return side === 'after'
+    ? { parentEntityId: anchor.parentId, anchorEntityId, lowerOrder: anchor.order, upperOrder: neighbor?.order ?? null }
+    : { parentEntityId: anchor.parentId, anchorEntityId, lowerOrder: neighbor?.order ?? null, upperOrder: anchor.order };
+};
+
+const placementsOf = async (
+  ctx: PrismToolContext,
+  items: { input: PlacementInput; parentEntityId: string | undefined }[],
+): Promise<Placement[] | { message: string }> => {
+  const byKey = new Map<string, Placement>();
+  const placements: Placement[] = [];
+  for (const item of items) {
+    const key = `${item.input.after ?? ''}|${item.input.before ?? ''}|${item.parentEntityId ?? ''}`;
+    let placement = byKey.get(key);
+    if (placement === undefined) {
+      const resolved = await placementOf(ctx, item.input, item.parentEntityId);
+      if ('message' in resolved) return resolved;
+      placement = resolved;
+      byKey.set(key, placement);
+    }
+    placements.push(placement);
+  }
+
+  return placements;
+};
+
+const orderOf = async (ctx: PrismToolContext, entityId: string): Promise<string> =>
+  await ctx.executor
+    .select({ order: Entities.order })
+    .from(Entities)
+    .where(eq(Entities.id, entityId))
+    .then(firstOrThrow)
+    .then((row) => row.order);
+
 const createFolders = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = CreateFoldersInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
@@ -691,19 +780,32 @@ const createFolders = async (ctx: PrismToolContext, input: unknown) => {
   );
   if (parents === null) return toolFailure('error', '상위 폴더를 찾지 못했어요 — list-entities로 폴더를 다시 확인하세요.');
 
+  const placements = await placementsOf(
+    ctx,
+    parsed.data.items.map((item) => ({
+      input: item,
+      parentEntityId: item.parentFolderId === undefined ? undefined : parents.get(item.parentFolderId),
+    })),
+  );
+  if ('message' in placements) return toolFailure('error', placements.message);
+
   const entityIds = [];
-  for (const item of parsed.data.items) {
+  for (const [index, item] of parsed.data.items.entries()) {
+    const placement = placements[index];
     const folder = await createFolderCore(
       ctx.executor,
       {
         userId: ctx.userId,
         siteId: ctx.siteId,
-        parentEntityId: item.parentFolderId === undefined ? null : (parents.get(item.parentFolderId) ?? null),
+        parentEntityId: placement.parentEntityId,
         name: item.name,
+        lowerOrder: placement.lowerOrder,
+        upperOrder: placement.upperOrder,
       },
       ctx.afterCommit,
     );
     entityIds.push(folder.entityId);
+    if (placement.anchorEntityId !== null) placement.lowerOrder = await orderOf(ctx, folder.entityId);
   }
 
   return { ok: true, folders: refsInOrder(entityIds, await entityRefsOf(ctx.executor, ctx.siteId, entityIds)) };
@@ -735,18 +837,30 @@ const createDocuments = async (ctx: PrismToolContext, input: unknown) => {
   );
   if (parents === null) return toolFailure('error', NOT_FOUND_FOLDER);
 
+  const placements = await placementsOf(
+    ctx,
+    parsed.data.items.map((item) => ({
+      input: item,
+      parentEntityId: item.folderId === undefined ? undefined : parents.get(item.folderId),
+    })),
+  );
+  if ('message' in placements) return toolFailure('error', placements.message);
+
   const entityIds = [];
-  for (const item of parsed.data.items) {
+  for (const placement of placements) {
     const document = await createDocumentCore(
       ctx.executor,
       {
         userId: ctx.userId,
         siteId: ctx.siteId,
-        parentEntityId: item.folderId === undefined ? null : (parents.get(item.folderId) ?? null),
+        parentEntityId: placement.parentEntityId,
+        lowerOrder: placement.lowerOrder,
+        upperOrder: placement.upperOrder,
       },
       ctx.afterCommit,
     );
     entityIds.push(document.entityId);
+    if (placement.anchorEntityId !== null) placement.lowerOrder = await orderOf(ctx, document.entityId);
   }
 
   return { ok: true, documents: refsInOrder(entityIds, await entityRefsOf(ctx.executor, ctx.siteId, entityIds)) };
@@ -775,20 +889,29 @@ const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
   const entityIds = await resolveEntityIds(ctx, parsed.data.ids);
   if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
 
-  let parentEntityId: string | null = null;
+  let folderEntity: string | undefined;
   if (parsed.data.folderId !== undefined) {
-    parentEntityId = await folderEntityId(ctx, parsed.data.folderId);
-    if (parentEntityId === null) return toolFailure('error', NOT_FOUND_FOLDER);
+    const resolved = await folderEntityId(ctx, parsed.data.folderId);
+    if (resolved === null) return toolFailure('error', NOT_FOUND_FOLDER);
+    folderEntity = resolved;
   }
+
+  const placement = await placementOf(ctx, parsed.data, folderEntity);
+  if ('message' in placement) return toolFailure('error', placement.message);
+  if (placement.anchorEntityId !== null && entityIds.includes(placement.anchorEntityId)) return toolFailure('error', PLACEMENT_SELF);
+  const lowerOrder =
+    placement.lowerOrder === null && placement.upperOrder === null
+      ? await lastOrderIn(ctx, placement.parentEntityId)
+      : placement.lowerOrder;
 
   await moveEntitiesCore(
     ctx.executor,
     {
       userId: ctx.userId,
       entityIds,
-      parentEntityId,
-      lowerOrder: null,
-      upperOrder: null,
+      parentEntityId: placement.parentEntityId,
+      lowerOrder,
+      upperOrder: placement.upperOrder,
       targetSiteId: null,
     },
     ctx.afterCommit,
