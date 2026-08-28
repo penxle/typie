@@ -79,6 +79,7 @@ const sanitizeWindowState = (state: WindowState): WindowState => {
 const showLoginKeepingTabs = () => {
   if (tabManager && tabManager.tabs.length > 0) store.save({ tabs: tabManager.serialize() });
   tabManager?.closeAll();
+  void auth.clearSession().catch(() => null);
   windowManager?.showLogin();
 };
 
@@ -204,7 +205,7 @@ ipcMain.on(IPC.contextMenu, (event, request: ContextMenuRequest) => {
 });
 ipcMain.handle(IPC.bridgeOpenExternal, (_event, url: string) => {
   const kind = policy?.classify(url);
-  if (kind === 'external' || kind === 'website' || kind === 'auth-other') return shell.openExternal(url);
+  if (kind !== 'blocked') return shell.openExternal(url);
 });
 
 const applyMenu = () => {
