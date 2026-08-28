@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, ipcMain, Menu, screen, session, shell, webContents } from 'electron';
+import { app, autoUpdater as nativeUpdater, ipcMain, Menu, screen, session, shell, webContents } from 'electron';
 import { AuthService } from './auth-service';
 import { showContextMenu } from './context-menu';
 import { env } from './env';
@@ -53,6 +53,9 @@ if (singleInstance) {
 }
 
 app.on('before-quit', () => {
+  quitting = true;
+});
+nativeUpdater.on('before-quit-for-update', () => {
   quitting = true;
 });
 

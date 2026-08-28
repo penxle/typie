@@ -62,7 +62,9 @@ export class Updater extends EventEmitter<{ ready: [] }> {
       const available = result?.isUpdateAvailable ?? false;
       await dialog.showMessageBox({
         type: 'info',
-        message: available ? '새 버전을 내려받고 있어요. 준비되면 알려드릴게요.' : '현재 최신 버전을 이용하고 있어요.',
+        message: available
+          ? '새 버전을 내려받고 있어요.\n준비되면 오른쪽 위에 업데이트 버튼이 나타나요.'
+          : '현재 최신 버전을 이용하고 있어요.',
         buttons: ['확인'],
       });
     } catch (err) {
