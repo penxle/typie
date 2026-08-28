@@ -27,6 +27,7 @@ export const REWRITE_FAILED_MESSAGE = '저장하지 못했어요 — 잠시 뒤 
 export const EDIT_TOO_LARGE_MESSAGE = '고친 파일이 너무 커요 — 연산을 나눠서 하세요.';
 export const FULL_TOO_LARGE_MESSAGE = '이 블록의 xml이 너무 커요 — under를 더 좁히거나 read로 창을 열어 읽으세요.';
 export const AT_MESSAGE = 'at에는 before·after·first_child·last_child 중 하나만 주세요.';
+export const TARGETS_MESSAGE = 'target(하나)이나 targets(목록) 중 하나만 주세요.';
 const INTERNAL_MESSAGE = '이 편집은 적용할 수 없어요 — 문서를 다시 열고 다시 시도하세요';
 
 export const OutlineDocumentInput = z.object({
@@ -42,25 +43,34 @@ const address = z.string().min(1);
 const At = z
   .object({ before: address.optional(), after: address.optional(), first_child: address.optional(), last_child: address.optional() })
   .refine((at) => Object.values(at).filter((v) => v !== undefined).length === 1, { message: AT_MESSAGE });
-const targets = z.array(address).min(1).max(EDIT_MAX_TARGETS);
+const targeted = { target: address.optional(), targets: z.array(address).min(1).max(EDIT_MAX_TARGETS).optional() };
+const oneTarget = { check: (op: { target?: string; targets?: string[] }) => (op.target === undefined) !== (op.targets === undefined) };
+const targetsRule = { message: TARGETS_MESSAGE, path: ['targets'] };
 
 const EditOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('insert'), xml: z.string(), at: At }),
-  z.object({ op: z.literal('delete'), targets }),
-  z.object({ op: z.literal('move'), targets, at: At }),
+  z.object({ op: z.literal('delete'), ...targeted }).refine(oneTarget.check, targetsRule),
+  z.object({ op: z.literal('move'), ...targeted, at: At }).refine(oneTarget.check, targetsRule),
   z.object({ op: z.literal('replace'), target: address, xml: z.string() }),
-  z.object({
-    op: z.literal('set'),
-    targets,
-    attrs: z.array(z.object({ key: z.string().min(1), value: z.string().nullable().optional() })).min(1),
-  }),
+  z
+    .object({
+      op: z.literal('set'),
+      ...targeted,
+      attrs: z.array(z.object({ key: z.string().min(1), value: z.string().nullable().optional() })).min(1),
+    })
+    .refine(oneTarget.check, targetsRule),
 ]);
 export type EditOp = z.infer<typeof EditOpSchema>;
 
 export const EditDocumentInput = z.object({ path: z.string().regex(PATH), ops: z.array(EditOpSchema).min(1).max(EDIT_MAX_OPS) });
 
 export const toRustOps = (ops: EditOp[]): unknown[] =>
-  ops.map((op) => (op.op === 'set' ? { ...op, attrs: op.attrs.map(({ key, value }) => ({ key, value: value ?? null })) } : op));
+  ops.map((op) => {
+    if (op.op === 'insert' || op.op === 'replace') return op;
+    const { target, targets, ...rest } = op;
+    const normalized = { ...rest, targets: targets ?? (target === undefined ? [] : [target]) };
+    return op.op === 'set' ? { ...normalized, attrs: op.attrs.map(({ key, value }) => ({ key, value: value ?? null })) } : normalized;
+  });
 
 type Detail = Record<string, unknown>;
 

@@ -25,6 +25,7 @@ import {
   REWRITE_FAILED_MESSAGE,
   SAVE_TOO_LARGE_MESSAGE,
   SaveDocumentInput,
+  TARGETS_MESSAGE,
   TOO_LARGE_MESSAGE,
   toRustOps,
 } from './prism-document-edit-core.ts';
@@ -246,7 +247,9 @@ const editDocument: PrismToolHandler = async (ctx, input) => {
   const parsed = EditDocumentInput.safeParse(input);
   if (!parsed.success) {
     const at = parsed.error.issues.some((issue) => issue.message === AT_MESSAGE || issue.path.includes('at'));
-    return toolFailure('error', at ? AT_MESSAGE : ERROR_MESSAGE);
+    if (at) return toolFailure('error', AT_MESSAGE);
+    const targets = parsed.error.issues.some((issue) => issue.message === TARGETS_MESSAGE);
+    return toolFailure('error', targets ? TARGETS_MESSAGE : ERROR_MESSAGE);
   }
 
   const documentId = documentIdOf(parsed.data.path);
