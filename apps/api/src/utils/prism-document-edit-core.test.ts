@@ -17,6 +17,7 @@ import {
   renderRow,
   SAVE_TOO_LARGE_MESSAGE,
   SaveDocumentInput,
+  TARGETS_MESSAGE,
   TOO_LARGE_MESSAGE,
   toRustOps,
   XML_DETAIL_TYPES,
@@ -398,6 +399,29 @@ test('EditDocumentInput: op별 필수 필드와 at의 정확히 하나, ops 1~10
   bad([{ op: 'delete', targets: [] }]);
   bad([{ op: 'set', targets: ['1'], attrs: [] }]);
   bad([{ op: 'nope' }]);
+  const badTargets = (ops: unknown[]) => {
+    const result = EditDocumentInput.safeParse({ path: 'documents/d1.xml', ops });
+    assert.ok(!result.success);
+    assert.ok(result.error.issues.some((issue) => issue.message === TARGETS_MESSAGE));
+  };
+  badTargets([{ op: 'delete' }]);
+  badTargets([{ op: 'move', at: { after: '1' } }]);
+  badTargets([{ op: 'set', attrs: [{ key: 'attr:variant', value: 'warning' }] }]);
+  badTargets([{ op: 'set', target: '7', targets: ['7'], attrs: [{ key: 'attr:variant', value: 'warning' }] }]);
+  const single = EditDocumentInput.safeParse({
+    path: 'documents/d1.xml',
+    ops: [
+      { op: 'set', target: '7', attrs: [{ key: 'attr:variant', value: 'warning' }] },
+      { op: 'delete', target: '2' },
+      { op: 'move', target: '3', at: { last_child: 'root' } },
+    ],
+  });
+  assert.ok(single.success);
+  assert.deepEqual(toRustOps(single.data.ops), [
+    { op: 'set', targets: ['7'], attrs: [{ key: 'attr:variant', value: 'warning' }] },
+    { op: 'delete', targets: ['2'] },
+    { op: 'move', targets: ['3'], at: { last_child: 'root' } },
+  ]);
   assert.deepEqual(toRustOps(ok.data.ops)[4], {
     op: 'set',
     targets: ['1'],
