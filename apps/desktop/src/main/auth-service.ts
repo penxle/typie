@@ -144,8 +144,12 @@ export class AuthService extends EventEmitter<{ authenticated: []; 'logged-out':
     return url.href;
   }
 
-  async logout() {
+  async clearSession() {
     await session.defaultSession.cookies.remove(this.#env.websiteUrl, COOKIE_NAME);
+  }
+
+  async logout() {
+    await this.clearSession();
     this.emit('logged-out');
   }
 }

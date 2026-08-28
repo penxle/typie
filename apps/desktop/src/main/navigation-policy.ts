@@ -2,15 +2,13 @@ import { shell } from 'electron';
 import type { WebContents } from 'electron';
 import type { Env } from './env';
 
-export type NavigationKind = 'website' | 'auth-login' | 'auth-logout' | 'auth-other' | 'external' | 'blocked';
+export type NavigationKind = 'website' | 'auth-login' | 'auth-logout' | 'external' | 'blocked';
 
 export type NavigationHandlers = {
   onLoginRequired: () => void;
   onLogout: () => void;
   onOpenTab: (url: string, background: boolean, opener: WebContents) => void;
 };
-
-const AUTH_LOGIN_PATHS = new Set(['/authorize', '/login', '/signup']);
 
 export class NavigationPolicy {
   #websiteOrigin: string;
@@ -33,7 +31,6 @@ export class NavigationPolicy {
         this.#handlers.onLogout();
         break;
       }
-      case 'auth-other':
       case 'external': {
         shell.openExternal(url).catch(() => null);
         break;
@@ -54,11 +51,7 @@ export class NavigationPolicy {
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'blocked';
     if (url.origin === this.#websiteOrigin) return 'website';
-    if (url.origin === this.#authOrigin) {
-      if (AUTH_LOGIN_PATHS.has(url.pathname)) return 'auth-login';
-      if (url.pathname === '/logout') return 'auth-logout';
-      return 'auth-other';
-    }
+    if (url.origin === this.#authOrigin) return url.pathname === '/logout' ? 'auth-logout' : 'auth-login';
     return 'external';
   }
 
