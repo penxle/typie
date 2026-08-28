@@ -98,7 +98,7 @@
     {
       display: 'flex',
       flexDirection: 'column',
-      maxHeight: '400px',
+      maxHeight: '[min(400px, var(--floating-available-height, 400px))]',
       overflowY: 'auto',
       '& > button:not(:first-of-type)': { borderTopWidth: '1px', borderColor: 'border.subtle' },
     },

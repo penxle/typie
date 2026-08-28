@@ -30,6 +30,7 @@
   const registerTrapContainer = getContext<((el: HTMLElement) => () => void) | undefined>('registerMenuTrapContainer');
 
   const MENU_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)';
+  const VIEWPORT_PADDING = 8;
 
   let submenuOpen = $state(false);
   let flipped = false;
@@ -68,10 +69,11 @@
 
     const tr = triggerEl.getBoundingClientRect();
     const submenuWidth = submenuEl.offsetWidth;
+    const submenuHeight = submenuEl.offsetHeight;
     flipped = tr.right + 4 + submenuWidth > window.innerWidth;
 
     submenuEl.style.position = 'fixed';
-    submenuEl.style.top = `${tr.top}px`;
+    submenuEl.style.top = `${Math.max(VIEWPORT_PADDING, Math.min(tr.top, window.innerHeight - VIEWPORT_PADDING - submenuHeight))}px`;
     submenuEl.style.left = flipped ? `${tr.left - 4 - submenuWidth}px` : `${tr.right + 4}px`;
 
     const menuContainer = triggerEl.parentElement;
@@ -290,6 +292,8 @@
         paddingY: '2px',
         width: '[max-content]',
         minWidth: '160px',
+        maxHeight: '[calc(100dvh - 16px)]',
+        overflowY: 'auto',
         backgroundColor: 'surface.default',
         boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08)]',
         _dark: {

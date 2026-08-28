@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { APP_STORE_URL, PLAY_STORE_URL } from '@typie/lib/const';
+  import { APP_STORE_URL, DESKTOP_MAC_ARM64_URL, DESKTOP_MAC_X64_URL, DESKTOP_WIN_X64_URL, PLAY_STORE_URL } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { flex, grid } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
@@ -21,21 +21,21 @@
       icon: AppleIcon,
       platform: 'macOS',
       detail: 'Apple Silicon · .dmg',
-      url: 'https://download.typie.net/desktop/Typie-mac-arm64.dmg',
+      url: DESKTOP_MAC_ARM64_URL,
     },
     {
       id: 'mac-x64',
       icon: AppleIcon,
       platform: 'macOS',
       detail: 'Intel · .dmg',
-      url: 'https://download.typie.net/desktop/Typie-mac-x64.dmg',
+      url: DESKTOP_MAC_X64_URL,
     },
     {
       id: 'win-x64',
       icon: WindowsIcon,
       platform: 'Windows',
       detail: 'x64 · .exe',
-      url: 'https://download.typie.net/desktop/Typie-win-x64.exe',
+      url: DESKTOP_WIN_X64_URL,
     },
   ];
 
@@ -55,7 +55,7 @@
   });
 
   const primaryByPlatform = {
-    mac: { item: desktop[0], label: 'macOS용 다운로드', note: 'Apple Silicon 기준 · Intel Mac은 아래에서 선택하세요' },
+    mac: { item: desktop[0], label: 'macOS용 다운로드', note: 'macOS 11 이상 · Apple Silicon' },
     windows: { item: desktop[2], label: 'Windows용 다운로드', note: 'Windows 10 이상 · x64' },
     ios: { item: mobile[0], label: 'App Store에서 받기', note: 'iPhone · iPad' },
     android: { item: mobile[1], label: 'Google Play에서 받기', note: 'Android' },

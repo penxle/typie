@@ -7,7 +7,7 @@ export type NavigationKind = 'website' | 'auth-login' | 'auth-logout' | 'auth-ot
 export type NavigationHandlers = {
   onLoginRequired: () => void;
   onLogout: () => void;
-  onOpenTab: (url: string, background: boolean) => void;
+  onOpenTab: (url: string, background: boolean, opener: WebContents) => void;
 };
 
 const AUTH_LOGIN_PATHS = new Set(['/authorize', '/login', '/signup']);
@@ -78,7 +78,7 @@ export class NavigationPolicy {
     webContents.setWindowOpenHandler(({ url, disposition }) => {
       const kind = this.classify(url);
       if (kind === 'website') {
-        this.#handlers.onOpenTab(url, disposition === 'background-tab');
+        this.#handlers.onOpenTab(url, disposition === 'background-tab', webContents);
       } else {
         this.#dispatch(kind, url);
       }

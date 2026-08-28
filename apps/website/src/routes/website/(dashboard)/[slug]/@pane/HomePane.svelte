@@ -26,6 +26,7 @@
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
+  import TabIcon from './TabIcon.svelte';
   import type { Pane } from './types';
 
   type HomePane = Extract<Pane, { kind: 'home' }>;
@@ -224,6 +225,7 @@
   {#if query.data}
     {#if focused}
       <Helmet title="홈" />
+      <TabIcon icon="home" />
     {/if}
 
     <div class={css({ width: 'full', height: 'full', overflow: 'auto' })}>

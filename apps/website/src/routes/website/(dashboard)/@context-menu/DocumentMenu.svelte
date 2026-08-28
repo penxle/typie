@@ -20,11 +20,13 @@
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
+  import PlusIcon from '~icons/lucide/plus';
   import Rows2Icon from '~icons/lucide/rows-2';
   import ScissorsIcon from '~icons/lucide/scissors';
   import TargetIcon from '~icons/lucide/target';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
+  import { desktop } from '$lib/desktop';
   import { cache, unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
@@ -465,6 +467,9 @@
 
 <HorizontalDivider color="secondary" />
 
+{#if desktop}
+  <MenuItem icon={PlusIcon} onclick={() => desktop?.openTab?.(`${location.origin}/${entity.slug}`)}>새 탭에 열기</MenuItem>
+{/if}
 <MenuItem icon={Columns2Icon} onclick={() => handleAddPane('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddPane('vertical')}>아래에 열기</MenuItem>
 

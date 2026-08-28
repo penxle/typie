@@ -7,8 +7,10 @@
   import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import GlobeIcon from '~icons/lucide/globe';
+  import AppleIcon from '~icons/simple-icons/apple';
   import AppStoreIcon from '~icons/simple-icons/appstore';
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
+  import WindowsIcon from '~icons/simple-icons/windows';
   import { browser } from '$app/environment';
   import { env } from '$env/dynamic/public';
   import { graphql } from '$mearie';
@@ -230,6 +232,26 @@
                 href={env.PUBLIC_AUTH_URL}
               >
                 <Icon icon={GlobeIcon} size={20} />
+              </a>
+              <a
+                class={css({
+                  color: 'dark.gray.500',
+                  transition: '[color 0.2s ease-out]',
+                  _hover: { color: 'dark.gray.200' },
+                })}
+                href="/download"
+              >
+                <Icon icon={AppleIcon} size={20} />
+              </a>
+              <a
+                class={css({
+                  color: 'dark.gray.500',
+                  transition: '[color 0.2s ease-out]',
+                  _hover: { color: 'dark.gray.200' },
+                })}
+                href="/download"
+              >
+                <Icon icon={WindowsIcon} size={20} />
               </a>
               <a
                 class={css({

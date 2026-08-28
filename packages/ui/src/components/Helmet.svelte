@@ -10,7 +10,9 @@
     struct?: Record<string, unknown>;
   };
 
-  let { type = 'website', title, trailing = '타이피', description, image, struct }: Props = $props();
+  const isDesktop = typeof window !== 'undefined' && 'typieDesktop' in window;
+
+  let { type = 'website', title, trailing = isDesktop ? null : '타이피', description, image, struct }: Props = $props();
 
   const effectiveTitle = $derived(trailing ? `${title}${trailing ? ` · ${trailing}` : ''}` : title);
 </script>

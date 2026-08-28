@@ -4,6 +4,9 @@ export const IPC = {
   tabsClose: 'tabs:close',
   tabsActivate: 'tabs:activate',
   tabsMove: 'tabs:move',
+  tabsRequestClose: 'tabs:request-close',
+  tabIcon: 'tab:icon',
+  tabOpen: 'tab:open',
   theme: 'theme',
   themeChanged: 'theme:changed',
   menuPopup: 'menu:popup',
@@ -14,6 +17,8 @@ export const IPC = {
   contextMenu: 'contextmenu:request',
   bridgeOpenExternal: 'bridge:open-external',
   bridgeFocus: 'bridge:focus',
+  bridgePreference: 'bridge:preference',
   updateReady: 'update:ready',
   updateRestart: 'update:restart',
+  windowFullscreen: 'window:fullscreen',
 } as const;

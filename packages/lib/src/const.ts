@@ -42,6 +42,10 @@ export const TRIAL_DURATION_DAYS = 14;
 export const APP_STORE_URL = 'https://apps.apple.com/app/id6745595771';
 export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=co.typie';
 
+export const DESKTOP_MAC_ARM64_URL = 'https://download.typie.net/desktop/Typie-mac-arm64.dmg';
+export const DESKTOP_MAC_X64_URL = 'https://download.typie.net/desktop/Typie-mac-x64.dmg';
+export const DESKTOP_WIN_X64_URL = 'https://download.typie.net/desktop/Typie-win-x64.exe';
+
 // Wire form of editor_crdt Dot::ROOT ("{base62(actor)}_{base62(clock)}").
 // Pinned in crates/editor-crdt/src/dot.rs (root_string_form_is_pinned_for_ffi_clients).
 export const EDITOR_FFI_ROOT_ID = '0_AzL8n0Y58m8';

@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('shell', {
     ipcRenderer.on('tabs:state', listener);
     return () => ipcRenderer.removeListener('tabs:state', listener);
   },
+  onCloseTabRequest: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('tabs:request-close', listener);
+    return () => ipcRenderer.removeListener('tabs:request-close', listener);
+  },
   onTheme: (callback: (theme: unknown) => void) => {
     const listener = (_event: unknown, theme: unknown) => callback(theme);
     ipcRenderer.on('theme', listener);
@@ -24,5 +29,10 @@ contextBridge.exposeInMainWorld('shell', {
     const listener = () => callback();
     ipcRenderer.on('update:ready', listener);
     return () => ipcRenderer.removeListener('update:ready', listener);
+  },
+  onFullscreen: (callback: (fullscreen: boolean) => void) => {
+    const listener = (_event: unknown, fullscreen: boolean) => callback(fullscreen);
+    ipcRenderer.on('window:fullscreen', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen', listener);
   },
 });

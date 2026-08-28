@@ -263,6 +263,7 @@
         borderRadius: '8px',
         paddingY: '2px',
         minWidth: '160px',
+        maxHeight: '[var(--floating-available-height)]',
         backgroundColor: 'surface.default',
         boxShadow: 'menu',
         overflowY: 'auto',
@@ -275,8 +276,10 @@
     onoutroend={ontransitionend}
     onpointermove={hoverFocus}
     role="menu"
+    tabindex="-1"
     use:floating
     use:focusTrap={{
+      initialFocus: () => menuEl ?? false,
       fallbackFocus: menuEl,
       escapeDeactivates: false,
       allowOutsideClick: true,

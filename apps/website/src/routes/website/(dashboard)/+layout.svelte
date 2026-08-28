@@ -331,6 +331,10 @@
     };
   });
 
+  $effect(() => {
+    return desktop?.on('preference', () => pushState('', { shallowRoute: '/preference/profile' }));
+  });
+
   let onboardingModalOpen = $state(false);
   let referralWelcomeModalOpen = $state(false);
   let marketingConsentModalOpen = $state(false);

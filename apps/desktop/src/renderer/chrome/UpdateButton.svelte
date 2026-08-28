@@ -19,19 +19,19 @@
   class={css({
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '5px',
     flexShrink: '0',
-    height: '28px',
-    marginY: '6px',
-    paddingLeft: '10px',
-    paddingRight: '12px',
+    height: '24px',
+    marginY: '8px',
+    paddingLeft: '8px',
+    paddingRight: '10px',
     borderRadius: 'full',
     fontSize: '12px',
     fontWeight: 'semibold',
     color: 'text.brand',
-    backgroundColor: 'accent.brand.subtle',
+    boxShadow: '[inset 0 0 0 1px {colors.accent.brand.default/40}]',
     whiteSpace: 'nowrap',
-    transitionProperty: '[background-color, color, transform]',
+    transitionProperty: '[background-color, color, box-shadow, transform]',
     transitionDuration: '[120ms]',
     _hover: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
     _active: { transform: 'scale(0.97)' },
@@ -42,6 +42,6 @@
   type="button"
   in:enter
 >
-  <CircleArrowUpIcon class={css({ size: '14px' })} />
+  <CircleArrowUpIcon class={css({ size: '13px' })} />
   업데이트
 </button>

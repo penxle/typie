@@ -4,6 +4,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { contextMenu, portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
+  import { entityIconMap } from '@typie/ui/constants';
   import { Toast } from '@typie/ui/notification';
   import { createDragScroll, elementScrollViewport } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
@@ -16,7 +17,6 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
-  import { entityIconMap } from '../@context-menu/entity-icons';
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
@@ -329,7 +329,7 @@
 
     const entityId = element.dataset.id;
 
-    if (entityId && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+    if (entityId && e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
     }

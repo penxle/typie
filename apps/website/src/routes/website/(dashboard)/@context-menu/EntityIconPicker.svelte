@@ -2,9 +2,9 @@
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { Icon, Submenu } from '@typie/ui/components';
+  import { entityIconColors, entityIcons, getEntityIconColor } from '@typie/ui/constants';
   import CheckIcon from '~icons/lucide/check';
   import PaletteIcon from '~icons/lucide/palette';
-  import { entityIconColors, entityIcons, getEntityIconColor } from './entity-icons';
 
   type Props = {
     icon?: string;
