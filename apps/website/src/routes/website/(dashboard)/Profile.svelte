@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
-  import { APP_STORE_URL, PLAY_STORE_URL } from '@typie/lib/const';
+  import { APP_STORE_URL, DESKTOP_MAC_ARM64_URL, DESKTOP_WIN_X64_URL, PLAY_STORE_URL } from '@typie/lib/const';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
-  import { pushEscapeHandler } from '@typie/ui/utils';
+  import { isMobileDevice, pushEscapeHandler } from '@typie/ui/utils';
   import { generate } from 'lean-qr';
   import { toSvgSource } from 'lean-qr/extras/svg';
   import mixpanel from 'mixpanel-browser';
@@ -32,10 +32,12 @@
   import AppleIcon from '~icons/simple-icons/apple';
   import DiscordIcon from '~icons/simple-icons/discord';
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
+  import WindowsIcon from '~icons/simple-icons/windows';
   import XBrandIcon from '~icons/simple-icons/x';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
+  import { desktop } from '$lib/desktop';
   import { graphql } from '$mearie';
   import type { DashboardLayout_Profile_user$key } from '$mearie';
 
@@ -69,13 +71,30 @@
 
   let panelEl = $state<HTMLDivElement>();
   let mobileQrOpen = $state(false);
+  const showDesktop = !desktop && !isMobileDevice();
+  const appLinkClass = flex({
+    flex: '1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    paddingY: '10px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: 'medium',
+    color: 'text.default',
+    backgroundColor: 'surface.muted',
+    transition: 'common',
+    _hover: { backgroundColor: 'interactive.hover' },
+  });
   const qrSvg = toSvgSource(generate(`${env.PUBLIC_WEBSITE_URL}/app`), {
     on: 'currentColor',
     off: 'transparent',
     pad: 0,
-    width: 200,
-    height: 200,
+    width: 80,
+    height: 80,
   });
+  const sectionTitleClass = css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' });
+  const sectionNoteClass = css({ fontSize: '12px', color: 'text.faint' });
 
   const close = () => {
     open = false;
@@ -297,7 +316,7 @@
             type="button"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SmartphoneIcon} size={14} />
-            <span>타이피 모바일</span>
+            <span>타이피 앱</span>
             <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={QrCodeIcon} size={12} />
           </button>
 
@@ -656,61 +675,68 @@
   }}
   open={mobileQrOpen}
 >
-  <div class={flex({ direction: 'column', alignItems: 'center', gap: '16px', padding: '32px' })}>
-    <div class={css({ size: '200px', color: 'text.default' })}>
-      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-      {@html qrSvg}
-    </div>
+  <div class={flex({ direction: 'column', gap: '20px', padding: '32px' })}>
     <div class={flex({ direction: 'column', alignItems: 'center', gap: '4px' })}>
-      <span class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default' })}>타이피 - 작가를 위한 글쓰기 도구</span>
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>모바일에서도 글쓰기를 이어갈 수 있어요</span>
+      <span class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default' })}>타이피 - 언제든 이어 쓰는 글쓰기 앱</span>
+      <span class={css({ fontSize: '13px', color: 'text.faint' })}>데스크톱과 모바일, 어디서든 이어 쓰세요.</span>
     </div>
 
-    <div class={flex({ gap: '8px', width: 'full' })}>
-      <a
-        class={flex({
-          flex: '1',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '6px',
-          paddingY: '10px',
-          borderRadius: '8px',
-          fontSize: '13px',
-          fontWeight: 'medium',
-          color: 'text.default',
-          backgroundColor: 'surface.muted',
-          transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        href={APP_STORE_URL}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        <Icon icon={AppleIcon} size={14} />
-        App Store
-      </a>
-      <a
-        class={flex({
-          flex: '1',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '6px',
-          paddingY: '10px',
-          borderRadius: '8px',
-          fontSize: '13px',
-          fontWeight: 'medium',
-          color: 'text.default',
-          backgroundColor: 'surface.muted',
-          transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
-        })}
-        href={PLAY_STORE_URL}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        <Icon icon={GooglePlayIcon} size={14} />
-        Google Play
-      </a>
+    <div class={flex({ direction: 'column', gap: '12px' })}>
+      <div class={flex({ alignItems: 'baseline', justifyContent: 'space-between' })}>
+        <span class={sectionTitleClass}>모바일</span>
+        <span class={sectionNoteClass}>iOS · Android</span>
+      </div>
+      <div class={flex({ gap: '12px' })}>
+        <div class={css({ flexShrink: '0', size: '80px', color: 'text.default' })}>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html qrSvg}
+        </div>
+        <div class={flex({ flex: '1', direction: 'column', gap: '8px' })}>
+          <a class={appLinkClass} href={APP_STORE_URL} rel="noopener noreferrer" target="_blank">
+            <Icon icon={AppleIcon} size={14} />
+            App Store
+          </a>
+          <a class={appLinkClass} href={PLAY_STORE_URL} rel="noopener noreferrer" target="_blank">
+            <Icon icon={GooglePlayIcon} size={14} />
+            Google Play
+          </a>
+        </div>
+      </div>
     </div>
+
+    {#if showDesktop}
+      <HorizontalDivider color="secondary" />
+
+      <div class={flex({ direction: 'column', gap: '12px' })}>
+        <div class={flex({ alignItems: 'baseline', justifyContent: 'space-between' })}>
+          <span class={sectionTitleClass}>데스크톱</span>
+          <span class={sectionNoteClass}>macOS · Windows</span>
+        </div>
+        <div class={flex({ direction: 'column', gap: '8px' })}>
+          <a class={appLinkClass} href={DESKTOP_MAC_ARM64_URL}>
+            <Icon icon={AppleIcon} size={14} />
+            macOS
+          </a>
+          <a class={appLinkClass} href={DESKTOP_WIN_X64_URL}>
+            <Icon icon={WindowsIcon} size={14} />
+            Windows
+          </a>
+        </div>
+        <a
+          class={css({
+            alignSelf: 'center',
+            fontSize: '12px',
+            color: 'text.faint',
+            transition: 'common',
+            _hover: { color: 'text.default' },
+          })}
+          href="/download"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          다른 버전 보기
+        </a>
+      </div>
+    {/if}
   </div>
 </Modal>

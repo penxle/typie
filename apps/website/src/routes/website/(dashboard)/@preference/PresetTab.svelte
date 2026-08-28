@@ -460,7 +460,7 @@
                   zIndex: 'menu',
                   boxShadow: 'small',
                   overflow: 'hidden',
-                  maxHeight: '200px',
+                  maxHeight: '[min(200px, var(--floating-available-height, 200px))]',
                   overflowY: 'auto',
                 })}
                 use:fontSizeFloatingAction

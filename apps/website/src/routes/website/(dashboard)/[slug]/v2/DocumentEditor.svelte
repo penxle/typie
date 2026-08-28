@@ -26,6 +26,7 @@
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import XIcon from '~icons/lucide/x';
+  import { desktop } from '$lib/desktop';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
@@ -41,6 +42,7 @@
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { dragPane } from '../@pane/dnd';
   import { getEditorRegistry } from '../@pane/editor-registry.svelte';
+  import TabIcon from '../@pane/TabIcon.svelte';
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
@@ -1015,7 +1017,8 @@
 
 {#if document && entity && fontFamilies.length > 0}
   {#if focused}
-    <Helmet title={`${title || '(제목 없음)'} 작성 중`} />
+    <Helmet title={desktop ? title || '(제목 없음)' : `${title || '(제목 없음)'} 작성 중`} />
+    <TabIcon color={entity.iconColor} icon={entity.icon} />
   {/if}
 
   <div class={flex({ height: 'full', flex: '1', overflowX: 'auto' })}>

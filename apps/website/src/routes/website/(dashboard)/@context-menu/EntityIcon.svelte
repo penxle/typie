@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { Icon } from '@typie/ui/components';
+  import { entityIconMap, getEntityIconColor } from '@typie/ui/constants';
   import FileIcon from '~icons/lucide/file';
   import { graphql } from '$mearie';
-  import { entityIconMap, getEntityIconColor } from './entity-icons';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component, ComponentProps } from 'svelte';
   import type { EntityIcon_entity$key } from '$mearie';

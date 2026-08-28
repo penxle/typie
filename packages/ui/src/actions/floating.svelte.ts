@@ -1,4 +1,4 @@
-import { arrow, autoUpdate, computePosition, detectOverflow, flip, offset, shift } from '@floating-ui/dom';
+import { arrow, autoUpdate, computePosition, detectOverflow, flip, offset, shift, size } from '@floating-ui/dom';
 import { on } from 'svelte/events';
 import { match } from 'ts-pattern';
 import type {
@@ -41,6 +41,22 @@ type CenterWhenReferenceDoesNotFitMiddleware = {
 };
 
 const REFERENCE_BOUNDS_MIDDLEWARE = 'referenceBoundsForCenteredFallback';
+const VIEWPORT_PADDING = 8;
+
+export const FLOATING_AVAILABLE_WIDTH_VAR = '--floating-available-width';
+export const FLOATING_AVAILABLE_HEIGHT_VAR = '--floating-available-height';
+
+const createDefaultMiddleware = (): Middleware[] => [
+  shift({ padding: VIEWPORT_PADDING }),
+  flip({ padding: VIEWPORT_PADDING }),
+  size({
+    padding: VIEWPORT_PADDING,
+    apply({ availableWidth, availableHeight, elements }) {
+      elements.floating.style.setProperty(FLOATING_AVAILABLE_WIDTH_VAR, `${Math.max(0, availableWidth)}px`);
+      elements.floating.style.setProperty(FLOATING_AVAILABLE_HEIGHT_VAR, `${Math.max(0, availableHeight)}px`);
+    },
+  }),
+];
 
 export function resolveFloatingCenteredFallback({
   reference,
@@ -127,7 +143,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       return;
     }
 
-    const middleware = options?.middleware ?? [shift({ padding: 8 }), flip()];
+    const middleware = options?.middleware ?? createDefaultMiddleware();
 
     const { x, y, placement, strategy, middlewareData } = await computePosition(referenceElement, floatingElement, {
       strategy: 'absolute',

@@ -91,6 +91,23 @@
       </a>
 
       <a
+        class={css({
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'dark.gray.400',
+          paddingY: '8px',
+          paddingX: '20px',
+          transition: '[color 0.2s ease-out]',
+          _hover: {
+            color: 'dark.gray.100',
+          },
+        })}
+        href="/download"
+      >
+        다운로드
+      </a>
+
+      <a
         class={cx(
           'group',
           css({
@@ -220,6 +237,26 @@
       href="/changelog"
     >
       업데이트 노트
+    </a>
+
+    <a
+      class={css({
+        display: 'block',
+        fontSize: '15px',
+        fontWeight: 'medium',
+        color: 'dark.gray.400',
+        paddingY: '16px',
+        paddingX: '24px',
+        borderBottomWidth: '1px',
+        borderBottomColor: 'dark.gray.900',
+        transition: '[color 0.2s ease-out]',
+        _hover: {
+          color: 'dark.gray.100',
+        },
+      })}
+      href="/download"
+    >
+      다운로드
     </a>
 
     <div class={css({ paddingX: '24px', paddingY: '16px' })}>

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, ipcMain, Menu, nativeTheme, screen, session, shell, webContents } from 'electron';
+import { app, ipcMain, Menu, screen, session, shell, webContents } from 'electron';
 import { AuthService } from './auth-service';
 import { showContextMenu } from './context-menu';
 import { env } from './env';
@@ -9,12 +9,13 @@ import { NavigationPolicy } from './navigation-policy';
 import { initSentry } from './sentry';
 import { Store } from './store';
 import { TabManager } from './tab-manager';
+import { readStoredTheme } from './theme';
 import { Updater } from './updater';
 import { WindowManager } from './window-manager';
+import type { TabIcon } from '@typie/lib/desktop';
 import type { ContextMenuRequest } from './context-menu';
+import type { ThemePayload } from './theme';
 import type { WindowState } from './window-manager';
-
-type ThemePayload = { theme: 'light' | 'dark'; variantLight: string; variantDark: string };
 
 app.setName('타이피');
 app.setPath('userData', path.join(app.getPath('appData'), 'Typie'));
@@ -32,6 +33,12 @@ const updater = new Updater(app.isPackaged);
 const themes = new Map<number, ThemePayload>();
 
 let quitting = false;
+let creatingWindow = false;
+let menuTabsKey = '';
+
+const menuTabs = () => (tabManager?.tabs ?? []).map((tab) => ({ title: tab.title, active: tab.id === tabManager?.activeTab?.id }));
+const tabsKey = (tabs: { title: string; active: boolean }[]) =>
+  `${tabManager?.canReopen ? '+' : '-'}\n${tabs.map((tab) => `${tab.active ? '*' : ''}${tab.title}`).join('\n')}`;
 const singleInstance = app.requestSingleInstanceLock();
 
 if (singleInstance) {
@@ -48,8 +55,6 @@ if (singleInstance) {
 app.on('before-quit', () => {
   quitting = true;
 });
-
-const osTheme = () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 
 const chromeWebContents = () => {
   const chrome = windowManager?.chrome.webContents;
@@ -93,13 +98,27 @@ const showLoggedIn = () => {
   store.save({ tabs: null });
 };
 
-const createWindow = () => {
+const applyTheme = (theme: ThemePayload) => {
+  chromeWebContents()?.send(IPC.theme, theme);
+  windowManager?.setTheme(theme.theme);
+  tabManager?.setBackground(windowManager?.background ?? '#ffffff');
+};
+
+const createWindow = async () => {
+  if (windowManager || creatingWindow) return;
+  creatingWindow = true;
   store.load();
-  windowManager = new WindowManager(sanitizeWindowState(store.data.window), osTheme(), { version: app.getVersion(), env: env.name });
+  let theme: ThemePayload;
+  try {
+    theme = await readStoredTheme(env.websiteUrl);
+  } finally {
+    creatingWindow = false;
+  }
+  windowManager = new WindowManager(sanitizeWindowState(store.data.window), theme, { version: app.getVersion(), env: env.name });
   policy = new NavigationPolicy(env, {
     onLoginRequired: showLoginKeepingTabs,
     onLogout: () => auth.logout().catch(() => null),
-    onOpenTab: (url, background) => tabManager?.create(url, { background }),
+    onOpenTab: (url, background, opener) => tabManager?.openFrom(opener, url, background),
   });
   tabManager = new TabManager(windowManager, policy);
   const chrome = windowManager.chrome.webContents;
@@ -107,6 +126,7 @@ const createWindow = () => {
   let lastActiveId: string | null = null;
   tabManager.onState((state) => {
     chromeWebContents()?.send(IPC.tabsState, state);
+    if (tabsKey(menuTabs()) !== menuTabsKey) applyMenu();
     for (const id of themes.keys()) {
       if (!webContents.fromId(id)) themes.delete(id);
     }
@@ -114,16 +134,14 @@ const createWindow = () => {
     lastActiveId = state.activeId;
     const active = tabManager?.activeTab?.view.webContents;
     const theme = active ? themes.get(active.id) : undefined;
-    if (theme) {
-      chromeWebContents()?.send(IPC.theme, theme);
-      windowManager?.setTheme(theme.theme);
-    }
+    if (theme) applyTheme(theme);
   });
-  tabManager.onEmpty(() => windowManager?.window.close());
 
   if (process.platform !== 'darwin') windowManager.window.setAutoHideMenuBar(true);
 
   windowManager.window.on('focus', () => tabManager?.activeTab?.view.webContents.send(IPC.bridgeFocus));
+  windowManager.window.on('enter-full-screen', () => chromeWebContents()?.send(IPC.windowFullscreen, true));
+  windowManager.window.on('leave-full-screen', () => chromeWebContents()?.send(IPC.windowFullscreen, false));
 
   windowManager.window.on('app-command', (_event, command) => {
     if (command === 'browser-backward') tabManager?.goBack();
@@ -151,6 +169,7 @@ const createWindow = () => {
 
   const loggedIn = auth.hasSession();
   chrome.once('did-finish-load', async () => {
+    if (windowManager?.window.isFullScreen()) chrome.send(IPC.windowFullscreen, true);
     windowManager?.show();
     if (await loggedIn) showLoggedIn();
     else showLoginKeepingTabs();
@@ -159,10 +178,7 @@ const createWindow = () => {
 
 ipcMain.on(IPC.themeChanged, (event, theme: ThemePayload) => {
   themes.set(event.sender.id, theme);
-  if (event.sender === tabManager?.activeTab?.view.webContents) {
-    chromeWebContents()?.send(IPC.theme, theme);
-    windowManager?.setTheme(theme.theme);
-  }
+  if (event.sender === tabManager?.activeTab?.view.webContents) applyTheme(theme);
 });
 ipcMain.handle(IPC.authLogin, () => auth.startLogin());
 ipcMain.on(IPC.authCancel, () => auth.cancelLogin());
@@ -174,6 +190,14 @@ ipcMain.on(IPC.menuPopup, () => {
   if (menu && windowManager) menu.popup({ window: windowManager.window });
 });
 ipcMain.on(IPC.pageRetry, (event) => tabManager?.retry(event.sender));
+ipcMain.on(IPC.tabOpen, (event, url: string) => {
+  if (typeof url === 'string' && policy?.classify(url) === 'website') tabManager?.openFrom(event.sender, url, true);
+});
+ipcMain.on(IPC.tabIcon, (event, icon: TabIcon) => {
+  const valid =
+    typeof icon === 'object' && icon !== null && typeof icon.icon === 'string' && (icon.color === null || typeof icon.color === 'string');
+  if (valid) tabManager?.setIcon(event.sender, { icon: icon.icon, color: icon.color });
+});
 ipcMain.on(IPC.updateRestart, () => void updater.confirmRestart(windowManager?.window));
 ipcMain.on(IPC.contextMenu, (event, request: ContextMenuRequest) => {
   if (windowManager && event.sender === tabManager?.activeTab?.view.webContents) showContextMenu(windowManager.window, request);
@@ -187,7 +211,7 @@ const applyMenu = () => {
   menu = buildMenu(
     {
       newTab: () => tabManager?.create(`${env.websiteUrl}/`),
-      closeTab: () => tabManager?.closeActive(),
+      closeTab: () => chromeWebContents()?.send(IPC.tabsRequestClose),
       closeWindow: () => windowManager?.window.close(),
       reopenTab: () => tabManager?.reopenLast(),
       reload: () => tabManager?.reloadActive(),
@@ -196,15 +220,17 @@ const applyMenu = () => {
       nextTab: () => tabManager?.next(),
       prevTab: () => tabManager?.prev(),
       activateTab: (index) => tabManager?.activateIndex(index),
-      activateLastTab: () => tabManager?.activateLast(),
+      openPreference: () => tabManager?.activeTab?.view.webContents.send(IPC.bridgePreference),
       checkForUpdates: () => void updater.checkManually(windowManager?.window),
       restartToUpdate: () => void updater.confirmRestart(windowManager?.window),
       openWebsite: () => shell.openExternal(env.websiteUrl),
       toggleDevTools: () => tabManager?.activeTab?.view.webContents.toggleDevTools(),
       crashActiveTab: () => tabManager?.activeTab?.view.webContents.forcefullyCrashRenderer(),
+      simulateUpdateReady: () => updater.simulateReady(),
     },
-    { devTools: !app.isPackaged, updateReady: updater.ready },
+    { devTools: !app.isPackaged, updateReady: updater.ready, tabs: menuTabs(), canReopen: tabManager?.canReopen ?? false },
   );
+  menuTabsKey = tabsKey(menuTabs());
   Menu.setApplicationMenu(menu);
 };
 
@@ -229,11 +255,11 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(['clipboard-read', 'clipboard-sanitized-write', 'notifications', 'fullscreen'].includes(permission));
   });
-  createWindow();
+  void createWindow();
   updater.start();
   app.on('activate', () => {
     if (!windowManager) {
-      createWindow();
+      void createWindow();
       return;
     }
     windowManager.show();

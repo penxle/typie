@@ -35,6 +35,11 @@ export class Updater extends EventEmitter<{ ready: [] }> {
     return this.#ready;
   }
 
+  simulateReady() {
+    this.#ready = true;
+    this.emit('ready');
+  }
+
   start() {
     if (!this.#enabled) return;
     setTimeout(() => this.#check(), INITIAL_DELAY_MS);

@@ -2,17 +2,14 @@
 
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { BaseWindow, nativeTheme, WebContentsView } from 'electron';
+import { BaseWindow, WebContentsView } from 'electron';
+import { themeColors } from './theme';
 import type { Rectangle } from 'electron';
+import type { Theme, ThemePayload } from './theme';
 
 export const CHROME_HEIGHT = 40;
 
 const isMac = process.platform === 'darwin';
-
-type Theme = 'light' | 'dark';
-
-const themeColors = (theme: Theme) =>
-  theme === 'dark' ? { background: '#1a1a1a', symbol: '#c8c8c8' } : { background: '#ffffff', symbol: '#888888' };
 
 const rendererUrl = (page: string, query: Record<string, string> = {}) => {
   const search = new URLSearchParams(query).toString();
@@ -37,12 +34,14 @@ export class WindowManager {
   #loginAttached = false;
 
   #loginQuery: Record<string, string>;
+  #theme: Theme;
   readonly window: BaseWindow;
   readonly chrome: WebContentsView;
 
-  constructor(state: WindowState, theme: Theme, loginQuery: Record<string, string>) {
+  constructor(state: WindowState, theme: ThemePayload, loginQuery: Record<string, string>) {
     this.#loginQuery = loginQuery;
-    const { background, symbol } = themeColors(theme);
+    this.#theme = theme.theme;
+    const { background, symbol } = themeColors(theme.theme);
     this.window = new BaseWindow({
       width: state.bounds?.width ?? 1280,
       height: state.bounds?.height ?? 800,
@@ -61,8 +60,11 @@ export class WindowManager {
     this.chrome = new WebContentsView({
       webPreferences: { preload: preloadPath('chrome'), sandbox: true, contextIsolation: true },
     });
+    this.chrome.setBackgroundColor(background);
     this.window.contentView.addChildView(this.chrome);
-    this.chrome.webContents.loadURL(rendererUrl('chrome')).catch(() => null);
+    this.chrome.webContents
+      .loadURL(rendererUrl('chrome', { theme: theme.theme, variantLight: theme.variantLight, variantDark: theme.variantDark }))
+      .catch(() => null);
 
     this.window.on('resize', () => this.layout());
     this.window.on('maximize', () => this.layout());
@@ -95,9 +97,20 @@ export class WindowManager {
     this.layout();
   }
 
+  get theme(): Theme {
+    return this.#theme;
+  }
+
+  get background(): string {
+    return themeColors(this.#theme).background;
+  }
+
   setTheme(theme: Theme) {
+    this.#theme = theme;
     const { background, symbol } = themeColors(theme);
     this.window.setBackgroundColor(background);
+    this.chrome.setBackgroundColor(background);
+    this.#login?.setBackgroundColor(background);
     if (process.platform === 'win32') {
       this.window.setTitleBarOverlay({ color: background, symbolColor: symbol, height: CHROME_HEIGHT });
     }
@@ -107,6 +120,12 @@ export class WindowManager {
     this.#attached.add(view);
     this.window.contentView.addChildView(view);
     view.setBounds(this.contentBounds());
+  }
+
+  presize(view: WebContentsView) {
+    this.window.contentView.addChildView(view);
+    view.setBounds(this.contentBounds());
+    this.window.contentView.removeChildView(view);
   }
 
   detach(view: WebContentsView) {
@@ -122,9 +141,8 @@ export class WindowManager {
       this.#login = new WebContentsView({
         webPreferences: { preload: preloadPath('page'), sandbox: true, contextIsolation: true },
       });
-      this.#login.webContents
-        .loadURL(rendererUrl('login', { ...this.#loginQuery, theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }))
-        .catch(() => null);
+      this.#login.setBackgroundColor(this.background);
+      this.#login.webContents.loadURL(rendererUrl('login', { ...this.#loginQuery, theme: this.#theme })).catch(() => null);
     }
     this.setChromeVisible(false);
     this.window.contentView.addChildView(this.#login);

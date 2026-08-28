@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { TypieDesktopBridge } from '@typie/lib/desktop';
+import type { TabIcon, TypieDesktopBridge } from '@typie/lib/desktop';
 
 const IPC_THEME_CHANGED = 'theme:changed';
 const IPC_CONTEXT_MENU = 'contextmenu:request';
 const IPC_PAGE_RETRY = 'page:retry';
+const IPC_TAB_ICON = 'tab:icon';
+const IPC_TAB_OPEN = 'tab:open';
 
 const RENDERER_DEV_PORT = '5300';
 
@@ -53,9 +55,12 @@ window.addEventListener(
 
 const appVersion = process.argv.find((arg) => arg.startsWith('--typie-app-version='))?.split('=')[1] ?? '0.0.0';
 
-const focusListeners = new Set<() => void>();
+const listeners = { focus: new Set<() => void>(), preference: new Set<() => void>() };
 ipcRenderer.on('bridge:focus', () => {
-  for (const listener of focusListeners) listener();
+  for (const listener of listeners.focus) listener();
+});
+ipcRenderer.on('bridge:preference', () => {
+  for (const listener of listeners.preference) listener();
 });
 
 contextBridge.exposeInMainWorld(
@@ -64,14 +69,17 @@ contextBridge.exposeInMainWorld(
     version: appVersion,
     platform: process.platform as 'darwin' | 'win32',
     openExternal: (url: string) => ipcRenderer.invoke('bridge:open-external', url) as Promise<void>,
-    on: (event: 'focus', callback: () => void) => {
+    on: (event: 'focus' | 'preference', callback: () => void) => {
+      const set = listeners[event];
       // eslint-disable-next-line @typescript-eslint/no-empty-function
-      if (event !== 'focus') return () => {};
-      focusListeners.add(callback);
+      if (!set) return () => {};
+      set.add(callback);
       return () => {
-        focusListeners.delete(callback);
+        set.delete(callback);
       };
     },
+    setTabIcon: (icon: TabIcon) => ipcRenderer.send(IPC_TAB_ICON, icon),
+    openTab: (url: string) => ipcRenderer.send(IPC_TAB_OPEN, url),
   } satisfies TypieDesktopBridge),
 );
 

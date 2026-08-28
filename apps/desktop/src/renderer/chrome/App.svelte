@@ -8,6 +8,7 @@
   let tabs = $state<TabState[]>([]);
   let activeId = $state<string | null>(null);
   let updateReady = $state(false);
+  let fullscreen = $state(false);
 
   onMount(() => {
     const offTabs = window.shell.onTabsState?.((state) => {
@@ -22,15 +23,19 @@
     const offUpdate = window.shell.onUpdateReady?.(() => {
       updateReady = true;
     });
+    const offFullscreen = window.shell.onFullscreen?.((value) => {
+      fullscreen = value;
+    });
     return () => {
       offTabs?.();
       offTheme?.();
       offUpdate?.();
+      offFullscreen?.();
     };
   });
 </script>
 
-<TabStrip {activeId} {tabs}>
+<TabStrip {activeId} {fullscreen} {tabs}>
   {#if updateReady}
     <UpdateButton onrestart={() => window.shell.restartToUpdate?.()} />
   {/if}

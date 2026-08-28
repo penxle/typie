@@ -17,6 +17,7 @@
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
+  import TabIcon from './TabIcon.svelte';
   import type { Pane } from './types';
 
   type EntityPane = Extract<Pane, { kind: 'entity' }>;
@@ -206,6 +207,7 @@
       {@const name = '문서'}
       {#if focused}
         <Helmet title={`삭제된 ${name}`} />
+        <TabIcon icon="file-x" />
       {/if}
 
       <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>

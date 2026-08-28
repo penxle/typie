@@ -1,26 +1,26 @@
 import { randomUUID } from 'node:crypto';
-import { nativeTheme } from 'electron';
 import { createTabView } from './tab-view';
 import { rendererUrl } from './window-manager';
+import type { TabIcon } from '@typie/lib/desktop';
 import type { WebContents, WebContentsView } from 'electron';
 import type { NavigationPolicy } from './navigation-policy';
 import type { TabSession } from './store';
 import type { WindowManager } from './window-manager';
 
-export type TabState = { id: string; title: string; url: string; loading: boolean };
+export type TabState = { id: string; title: string; url: string; icon: TabIcon | null };
 export type TabsStatePayload = { tabs: TabState[]; activeId: string | null };
 
-type Tab = TabState & { view: WebContentsView; titleGrace?: ReturnType<typeof setTimeout> };
+type Tab = TabState & { view: WebContentsView };
 
 const RECENTLY_CLOSED_LIMIT = 10;
-const TITLE_GRACE_MS = 1500;
 
 export class TabManager {
   #tabs: Tab[] = [];
   #activeId: string | null = null;
   #recentlyClosed: string[] = [];
+  #restoring = false;
+  #related: { id: string; count: number } | null = null;
   #onState?: (state: TabsStatePayload) => void;
-  #onEmpty?: () => void;
   #windowManager: WindowManager;
   #policy: NavigationPolicy;
 
@@ -38,29 +38,11 @@ export class TabManager {
   #showPage(id: string, page: 'offline' | 'crash', query: Record<string, string>) {
     const tab = this.#tabs.find((t) => t.id === id);
     if (!tab) return;
-    tab.view.webContents
-      .loadURL(rendererUrl(page, { ...query, theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }))
-      .catch(() => null);
+    tab.view.webContents.loadURL(rendererUrl(page, { ...query, theme: this.#windowManager.theme })).catch(() => null);
   }
 
   #setTitle(id: string, title: string) {
-    const tab = this.#tabs.find((t) => t.id === id);
-    if (!tab) return;
-    clearTimeout(tab.titleGrace);
-    tab.titleGrace = undefined;
-    this.#update(id, { title });
-  }
-
-  #setLoading(id: string, loading: boolean) {
-    const tab = this.#tabs.find((t) => t.id === id);
-    if (!tab) return;
-    clearTimeout(tab.titleGrace);
-    tab.titleGrace = undefined;
-    if (loading || tab.title) {
-      this.#update(id, { loading });
-      return;
-    }
-    tab.titleGrace = setTimeout(() => this.#update(id, { loading: false }), TITLE_GRACE_MS);
+    if (title) this.#update(id, { title });
   }
 
   #update(id: string, patch: Partial<TabState>) {
@@ -71,6 +53,7 @@ export class TabManager {
   }
 
   #publish() {
+    if (this.#restoring) return;
     this.#onState?.({ tabs: this.tabs, activeId: this.#activeId });
   }
 
@@ -78,12 +61,8 @@ export class TabManager {
     this.#onState = callback;
   }
 
-  onEmpty(callback: () => void) {
-    this.#onEmpty = callback;
-  }
-
   get tabs(): TabState[] {
-    return this.#tabs.map((tab) => ({ id: tab.id, title: tab.title, url: tab.url, loading: tab.loading }));
+    return this.#tabs.map((tab) => ({ id: tab.id, title: tab.title, url: tab.url, icon: tab.icon }));
   }
 
   get activeTab(): Tab | undefined {
@@ -96,10 +75,14 @@ export class TabManager {
       id,
       title: '',
       url,
-      loading: true,
+      icon: null,
       view: createTabView({
         onTitle: (title) => this.#setTitle(id, title),
-        onLoading: (loading) => this.#setLoading(id, loading),
+        onNavigate: (nextUrl) => {
+          const patch: Partial<TabState> = { title: '', icon: null };
+          if (this.#policy.classify(nextUrl) === 'website') patch.url = nextUrl;
+          this.#update(id, patch);
+        },
         onUrl: (nextUrl) => {
           if (this.#policy.classify(nextUrl) === 'website') this.#update(id, { url: nextUrl });
         },
@@ -110,11 +93,23 @@ export class TabManager {
       }),
     };
     this.#policy.attach(tab.view.webContents);
+    tab.view.setBackgroundColor(this.#windowManager.background);
     const index = options.index ?? this.#tabs.length;
     this.#tabs.splice(index, 0, tab);
-    tab.view.webContents.loadURL(url).catch(() => null);
     if (!options.background || !this.#activeId) this.activate(id);
+    else this.#windowManager.presize(tab.view);
+    tab.view.webContents.loadURL(url).catch(() => null);
     this.#publish();
+    return id;
+  }
+
+  openFrom(opener: WebContents, url: string, background: boolean) {
+    const index = this.#tabs.findIndex((t) => t.view.webContents === opener);
+    if (index === -1) return this.create(url, { background });
+    const tab = this.#tabs[index];
+    const count = this.#related?.id === tab.id ? this.#related.count : 0;
+    const id = this.create(url, { background, index: Math.min(index + 1 + count, this.#tabs.length) });
+    this.#related = { id: tab.id, count: count + 1 };
     return id;
   }
 
@@ -122,7 +117,10 @@ export class TabManager {
     const tab = this.#tabs.find((t) => t.id === id);
     if (!tab) return;
     const previous = this.activeTab;
-    if (previous && previous.id !== id) this.#windowManager.detach(previous.view);
+    if (previous && previous.id !== id) {
+      this.#windowManager.detach(previous.view);
+      this.#related = null;
+    }
     this.#activeId = id;
     this.#windowManager.attach(tab.view);
     tab.view.webContents.focus();
@@ -134,10 +132,6 @@ export class TabManager {
     if (tab) this.activate(tab.id);
   }
 
-  activateLast() {
-    this.activateIndex(this.#tabs.length - 1);
-  }
-
   next() {
     this.#step(1);
   }
@@ -147,10 +141,11 @@ export class TabManager {
   }
 
   close(id: string) {
+    if (this.#tabs.length <= 1) return;
     const index = this.#tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
     const [tab] = this.#tabs.splice(index, 1);
-    clearTimeout(tab.titleGrace);
+    this.#related = null;
     if (this.#activeId === id) {
       this.#windowManager.detach(tab.view);
       this.#activeId = null;
@@ -161,22 +156,20 @@ export class TabManager {
     if (this.#recentlyClosed.length > RECENTLY_CLOSED_LIMIT) this.#recentlyClosed.shift();
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     this.#publish();
-    if (this.#tabs.length === 0) this.#onEmpty?.();
-  }
-
-  closeActive() {
-    if (this.#activeId) this.close(this.#activeId);
   }
 
   closeAll() {
     for (const tab of this.#tabs) {
-      clearTimeout(tab.titleGrace);
       if (tab.id === this.#activeId) this.#windowManager.detach(tab.view);
       if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
     }
     this.#tabs = [];
     this.#activeId = null;
     this.#publish();
+  }
+
+  get canReopen() {
+    return this.#recentlyClosed.length > 0;
   }
 
   reopenLast() {
@@ -189,11 +182,21 @@ export class TabManager {
     if (from === -1) return;
     const [tab] = this.#tabs.splice(from, 1);
     this.#tabs.splice(Math.max(0, Math.min(toIndex, this.#tabs.length)), 0, tab);
+    this.#related = null;
     this.#publish();
   }
 
   reloadActive() {
     this.activeTab?.view.webContents.reload();
+  }
+
+  setBackground(color: string) {
+    for (const tab of this.#tabs) tab.view.setBackgroundColor(color);
+  }
+
+  setIcon(sender: WebContents, icon: TabIcon) {
+    const tab = this.#tabs.find((t) => t.view.webContents === sender);
+    if (tab) this.#update(tab.id, { icon });
   }
 
   retry(sender: WebContents) {
@@ -226,7 +229,9 @@ export class TabManager {
   }
 
   restore(session: TabSession) {
+    this.#restoring = true;
     for (const url of session.urls) this.create(url, { background: true });
+    this.#restoring = false;
     this.activateIndex(Math.min(session.active, this.#tabs.length - 1));
   }
 }
