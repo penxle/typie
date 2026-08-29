@@ -113,7 +113,6 @@
       }),
     )}
     aria-label={labelOf(rail)}
-    data-prism-margin-activator
     data-selected={active ? '' : undefined}
     onclick={() => margin.activate(rail.itemId)}
     type="button"
