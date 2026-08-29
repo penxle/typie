@@ -81,7 +81,6 @@
         style:top={`${mark.ratio * 100}%`}
         class={css(markRecipe.raw({ tone: mark.tone, active: margin.activeId === mark.itemId }))}
         aria-label={labelOf(mark.itemId)}
-        data-prism-margin-activator
         onclick={() => margin.activate(mark.itemId)}
         title={labelOf(mark.itemId)}
         type="button"

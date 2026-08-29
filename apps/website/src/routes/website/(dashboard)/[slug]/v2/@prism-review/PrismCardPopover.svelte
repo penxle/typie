@@ -64,13 +64,6 @@
     placement: 'right-start',
     // 본문↔카드 간격은 컬럼 모드와 같은 수를 쓴다 — 모드가 바뀐다고 거리가 달라질 이유가 없다
     offset: COLUMN_GAP,
-    onClickOutside: (event: Event) => {
-      // 원고는 바깥이 아니다 — 피드백을 띄워 놓고 그 대목을 고치는 것이 이 모드의 쓰임이다.
-      // 레일·룰러도 마찬가지로 갈아타기이지 떠나기가 아니다(에디터 영역 밖으로 옮겨져도 걸리도록 표지로도 본다)
-      if (event.target instanceof Node && ctx.editor?.scrollContainerEl?.contains(event.target)) return;
-      if (event.target instanceof Element && event.target.closest('[data-prism-margin-activator]')) return;
-      margin.activate(null);
-    },
     middleware: [
       // 세로는 스크롤러가 경계다 — 그래야 툴바 위로 올라가지 않는다
       shift({

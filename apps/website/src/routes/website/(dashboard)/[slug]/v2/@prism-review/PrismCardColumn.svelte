@@ -66,7 +66,8 @@
   let heightOverrides: Record<string, number> = {};
   let suppressUntil = 0;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
-  let previousActive: string | null = null;
+  // 새로 마운트된 컬럼은 현재 활성 높이로 처음 그려진다 — 이미 펼쳐진 카드를 토글로 다시 예측하지 않는다.
+  let previousActive = margin.activeId;
   // relayout은 여러 경로에서 반복되므로 준비된 활성만 한 번 소비하고, mode 변화로 같은 활성을 다시 등록하지 않는다.
   let pendingRevealSequence: number | null = null;
   let revealedSequence = 0;
