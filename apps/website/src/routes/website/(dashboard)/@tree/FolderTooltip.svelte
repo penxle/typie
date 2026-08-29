@@ -4,18 +4,20 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Icon, RingSpinner } from '@typie/ui/components';
   import { comma } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
 
   type Props = {
     characterCount?: number;
+    createdAt: string;
     documentCount?: number;
     folderCount?: number;
     loading: boolean;
     visibility: EntityVisibility;
   };
 
-  let { characterCount, documentCount, folderCount, loading, visibility }: Props = $props();
+  let { characterCount, createdAt, documentCount, folderCount, loading, visibility }: Props = $props();
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '120px', opacity: '70' })}>
@@ -52,4 +54,6 @@
 
     <div>총 {comma(characterCount)}자</div>
   {/if}
+
+  <div>생성: {dayjs(createdAt).formatAsDateTime()}</div>
 </div>

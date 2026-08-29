@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import {
   EntityAvailability,
+  EntityType,
   PrismReaction,
   PrismRunState,
   PrismToolPhase,
@@ -15,7 +16,7 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
 import { ApproveInputSchema, DECLINED_MESSAGE, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { redis } from '#/cache.ts';
@@ -454,7 +455,7 @@ builder.queryFields((t) => ({
         .from(Entities)
         .leftJoin(Documents, eq(Documents.entityId, Entities.id))
         .leftJoin(Folders, eq(Folders.entityId, Entities.id))
-        .where(entityRefFilter(ids));
+        .where(and(entityRefFilter(ids), ne(Entities.type, EntityType.DIVIDER)));
       const entities = [...new Map(rows.map((row) => [row.entity.id, row.entity])).values()];
 
       const privateSiteIds = [

@@ -89,6 +89,9 @@ og.get('/:entityId', async (c) => {
   const node = await match(entity.type)
     .with(EntityType.FOLDER, () => renderFolder(entityId))
     .with(EntityType.DOCUMENT, () => renderDocument(entityId))
+    .with(EntityType.DIVIDER, () => {
+      throw new HTTPException(404);
+    })
     .exhaustive();
 
   const svg = await satori(node, {

@@ -5,6 +5,7 @@
   import mixpanel from 'mixpanel-browser';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
+  import MinusIcon from '~icons/lucide/minus';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
@@ -52,6 +53,36 @@
     graphql(`
       mutation TreeRootMenu_CreateFolder_Mutation($input: CreateFolderInput!) {
         createFolder(input: $input) {
+          id
+
+          entity {
+            id
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const [createDivider] = createMutation(
+    graphql(`
+      mutation TreeRootMenu_CreateDivider_Mutation($input: CreateDividerInput!) {
+        createDivider(input: $input) {
           id
 
           entity {
@@ -270,6 +301,21 @@
   }}
 >
   새 폴더 생성
+</MenuItem>
+
+<MenuItem
+  icon={MinusIcon}
+  onclick={async () => {
+    if (!SubscribeModal.gate('tree_root_menu_create_divider')) {
+      return;
+    }
+
+    const resp = await createDivider({ input: { siteId } });
+    mixpanel.track('create_divider', { via: 'tree_root_menu' });
+    entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createDivider.entity.id, [], false));
+  }}
+>
+  새 구분선 삽입
 </MenuItem>
 
 {#if app.state.clipboard}

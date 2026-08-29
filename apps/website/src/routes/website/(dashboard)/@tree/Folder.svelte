@@ -11,6 +11,7 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
   import { graphql } from '$mearie';
+  import EmptyFolderMenu from '../@context-menu/EmptyFolderMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
   import EntityGoalIndicator from '../@goal/EntityGoalIndicator.svelte';
@@ -39,6 +40,7 @@
         id
         name
         characterCount
+        createdAt
 
         entity {
           id
@@ -56,6 +58,10 @@
             targetCharacterCount
             dueAt
             createdAt
+          }
+
+          parent {
+            id
           }
 
           lastChild {
@@ -167,7 +173,7 @@
 
     const childEntities = children.data.entity.children.map((child) => ({
       id: child.id,
-      type: child.node.__typename as 'Document' | 'Folder',
+      type: child.node.__typename as 'Document' | 'Folder' | 'Divider',
       icon: '',
       iconColor: 'gray',
       parentId: folder.data.entity.id,
@@ -361,11 +367,16 @@
   {#snippet tooltipContent()}
     <FolderTooltip
       characterCount={tooltipInfo.data?.folder.characterCount}
+      createdAt={folder.data.createdAt}
       documentCount={tooltipInfo.data?.folder.documentCount}
       folderCount={tooltipInfo.data?.folder.folderCount}
       loading={tooltipInfo.loading}
       visibility={folder.data.entity.visibility}
     />
+  {/snippet}
+
+  {#snippet emptyFolderMenuContent()}
+    <EmptyFolderMenu entity={folder.data.entity} />
   {/snippet}
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
@@ -399,6 +410,7 @@
             fontWeight: 'medium',
             color: 'text.disabled',
           })}
+          use:contextMenu={{ content: emptyFolderMenuContent }}
         >
           폴더가 비어있어요
         </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { graphql } from '$mearie';
+  import Divider from './Divider.svelte';
   import Document from './Document.svelte';
   import Folder from './Folder.svelte';
   import type { DashboardLayout_EntityTree_Entity_entity$key } from '$mearie';
@@ -29,6 +30,11 @@
             id
             ...DashboardLayout_EntityTree_Document_document
           }
+
+          ... on Divider {
+            id
+            ...DashboardLayout_EntityTree_Divider_divider
+          }
         }
       }
     `),
@@ -40,4 +46,6 @@
   <Folder folder$key={entity.data.node} />
 {:else if entity.data.node.__typename === 'Document'}
   <Document document$key={entity.data.node} />
+{:else if entity.data.node.__typename === 'Divider'}
+  <Divider divider$key={entity.data.node} />
 {/if}

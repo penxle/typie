@@ -14,6 +14,7 @@
   import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
+  import MinusIcon from '~icons/lucide/minus';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
@@ -29,7 +30,7 @@
   type EntityNode = {
     id: string;
     node: {
-      __typename: 'Document' | 'Folder';
+      __typename: 'Document' | 'Folder' | 'Divider';
     };
     children?: EntityNode[];
     ' $_DashboardLayout_EntityTree_Entity_entity'?: unknown;
@@ -253,6 +254,7 @@
     const count = {
       document: 0,
       folder: 0,
+      divider: 0,
     };
 
     for (const entityId of selectedEntityIds) {
@@ -264,10 +266,11 @@
 
       if (entity.type === 'Folder') {
         count.folder++;
-        continue;
+      } else if (entity.type === 'Divider') {
+        count.divider++;
+      } else {
+        count.document++;
       }
-
-      count.document++;
     }
 
     return count;
@@ -877,6 +880,7 @@
       return {
         document: 0,
         folder: 0,
+        divider: 0,
       };
     }
 
@@ -889,6 +893,7 @@
     return {
       document: dragging.element.dataset.type === 'document' ? 1 : 0,
       folder: dragging.element.dataset.type === 'folder' ? 1 : 0,
+      divider: dragging.element.dataset.type === 'divider' ? 1 : 0,
     };
   });
 
@@ -1015,7 +1020,8 @@
         <div class={flex({ alignItems: 'center', gap: '2px', minWidth: '0' })}>
           <Icon
             style={css.raw({ color: 'text.bright', flexShrink: '0' })}
-            icon={entityIconMap.get(dragging?.element.dataset.icon ?? '') ?? (ghostEntityType === 'folder' ? FolderIcon : FileIcon)}
+            icon={entityIconMap.get(dragging?.element.dataset.icon ?? '') ??
+              (ghostEntityType === 'folder' ? FolderIcon : ghostEntityType === 'divider' ? MinusIcon : FileIcon)}
             size={14}
           />
           <span
@@ -1042,6 +1048,12 @@
           <div class={center({ gap: '2px' })}>
             <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
             {ghostEntityCount.document}
+          </div>
+        {/if}
+        {#if ghostEntityCount.divider > 0}
+          <div class={center({ gap: '2px' })}>
+            <Icon style={css.raw({ color: 'text.bright' })} icon={MinusIcon} size={14} />
+            {ghostEntityCount.divider}
           </div>
         {/if}
       {/if}

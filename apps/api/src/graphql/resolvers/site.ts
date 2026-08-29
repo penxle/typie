@@ -170,6 +170,7 @@ Site.implement({
             and(
               eq(Entities.siteId, self.id),
               eq(Entities.state, EntityState.DELETED),
+              ne(Entities.type, EntityType.DIVIDER),
               gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
               or(isNull(parentEntities.id), eq(parentEntities.state, EntityState.ACTIVE)),
             ),
@@ -198,6 +199,7 @@ SiteView.implement({
                 and(
                   inArray(Entities.siteId, ids),
                   eq(Entities.state, EntityState.ACTIVE),
+                  ne(Entities.type, EntityType.DIVIDER),
                   eq(Entities.visibility, EntityVisibility.PUBLIC),
                   isNull(Entities.parentId),
                 ),

@@ -33,6 +33,7 @@ export type EntityType = keyof typeof EntityType;
 export const EntityType = {
   DOCUMENT: 'DOCUMENT',
   FOLDER: 'FOLDER',
+  DIVIDER: 'DIVIDER',
 } as const;
 
 export type EntityVisibility = keyof typeof EntityVisibility;

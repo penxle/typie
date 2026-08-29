@@ -7,6 +7,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
+  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { getContext, tick } from 'svelte';
   import BlendIcon from '~icons/lucide/blend';
@@ -19,6 +20,7 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
+  import MinusIcon from '~icons/lucide/minus';
   import PencilIcon from '~icons/lucide/pencil-line';
   import ScissorsIcon from '~icons/lucide/scissors';
   import SquarePenIcon from '~icons/lucide/square-pen';
@@ -27,11 +29,12 @@
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
+  import { josa } from '$lib/josa';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
-  import { maxDepth } from '../@tree/utils';
+  import { getNextSiblingOrder, maxDepth } from '../@tree/utils';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
 
@@ -39,14 +42,17 @@
     folder: {
       id: string;
       name: string;
+      createdAt: string;
     };
     entity: {
       id: string;
+      order: string;
       url: string;
       depth: number;
       visibility: EntityVisibility;
       icon: string;
       iconColor: string;
+      parent?: { id: string } | null;
       lastChild?: {
         id: string;
         order: string;
@@ -144,6 +150,50 @@
     graphql(`
       mutation FolderMenu_CreateFolder_Mutation($input: CreateFolderInput!) {
         createFolder(input: $input) {
+          id
+
+          entity {
+            id
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const [createDivider] = createMutation(
+    graphql(`
+      mutation FolderMenu_CreateDivider_Mutation($input: CreateDividerInput!) {
+        createDivider(input: $input) {
           id
 
           entity {
@@ -380,31 +430,6 @@
   이름 변경
 </MenuItem>
 
-<EntityIconPicker
-  icon={entity.icon}
-  iconColor={entity.iconColor}
-  onColorSelect={async (color) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
-
-    await updateEntityIcon(
-      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
-    );
-  }}
-  onIconSelect={async (name) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
-
-    await updateEntityIcon(
-      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
-    );
-  }}
-/>
-
 <HorizontalDivider color="secondary" />
 
 <MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
@@ -430,6 +455,33 @@
 >
   목표
 </MenuItem>
+
+<HorizontalDivider color="secondary" />
+
+<EntityIconPicker
+  icon={entity.icon}
+  iconColor={entity.iconColor}
+  onColorSelect={async (color) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
+    );
+  }}
+  onIconSelect={async (name) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
+    );
+  }}
+/>
 
 <MenuItem
   icon={ClipboardCopyIcon}
@@ -507,32 +559,30 @@
   </MenuItem>
 {/if}
 
-<HorizontalDivider color="secondary" />
-
 <MenuItem
-  icon={SquarePenIcon}
+  icon={MinusIcon}
   onclick={async () => {
-    if (!SubscribeModal.gate('folder_menu_create_document')) {
+    if (!SubscribeModal.gate('folder_menu_create_sibling_divider')) {
       return;
     }
 
-    const resp = await createDocument({
+    const resp = await createDivider({
       input: {
         siteId: entity.site.id,
-        parentEntityId: entity.id,
-        v2: true,
+        parentEntityId: entity.parent?.id ?? null,
+        lowerOrder: entity.order,
+        upperOrder: getNextSiblingOrder(entity.id) ?? null,
       },
     });
 
-    mixpanel.track('create_child_document', { via });
-    open();
-    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [entity.id], false);
-    entityTreeRevealState.set(revealRequest);
-    await goto(`/${resp.createDocument.entity.slug}`);
+    mixpanel.track('create_divider', { via });
+    entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createDivider.entity.id, entity.parent ? [entity.parent.id] : [], false));
   }}
 >
-  하위 문서 생성
+  아래에 구분선 삽입
 </MenuItem>
+
+<HorizontalDivider color="secondary" />
 
 {#if entity.depth < maxDepth - 1}
   <MenuItem
@@ -561,6 +611,31 @@
     하위 폴더 생성
   </MenuItem>
 {/if}
+
+<MenuItem
+  icon={SquarePenIcon}
+  onclick={async () => {
+    if (!SubscribeModal.gate('folder_menu_create_document')) {
+      return;
+    }
+
+    const resp = await createDocument({
+      input: {
+        siteId: entity.site.id,
+        parentEntityId: entity.id,
+        v2: true,
+      },
+    });
+
+    mixpanel.track('create_child_document', { via });
+    open();
+    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [entity.id], false);
+    entityTreeRevealState.set(revealRequest);
+    await goto(`/${resp.createDocument.entity.slug}`);
+  }}
+>
+  하위 문서 생성
+</MenuItem>
 
 <HorizontalDivider color="secondary" />
 
@@ -611,7 +686,7 @@
     paddingX: '10px',
     paddingY: '4px',
     fontSize: '12px',
-    color: 'text.disabled',
+    color: 'text.faint',
     userSelect: 'none',
   })}
 >
@@ -634,13 +709,13 @@
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
       {#if info.data.folder.folderCount > 0}
         <div class={center({ gap: '2px' })}>
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
+          <Icon icon={FolderIcon} size={14} />
           {info.data.folder.folderCount}개
         </div>
       {/if}
       {#if info.data.folder.documentCount > 0}
         <div class={center({ gap: '2px' })}>
-          <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
+          <Icon icon={FileIcon} size={14} />
           {info.data.folder.documentCount}개
         </div>
       {/if}
@@ -648,6 +723,8 @@
 
     <span>총 {comma(info.data.folder.characterCount)}자</span>
   {/if}
+
+  <div>생성: {dayjs(folder.createdAt).formatAsDateTime()}</div>
 
   <button
     class={flex({
@@ -689,9 +766,14 @@
   {:else if descendants.data}
     {@const folders = descendants.data.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
     {@const documents = descendants.data.entity.descendants.filter((d) => d.type === EntityType.DOCUMENT).length}
+    {@const dividers = descendants.data.entity.descendants.filter((d) => d.type === EntityType.DIVIDER).length}
 
-    {#if folders > 0 || documents > 0}
-      {@const items = [folders > 0 && `${folders}개의 하위 폴더`, documents > 0 && `${documents}개의 하위 문서`].filter(Boolean)}
+    {#if folders > 0 || documents > 0 || dividers > 0}
+      {@const items = [
+        folders > 0 && `${folders}개의 하위 폴더`,
+        documents > 0 && `${documents}개의 하위 문서`,
+        dividers > 0 && `${dividers}개의 하위 구분선`,
+      ].filter(Boolean)}
       <div
         class={flex({
           alignItems: 'center',
@@ -704,7 +786,7 @@
       >
         <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-          {items.join('와 ')}가 함께 삭제돼요
+          {items.join('와 ')}{josa(items.at(-1) || '', '이', '가')} 함께 삭제돼요
         </span>
       </div>
     {:else}

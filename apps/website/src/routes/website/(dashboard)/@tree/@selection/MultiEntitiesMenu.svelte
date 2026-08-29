@@ -11,10 +11,12 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import InfoIcon from '~icons/lucide/info';
+  import MinusIcon from '~icons/lucide/minus';
   import ScissorsIcon from '~icons/lucide/scissors';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { cache } from '$lib/graphql';
+  import { josa } from '$lib/josa';
   import { graphql } from '$mearie';
   import EntityIconPicker from '../../@context-menu/EntityIconPicker.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
@@ -82,9 +84,10 @@
     `),
   );
 
-  const { folderIds, documentIds } = $derived.by(() => {
+  const { folderIds, documentIds, dividerIds } = $derived.by(() => {
     const folderIds: string[] = [];
     const documentIds: string[] = [];
+    const dividerIds: string[] = [];
 
     const entityIds = tree.selectedEntityIds;
 
@@ -95,6 +98,8 @@
             folderIds.push(entity.id);
           } else if (entity.type === 'Document') {
             documentIds.push(entity.id);
+          } else if (entity.type === 'Divider') {
+            dividerIds.push(entity.id);
           }
         }
 
@@ -106,18 +111,19 @@
 
     collect(tree.entities);
 
-    return { folderIds, documentIds };
+    return { folderIds, documentIds, dividerIds };
   });
 
+  const iconTargetIds = $derived([...folderIds, ...documentIds]);
+
   const { allSameIcon, allSameIconColor } = $derived.by(() => {
-    const entityIds = tree.selectedEntityIds;
     let firstIcon: string | undefined;
     let firstIconColor: string | undefined;
     let allSameIcon: string | undefined;
     let allSameIconColor: string | undefined;
     let first = true;
 
-    for (const entityId of entityIds) {
+    for (const entityId of iconTargetIds) {
       const entity = tree.entityMap.get(entityId);
       if (!entity) continue;
 
@@ -155,63 +161,71 @@
         {documentIds.length}개
       </div>
     {/if}
+    {#if dividerIds.length > 0}
+      <div class={center({ gap: '2px' })}>
+        <Icon style={css.raw({ color: 'text.disabled' })} icon={MinusIcon} size={14} />
+        {dividerIds.length}개
+      </div>
+    {/if}
   </div>
 </div>
 
 <HorizontalDivider color="secondary" />
 
-<EntityIconPicker
-  icon={allSameIcon}
-  iconColor={allSameIconColor}
-  onColorSelect={async (color) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
+{#if iconTargetIds.length > 0}
+  <EntityIconPicker
+    icon={allSameIcon}
+    iconColor={allSameIconColor}
+    onColorSelect={async (color) => {
+      if (!SubscribeModal.gate('entity_update_icon')) {
+        return;
+      }
 
-    const entityIds = [...tree.selectedEntityIds];
-    await updateEntitiesIcon(
-      { input: { entityIds, icon: allSameIcon, iconColor: color } },
-      {
-        metadata: {
-          cache: {
-            optimisticResponse: {
-              updateEntitiesIcon: entityIds.map((id) => ({
-                id,
-                icon: allSameIcon ?? tree.entityMap.get(id)?.icon ?? 'file',
-                iconColor: color,
-              })),
+      const entityIds = iconTargetIds;
+      await updateEntitiesIcon(
+        { input: { entityIds, icon: allSameIcon, iconColor: color } },
+        {
+          metadata: {
+            cache: {
+              optimisticResponse: {
+                updateEntitiesIcon: entityIds.map((id) => ({
+                  id,
+                  icon: allSameIcon ?? tree.entityMap.get(id)?.icon ?? 'file',
+                  iconColor: color,
+                })),
+              },
             },
           },
         },
-      },
-    );
-  }}
-  onIconSelect={async (name) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
+      );
+    }}
+    onIconSelect={async (name) => {
+      if (!SubscribeModal.gate('entity_update_icon')) {
+        return;
+      }
 
-    const entityIds = [...tree.selectedEntityIds];
-    await updateEntitiesIcon(
-      { input: { entityIds, icon: name, iconColor: allSameIconColor } },
-      {
-        metadata: {
-          cache: {
-            optimisticResponse: {
-              updateEntitiesIcon: entityIds.map((id) => ({
-                id,
-                icon: name,
-                iconColor: allSameIconColor ?? tree.entityMap.get(id)?.iconColor ?? 'gray',
-              })),
+      const entityIds = iconTargetIds;
+      await updateEntitiesIcon(
+        { input: { entityIds, icon: name, iconColor: allSameIconColor } },
+        {
+          metadata: {
+            cache: {
+              optimisticResponse: {
+                updateEntitiesIcon: entityIds.map((id) => ({
+                  id,
+                  icon: name,
+                  iconColor: allSameIconColor ?? tree.entityMap.get(id)?.iconColor ?? 'gray',
+                })),
+              },
             },
           },
         },
-      },
-    );
-  }}
-/>
+      );
+    }}
+  />
 
-<HorizontalDivider color="secondary" />
+  <HorizontalDivider color="secondary" />
+{/if}
 
 {#if folderIds.length > 0}
   <MenuItem
@@ -311,6 +325,11 @@
 </MenuItem>
 
 {#snippet deleteDetailsView()}
+  {@const items = [
+    folderIds.length > 0 && `${folderIds.length}개의 폴더`,
+    documentIds.length > 0 && `${documentIds.length}개의 문서`,
+    dividerIds.length > 0 && `${dividerIds.length}개의 구분선`,
+  ].filter(Boolean)}
   <div
     class={flex({
       alignItems: 'center',
@@ -323,9 +342,7 @@
   >
     <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
-      {[folderIds.length > 0 && `${folderIds.length}개의 폴더`, documentIds.length > 0 && `${documentIds.length}개의 문서`]
-        .filter(Boolean)
-        .join(', ')}가 삭제돼요
+      {items.join(', ')}{josa(items.at(-1) || '', '이', '가')} 삭제돼요
     </span>
   </div>
 

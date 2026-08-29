@@ -5,6 +5,7 @@ import { TypieError } from '@typie/lib/errors';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
   db,
+  Dividers,
   DocumentBundles,
   Documents,
   DocumentStates,
@@ -446,6 +447,8 @@ export const copyEntityRecursive = async (
     const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
     const resolvedName = await resolveNameConflict(tx, sourceFolder.name, targetParentId, targetSiteId, 'FOLDER');
     await copyFolder(tx, sourceEntityId, newEntity.id, resolvedName, targetSiteId, targetDepth, userId, v2Map);
+  } else if (sourceEntity.type === EntityType.DIVIDER) {
+    await tx.insert(Dividers).values({ entityId: newEntity.id });
   }
 
   // Notes 복제
