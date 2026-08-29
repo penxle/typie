@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { hoverIntent } from '@typie/ui/actions';
   import { onDestroy, onMount } from 'svelte';
   import { advanceEntityNameMotion } from './entity-name-motion';
 
@@ -21,7 +22,6 @@
   let overflowRight = $state(false);
   let fogTransitionReady = $state(false);
   let prefersReducedMotion = $state(false);
-  let hoverDelay: number | undefined;
   let animationFrame: number | undefined;
   let fogTransitionFrame: number | undefined;
   let fogTransitionScheduled = false;
@@ -36,14 +36,6 @@
     overflowRight = viewport ? viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1 : false;
   };
 
-  const cancelHoverIntent = () => {
-    if (hoverDelay !== undefined) {
-      window.clearTimeout(hoverDelay);
-      hoverDelay = undefined;
-    }
-    hoverReady = false;
-  };
-
   const cancelAnimation = () => {
     if (animationFrame !== undefined) {
       window.cancelAnimationFrame(animationFrame);
@@ -51,11 +43,6 @@
     }
     motionVelocity = 0;
     previousFrameTime = undefined;
-  };
-
-  const cancelMotion = () => {
-    cancelHoverIntent();
-    cancelAnimation();
   };
 
   const settleAt = (element: HTMLSpanElement, position: number) => {
@@ -66,7 +53,7 @@
   };
 
   const reset = () => {
-    cancelMotion();
+    cancelAnimation();
     motionPosition = 0;
     if (viewport) viewport.scrollLeft = 0;
     updateOverflow();
@@ -114,37 +101,12 @@
     animationFrame = window.requestAnimationFrame(advance);
   };
 
-  const scheduleHoverIntent = () => {
-    cancelHoverIntent();
-
-    const element = viewport;
-    if (!element) return;
-
-    hoverDelay = window.setTimeout(() => {
-      hoverDelay = undefined;
-      if (!hovered || viewport !== element) return;
-
-      hoverReady = true;
-      startMotion();
-    }, HOVER_DELAY);
-  };
-
-  const handlePointerEnter = () => {
-    hovered = true;
-    scheduleHoverIntent();
-  };
-
-  const handlePointerLeave = () => {
-    hovered = false;
-    reset();
-  };
-
   const maskImage = `linear-gradient(to right, rgb(0 0 0 / var(--entity-name-leading-mask-alpha)), black ${FOG_WIDTH}px, black calc(100% - ${FOG_WIDTH}px), rgb(0 0 0 / var(--entity-name-trailing-mask-alpha)))`;
 
   $effect(() => {
     void name;
     reset();
-    if (hovered) scheduleHoverIntent();
+    if (hoverReady) startMotion();
   });
 
   $effect(() => {
@@ -166,6 +128,23 @@
 
   onMount(() => {
     const hoverTarget = viewport?.closest<HTMLElement>('[role="treeitem"]');
+    const hoverIntentAction = hoverTarget
+      ? hoverIntent(hoverTarget, {
+          delay: HOVER_DELAY,
+          onEnter: () => {
+            hovered = true;
+          },
+          onIntent: () => {
+            hoverReady = true;
+            startMotion();
+          },
+          onLeave: () => {
+            hovered = false;
+            hoverReady = false;
+            reset();
+          },
+        })
+      : undefined;
     const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const updateReducedMotion = () => {
       prefersReducedMotion = reducedMotionQuery.matches;
@@ -175,21 +154,18 @@
       settleAt(element, Math.max(0, element.scrollWidth - element.clientWidth));
     };
 
-    hoverTarget?.addEventListener('pointerenter', handlePointerEnter);
-    hoverTarget?.addEventListener('pointerleave', handlePointerLeave);
     reducedMotionQuery.addEventListener('change', updateReducedMotion);
     updateReducedMotion();
     updateOverflow();
 
     return () => {
       if (fogTransitionFrame !== undefined) window.cancelAnimationFrame(fogTransitionFrame);
-      hoverTarget?.removeEventListener('pointerenter', handlePointerEnter);
-      hoverTarget?.removeEventListener('pointerleave', handlePointerLeave);
+      hoverIntentAction?.destroy?.();
       reducedMotionQuery.removeEventListener('change', updateReducedMotion);
     };
   });
 
-  onDestroy(cancelMotion);
+  onDestroy(cancelAnimation);
 </script>
 
 <span
