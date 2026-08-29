@@ -16,6 +16,7 @@ export { default as Popover } from './Popover.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';
 export { default as ProgressRing } from './ProgressRing.svelte';
 export { default as RingSpinner } from './RingSpinner.svelte';
+export { default as Scrollbar } from './Scrollbar.svelte';
 export { default as SearchableDropdown } from './SearchableDropdown.svelte';
 export { default as SegmentButtons } from './SegmentButtons.svelte';
 export { default as Select } from './Select.svelte';

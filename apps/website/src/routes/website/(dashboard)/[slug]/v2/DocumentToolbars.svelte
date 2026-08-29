@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { VerticalDivider } from '@typie/ui/components';
+  import { Scrollbar, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import ArrowUpDownIcon from '~icons/lucide/arrow-up-down';
@@ -14,7 +14,6 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { otherToolbarKind, readPrimaryToolbar, writePrimaryToolbar } from './toolbar-kind';
-  import ToolbarHorizontalScrollbar from './ToolbarHorizontalScrollbar.svelte';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ComponentProps } from 'svelte';
   import type { ToolbarKind } from './toolbar-kind';
@@ -161,7 +160,13 @@
     </div>
   </div>
 
-  <ToolbarHorizontalScrollbar controls={primaryToolbarId} scrollContainer={primaryScrollContainer} />
+  <Scrollbar
+    controls={primaryToolbarId}
+    label="툴바 가로 스크롤"
+    orientation="horizontal"
+    scrollContainer={primaryScrollContainer}
+    size="sm"
+  />
 </div>
 
 {#if open}
@@ -180,6 +185,12 @@
       {@render items(expanded)}
     </div>
 
-    <ToolbarHorizontalScrollbar controls={expandedToolbarId} scrollContainer={expandedScrollContainer} />
+    <Scrollbar
+      controls={expandedToolbarId}
+      label="툴바 가로 스크롤"
+      orientation="horizontal"
+      scrollContainer={expandedScrollContainer}
+      size="sm"
+    />
   </div>
 {/if}
