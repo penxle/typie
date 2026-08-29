@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
+  import { Icon, Menu, MenuItem, Scrollbar, TimeAgo } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import { tick } from 'svelte';
   import ArchiveIcon from '~icons/lucide/archive';
@@ -44,6 +44,7 @@
   let searchEl = $state<HTMLInputElement>();
   let editEl = $state<HTMLInputElement>();
   let listEl = $state<HTMLElement>();
+  const listScrollId = 'prism-session-list-scroll';
   let pendingEdit: Session | null = null;
 
   const labelOf = sessionLabel;
@@ -162,7 +163,7 @@
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: '0',
-    marginRight: '4px',
+    marginRight: '6px',
     size: '24px',
     borderRadius: '4px',
     color: 'text.faint',
@@ -255,59 +256,64 @@
     </button>
   </div>
 
-  <div
-    bind:this={listEl}
-    class={css({ flexGrow: '1', minHeight: '0', overflowY: 'auto', scrollbarWidth: 'none', paddingBottom: '12px' })}
-    role="listbox"
-  >
-    {#if sessions.length === 0}
-      <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
-        아직 대화가 없어요
-      </div>
-    {:else if visible.length === 0 && archived.length === 0}
-      <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
-        "{query.trim()}"에 맞는 대화가 없어요
-      </div>
-    {/if}
-
-    {#each groups as group (group.key)}
-      <div class={groupLabel}>{group.label}</div>
-      {#each group.sessions as session (session.id)}
-        {@render item(session, indexOf(session.id), false)}
-      {/each}
-    {/each}
-
-    {#if archived.length > 0}
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '4px',
-          width: 'full',
-          paddingX: '14px',
-          paddingTop: '14px',
-          paddingBottom: '4px',
-          fontSize: '11px',
-          fontWeight: 'medium',
-          color: 'text.faint',
-          _hover: { color: 'text.subtle' },
-        })}
-        aria-expanded={showArchived}
-        onclick={() => (archivedOpen = !archivedOpen)}
-        type="button"
-      >
-        <Icon
-          style={css.raw({ transition: '[transform 160ms ease]', transform: showArchived ? 'rotate(90deg)' : 'rotate(0deg)' })}
-          icon={ChevronRightIcon}
-          size={12}
-        />
-        보관됨 ({archived.length})
-      </button>
-      {#if showArchived}
-        {#each archived as session (session.id)}
-          {@render item(session, indexOf(session.id), true)}
-        {/each}
+  <div class={css({ position: 'relative', flexGrow: '1', minHeight: '0' })}>
+    <div
+      bind:this={listEl}
+      id={listScrollId}
+      class={css({ height: 'full', overflowY: 'auto', scrollbarWidth: 'none', paddingBottom: '12px' })}
+      role="listbox"
+    >
+      {#if sessions.length === 0}
+        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+          아직 대화가 없어요
+        </div>
+      {:else if visible.length === 0 && archived.length === 0}
+        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+          "{query.trim()}"에 맞는 대화가 없어요
+        </div>
       {/if}
-    {/if}
+
+      {#each groups as group (group.key)}
+        <div class={groupLabel}>{group.label}</div>
+        {#each group.sessions as session (session.id)}
+          {@render item(session, indexOf(session.id), false)}
+        {/each}
+      {/each}
+
+      {#if archived.length > 0}
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '4px',
+            width: 'full',
+            paddingX: '14px',
+            paddingTop: '14px',
+            paddingBottom: '4px',
+            fontSize: '11px',
+            fontWeight: 'medium',
+            color: 'text.faint',
+            _hover: { color: 'text.subtle' },
+          })}
+          aria-expanded={showArchived}
+          onclick={() => (archivedOpen = !archivedOpen)}
+          type="button"
+        >
+          <Icon
+            style={css.raw({ transition: '[transform 160ms ease]', transform: showArchived ? 'rotate(90deg)' : 'rotate(0deg)' })}
+            icon={ChevronRightIcon}
+            size={12}
+          />
+          보관됨 ({archived.length})
+        </button>
+        {#if showArchived}
+          {#each archived as session (session.id)}
+            {@render item(session, indexOf(session.id), true)}
+          {/each}
+        {/if}
+      {/if}
+    </div>
+
+    <Scrollbar controls={listScrollId} label="대화 목록 세로 스크롤" orientation="vertical" scrollContainer={listEl} size="md" />
   </div>
 </div>
 

@@ -2,7 +2,7 @@
   import { awaitingRunClose, effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, Scrollbar } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -347,6 +347,7 @@
   };
 
   let content = $state<HTMLElement>();
+  const transcriptScrollId = 'prism-transcript-scroll';
   let overflowTop = $state(false);
   let overflowBottom = $state(false);
 
@@ -445,6 +446,7 @@
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
   <div
     bind:this={container}
+    id={transcriptScrollId}
     style:mask-image={maskImage}
     class={flex({
       flexDirection: 'column',
@@ -540,6 +542,8 @@
       {/if}
     </div>
   </div>
+
+  <Scrollbar controls={transcriptScrollId} label="대화 본문 세로 스크롤" orientation="vertical" scrollContainer={container} size="md" />
 
   {#if !follow}
     <button
