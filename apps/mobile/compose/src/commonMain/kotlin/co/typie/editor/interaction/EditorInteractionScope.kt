@@ -55,6 +55,7 @@ internal class EditorInteractionScope(
   private val semantics =
     EditorInteractionSemantics(
       effects = this,
+      coroutineScope = coroutineScope,
       contextMenuStateProvider = {
         checkNotNull(uiState) { "Editor interaction scope has no UI state" }.contextMenu
       },

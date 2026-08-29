@@ -38,6 +38,7 @@ internal fun EditorZoomOverlay(modifier: Modifier = Modifier) {
   val zoomController = LocalEditorZoomController.current
   val enabled = zoomController.isZoomEnabled
   val displayZoom = zoomController.displayZoom
+  val indicatorZoom = zoomController.indicatorZoom
 
   var visible by remember { mutableStateOf(false) }
   var lastZoom by remember { mutableStateOf<Float?>(null) }
@@ -78,7 +79,7 @@ internal fun EditorZoomOverlay(modifier: Modifier = Modifier) {
       animationSpec = tween(durationMillis = ZoomOverlayFadeMs),
       label = "editor-zoom-overlay-alpha",
     )
-  val zoomPercent = (displayZoom * 100f).toInt()
+  val zoomPercent = (indicatorZoom * 100f).toInt()
 
   Box(modifier = modifier.graphicsLayer { this.alpha = alpha }) {
     Box(

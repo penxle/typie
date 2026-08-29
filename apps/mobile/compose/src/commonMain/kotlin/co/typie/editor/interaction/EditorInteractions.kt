@@ -36,7 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val EditorTapSlopDp = 8f
-private const val WheelBurstGapMs = 56L
+private const val WheelBurstGapMs = 32L
 
 private enum class EditorDirectPointerAdmission {
   Document,
@@ -289,22 +289,8 @@ private class EditorInteractionsNode(
       finishReleasedPointers(pointerEvent)
       return
     }
-    if (pressedTouchChanges.size == 1) {
-      val survivor = pressedTouchChanges.single()
-      val rootPosition = positionInRoot(survivor.position)
-      if (
-        interactionController.endPinchAndResumeViewportPan(
-          change = survivor,
-          position = rootPosition,
-          driver = scrollDriver,
-        )
-      ) {
-        singlePointerStreams += survivor.id.value
-        consumeEditorChanges(pointerEvent)
-        finishReleasedPointers(pointerEvent)
-        return
-      }
-    } else if (interactionController.onPinchEnd()) {
+    if (interactionController.onPinchEnd()) {
+      suppressUntilAllUp = pressedTouchChanges.isNotEmpty()
       consumeEditorChanges(pointerEvent)
       finishReleasedPointers(pointerEvent)
       return
@@ -541,7 +527,8 @@ private class EditorInteractionsNode(
 
   private fun resolvePinchSample(changes: List<PointerInputChange>): EditorPinchSample? =
     resolveEditorPinchSample(
-      positionsInRoot = changes.map { change -> positionInRoot(change.position) }
+      positionsInRoot = changes.map { change -> positionInRoot(change.position) },
+      timestampMillis = changes.maxOfOrNull(PointerInputChange::uptimeMillis) ?: 0L,
     )
 
   private fun positionInRoot(position: Offset): Offset =
@@ -650,6 +637,7 @@ private class EditorInteractionsNode(
     val zoomModified = pointerEvent.keyboardModifiers.isEditorIndirectZoomModifierPressed()
     if (!zoomModified) {
       finishWheelZoom()
+      interactionController.interruptZoomForDirectPan()
       if (scrollDriver.launchPointerSignalScroll(scrollDelta = scrollDelta, density = density)) {
         onViewportIndirectInput()
         pointerEvent.changes.forEach(PointerInputChange::consume)
@@ -719,6 +707,9 @@ private class EditorInteractionsNode(
     if (!canAcceptIndirectInput() && !yieldPendingPhysicalPointerToIndirectInput()) {
       pointerEvent.changes.forEach(PointerInputChange::consume)
       return
+    }
+    if (pointerEvent.type == PointerEventType.PanStart) {
+      interactionController.interruptZoomForDirectPan()
     }
     if (pointerEvent.type == PointerEventType.PanMove) {
       val panOffset =

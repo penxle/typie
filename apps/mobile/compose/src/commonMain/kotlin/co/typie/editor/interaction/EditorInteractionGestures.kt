@@ -378,20 +378,6 @@ internal class EditorInteractionGestures(
     return ended
   }
 
-  fun endPinchAndResumeViewportPan(
-    change: PointerInputChange,
-    position: Offset,
-    driver: EditorPanGestureDriver,
-    context: EditorGestureContext,
-  ): Boolean {
-    if (!pinch.isPinching) {
-      return false
-    }
-    endPinch(context = context)
-    pan.resume(change = change, position = position, driver = driver)
-    return true
-  }
-
   fun beginIndirectZoom(context: EditorGestureContext): Boolean {
     if (!context.mode.canApply(EditorInteractionEvent.ViewportZoomStart)) {
       return false
@@ -435,7 +421,7 @@ internal class EditorInteractionGestures(
     )
 
   fun endIndirectZoom(context: EditorGestureContext) {
-    context.semantics.viewportZoom.end()
+    context.semantics.viewportZoom.release()
     context.applyModeEvent(EditorInteractionEvent.ViewportZoomEnd)
   }
 

@@ -333,6 +333,16 @@ function dispatchEditorKey(editor: Editor, key: RepeatKey, init: KeyboardEventIn
   return beforeRevision;
 }
 
+function editorTouch(target: EventTarget, identifier: number, clientX: number, clientY: number): Touch {
+  return new Touch({ identifier, target, clientX, clientY });
+}
+
+function dispatchEditorTouch(target: HTMLElement, type: string, touches: Touch[]): TouchEvent {
+  const event = new TouchEvent(type, { touches, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
 async function pressEditorKey(editor: Editor, key: 'Enter' | 'Backspace') {
   const beforeRevision = dispatchEditorKey(editor, key);
   await expect.poll(() => editor.appliedRevision).toBeGreaterThan(beforeRevision);
@@ -1324,7 +1334,7 @@ describe('web editor frame synchronization', () => {
       expectActualCanvas(editor, 0);
     }
 
-    await expect.poll(() => editor.renderZoom).toBeCloseTo(editor.displayZoom);
+    await expect.poll(() => Math.abs(editor.renderZoom - editor.displayZoom)).toBeLessThan(0.005);
     for (let frame = 0; frame < 60 && editor.published?.frames.get(0)?.canvas === displayed; frame += 1) {
       await nextAnimationFrame();
       const sample = readWebFrameSample(editor, scrollRoot, 0, 12 + frame, null);
@@ -1338,6 +1348,40 @@ describe('web editor frame synchronization', () => {
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0).length).toBeGreaterThan(0);
     expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
+  });
+
+  it('stops zoom on the first pinch pointer release and keeps the survivor zoom-owned until all-up', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc('touch zoom'), { withZoom: true });
+    await waitForPresentation(editor);
+    const pageRect = editor.pageEls[0]?.getBoundingClientRect();
+    if (!pageRect) throw new Error('Expected a mounted editor page');
+    const centerX = pageRect.left + pageRect.width / 2;
+    const centerY = pageRect.top + 60;
+
+    dispatchEditorTouch(scrollRoot, 'touchstart', [
+      editorTouch(scrollRoot, 0, centerX - 30, centerY),
+      editorTouch(scrollRoot, 1, centerX + 30, centerY),
+    ]);
+    await nextAnimationFrame();
+    const survivor = editorTouch(scrollRoot, 0, centerX - 36, centerY);
+    dispatchEditorTouch(scrollRoot, 'touchmove', [survivor, editorTouch(scrollRoot, 1, centerX + 36, centerY)]);
+    await nextAnimationFrame();
+    const zoomAtRelease = editor.displayZoom;
+
+    dispatchEditorTouch(scrollRoot, 'touchend', [survivor]);
+    const survivorMove = dispatchEditorTouch(scrollRoot, 'touchmove', [editorTouch(scrollRoot, 0, centerX - 38, centerY)]);
+
+    expect(survivorMove.defaultPrevented).toBe(true);
+    await nextAnimationFrame();
+    await nextAnimationFrame();
+    expect(editor.displayZoom).toBeCloseTo(zoomAtRelease);
+
+    dispatchEditorTouch(scrollRoot, 'touchend', []);
+    const nextTouch = editorTouch(scrollRoot, 2, centerX, centerY);
+    dispatchEditorTouch(scrollRoot, 'touchstart', [nextTouch]);
+    const nextMove = dispatchEditorTouch(scrollRoot, 'touchmove', [editorTouch(scrollRoot, 2, centerX, centerY + 2)]);
+    expect(nextMove.defaultPrevented).toBe(false);
+    dispatchEditorTouch(scrollRoot, 'touchend', []);
   });
 
   it('keeps the scrollbar thumb synchronized without showing scroll progress for zoom correction', async () => {

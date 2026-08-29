@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { IS_MAC } from '$lib/editor-ffi/constants';
+  import { resolveDocumentZoomIndicator } from '$lib/editor-ffi/zoom';
   import { EditorZoomController } from '../editor-zoom.svelte';
   import ZoomOverlay from './ZoomOverlay.svelte';
   import type { Snippet } from 'svelte';
@@ -25,12 +26,16 @@
     zoom: number;
     clientX: number;
     clientY: number;
+    timestampMs: number;
   };
+
+  type PinchContact = Pick<Touch, 'clientX' | 'clientY'>;
 
   let { editor, active = true, layout, viewportWidth, attachViewportAnchor, children }: Props = $props();
 
   let pinchSession = $state<PinchSession | null>(null);
   let pinchQueuedUpdate = $state<PinchUpdate | null>(null);
+  let suppressPinchUntilAllUp = false;
   let pinchFlushPromise: Promise<void> | null = null;
   const scrollContainer = $derived(editor.scrollContainerEl);
 
@@ -45,6 +50,7 @@
   const zoomEnabled = $derived(layout !== null);
   const displayZoom = $derived(zoomEnabled ? zoom.displayZoom : 1);
   const renderZoom = $derived(zoomEnabled ? zoom.renderZoom : 1);
+  const indicatorZoom = $derived(layout ? resolveDocumentZoomIndicator(displayZoom, layout) : 1);
 
   $effect(() => {
     editor.displayZoom = displayZoom;
@@ -112,11 +118,11 @@
     }
   };
 
-  function isTouchOnPage(touch: Touch): boolean {
+  function isTouchOnPage(touch: PinchContact): boolean {
     return editor.clientToLocal(touch.clientX, touch.clientY) !== null;
   }
 
-  function touchDistance(t1: Touch, t2: Touch): number {
+  function touchDistance(t1: PinchContact, t2: PinchContact): number {
     return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
   }
 
@@ -131,32 +137,36 @@
     while (pinchQueuedUpdate) {
       const next = pinchQueuedUpdate;
       pinchQueuedUpdate = null;
-      await zoom.zoomToClientPoint(next.zoom, next.clientX, next.clientY);
+      await zoom.updateDirectZoom('touch', next.zoom, next.clientX, next.clientY, next.timestampMs);
     }
   }
 
-  async function commitPinchZoom(): Promise<void> {
+  async function finishPinchZoom(): Promise<void> {
     await pinchFlushPromise;
-    zoom.commitRenderZoom();
+    await zoom.releaseDirectZoom('touch');
   }
 
-  function tryStartPinch(touches: TouchList): boolean {
-    if (!zoomEnabled || touches.length !== 2) {
-      return false;
-    }
+  function cancelPinchAndSuppressUntilAllUp(remainingTouches: number): void {
+    pinchSession = null;
+    pinchQueuedUpdate = null;
+    suppressPinchUntilAllUp = remainingTouches > 0;
+    zoom.cancelDirectZoom('touch');
+  }
 
-    const t1 = touches.item(0);
-    const t2 = touches.item(1);
-    if (!t1 || !t2) {
-      return false;
-    }
-
+  function tryStartPinchWithContacts(t1: PinchContact, t2: PinchContact, timestampMs: number): boolean {
+    if (!zoomEnabled) return false;
     if (!isTouchOnPage(t1) || !isTouchOnPage(t2)) {
       return false;
     }
 
     const startDistance = touchDistance(t1, t2);
     if (!Number.isFinite(startDistance) || startDistance <= 0) {
+      return false;
+    }
+
+    const clientX = (t1.clientX + t2.clientX) / 2;
+    const clientY = (t1.clientY + t2.clientY) / 2;
+    if (!zoom.beginDirectZoom('touch', clientX, clientY, timestampMs)) {
       return false;
     }
 
@@ -168,20 +178,46 @@
     return true;
   }
 
+  function tryStartPinch(touches: TouchList, timestampMs: number): boolean {
+    if (touches.length !== 2) return false;
+    const t1 = touches.item(0);
+    const t2 = touches.item(1);
+    return t1 !== null && t2 !== null && tryStartPinchWithContacts(t1, t2, timestampMs);
+  }
+
   function handleTouchStartForPinch(event: TouchEvent): void {
-    if (pinchSession || !zoomEnabled || event.touches.length !== 2) {
+    if (!zoomEnabled) {
       return;
     }
 
-    tryStartPinch(event.touches);
+    if (suppressPinchUntilAllUp) return;
+
+    if (pinchSession && event.touches.length > 2) {
+      cancelPinchAndSuppressUntilAllUp(event.touches.length);
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      zoom.interruptForDirectPan();
+      return;
+    }
+
+    if (pinchSession || event.touches.length !== 2) return;
+
+    tryStartPinch(event.touches, event.timeStamp);
   }
 
   function handleTouchMoveForPinch(event: TouchEvent): void {
+    if (suppressPinchUntilAllUp) {
+      if (event.cancelable) event.preventDefault();
+      return;
+    }
+
     if (!zoomEnabled || event.touches.length !== 2) {
       return;
     }
 
-    if (!pinchSession && !tryStartPinch(event.touches)) {
+    if (!pinchSession && !tryStartPinch(event.touches, event.timeStamp)) {
       return;
     }
 
@@ -204,25 +240,29 @@
       zoom: pinchSession.startZoom * (distance / pinchSession.startDistance),
       clientX: (t1.clientX + t2.clientX) / 2,
       clientY: (t1.clientY + t2.clientY) / 2,
+      timestampMs: event.timeStamp,
     });
   }
 
   function handleTouchEndForPinch(event: TouchEvent): void {
-    if (event.touches.length < 2) {
-      pinchSession = null;
-      void commitPinchZoom();
+    if (suppressPinchUntilAllUp) {
+      if (event.touches.length === 0) suppressPinchUntilAllUp = false;
       return;
     }
 
-    if (event.touches.length === 2) {
-      pinchSession = null;
-      tryStartPinch(event.touches);
+    if (!pinchSession) return;
+    if (event.touches.length >= 2) {
+      cancelPinchAndSuppressUntilAllUp(event.touches.length);
+      return;
     }
+
+    pinchSession = null;
+    suppressPinchUntilAllUp = event.touches.length > 0;
+    void finishPinchZoom();
   }
 
-  function handleTouchCancelForPinch(): void {
-    pinchSession = null;
-    void commitPinchZoom();
+  function handleTouchCancelForPinch(event: TouchEvent): void {
+    cancelPinchAndSuppressUntilAllUp(event.touches.length);
   }
 
   $effect(() => {
@@ -241,8 +281,8 @@
     const handleTouchEnd = (event: Event) => {
       handleTouchEndForPinch(event as TouchEvent);
     };
-    const handleTouchCancel = () => {
-      handleTouchCancelForPinch();
+    const handleTouchCancel = (event: Event) => {
+      handleTouchCancelForPinch(event as TouchEvent);
     };
 
     target.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
@@ -252,6 +292,10 @@
     target.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
+      pinchSession = null;
+      pinchQueuedUpdate = null;
+      suppressPinchUntilAllUp = false;
+      zoom.cancelDirectZoom('touch');
       target.removeEventListener('wheel', handleWheelForZoom, { capture: true });
       target.removeEventListener('touchstart', handleTouchStart);
       target.removeEventListener('touchmove', handleTouchMove);
@@ -267,6 +311,8 @@
 
     pinchSession = null;
     pinchQueuedUpdate = null;
+    suppressPinchUntilAllUp = false;
+    zoom.cancelDirectZoom();
   });
 </script>
 
@@ -276,4 +322,4 @@
   {@render children?.()}
 </div>
 
-<ZoomOverlay {displayZoom} enabled={zoomEnabled} {scrollContainer} />
+<ZoomOverlay {displayZoom} enabled={zoomEnabled} {indicatorZoom} {scrollContainer} />

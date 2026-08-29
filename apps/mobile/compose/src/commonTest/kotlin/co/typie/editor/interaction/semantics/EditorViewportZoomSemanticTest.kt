@@ -16,6 +16,212 @@ import kotlin.test.assertTrue
 
 class EditorViewportZoomSemanticTest {
   @Test
+  fun `slow pinch detents at a snap point while hard bounds remain elastic`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.95f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(0.95f)
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(
+      fixture.semantic.updatePinch(
+        start.copy(distancePx = 100f * (0.99f / 0.95f), timestampMillis = 250L)
+      )
+    )
+    assertEquals(1f, fixture.zoomController.displayZoom, 0.0001f)
+
+    assertTrue(
+      fixture.semantic.updatePinch(
+        start.copy(distancePx = 100f * (2.2f / 0.95f), timestampMillis = 500L)
+      )
+    )
+    assertTrue(fixture.zoomController.displayZoom > 2f)
+    assertTrue(fixture.zoomController.displayZoom < 2.2f)
+
+    fixture.semantic.release()
+    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(2f, fixture.zoomController.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `fast pinch crosses a snap point without capture`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.95f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(0.95f)
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(
+      fixture.semantic.updatePinch(
+        start.copy(distancePx = 100f * (0.99f / 0.95f), timestampMillis = 50L)
+      )
+    )
+
+    assertEquals(0.99f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `release from a direct detent stays settled`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.95f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(0.95f)
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(
+      fixture.semantic.updatePinch(
+        start.copy(distancePx = 100f * (0.99f / 0.95f), timestampMillis = 250L)
+      )
+    )
+    fixture.semantic.release()
+
+    assertEquals(1f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `fast in-range pinch stops at the released zoom`() {
+    val fixture = Fixture()
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 120f, timestampMillis = 16L)))
+    fixture.semantic.release()
+
+    assertEquals(1.2f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `overshoot recovery sends one zoom snap haptic`() {
+    val fixture = Fixture()
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 220f, timestampMillis = 250L)))
+    assertTrue(fixture.zoomController.displayZoom > 2f)
+    assertEquals(0, fixture.zoomSnapCount)
+
+    fixture.semantic.release()
+
+    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(1, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `tiny overshoot recovers to the exact bound with one haptic`() {
+    val fixture = Fixture()
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(
+      fixture.semantic.updatePinch(start.copy(distancePx = 200.1f, timestampMillis = 250L))
+    )
+    assertTrue(fixture.zoomController.displayZoom > 2f)
+
+    fixture.semantic.release()
+
+    assertEquals(2f, fixture.zoomController.displayZoom)
+    assertEquals(1, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `first indirect update does not assume a slow velocity`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.95f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(0.95f)
+
+    assertTrue(fixture.semantic.beginIndirect())
+    assertTrue(
+      fixture.semantic.updateIndirectScale(
+        focalInRootPx = Offset(80f, 150f),
+        scaleFactor = 0.99f / 0.95f,
+      )
+    )
+
+    assertEquals(0.99f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `overzoom stays elastic when the fit detent equals the hard bound`() {
+    val fixture =
+      Fixture(
+        viewportWidth = 1000f,
+        documentLayoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 400f),
+      )
+    fixture.zoomController.setDisplayZoom(
+      zoom = 2f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(2f)
+    val start =
+      EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f, timestampMillis = 0L)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 110f, timestampMillis = 250L)))
+
+    assertTrue(fixture.zoomController.displayZoom > 2f)
+    assertTrue(fixture.zoomController.displayZoom < 2.2f)
+    assertEquals(0, fixture.zoomSnapCount)
+
+    fixture.semantic.release()
+
+    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(1, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `direct pan interruption ends transform while recovering overzoom`() {
+    val fixture = Fixture()
+    val start = EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f)
+
+    assertTrue(fixture.semantic.beginPinch(start))
+    assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 220f)))
+    fixture.semantic.interruptForDirectPan()
+
+    assertEquals(false, fixture.viewportState.isTransforming)
+    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `cancelling indirect zoom before its first sample does not strand overzoom`() {
+    val fixture = Fixture()
+    fixture.zoomController.setGestureDisplayZoom(
+      rawZoom = 2.2f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    assertTrue(fixture.zoomController.displayZoom > 2f)
+
+    assertTrue(fixture.semantic.beginIndirect())
+    fixture.semantic.cancel()
+
+    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(false, fixture.viewportState.isTransforming)
+  }
+
+  @Test
   fun `pinch zoom keeps the anchor under the focal point`() {
     val fixture = Fixture()
 
@@ -27,7 +233,7 @@ class EditorViewportZoomSemanticTest {
     assertEquals(1.5f, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(Offset(40f, 75f), fixture.viewportState.scrollOffset)
 
-    fixture.semantic.end()
+    fixture.semantic.release()
     assertEquals(false, fixture.viewportState.isTransforming)
     assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
   }
@@ -46,10 +252,10 @@ class EditorViewportZoomSemanticTest {
     assertTrue(fixture.semantic.updatePinch(start.copy(distancePx = 75f)))
 
     assertEquals(0.75f, fixture.zoomController.displayZoom, 0.0001f)
-    assertEquals(1f, fixture.zoomController.renderZoom, 0.0001f)
+    assertEquals(0.75f, fixture.zoomController.renderZoom, 0.0001f)
     assertTrue(fixture.attachedAnchors.isNotEmpty())
 
-    fixture.semantic.end()
+    fixture.semantic.release()
     assertEquals(0.75f, fixture.zoomController.renderZoom, 0.0001f)
   }
 
@@ -146,7 +352,7 @@ class EditorViewportZoomSemanticTest {
     assertEquals(1f, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(Offset(x = 100f, y = 80f), fixture.viewportState.scrollOffset)
 
-    fixture.semantic.end()
+    fixture.semantic.release()
     fixture.viewportState.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 120f),
       contentSize = Size(width = 500f, height = 500f),
@@ -172,7 +378,7 @@ class EditorViewportZoomSemanticTest {
     assertEquals(1.5f, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(Offset(40f, 75f), fixture.viewportState.scrollOffset)
 
-    fixture.semantic.end()
+    fixture.semantic.release()
     assertEquals(false, fixture.viewportState.isTransforming)
     assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
   }
@@ -236,7 +442,9 @@ class EditorViewportZoomSemanticTest {
     assertTrue(
       fixture.semantic.updateIndirectScroll(Offset(300f, 0f), normalizedDeltaForOneAndHalfZoom)
     )
-    assertEquals(2f, fixture.zoomController.displayZoom, 0.0001f)
+    val overzoom = fixture.zoomController.displayZoom
+    assertTrue(overzoom > 2f)
+    assertTrue(overzoom < 2.25f)
     assertEquals(Offset.Zero, fixture.viewportState.scrollOffset)
 
     fixture.viewportState.updateMeasuredBounds(
@@ -244,7 +452,7 @@ class EditorViewportZoomSemanticTest {
       contentSize = Size(width = 1440f, height = 2000f),
     )
 
-    assertEquals(Offset(300f, 0f), fixture.viewportState.scrollOffset)
+    assertEquals(Offset(300f * (overzoom - 1f), 0f), fixture.viewportState.scrollOffset)
   }
 
   @Test
@@ -260,7 +468,7 @@ class EditorViewportZoomSemanticTest {
     assertEquals(1.5f, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(Offset(40f, 75f), fixture.viewportState.scrollOffset)
 
-    fixture.semantic.end()
+    fixture.semantic.release()
     assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
   }
 
@@ -285,6 +493,9 @@ class EditorViewportZoomSemanticTest {
     val layoutSpec = documentLayoutSpec
     val attachedAnchors =
       mutableListOf<Triple<co.typie.editor.EditorViewportAnchor, Offset, Offset>>()
+    var zoomSnapCount = 0
+      private set
+
     val zoomController = EditorZoomController()
     val viewportState =
       EditorViewportState().apply {
@@ -333,7 +544,7 @@ class EditorViewportZoomSemanticTest {
           pageSizes = pageSizes,
           viewportWidth = viewportWidth,
           density = 1f,
-          onZoomSnap = {},
+          onZoomSnap = { zoomSnapCount += 1 },
           onAttachViewportAnchor = { anchor, displayPosition, scrollOffset ->
             attachedAnchors += Triple(anchor, displayPosition, scrollOffset)
           },
