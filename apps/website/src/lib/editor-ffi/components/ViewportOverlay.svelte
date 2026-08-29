@@ -1,17 +1,29 @@
 <script lang="ts" module>
   import { createStableContext } from '@typie/ui/context/stable';
+  import type { Editor } from '../editor.svelte';
 
   class ViewportOverlayContext {
     #frame: number | null = null;
-    change = $state(0);
+    #editor: Editor | undefined;
+    #change = $state(0);
 
     requestSync = () => {
       if (this.#frame !== null) return;
       this.#frame = requestAnimationFrame(() => {
         this.#frame = null;
-        this.change += 1;
+        this.#change += 1;
       });
     };
+
+    constructor(editor: Editor | undefined) {
+      this.#editor = editor;
+    }
+
+    // Presentation updates are already frame-coalesced, so consumers observe them directly.
+    get change(): number {
+      void this.#editor?.presentationGeometryRevision;
+      return this.#change;
+    }
 
     destroy(): void {
       if (this.#frame === null) return;
@@ -38,7 +50,7 @@
   let { children }: Props = $props();
 
   const { editor } = getEditorContext();
-  const overlay = setViewportOverlayContext(new ViewportOverlayContext());
+  const overlay = setViewportOverlayContext(new ViewportOverlayContext(editor));
 
   $effect(() => {
     if (!editor) return;

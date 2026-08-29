@@ -145,6 +145,19 @@
     return `${Math.round(y.ratio * 100)}%`;
   });
 
+  function sync() {
+    if (!scrollContainer) return;
+    metrics = {
+      scrollTop: scrollContainer.scrollTop,
+      scrollLeft: scrollContainer.scrollLeft,
+      scrollHeight: scrollContainer.scrollHeight,
+      scrollWidth: scrollContainer.scrollWidth,
+      clientHeight: scrollContainer.clientHeight,
+      clientWidth: scrollContainer.clientWidth,
+    };
+    containerRect = scrollContainer.getBoundingClientRect();
+  }
+
   function markUserScroll() {
     userScrollActive = true;
     clearTimeout(userScrollTimer);
@@ -163,18 +176,6 @@
     const el = scrollContainer;
     if (!el) return;
 
-    const sync = () => {
-      metrics = {
-        scrollTop: el.scrollTop,
-        scrollLeft: el.scrollLeft,
-        scrollHeight: el.scrollHeight,
-        scrollWidth: el.scrollWidth,
-        clientHeight: el.clientHeight,
-        clientWidth: el.clientWidth,
-      };
-      containerRect = el.getBoundingClientRect();
-    };
-
     const handleScroll = () => {
       sync();
       show(userScrollActive || dragAxis !== null ? 'user' : 'auto');
@@ -192,8 +193,6 @@
     el.addEventListener('wheel', handleUserInput, { passive: true });
     el.addEventListener('touchmove', handleUserInput, { passive: true });
 
-    sync();
-
     return () => {
       el.removeEventListener('scroll', handleScroll);
       el.removeEventListener('wheel', handleUserInput);
@@ -202,6 +201,11 @@
       clearTimeout(hideTimer);
       clearTimeout(userScrollTimer);
     };
+  });
+
+  $effect(() => {
+    void editor?.presentationGeometryRevision;
+    sync();
   });
 
   function startDrag(axis: 'x' | 'y', e: PointerEvent): ScrollDragSession | null {
