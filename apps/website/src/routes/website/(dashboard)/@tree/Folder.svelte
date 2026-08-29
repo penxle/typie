@@ -1,15 +1,14 @@
 <script lang="ts">
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
+  import { flex } from '@typie/styled-system/patterns';
   import { contextMenu, tooltip } from '@typie/ui/actions';
-  import { Icon, Menu, RingSpinner } from '@typie/ui/components';
+  import { Icon, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import EllipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
@@ -20,6 +19,8 @@
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
   import { entityTreeRevealState, shouldOpenEntityTreeFolder } from './entity-reveal.svelte';
+  import EntityMenu from './EntityMenu.svelte';
+  import EntityName from './EntityName.svelte';
   import FolderTooltip from './FolderTooltip.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Folder_folder$key } from '$mearie';
@@ -319,18 +320,7 @@
         />
       </form>
     {:else}
-      <span
-        class={css({
-          flexGrow: '1',
-          fontSize: '14px',
-          fontWeight: 'medium',
-          color: 'text.muted',
-          wordBreak: 'break-all',
-          lineClamp: '1',
-        })}
-      >
-        {folder.data.name}
-      </span>
+      <EntityName name={folder.data.name} />
 
       {#if folder.data.entity.goal}
         <EntityGoalIndicator
@@ -345,27 +335,9 @@
         />
       {/if}
 
-      <Menu placement="bottom-start">
-        {#snippet button({ open })}
-          <div
-            class={center({
-              borderRadius: '4px',
-              size: '16px',
-              color: 'text.disabled',
-              opacity: '0',
-              transition: 'common',
-              _hover: { backgroundColor: 'interactive.hover' },
-              _groupHover: { opacity: '100' },
-              _pressed: { backgroundColor: 'interactive.hover', opacity: '100' },
-            })}
-            aria-pressed={open}
-          >
-            <Icon icon={EllipsisIcon} size={14} />
-          </div>
-        {/snippet}
-
+      <EntityMenu label="폴더 메뉴">
         {@render contextMenuContent()}
-      </Menu>
+      </EntityMenu>
     {/if}
   </summary>
   {#snippet contextMenuContent()}

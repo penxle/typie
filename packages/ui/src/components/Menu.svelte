@@ -20,6 +20,7 @@
     setFullWidth?: boolean;
     disableAutoUpdate?: boolean;
     disabled?: boolean;
+    buttonAriaLabel?: string;
     onopen?: () => void;
     onclose?: () => void;
     ontransitionend?: () => void;
@@ -38,6 +39,7 @@
     setFullWidth = false,
     disableAutoUpdate = false,
     disabled = false,
+    buttonAriaLabel,
     onopen,
     onclose,
     ontransitionend,
@@ -211,6 +213,7 @@
     class={css(style)}
     aria-disabled={disabled}
     aria-expanded={open}
+    aria-label={buttonAriaLabel}
     {disabled}
     onclick={(e) => {
       if (disabled) {
