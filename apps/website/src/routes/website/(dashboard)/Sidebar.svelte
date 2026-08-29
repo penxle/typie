@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { pointerCapture, tooltip } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, Scrollbar } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -214,6 +214,7 @@
   };
 
   let treeScrollEl = $state<HTMLDivElement>();
+  const treeScrollId = 'sidebar-entity-tree-scroll';
   let canScrollUp = $state(false);
   let canScrollDown = $state(false);
 
@@ -680,19 +681,25 @@
       </div>
     </div>
 
-    <div
-      bind:this={treeScrollEl}
-      class={css({
-        flexGrow: '1',
-        overflowY: 'auto',
-        borderTopWidth: canScrollUp ? '1px' : '0',
-        borderBottomWidth: canScrollDown ? '1px' : '0',
-        borderColor: 'border.subtle',
-        transition: '[border-width 150ms ease]',
-      })}
-      onscroll={updateScrollState}
-    >
-      <EntityTree site$key={site} />
+    <div class={css({ position: 'relative', flexGrow: '1', minHeight: '0' })}>
+      <div
+        bind:this={treeScrollEl}
+        id={treeScrollId}
+        class={css({
+          height: 'full',
+          overflowY: 'auto',
+          scrollbar: 'hidden',
+          borderTopWidth: canScrollUp ? '1px' : '0',
+          borderBottomWidth: canScrollDown ? '1px' : '0',
+          borderColor: 'border.subtle',
+          transition: '[border-width 150ms ease]',
+        })}
+        onscroll={updateScrollState}
+      >
+        <EntityTree site$key={site} />
+      </div>
+
+      <Scrollbar controls={treeScrollId} label="트리 세로 스크롤" orientation="vertical" scrollContainer={treeScrollEl} size="md" />
     </div>
 
     <TrialWidget user$key={user.data} />
