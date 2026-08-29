@@ -20,6 +20,7 @@
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
+  import MinusIcon from '~icons/lucide/minus';
   import PlusIcon from '~icons/lucide/plus';
   import Rows2Icon from '~icons/lucide/rows-2';
   import ScissorsIcon from '~icons/lucide/scissors';
@@ -31,6 +32,8 @@
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
+  import { getNextSiblingOrder } from '../@tree/utils';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
   import type { Snippet } from 'svelte';
@@ -318,16 +321,49 @@
     `),
   );
 
-  const getUpperOrder = () => {
-    const el = globalThis.document.querySelector<HTMLElement>(`[data-id="${entity.id}"]`);
-    if (!el) return;
+  const [createDivider] = createMutation(
+    graphql(`
+      mutation DocumentMenu_CreateDivider_Mutation($input: CreateDividerInput!) {
+        createDivider(input: $input) {
+          id
 
-    let nextEl = el.nextElementSibling as HTMLElement | null;
-    while (nextEl && !Object.hasOwn(nextEl.dataset, 'id')) {
-      nextEl = nextEl.nextElementSibling as HTMLElement | null;
-    }
-    return nextEl?.dataset.order;
-  };
+          entity {
+            id
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
 
   const handleDuplicate = async () => {
     if (!SubscribeModal.gate('entity_duplicate')) {
@@ -440,33 +476,6 @@
   </div>
 {/snippet}
 
-<EntityIconPicker
-  icon={entity.icon}
-  iconColor={entity.iconColor}
-  onColorSelect={async (color) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
-
-    await updateEntityIcon(
-      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
-    );
-  }}
-  onIconSelect={async (name) => {
-    if (!SubscribeModal.gate('entity_update_icon')) {
-      return;
-    }
-
-    await updateEntityIcon(
-      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
-    );
-  }}
-/>
-
-<HorizontalDivider color="secondary" />
-
 {#if desktop}
   <MenuItem icon={PlusIcon} onclick={() => desktop?.openTab?.(`${location.origin}/${entity.slug}`)}>새 탭에 열기</MenuItem>
 {/if}
@@ -500,6 +509,41 @@
 </MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+
+{#if document.documentType === DocumentType.NORMAL}
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.TEMPLATE)}>템플릿으로 전환</MenuItem>
+{:else if document.documentType === DocumentType.TEMPLATE}
+  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.NORMAL)}>문서로 전환</MenuItem>
+{/if}
+
+<MenuItem icon={FileDownIcon} onclick={() => (app.state.exportOpen = entity.slug)}>파일로 내보내기</MenuItem>
+
+<HorizontalDivider color="secondary" />
+
+<EntityIconPicker
+  icon={entity.icon}
+  iconColor={entity.iconColor}
+  onColorSelect={async (color) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
+    );
+  }}
+  onIconSelect={async (name) => {
+    if (!SubscribeModal.gate('entity_update_icon')) {
+      return;
+    }
+
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
+    );
+  }}
+/>
 
 {#if via === 'tree'}
   <MenuItem
@@ -547,7 +591,7 @@
           return;
         }
 
-        const upperOrder = getUpperOrder() ?? null;
+        const upperOrder = getNextSiblingOrder(entity.id) ?? null;
         const count = clipboard.entityIds.length;
 
         const promise = (async () => {
@@ -585,19 +629,38 @@
       아래에 붙여넣기
     </MenuItem>
   {/if}
-{/if}
 
-{#if document.documentType === DocumentType.NORMAL}
-  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.TEMPLATE)}>템플릿으로 전환</MenuItem>
-{:else if document.documentType === DocumentType.TEMPLATE}
-  <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.NORMAL)}>문서로 전환</MenuItem>
+  {#if entity.order}
+    <MenuItem
+      icon={MinusIcon}
+      onclick={async () => {
+        const currentSiteId = app.preference.current.currentSiteId;
+        if (!currentSiteId || !entity.order) return;
+
+        if (!SubscribeModal.gate('document_menu_create_sibling_divider')) {
+          return;
+        }
+
+        const resp = await createDivider({
+          input: {
+            siteId: currentSiteId,
+            parentEntityId: entity.parent?.id ?? null,
+            lowerOrder: entity.order,
+            upperOrder: getNextSiblingOrder(entity.id) ?? null,
+          },
+        });
+
+        mixpanel.track('create_divider', { via });
+        const ancestorFolderIds = entity.parent ? [entity.parent.id] : [];
+        entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createDivider.entity.id, ancestorFolderIds, false));
+      }}
+    >
+      아래에 구분선 삽입
+    </MenuItem>
+  {/if}
 {/if}
 
 {@render children?.()}
-
-<HorizontalDivider color="secondary" />
-
-<MenuItem icon={FileDownIcon} onclick={() => (app.state.exportOpen = entity.slug)}>파일로 내보내기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

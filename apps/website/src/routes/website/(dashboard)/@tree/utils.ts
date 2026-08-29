@@ -51,3 +51,14 @@ export const getPreviousElement = (root: HTMLElement, current: HTMLElement, sele
 
   return null;
 };
+
+export const getNextSiblingOrder = (entityId: string): string | undefined => {
+  const el = document.querySelector<HTMLElement>(`[data-id="${entityId}"]`);
+  if (!el) return;
+
+  let nextEl = el.nextElementSibling as HTMLElement | null;
+  while (nextEl && !Object.hasOwn(nextEl.dataset, 'id')) {
+    nextEl = nextEl.nextElementSibling as HTMLElement | null;
+  }
+  return nextEl?.dataset.order;
+};

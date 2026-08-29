@@ -9,9 +9,10 @@
   type Props = {
     entityId: string;
     visibility?: EntityVisibility;
+    dot?: boolean;
   };
 
-  let { entityId, visibility }: Props = $props();
+  let { entityId, visibility, dot = true }: Props = $props();
 
   const treeState = getTreeContext();
   const selected = $derived(treeState.selectedEntityIds.has(entityId));
@@ -133,24 +134,26 @@
 </script>
 
 <div class={css({ position: 'relative', flex: 'none', size: '16px' })}>
-  <div
-    class={css(
-      {
-        position: 'absolute',
-        inset: '0',
-        borderRadius: 'full',
-        backgroundColor: 'interactive.hover',
-        size: '4px',
-        margin: 'auto',
-        opacity: '100',
-        transition: 'common',
-        _groupHover: { opacity: '0' },
-      },
-      visibility === EntityVisibility.PUBLIC && { backgroundColor: 'accent.success.default' },
-      visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
-      selected && { opacity: '0' },
-    )}
-  ></div>
+  {#if dot}
+    <div
+      class={css(
+        {
+          position: 'absolute',
+          inset: '0',
+          borderRadius: 'full',
+          backgroundColor: 'interactive.hover',
+          size: '4px',
+          margin: 'auto',
+          opacity: '100',
+          transition: 'common',
+          _groupHover: { opacity: '0' },
+        },
+        visibility === EntityVisibility.PUBLIC && { backgroundColor: 'accent.success.default' },
+        visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
+        selected && { opacity: '0' },
+      )}
+    ></div>
+  {/if}
   <div
     class={css(
       {

@@ -49,6 +49,7 @@ export const isTypeOf = (tableCode: string) => (self: unknown) => {
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
 export const IDocument = createInterfaceRef('IDocument', T.Documents);
 export const IFolder = createInterfaceRef('IFolder', T.Folders);
+export const IDivider = createInterfaceRef('IDivider', T.Dividers);
 export const ISite = createInterfaceRef('ISite', T.Sites);
 export const IUser = createInterfaceRef('IUser', T.Users);
 
@@ -62,6 +63,7 @@ export const Entity = createObjectRef('Entity', T.Entities);
 export const EntityGoal = createObjectRef('EntityGoal', T.EntityGoals);
 export const File = createObjectRef('File', T.Files);
 export const Folder = createObjectRef('Folder', T.Folders);
+export const Divider = createObjectRef('Divider', T.Dividers);
 export const Font = createObjectRef('Font', T.Fonts);
 export const FontFamily = createObjectRef('FontFamily', T.FontFamilies);
 export const Image = createObjectRef('Image', T.Images);
@@ -109,7 +111,7 @@ export const EntityContainer = builder.unionType('EntityContainer', {
 });
 
 export const EntityNode = builder.unionType('EntityNode', {
-  types: [Document, Folder],
+  types: [Document, Folder, Divider],
 });
 
 export const EntityViewNode = builder.unionType('EntityViewNode', {

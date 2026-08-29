@@ -190,6 +190,13 @@ enum CouponState {
   DISABLED
 }
 
+input CreateDividerInput {
+  lowerOrder: String
+  parentEntityId: ID
+  siteId: ID!
+  upperOrder: String
+}
+
 input CreateDocumentCommentInput {
   clientId: String!
   content: String!
@@ -315,6 +322,12 @@ input DeleteTextReplacementInput {
 
 input DeleteWidgetInput {
   widgetId: ID!
+}
+
+type Divider implements IDivider {
+  createdAt: DateTime!
+  entity: Entity!
+  id: ID!
 }
 
 type Document implements IDocument {
@@ -642,7 +655,7 @@ type EntityGoal {
   targetCharacterCount: Int!
 }
 
-union EntityNode = Document | Folder
+union EntityNode = Divider | Document | Folder
 
 enum EntityState {
   ACTIVE
@@ -651,6 +664,7 @@ enum EntityState {
 }
 
 enum EntityType {
+  DIVIDER
   DOCUMENT
   FOLDER
 }
@@ -714,6 +728,7 @@ type File implements Blob {
 
 type Folder implements IFolder {
   characterCount: Int!
+  createdAt: DateTime!
   documentCount: Int!
   entity: Entity!
   folderCount: Int!
@@ -770,6 +785,10 @@ input GenerateSingleSignOnAuthorizationUrlInput {
   email: String
   provider: SingleSignOnProvider!
   state: String!
+}
+
+interface IDivider {
+  id: ID!
 }
 
 interface IDocument {
@@ -948,6 +967,7 @@ type Mutation {
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
   closePrismReviewThread(input: ClosePrismReviewThreadInput!): PrismReviewThread!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
+  createDivider(input: CreateDividerInput!): Divider!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
   createDocumentCommentThread(input: CreateDocumentCommentThreadInput!): DocumentCommentThread!

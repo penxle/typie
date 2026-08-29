@@ -1,6 +1,6 @@
 export type TreeEntity = {
   id: string;
-  type: 'Document' | 'Folder';
+  type: 'Document' | 'Folder' | 'Divider';
   icon: string;
   iconColor: string;
   children?: TreeEntity[];

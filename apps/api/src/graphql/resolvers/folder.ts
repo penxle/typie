@@ -1,7 +1,7 @@
 import { EntityState, EntityType, EntityVisibility } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import { db, Documents, DocumentStates, Entities, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
@@ -30,6 +30,8 @@ Folder.implement({
     view: t.expose('id', { type: FolderView }),
 
     entity: t.expose('entityId', { type: Entity }),
+
+    createdAt: t.expose('createdAt', { type: 'DateTime' }),
 
     maxDescendantFoldersDepth: t.int({
       resolve: async (self) => {
@@ -418,11 +420,12 @@ builder.mutationFields((t) => ({
             .execute<{ id: string }>(
               sql`
                 WITH RECURSIVE sq AS (
-                  SELECT ${Entities.id} FROM ${Entities} WHERE ${inArray(Entities.parentId, entityIds)} AND ${eq(Entities.state, EntityState.ACTIVE)}
+                  SELECT ${Entities.id} FROM ${Entities}
+                  WHERE ${inArray(Entities.parentId, entityIds)} AND ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
                   UNION ALL
                   SELECT ${Entities.id} FROM ${Entities}
                   JOIN sq ON ${Entities.parentId} = sq.id
-                  WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+                  WHERE ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
                 )
                 SELECT id FROM sq;
               `,

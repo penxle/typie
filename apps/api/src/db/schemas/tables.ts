@@ -158,6 +158,22 @@ export const Folders = pgTable(
   (t) => [index().on(t.entityId)],
 );
 
+export const Dividers = pgTable(
+  'dividers',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.DIVIDERS, { length: 'short' })),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.entityId)],
+);
+
 export const FontFamilies = pgTable(
   'font_families',
   {

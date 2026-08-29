@@ -74,6 +74,10 @@
               id
               name
             }
+
+            ... on Divider {
+              id
+            }
           }
         }
       }
@@ -89,9 +93,9 @@
       const entity = found.find((candidate) => candidate.id === id || candidate.node.id === id);
       if (entity === undefined) return null;
       const node = entity.node;
-      return node.__typename === 'Folder'
-        ? { kind: 'folder', name: node.name, visibility: entity.visibility }
-        : { kind: 'document', name: node.title, visibility: entity.visibility };
+      if (node.__typename === 'Folder') return { kind: 'folder', name: node.name, visibility: entity.visibility };
+      if (node.__typename === 'Document') return { kind: 'document', name: node.title, visibility: entity.visibility };
+      return null;
     }),
   );
 

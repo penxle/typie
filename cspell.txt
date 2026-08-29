@@ -103,6 +103,7 @@ inview
 ipaddr
 ivec
 jaccard
+josa
 jsign
 kakao
 kakaokompassauth

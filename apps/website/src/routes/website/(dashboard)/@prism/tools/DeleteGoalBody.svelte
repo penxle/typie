@@ -34,6 +34,10 @@
               id
               name
             }
+
+            ... on Divider {
+              id
+            }
           }
         }
       }
@@ -47,7 +51,9 @@
     ids.map((id) => {
       const node = found.find((entity) => entity.id === id || entity.node.id === id)?.node;
       if (node === undefined) return null;
-      return node.__typename === 'Folder' ? node.name : node.title;
+      if (node.__typename === 'Folder') return node.name;
+      if (node.__typename === 'Document') return node.title;
+      return null;
     }),
   );
 

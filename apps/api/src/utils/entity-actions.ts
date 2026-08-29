@@ -1,9 +1,10 @@
 import { EntityAvailability, EntityState, EntityType, NoteState } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
+  Dividers,
   DocumentBundles,
   Documents,
   DocumentStates,
@@ -130,6 +131,99 @@ export const createFolderCore = async (executor: Database | Transaction, args: C
   });
 
   return folder;
+};
+
+type CreateDividerCoreArgs = {
+  userId: string;
+  siteId: string;
+  parentEntityId: string | null;
+  lowerOrder?: string | null;
+  upperOrder?: string | null;
+};
+
+export const createDividerCore = async (
+  executor: Database | Transaction,
+  args: CreateDividerCoreArgs,
+  afterCommit?: PostCommitRegistrar,
+) => {
+  await assertSitePermission({
+    userId: args.userId,
+    siteId: args.siteId,
+  });
+
+  await assertActiveSubscription({ userId: args.userId });
+
+  let depth = 0;
+  if (args.parentEntityId) {
+    const parentEntity = await executor
+      .select({ id: Entities.id, depth: Entities.depth })
+      .from(Entities)
+      .where(
+        and(
+          eq(Entities.siteId, args.siteId),
+          eq(Entities.id, args.parentEntityId),
+          eq(Entities.type, EntityType.FOLDER),
+          eq(Entities.state, EntityState.ACTIVE),
+        ),
+      )
+      .then(firstOrThrow);
+
+    depth = parentEntity.depth + 1;
+  }
+
+  let orderLower: string | null = args.lowerOrder ?? null;
+
+  if (!args.lowerOrder) {
+    const last = await executor
+      .select({ order: Entities.order })
+      .from(Entities)
+      .where(
+        and(eq(Entities.siteId, args.siteId), args.parentEntityId ? eq(Entities.parentId, args.parentEntityId) : isNull(Entities.parentId)),
+      )
+      .orderBy(desc(Entities.order))
+      .limit(1)
+      .then(first);
+
+    orderLower = last?.order ?? null;
+  }
+
+  const divider = await executor.transaction(async (tx) => {
+    const entity = await tx
+      .insert(Entities)
+      .values({
+        userId: args.userId,
+        siteId: args.siteId,
+        parentId: args.parentEntityId,
+        slug: generateSlug(),
+        permalink: generatePermalink(),
+        type: EntityType.DIVIDER,
+        icon: 'minus',
+        order: generateFractionalOrder({ lower: orderLower, upper: args.upperOrder ?? null }),
+        depth,
+      })
+      .returning({ id: Entities.id })
+      .then(firstOrThrow);
+
+    const divider = await tx
+      .insert(Dividers)
+      .values({
+        entityId: entity.id,
+      })
+      .returning()
+      .then(firstOrThrow);
+
+    return divider;
+  });
+
+  await runAfterCommit(afterCommit, async () => {
+    if (args.parentEntityId) {
+      pubsub.publish('site:update', args.siteId, { scope: 'entity', entityId: args.parentEntityId });
+    } else {
+      pubsub.publish('site:update', args.siteId, { scope: 'site' });
+    }
+  });
+
+  return divider;
 };
 
 type DeleteEntitiesCoreArgs = {
@@ -1102,10 +1196,12 @@ export const updateFolderOptionCore = async (
       const descendantEntities = await tx.execute<{ id: string; type: EntityType; state: EntityState }>(
         sql`
           WITH RECURSIVE sq AS (
-            SELECT ${Entities.id} FROM ${Entities} WHERE ${eq(Entities.parentId, folder.entityId)}
+            SELECT ${Entities.id} FROM ${Entities}
+            WHERE ${eq(Entities.parentId, folder.entityId)} AND ${ne(Entities.type, EntityType.DIVIDER)}
             UNION ALL
             SELECT ${Entities.id} FROM ${Entities}
             JOIN sq ON ${Entities.parentId} = sq.id
+            WHERE ${ne(Entities.type, EntityType.DIVIDER)}
           )
           SELECT ${DescendantEntities.id}, ${DescendantEntities.type}, ${DescendantEntities.state}
           FROM sq

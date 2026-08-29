@@ -6,6 +6,7 @@ import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import {
   db,
+  Dividers,
   DocumentHeads,
   Documents,
   DocumentStates,
@@ -104,6 +105,13 @@ Entity.implement({
               key: ({ entityId }) => entityId,
             }),
           )
+          .with(EntityType.DIVIDER, () =>
+            ctx.loader({
+              name: 'Entity.node (Divider)',
+              load: (ids) => db.select().from(Dividers).where(inArray(Dividers.entityId, ids)),
+              key: ({ entityId }) => entityId,
+            }),
+          )
           .exhaustive();
 
         return await loader.load(self.id);
@@ -195,6 +203,7 @@ Entity.implement({
                 and(
                   inArray(Entities.parentId, ids),
                   eq(Entities.state, EntityState.DELETED),
+                  ne(Entities.type, EntityType.DIVIDER),
                   gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
                 ),
               )
@@ -383,6 +392,9 @@ EntityView.implement({
               key: ({ entityId }) => entityId,
             }),
           )
+          .with(EntityType.DIVIDER, () => {
+            throw new NotFoundError();
+          })
           .exhaustive();
 
         return await loader.load(self.id);
@@ -398,7 +410,14 @@ EntityView.implement({
         return await db
           .select()
           .from(Entities)
-          .where(and(eq(Entities.parentId, self.id), eq(Entities.state, EntityState.ACTIVE), inArray(Entities.visibility, visibilities)))
+          .where(
+            and(
+              eq(Entities.parentId, self.id),
+              eq(Entities.state, EntityState.ACTIVE),
+              ne(Entities.type, EntityType.DIVIDER),
+              inArray(Entities.visibility, visibilities),
+            ),
+          )
           .orderBy(asc(Entities.order));
       },
     }),
@@ -622,6 +641,7 @@ builder.queryFields((t) => ({
           and(
             eq(Entities.siteId, site.id),
             eq(Entities.state, EntityState.ACTIVE),
+            ne(Entities.type, EntityType.DIVIDER),
             eq(
               Entities.slug,
               sql<string>`COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.SLUG} AND ${Redirects.from} = ${args.slug}), ${args.slug})`,
@@ -659,6 +679,7 @@ builder.queryFields((t) => ({
         .where(
           and(
             eq(Entities.state, EntityState.ACTIVE),
+            ne(Entities.type, EntityType.DIVIDER),
             eq(
               Entities.permalink,
               sql<string>`COALESCE((SELECT ${Redirects.to} FROM ${Redirects} WHERE ${Redirects.type} = ${RedirectType.PERMALINK} AND ${Redirects.from} = ${args.permalink}), ${args.permalink})`,

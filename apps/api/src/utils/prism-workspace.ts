@@ -1,10 +1,10 @@
 import { logger } from '@typie/lib';
 import { ENTITY_ICON_COLORS, ENTITY_ICON_NAMES, NOTE_COLORS, NOTE_DEFAULT_COLOR } from '@typie/lib/catalogs';
-import { DocumentCommentState, DocumentCommentThreadState, EntityState, NoteState } from '@typie/lib/enums';
+import { DocumentCommentState, DocumentCommentThreadState, EntityState, EntityType, NoteState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
@@ -172,6 +172,7 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
   const inScope = and(
     eq(Entities.siteId, ctx.siteId),
     eq(Entities.state, EntityState.ACTIVE),
+    ne(Entities.type, EntityType.DIVIDER),
     scope === null ? isNull(Entities.parentId) : eq(Entities.parentId, scope.entityId),
   );
   const total = await db
@@ -192,12 +193,12 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
         WITH RECURSIVE descendants AS (
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
           FROM ${Entities}
-          WHERE ${inArray(Entities.parentId, roots)} AND ${eq(Entities.state, EntityState.ACTIVE)}
+          WHERE ${inArray(Entities.parentId, roots)} AND ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
           UNION ALL
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
           FROM ${Entities}
           JOIN descendants ON ${Entities.parentId} = descendants.id
-          WHERE ${eq(Entities.state, EntityState.ACTIVE)}
+          WHERE ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
         )
         SELECT id, parent_id FROM descendants ORDER BY "order" ASC
       `)
@@ -491,6 +492,7 @@ const listTrash = async (ctx: PrismToolContext, input: unknown) => {
       and(
         eq(Entities.siteId, ctx.siteId),
         eq(Entities.state, EntityState.DELETED),
+        ne(Entities.type, EntityType.DIVIDER),
         gt(Entities.deletedAt, dayjs().subtract(30, 'days')),
         or(isNull(parents.id), eq(parents.state, EntityState.ACTIVE)),
       ),
