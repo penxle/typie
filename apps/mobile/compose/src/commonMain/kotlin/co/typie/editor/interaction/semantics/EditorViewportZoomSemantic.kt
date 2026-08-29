@@ -5,6 +5,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.EditorViewportAnchor
 import co.typie.editor.EditorZoomController
+import co.typie.editor.EditorZoomLandmark
 import co.typie.editor.EditorZoomMotion
 import co.typie.editor.EditorZoomMotionFrame
 import co.typie.editor.EditorZoomMotionTuning
@@ -12,6 +13,7 @@ import co.typie.editor.EditorZoomSnapKey
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.documentZoomWidth
 import co.typie.editor.clampDocumentLayoutZoom
+import co.typie.editor.clampDocumentZoom
 import co.typie.editor.computeDocumentZoomBounds
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorPinchSample
@@ -201,10 +203,88 @@ internal class EditorViewportZoomSemantic(
     val seed = currentConfig?.createMotionSeed()
     clearDirectSessions()
     if (currentConfig == null || seed == null) {
-      finishWithoutMotion(currentConfig)
+      settleAndFinishInteraction(currentConfig)
       return
     }
     finishOrRecover(config = currentConfig, seed = seed)
+  }
+
+  fun setZoomAtViewportCenter(targetZoom: Float, snapToLandmarks: Boolean = true): Boolean {
+    val currentConfig = config?.takeIf { it.isUsable } ?: return false
+    if (!targetZoom.isFinite() || targetZoom <= 0f) return false
+    val viewportSize = currentConfig.viewportState.viewportSize
+    if (viewportSize.width <= 0f || viewportSize.height <= 0f) return false
+    val previousZoom = currentConfig.zoomController.displayZoom
+    val startScrollOffset = currentConfig.viewportState.effectiveTransformScrollTarget
+    val viewportCenter =
+      startScrollOffset + Offset(x = viewportSize.width / 2f, y = viewportSize.height / 2f)
+    val anchor =
+      currentConfig
+        .resolveViewportTransform(displayZoom = previousZoom)
+        .resolveAnchor(focalX = viewportCenter.x, focalY = viewportCenter.y) ?: return false
+    val previousAnchorPosition =
+      currentConfig.resolveAnchorDisplayPosition(anchor, previousZoom) ?: return false
+    val resolvedZoom =
+      if (snapToLandmarks) {
+        clampDocumentLayoutZoom(
+          zoom = targetZoom,
+          layoutSpec = currentConfig.layoutSpec,
+          viewportWidth = currentConfig.viewportWidth,
+        )
+      } else {
+        clampDocumentZoom(targetZoom, computeDocumentZoomBounds(currentConfig.layoutSpec))
+      }
+    if (previousZoom == resolvedZoom) return false
+
+    clearDirectSessions()
+    stopMotion(commitRender = false)
+    beginTransform(currentConfig)
+    val changed =
+      currentConfig.zoomController.setDisplayZoom(
+        zoom = resolvedZoom,
+        layoutSpec = currentConfig.layoutSpec,
+        viewportWidth = currentConfig.viewportWidth,
+        snapToLandmarks = snapToLandmarks,
+      )
+    val anchorDisplayPosition =
+      currentConfig.resolveAnchorDisplayPosition(anchor, currentConfig.zoomController.displayZoom)
+    if (!changed || anchorDisplayPosition == null) {
+      finishInteraction(currentConfig)
+      return false
+    }
+    val targetScrollOffset = startScrollOffset + (anchorDisplayPosition - previousAnchorPosition)
+    currentConfig.viewportState.scrollToTransformTarget(
+      offset = targetScrollOffset,
+      retainUntilMeasuredBounds = true,
+    )
+    currentConfig.onAttachViewportAnchor(anchor, anchorDisplayPosition, targetScrollOffset)
+    finishInteraction(currentConfig)
+    return true
+  }
+
+  fun zoomInAtViewportCenter(): Boolean {
+    val currentConfig = config ?: return false
+    val targetZoom = currentConfig.zoomController.resolveZoomInTarget() ?: return false
+    val changed = setZoomAtViewportCenter(targetZoom, snapToLandmarks = false)
+    if (changed) currentConfig.onZoomSnap()
+    return changed
+  }
+
+  fun zoomOutAtViewportCenter(): Boolean {
+    val currentConfig = config ?: return false
+    val targetZoom = currentConfig.zoomController.resolveZoomOutTarget() ?: return false
+    val changed = setZoomAtViewportCenter(targetZoom, snapToLandmarks = false)
+    if (changed) currentConfig.onZoomSnap()
+    return changed
+  }
+
+  fun toggleIndicatorZoomAtViewportCenter(): EditorZoomLandmark? {
+    val currentConfig = config ?: return null
+    val targetZoom = currentConfig.zoomController.resolveIndicatorToggleTarget() ?: return null
+    if (!setZoomAtViewportCenter(targetZoom)) return null
+    val landmark = currentConfig.zoomController.resolveLandmark() ?: return null
+    currentConfig.onZoomSnap()
+    return landmark
   }
 
   private fun releaseForDirectPan() {
@@ -238,7 +318,7 @@ internal class EditorViewportZoomSemantic(
     if (currentConfig != null && seed != null) {
       finishOrRecover(config = currentConfig, seed = seed)
     } else {
-      finishWithoutMotion(currentConfig)
+      settleAndFinishInteraction(currentConfig)
     }
   }
 
@@ -321,6 +401,7 @@ internal class EditorViewportZoomSemantic(
     val bounds = computeDocumentZoomBounds(config.layoutSpec)
     val displayZoom = config.zoomController.displayZoom
     if (displayZoom in bounds) {
+      settleReleasedSnap(config = config, seed = seed, displayZoom = displayZoom)
       finishInteraction(config)
       return
     }
@@ -358,6 +439,41 @@ internal class EditorViewportZoomSemantic(
       }
       finishMotion(active)
     }
+  }
+
+  private fun settleReleasedSnap(
+    config: EditorViewportZoomSemanticConfig,
+    seed: MotionSeed,
+    displayZoom: Float,
+  ) {
+    val settledZoom =
+      clampDocumentLayoutZoom(
+        zoom = displayZoom,
+        layoutSpec = config.layoutSpec,
+        viewportWidth = config.viewportWidth,
+      )
+    val snapKey = config.zoomController.resolveSnapKey(settledZoom) ?: return
+    val anchorDisplayPosition =
+      config.resolveAnchorDisplayPosition(anchor = seed.anchor, displayZoom = settledZoom) ?: return
+    if (
+      !config.zoomController.setDisplayZoom(
+        zoom = settledZoom,
+        layoutSpec = config.layoutSpec,
+        viewportWidth = config.viewportWidth,
+      )
+    ) {
+      return
+    }
+
+    val targetScrollOffset =
+      seed.scrollOffset + (anchorDisplayPosition - seed.anchorDisplayPosition)
+    config.viewportState.scrollToTransformTarget(
+      offset = targetScrollOffset,
+      retainUntilMeasuredBounds = true,
+    )
+    config.onAttachViewportAnchor(seed.anchor, anchorDisplayPosition, targetScrollOffset)
+    lastSnapKey = snapKey
+    config.onZoomSnap()
   }
 
   private fun applyMotionFrame(active: ActiveMotion, frame: EditorZoomMotionFrame): Boolean {
@@ -414,7 +530,7 @@ internal class EditorViewportZoomSemantic(
     if (activeMotion !== active) return
     activeMotion = null
     motionJob = null
-    finishInteraction(config)
+    settleAndFinishInteraction(config)
   }
 
   private fun stopMotion(commitRender: Boolean) {
@@ -429,7 +545,7 @@ internal class EditorViewportZoomSemantic(
     if (config != null) endTransform(config) else transformActive = false
   }
 
-  private fun finishWithoutMotion(config: EditorViewportZoomSemanticConfig?) {
+  private fun settleAndFinishInteraction(config: EditorViewportZoomSemanticConfig?) {
     config
       ?.zoomController
       ?.setDisplayZoom(

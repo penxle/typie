@@ -18,11 +18,12 @@
   import SelectionHandles from './components/SelectionHandles.svelte';
   import EditorZoom from './components/ui/EditorZoom.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
-  import { PAGE_GAP } from './constants';
+  import { CONTINUOUS_MIN_WIDTH, PAGE_GAP } from './constants';
   import { setupEditorContext } from './editor.svelte';
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { setupEditorScroll } from './scroll.svelte';
+  import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
   import type { Editor } from './editor.svelte';
   import type { DocumentZoomLayout } from './zoom';
@@ -37,6 +38,7 @@
     useWindowScroll?: boolean;
     userId: string;
     withZoom?: boolean;
+    withViewportLifecycle?: boolean;
     headerHeight?: number;
     contentInsetLeft?: number;
     contentInsetRight?: number;
@@ -52,6 +54,7 @@
     useWindowScroll = false,
     userId,
     withZoom = false,
+    withViewportLifecycle = false,
     headerHeight = 0,
     contentInsetLeft = 0,
     contentInsetRight = 0,
@@ -74,6 +77,8 @@
   let viewportWidth = $state(360);
   let ready = false;
   let publishedReady = false;
+  let viewportInitialized = false;
+  let lastViewportWidth: number | undefined;
   const isPaginated = $derived(editor.rootAttrs?.layout_mode.type === 'paginated');
   const pageWidth = $derived(editor.pageSizes[0]?.width ?? 0);
   const zoomLayout: DocumentZoomLayout | null = $derived.by(() => {
@@ -103,6 +108,27 @@
       surfaceHost = undefined;
       host.destroy();
     };
+  });
+
+  $effect(() => {
+    if (!withViewportLifecycle) return;
+    const width = viewportWidth;
+    const renderZoom = editor.renderZoom;
+    const isContinuous = editor.rootAttrs?.layout_mode.type === 'continuous';
+    const physicalWidth = isContinuous ? Math.max(CONTINUOUS_MIN_WIDTH, width) : width;
+    const effectiveWidth = isContinuous
+      ? resolveContinuousLayoutViewportWidth({ viewportWidth: physicalWidth, committedZoom: renderZoom })
+      : physicalWidth;
+    untrack(() => {
+      const physicalViewportChanged = viewportInitialized && lastViewportWidth !== width;
+      lastViewportWidth = width;
+      if (viewportInitialized) editor.resizeViewport(effectiveWidth, 180, 1);
+      else {
+        viewportInitialized = true;
+        editor.resizeViewportNow(effectiveWidth, 180, 1);
+      }
+      if (physicalViewportChanged) ctx.scroll?.reconcileViewportResize();
+    });
   });
 
   $effect(() => {
@@ -189,13 +215,7 @@
     <div style:height={`${headerHeight}px`} data-editor-test-header></div>
   {/if}
   {#if withZoom}
-    <EditorZoom
-      active
-      attachViewportAnchor={(point) => ctx.scroll?.attachViewportAnchorAt(point)}
-      {editor}
-      layout={zoomLayout}
-      {viewportWidth}
-    >
+    <EditorZoom active {editor} editorViewSurface={scrollRoot} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
       {@render editorContent()}
     </EditorZoom>
   {:else}

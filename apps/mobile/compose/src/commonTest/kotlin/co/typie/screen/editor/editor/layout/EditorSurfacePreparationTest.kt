@@ -273,6 +273,7 @@ class EditorSurfacePreparationTest {
         EditorViewportAnchorPublication.Ready(
           scrollOffset = Offset(x = 0f, y = resolved.maximumScrollY),
           geometry = null,
+          attachmentAchieved = false,
         ),
         resolved.anchorPublication,
       )

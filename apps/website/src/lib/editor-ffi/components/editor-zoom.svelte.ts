@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@typie/ui/state';
 import { tick } from 'svelte';
 import {
   clampDocumentLayoutZoom,
@@ -11,15 +12,19 @@ import {
   RENDER_ZOOM_SCALE_RATIO_THRESHOLD,
   renderZoomForDisplay,
   resolveDirectDocumentZoom,
+  resolveDocumentZoomIndicator,
+  resolveDocumentZoomLandmark,
+  resolveDocumentZoomStepTarget,
   zoomDiffers,
   zoomEquals,
 } from '$lib/editor-ffi/zoom';
 import { ZOOM_MAX_MOTION_SECONDS, ZoomMotion } from '$lib/editor-ffi/zoom-motion';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { Editor } from '$lib/editor-ffi/editor.svelte';
-import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
+import type { DocumentZoomLandmark, DocumentZoomLayout } from '$lib/editor-ffi/zoom';
 
 type ZoomAnchor = { page: number; x: number; y: number; focalX: number; focalY: number };
+type ZoomCommandAnchor = { anchor: ZoomAnchor | null; attached: boolean };
 type DirectZoomKind = 'touch' | 'wheel';
 type ZoomMotionPlayback = 'animated' | 'immediate';
 
@@ -47,12 +52,14 @@ type EditorZoomControllerOptions = {
   layout: () => DocumentZoomLayout | null;
   viewportWidth: () => number;
   getScrollViewport: () => ScrollViewport | null | undefined;
-  attachViewportAnchor?: (point: Pick<ZoomAnchor, 'page' | 'x' | 'y'>) => void;
+  resolvePendingViewportAnchor?: () => ZoomAnchor | null;
+  resolveViewportAnchor?: () => ZoomAnchor | null;
+  beginViewportZoom?: (point: Pick<ZoomAnchor, 'page' | 'x' | 'y'>) => void;
+  updateViewportZoomAttachment?: (desiredScroll: { left: number; top: number }) => void;
 };
 
 export class EditorZoomController {
   static readonly WHEEL_RAW_ZOOM_RESET_MS = 32;
-  static readonly KEYBOARD_ZOOM_STEP = 0.1;
 
   #initializedLayoutKey: string | null = null;
   #renderZoomTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,6 +70,8 @@ export class EditorZoomController {
   #activeMotion: ActiveZoomMotion | null = null;
   #cancelAnimationFrame: (() => void) | null = null;
   #applyQueue: Promise<unknown> = Promise.resolve();
+  #pendingCommandAnchor: ZoomAnchor | null = null;
+  #commandRevision = 0;
   #options: EditorZoomControllerOptions;
 
   displayZoom = $state(1);
@@ -72,9 +81,14 @@ export class EditorZoomController {
     this.#options = options;
   }
 
-  async #stepZoomByKeyboard(delta: number): Promise<void> {
-    if (!this.#options.layout()) return;
-    await this.#setZoomWithAnchor(this.displayZoom + delta, this.#createZoomAnchorFromViewportCenter());
+  async #stepZoomByKeyboard(direction: -1 | 1): Promise<boolean> {
+    const layout = this.#options.layout();
+    if (!layout) return false;
+    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
+    const indicatorZoom = resolveDocumentZoomIndicator(this.displayZoom, layout);
+    const targetZoom = resolveDocumentZoomStepTarget({ zoom: indicatorZoom, direction, layout, viewportWidth });
+    if (targetZoom === null) return false;
+    return this.#setZoomWithAnchor(targetZoom, this.#createZoomAnchorFromViewportCenter(), false);
   }
 
   #createZoomAnchorFromClient(clientX: number, clientY: number): ZoomAnchor | null {
@@ -86,11 +100,20 @@ export class EditorZoomController {
     return { ...resolved, focalX: clientX - rect.left, focalY: clientY - rect.top };
   }
 
-  #createZoomAnchorFromViewportCenter(): ZoomAnchor | null {
+  #createZoomAnchorFromViewportCenter(): ZoomCommandAnchor {
+    if (this.#pendingCommandAnchor) return { anchor: this.#pendingCommandAnchor, attached: true };
+    const pending = this.#options.resolvePendingViewportAnchor?.();
+    if (pending) return { anchor: pending, attached: true };
     const viewport = this.#options.getScrollViewport();
-    if (!viewport) return null;
+    if (!viewport) return { anchor: null, attached: false };
     const rect = viewport.getRect();
-    return this.#createZoomAnchorFromClient(rect.left + (rect.right - rect.left) / 2, rect.top + (rect.bottom - rect.top) / 2);
+    const focalX = (rect.right - rect.left) / 2;
+    const focalY = (rect.bottom - rect.top) / 2;
+    const current = this.#options.resolveViewportAnchor?.();
+    if (current && Math.abs(current.focalX - focalX) <= 0.5 && Math.abs(current.focalY - focalY) <= 0.5) {
+      return { anchor: current, attached: true };
+    }
+    return { anchor: this.#createZoomAnchorFromClient(rect.left + focalX, rect.top + focalY), attached: false };
   }
 
   #resolveFocalInViewport(clientX: number, clientY: number): { x: number; y: number } | null {
@@ -100,9 +123,22 @@ export class EditorZoomController {
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
   }
 
-  async #setZoomWithAnchor(nextZoom: number, anchor: ZoomAnchor | null): Promise<void> {
-    this.setZoom(nextZoom);
-    await this.#syncZoomAnchor(anchor, this.displayZoom);
+  async #setZoomWithAnchor(nextZoom: number, requestedAnchor: ZoomCommandAnchor, snapToLandmarks = true): Promise<boolean> {
+    const commandAnchor = this.#pendingCommandAnchor ?? (requestedAnchor.anchor ? { ...requestedAnchor.anchor } : null);
+    if (commandAnchor && !this.#pendingCommandAnchor && !requestedAnchor.attached) this.#options.beginViewportZoom?.(commandAnchor);
+    this.#pendingCommandAnchor = commandAnchor;
+    const revision = ++this.#commandRevision;
+    const previousZoom = this.displayZoom;
+    this.setZoom(nextZoom, { preserveCommand: true, snapToLandmarks });
+    const appliedZoom = this.displayZoom;
+    await this.#syncZoomAnchor(commandAnchor, appliedZoom, () => this.#commandRevision === revision);
+    if (this.#commandRevision === revision) this.#pendingCommandAnchor = null;
+    return zoomDiffers(previousZoom, this.displayZoom);
+  }
+
+  #invalidateCommand(): void {
+    this.#commandRevision += 1;
+    this.#pendingCommandAnchor = null;
   }
 
   #clearWheelReleaseTimer(): void {
@@ -169,15 +205,20 @@ export class EditorZoomController {
     if (pageCount === 0 || anchor.page < 0 || anchor.page >= pageCount) return false;
     await tick();
     if (!isCurrent()) return false;
-    const pageEl = this.#options.editor.pageEls[anchor.page];
+    const resolvedAnchor = this.#options.resolveViewportAnchor?.() ?? anchor;
+    const pageEl = this.#options.editor.pageEls[resolvedAnchor.page];
     if (!pageEl) return false;
     const pageRect = pageEl.getBoundingClientRect();
     const scrollRect = viewport.getRect();
-    const deltaX = pageRect.left + anchor.x * zoom - (scrollRect.left + anchor.focalX);
-    const deltaY = pageRect.top + anchor.y * zoom - (scrollRect.top + anchor.focalY);
+    const deltaX = pageRect.left + resolvedAnchor.x * zoom - (scrollRect.left + resolvedAnchor.focalX);
+    const deltaY = pageRect.top + resolvedAnchor.y * zoom - (scrollRect.top + resolvedAnchor.focalY);
     if (![deltaX, deltaY].every(Number.isFinite)) return false;
+    const desiredScroll = {
+      left: viewport.getScrollLeft() + deltaX,
+      top: viewport.getScrollTop() + deltaY,
+    };
     if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) viewport.scrollBy(deltaX, deltaY);
-    this.#options.attachViewportAnchor?.(anchor);
+    this.#options.updateViewportZoomAttachment?.(desiredScroll);
     return true;
   }
 
@@ -282,13 +323,26 @@ export class EditorZoomController {
     return this.#activeMotion !== null;
   }
 
+  get landmark(): DocumentZoomLandmark | null {
+    const layout = this.#options.layout();
+    if (!layout) return null;
+    const viewportWidth = this.#options.viewportWidth();
+    return resolveDocumentZoomLandmark({
+      zoom: resolveDocumentZoomIndicator(this.displayZoom, layout),
+      layout,
+      viewportWidth,
+    });
+  }
+
   destroy(): void {
+    this.#invalidateCommand();
     this.#cancelInteractiveMotion();
     this.#clearRenderZoomTimer();
     this.#renderZoomMismatchStartedAt = null;
   }
 
-  setZoom(nextZoom: number, { commitRender = false } = {}): void {
+  setZoom(nextZoom: number, { commitRender = false, preserveCommand = false, snapToLandmarks = true } = {}): void {
+    if (!preserveCommand) this.#invalidateCommand();
     this.#cancelInteractiveMotion();
     this.#clearRenderZoomTimer();
     const layout = this.#options.layout();
@@ -302,7 +356,9 @@ export class EditorZoomController {
       return;
     }
     const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
-    const clamped = clampDocumentLayoutZoom({ zoom: nextZoom, layout, viewportWidth });
+    const clamped = snapToLandmarks
+      ? clampDocumentLayoutZoom({ zoom: nextZoom, layout, viewportWidth })
+      : clampDocumentZoom(nextZoom, computeDocumentZoomBounds(layout));
     if (zoomDiffers(this.displayZoom, clamped)) this.displayZoom = clamped;
     if (commitRender) this.#commitLatestRenderZoom(Date.now());
     else this.#scheduleRenderZoom();
@@ -320,22 +376,28 @@ export class EditorZoomController {
     const key = layoutKey(layout);
     if (this.#initializedLayoutKey === key) return;
     this.#initializedLayoutKey = key;
-    this.setZoom(computeInitialDocumentZoom(layout, viewportWidth), { commitRender: true });
+    const initialZoom = computeInitialDocumentZoom(layout, viewportWidth);
+    this.setZoom(initialZoom, { commitRender: true });
   }
 
   clampCurrentZoomToBounds(): void {
     if (this.hasActiveDirectZoom || this.hasActiveMotion) return;
     const layout = this.#options.layout();
     if (!layout) return;
-    const viewportWidth = this.#options.viewportWidth() > 0 ? this.#options.viewportWidth() : 1;
-    const clamped = clampDocumentLayoutZoom({ zoom: this.displayZoom, layout, viewportWidth });
-    if (zoomDiffers(clamped, this.displayZoom)) this.setZoom(clamped, { commitRender: true });
+    const nextZoom = clampDocumentZoom(this.displayZoom, computeDocumentZoomBounds(layout));
+    if (zoomDiffers(nextZoom, this.displayZoom)) {
+      this.setZoom(nextZoom, {
+        commitRender: true,
+        preserveCommand: true,
+      });
+    }
   }
 
   beginDirectZoom(kind: DirectZoomKind, clientX: number, clientY: number, timestampMs: number): boolean {
     const layout = this.#options.layout();
     const focal = this.#resolveFocalInViewport(clientX, clientY);
     if (!layout || !focal) return false;
+    this.#invalidateCommand();
     this.#cancelInteractiveMotion();
     this.#directSession = {
       kind,
@@ -345,6 +407,7 @@ export class EditorZoomController {
       snapZoom: resolveDirectSnapZoom(this.displayZoom, layout, this.#options.viewportWidth()),
       lastTimestampMs: normalizeTimestamp(timestampMs),
     };
+    if (this.#directSession.anchor) this.#options.beginViewportZoom?.(this.#directSession.anchor);
     return true;
   }
 
@@ -381,7 +444,7 @@ export class EditorZoomController {
     await this.#applyQueue;
     if (this.#directSession !== session) return;
     this.#directSession = null;
-    const reduceMotion = prefersReducedMotion();
+    const reduceMotion = prefersReducedMotion.current;
     await this.#finishOrRecover(session, reduceMotion ? 'immediate' : 'animated');
   }
 
@@ -389,11 +452,12 @@ export class EditorZoomController {
     if (kind && this.#directSession?.kind !== kind) return;
     const current = this.#directSession;
     this.#cancelInteractiveMotion();
-    if (current) void this.#finishOrRecover(current, prefersReducedMotion() ? 'immediate' : 'animated');
+    if (current) void this.#finishOrRecover(current, prefersReducedMotion.current ? 'immediate' : 'animated');
     else this.#scheduleRenderZoom(true);
   }
 
   interruptForDirectPan(): void {
+    this.#invalidateCommand();
     if (this.#directSession) {
       const kind = this.#directSession.kind;
       this.#directSession.anchor = null;
@@ -429,17 +493,42 @@ export class EditorZoomController {
     await this.updateDirectZoom('wheel', nextRawZoom, event.clientX, event.clientY, event.timeStamp);
   }
 
-  async zoomInByKeyboard(): Promise<void> {
-    await this.#stepZoomByKeyboard(EditorZoomController.KEYBOARD_ZOOM_STEP);
+  async zoomInByKeyboard(): Promise<boolean> {
+    return this.#stepZoomByKeyboard(1);
   }
 
-  async zoomOutByKeyboard(): Promise<void> {
-    await this.#stepZoomByKeyboard(-EditorZoomController.KEYBOARD_ZOOM_STEP);
+  async zoomOutByKeyboard(): Promise<boolean> {
+    return this.#stepZoomByKeyboard(-1);
   }
 
   async resetByKeyboard(): Promise<void> {
     if (!this.#options.layout()) return;
     await this.#setZoomWithAnchor(1, this.#createZoomAnchorFromViewportCenter());
+  }
+
+  get indicatorToggleTarget(): number | null {
+    const layout = this.#options.layout();
+    if (!layout) return null;
+    const viewportWidth = this.#options.viewportWidth();
+    const landmark = this.landmark;
+    const bounds = computeDocumentZoomBounds(layout);
+    const unitZoom = clampDocumentZoom(1, bounds);
+    const fitWidthZoom = computeDocumentFitWidthZoom(layout, viewportWidth);
+    const targetZoom = landmark === 'unit' ? fitWidthZoom : unitZoom;
+    return zoomEquals(this.displayZoom, targetZoom) ? null : targetZoom;
+  }
+
+  get indicatorToggleTargetLandmark(): DocumentZoomLandmark | null {
+    const layout = this.#options.layout();
+    const targetZoom = this.indicatorToggleTarget;
+    if (!layout || targetZoom === null) return null;
+    return resolveDocumentZoomLandmark({ zoom: targetZoom, layout, viewportWidth: this.#options.viewportWidth() });
+  }
+
+  async toggleZoomByIndicator(): Promise<boolean> {
+    const targetZoom = this.indicatorToggleTarget;
+    if (targetZoom === null) return false;
+    return this.#setZoomWithAnchor(targetZoom, this.#createZoomAnchorFromViewportCenter());
   }
 }
 
@@ -476,10 +565,6 @@ function resolveDirectSnapZoom(zoom: number, layout: DocumentZoomLayout, viewpor
 
 function nowMilliseconds(): number {
   return globalThis.performance?.now() ?? Date.now();
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function requestZoomAnimationFrame(callback: (timestampMs: number) => void): () => void {

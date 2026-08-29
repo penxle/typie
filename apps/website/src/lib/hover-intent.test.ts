@@ -43,6 +43,20 @@ describe('hoverIntent', () => {
     action?.destroy?.();
   });
 
+  it('supports a single low-speed sample for compact hover targets', async () => {
+    const onIntent = vi.fn();
+    const action = hoverIntent(element, { delay: 400, samples: 1, onIntent });
+
+    pointer(element, 'pointerenter', 10, 10);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(onIntent).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(onIntent).toHaveBeenCalledOnce();
+
+    action?.destroy?.();
+  });
+
   it('fires synchronously when the delay is zero', () => {
     const onIntent = vi.fn();
     const action = hoverIntent(element, { delay: 0, onIntent });

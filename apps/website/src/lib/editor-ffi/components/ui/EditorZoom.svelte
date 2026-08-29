@@ -1,19 +1,21 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { IS_MAC } from '$lib/editor-ffi/constants';
-  import { resolveDocumentZoomIndicator } from '$lib/editor-ffi/zoom';
+  import { computeDocumentZoomBounds, resolveDocumentZoomIndicator, zoomEquals } from '$lib/editor-ffi/zoom';
   import { EditorZoomController } from '../editor-zoom.svelte';
   import ZoomOverlay from './ZoomOverlay.svelte';
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
-  import type { DocumentZoomLayout } from '$lib/editor-ffi/zoom';
+  import type { EditorScrollScope } from '$lib/editor-ffi/scroll.svelte';
+  import type { DocumentZoomLandmark, DocumentZoomLayout } from '$lib/editor-ffi/zoom';
 
   type Props = {
     editor: Editor;
     active?: boolean;
     layout: DocumentZoomLayout | null;
     viewportWidth: number;
-    attachViewportAnchor?: (point: { page: number; x: number; y: number }) => void;
+    editorViewSurface: HTMLElement | undefined;
+    scroll: EditorScrollScope | undefined;
     children?: Snippet;
   };
 
@@ -31,12 +33,14 @@
 
   type PinchContact = Pick<Touch, 'clientX' | 'clientY'>;
 
-  let { editor, active = true, layout, viewportWidth, attachViewportAnchor, children }: Props = $props();
+  let { editor, active = true, layout, viewportWidth, editorViewSurface, scroll, children }: Props = $props();
 
   let pinchSession = $state<PinchSession | null>(null);
   let pinchQueuedUpdate = $state<PinchUpdate | null>(null);
   let suppressPinchUntilAllUp = false;
   let pinchFlushPromise: Promise<void> | null = null;
+  let boundaryAttemptRequest = $state(0);
+  let boundaryAttemptLandmark = $state<DocumentZoomLandmark | null>(null);
   const scrollContainer = $derived(editor.scrollContainerEl);
 
   const zoom = new EditorZoomController({
@@ -44,13 +48,42 @@
     layout: () => layout,
     viewportWidth: () => viewportWidth,
     getScrollViewport: () => editor.scrollViewport,
-    attachViewportAnchor: (point) => attachViewportAnchor?.(point),
+    resolvePendingViewportAnchor: () => scroll?.resolvePendingViewportZoomAnchor() ?? null,
+    resolveViewportAnchor: () => scroll?.resolveViewportZoomAnchor() ?? null,
+    beginViewportZoom: (point) => scroll?.beginViewportZoomAt(point),
+    updateViewportZoomAttachment: (desiredScroll) => scroll?.updateViewportZoomAttachment(desiredScroll),
   });
 
   const zoomEnabled = $derived(layout !== null);
   const displayZoom = $derived(zoomEnabled ? zoom.displayZoom : 1);
   const renderZoom = $derived(zoomEnabled ? zoom.renderZoom : 1);
   const indicatorZoom = $derived(layout ? resolveDocumentZoomIndicator(displayZoom, layout) : 1);
+  const landmark = $derived(zoom.landmark);
+  const bounds = $derived(layout ? computeDocumentZoomBounds(layout) : null);
+  const atMinimum = $derived(bounds ? zoomEquals(indicatorZoom, bounds.min) : false);
+  const atMaximum = $derived(bounds ? zoomEquals(indicatorZoom, bounds.max) : false);
+  const toggleTargetLandmark = $derived(zoom.indicatorToggleTargetLandmark);
+
+  function requestBoundaryAttempt(nextLandmark: 'minimum' | 'maximum') {
+    boundaryAttemptLandmark = nextLandmark;
+    boundaryAttemptRequest += 1;
+  }
+
+  async function zoomIn(): Promise<boolean> {
+    const changed = await zoom.zoomInByKeyboard();
+    if (!changed && atMaximum) requestBoundaryAttempt('maximum');
+    return changed;
+  }
+
+  async function zoomOut(): Promise<boolean> {
+    const changed = await zoom.zoomOutByKeyboard();
+    if (!changed && atMinimum) requestBoundaryAttempt('minimum');
+    return changed;
+  }
+
+  async function toggleZoom(): Promise<void> {
+    await zoom.toggleZoomByIndicator();
+  }
 
   $effect(() => {
     editor.displayZoom = displayZoom;
@@ -102,13 +135,13 @@
 
     if (isZoomInShortcut(event)) {
       event.preventDefault();
-      void zoom.zoomInByKeyboard();
+      void zoomIn();
       return;
     }
 
     if (isZoomOutShortcut(event)) {
       event.preventDefault();
-      void zoom.zoomOutByKeyboard();
+      void zoomOut();
       return;
     }
 
@@ -318,8 +351,23 @@
 
 <svelte:window onkeydowncapture={handleBrowserZoomShortcut} />
 
+<ZoomOverlay
+  {atMaximum}
+  {atMinimum}
+  {boundaryAttemptLandmark}
+  {boundaryAttemptRequest}
+  {displayZoom}
+  {editorViewSurface}
+  enabled={zoomEnabled}
+  {indicatorZoom}
+  {landmark}
+  onToggleZoom={toggleZoom}
+  onZoomIn={zoomIn}
+  onZoomOut={zoomOut}
+  {scrollContainer}
+  {toggleTargetLandmark}
+/>
+
 <div class={css({ display: 'contents' })}>
   {@render children?.()}
 </div>
-
-<ZoomOverlay {displayZoom} enabled={zoomEnabled} {indicatorZoom} {scrollContainer} />

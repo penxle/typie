@@ -7,6 +7,8 @@ export type HoverIntentParameter = {
   intentEnabled?: boolean;
   /** Maximum movement in pixels per 100ms that counts as low-speed movement. */
   sensitivity?: number;
+  /** Consecutive low-speed samples required before intent is established. */
+  samples?: number;
   onEnter?: (event: PointerEvent) => void;
   onIntent: (event: PointerEvent) => void;
   onLeave?: (event: PointerEvent) => void;
@@ -14,7 +16,9 @@ export type HoverIntentParameter = {
 
 const SAMPLE_INTERVAL_MS = 100;
 const DEFAULT_SENSITIVITY = 6;
-const REQUIRED_LOW_SPEED_SAMPLES = 2;
+const DEFAULT_SAMPLES = 2;
+
+const resolveSamples = (value: number | undefined) => Math.max(1, Math.floor(value ?? DEFAULT_SAMPLES));
 
 export const hoverIntent: Action<HTMLElement, HoverIntentParameter> = (element, parameter) => {
   let current = parameter;
@@ -57,7 +61,7 @@ export const hoverIntent: Action<HTMLElement, HoverIntentParameter> = (element, 
     previousY = pointerY;
     previousSampleTime = now;
 
-    if (lowSpeedSamples >= REQUIRED_LOW_SPEED_SAMPLES) fireIntent(pointerEvent);
+    if (lowSpeedSamples >= resolveSamples(current.samples)) fireIntent(pointerEvent);
     else sampleTimer = setTimeout(sample, SAMPLE_INTERVAL_MS);
   };
 
@@ -118,12 +122,13 @@ export const hoverIntent: Action<HTMLElement, HoverIntentParameter> = (element, 
       const intentWasEnabled = current.intentEnabled !== false;
       const delayChanged = next.delay !== current.delay;
       const sensitivityChanged = next.sensitivity !== current.sensitivity;
+      const samplesChanged = next.samples !== current.samples;
       current = next;
       const intentIsEnabled = current.intentEnabled !== false;
       if (!intentIsEnabled) {
         clearDetection();
         intended = false;
-      } else if (hovered && !intended && pointerEvent && (!intentWasEnabled || delayChanged || sensitivityChanged)) {
+      } else if (hovered && !intended && pointerEvent && (!intentWasEnabled || delayChanged || sensitivityChanged || samplesChanged)) {
         startDetection(pointerEvent);
       }
     },

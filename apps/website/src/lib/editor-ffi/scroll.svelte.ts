@@ -13,12 +13,17 @@ import {
 import { SmoothScrollMotion } from './smooth-scroll-motion';
 import { EditorViewportAnchorState, resolveViewportAnchorGeometry, viewportCenterAnchorPoint } from './viewport-anchor';
 import { resolveContinuousViewPadding } from './zoom';
-import type { PageRect, ViewportAnchorResolution } from '@typie/editor-ffi/browser';
+import type { PageRect, ViewportAnchor, ViewportAnchorResolution } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from './editor.svelte';
 import type { EditorRequest } from './editor-update';
 import type { VerticalSpan } from './required-surface-pages';
 import type { EditorVisibleArea, RevealTargetSpan, ScrollContainerMetrics } from './scroll';
-import type { EditorViewportAnchorGeometry, EditorViewportAnchorLayout, EditorViewportAnchorRevealOrigin } from './viewport-anchor';
+import type {
+  EditorViewportAnchorGeometry,
+  EditorViewportAnchorLayout,
+  EditorViewportAnchorRevealOrigin,
+  EditorViewportScrollPosition,
+} from './viewport-anchor';
 
 export type EditorScrollRevealPolicy = 'cursor_guard' | 'pointer_cursor_guard' | 'typewriter' | 'reveal';
 type ResolvedEditorScrollRevealPolicy = Exclude<EditorScrollRevealPolicy, 'pointer_cursor_guard'>;
@@ -43,6 +48,7 @@ export type EditorViewportAnchorPublication =
       geometry: EditorViewportAnchorGeometry | null;
       targetScrollLeft: number | null;
       targetScrollTop: number | null;
+      attachmentAchieved: boolean;
     }
   | { type: 'unavailable' };
 
@@ -298,7 +304,7 @@ export class EditorScrollScope {
 
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
-    if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null };
+    if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null, attachmentAchieved: false };
     const metrics = this.#viewportMetrics(snapshot, true);
     if (!metrics) return { type: 'unavailable' };
     const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
@@ -327,6 +333,7 @@ export class EditorScrollScope {
       geometry: null,
       targetScrollLeft: clampedScrollLeft === metrics.scrollLeft ? null : clampedScrollLeft,
       targetScrollTop: clampedScrollTop === metrics.scrollTop ? null : clampedScrollTop,
+      attachmentAchieved: false,
     });
 
     const resolution = this.#resolveCandidateViewportAnchor(snapshot);
@@ -365,11 +372,13 @@ export class EditorScrollScope {
       metrics.scrollLeft,
       metrics.maximumScrollLeft,
     );
+    if (!targetScroll.attachmentAchieved) this.#viewportAnchor.deferAttachment();
     return {
       type: 'ready',
       geometry,
-      targetScrollLeft: targetScroll.left === metrics.scrollLeft ? null : targetScroll.left,
-      targetScrollTop: targetScroll.top,
+      targetScrollLeft: targetScroll.scroll.left === metrics.scrollLeft ? null : targetScroll.scroll.left,
+      targetScrollTop: targetScroll.scroll.top,
+      attachmentAchieved: targetScroll.attachmentAchieved,
     };
   }
 
@@ -377,7 +386,7 @@ export class EditorScrollScope {
     if (publication.type !== 'ready') return;
     const viewport = this.#editor.scrollViewport;
     if (publication.targetScrollLeft === null && publication.targetScrollTop === null) {
-      if (viewport && publication.geometry) {
+      if (viewport && publication.geometry && publication.attachmentAchieved) {
         this.#viewportAnchor.acceptGeometry(publication.geometry, {
           left: viewport.getScrollLeft(),
           top: viewport.getScrollTop(),
@@ -409,10 +418,11 @@ export class EditorScrollScope {
       this.#ensureViewportAnchor();
       return;
     }
-    this.#viewportAnchor.acceptGeometry(publication.geometry, {
-      left: viewport.getScrollLeft(),
-      top: viewport.getScrollTop(),
-    });
+    const actualScroll = { left: viewport.getScrollLeft(), top: viewport.getScrollTop() };
+    const reachedPublicationTarget = Math.abs(actualScroll.left - targetLeft) <= 1 && Math.abs(actualScroll.top - targetTop) <= 1;
+    if (reachedPublicationTarget && publication.attachmentAchieved) {
+      this.#viewportAnchor.acceptGeometry(publication.geometry, actualScroll);
+    }
   }
 
   observeViewportScroll(): void {
@@ -617,7 +627,7 @@ export class EditorScrollScope {
     this.#editor.requestPublication();
   }
 
-  attachViewportAnchorAt(point: { page: number; x: number; y: number }): void {
+  attachViewportAnchorAt(point: { page: number; x: number; y: number }, desiredScroll?: EditorViewportScrollPosition): void {
     const snapshot = this.#editor.published?.snapshot;
     const metrics = this.#viewportMetrics(snapshot);
     if (!snapshot || !metrics) return;
@@ -629,12 +639,57 @@ export class EditorScrollScope {
     if (!capture) return;
     const geometry = resolveViewportAnchorGeometry(capture.geometry, metrics.layout);
     if (!geometry) return;
-    this.#viewportAnchor.attachViewport(capture.identity, geometry, {
-      left: metrics.scrollLeft,
-      top: metrics.scrollTop,
-    });
+    const actualScroll = { left: metrics.scrollLeft, top: metrics.scrollTop };
+    const attachmentScroll = desiredScroll ?? actualScroll;
+    const attachmentPending =
+      Math.abs(attachmentScroll.left - actualScroll.left) > 1 || Math.abs(attachmentScroll.top - actualScroll.top) > 1;
+    this.#viewportAnchor.attachViewport(capture.identity, geometry, attachmentScroll, attachmentPending);
     this.#expectedScrollLeft = metrics.scrollLeft;
     this.#expectedScrollTop = metrics.scrollTop;
+  }
+
+  beginViewportZoomAt(point: { page: number; x: number; y: number }): void {
+    this.attachViewportAnchorAt(point);
+  }
+
+  updateViewportZoomAttachment(desiredScroll: EditorViewportScrollPosition): void {
+    const attachment = this.#viewportAnchor.viewportAttachment;
+    const snapshot = this.#editor.published?.snapshot;
+    const metrics = this.#viewportMetrics(snapshot);
+    if (!attachment || !snapshot || !metrics) return;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, attachment.identity);
+    if (resolution.type !== 'resolved') return;
+    const geometry = resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
+    if (!geometry) return;
+    const actualScroll = { left: metrics.scrollLeft, top: metrics.scrollTop };
+    const attachmentPending = Math.abs(desiredScroll.left - actualScroll.left) > 1 || Math.abs(desiredScroll.top - actualScroll.top) > 1;
+    this.#viewportAnchor.reattachViewport(geometry, desiredScroll, attachmentPending);
+    this.#expectedScrollLeft = metrics.scrollLeft;
+    this.#expectedScrollTop = metrics.scrollTop;
+  }
+
+  resolvePendingViewportZoomAnchor(): { page: number; x: number; y: number; focalX: number; focalY: number } | null {
+    return this.#resolveViewportZoomAnchor(this.#viewportAnchor.pendingViewportAttachment);
+  }
+
+  resolveViewportZoomAnchor(): { page: number; x: number; y: number; focalX: number; focalY: number } | null {
+    return this.#resolveViewportZoomAnchor(this.#viewportAnchor.viewportAttachment);
+  }
+
+  #resolveViewportZoomAnchor(
+    attachment: { identity: ViewportAnchor; focalX: number; focalY: number } | null,
+  ): { page: number; x: number; y: number; focalX: number; focalY: number } | null {
+    const snapshot = this.#editor.published?.snapshot;
+    if (!attachment || !snapshot) return null;
+    const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, attachment.identity);
+    if (resolution.type !== 'resolved') return null;
+    return {
+      page: resolution.geometry.point.page_idx,
+      x: resolution.geometry.point.x,
+      y: resolution.geometry.point.y,
+      focalX: attachment.focalX,
+      focalY: attachment.focalY,
+    };
   }
 
   scrollIntoView(options: EditorScrollIntoViewOptions, admission?: EditorRequest): Promise<void> | undefined {

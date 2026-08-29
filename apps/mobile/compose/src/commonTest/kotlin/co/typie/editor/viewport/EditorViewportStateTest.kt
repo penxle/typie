@@ -197,7 +197,7 @@ class EditorViewportStateTest {
   }
 
   @Test
-  fun `same measured bounds consume retained zoom target without reviving it later`() {
+  fun `retained zoom target survives stale measured bounds until it becomes reachable`() {
     val state = EditorViewportState()
     state.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 100f),
@@ -221,8 +221,8 @@ class EditorViewportStateTest {
       contentSize = Size(width = 400f, height = 400f),
     )
 
-    assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
-    assertEquals(1, state.lastScrollRevision)
+    assertEquals(Offset(x = 180f, y = 240f), state.scrollOffset)
+    assertEquals(2, state.lastScrollRevision)
   }
 
   @Test

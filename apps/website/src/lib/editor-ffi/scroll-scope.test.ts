@@ -819,6 +819,39 @@ describe('EditorScrollScope', () => {
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 300, top: 220, behavior: 'instant' });
   });
 
+  it('lets direct zoom replace a pending command viewport anchor', () => {
+    const snapshot = selectionSnapshot(false, {
+      page_idx: 0,
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+    });
+    const { editor, scope } = setup(snapshot);
+    const commandAnchor = { type: 'node' as const, node: 'command', offset_x: 0, offset_y: 0 };
+    const directAnchor = { type: 'node' as const, node: 'direct', offset_x: 0, offset_y: 0 };
+    editor.captureViewportAnchorAt = vi.fn((_revision, point) => ({
+      identity: point.x === 100 ? commandAnchor : directAnchor,
+      geometry: {
+        point: { page_idx: 0, x: point.x, y: point.y },
+        rect: undefined,
+      },
+    }));
+    editor.resolveViewportAnchor = vi.fn((_revision, identity) => ({
+      type: 'resolved' as const,
+      geometry: {
+        point: {
+          page_idx: 0,
+          x: identity === commandAnchor ? 100 : 400,
+          y: identity === commandAnchor ? 100 : 300,
+        },
+        rect: undefined,
+      },
+    }));
+
+    scope.attachViewportAnchorAt({ page: 0, x: 100, y: 100 }, { left: 80, top: 80 });
+    scope.beginViewportZoomAt({ page: 0, x: 400, y: 300 });
+
+    expect(scope.resolveViewportZoomAnchor()).toMatchObject({ x: 400, y: 300 });
+  });
+
   it('measures the document track once without reading every page during direct scroll reconciliation', () => {
     const snapshot = trackedSnapshot('unused', {
       page_idx: 0,
@@ -1001,9 +1034,10 @@ describe('EditorScrollScope', () => {
 
     expect(scope.prepareViewportAnchorPublication(initial)).toEqual({
       type: 'ready',
-      geometry: { pointX: 0, pointY: 200 },
+      geometry: { pointX: 0, pointY: 200, rect: undefined },
       targetScrollLeft: null,
       targetScrollTop: 0,
+      attachmentAchieved: true,
     });
   });
 
@@ -1043,9 +1077,10 @@ describe('EditorScrollScope', () => {
 
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
-      geometry: { pointX: 0, pointY: 500 },
+      geometry: { pointX: 0, pointY: 500, rect: undefined },
       targetScrollLeft: null,
       targetScrollTop: 0,
+      attachmentAchieved: true,
     });
     expect(scrollTo).not.toHaveBeenCalled();
   });
@@ -1102,6 +1137,7 @@ describe('EditorScrollScope', () => {
       geometry: null,
       targetScrollLeft: null,
       targetScrollTop: null,
+      attachmentAchieved: false,
     });
   });
 
@@ -1121,7 +1157,13 @@ describe('EditorScrollScope', () => {
 
     const publication = scope.prepareViewportAnchorPublication(candidate);
 
-    expect(publication).toEqual({ type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: 0 });
+    expect(publication).toEqual({
+      type: 'ready',
+      geometry: null,
+      targetScrollLeft: null,
+      targetScrollTop: 0,
+      attachmentAchieved: false,
+    });
     scope.applyViewportAnchorPublication(publication);
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 0, top: 0, behavior: 'instant' });
     expect(getScrollTop()).toBe(0);
@@ -1146,6 +1188,7 @@ describe('EditorScrollScope', () => {
       geometry: null,
       targetScrollLeft: null,
       targetScrollTop: null,
+      attachmentAchieved: false,
     });
   });
 
@@ -1167,6 +1210,7 @@ describe('EditorScrollScope', () => {
       geometry: { pointX: 0, pointY: 320 },
       targetScrollLeft: null,
       targetScrollTop: 220,
+      attachmentAchieved: true,
     });
     expect(scope.applyPending(request, snapshot, { type: 'scroll_to', y: 580 })).toBe(true);
 
@@ -1225,6 +1269,7 @@ describe('EditorScrollScope', () => {
       geometry: { pointX: 0, pointY: 320 },
       targetScrollLeft: null,
       targetScrollTop: 220,
+      attachmentAchieved: true,
     });
     expect(scope.applyPending(request, snapshot, { type: 'no_scroll' })).toBe(true);
 

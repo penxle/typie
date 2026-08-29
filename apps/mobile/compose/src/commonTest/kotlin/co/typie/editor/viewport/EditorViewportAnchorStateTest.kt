@@ -22,7 +22,10 @@ class EditorViewportAnchorStateTest {
     state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
 
     assertEquals(
-      Offset(x = 0f, y = 220f),
+      EditorViewportAnchorScroll(
+        scrollOffset = Offset(x = 0f, y = 220f),
+        attachmentAchieved = true,
+      ),
       state.publicationScroll(
         geometry = geometry(pointY = 320f),
         currentScrollOffset = Offset(x = 0f, y = 100f),
@@ -41,7 +44,10 @@ class EditorViewportAnchorStateTest {
     )
 
     assertEquals(
-      Offset(x = 180f, y = 220f),
+      EditorViewportAnchorScroll(
+        scrollOffset = Offset(x = 180f, y = 220f),
+        attachmentAchieved = true,
+      ),
       state.publicationScroll(
         geometry = geometry(pointX = 260f, pointY = 320f),
         currentScrollOffset = Offset(x = 20f, y = 100f),
@@ -56,7 +62,10 @@ class EditorViewportAnchorStateTest {
     state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
 
     assertEquals(
-      Offset(x = 0f, y = 100f),
+      EditorViewportAnchorScroll(
+        scrollOffset = Offset(x = 0f, y = 100f),
+        attachmentAchieved = true,
+      ),
       state.publicationScroll(
         geometry = geometry(pointY = 200f),
         currentScrollOffset = Offset(x = 0f, y = 100f),
@@ -142,20 +151,29 @@ class EditorViewportAnchorStateTest {
   }
 
   @Test
-  fun `clamped publication records the achieved attachment`() {
+  fun `publication preserves the desired attachment until bounds can reach it`() {
     val state = EditorViewportAnchorState()
     state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
     val candidate = geometry(pointY = 800f)
 
-    val clamped =
+    val constrained =
       state.publicationScroll(
         geometry = candidate,
         currentScrollOffset = Offset(x = 0f, y = 100f),
         maximumScrollOffset = Offset(x = 0f, y = 500f),
       )
-    state.acceptGeometry(candidate, scrollOffset = clamped)
 
-    assertEquals(300f, state.pointAttachmentY)
+    assertEquals(Offset(x = 0f, y = 500f), constrained.scrollOffset)
+    assertFalse(constrained.attachmentAchieved)
+    val recovered =
+      state.publicationScroll(
+        geometry = candidate,
+        currentScrollOffset = constrained.scrollOffset,
+        maximumScrollOffset = Offset(x = 0f, y = 1000f),
+      )
+    assertEquals(Offset(x = 0f, y = 700f), recovered.scrollOffset)
+    assertTrue(recovered.attachmentAchieved)
+    assertEquals(100f, state.pointAttachmentY)
   }
 
   @Test
@@ -176,7 +194,10 @@ class EditorViewportAnchorStateTest {
     )
 
     assertEquals(
-      Offset(x = 0f, y = 240f),
+      EditorViewportAnchorScroll(
+        scrollOffset = Offset(x = 0f, y = 240f),
+        attachmentAchieved = true,
+      ),
       state.publicationRevealScroll(
         geometry = geometry(pointY = 600f, top = 500f, bottom = 700f),
         currentScrollOffset = Offset(x = 0f, y = 161f),
@@ -213,7 +234,10 @@ class EditorViewportAnchorStateTest {
     assertEquals(-20f, state.pointAttachmentX)
     assertEquals(80f, state.pointAttachmentY)
     assertEquals(
-      Offset(x = 160f, y = 120f),
+      EditorViewportAnchorScroll(
+        scrollOffset = Offset(x = 160f, y = 120f),
+        attachmentAchieved = true,
+      ),
       state.publicationScroll(
         geometry = selectionGeometry.copy(pointX = 140f),
         currentScrollOffset = Offset(x = 120f, y = 120f),

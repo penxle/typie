@@ -22,8 +22,11 @@ import co.typie.editor.viewport.viewportCenterAnchorPoint
 internal sealed interface EditorViewportAnchorPublication {
   data object Withhold : EditorViewportAnchorPublication
 
-  data class Ready(val scrollOffset: Offset, val geometry: EditorViewportAnchorGeometry?) :
-    EditorViewportAnchorPublication
+  data class Ready(
+    val scrollOffset: Offset,
+    val geometry: EditorViewportAnchorGeometry?,
+    val attachmentAchieved: Boolean = true,
+  ) : EditorViewportAnchorPublication
 }
 
 internal fun reconcileViewportAnchorPublication(
@@ -77,6 +80,7 @@ internal fun reconcileViewportAnchorPublication(
           y = currentScrollY.coerceIn(0f, maximumScrollY),
         ),
       geometry = null,
+      attachmentAchieved = false,
     )
   if (publishedBundle == null || publishedBundle.snapshot.version == candidateState.version) {
     return unanchoredPublication
@@ -103,32 +107,35 @@ internal fun reconcileViewportAnchorPublication(
           frame = candidateFrame,
           contentOriginY = contentOriginY,
         ) ?: return EditorViewportAnchorPublication.Withhold
+      val anchorScroll =
+        anchorState.publicationRevealScroll(
+          geometry = geometry,
+          currentScrollOffset = currentScrollOffset,
+          maximumScrollOffset = Offset(x = maximumScrollX, y = maximumScrollY),
+          visibleArea = measuredScrollFrame.visibleArea,
+          resolveReveal = { origin ->
+            when (
+              val result =
+                resolveEditorScrollIntent(
+                  frame = candidateFrame,
+                  target = origin.target,
+                  policy = origin.policy,
+                  currentScroll = origin.scrollY,
+                  contentOriginY = contentOriginY,
+                  maximumScrollY = maximumScrollY,
+                )
+            ) {
+              EditorScrollIntentResult.Unresolved -> null
+              EditorScrollIntentResult.NoScroll -> origin.scrollY
+              is EditorScrollIntentResult.ScrollTo -> result.y
+            }
+          },
+        )
+      if (!anchorScroll.attachmentAchieved) anchorState.deferAttachment()
       EditorViewportAnchorPublication.Ready(
-        scrollOffset =
-          anchorState.publicationRevealScroll(
-            geometry = geometry,
-            currentScrollOffset = currentScrollOffset,
-            maximumScrollOffset = Offset(x = maximumScrollX, y = maximumScrollY),
-            visibleArea = measuredScrollFrame.visibleArea,
-            resolveReveal = { origin ->
-              when (
-                val result =
-                  resolveEditorScrollIntent(
-                    frame = candidateFrame,
-                    target = origin.target,
-                    policy = origin.policy,
-                    currentScroll = origin.scrollY,
-                    contentOriginY = contentOriginY,
-                    maximumScrollY = maximumScrollY,
-                  )
-              ) {
-                EditorScrollIntentResult.Unresolved -> null
-                EditorScrollIntentResult.NoScroll -> origin.scrollY
-                is EditorScrollIntentResult.ScrollTo -> result.y
-              }
-            },
-          ),
+        scrollOffset = anchorScroll.scrollOffset,
         geometry = geometry,
+        attachmentAchieved = anchorScroll.attachmentAchieved,
       )
     }
   }
@@ -283,7 +290,9 @@ internal fun reconcileViewportAnchorObservation(
       }
     when {
       viewportState.lastScrollWasAuto ->
-        geometry?.let { anchorState.acceptGeometry(it, viewportState.scrollOffset) }
+        geometry?.let {
+          anchorState.acceptGeometryAfterAutomaticScroll(it, viewportState.scrollOffset)
+        }
       preferredSelectionGeometry != null &&
         anchorState.tryReactivatePreferredSelection(
           geometry = preferredSelectionGeometry,
@@ -372,6 +381,7 @@ internal fun attachViewportZoomAnchor(
   displayPosition: Offset,
   scrollOffset: Offset,
   contentOriginY: Float,
+  attachmentPending: Boolean = false,
 ) {
   if (
     !displayPosition.x.isFinite() || !displayPosition.y.isFinite() || !contentOriginY.isFinite()
@@ -393,6 +403,7 @@ internal fun attachViewportZoomAnchor(
         pointY = contentOriginY + displayPosition.y,
       ),
     scrollOffset = scrollOffset,
+    attachmentPending = attachmentPending,
   )
 }
 

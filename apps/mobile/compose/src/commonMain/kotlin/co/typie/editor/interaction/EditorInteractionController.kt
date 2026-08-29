@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.EditorZoomLandmark
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
@@ -177,6 +178,13 @@ internal class EditorInteractionController(
   fun interruptZoomForDirectPan() {
     semantics.viewportZoom.interruptForDirectPan()
   }
+
+  fun zoomInAtViewportCenter(): Boolean = semantics.viewportZoom.zoomInAtViewportCenter()
+
+  fun zoomOutAtViewportCenter(): Boolean = semantics.viewportZoom.zoomOutAtViewportCenter()
+
+  fun toggleIndicatorZoomAtViewportCenter(): EditorZoomLandmark? =
+    semantics.viewportZoom.toggleIndicatorZoomAtViewportCenter()
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =
     if (ensurePointerInputEnabled()) {

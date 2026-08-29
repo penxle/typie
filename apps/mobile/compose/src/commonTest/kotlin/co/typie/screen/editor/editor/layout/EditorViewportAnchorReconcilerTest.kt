@@ -328,6 +328,7 @@ class EditorViewportAnchorReconcilerTest {
       EditorViewportAnchorPublication.Ready(
         scrollOffset = Offset(x = 0f, y = 100f),
         geometry = null,
+        attachmentAchieved = false,
       ),
       publication,
     )

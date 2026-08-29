@@ -1,19 +1,28 @@
 package co.typie.editor.interaction.semantics
 
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.EditorZoomController
+import co.typie.editor.EditorZoomLandmark
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorPinchSample
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
+import kotlin.coroutines.coroutineContext
 import kotlin.math.ln
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class EditorViewportZoomSemanticTest {
   @Test
   fun `slow pinch detents at a snap point while hard bounds remain elastic`() {
@@ -142,6 +151,107 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
+  fun `recovery normalizes zoom when presentation changes during motion`() =
+    runTest(StandardTestDispatcher()) {
+      val frameClock = BroadcastFrameClock()
+      val pageSizes = mutableListOf(PageSize(width = 720f, height = 960f))
+      val fixture =
+        Fixture(
+          pageSizes = pageSizes,
+          coroutineScope = CoroutineScope(coroutineContext + frameClock),
+        )
+      val start =
+        EditorPinchSample(
+          focalInRootPx = Offset(80f, 150f),
+          distancePx = 100f,
+          timestampMillis = 0L,
+        )
+
+      assertTrue(fixture.semantic.beginPinch(start))
+      assertTrue(
+        fixture.semantic.updatePinch(start.copy(distancePx = 220f, timestampMillis = 250L))
+      )
+      assertTrue(fixture.zoomController.displayZoom > 2f)
+
+      fixture.semantic.release()
+      pageSizes.clear()
+      runCurrent()
+      frameClock.sendFrame(16_000_000L)
+      runCurrent()
+
+      assertEquals(2f, fixture.zoomController.displayZoom)
+    }
+
+  @Test
+  fun `indicator toggle sends one snap haptic for each applied landmark`() {
+    val fixture = Fixture(viewportWidth = 360f)
+
+    assertEquals(EditorZoomLandmark.Unit, fixture.semantic.toggleIndicatorZoomAtViewportCenter())
+    assertEquals(1, fixture.zoomSnapCount)
+
+    assertEquals(
+      EditorZoomLandmark.FitWidth,
+      fixture.semantic.toggleIndicatorZoomAtViewportCenter(),
+    )
+    assertEquals(2, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `indicator steps stop at ten-percent grid lines and send snap haptics`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.53f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+      snapToLandmarks = false,
+    )
+
+    assertTrue(fixture.semantic.zoomInAtViewportCenter())
+    assertEquals(0.6f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(1, fixture.zoomSnapCount)
+
+    assertTrue(fixture.semantic.zoomOutAtViewportCenter())
+    assertEquals(0.5f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(2, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `rapid fit and unit toggles retain the viewport center through stale bounds`() {
+    val viewportSize = Size(width = 360f, height = 300f)
+    val fixture =
+      Fixture(
+        viewportWidth = 360f,
+        initialScrollOffset = Offset(x = 0f, y = 600f),
+        measuredViewportSize = viewportSize,
+        contentSize = Size(width = 720f, height = 1500f),
+      )
+    fixture.zoomController.setDisplayZoom(
+      zoom = 1f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(1f)
+
+    assertEquals(
+      EditorZoomLandmark.FitWidth,
+      fixture.semantic.toggleIndicatorZoomAtViewportCenter(),
+    )
+    fixture.viewportState.updateMeasuredBounds(
+      viewportSize = viewportSize,
+      contentSize = Size(width = 360f, height = 450f),
+    )
+    assertEquals(150f, fixture.viewportState.scrollOffset.y)
+
+    assertEquals(EditorZoomLandmark.Unit, fixture.semantic.toggleIndicatorZoomAtViewportCenter())
+    fixture.viewportState.updateMeasuredBounds(
+      viewportSize = viewportSize,
+      contentSize = Size(width = 720f, height = 1500f),
+    )
+
+    assertEquals(600f, fixture.viewportState.scrollOffset.y)
+  }
+
+  @Test
   fun `first indirect update does not assume a slow velocity`() {
     val fixture = Fixture()
     fixture.zoomController.setDisplayZoom(
@@ -160,6 +270,33 @@ class EditorViewportZoomSemanticTest {
     )
 
     assertEquals(0.99f, fixture.zoomController.displayZoom, 0.0001f)
+  }
+
+  @Test
+  fun `releasing indirect input near unit settles the rounded percentage onto the landmark`() {
+    val fixture = Fixture()
+    fixture.zoomController.setDisplayZoom(
+      zoom = 0.95f,
+      layoutSpec = fixture.layoutSpec,
+      viewportWidth = fixture.viewportWidth,
+    )
+    fixture.uiState.updateDisplayZoom(0.95f)
+
+    assertTrue(fixture.semantic.beginIndirect())
+    assertTrue(
+      fixture.semantic.updateIndirectScale(
+        focalInRootPx = Offset(80f, 150f),
+        scaleFactor = 0.995f / 0.95f,
+      )
+    )
+    assertEquals(0.995f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(null, fixture.zoomController.resolveLandmark())
+
+    fixture.semantic.release()
+
+    assertEquals(1f, fixture.zoomController.displayZoom)
+    assertEquals(EditorZoomLandmark.Unit, fixture.zoomController.resolveLandmark())
+    assertEquals(1, fixture.zoomSnapCount)
   }
 
   @Test
@@ -472,6 +609,22 @@ class EditorViewportZoomSemanticTest {
     assertEquals(fixture.zoomController.displayZoom, fixture.zoomController.renderZoom, 0.0001f)
   }
 
+  @Test
+  fun `bounded zoom command preserves the viewport center anchor`() {
+    val fixture =
+      Fixture(
+        initialScrollOffset = Offset(40f, 80f),
+        measuredViewportSize = Size(width = 200f, height = 300f),
+      )
+
+    assertTrue(fixture.semantic.setZoomAtViewportCenter(1.5f))
+
+    assertEquals(1.5f, fixture.zoomController.displayZoom, 0.0001f)
+    assertEquals(1.5f, fixture.zoomController.renderZoom, 0.0001f)
+    assertEquals(Offset(110f, 195f), fixture.viewportState.scrollOffset)
+    assertEquals(Offset(110f, 195f), fixture.attachedAnchors.single().third)
+  }
+
   private class Fixture(
     val pageSizes: List<PageSize> = listOf(PageSize(width = 720f, height = 960f)),
     val viewportWidth: Float = 720f,
@@ -480,6 +633,7 @@ class EditorViewportZoomSemanticTest {
     editorBoundsInRoot: Rect = Rect(left = 0f, top = 0f, right = 720f, bottom = 2000f),
     measuredViewportSize: Size = Size(width = 100f, height = 120f),
     contentSize: Size = Size(width = 2000f, height = 2000f),
+    coroutineScope: CoroutineScope? = null,
     documentLayoutSpec: EditorDocumentLayoutSpec =
       EditorDocumentLayoutSpec.Paginated(
         pageWidth = 720f,
@@ -508,7 +662,7 @@ class EditorViewportZoomSemanticTest {
         pageOffsets.forEach { (page, offset) -> updatePageOffset(page = page, offset = offset) }
         updateEditorBounds(boundsInRoot = editorBoundsInRoot, density = 1f)
       }
-    val semantic = EditorViewportZoomSemantic()
+    val semantic = EditorViewportZoomSemantic(coroutineScope = coroutineScope)
 
     init {
       zoomController.syncLayout(layoutSpec = layoutSpec, viewportWidth = viewportWidth)
