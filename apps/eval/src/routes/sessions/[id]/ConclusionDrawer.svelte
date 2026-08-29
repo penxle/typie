@@ -2,7 +2,7 @@
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
-  import { MediaQuery } from 'svelte/reactivity';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import IconX from '~icons/lucide/x';
   import { anchorQuote } from '$lib/feedback/anchors.ts';
   import { VERDICT_POINTS, verdictLabel } from '$lib/feedback/verdicts.ts';
@@ -53,8 +53,6 @@
     onClose,
     onActivate,
   }: Props = $props();
-
-  const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)', false);
 
   const understandingLines = $derived((conclusion.understanding ?? '').split('\n').filter((line) => line.trim().length > 0));
   // 진전 서술은 재리뷰 회차에만 온다 — 1회차·구 데이터는 필드가 없어 섹션 자체가 서지 않는다.
@@ -186,7 +184,7 @@
 
 <div class={css(rootRecipe.raw({ open }))} aria-hidden={!open} inert={!open}>
   <button
-    class={css(scrimRecipe.raw({ open, instant: reducedMotion.current }))}
+    class={css(scrimRecipe.raw({ open, instant: prefersReducedMotion.current }))}
     aria-label="총평 닫기"
     onclick={onClose}
     type="button"
@@ -223,7 +221,7 @@
     <span class={css({ fontSize: '10px', fontWeight: 'semibold', color: 'text.bright', letterSpacing: '[0.04em]' })}>ESC</span>
   </button>
 
-  <section class={css(drawerRecipe.raw({ open, instant: reducedMotion.current }))} aria-label="편집자의 총평">
+  <section class={css(drawerRecipe.raw({ open, instant: prefersReducedMotion.current }))} aria-label="편집자의 총평">
     <div
       class={flex({
         align: 'center',
@@ -264,7 +262,7 @@
 
     <div class={css({ flexGrow: '1', minHeight: '0', overflowY: 'auto' })}>
       <div
-        class={css(letterRecipe.raw({ open, instant: reducedMotion.current }), {
+        class={css(letterRecipe.raw({ open, instant: prefersReducedMotion.current }), {
           maxWidth: '660px',
           marginX: 'auto',
           paddingX: '20px',

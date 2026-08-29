@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
-import androidx.compose.ui.window.application
 import co.typie.dev.DesktopDebugKeyboard
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
@@ -142,7 +141,7 @@ fun main() {
     prefs.getBoolean("hardwareKeyboardConnected", false)
   )
 
-  application {
+  runDesktopApplication {
     var usePhysicalScale by remember { mutableStateOf(preferPhysical) }
     val windowState = remember {
       WindowState(size = if (preferPhysical) physicalSize else pointAccurateSize)

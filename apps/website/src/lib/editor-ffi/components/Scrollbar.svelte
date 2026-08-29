@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '@typie/ui/actions';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import type { Size } from '@typie/editor-ffi/browser';
@@ -258,12 +259,14 @@
     style:left={!isVertical && containerRect ? `${containerRect.left}px` : undefined}
     style:height={isVertical && containerRect ? `${containerRect.height - (x.canScroll ? 12 : 0)}px` : '12px'}
     style:width={!isVertical && containerRect ? `${containerRect.width - (y.canScroll ? 12 : 0)}px` : '12px'}
+    style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
     class={css({
       pointerEvents: 'auto',
       position: 'fixed',
       zIndex: '10',
       transition: 'opacity',
       transitionDuration: '300ms',
+      _motionReduce: { transitionDuration: '0ms' },
       opacity: isVisible || isDraggingThis ? (isUserMode ? '100' : '65') : '0',
     })}
     aria-controls="scroll-content"
@@ -290,6 +293,7 @@
       style:bottom={isVertical ? undefined : '2px'}
       style:height={isVertical ? `${geometry.thumbSize}px` : '8px'}
       style:width={isVertical ? '8px' : `${geometry.thumbSize}px`}
+      style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
       class={css({
         position: 'absolute',
         cursor: 'pointer',
@@ -304,6 +308,7 @@
             : 'surface.inverse/22',
         _hover: { backgroundColor: 'surface.inverse/80' },
         _active: { backgroundColor: 'surface.inverse/80' },
+        _motionReduce: { transition: '[none]' },
       })}
       aria-valuemax={geometry.maxScroll}
       aria-valuemin={0}
@@ -324,6 +329,7 @@
   <div
     style:top="{indicatorTop}px"
     style:right="{indicatorRight}px"
+    style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
     class={css({
       pointerEvents: 'none',
       position: 'fixed',
@@ -338,6 +344,7 @@
       fontVariantNumeric: 'tabular-nums',
       transition: 'opacity',
       transitionDuration: '300ms',
+      _motionReduce: { transitionDuration: '0ms' },
       opacity: isVisible && isUserMode ? '100' : '0',
     })}
   >

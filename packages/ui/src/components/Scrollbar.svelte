@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '../actions';
+  import { prefersReducedMotion } from '../state/reduced-motion.svelte';
 
   const HIDE_DELAY = 1000;
   const MIN_THUMB_SIZE = 30;
@@ -216,13 +217,14 @@
     style:height={vertical ? undefined : `${dimensions.hitLane}px`}
     style:opacity={visible ? 1 : 0}
     style:transition-property="opacity"
-    style:transition-duration={visible ? '300ms' : '600ms'}
+    style:transition-duration={prefersReducedMotion.current ? '0ms' : visible ? '300ms' : '600ms'}
     style:transition-timing-function="cubic-bezier(0.4, 0, 0.2, 1)"
     class={css({
       position: 'absolute',
       zIndex: '1',
       pointerEvents: 'auto',
       touchAction: 'none',
+      _motionReduce: { transitionDuration: '0ms' },
     })}
     aria-controls={controls}
     aria-label={label}
@@ -261,12 +263,14 @@
         style:left={vertical ? undefined : '0'}
         style:width={vertical ? `${dimensions.paintedThumb}px` : undefined}
         style:height={vertical ? undefined : `${dimensions.paintedThumb}px`}
+        style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
         class={css({
           position: 'absolute',
           pointerEvents: 'none',
           borderRadius: 'full',
           backgroundColor: dragging || thumbHovered ? 'surface.inverse/30' : 'surface.inverse/18',
           transition: 'colors',
+          _motionReduce: { transition: '[none]' },
         })}
       ></div>
     </div>

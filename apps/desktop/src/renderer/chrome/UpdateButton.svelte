@@ -2,6 +2,7 @@
   // cspell:ignore onrestart
 
   import { css } from '@typie/styled-system/css';
+  import { prefersReducedMotion } from '@typie/ui/state/reduced-motion';
   import { cubicOut } from 'svelte/easing';
   import { fade, scale } from 'svelte/transition';
   import CircleArrowUpIcon from '~icons/lucide/circle-arrow-up';
@@ -9,9 +10,10 @@
   type Props = { onrestart: () => void };
   let { onrestart }: Props = $props();
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const enter = (node: Element) =>
-    reduceMotion.matches ? fade(node, { duration: 150 }) : scale(node, { duration: 180, start: 0.95, opacity: 0, easing: cubicOut });
+    prefersReducedMotion.current
+      ? fade(node, { duration: 150 })
+      : scale(node, { duration: 180, start: 0.95, opacity: 0, easing: cubicOut });
 </script>
 
 <button
