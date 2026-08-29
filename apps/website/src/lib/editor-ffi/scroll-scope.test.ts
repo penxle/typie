@@ -839,6 +839,8 @@ describe('EditorScrollScope', () => {
     setScrollTop(10);
     scope.observeViewportScroll();
 
+    expect(scope.lastScrollRevision).toBe(1);
+    expect(scope.lastScrollWasAuto).toBe(false);
     expect(measureTrack).toHaveBeenCalledOnce();
     expect(editor.clientToLocal).not.toHaveBeenCalled();
     expect(measureFirstPage).not.toHaveBeenCalled();
@@ -910,6 +912,8 @@ describe('EditorScrollScope', () => {
     scope.attachViewportAnchorAt({ page: 0, x: 200, y: 200 });
     scope.observeViewportScroll();
 
+    expect(scope.lastScrollRevision).toBe(1);
+    expect(scope.lastScrollWasAuto).toBe(true);
     expect(scope.prepareViewportAnchorPublication(candidate)).toMatchObject({
       type: 'ready',
       targetScrollLeft: 300,

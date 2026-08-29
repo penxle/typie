@@ -216,7 +216,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
 
     setScrollOffset(
       nextScrollOffset = resolvedScrollOffset,
-      isAutoScroll = false,
+      isAutoScroll = true,
       emitScrollEvent = true,
     )
   }
@@ -279,7 +279,7 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
     retainedTransformScrollTarget = null
     setScrollOffset(
       nextScrollOffset = retainedScrollTarget.coerceToBounds(),
-      isAutoScroll = false,
+      isAutoScroll = true,
       emitScrollEvent = true,
     )
     return true
