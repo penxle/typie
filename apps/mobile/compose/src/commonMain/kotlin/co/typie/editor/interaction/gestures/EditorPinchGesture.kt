@@ -31,12 +31,12 @@ internal class EditorPinchGesture {
     }
 
     isPinching = false
-    context.semantics.viewportZoom.end()
+    context.semantics.viewportZoom.release()
     return true
   }
 
   fun cancel(context: EditorGestureContext) {
-    context.semantics.viewportZoom.end()
+    context.semantics.viewportZoom.cancel()
     reset()
   }
 

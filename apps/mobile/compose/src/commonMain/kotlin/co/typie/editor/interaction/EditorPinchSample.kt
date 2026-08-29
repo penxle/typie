@@ -2,9 +2,16 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 
-internal data class EditorPinchSample(val focalInRootPx: Offset, val distancePx: Float)
+internal data class EditorPinchSample(
+  val focalInRootPx: Offset,
+  val distancePx: Float,
+  val timestampMillis: Long = 0L,
+)
 
-internal fun resolveEditorPinchSample(positionsInRoot: List<Offset>): EditorPinchSample? {
+internal fun resolveEditorPinchSample(
+  positionsInRoot: List<Offset>,
+  timestampMillis: Long = 0L,
+): EditorPinchSample? {
   if (positionsInRoot.size != 2) {
     return null
   }
@@ -13,5 +20,6 @@ internal fun resolveEditorPinchSample(positionsInRoot: List<Offset>): EditorPinc
   return EditorPinchSample(
     focalInRootPx = (first + second) / 2f,
     distancePx = (first - second).getDistance(),
+    timestampMillis = timestampMillis,
   )
 }

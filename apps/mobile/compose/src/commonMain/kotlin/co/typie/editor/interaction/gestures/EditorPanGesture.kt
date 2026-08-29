@@ -63,11 +63,6 @@ internal class EditorPanGesture {
     return true
   }
 
-  fun resume(change: PointerInputChange, position: Offset, driver: EditorPanGestureDriver) {
-    reset()
-    prepare(change = change, position = position, startKind = StartKind.Resumed, driver = driver)
-  }
-
   fun update(change: PointerInputChange, position: Offset, context: EditorGestureContext): Boolean {
     val current = session?.takeIf { it.pointerId == change.id.value } ?: return false
     val pressed = change.pressed
@@ -175,6 +170,7 @@ internal class EditorPanGesture {
     if (!context.mode.canApply(EditorInteractionEvent.PanStart)) {
       return false
     }
+    context.semantics.viewportZoom.interruptForDirectPan()
     if (!current.driverStarted) {
       if (!current.driver.start()) {
         return false
@@ -218,7 +214,6 @@ internal class EditorPanGesture {
 
   private enum class StartKind {
     Fresh,
-    Resumed,
     ScrollCatch,
   }
 }

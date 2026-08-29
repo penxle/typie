@@ -1,5 +1,6 @@
 import { clamp } from '@typie/ui/utils';
 import { CONTINUOUS_VIEW_PADDING } from './constants';
+import { elasticDisplayZoom } from './zoom-motion';
 
 export const MIN_DOCUMENT_DISPLAY_WIDTH = 100;
 export const MAX_DOCUMENT_ZOOM = 2;
@@ -77,6 +78,15 @@ export function clampDocumentLayoutZoom({
   }
 
   return snapped ?? clamped;
+}
+
+export function resolveDirectDocumentZoom(zoom: number, layout: DocumentZoomLayout): number {
+  const bounds = computeDocumentZoomBounds(layout);
+  return elasticDisplayZoom(zoom, bounds) ?? bounds.min;
+}
+
+export function resolveDocumentZoomIndicator(displayZoom: number, layout: DocumentZoomLayout): number {
+  return clampDocumentZoom(displayZoom, computeDocumentZoomBounds(layout));
 }
 
 export function resolveContinuousLayoutViewportWidth({

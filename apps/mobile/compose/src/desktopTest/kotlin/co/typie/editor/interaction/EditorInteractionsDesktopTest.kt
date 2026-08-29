@@ -1215,36 +1215,38 @@ class EditorInteractionsDesktopTest {
     }
 
   @Test
-  fun `surviving pinch pointer resumes normal nested pan without touch slop`() = runComposeUiTest {
+  fun `surviving pinch pointer stays zoom owned until all pointers are up`() = runComposeUiTest {
     val fixture = Fixture()
     setEditorContent(fixture)
 
     onNodeWithTag(EditorTag).performTouchInput {
       down(pointerId = 0, position = Offset(100f, 100f))
       down(pointerId = 1, position = Offset(200f, 100f))
-      updatePointerTo(pointerId = 0, position = Offset(50f, 100f))
-      updatePointerTo(pointerId = 1, position = Offset(250f, 100f))
+      updatePointerTo(pointerId = 0, position = Offset(80f, 100f))
+      updatePointerTo(pointerId = 1, position = Offset(220f, 100f))
       move()
-      up(pointerId = 1)
     }
+    val zoomBeforeRelease = fixture.zoomController.displayZoom
+
+    onNodeWithTag(EditorTag).performTouchInput { up(pointerId = 1) }
     assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertEquals(zoomBeforeRelease, fixture.zoomController.displayZoom, 0.0001f)
     assertTrue(fixture.touchPanDeltas.isEmpty())
 
     onNodeWithTag(EditorTag).performTouchInput {
-      moveTo(pointerId = 0, position = Offset(50f, 101f))
-      moveTo(pointerId = 0, position = Offset(50f, 102f))
+      moveTo(pointerId = 0, position = Offset(80f, 101f))
+      moveTo(pointerId = 0, position = Offset(80f, 102f))
     }
     waitForIdle()
 
-    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
-    assertEquals(listOf(Offset(x = 0f, y = 1f), Offset(x = 0f, y = 1f)), fixture.touchPanDeltas)
-    assertTrue(fixture.nestedScrollAvailable.isNotEmpty())
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertTrue(fixture.nestedScrollAvailable.isEmpty())
 
     onNodeWithTag(EditorTag).performTouchInput { up(pointerId = 0) }
     waitForIdle()
     assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
-    assertTrue(fixture.flingVelocities.isNotEmpty())
-    assertTrue(fixture.flingVelocities.all { velocity -> velocity.y < 1_000f })
+    assertTrue(fixture.flingVelocities.isEmpty())
   }
 
   @Test

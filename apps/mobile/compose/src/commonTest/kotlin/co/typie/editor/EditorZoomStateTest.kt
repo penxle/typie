@@ -5,6 +5,7 @@ import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -99,6 +100,29 @@ class EditorZoomControllerTest {
 
     assertEquals(1f, state.displayZoom, 0.0001f)
     assertEquals(1f, state.renderZoom, 0.0001f)
+  }
+
+  @Test
+  fun `direct gesture zoom rubber bands beyond bounds while programmatic zoom stays clamped`() {
+    val state = EditorZoomController()
+    val layout =
+      EditorDocumentLayoutSpec.Paginated(
+        pageWidth = 720f,
+        pageHeight = 960f,
+        pageMarginTop = 72f,
+        pageMarginBottom = 72f,
+        pageMarginLeft = 64f,
+        pageMarginRight = 64f,
+      )
+    state.syncLayout(layoutSpec = layout, viewportWidth = 720f)
+
+    state.setGestureDisplayZoom(rawZoom = 2.2f, layoutSpec = layout, viewportWidth = 720f)
+    assertTrue(state.displayZoom > 2f)
+    assertTrue(state.displayZoom < 2.2f)
+    assertEquals(2f, state.indicatorZoom, 0.0001f)
+
+    state.setDisplayZoom(zoom = state.displayZoom, layoutSpec = layout, viewportWidth = 720f)
+    assertEquals(2f, state.displayZoom, 0.0001f)
   }
 
   @Test

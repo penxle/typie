@@ -5,6 +5,8 @@ import {
   computeDocumentZoomBounds,
   resolveContinuousLayoutViewportWidth,
   resolveContinuousViewPadding,
+  resolveDirectDocumentZoom,
+  resolveDocumentZoomIndicator,
 } from './zoom';
 
 describe('continuous document zoom policy', () => {
@@ -34,5 +36,16 @@ describe('continuous document zoom policy', () => {
     expect(resolveContinuousViewPadding(1.5)).toBe(30);
     expect(resolveContinuousViewPadding(0.5)).toBe(10);
     expect(resolveContinuousViewPadding(NaN)).toBe(20);
+  });
+
+  it('keeps snapping out of direct input and rubber bands past hard bounds', () => {
+    expect(resolveDirectDocumentZoom(0.79, layout)).toBe(0.79);
+    expect(resolveDirectDocumentZoom(2.2, layout)).toBeGreaterThan(2);
+    expect(resolveDirectDocumentZoom(2.2, layout)).toBeLessThan(2.2);
+  });
+
+  it('reports only the normal range to the zoom indicator', () => {
+    expect(resolveDocumentZoomIndicator(2.08, layout)).toBe(2);
+    expect(resolveDocumentZoomIndicator(0.1, layout)).toBe(computeDocumentZoomBounds(layout).min);
   });
 });

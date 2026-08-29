@@ -138,22 +138,6 @@ internal class EditorInteractionController(
 
   fun onPinchEnd(): Boolean = gestures.endPinch(context = this)
 
-  fun endPinchAndResumeViewportPan(
-    change: PointerInputChange,
-    position: Offset,
-    driver: EditorPanGestureDriver,
-  ): Boolean {
-    if (!ensurePointerInputEnabled()) {
-      return false
-    }
-    return gestures.endPinchAndResumeViewportPan(
-      change = change,
-      position = position,
-      driver = driver,
-      context = this,
-    )
-  }
-
   fun beginIndirectZoom(): Boolean =
     if (ensurePointerInputEnabled()) {
       gestures.beginIndirectZoom(context = this)
@@ -188,6 +172,10 @@ internal class EditorInteractionController(
 
   fun endIndirectZoom() {
     gestures.endIndirectZoom(context = this)
+  }
+
+  fun interruptZoomForDirectPan() {
+    semantics.viewportZoom.interruptForDirectPan()
   }
 
   fun onLongPressTimer(pointerId: Long, position: Offset, nowMillis: Long): Boolean =

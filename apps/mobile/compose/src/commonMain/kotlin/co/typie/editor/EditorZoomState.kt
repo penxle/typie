@@ -40,6 +40,14 @@ internal class EditorZoomController(
   val isZoomEnabled: Boolean
     get() = initializedLayoutKey != null
 
+  val indicatorZoom: Float
+    get() =
+      if (isZoomEnabled) {
+        clampDocumentZoom(displayZoom, computeDocumentZoomBounds(currentLayoutSpec))
+      } else {
+        1f
+      }
+
   private var initializedLayoutKey: String? = null
   private var currentLayoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(0f)
   private var currentViewportWidth: Float = 0f
@@ -91,6 +99,32 @@ internal class EditorZoomController(
     )
   }
 
+  fun setGestureDisplayZoom(
+    rawZoom: Float,
+    snapZoom: Float? = null,
+    layoutSpec: EditorDocumentLayoutSpec,
+    viewportWidth: Float,
+  ): Boolean {
+    currentLayoutSpec = layoutSpec
+    currentViewportWidth = viewportWidth
+    val displayZoom =
+      snapZoom?.takeIf { it.isFinite() && it > 0f }
+        ?: elasticEditorDisplayZoom(rawZoom, computeDocumentZoomBounds(layoutSpec))
+        ?: return false
+    return setResolvedDisplayZoom(displayZoom = displayZoom, commitRender = false)
+  }
+
+  fun setMotionDisplayZoom(
+    displayZoom: Float,
+    layoutSpec: EditorDocumentLayoutSpec,
+    viewportWidth: Float,
+  ): Boolean {
+    if (!displayZoom.isFinite() || displayZoom <= 0f) return false
+    currentLayoutSpec = layoutSpec
+    currentViewportWidth = viewportWidth
+    return setResolvedDisplayZoom(displayZoom = displayZoom, commitRender = false)
+  }
+
   fun commitRenderZoom() {
     requestRenderZoomCommit()
   }
@@ -127,9 +161,13 @@ internal class EditorZoomController(
 
     val resolvedZoom =
       resolveDisplayZoom(zoom = zoom, layoutSpec = layoutSpec, viewportWidth = viewportWidth)
-    val changed = zoomDiffers(displayZoom, resolvedZoom)
+    return setResolvedDisplayZoom(displayZoom = resolvedZoom, commitRender = commitRender)
+  }
+
+  private fun setResolvedDisplayZoom(displayZoom: Float, commitRender: Boolean): Boolean {
+    val changed = zoomDiffers(this.displayZoom, displayZoom)
     if (changed) {
-      displayZoom = resolvedZoom
+      this.displayZoom = displayZoom
     }
 
     if (commitRender) {

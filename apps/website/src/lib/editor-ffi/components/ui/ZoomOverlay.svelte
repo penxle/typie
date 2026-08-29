@@ -5,13 +5,14 @@
   type Props = {
     enabled: boolean;
     displayZoom: number;
+    indicatorZoom: number;
     scrollContainer?: HTMLElement;
   };
 
   const ZOOM_OVERLAY_VISIBLE_MS = 1000;
   const ZOOM_OVERLAY_FADE_MS = 180;
 
-  let { enabled, displayZoom, scrollContainer }: Props = $props();
+  let { enabled, displayZoom, indicatorZoom, scrollContainer }: Props = $props();
 
   let visible = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -88,7 +89,7 @@
     };
   });
 
-  const zoomPercent = $derived(Math.round(displayZoom * 100));
+  const zoomPercent = $derived(Math.round(indicatorZoom * 100));
 </script>
 
 {#if enabled}
