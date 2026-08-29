@@ -19,8 +19,6 @@ export type AppPreference = {
   focusDuration: number;
   restDuration: number;
 
-  announcementViewedIds?: string[];
-
   typewriterEnabled: boolean;
   typewriterPosition: number;
 
@@ -37,6 +35,7 @@ export type AppPreference = {
   referralWelcomeModalShown: boolean;
 
   planChangeNoticeShown: boolean;
+  changelogSeenId: string;
 
   initialPage: 'blank' | 'last';
 
@@ -57,6 +56,7 @@ type AppState = {
   shareOpen: string[];
   exportOpen: string | null;
   statsOpen: boolean;
+  changelogOpen: boolean;
   goalOpen: string[];
   userGoalOpen: boolean;
   shortcutsOpen: boolean;
@@ -109,6 +109,7 @@ export const setupAppContext = (userId: string) => {
     shareOpen: [],
     exportOpen: null,
     statsOpen: false,
+    changelogOpen: false,
     goalOpen: [],
     userGoalOpen: false,
     shortcutsOpen: false,
@@ -168,6 +169,7 @@ export const setupAppContext = (userId: string) => {
       referralWelcomeModalShown: false,
 
       planChangeNoticeShown: false,
+      changelogSeenId: '',
 
       initialPage: 'last',
 
