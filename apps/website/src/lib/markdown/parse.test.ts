@@ -153,4 +153,129 @@ describe('parseMarkdown', () => {
       },
     ]);
   });
+
+  it('parses a details fence with its summary and nested blocks', () => {
+    expect(parseMarkdown('::: details 버그 수정\n- 첫번째\n- 두번째\n:::')).toEqual([
+      {
+        kind: 'details',
+        summary: '버그 수정',
+        children: [
+          {
+            kind: 'list',
+            ordered: false,
+            startIndex: 1,
+            items: [
+              { task: false, checked: false, blocks: [{ kind: 'paragraph', children: [{ kind: 'text', text: '첫번째' }] }] },
+              { task: false, checked: false, blocks: [{ kind: 'paragraph', children: [{ kind: 'text', text: '두번째' }] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a details fence with no summary', () => {
+    expect(parseMarkdown('::: details\n내용\n:::')).toEqual([
+      { kind: 'details', summary: '', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '내용' }] }] },
+    ]);
+  });
+
+  it('runs an unclosed details fence to the end of the input', () => {
+    expect(parseMarkdown('::: details 제목\n내용')).toEqual([
+      { kind: 'details', summary: '제목', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '내용' }] }] },
+    ]);
+  });
+
+  it('nests a details fence inside a longer one', () => {
+    expect(parseMarkdown(':::: details 바깥\n::: details 안쪽\n내용\n:::\n::::')).toEqual([
+      {
+        kind: 'details',
+        summary: '바깥',
+        children: [{ kind: 'details', summary: '안쪽', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '내용' }] }] }],
+      },
+    ]);
+  });
+
+  it('leaves a bare colon fence as text', () => {
+    expect(parseMarkdown(':::\n내용\n:::')).toEqual([
+      {
+        kind: 'paragraph',
+        children: [
+          { kind: 'text', text: ':::' },
+          { kind: 'br' },
+          { kind: 'text', text: '내용' },
+          { kind: 'br' },
+          { kind: 'text', text: ':::' },
+        ],
+      },
+    ]);
+  });
+
+  it('parses consecutive details fences independently', () => {
+    expect(parseMarkdown('::: details 첫째\n가\n:::\n\n::: details 둘째\n나\n:::')).toEqual([
+      { kind: 'details', summary: '첫째', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '가' }] }] },
+      { kind: 'details', summary: '둘째', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '나' }] }] },
+    ]);
+  });
+
+  it('parses a space directive with a default of one line', () => {
+    expect(parseMarkdown('앞\n\n::: space\n\n뒤')).toEqual([
+      { kind: 'paragraph', children: [{ kind: 'text', text: '앞' }] },
+      { kind: 'space', lines: 1 },
+      { kind: 'paragraph', children: [{ kind: 'text', text: '뒤' }] },
+    ]);
+  });
+
+  it('parses an explicit line count on a space directive', () => {
+    expect(parseMarkdown('::: space 3')).toEqual([{ kind: 'space', lines: 3 }]);
+  });
+
+  it('leaves a space directive with a non-numeric argument as text', () => {
+    expect(parseMarkdown('::: space 가나')).toEqual([{ kind: 'paragraph', children: [{ kind: 'text', text: '::: space 가나' }] }]);
+  });
+
+  it('parses a space directive nested inside a details block', () => {
+    expect(parseMarkdown('::: details 제목\n앞\n\n::: space 2\n\n뒤\n:::')).toEqual([
+      {
+        kind: 'details',
+        summary: '제목',
+        children: [
+          { kind: 'paragraph', children: [{ kind: 'text', text: '앞' }] },
+          { kind: 'space', lines: 2 },
+          { kind: 'paragraph', children: [{ kind: 'text', text: '뒤' }] },
+        ],
+      },
+    ]);
+  });
+
+  it('parses a note container with its nested blocks', () => {
+    expect(parseMarkdown('::: note\n작은 글씨\n:::')).toEqual([
+      { kind: 'note', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '작은 글씨' }] }] },
+    ]);
+  });
+
+  it('leaves a note fence carrying a label as text', () => {
+    expect(parseMarkdown('::: note 제목\n내용\n:::')).toEqual([
+      {
+        kind: 'paragraph',
+        children: [
+          { kind: 'text', text: '::: note 제목' },
+          { kind: 'br' },
+          { kind: 'text', text: '내용' },
+          { kind: 'br' },
+          { kind: 'text', text: ':::' },
+        ],
+      },
+    ]);
+  });
+
+  it('nests a note inside a details block', () => {
+    expect(parseMarkdown(':::: details 제목\n::: note\n주석\n:::\n::::')).toEqual([
+      {
+        kind: 'details',
+        summary: '제목',
+        children: [{ kind: 'note', children: [{ kind: 'paragraph', children: [{ kind: 'text', text: '주석' }] }] }],
+      },
+    ]);
+  });
 });

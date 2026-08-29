@@ -1,6 +1,8 @@
 import { Marked } from 'marked';
 import markedCjkFriendly from 'marked-cjk-friendly';
+import { markedDirectives } from './directives';
 import type { Token, Tokens } from 'marked';
+import type { ContainerToken, SpaceToken } from './directives';
 
 export type InlineNode =
   | { kind: 'text'; text: string }
@@ -25,6 +27,9 @@ export type BlockNode =
   | { kind: 'table'; header: TableRowNode; rows: TableRowNode[] }
   | { kind: 'code'; text: string }
   | { kind: 'blockquote'; children: BlockNode[] }
+  | { kind: 'details'; summary: string; children: BlockNode[] }
+  | { kind: 'note'; children: BlockNode[] }
+  | { kind: 'space'; lines: number }
   | { kind: 'hr' };
 
 const inlineNodes = (tokens: Token[]): InlineNode[] => {
@@ -128,6 +133,19 @@ const blockNodes = (tokens: Token[]): BlockNode[] => {
         out.push({ kind: 'blockquote', children: blockNodes((token as Tokens.Blockquote).tokens) });
         break;
       }
+      case 'details': {
+        const details = token as ContainerToken;
+        out.push({ kind: 'details', summary: details.label, children: blockNodes(details.tokens) });
+        break;
+      }
+      case 'note': {
+        out.push({ kind: 'note', children: blockNodes((token as ContainerToken).tokens) });
+        break;
+      }
+      case 'blockSpace': {
+        out.push({ kind: 'space', lines: (token as SpaceToken).lines });
+        break;
+      }
       case 'hr': {
         out.push({ kind: 'hr' });
         break;
@@ -141,7 +159,7 @@ const blockNodes = (tokens: Token[]): BlockNode[] => {
   return out;
 };
 
-const marked = new Marked({ gfm: true, breaks: true }, markedCjkFriendly());
+const marked = new Marked({ gfm: true, breaks: true }, markedCjkFriendly(), markedDirectives());
 
 export const parseMarkdown = (source: string): BlockNode[] => {
   if (source.length === 0) return [];
