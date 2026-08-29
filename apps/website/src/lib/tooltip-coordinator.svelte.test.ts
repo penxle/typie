@@ -66,7 +66,7 @@ const tooltipElement = () => document.querySelector<HTMLElement>('[role="tooltip
 const tooltipElements = () => [...document.querySelectorAll<HTMLElement>('[role="tooltip"]')];
 
 const enter = (element: HTMLElement) => {
-  element.dispatchEvent(new Event('pointerenter'));
+  element.dispatchEvent(new MouseEvent('pointerenter', { clientX: 0, clientY: 0 }));
   element.dispatchEvent(new Event('mouseenter'));
 };
 
