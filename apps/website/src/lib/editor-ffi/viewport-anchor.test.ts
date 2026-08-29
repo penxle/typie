@@ -58,8 +58,8 @@ describe('EditorViewportAnchorState', () => {
     state.attach(identity, { pointX: 100, pointY: 200 }, { left: 20, top: 100 });
 
     expect(state.publicationScroll({ pointX: 260, pointY: 320 }, { left: 20, top: 100 }, { left: 500, top: 500 })).toEqual({
-      left: 180,
-      top: 220,
+      scroll: { left: 180, top: 220 },
+      attachmentAchieved: true,
     });
   });
 
@@ -68,8 +68,8 @@ describe('EditorViewportAnchorState', () => {
     state.attach(identity, { pointX: 0, pointY: 200 }, { left: 0, top: 100 });
 
     expect(state.publicationScroll({ pointX: 0, pointY: 200 }, { left: 0, top: 100 }, { left: 0, top: 500 })).toEqual({
-      left: 0,
-      top: 100,
+      scroll: { left: 0, top: 100 },
+      attachmentAchieved: true,
     });
   });
 
@@ -99,17 +99,34 @@ describe('EditorViewportAnchorState', () => {
     expect(state.resizeScroll(geometry, 100, 300, 1000, { topInset: 0, bottomInset: 100 })).toBe(130);
   });
 
-  it('records the achieved attachment after publication clamping', () => {
+  it('preserves the desired attachment until publication bounds can reach it', () => {
     const state = new EditorViewportAnchorState();
     state.attach(identity, { pointX: 200, pointY: 200 }, { left: 100, top: 100 });
     const candidate = { pointX: 800, pointY: 800 };
 
-    const clamped = state.publicationScroll(candidate, { left: 100, top: 100 }, { left: 500, top: 500 });
-    state.acceptGeometry(candidate, clamped);
+    const constrained = state.publicationScroll(candidate, { left: 100, top: 100 }, { left: 500, top: 500 });
 
-    expect(clamped).toEqual({ left: 500, top: 500 });
-    expect(state.pointAttachmentX).toBe(300);
-    expect(state.pointAttachmentY).toBe(300);
+    expect(constrained).toEqual({ scroll: { left: 500, top: 500 }, attachmentAchieved: false });
+    expect(state.publicationScroll(candidate, constrained.scroll, { left: 1000, top: 1000 })).toEqual({
+      scroll: { left: 700, top: 700 },
+      attachmentAchieved: true,
+    });
+    expect(state.pointAttachmentX).toBe(100);
+    expect(state.pointAttachmentY).toBe(100);
+  });
+
+  it('updates a zoom attachment without replacing its stable viewport identity', () => {
+    const state = new EditorViewportAnchorState();
+    state.attachViewport(viewportIdentity, { pointX: 200, pointY: 300 }, { left: 100, top: 200 });
+
+    expect(state.reattachViewport({ pointX: 320, pointY: 440 }, { left: 220, top: 340 })).toBe(true);
+
+    expect(state.identity).toBe(viewportIdentity);
+    expect(state.viewportAttachment).toEqual({ identity: viewportIdentity, focalX: 100, focalY: 100 });
+    expect(state.publicationScroll({ pointX: 400, pointY: 500 }, { left: 220, top: 340 }, { left: 500, top: 500 })).toEqual({
+      scroll: { left: 300, top: 400 },
+      attachmentAchieved: true,
+    });
   });
 
   it('finishes a provisional selection reveal where the measured rect would have revealed initially', () => {
@@ -118,7 +135,10 @@ describe('EditorViewportAnchorState', () => {
     const measured = { pointX: 0, pointY: 600, rect: { top: 500, bottom: 700 } };
     state.attachSelection(identity, provisional, { left: 0, top: 161 });
 
-    expect(state.publicationRevealScroll(measured, 161, 400, 1000, visibleArea)).toEqual({ left: 0, top: 360 });
+    expect(state.publicationRevealScroll(measured, 161, 400, 1000, visibleArea)).toEqual({
+      scroll: { left: 0, top: 360 },
+      attachmentAchieved: true,
+    });
   });
 
   it('reactivates a preferred selection rect after direct scrolling returns it inside the cursor guard', () => {
@@ -139,7 +159,7 @@ describe('EditorViewportAnchorState', () => {
 
     expect(state.tryReactivatePreferredSelection(selectionGeometry, { left: 120, top: 100 }, 300, visibleArea)).toBe(true);
     expect(state.pointAttachmentX).toBe(80);
-    expect(state.publicationScroll(selectionGeometry, { left: 120, top: 100 }, { left: 500, top: 500 }).left).toBe(120);
+    expect(state.publicationScroll(selectionGeometry, { left: 120, top: 100 }, { left: 500, top: 500 }).scroll.left).toBe(120);
   });
 
   it('does not reactivate a preferred selection without a compact rect inside the guard', () => {

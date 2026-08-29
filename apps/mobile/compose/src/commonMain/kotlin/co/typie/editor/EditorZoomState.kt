@@ -11,6 +11,8 @@ import androidx.compose.runtime.setValue
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.documentZoomWidth
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,6 +27,7 @@ private const val RenderZoomDebounceMs = 120L
 private const val RenderZoomMinCommitIntervalMs = 160L
 private const val RenderZoomMaxCommitDelayMs = 300L
 private const val RenderZoomScaleRatioThreshold = 1.18f
+private const val DiscreteZoomStep = 0.1f
 
 @Stable
 internal class EditorZoomController(
@@ -78,10 +81,8 @@ internal class EditorZoomController(
       return
     }
 
-    setZoomInternal(
-      zoom = displayZoom,
-      layoutSpec = layoutSpec,
-      viewportWidth = viewportWidth,
+    setResolvedDisplayZoom(
+      displayZoom = clampDocumentZoom(displayZoom, computeDocumentZoomBounds(layoutSpec)),
       commitRender = true,
     )
   }
@@ -90,12 +91,14 @@ internal class EditorZoomController(
     zoom: Float,
     layoutSpec: EditorDocumentLayoutSpec,
     viewportWidth: Float,
+    snapToLandmarks: Boolean = true,
   ): Boolean {
     return setZoomInternal(
       zoom = zoom,
       layoutSpec = layoutSpec,
       viewportWidth = viewportWidth,
       commitRender = false,
+      snapToLandmarks = snapToLandmarks,
     )
   }
 
@@ -144,23 +147,71 @@ internal class EditorZoomController(
     }
   }
 
+  fun resolveLandmark(zoom: Float = indicatorZoom): EditorZoomLandmark? {
+    if (!isZoomEnabled) return null
+    return resolveEditorZoomLandmark(
+      zoom = zoom,
+      layoutSpec = currentLayoutSpec,
+      viewportWidth = currentViewportWidth,
+    )
+  }
+
+  fun resolveIndicatorToggleTarget(): Float? {
+    if (!isZoomEnabled) return null
+    val bounds = computeDocumentZoomBounds(currentLayoutSpec)
+    val unitZoom = clampDocumentZoom(zoom = 1f, bounds = bounds)
+    val fitWidthZoom =
+      computeDocumentFitWidthZoom(
+        layoutSpec = currentLayoutSpec,
+        viewportWidth = currentViewportWidth,
+      )
+    val targetZoom = if (resolveLandmark() == EditorZoomLandmark.Unit) fitWidthZoom else unitZoom
+    return targetZoom.takeUnless { zoomEquals(it, displayZoom) }
+  }
+
+  fun resolveZoomInTarget(): Float? = resolveStepTarget(1)
+
+  fun resolveZoomOutTarget(): Float? = resolveStepTarget(-1)
+
+  private fun resolveStepTarget(direction: Int): Float? {
+    if (!isZoomEnabled) return null
+    return resolveEditorZoomStepTarget(
+      zoom = indicatorZoom,
+      direction = direction,
+      layoutSpec = currentLayoutSpec,
+      viewportWidth = currentViewportWidth,
+    )
+  }
+
   private fun resolveDisplayZoom(
     zoom: Float,
     layoutSpec: EditorDocumentLayoutSpec,
     viewportWidth: Float,
-  ): Float = clampDocumentLayoutZoom(zoom, layoutSpec, viewportWidth)
+    snapToLandmarks: Boolean,
+  ): Float =
+    if (snapToLandmarks) {
+      clampDocumentLayoutZoom(zoom, layoutSpec, viewportWidth)
+    } else {
+      clampDocumentZoom(zoom, computeDocumentZoomBounds(layoutSpec))
+    }
 
   private fun setZoomInternal(
     zoom: Float,
     layoutSpec: EditorDocumentLayoutSpec,
     viewportWidth: Float,
     commitRender: Boolean,
+    snapToLandmarks: Boolean = true,
   ): Boolean {
     currentLayoutSpec = layoutSpec
     currentViewportWidth = viewportWidth
 
     val resolvedZoom =
-      resolveDisplayZoom(zoom = zoom, layoutSpec = layoutSpec, viewportWidth = viewportWidth)
+      resolveDisplayZoom(
+        zoom = zoom,
+        layoutSpec = layoutSpec,
+        viewportWidth = viewportWidth,
+        snapToLandmarks = snapToLandmarks,
+      )
     return setResolvedDisplayZoom(displayZoom = resolvedZoom, commitRender = commitRender)
   }
 
@@ -271,6 +322,39 @@ internal enum class EditorZoomSnapKey {
   Unit,
 }
 
+internal enum class EditorZoomLandmark {
+  Minimum,
+  FitWidth,
+  Unit,
+  Maximum,
+}
+
+internal fun resolveEditorZoomLandmark(
+  zoom: Float,
+  layoutSpec: EditorDocumentLayoutSpec,
+  viewportWidth: Float,
+): EditorZoomLandmark? {
+  val layoutWidth =
+    when (layoutSpec) {
+      is EditorDocumentLayoutSpec.Continuous -> layoutSpec.maxWidth
+      is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageWidth
+    }
+  if (!zoom.isFinite() || zoom <= 0f || !layoutWidth.isFinite() || layoutWidth <= 0f) return null
+  if (!viewportWidth.isFinite() || viewportWidth <= 0f) return null
+
+  val bounds = computeDocumentZoomBounds(layoutSpec)
+  val unitZoom = clampDocumentZoom(zoom = 1f, bounds = bounds)
+  if (zoomEquals(zoom, unitZoom)) return EditorZoomLandmark.Unit
+
+  val naturalFitWidthZoom = viewportWidth / layoutSpec.documentZoomWidth()
+  if (naturalFitWidthZoom in bounds && zoomEquals(zoom, naturalFitWidthZoom)) {
+    return EditorZoomLandmark.FitWidth
+  }
+  if (zoomEquals(zoom, bounds.start)) return EditorZoomLandmark.Minimum
+  if (zoomEquals(zoom, bounds.endInclusive)) return EditorZoomLandmark.Maximum
+  return null
+}
+
 internal fun computeDocumentZoomBounds(
   layoutSpec: EditorDocumentLayoutSpec
 ): ClosedFloatingPointRange<Float> {
@@ -339,6 +423,34 @@ internal fun clampDocumentLayoutZoom(
   }
 
   return snapped ?: clamped
+}
+
+private fun resolveEditorZoomStepTarget(
+  zoom: Float,
+  direction: Int,
+  layoutSpec: EditorDocumentLayoutSpec,
+  viewportWidth: Float,
+): Float? {
+  val bounds = computeDocumentZoomBounds(layoutSpec)
+  val current = clampDocumentZoom(zoom, bounds)
+  val candidates =
+    mutableListOf(
+      bounds.start,
+      computeDocumentFitWidthZoom(layoutSpec, viewportWidth),
+      clampDocumentZoom(1f, bounds),
+      bounds.endInclusive,
+    )
+  val firstGridIndex = ceil((bounds.start - ZoomEpsilon) / DiscreteZoomStep).toInt()
+  val lastGridIndex = floor((bounds.endInclusive + ZoomEpsilon) / DiscreteZoomStep).toInt()
+  for (index in firstGridIndex..lastGridIndex) {
+    candidates += clampDocumentZoom(index * DiscreteZoomStep, bounds)
+  }
+
+  return if (direction > 0) {
+    candidates.filter { it > current + ZoomEpsilon }.minOrNull()
+  } else {
+    candidates.filter { it < current - ZoomEpsilon }.maxOrNull()
+  }
 }
 
 internal fun renderZoomForDisplay(displayZoom: Float): Float {

@@ -137,6 +137,10 @@ internal fun Modifier.observeEditorHeaderReadingTaps(
       try {
         awaitEachGesture {
           val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+          if (down.isConsumed) {
+            tracker.cancel()
+            return@awaitEachGesture
+          }
           if (!enabled()) {
             tracker.cancel()
             return@awaitEachGesture
@@ -176,6 +180,10 @@ internal fun Modifier.observeEditorHeaderReadingTaps(
                 return@awaitEachGesture
               }
               continue
+            }
+            if (change.isConsumed) {
+              tracker.cancel()
+              return@awaitEachGesture
             }
             if (event.changes.count { it.pressed } > 1) {
               tracker.cancel()

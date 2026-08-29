@@ -276,9 +276,12 @@ internal class EditorViewportState(initialScrollOffset: Offset = Offset.Zero) {
       return false
     }
 
-    retainedTransformScrollTarget = null
+    val resolvedScrollOffset = retainedScrollTarget.coerceToBounds()
+    if (resolvedScrollOffset == retainedScrollTarget) {
+      retainedTransformScrollTarget = null
+    }
     setScrollOffset(
-      nextScrollOffset = retainedScrollTarget.coerceToBounds(),
+      nextScrollOffset = resolvedScrollOffset,
       isAutoScroll = true,
       emitScrollEvent = true,
     )

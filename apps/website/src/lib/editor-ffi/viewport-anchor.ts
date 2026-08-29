@@ -17,8 +17,10 @@ export type EditorViewportAnchorGeometry = {
 
 type ActiveViewportAnchor = {
   identity: ViewportAnchor;
+  source: 'selection' | 'viewport';
   pointAttachmentX: number;
   pointAttachmentY: number;
+  attachmentPending: boolean;
   rect?: { top: number; bottom: number };
   revealOrigin?: EditorViewportAnchorRevealOrigin;
 };
@@ -36,6 +38,11 @@ export type EditorViewportAnchorLayout = {
 
 export type EditorViewportScrollPosition = { left: number; top: number };
 
+export type EditorViewportAnchorScroll = {
+  scroll: EditorViewportScrollPosition;
+  attachmentAchieved: boolean;
+};
+
 export type EditorViewportCenterMetrics = {
   scrollLeft: number;
   scrollTop: number;
@@ -52,12 +59,16 @@ export class EditorViewportAnchorState {
     geometry: EditorViewportAnchorGeometry,
     scroll: EditorViewportScrollPosition,
     revealOrigin?: EditorViewportAnchorRevealOrigin,
+    source: ActiveViewportAnchor['source'] = 'viewport',
+    attachmentPending = false,
   ): void {
     if (![geometry.pointX, geometry.pointY, scroll.left, scroll.top].every(Number.isFinite)) return;
     this.#active = {
       identity,
+      source,
       pointAttachmentX: geometry.pointX - scroll.left,
       pointAttachmentY: geometry.pointY - scroll.top,
+      attachmentPending,
       rect: geometry.rect,
       revealOrigin,
     };
@@ -77,6 +88,17 @@ export class EditorViewportAnchorState {
 
   get preferredSelectionIdentity(): ViewportAnchor | null {
     return this.#preferredSelection;
+  }
+
+  get pendingViewportAttachment(): { identity: ViewportAnchor; focalX: number; focalY: number } | null {
+    const attachment = this.viewportAttachment;
+    return this.#active?.attachmentPending ? attachment : null;
+  }
+
+  get viewportAttachment(): { identity: ViewportAnchor; focalX: number; focalY: number } | null {
+    const active = this.#active;
+    if (!active || active.source !== 'viewport') return null;
+    return { identity: active.identity, focalX: active.pointAttachmentX, focalY: active.pointAttachmentY };
   }
 
   clear(): void {
@@ -99,11 +121,23 @@ export class EditorViewportAnchorState {
     revealOrigin?: EditorViewportAnchorRevealOrigin,
   ): void {
     this.#preferredSelection = identity;
-    this.#attachActive(identity, geometry, scroll, revealOrigin);
+    this.#attachActive(identity, geometry, scroll, revealOrigin, 'selection');
   }
 
-  attachViewport(identity: ViewportAnchor, geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
-    this.#attachActive(identity, geometry, scroll);
+  attachViewport(
+    identity: ViewportAnchor,
+    geometry: EditorViewportAnchorGeometry,
+    scroll: EditorViewportScrollPosition,
+    attachmentPending = false,
+  ): void {
+    this.#attachActive(identity, geometry, scroll, undefined, 'viewport', attachmentPending);
+  }
+
+  reattachViewport(geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition, attachmentPending = false): boolean {
+    const active = this.#active;
+    if (!active || active.source !== 'viewport') return false;
+    this.#attachActive(active.identity, geometry, scroll, undefined, 'viewport', attachmentPending);
+    return true;
   }
 
   adoptSelection(
@@ -118,7 +152,7 @@ export class EditorViewportAnchorState {
     const activate =
       !preserveActiveAnchor && (this.#active !== null || this.canRetainAfterDirectScroll(geometry, scroll.top, clientHeight, visibleArea));
     this.#preferredSelection = identity;
-    if (activate) this.#attachActive(identity, geometry, scroll);
+    if (activate) this.#attachActive(identity, geometry, scroll, undefined, 'selection');
   }
 
   clearPreferredSelection(): void {
@@ -146,7 +180,7 @@ export class EditorViewportAnchorState {
     ) {
       return false;
     }
-    this.#attachActive(identity, geometry, scroll);
+    this.#attachActive(identity, geometry, scroll, undefined, 'selection');
     return true;
   }
 
@@ -154,7 +188,7 @@ export class EditorViewportAnchorState {
     geometry: EditorViewportAnchorGeometry,
     currentScroll: EditorViewportScrollPosition,
     maximumScroll: EditorViewportScrollPosition,
-  ): EditorViewportScrollPosition {
+  ): EditorViewportAnchorScroll {
     const active = this.#active;
     if (
       !active ||
@@ -162,11 +196,19 @@ export class EditorViewportAnchorState {
       maximumScroll.left < 0 ||
       maximumScroll.top < 0
     ) {
-      return currentScroll;
+      return { scroll: currentScroll, attachmentAchieved: false };
     }
+    const desiredScroll = {
+      left: geometry.pointX - active.pointAttachmentX,
+      top: geometry.pointY - active.pointAttachmentY,
+    };
+    const scroll = {
+      left: clamp(desiredScroll.left, 0, maximumScroll.left),
+      top: clamp(desiredScroll.top, 0, maximumScroll.top),
+    };
     return {
-      left: clamp(geometry.pointX - active.pointAttachmentX, 0, maximumScroll.left),
-      top: clamp(geometry.pointY - active.pointAttachmentY, 0, maximumScroll.top),
+      scroll,
+      attachmentAchieved: scroll.left === desiredScroll.left && scroll.top === desiredScroll.top,
     };
   }
 
@@ -179,7 +221,7 @@ export class EditorViewportAnchorState {
     resolveReveal?: (origin: EditorViewportAnchorRevealOrigin) => number | null,
     currentScrollLeft = 0,
     maximumScrollLeft = 0,
-  ): EditorViewportScrollPosition {
+  ): EditorViewportAnchorScroll {
     const exact = this.publicationScroll(
       geometry,
       { left: currentScrollLeft, top: currentScrollTop },
@@ -189,14 +231,29 @@ export class EditorViewportAnchorState {
     const revealOrigin = this.#active?.revealOrigin;
     if (revealOrigin) {
       const reveal = resolveReveal?.(revealOrigin);
-      if (reveal !== null && reveal !== undefined) return { ...exact, top: clamp(reveal, 0, Math.max(0, scrollHeight - clientHeight)) };
+      if (reveal !== null && reveal !== undefined) {
+        return {
+          scroll: { ...exact.scroll, top: clamp(reveal, 0, Math.max(0, scrollHeight - clientHeight)) },
+          attachmentAchieved: true,
+        };
+      }
     }
-    return { ...exact, top: this.resizeScroll(geometry, exact.top, clientHeight, scrollHeight, visibleArea) };
+    return {
+      scroll: {
+        ...exact.scroll,
+        top: this.resizeScroll(geometry, exact.scroll.top, clientHeight, scrollHeight, visibleArea),
+      },
+      attachmentAchieved: true,
+    };
   }
 
   acceptGeometry(geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
     const active = this.#active;
-    if (active) this.#attachActive(active.identity, geometry, scroll, active.revealOrigin);
+    if (active) this.#attachActive(active.identity, geometry, scroll, active.revealOrigin, active.source);
+  }
+
+  deferAttachment(): void {
+    if (this.#active) this.#active = { ...this.#active, attachmentPending: true };
   }
 
   finishRevealConvergence(): void {

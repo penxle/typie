@@ -11,6 +11,7 @@ export const RENDER_ZOOM_MIN_COMMIT_INTERVAL_MS = 160;
 export const RENDER_ZOOM_MAX_COMMIT_DELAY_MS = 300;
 export const RENDER_ZOOM_SCALE_RATIO_THRESHOLD = 1.18;
 export const ZOOM_EPSILON = 0.0001;
+const DISCRETE_ZOOM_STEP = 0.1;
 
 export type ZoomBounds = {
   min: number;
@@ -18,6 +19,8 @@ export type ZoomBounds = {
 };
 
 export type DocumentZoomLayout = { type: 'continuous'; maxWidth: number } | { type: 'paginated'; pageWidth: number };
+
+export type DocumentZoomLandmark = 'minimum' | 'fit-width' | 'unit' | 'maximum';
 
 export function documentZoomWidth(layout: DocumentZoomLayout): number {
   const width = layout.type === 'continuous' ? layout.maxWidth + CONTINUOUS_VIEW_PADDING * 2 : layout.pageWidth;
@@ -80,6 +83,31 @@ export function clampDocumentLayoutZoom({
   return snapped ?? clamped;
 }
 
+export function resolveDocumentZoomStepTarget({
+  zoom,
+  direction,
+  layout,
+  viewportWidth,
+}: {
+  zoom: number;
+  direction: -1 | 1;
+  layout: DocumentZoomLayout;
+  viewportWidth: number;
+}): number | null {
+  const bounds = computeDocumentZoomBounds(layout);
+  const current = clampDocumentZoom(zoom, bounds);
+  const candidates = [bounds.min, computeDocumentFitWidthZoom(layout, viewportWidth), clampDocumentZoom(1, bounds), bounds.max];
+  const firstGridIndex = Math.ceil((bounds.min - ZOOM_EPSILON) / DISCRETE_ZOOM_STEP);
+  const lastGridIndex = Math.floor((bounds.max + ZOOM_EPSILON) / DISCRETE_ZOOM_STEP);
+  for (let index = firstGridIndex; index <= lastGridIndex; index += 1) {
+    candidates.push(index * DISCRETE_ZOOM_STEP);
+  }
+
+  const ordered = [...new Set(candidates.map((candidate) => clampDocumentZoom(candidate, bounds)))].toSorted((a, b) => a - b);
+  if (direction > 0) return ordered.find((candidate) => candidate > current + ZOOM_EPSILON) ?? null;
+  return ordered.findLast((candidate) => candidate < current - ZOOM_EPSILON) ?? null;
+}
+
 export function resolveDirectDocumentZoom(zoom: number, layout: DocumentZoomLayout): number {
   const bounds = computeDocumentZoomBounds(layout);
   return elasticDisplayZoom(zoom, bounds) ?? bounds.min;
@@ -87,6 +115,30 @@ export function resolveDirectDocumentZoom(zoom: number, layout: DocumentZoomLayo
 
 export function resolveDocumentZoomIndicator(displayZoom: number, layout: DocumentZoomLayout): number {
   return clampDocumentZoom(displayZoom, computeDocumentZoomBounds(layout));
+}
+
+export function resolveDocumentZoomLandmark({
+  zoom,
+  layout,
+  viewportWidth,
+}: {
+  zoom: number;
+  layout: DocumentZoomLayout;
+  viewportWidth: number;
+}): DocumentZoomLandmark | null {
+  const layoutWidth = layout.type === 'continuous' ? layout.maxWidth : layout.pageWidth;
+  if (!Number.isFinite(zoom) || zoom <= 0 || !Number.isFinite(layoutWidth) || layoutWidth <= 0) return null;
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return null;
+
+  const bounds = computeDocumentZoomBounds(layout);
+  const unitZoom = clampDocumentZoom(1, bounds);
+  if (zoomEquals(zoom, unitZoom)) return 'unit';
+
+  const naturalFitWidthZoom = viewportWidth / documentZoomWidth(layout);
+  if (naturalFitWidthZoom >= bounds.min && naturalFitWidthZoom <= bounds.max && zoomEquals(zoom, naturalFitWidthZoom)) return 'fit-width';
+  if (zoomEquals(zoom, bounds.min)) return 'minimum';
+  if (zoomEquals(zoom, bounds.max)) return 'maximum';
+  return null;
 }
 
 export function resolveContinuousLayoutViewportWidth({

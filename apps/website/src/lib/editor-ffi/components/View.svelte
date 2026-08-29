@@ -85,6 +85,7 @@
   // 이 View 인스턴스가 소유한다. 공유 컨텍스트에 두면 {#key ctx.editor}로 View가 교체될 때
   // 새 인스턴스가 옛 인스턴스의 host를 읽어버린다 (새 브랜치 생성이 옛 브랜치 파괴보다 먼저다).
   let surfaceHost = $state<EditorSurfaceHost>();
+  let editorViewSurface = $state<HTMLElement>();
 
   setupEditorScroll(ctx);
   setupEditorPublication(ctx, () => surfaceHost);
@@ -229,6 +230,9 @@
   let readyFired = false;
   let viewportEditor: (typeof ctx)['editor'];
   let viewportLayoutType: 'continuous' | 'paginated' | undefined;
+  let viewportClientWidth: number | undefined;
+  let viewportClientHeight: number | undefined;
+  let lastViewportScaleFactor: number | undefined;
 
   $effect(() => {
     const editor = ctx.editor;
@@ -244,15 +248,21 @@
       : physicalWidth;
 
     untrack(() => {
-      const committedLayoutChanged = viewportEditor === editor && viewportLayoutType !== layoutMode?.type;
+      const sameEditor = viewportEditor === editor;
+      const committedLayoutChanged = sameEditor && viewportLayoutType !== layoutMode?.type;
+      const physicalViewportChanged =
+        sameEditor && (viewportClientWidth !== width || viewportClientHeight !== height || lastViewportScaleFactor !== viewportScaleFactor);
       viewportLayoutType = layoutMode?.type;
-      if (viewportEditor === editor && !committedLayoutChanged) {
+      viewportClientWidth = width;
+      viewportClientHeight = height;
+      lastViewportScaleFactor = viewportScaleFactor;
+      if (sameEditor && !committedLayoutChanged) {
         editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
       } else {
         viewportEditor = editor;
         editor.resizeViewportNow(effectiveWidth, height, viewportScaleFactor);
       }
-      ctx.scroll?.reconcileViewportResize();
+      if (physicalViewportChanged) ctx.scroll?.reconcileViewportResize();
     });
 
     if (!readyFired && editor.isPublished(editor.appliedRevision, { requireFrame: true })) {
@@ -323,6 +333,7 @@
 />
 
 <div
+  bind:this={editorViewSurface}
   style:--editor-layout-background={layoutBackground}
   class={css(
     {
@@ -415,13 +426,7 @@
     {/if}
 
     {#if ctx.editor}
-      <EditorZoom
-        {active}
-        attachViewportAnchor={(point) => ctx.scroll?.attachViewportAnchorAt(point)}
-        editor={ctx.editor}
-        layout={zoomLayout}
-        viewportWidth={clientWidth ?? 0}
-      >
+      <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           bind:this={ctx.editor.extensionAreaEl}

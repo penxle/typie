@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clipToBounds
@@ -88,6 +89,8 @@ import co.typie.screen.editor.editor.overlay.editorSoftwareMagnifierLens
 import co.typie.screen.editor.editor.overlay.editorSoftwareMagnifierSource
 import co.typie.screen.editor.editor.overlay.resolveEditorMagnifierPlacement
 import co.typie.screen.editor.editor.state.EditorScreenState
+import co.typie.ui.input.PointerInputModeState
+import co.typie.ui.input.trackPointerInputMode
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlin.math.max
@@ -198,6 +201,7 @@ internal enum class EditorViewportScrollReconcileMode {
   Enabled,
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun EditorScreenLayout(
   state: EditorScreenState,
@@ -212,7 +216,9 @@ internal fun EditorScreenLayout(
   editorInteractionEnabled: Boolean = true,
   platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
   viewportScrollReconcileMode: EditorViewportScrollReconcileMode,
+  pointerInputModeState: PointerInputModeState? = null,
   onViewportIndirectInput: () -> Unit = {},
+  onViewportPointerEnter: () -> Unit = {},
   onRequestEditing: (() -> Boolean)? = null,
   onMeasuredViewportSizeChange: (Size) -> Unit,
   header: @Composable () -> Unit,
@@ -225,6 +231,7 @@ internal fun EditorScreenLayout(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
+  val activePointerInputModeState = pointerInputModeState ?: remember { PointerInputModeState() }
   val scrollGestureLockState = LocalScrollGestureLockState.current
   val platformIndirectScaleBridge = remember { EditorPlatformIndirectScaleBridge() }
   val viewConfiguration = LocalViewConfiguration.current
@@ -342,6 +349,10 @@ internal fun EditorScreenLayout(
       modifier
         .fillMaxSize()
         .observeEditorScreenPointerSequence(screenPointerSequence)
+        .trackPointerInputMode(
+          state = activePointerInputModeState,
+          onNonTouchPointerEnter = onViewportPointerEnter,
+        )
         .editorNativeMagnifier(magnifierPlacement)
         .onGloballyPositioned { coordinates ->
           layoutBoundsInRoot = coordinates.unclippedBoundsInRoot()
@@ -433,7 +444,13 @@ internal fun EditorScreenLayout(
         )
         smoothScrollSession.translate(state.viewportState.scrollOffset.y - previousScrollOffset.y)
         anchorPublication.geometry?.let { geometry ->
-          activeViewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset)
+          if (
+            anchorPublication.attachmentAchieved &&
+              (state.viewportState.scrollOffset - anchorPublication.scrollOffset).getDistance() <=
+                1f
+          ) {
+            activeViewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset)
+          }
         }
         candidate
       }

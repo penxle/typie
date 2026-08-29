@@ -271,6 +271,7 @@ async function mountEditor(
     readOnly?: boolean;
     typewriterEnabled?: boolean;
     withZoom?: boolean;
+    withViewportLifecycle?: boolean;
     displayZoom?: number;
     contentInsetLeft?: number;
     contentInsetRight?: number;
@@ -293,6 +294,7 @@ async function mountEditor(
       typewriterEnabled: options.typewriterEnabled,
       userId: `frame-sync-${crypto.randomUUID()}`,
       withZoom: options.withZoom,
+      withViewportLifecycle: options.withViewportLifecycle,
       contentInsetLeft: options.contentInsetLeft,
       contentInsetRight: options.contentInsetRight,
     },
@@ -1348,6 +1350,75 @@ describe('web editor frame synchronization', () => {
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0).length).toBeGreaterThan(0);
     expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
+  });
+
+  it('leaves keyboard focus on zoom indicator controls after they run', async () => {
+    const { editor } = await mountEditor(doc('zoom focus'), { withZoom: true });
+    editor.focus();
+    expect(document.activeElement).toBe(editor.inputEl);
+
+    const zoomIn = document.querySelector<HTMLButtonElement>('[aria-label="페이지 확대"]');
+    expect(zoomIn).not.toBeNull();
+    zoomIn?.focus();
+    expect(document.activeElement).toBe(zoomIn);
+    zoomIn?.click();
+    await expect.poll(() => editor.displayZoom).toBeGreaterThan(1);
+    expect(document.activeElement).toBe(zoomIn);
+
+    const value = document.querySelector<HTMLButtonElement>('[aria-label="원본 크기로 돌아가기"]');
+    expect(value).not.toBeNull();
+    value?.focus();
+    expect(document.activeElement).toBe(value);
+    value?.click();
+    await expect.poll(() => editor.displayZoom).toBeCloseTo(1);
+    expect(document.activeElement).toBe(value);
+  });
+
+  it('preserves editor focus during mouse pointer zoom controls', async () => {
+    const { editor } = await mountEditor(doc('zoom pointer focus'), { withZoom: true });
+    editor.focus();
+    expect(document.activeElement).toBe(editor.inputEl);
+
+    const value = document.querySelector<HTMLButtonElement>('[role="group"][aria-label="페이지 배율"] button:nth-of-type(2)');
+    expect(value).not.toBeNull();
+    if (!value) throw new Error('Expected the zoom indicator value button');
+    const previousZoom = editor.displayZoom;
+    const pointerDown = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' });
+    value.dispatchEvent(pointerDown);
+
+    expect(pointerDown.defaultPrevented).toBe(true);
+    value.click();
+    await expect.poll(() => editor.displayZoom).not.toBeCloseTo(previousZoom);
+    expect(document.activeElement).toBe(editor.inputEl);
+  });
+
+  it('keeps a manually scrolled viewport fixed across settled unit and fit toggles', async () => {
+    const { editor, scrollRoot } = await mountEditor(continuousDoc('viewport anchor reflow '.repeat(300)), {
+      withZoom: true,
+      withViewportLifecycle: true,
+    });
+    await waitForPresentation(editor);
+    editor.focus();
+    scrollRoot.scrollTop = scrollRoot.scrollHeight / 2;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+
+    const value = document.querySelector<HTMLButtonElement>('[role="group"][aria-label="페이지 배율"] button:nth-of-type(2)');
+    expect(value).not.toBeNull();
+    if (!value) throw new Error('Expected the zoom indicator value button');
+    const initialScrollTop = scrollRoot.scrollTop;
+
+    for (let click = 0; click < 2; click += 1) {
+      value.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      value.click();
+      await expect.poll(() => Math.abs(editor.renderZoom - editor.displayZoom)).toBeLessThan(0.005);
+      await waitForPresentation(editor);
+      await nextAnimationFrame();
+    }
+
+    expect(editor.displayZoom).toBeCloseTo(1);
+    expect(scrollRoot.scrollTop).toBeCloseTo(initialScrollTop, 0);
+    expect(document.activeElement).toBe(editor.inputEl);
   });
 
   it('stops zoom on the first pinch pointer release and keeps the survivor zoom-owned until all-up', async () => {

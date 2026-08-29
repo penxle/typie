@@ -162,6 +162,7 @@ import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorScrollbars
+import co.typie.screen.editor.editor.overlay.EditorZoomIndicatorState
 import co.typie.screen.editor.editor.overlay.EditorZoomOverlay
 import co.typie.screen.editor.editor.placeholder.EditorDocumentPlaceholder
 import co.typie.screen.editor.editor.spellcheck.SpellcheckOverlay
@@ -220,6 +221,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarCenterAppearance
+import co.typie.ui.input.PointerInputModeState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
@@ -284,6 +286,8 @@ fun EditorScreen(entityId: String) {
     }
   var assetQueryGeneration by remember(entityId) { mutableStateOf(0L) }
   val zoomController = rememberEditorZoomController(key = entityId)
+  val zoomIndicatorState = remember(entityId) { EditorZoomIndicatorState() }
+  val pointerInputModeState = remember(entityId) { PointerInputModeState() }
   val viewportAnchorState = remember(entityId) { EditorViewportAnchorState() }
   val screenState = rememberEditorScreenState(key = entityId)
   val subPaneState = remember(entityId) { EditorSubPaneState() }
@@ -1759,6 +1763,7 @@ fun EditorScreen(entityId: String) {
                 anchor = anchor,
                 displayPosition = displayPosition,
                 scrollOffset = scrollOffset,
+                attachmentPending = screenState.viewportState.scrollOffset != scrollOffset,
                 contentOriginY = resolveViewportAnchorContentOriginY(frame),
               )
             },
@@ -1851,7 +1856,11 @@ fun EditorScreen(entityId: String) {
         viewportContentWidth = bodyTrackWidth,
         viewportAnchorState = viewportAnchorState,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
+        pointerInputModeState = pointerInputModeState,
         onViewportIndirectInput = { uiState.contextMenu.hide() },
+        onViewportPointerEnter = {
+          zoomIndicatorState.onPanePointerEnter(zoomController.resolveLandmark())
+        },
         onRequestEditing =
           if (!isEditing && !editorReadOnly) {
             {
@@ -1952,9 +1961,15 @@ fun EditorScreen(entityId: String) {
           }
           if (editorReady) {
             EditorZoomOverlay(
+              state = zoomIndicatorState,
+              nonTouchPointerActive = pointerInputModeState.nonTouchPointerActive,
+              onZoomIn = interactionScope.controller::zoomInAtViewportCenter,
+              onZoomOut = interactionScope.controller::zoomOutAtViewportCenter,
+              onToggleZoom = interactionScope.controller::toggleIndicatorZoomAtViewportCenter,
+              onRequestEditorFocus = ::requestEditorFocus,
               modifier =
-                Modifier.align(Alignment.BottomStart)
-                  .padding(start = 20.dp, bottom = 20.dp + visibleArea.bottomOcclusion.dp)
+                Modifier.align(Alignment.TopEnd)
+                  .padding(end = 20.dp, top = 20.dp + visibleArea.topOcclusion.dp),
             )
             EditorCharacterCountOverlay(
               editor = runtime.editor,

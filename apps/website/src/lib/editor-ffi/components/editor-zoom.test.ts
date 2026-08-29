@@ -149,6 +149,172 @@ describe('EditorZoomController continuous timing', () => {
   });
 });
 
+describe('EditorZoomController indicator toggle', () => {
+  const createToggleController = (viewportWidth: number): EditorZoomController => {
+    const editor = {
+      clientToLocal: vi.fn(() => null),
+      pageSizes: [],
+      pageEls: [],
+    } as unknown as Editor;
+    const controller = new EditorZoomController({
+      editor,
+      layout: () => defaultLayout,
+      viewportWidth: () => viewportWidth,
+      getScrollViewport: () => null,
+    });
+    controllers.push(controller);
+    return controller;
+  };
+
+  it('toggles fit-width to unit and unit to fit-width', async () => {
+    const controller = createToggleController(500);
+    controller.syncInitialZoom();
+
+    expect(controller.displayZoom).toBe(0.5);
+    await expect(controller.toggleZoomByIndicator()).resolves.toBe(true);
+    expect(controller.displayZoom).toBe(1);
+
+    await expect(controller.toggleZoomByIndicator()).resolves.toBe(true);
+    expect(controller.displayZoom).toBe(0.5);
+  });
+
+  it('returns any unnamed zoom to unit', async () => {
+    const controller = createToggleController(500);
+    controller.setZoom(1.4, { commitRender: true });
+
+    await expect(controller.toggleZoomByIndicator()).resolves.toBe(true);
+    expect(controller.displayZoom).toBe(1);
+  });
+
+  it('does nothing when unit and fit-width are the same zoom', async () => {
+    const controller = createToggleController(1000);
+    controller.syncInitialZoom();
+
+    await expect(controller.toggleZoomByIndicator()).resolves.toBe(false);
+    expect(controller.displayZoom).toBe(1);
+  });
+
+  it('reports a bound when the requested fit zoom is clamped', async () => {
+    const controller = createToggleController(2500);
+    controller.syncInitialZoom();
+    controller.setZoom(1, { commitRender: true });
+
+    await expect(controller.toggleZoomByIndicator()).resolves.toBe(true);
+    expect(controller.displayZoom).toBe(2);
+  });
+
+  it('reuses one viewport anchor for rapid toggles before layout catches up', async () => {
+    let scrollTop = 300;
+    const scrollBy = vi.fn((_deltaX: number, deltaY: number) => {
+      scrollTop += deltaY;
+    });
+    const viewport = {
+      getRect: () => ({ left: 0, top: 0, right: 500, bottom: 500 }),
+      getScrollLeft: () => 0,
+      getScrollTop: () => scrollTop,
+      scrollBy,
+    };
+    const clientToLocal = vi.fn().mockReturnValueOnce({ page: 0, x: 250, y: 550 }).mockReturnValue({ page: 0, x: 250, y: 900 });
+    const beginViewportZoom = vi.fn();
+    const updateViewportZoomAttachment = vi.fn();
+    const editor = {
+      clientToLocal,
+      pageSizes: [{ width: 1000, height: 2000 }],
+      pageEls: [{ getBoundingClientRect: () => ({ left: 0, top: -scrollTop }) }],
+    } as unknown as Editor;
+    const controller = new EditorZoomController({
+      editor,
+      layout: () => defaultLayout,
+      viewportWidth: () => 500,
+      getScrollViewport: () => viewport as unknown as ScrollViewport,
+      beginViewportZoom,
+      updateViewportZoomAttachment,
+    });
+    controllers.push(controller);
+
+    const fit = controller.toggleZoomByIndicator();
+    const unit = controller.toggleZoomByIndicator();
+
+    expect(clientToLocal).toHaveBeenCalledOnce();
+    await Promise.all([fit, unit]);
+    expect(beginViewportZoom).toHaveBeenCalledOnce();
+    expect(updateViewportZoomAttachment).toHaveBeenCalledOnce();
+  });
+
+  it('keeps settled indicator toggles reversible by retaining the scroll owner viewport anchor', async () => {
+    let scrollTop = 300;
+    const controllerRef: { current?: EditorZoomController } = {};
+    let activeAnchor = { page: 0, x: 250, y: 550, focalX: 250, focalY: 250 };
+    const viewport = {
+      getRect: () => ({ left: 0, top: 0, right: 500, bottom: 500 }),
+      getScrollLeft: () => 0,
+      getScrollTop: () => scrollTop,
+      scrollBy: (_deltaX: number, deltaY: number) => {
+        scrollTop += deltaY;
+      },
+    };
+    const clientToLocal = vi.fn(() => ({
+      page: 0,
+      x: 250,
+      y: (scrollTop + 250) / (controllerRef.current?.displayZoom ?? 1) + 0.25,
+    }));
+    const editor = {
+      clientToLocal,
+      pageSizes: [{ width: 1000, height: 2000 }],
+      pageEls: [{ getBoundingClientRect: () => ({ left: 0, top: -scrollTop }) }],
+    } as unknown as Editor;
+    const beginViewportZoom = vi.fn((point: { page: number; x: number; y: number }) => {
+      activeAnchor = { ...point, focalX: 250, focalY: 250 };
+    });
+    const controller = new EditorZoomController({
+      editor,
+      layout: () => defaultLayout,
+      viewportWidth: () => 500,
+      getScrollViewport: () => viewport as unknown as ScrollViewport,
+      beginViewportZoom,
+      resolveViewportAnchor: () => activeAnchor,
+    });
+    controllerRef.current = controller;
+    controllers.push(controller);
+
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      await controller.toggleZoomByIndicator();
+      await controller.toggleZoomByIndicator();
+    }
+
+    expect(clientToLocal).not.toHaveBeenCalled();
+    expect(beginViewportZoom).not.toHaveBeenCalled();
+    expect(scrollTop).toBeCloseTo(300);
+  });
+
+  it('does not resnap a settled zoom when the viewport resizes', async () => {
+    let viewportWidth = 500;
+    const editor = {
+      clientToLocal: vi.fn(() => null),
+      pageSizes: [],
+      pageEls: [],
+    } as unknown as Editor;
+    const controller = new EditorZoomController({
+      editor,
+      layout: () => ({ type: 'continuous', maxWidth: 600 }),
+      viewportWidth: () => viewportWidth,
+      getScrollViewport: () => null,
+    });
+    controllers.push(controller);
+    controller.syncInitialZoom();
+
+    controller.setZoom(0.79, { commitRender: true });
+    expect(controller.displayZoom).toBe(0.78125);
+    expect(controller.landmark).toBe('fit-width');
+
+    viewportWidth = 480;
+    controller.clampCurrentZoomToBounds();
+
+    expect(controller.displayZoom).toBe(0.78125);
+    expect(controller.landmark).toBeNull();
+  });
+});
+
 const wheelEvent = ({
   metaKey = false,
   ctrlKey = false,
@@ -183,6 +349,70 @@ afterEach(() => {
   controllers.length = 0;
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('EditorZoomController keyboard steps', () => {
+  it('moves to the next ten-percent grid line instead of adding ten percent', async () => {
+    const controller = createController();
+
+    controller.setZoom(0.53, { commitRender: true });
+    expect(await controller.zoomInByKeyboard()).toBe(true);
+    expect(controller.displayZoom).toBeCloseTo(0.6);
+
+    controller.setZoom(0.53, { commitRender: true });
+    expect(await controller.zoomOutByKeyboard()).toBe(true);
+    expect(controller.displayZoom).toBeCloseTo(0.5);
+  });
+
+  it('stops at intervening landmarks as well as ten-percent grid lines', async () => {
+    const layout = { type: 'paginated', pageWidth: 1000 } as const;
+    const editor = {
+      clientToLocal: vi.fn(() => null),
+      pageSizes: [],
+      pageEls: [],
+    } as unknown as Editor;
+    const controller = new EditorZoomController({
+      editor,
+      layout: () => layout,
+      viewportWidth: () => 520,
+      getScrollViewport: () => null,
+    });
+    controllers.push(controller);
+
+    controller.setZoom(0.45, { commitRender: true });
+    await controller.zoomInByKeyboard();
+    expect(controller.displayZoom).toBeCloseTo(0.5);
+    await controller.zoomInByKeyboard();
+    expect(controller.displayZoom).toBeCloseTo(0.52);
+
+    controller.setZoom(0.58, { commitRender: true });
+    await controller.zoomOutByKeyboard();
+    expect(controller.displayZoom).toBeCloseTo(0.52);
+  });
+
+  it('reports whether a minimum or maximum step changed the applied zoom', async () => {
+    const controller = createController();
+
+    controller.setZoom(0.1, { commitRender: true });
+    expect(await controller.zoomOutByKeyboard()).toBe(false);
+    expect(await controller.zoomInByKeyboard()).toBe(true);
+
+    controller.setZoom(2, { commitRender: true });
+    expect(await controller.zoomInByKeyboard()).toBe(false);
+    expect(await controller.zoomOutByKeyboard()).toBe(true);
+  });
+
+  it('keeps an outward keyboard step unavailable during elastic overshoot', async () => {
+    const controller = createController();
+
+    expect(controller.beginDirectZoom('touch', 0, 0, 0)).toBe(true);
+    await controller.updateDirectZoom('touch', 0.05, 0, 0, 250);
+    const overshootZoom = controller.displayZoom;
+    expect(overshootZoom).toBeLessThan(0.1);
+
+    expect(await controller.zoomOutByKeyboard()).toBe(false);
+    expect(controller.displayZoom).toBe(overshootZoom);
+  });
 });
 
 describe('EditorZoomController direct zoom detents', () => {
@@ -287,6 +517,8 @@ describe('EditorZoomController direct zoom detents', () => {
     const scrollBy = vi.fn();
     const viewport = {
       getRect: () => ({ left: 0, top: 0, right: 1000, bottom: 1000 }),
+      getScrollLeft: () => 0,
+      getScrollTop: () => 0,
       scrollBy,
     };
     const editor = {
@@ -318,6 +550,8 @@ describe('EditorZoomController direct zoom detents', () => {
     const scrollBy = vi.fn();
     const viewport = {
       getRect: () => ({ left: 0, top: 0, right: 1000, bottom: 1000 }),
+      getScrollLeft: () => 0,
+      getScrollTop: () => 0,
       scrollBy,
     };
     const editor = {
@@ -371,6 +605,8 @@ describe('EditorZoomController.handleWheel', () => {
     const scrollBy = vi.fn();
     const viewport = {
       getRect: () => ({ left: 0, top: 0, right: 1000, bottom: 1000 }),
+      getScrollLeft: () => 0,
+      getScrollTop: () => 0,
       scrollBy,
     };
     const editor = {

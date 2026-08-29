@@ -7,6 +7,7 @@ import {
   resolveContinuousViewPadding,
   resolveDirectDocumentZoom,
   resolveDocumentZoomIndicator,
+  resolveDocumentZoomLandmark,
 } from './zoom';
 
 describe('continuous document zoom policy', () => {
@@ -47,5 +48,38 @@ describe('continuous document zoom policy', () => {
   it('reports only the normal range to the zoom indicator', () => {
     expect(resolveDocumentZoomIndicator(2.08, layout)).toBe(2);
     expect(resolveDocumentZoomIndicator(0.1, layout)).toBe(computeDocumentZoomBounds(layout).min);
+  });
+});
+
+describe('document zoom landmarks', () => {
+  const layout = { type: 'paginated', pageWidth: 1000 } as const;
+
+  it.each([
+    [0.1, 500, 'minimum'],
+    [0.5, 500, 'fit-width'],
+    [0.75, 500, null],
+    [1, 500, 'unit'],
+    [2, 500, 'maximum'],
+  ] as const)('resolves zoom %s in viewport %s as %s', (zoom, viewportWidth, expected) => {
+    expect(resolveDocumentZoomLandmark({ zoom, layout, viewportWidth })).toBe(expected);
+  });
+
+  it('prefers unit over fit-width and fit-width over a bound', () => {
+    expect(resolveDocumentZoomLandmark({ zoom: 1, layout, viewportWidth: 1000 })).toBe('unit');
+    expect(resolveDocumentZoomLandmark({ zoom: 0.1, layout, viewportWidth: 100 })).toBe('fit-width');
+  });
+
+  it('does not call a clamped fit-width target a fit landmark', () => {
+    expect(resolveDocumentZoomLandmark({ zoom: 0.1, layout, viewportWidth: 50 })).toBe('minimum');
+    expect(resolveDocumentZoomLandmark({ zoom: 2, layout, viewportWidth: 2500 })).toBe('maximum');
+  });
+
+  it.each([
+    [NaN, 500, layout],
+    [1, 0, layout],
+    [1, NaN, layout],
+    [1, 500, { type: 'paginated', pageWidth: NaN } as const],
+  ])('does not name invalid zoom or layout input', (zoom, viewportWidth, invalidLayout) => {
+    expect(resolveDocumentZoomLandmark({ zoom, layout: invalidLayout, viewportWidth })).toBeNull();
   });
 });
