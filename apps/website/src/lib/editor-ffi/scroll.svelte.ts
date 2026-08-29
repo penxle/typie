@@ -168,6 +168,8 @@ export class EditorScrollScope {
   #contentBottomOverflow = $state(0);
 
   visibleArea = $state<EditorVisibleArea>(DEFAULT_VISIBLE_AREA);
+  lastScrollRevision = $state(0);
+  lastScrollWasAuto = $state(false);
 
   bottomPadding = $derived.by(() => {
     void this.#editor.viewport.height;
@@ -424,13 +426,13 @@ export class EditorScrollScope {
     const hasExpectedScroll = this.#expectedScrollLeft !== null || this.#expectedScrollTop !== null;
     const expectedLeftMatches = this.#expectedScrollLeft === null || Math.abs(scrollLeft - this.#expectedScrollLeft) <= 1;
     const expectedTopMatches = this.#expectedScrollTop === null || Math.abs(scrollTop - this.#expectedScrollTop) <= 1;
-    if (hasExpectedScroll && expectedLeftMatches && expectedTopMatches) {
-      this.#expectedScrollLeft = null;
-      this.#expectedScrollTop = null;
-      return;
-    }
+    const matchesExpectedScroll = hasExpectedScroll && expectedLeftMatches && expectedTopMatches;
     this.#expectedScrollLeft = null;
     this.#expectedScrollTop = null;
+    this.lastScrollWasAuto = matchesExpectedScroll;
+    this.lastScrollRevision += 1;
+    if (matchesExpectedScroll) return;
+
     if (this.#smoothMotion) this.cancel();
     this.#viewportAnchor.finishRevealConvergence();
 

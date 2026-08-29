@@ -1,11 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '@typie/ui/actions';
+  import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import type { Size } from '@typie/editor-ffi/browser';
 
   const HIDE_DELAY = 1000;
-  const USER_SCROLL_WINDOW_MS = 220;
   const MIN_THUMB_SIZE = 30;
   const TRACK_PADDING = 2;
   const INDICATOR_HEIGHT = 24;
@@ -97,8 +97,6 @@
 
   let dragAxis = $state<'x' | 'y' | null>(null);
   let hoverAxis = $state<'x' | 'y' | null>(null);
-  let userScrollActive = $state(false);
-  let userScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
   let mode = $state<'hidden' | 'user' | 'auto'>('hidden');
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -158,12 +156,6 @@
     containerRect = scrollContainer.getBoundingClientRect();
   }
 
-  function markUserScroll() {
-    userScrollActive = true;
-    clearTimeout(userScrollTimer);
-    userScrollTimer = setTimeout(() => (userScrollActive = false), USER_SCROLL_WINDOW_MS);
-  }
-
   function show(next: 'user' | 'auto') {
     mode = next;
     clearTimeout(hideTimer);
@@ -176,31 +168,23 @@
     const el = scrollContainer;
     if (!el) return;
 
-    const handleScroll = () => {
-      sync();
-      show(userScrollActive || dragAxis !== null ? 'user' : 'auto');
-    };
-
-    const handleUserInput = () => {
-      markUserScroll();
-      show('user');
-    };
-
     const resizeObserver = new ResizeObserver(sync);
     resizeObserver.observe(el);
 
-    el.addEventListener('scroll', handleScroll);
-    el.addEventListener('wheel', handleUserInput, { passive: true });
-    el.addEventListener('touchmove', handleUserInput, { passive: true });
-
     return () => {
-      el.removeEventListener('scroll', handleScroll);
-      el.removeEventListener('wheel', handleUserInput);
-      el.removeEventListener('touchmove', handleUserInput);
       resizeObserver.disconnect();
       clearTimeout(hideTimer);
-      clearTimeout(userScrollTimer);
     };
+  });
+
+  $effect(() => {
+    const scroll = ctx.scroll;
+    const revision = scroll?.lastScrollRevision ?? 0;
+    const isAuto = scroll?.lastScrollWasAuto ?? true;
+    if (revision === 0) return;
+
+    sync();
+    untrack(() => show(isAuto ? 'auto' : 'user'));
   });
 
   $effect(() => {
@@ -215,7 +199,6 @@
     ctx.scroll?.cancel();
 
     dragAxis = axis;
-    markUserScroll();
     show('user');
 
     const geometryetry = axis === 'y' ? y : x;
@@ -230,7 +213,6 @@
 
   function moveDrag(session: ScrollDragSession, e: PointerEvent) {
     if (!scrollContainer || dragAxis !== session.axis) return;
-    markUserScroll();
     const position = session.axis === 'y' ? e.clientY : e.clientX;
     const delta = ((position - session.startPointer) / session.trackMinusThumb) * session.maxScroll;
     if (session.axis === 'y') scrollContainer.scrollTop = session.startScroll + delta;
@@ -253,7 +235,6 @@
     e.preventDefault();
     e.stopPropagation();
     ctx.scroll?.cancel();
-    markUserScroll();
     show('user');
 
     const track = e.currentTarget as HTMLElement;

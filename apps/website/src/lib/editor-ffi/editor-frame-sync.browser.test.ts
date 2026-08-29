@@ -1340,6 +1340,44 @@ describe('web editor frame synchronization', () => {
     expectActualCanvas(editor, 0);
   });
 
+  it('keeps the scrollbar thumb synchronized without showing scroll progress for zoom correction', async () => {
+    const { editor, scrollRoot } = await mountEditor(longDoc(), { withZoom: true });
+    await waitForPresentation(editor);
+
+    scrollRoot.scrollTop = scrollRoot.scrollHeight / 3;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await tick();
+
+    const verticalScrollbar = document.querySelector<HTMLElement>('[role="scrollbar"]:not([aria-orientation])');
+    const thumb = verticalScrollbar?.querySelector<HTMLElement>('[role="slider"]');
+    const indicator = verticalScrollbar?.previousElementSibling as HTMLElement | null;
+    expect(verticalScrollbar).not.toBeNull();
+    expect(thumb).not.toBeNull();
+    expect(indicator?.textContent).toMatch(/^\d+%$/);
+    if (!thumb || !indicator) throw new Error('Expected the vertical scrollbar thumb and indicator');
+    await expect.poll(() => Number.parseFloat(getComputedStyle(indicator).opacity)).toBeGreaterThan(0.99);
+
+    const scrollTopBeforeZoom = scrollRoot.scrollTop;
+    const zoomBefore = editor.displayZoom;
+    const viewportRect = scrollRoot.getBoundingClientRect();
+    scrollRoot.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: -24,
+        metaKey: navigator.platform.toUpperCase().includes('MAC'),
+        ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+        clientX: viewportRect.left + viewportRect.width / 2,
+        clientY: viewportRect.top + viewportRect.height / 2,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await expect.poll(() => editor.displayZoom).toBeGreaterThan(zoomBefore);
+    await expect.poll(() => Math.abs(scrollRoot.scrollTop - scrollTopBeforeZoom)).toBeGreaterThan(0.5);
+    await expect.poll(() => Number(thumb.getAttribute('aria-valuenow'))).toBeCloseTo(scrollRoot.scrollTop);
+    await expect.poll(() => Number.parseFloat(getComputedStyle(indicator).opacity)).toBeLessThan(0.01);
+  });
+
   it('delays continuous reflow until the render commit and replaces it coherently', async () => {
     const { editor, scrollRoot } = await mountEditor(continuousDoc('continuous zoom '.repeat(40)), { withZoom: true });
     await waitForPresentation(editor);

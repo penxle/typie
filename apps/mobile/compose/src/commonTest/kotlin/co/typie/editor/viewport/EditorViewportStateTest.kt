@@ -175,7 +175,7 @@ class EditorViewportStateTest {
 
     assertEquals(Offset(x = 100f, y = 100f), state.scrollOffset)
     assertEquals(1, state.lastScrollRevision)
-    assertFalse(state.lastScrollWasAuto)
+    assertTrue(state.lastScrollWasAuto)
 
     state.endTransform()
     state.updateMeasuredBounds(
@@ -185,6 +185,7 @@ class EditorViewportStateTest {
 
     assertEquals(Offset(x = 180f, y = 240f), state.scrollOffset)
     assertEquals(2, state.lastScrollRevision)
+    assertTrue(state.lastScrollWasAuto)
 
     state.updateMeasuredBounds(
       viewportSize = Size(width = 100f, height = 100f),

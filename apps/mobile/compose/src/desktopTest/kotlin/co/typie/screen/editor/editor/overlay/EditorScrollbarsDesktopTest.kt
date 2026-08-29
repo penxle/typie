@@ -19,6 +19,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
@@ -79,6 +80,45 @@ class EditorScrollbarsDesktopTest {
       assertEquals(20f, placement.width, absoluteTolerance = 0.01f)
       assertEquals(32f, placement.height, absoluteTolerance = 0.01f)
     }
+  }
+
+  @Test
+  fun zoomOwnedScrollKeepsThePercentageIndicatorHidden() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    val viewportState = EditorViewportState()
+
+    setContent {
+      CompositionLocalProvider(LocalAppColors provides LightColors) {
+        ScrollbarLayoutFrame(
+          viewportState = viewportState,
+          contentSize = Size(width = 100f, height = 300f),
+        ) {
+          EditorScrollbars(
+            viewportState = viewportState,
+            visibleArea = VisibleArea,
+            layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 100f),
+            pageSizes = emptyList(),
+            displayZoom = 1f,
+            modifier = Modifier.fillMaxSize(),
+          )
+        }
+      }
+    }
+    mainClock.advanceTimeBy(32L)
+
+    runOnIdle { viewportState.scrollToY(100f) }
+    mainClock.advanceTimeBy(32L)
+    onNodeWithText("50%").assertIsDisplayed()
+
+    runOnIdle {
+      viewportState.scrollToTransformTarget(
+        offset = Offset(x = 0f, y = 120f),
+        retainUntilMeasuredBounds = false,
+      )
+    }
+    mainClock.advanceTimeBy(332L)
+
+    onNodeWithText("60%").assertDoesNotExist()
   }
 
   @Test
