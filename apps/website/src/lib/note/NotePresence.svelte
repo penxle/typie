@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { onDestroy } from 'svelte';
   import type { Snippet } from 'svelte';
   import type { NotePresence } from './note-list-state.svelte';
@@ -37,7 +38,7 @@
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
     let completionTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const reducedMotion = prefersReducedMotion.current;
 
     transitioning = null;
 

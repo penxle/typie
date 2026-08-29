@@ -2,6 +2,7 @@
   import themeData from '@typie/assets/theme.json' with { type: 'json' };
   import { PRISM_ICON_DURATION_SECONDS } from '@typie/prism-ui';
   import { token } from '@typie/styled-system/tokens';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { onDestroy, onMount, untrack } from 'svelte';
   import PrismIcon from '~icons/typie/prism';
   import PrismObject from '$lib/prism-ui/PrismObject.svelte';
@@ -34,9 +35,7 @@
     destination,
     phase,
     prismEnabled = true,
-    reducedMotion = typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    reducedMotion = untrack(() => prefersReducedMotion.current),
     rowSpinnerPlaybackStartedAt,
     themeVariant,
     welcomeAdmission = true,

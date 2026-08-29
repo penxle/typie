@@ -1,4 +1,5 @@
 import { tryAppContext } from '@typie/ui/context';
+import { prefersReducedMotion } from '@typie/ui/state';
 import { untrack } from 'svelte';
 import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { pageRectsToRevealTargetSpan, resolveCachedPageSpans, roundToScale, selectionHeadRect } from './geometry';
@@ -93,12 +94,8 @@ function sanitizeTypewriterPosition(position: number | undefined): number {
   return typeof position === 'number' && Number.isFinite(position) ? Math.max(0, Math.min(1, position)) : 0.5;
 }
 
-function prefersReducedMotion(): boolean {
-  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
-
 export function isInstantReveal(request: Pick<EditorBringIntoViewRequest, 'behavior'> | null): boolean {
-  return request !== null && (request.behavior === 'instant' || (request.behavior === 'smooth' && prefersReducedMotion()));
+  return request !== null && (request.behavior === 'instant' || (request.behavior === 'smooth' && prefersReducedMotion.current));
 }
 
 function createBringIntoViewRequest({ target, policy, behavior = 'instant' }: EditorScrollIntoViewOptions): EditorBringIntoViewRequest {

@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@typie/ui/state';
 import { quintOut } from 'svelte/easing';
 import { fade, fly, scale, slide } from 'svelte/transition';
 import type { TransitionConfig } from 'svelte/transition';
@@ -9,7 +10,7 @@ export const PRISM_VISIBILITY_MOTION = {
   easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
 } as const;
 
-export const reducedMotion = (): boolean => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const reducedMotion = (): boolean => prefersReducedMotion.current;
 
 const cubic = (at: number, first: number, second: number): number => {
   const c = 3 * first;

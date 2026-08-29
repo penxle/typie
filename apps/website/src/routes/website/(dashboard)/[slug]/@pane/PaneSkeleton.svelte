@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
   import { otherToolbarKind, readPrimaryToolbar } from '../v2/toolbar-kind';
   import { getPaneGroup } from './context.svelte';
@@ -87,7 +88,7 @@
   const bar = css({
     backgroundColor: 'surface.muted',
     borderRadius: '4px',
-    animation: 'pulse 2s ease-in-out infinite',
+    animation: '[var(--pane-skeleton-motion, pulse 2s ease-in-out infinite)]',
     flexShrink: '0',
   });
 
@@ -118,7 +119,10 @@
 </script>
 
 {#if pane.kind === 'entity'}
-  <div class={flex({ flexDirection: 'column', size: 'full' })}>
+  <div
+    style:--pane-skeleton-motion={prefersReducedMotion.current ? 'none' : undefined}
+    class="skeleton-motion {flex({ flexDirection: 'column', size: 'full' })}"
+  >
     <!-- Header (36px): breadcrumb ... controls close -->
     <div
       class={flex({
@@ -273,7 +277,12 @@
           >
             {#each linesBefore as line, i (i)}
               <div style:height="1lh" class={flex({ alignItems: 'center' })}>
-                <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
+                <div
+                  style:width={line.width}
+                  style:height="16px"
+                  style:--pane-skeleton-line-animation={line.animation}
+                  class={textLine}
+                ></div>
               </div>
             {/each}
             <!-- Image placeholder -->
@@ -283,12 +292,17 @@
                 borderRadius: '8px',
                 width: 'full',
                 height: '320px',
-                animation: 'pulse 2s ease-in-out infinite',
+                animation: '[var(--pane-skeleton-motion, pulse 2s ease-in-out infinite)]',
               })}
             ></div>
             {#each linesAfter as line, i (i)}
               <div style:height="1lh" class={flex({ alignItems: 'center' })}>
-                <div style:width={line.width} style:height="16px" style:animation={line.animation} class={textLine}></div>
+                <div
+                  style:width={line.width}
+                  style:height="16px"
+                  style:--pane-skeleton-line-animation={line.animation}
+                  class={textLine}
+                ></div>
               </div>
             {/each}
           </div>
@@ -314,7 +328,10 @@
   </div>
 {:else if pane.kind === 'home'}
   <!-- Home skeleton: centered like the actual HomePane layout -->
-  <div class={css({ width: 'full', height: 'full', overflow: 'auto' })}>
+  <div
+    style:--pane-skeleton-motion={prefersReducedMotion.current ? 'none' : undefined}
+    class="skeleton-motion {css({ width: 'full', height: 'full', overflow: 'auto' })}"
+  >
     <div
       class={flex({
         flexDirection: 'column',
@@ -344,7 +361,7 @@
               padding: '12px',
               borderRadius: '8px',
               backgroundColor: 'surface.subtle',
-              animation: 'pulse 2s ease-in-out infinite',
+              animation: '[var(--pane-skeleton-motion, pulse 2s ease-in-out infinite)]',
             })}
           >
             <div class={flex({ flexDirection: 'column', gap: '4px' })}>
@@ -370,3 +387,19 @@
 {:else}
   {unreachable(pane)}
 {/if}
+
+<style>
+  :global(.skeleton-motion) {
+    --pane-skeleton-line-animation: none;
+  }
+
+  :global(.skeleton-motion) :global([style*='--pane-skeleton-line-animation']) {
+    animation: var(--pane-skeleton-motion, var(--pane-skeleton-line-animation));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.skeleton-motion) {
+      --pane-skeleton-motion: none;
+    }
+  }
+</style>

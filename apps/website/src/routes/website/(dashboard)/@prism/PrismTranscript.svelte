@@ -7,7 +7,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { parseMarkdown } from './lib/markdown.ts';
-  import { pop, rise } from './lib/motion.ts';
+  import { pop, reducedMotion, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
   import { labelForRequest } from './lib/tool-labels.ts';
@@ -134,7 +134,7 @@
   const MAX_FRAME_MS = 100;
   const BOTTOM_FOLLOW_TOLERANCE_PX = 8;
 
-  const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = reducedMotion();
   const newPaced = () => new PacedText({ instant: reduceMotion });
 
   let container = $state<HTMLElement>();

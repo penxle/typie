@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { entityIconMap, getEntityIconColor } from '@typie/ui/constants';
+  import { prefersReducedMotion } from '@typie/ui/state/reduced-motion';
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -14,7 +15,6 @@
 
   const isMac = window.shell.platform === 'darwin';
   const extraIcons = new Map([['file-x', FileXIcon]]);
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const CLOSE_MS = 160;
   const SETTLE_MIN_MS = 80;
   const SETTLE_MAX_MS = 200;
@@ -72,7 +72,7 @@
   $effect(() => {
     const ids = new Set(tabs.map((tab) => tab.id));
     const added = tabs.filter((tab) => !knownIds.has(tab.id));
-    if (knownIds.size > 0 && added.length === 1 && !reduceMotion.matches) {
+    if (knownIds.size > 0 && added.length === 1 && !prefersReducedMotion.current) {
       const id = added[0].id;
       entering = id;
       const sibling = tabs.find((tab) => tab.id !== id);
@@ -117,7 +117,7 @@
 
   const startClose = (id: string) => {
     if (!closable || closing.includes(id)) return;
-    if (reduceMotion.matches) {
+    if (prefersReducedMotion.current) {
       window.shell.closeTab?.(id);
       return;
     }
@@ -193,7 +193,7 @@
         if (drag?.id === id && drag.committed) releaseDrag();
       }, COMMIT_TIMEOUT_MS);
     };
-    if (reduceMotion.matches) {
+    if (prefersReducedMotion.current) {
       commit();
       return;
     }

@@ -13,6 +13,7 @@
     "./form": "./src/form/index.ts",
     "./notification": "./src/notification/index.ts",
     "./state": "./src/state/index.ts",
+    "./state/reduced-motion": "./src/state/reduced-motion.svelte.ts",
     "./transitions": "./src/transitions/index.ts",
     "./utils": "./src/utils/index.ts",
     "./styles.css": "./styles/index.css"

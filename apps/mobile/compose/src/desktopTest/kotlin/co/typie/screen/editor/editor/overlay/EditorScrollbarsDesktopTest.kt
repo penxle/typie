@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -120,6 +121,43 @@ class EditorScrollbarsDesktopTest {
 
     onNodeWithText("60%").assertDoesNotExist()
   }
+
+  @Test
+  fun zeroMotionScaleSettlesTheIndicatorWithoutShorteningItsDwell() =
+    runComposeUiTest(effectContext = TestMotionDurationScale(0f)) {
+      mainClock.autoAdvance = false
+      val viewportState = EditorViewportState()
+
+      setContent {
+        CompositionLocalProvider(LocalAppColors provides LightColors) {
+          ScrollbarLayoutFrame(
+            viewportState = viewportState,
+            contentSize = Size(width = 100f, height = 300f),
+          ) {
+            EditorScrollbars(
+              viewportState = viewportState,
+              visibleArea = VisibleArea,
+              layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 100f),
+              pageSizes = emptyList(),
+              displayZoom = 1f,
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
+        }
+      }
+      mainClock.advanceTimeByFrame()
+
+      runOnIdle { viewportState.scrollToY(100f) }
+      mainClock.advanceTimeByFrame()
+      onNodeWithText("50%").assertIsDisplayed()
+
+      mainClock.advanceTimeBy(299L)
+      onNodeWithText("50%").assertIsDisplayed()
+
+      mainClock.advanceTimeBy(1L)
+      mainClock.advanceTimeByFrame()
+      onNodeWithText("50%").assertDoesNotExist()
+    }
 
   @Test
   fun remeasurementResolvesBothAxisReservationsFromOneFrame() = runComposeUiTest {
@@ -329,6 +367,8 @@ class EditorScrollbarsDesktopTest {
     const val VerticalThumbTag = "vertical-scrollbar-thumb"
     val VisibleArea = EditorVisibleArea(viewport = Size(width = 100f, height = 100f))
   }
+
+  private class TestMotionDurationScale(override val scaleFactor: Float) : MotionDurationScale
 }
 
 @Composable

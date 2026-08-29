@@ -8,6 +8,7 @@
   import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { tick, untrack } from 'svelte';
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
@@ -961,6 +962,7 @@
             destination={indicatorDestination}
             phase={indicatorPhase}
             prismEnabled={app.preference.current.prismWelcomeObjectEnabled}
+            reducedMotion={prefersReducedMotion.current}
             rowSpinnerPlaybackStartedAt={indicatorSpinnerPlaybackStartedAt}
             themeVariant={theme.currentThemeVariant}
             {welcomeAdmission}

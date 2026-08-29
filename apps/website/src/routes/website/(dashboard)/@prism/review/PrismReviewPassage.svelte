@@ -12,7 +12,7 @@
   import { graphql } from '$mearie';
   import { backoffDelay } from '../lib/backoff.ts';
   import { parseMarkdown } from '../lib/markdown.ts';
-  import { expand, fadeIn, fadeOut, rise } from '../lib/motion.ts';
+  import { expand, fadeIn, fadeOut, reducedMotion, rise } from '../lib/motion.ts';
   import { PacedText } from '../lib/paced-text.svelte.ts';
   import PrismMarkdown from '../PrismMarkdown.svelte';
   import PrismToolCalls from '../PrismToolCalls.svelte';
@@ -240,7 +240,7 @@
   const tierLabel = $derived(header?.tier ?? (tier === null ? null : (TIER_OPTIONS.find((option) => option.tier === tier)?.label ?? null)));
   const result = $derived(round === null ? null : describeResult(round));
 
-  const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = reducedMotion();
 
   let firstPaint = $state(true);
 

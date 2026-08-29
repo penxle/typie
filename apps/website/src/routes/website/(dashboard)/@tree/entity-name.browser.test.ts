@@ -16,9 +16,10 @@ const wait = (duration: number) => new Promise<void>((resolve) => setTimeout(res
 const maskAlpha = (element: HTMLElement, edge: 'leading' | 'trailing') =>
   Number(getComputedStyle(element).getPropertyValue(`--entity-name-${edge}-mask-alpha`));
 
-const mockReducedMotion = (reducedMotion: boolean) => {
+const reducedMotionPreference = vi.hoisted(() => {
   const eventTarget = new EventTarget();
   const query = '(prefers-reduced-motion: reduce)';
+  let reducedMotion = false;
   const mediaQuery = {
     get matches() {
       return reducedMotion;
@@ -34,10 +35,17 @@ const mockReducedMotion = (reducedMotion: boolean) => {
 
   vi.spyOn(window, 'matchMedia').mockReturnValue(mediaQuery);
 
-  return (next: boolean) => {
-    reducedMotion = next;
-    mediaQuery.dispatchEvent(new MediaQueryListEvent('change', { matches: next, media: query }));
+  return {
+    set(next: boolean) {
+      reducedMotion = next;
+      mediaQuery.dispatchEvent(new MediaQueryListEvent('change', { matches: next, media: query }));
+    },
   };
+});
+
+const mockReducedMotion = (reducedMotion: boolean) => {
+  reducedMotionPreference.set(reducedMotion);
+  return reducedMotionPreference.set;
 };
 
 const mountName = async (name: string, width: number) => {
@@ -70,6 +78,7 @@ afterEach(async () => {
   vi.useRealTimers();
   if (component) await unmount(component);
   component = undefined;
+  reducedMotionPreference.set(false);
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -264,7 +273,7 @@ describe('entity tree name overflow', () => {
 
     vi.useFakeTimers();
     enter(target);
-    await vi.advanceTimersByTimeAsync(399);
+    await vi.advanceTimersByTimeAsync(199);
     expect(viewport.scrollLeft).toBe(0);
 
     await vi.advanceTimersByTimeAsync(1);

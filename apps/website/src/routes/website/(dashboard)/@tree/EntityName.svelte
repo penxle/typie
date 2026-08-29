@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { hoverIntent } from '@typie/ui/actions';
+  import { prefersReducedMotion as reducedMotionPreference } from '@typie/ui/state';
   import { onDestroy, onMount } from 'svelte';
   import { advanceEntityNameMotion } from './entity-name-motion';
 
@@ -21,12 +22,12 @@
   let overflowLeft = $state(false);
   let overflowRight = $state(false);
   let fogTransitionReady = $state(false);
-  let prefersReducedMotion = $state(false);
+  const prefersReducedMotion = $derived(reducedMotionPreference.current);
   let animationFrame: number | undefined;
   let fogTransitionFrame: number | undefined;
   let fogTransitionScheduled = false;
   let hovered = false;
-  let hoverReady = false;
+  let hoverReady = $state(false);
   let motionPosition = 0;
   let motionVelocity = 0;
   let previousFrameTime: number | undefined;
@@ -126,6 +127,11 @@
     }
   });
 
+  $effect(() => {
+    if (!prefersReducedMotion || !hoverReady || !viewport) return;
+    settleAt(viewport, Math.max(0, viewport.scrollWidth - viewport.clientWidth));
+  });
+
   onMount(() => {
     const hoverTarget = viewport?.closest<HTMLElement>('[role="treeitem"]');
     const hoverIntentAction = hoverTarget
@@ -145,23 +151,11 @@
           },
         })
       : undefined;
-    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const updateReducedMotion = () => {
-      prefersReducedMotion = reducedMotionQuery.matches;
-      const element = viewport;
-      if (!prefersReducedMotion || !hoverReady || !element) return;
-
-      settleAt(element, Math.max(0, element.scrollWidth - element.clientWidth));
-    };
-
-    reducedMotionQuery.addEventListener('change', updateReducedMotion);
-    updateReducedMotion();
     updateOverflow();
 
     return () => {
       if (fogTransitionFrame !== undefined) window.cancelAnimationFrame(fogTransitionFrame);
       hoverIntentAction?.destroy?.();
-      reducedMotionQuery.removeEventListener('change', updateReducedMotion);
     };
   });
 
