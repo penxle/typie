@@ -1,13 +1,10 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
-  import { center } from '@typie/styled-system/patterns';
   import { contextMenu, tooltip } from '@typie/ui/actions';
-  import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
-  import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import { navigating } from '$app/state';
   import { graphql } from '$mearie';
@@ -18,6 +15,8 @@
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import DocumentTooltip from './DocumentTooltip.svelte';
   import { entityTreeRevealState, shouldConsumeDocumentRevealRequest } from './entity-reveal.svelte';
+  import EntityMenu from './EntityMenu.svelte';
+  import EntityName from './EntityName.svelte';
   import { getTreeContext } from './state.svelte';
   import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
 
@@ -160,21 +159,7 @@
 
   <EntityIcon entity$key={document.data.entity} fallback={FileIcon} size={14} />
 
-  <span
-    class={css(
-      {
-        flexGrow: '1',
-        fontSize: '14px',
-        fontWeight: 'medium',
-        color: 'text.muted',
-        wordBreak: 'break-all',
-        lineClamp: '1',
-      },
-      active && { fontWeight: 'bold', color: 'text.default' },
-    )}
-  >
-    {document.data.title}
-  </span>
+  <EntityName name={document.data.title} {active} />
 
   {#if document.data.entity.goal}
     <EntityGoalIndicator
@@ -189,27 +174,9 @@
     />
   {/if}
 
-  <Menu placement="bottom-start">
-    {#snippet button({ open })}
-      <div
-        class={center({
-          borderRadius: '4px',
-          size: '16px',
-          color: 'text.disabled',
-          opacity: '0',
-          transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
-          _groupHover: { opacity: '100' },
-          _pressed: { backgroundColor: 'interactive.hover', opacity: '100' },
-        })}
-        aria-pressed={open}
-      >
-        <Icon icon={EllipsisIcon} size={14} />
-      </div>
-    {/snippet}
-
+  <EntityMenu label="문서 메뉴">
     {@render contextMenuContent()}
-  </Menu>
+  </EntityMenu>
 </a>
 
 {#snippet contextMenuContent()}
