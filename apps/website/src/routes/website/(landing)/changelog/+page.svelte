@@ -3,12 +3,15 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import dayjs from 'dayjs';
-  import { marked } from 'marked';
+  import { Marked } from 'marked';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import { markedDirectives } from '$lib/markdown/directives';
   import { inview } from '../(index)/inview';
 
   let { data } = $props();
+
+  const marked = new Marked({ gfm: true, breaks: true }, markedDirectives());
 </script>
 
 <Helmet description="올인원 글쓰기 도구 타이피의 새로운 기능과 개선 사항들을 확인해보세요." title="업데이트 노트" />
@@ -325,6 +328,61 @@
                     borderTopColor: 'dark.gray.900',
                     marginY: '40px',
                   },
+                  '& details': {
+                    marginY: '20px',
+                  },
+                  '& summary': {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    listStyle: 'none',
+                    fontWeight: 'medium',
+                    color: 'dark.gray.100',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  },
+                  '& summary::-webkit-details-marker': {
+                    display: 'none',
+                  },
+                  '& summary svg': {
+                    flexShrink: '0',
+                    width: '16px',
+                    height: '16px',
+                    color: 'dark.gray.500',
+                    transition: '[transform 200ms ease]',
+                  },
+                  '& details[open] summary svg': {
+                    transform: 'rotate(90deg)',
+                  },
+                  '& details::details-content': {
+                    display: 'grid',
+                    gridTemplateRows: '[0fr]',
+                    overflow: 'hidden',
+                    transition: '[grid-template-rows 200ms ease, content-visibility 200ms ease allow-discrete]',
+                  },
+                  '& details[open]::details-content': {
+                    gridTemplateRows: '[1fr]',
+                  },
+                  '& [data-details-body]': {
+                    minHeight: '0',
+                    overflow: 'hidden',
+                    opacity: '[0]',
+                    transition: '[opacity 200ms ease]',
+                  },
+                  '& details[open] [data-details-body]': {
+                    opacity: '[1]',
+                    transitionDelay: '[100ms]',
+                  },
+                  '& [data-details-body] > :first-child': {
+                    marginTop: '10px',
+                  },
+                  '& [data-note]': {
+                    fontSize: '[calc(13em/15)]',
+                    color: 'dark.gray.500',
+                  },
+                  '& [data-note] *': {
+                    color: '[inherit]',
+                  },
                   '& img': {
                     maxWidth: 'full',
                     height: 'auto',
@@ -335,7 +393,7 @@
                 })}
               >
                 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html marked(entry.body, { gfm: true, breaks: true })}
+                {@html marked.parse(entry.body)}
               </div>
             </div>
           </article>

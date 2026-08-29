@@ -169,7 +169,7 @@
           class={css({
             position: 'relative',
             display: 'grid',
-            gridTemplateColumns: '[100px 1fr]',
+            gridTemplateColumns: '[100px minmax(0, 1fr)]',
             gap: '20px',
           })}
         >
@@ -230,7 +230,7 @@
               />
             {/if}
 
-            <div class={css({ color: 'text.subtle' })}>
+            <div class={css({ fontSize: '15px', color: 'text.subtle' })}>
               <ChangelogMarkdown blocks={parseMarkdown(entry.body)} />
             </div>
           </div>

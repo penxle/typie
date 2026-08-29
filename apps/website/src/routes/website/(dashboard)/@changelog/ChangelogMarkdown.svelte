@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css, cx } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import SquareIcon from '~icons/lucide/square';
   import SquareCheckIcon from '~icons/lucide/square-check';
   import ChangelogMarkdown from './ChangelogMarkdown.svelte';
@@ -13,10 +14,12 @@
 
   let { blocks, depth = 0 }: Props = $props();
 
+  const opened = $state<Record<number, boolean>>({});
+
   const stack = css({
     display: 'flex',
     flexDirection: 'column',
-    fontSize: '15px',
+    minWidth: '0',
     lineHeight: '[1.75]',
     overflowWrap: 'anywhere',
   });
@@ -43,7 +46,12 @@
     _first: { marginTop: '0' },
   });
 
-  const headingSizes = [css({ fontSize: '17px' }), css({ fontSize: '16px' }), css({ fontSize: '15px' }), css({ fontSize: '15px' })];
+  const headingSizes = [
+    css({ fontSize: '[calc(17em/15)]' }),
+    css({ fontSize: '[calc(16em/15)]' }),
+    css({ fontSize: '[1em]' }),
+    css({ fontSize: '[1em]' }),
+  ];
 
   const listBase = css({ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '22px' });
 
@@ -54,8 +62,46 @@
   const taskBox = css({ flexShrink: '0', marginTop: '6px', color: 'text.faint' });
   const taskBoxChecked = css({ flexShrink: '0', marginTop: '6px', color: 'text.subtle' });
 
+  const detailsSummary = css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: 'full',
+    fontSize: '[1em]',
+    fontWeight: 'medium',
+    color: 'text.default',
+    textAlign: 'left',
+    cursor: 'pointer',
+    userSelect: 'none',
+  });
+
+  const detailsChevron = css.raw({
+    color: 'text.faint',
+    transitionProperty: '[transform]',
+    transitionDuration: '200ms',
+    transitionTimingFunction: 'ease',
+  });
+
+  const detailsReveal = css({
+    display: 'grid',
+    transitionProperty: '[grid-template-rows]',
+    transitionDuration: '200ms',
+    transitionTimingFunction: 'ease',
+  });
+
+  const detailsClip = css({ minHeight: '0', overflow: 'hidden' });
+
+  const noteBox = css({ fontSize: '[calc(13em/15)]', color: 'text.faint', '& *': { color: '[inherit]' } });
+
+  const detailsBody = css({
+    paddingTop: '10px',
+    transitionProperty: '[opacity]',
+    transitionDuration: '200ms',
+    transitionTimingFunction: 'ease',
+  });
+
   const tableScroll = css({ overflowX: 'auto', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '6px' });
-  const table = css({ borderCollapse: 'collapse', width: 'full', fontSize: '14px', lineHeight: '[1.6]' });
+  const table = css({ borderCollapse: 'collapse', width: 'full', fontSize: '[calc(14em/15)]', lineHeight: '[1.6]' });
   const headCell = css({ paddingX: '12px', paddingY: '8px', fontWeight: 'semibold', backgroundColor: 'surface.subtle' });
   const bodyCell = css({ paddingX: '12px', paddingY: '8px', borderTopWidth: '1px', borderColor: 'border.subtle' });
   const cellDivider = css({ borderLeftWidth: '1px', borderColor: 'border.subtle', _first: { borderLeftWidth: '0' } });
@@ -155,17 +201,44 @@
           borderRadius: '6px',
           backgroundColor: 'surface.muted',
           fontFamily: 'mono',
-          fontSize: '14px',
+          fontSize: '[calc(14em/15)]',
           lineHeight: '[1.6]',
           overflowX: 'auto',
           whiteSpace: 'pre',
         })}><code>{block.text}</code></pre>
+    {:else if block.kind === 'details'}
+      {@const expanded = opened[idx] ?? false}
+
+      <div>
+        <button class={detailsSummary} aria-expanded={expanded} onclick={() => (opened[idx] = !expanded)} type="button">
+          <Icon
+            style={css.raw(detailsChevron, { transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' })}
+            icon={ChevronRightIcon}
+            size={14}
+          />
+          {block.summary}
+        </button>
+
+        <div style:grid-template-rows={expanded ? '1fr' : '0fr'} class={detailsReveal} aria-hidden={!expanded} inert={!expanded}>
+          <div class={detailsClip}>
+            <div style:opacity={expanded ? '1' : '0'} style:transition-delay={expanded ? '100ms' : '0ms'} class={detailsBody}>
+              <ChangelogMarkdown blocks={block.children} {depth} />
+            </div>
+          </div>
+        </div>
+      </div>
     {:else if block.kind === 'blockquote'}
       <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.strong', paddingLeft: '13px', color: 'text.faint' })}>
         <ChangelogMarkdown blocks={block.children} {depth} />
       </blockquote>
+    {:else if block.kind === 'note'}
+      <div class={noteBox}>
+        <ChangelogMarkdown blocks={block.children} {depth} />
+      </div>
+    {:else if block.kind === 'space'}
+      <div style:height={`calc(${block.lines} * 1.75em - ${depth > 0 ? 7 : 13}px)`} class={css({ flexShrink: '0' })}></div>
     {:else if block.kind === 'hr'}
-      <hr class={css({ flexShrink: '0', height: '1px', backgroundColor: 'border.default', border: 'none' })} />
+      <hr class={css({ flexShrink: '0', height: '1px', backgroundColor: 'border.subtle', border: 'none' })} />
     {/if}
   {/each}
 </div>
