@@ -31,6 +31,7 @@
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
   import { isToolbarKind } from './[slug]/v2/toolbar-kind';
+  import ChangelogModal from './@changelog/ChangelogModal.svelte';
   import DocumentExportModal from './@context-menu/DocumentExportModal.svelte';
   import GoalModal from './@goal/GoalModal.svelte';
   import UserGoalModal from './@goal/UserGoalModal.svelte';
@@ -342,6 +343,15 @@
   let trialExpiredModalOpen = $state(false);
   let planChangeNoticeModalOpen = $state(false);
 
+  const introModalOpen = $derived(
+    onboardingModalOpen ||
+      referralWelcomeModalOpen ||
+      marketingConsentModalOpen ||
+      trialExpiredModalOpen ||
+      planChangeNoticeModalOpen ||
+      userSurveyModalOpen,
+  );
+
   const textReplacementRulesJson = $derived.by(() =>
     stringify(
       query.data.me.textReplacements
@@ -610,7 +620,7 @@
         overflow: 'hidden',
       })}
     >
-      <Sidebar user$key={query.data.me} />
+      <Sidebar changelogSuppressed={introModalOpen} user$key={query.data.me} />
 
       <div
         class={flex({
@@ -659,6 +669,7 @@
 <GoalModal />
 <UserGoalModal />
 <StatsModal />
+<ChangelogModal />
 <TrashModal siteId={currentSite.id} />
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />

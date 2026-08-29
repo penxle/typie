@@ -6,6 +6,7 @@ export const reroute: Reroute = async ({ url }) => {
     url.pathname === '/graphql' ||
     url.pathname === '/robots.txt' ||
     url.pathname === '/api/bootstrap' ||
+    url.pathname === '/api/changelog' ||
     url.pathname === '/_internal/bb' ||
     url.pathname === '/_internal/ffi'
   ) {

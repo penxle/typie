@@ -20,6 +20,7 @@
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
+  import ChangelogPopover from './@changelog/ChangelogPopover.svelte';
   import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
@@ -32,9 +33,10 @@
 
   type Props = {
     user$key: DashboardLayout_Sidebar_user$key;
+    changelogSuppressed: boolean;
   };
 
-  let { user$key }: Props = $props();
+  let { user$key, changelogSuppressed }: Props = $props();
 
   const app = getAppContext();
 
@@ -711,6 +713,8 @@
     <!-- 프로필 -->
     <Profile user$key={user.data} bind:open={profileOpen} />
   </div>
+
+  <ChangelogPopover suppressed={changelogSuppressed} />
 
   <div
     class={css({

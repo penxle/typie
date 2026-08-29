@@ -614,10 +614,11 @@
       <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
     </a>
 
-    <a
+    <button
       class={flex({
         alignItems: 'center',
         gap: '8px',
+        width: 'full',
         paddingX: '8px',
         paddingY: '6px',
         borderRadius: '6px',
@@ -626,16 +627,19 @@
         color: 'text.default',
         whiteSpace: 'nowrap',
         transition: 'common',
+        cursor: 'pointer',
         _hover: { backgroundColor: 'surface.muted' },
       })}
-      href="/changelog"
-      rel="noopener noreferrer"
-      target="_blank"
+      onclick={() => {
+        close();
+        app.state.changelogOpen = true;
+        mixpanel.track('open_changelog_modal', { via: 'profile_menu' });
+      }}
+      type="button"
     >
       <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={NewspaperIcon} size={14} />
       <span>업데이트 노트</span>
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
-    </a>
+    </button>
 
     <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
 
