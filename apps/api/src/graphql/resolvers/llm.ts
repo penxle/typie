@@ -8,10 +8,11 @@ import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
 import { dbr, Prompts } from '#/db/index.ts';
 import { env } from '#/env.ts';
-import { createUsageTracker, extractGatewayHeaders, extractUsage } from '#/utils/llm-usage.ts';
+import { createUsageTracker } from '#/utils/llm-usage.ts';
+import { extractGatewayHeaders, extractUsage } from '#/utils/llm-usage-core.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
-import type { UsageRecord } from '#/utils/llm-usage.ts';
+import type { UsageRecord } from '#/utils/llm-usage-core.ts';
 
 const openai = new OpenAI({
   apiKey: env.CLOUDFLARE_API_KEY,

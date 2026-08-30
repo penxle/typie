@@ -323,14 +323,14 @@ test('renderAffected: 적용 수와 부모별 직계 자식, 합계 200행 상�
   const one = { error: undefined, head: undefined, rows: many, total: 150, xml: undefined };
   const text = renderAffected(2, [one, one]);
   const lines = text.split('\n');
-  assert.equal(lines[0], '2개 연산을 적용했어요.');
+  assert.equal(lines[0], '2개 연산을 적용했어요. 작업이 끝났다면 save-document를 한번 불러 저장하세요');
   assert.equal(lines.filter((l) => /^\d+ <paragraph>/.test(l)).length, 200);
   assert.equal(lines.at(-1), '(행이 많아 200행에서 줄였어요 — 나머지는 outline-document로 보세요)');
   assert.equal(
     renderAffected(1, [
       { error: undefined, head: { ...row(2), name: 'blockquote', children: 0 }, rows: [row(1)], total: 1, xml: undefined },
     ]),
-    '1개 연산을 적용했어요.\n\n2 <blockquote> x (1자)\n1 <paragraph> x (1자)',
+    '1개 연산을 적용했어요. 작업이 끝났다면 save-document를 한번 불러 저장하세요\n\n2 <blockquote> x (1자)\n1 <paragraph> x (1자)',
   );
 
   const brimmed = {

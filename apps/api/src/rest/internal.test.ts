@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hangulRatio, promptUpdateSchema, pushSchema, verifyInternalKey } from './internal.ts';
+import { hangulRatio, promptUpdateSchema, pushSchema, verifyInternalKey } from './internal-core.ts';
 
 test('verifyInternalKey: 정확한 Bearer 키만 통과', () => {
   assert.equal(verifyInternalKey('Bearer secret-key', 'secret-key'), true);
