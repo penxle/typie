@@ -1,13 +1,17 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { computeDocumentZoomBounds, resolveDocumentZoomIndicator, zoomEquals } from '$lib/editor-ffi/zoom';
   import { EditorZoomController } from '../editor-zoom.svelte';
-  import ZoomOverlay from './ZoomOverlay.svelte';
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { EditorScrollScope } from '$lib/editor-ffi/scroll.svelte';
   import type { DocumentZoomLandmark, DocumentZoomLayout } from '$lib/editor-ffi/zoom';
+  import type { EditorZoomControlsRenderProps } from './EditorZoomControls.svelte';
+
+  export type EditorZoomRenderProps = {
+    controls: EditorZoomControlsRenderProps;
+    showViewControlsOnPaneEntry: boolean;
+  };
 
   type Props = {
     editor: Editor;
@@ -16,7 +20,7 @@
     viewportWidth: number;
     editorViewSurface: HTMLElement | undefined;
     scroll: EditorScrollScope | undefined;
-    children?: Snippet;
+    zoomControls?: Snippet<[EditorZoomRenderProps]>;
   };
 
   type PinchSession = {
@@ -33,7 +37,7 @@
 
   type PinchContact = Pick<Touch, 'clientX' | 'clientY'>;
 
-  let { editor, active = true, layout, viewportWidth, editorViewSurface, scroll, children }: Props = $props();
+  let { editor, active = true, layout, viewportWidth, editorViewSurface, scroll, zoomControls }: Props = $props();
 
   let pinchSession = $state<PinchSession | null>(null);
   let pinchQueuedUpdate = $state<PinchUpdate | null>(null);
@@ -41,8 +45,6 @@
   let pinchFlushPromise: Promise<void> | null = null;
   let boundaryAttemptRequest = $state(0);
   let boundaryAttemptLandmark = $state<DocumentZoomLandmark | null>(null);
-  const scrollContainer = $derived(editor.scrollContainerEl);
-
   const zoom = new EditorZoomController({
     editor,
     layout: () => layout,
@@ -299,8 +301,9 @@
   }
 
   $effect(() => {
-    const target = editor.scrollViewport?.target;
-    if (!target) return;
+    const wheelTarget = editorViewSurface;
+    const touchTarget = editor.scrollViewport?.target;
+    if (!wheelTarget || !touchTarget) return;
 
     const handleWheelForZoom = (event: Event) => {
       void zoom.handleWheel(event as WheelEvent);
@@ -318,22 +321,22 @@
       handleTouchCancelForPinch(event as TouchEvent);
     };
 
-    target.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
-    target.addEventListener('touchstart', handleTouchStart, { passive: true });
-    target.addEventListener('touchmove', handleTouchMove, { passive: false });
-    target.addEventListener('touchend', handleTouchEnd, { passive: true });
-    target.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    wheelTarget.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
+    touchTarget.addEventListener('touchstart', handleTouchStart, { passive: true });
+    touchTarget.addEventListener('touchmove', handleTouchMove, { passive: false });
+    touchTarget.addEventListener('touchend', handleTouchEnd, { passive: true });
+    touchTarget.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
       pinchSession = null;
       pinchQueuedUpdate = null;
       suppressPinchUntilAllUp = false;
       zoom.cancelDirectZoom('touch');
-      target.removeEventListener('wheel', handleWheelForZoom, { capture: true });
-      target.removeEventListener('touchstart', handleTouchStart);
-      target.removeEventListener('touchmove', handleTouchMove);
-      target.removeEventListener('touchend', handleTouchEnd);
-      target.removeEventListener('touchcancel', handleTouchCancel);
+      wheelTarget.removeEventListener('wheel', handleWheelForZoom, { capture: true });
+      touchTarget.removeEventListener('touchstart', handleTouchStart);
+      touchTarget.removeEventListener('touchmove', handleTouchMove);
+      touchTarget.removeEventListener('touchend', handleTouchEnd);
+      touchTarget.removeEventListener('touchcancel', handleTouchCancel);
     };
   });
 
@@ -351,23 +354,20 @@
 
 <svelte:window onkeydowncapture={handleBrowserZoomShortcut} />
 
-<ZoomOverlay
-  {atMaximum}
-  {atMinimum}
-  {boundaryAttemptLandmark}
-  {boundaryAttemptRequest}
-  {displayZoom}
-  {editorViewSurface}
-  enabled={zoomEnabled}
-  {indicatorZoom}
-  {landmark}
-  onToggleZoom={toggleZoom}
-  onZoomIn={zoomIn}
-  onZoomOut={zoomOut}
-  {scrollContainer}
-  {toggleTargetLandmark}
-/>
-
-<div class={css({ display: 'contents' })}>
-  {@render children?.()}
-</div>
+{@render zoomControls?.({
+  controls: {
+    atMaximum,
+    atMinimum,
+    boundaryAttemptLandmark,
+    boundaryAttemptRequest,
+    displayZoom,
+    enabled: zoomEnabled,
+    indicatorZoom,
+    landmark,
+    onToggleZoom: toggleZoom,
+    onZoomIn: zoomIn,
+    onZoomOut: zoomOut,
+    toggleTargetLandmark,
+  },
+  showViewControlsOnPaneEntry: zoomEnabled && landmark !== 'unit',
+})}

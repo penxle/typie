@@ -28,6 +28,8 @@
   import XIcon from '~icons/lucide/x';
   import { desktop } from '$lib/desktop';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
+  import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
+  import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
@@ -36,6 +38,7 @@
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
+  import EntityIcon from '../../@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import CloseButton from '../@pane/CloseButton.svelte';
@@ -62,6 +65,7 @@
   import { RemoteChangesetPipeline } from './sync/remote-changeset-pipeline';
   import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
+  import type { EditorContextBarSegmentRenderProps } from '$lib/editor-ffi/components/ui/EditorContextBar.svelte';
   import type { DocumentEditorV2_query$key } from '$mearie';
   import type { RemoteChangesetEvent } from './sync/remote-changeset-pipeline';
 
@@ -107,14 +111,11 @@
           availability
           icon
           iconColor
-
-          site {
-            id
-            name
-          }
+          ...EntityIcon_entity
 
           ancestors {
             id
+            ...EntityIcon_entity
 
             node {
               __typename
@@ -207,7 +208,6 @@
   );
 
   const entity = $derived(query.data.entity);
-  const siteName = $derived(entity?.site.name ?? '내 스페이스');
 
   const [updateDocument] = createMutation(
     graphql(`
@@ -287,6 +287,8 @@
 
   const document = $derived(entity?.node.__typename === 'Document' ? entity.node : null);
   const documentId = $derived(document?.id ?? null);
+  const breadcrumbPathIdentity = $derived(entity ? [...entity.ancestors.map((ancestor) => ancestor.id), entity.id].join('/') : '');
+  const breadcrumbViewportId = `editor-breadcrumb-${pane.id}`;
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
 
   let editorAreaWidth = $state(0);
@@ -1049,33 +1051,7 @@
             use:dragPane={dragPaneProps}
           >
             <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={12} />
-
-              <div
-                class={css({
-                  flex: 'none',
-                  maxWidth: '160px',
-                  fontSize: '12px',
-                  color: 'text.disabled',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                })}
-                title={siteName}
-              >
-                {siteName}
-              </div>
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
-
-              {#each entity.ancestors as ancestor (ancestor.id)}
-                {#if ancestor.node.__typename === 'Folder'}
-                  <div class={css({ flex: 'none', fontSize: '12px', color: 'text.disabled' })}>
-                    {ancestor.node.name}
-                  </div>
-                  <Icon style={css.raw({ color: 'text.disabled' })} icon={ChevronRightIcon} size={12} />
-                {/if}
-              {/each}
-
+              <EntityIcon entity$key={entity} size={14} />
               <button
                 class={css({
                   fontSize: '12px',
@@ -1343,6 +1319,45 @@
                             document$key={document}
                             onReady={handleEditorReady}
                           >
+                            {#snippet breadcrumb({ state }: EditorContextBarSegmentRenderProps)}
+                              <EditorBreadcrumb
+                                onPathChange={() => state.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS)}
+                                pathIdentity={breadcrumbPathIdentity}
+                                viewportId={breadcrumbViewportId}
+                              >
+                                <nav
+                                  class={css({
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    height: '32px',
+                                    paddingLeft: '24px',
+                                    paddingRight: '16px',
+                                    fontSize: '12px',
+                                    fontWeight: 'medium',
+                                    color: 'text.subtle',
+                                  })}
+                                  aria-label="문서 경로"
+                                >
+                                  <ol class={flex({ alignItems: 'center', gap: '2px', listStyle: 'none', whiteSpace: 'nowrap' })}>
+                                    {#each entity.ancestors as ancestor (ancestor.id)}
+                                      {#if ancestor.node.__typename === 'Folder'}
+                                        <li class={flex({ alignItems: 'center', gap: '4px' })}>
+                                          <EntityIcon entity$key={ancestor} fallback={FolderIcon} size={14} />
+                                          <span>{ancestor.node.name}</span>
+                                        </li>
+                                        <li class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
+                                          <Icon icon={ChevronRightIcon} size={14} />
+                                        </li>
+                                      {/if}
+                                    {/each}
+                                    <li class={flex({ alignItems: 'center', gap: '4px' })} aria-current="page">
+                                      <EntityIcon entity$key={entity} size={14} />
+                                      <span>{localTitle || '제목 없음'}</span>
+                                    </li>
+                                  </ol>
+                                </nav>
+                              </EditorBreadcrumb>
+                            {/snippet}
                             {#snippet header()}
                               <div
                                 class={flex({
