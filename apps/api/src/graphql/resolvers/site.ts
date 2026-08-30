@@ -44,6 +44,8 @@ Site.implement({
     entities: t.field({
       type: [Entity],
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+
         const loader = ctx.loader({
           name: 'Site.entities',
           many: true,
@@ -65,7 +67,9 @@ Site.implement({
       type: Entity,
       nullable: true,
       args: { type: t.arg({ type: EntityType }) },
-      resolve: async (self, args) => {
+      resolve: async (self, args, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+
         const rows = await db.execute<{ id: string }>(
           sql`
             WITH RECURSIVE sq AS (
@@ -94,6 +98,8 @@ Site.implement({
       type: Entity,
       nullable: true,
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+
         const loader = ctx.loader({
           name: 'Site.lastRootEntity',
           many: true,
@@ -160,7 +166,9 @@ Site.implement({
 
     deletedEntities: t.field({
       type: [Entity],
-      resolve: async (self) => {
+      resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+
         const parentEntities = alias(Entities, 'parent_entities');
         return await db
           .select(getTableColumns(Entities))
