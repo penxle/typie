@@ -1,6 +1,6 @@
 import { Marked } from 'marked';
 import markedCjkFriendly from 'marked-cjk-friendly';
-import type { Token, Tokens } from 'marked';
+import type { MarkedExtension, Token, Tokens } from 'marked';
 
 export type InlineNode =
   | { kind: 'word'; key: number; text: string }
@@ -178,8 +178,18 @@ const blockNodes = (tokens: Token[], cursor: number): BlockNode[] => {
   return out;
 };
 
+// 한국어에서 `8:56~9:03`처럼 범위를 나타내는 물결표를 GFM이 한 겹 취소선으로 묶으므로 두 겹만 인정한다.
+const doubleTildeOnly: MarkedExtension = {
+  tokenizer: {
+    del(src) {
+      if (src.startsWith('~') && !src.startsWith('~~')) return;
+      return false;
+    },
+  },
+};
+
 // `**'인용'**을`처럼 닫는 기호 앞이 구두점이면 CommonMark의 right-flanking 판정이 강조를 취소한다.
-const marked = new Marked({ gfm: true, breaks: true }, markedCjkFriendly());
+const marked = new Marked({ gfm: true, breaks: true }, markedCjkFriendly(), doubleTildeOnly);
 
 export const parseMarkdown = (source: string): BlockNode[] => {
   if (source.length === 0) return [];
