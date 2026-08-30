@@ -146,7 +146,7 @@ export const createPrismClient = (http: PrismHttp) => {
       return readFile(workflowPath(workflowId), path);
     },
     async getReviewSeeds(): Promise<Record<PrismReviewTierName, ReviewSeedMapping[]>> {
-      const catalog = await jsonOf(await expectOk(await http.request('/apps/feedback/catalog')), ReviewCatalogSchema);
+      const catalog = await jsonOf(await expectOk(await http.request('/apps/review/catalog')), ReviewCatalogSchema);
       return { high: catalog.workflows.high.seeds, medium: catalog.workflows.medium.seeds, low: catalog.workflows.low.seeds };
     },
     async getCatalog(): Promise<{ commands: PrismCommand[] | null }> {

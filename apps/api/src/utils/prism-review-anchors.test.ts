@@ -12,7 +12,7 @@ const graph = new Uint8Array([9, 9]);
 
 const outcomeWith = (anchors: { head: string; tail: string }[]): ReviewOutcome => ({
   version: 1,
-  kind: 'issues',
+  kind: 'reviewed',
   issues: [{ trait: 't', pass: 'judgment', body: null, anchors }],
 });
 

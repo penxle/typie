@@ -246,5 +246,5 @@ test('getReviewSeeds: feedback 카탈로그의 티어별 seeds', async () => {
     medium: [],
     low: [],
   });
-  assert.equal(http.calls[0]?.path, '/apps/feedback/catalog');
+  assert.equal(http.calls[0]?.path, '/apps/review/catalog');
 });

@@ -47,9 +47,9 @@ export type ReviewDiagnostics = {
 
 export type ReviewResult = {
   version: 1;
-  kind: 'feedback';
+  kind: 'reviewed';
   issues: ReviewIssue[];
-  conclusion: {
+  conclusion?: {
     understanding: string | null;
     progress?: string | null;
     strengths?: { body: string | null; anchors: Anchor[] }[];
@@ -62,8 +62,6 @@ export type ReviewResult = {
   diagnostics?: ReviewDiagnostics;
 };
 
-export type IssuesResult = { version: 1; kind: 'issues'; issues: ReviewIssue[]; dispositions?: ReviewThreadDisposition[] };
-
 export type ReviewRejectionCategory = 'diary' | 'practical' | 'non-text' | 'non-korean' | 'unprocessable' | 'unclassifiable';
 
 export type ReviewRejection = {
@@ -72,7 +70,7 @@ export type ReviewRejection = {
   rejected: { category: ReviewRejectionCategory; message: string; basis: string | null };
 };
 
-export type ReviewOutcome = ReviewResult | IssuesResult | ReviewRejection;
+export type ReviewOutcome = ReviewResult | ReviewRejection;
 
 export const ConfirmHintSchema = z.object({ documentId: z.string().optional(), tier: z.enum(PRISM_REVIEW_TIERS).optional() });
 export type ConfirmHint = z.infer<typeof ConfirmHintSchema>;
@@ -88,7 +86,6 @@ export const ConfirmDecisionSchema = z.discriminatedUnion('decision', [
 ]);
 
 export const ReviewOutcomeEnvelopeSchema = z.discriminatedUnion('kind', [
-  z.looseObject({ version: z.literal(1), kind: z.literal('feedback') }),
-  z.looseObject({ version: z.literal(1), kind: z.literal('issues') }),
+  z.looseObject({ version: z.literal(1), kind: z.literal('reviewed') }),
   z.looseObject({ version: z.literal(1), kind: z.literal('rejected') }),
 ]);

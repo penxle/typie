@@ -20,7 +20,7 @@ const inv = { ...turn, toolCallId: 'c1', invocation: 'inv_1' };
 test('워크플로 이벤트는 invocation.started 직후에 끼워 넣어 같은 run 안에 묶인다', () => {
   const session = [
     ev(1, 'run.started', run, { message: 'a', command: null }),
-    ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'feedback', ref: null } }),
+    ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review', ref: null } }),
     ev(3, 'invocation.completed', inv, {}),
     ev(4, 'run.completed', run, { result: null, usage: null }),
     ev(5, 'run.started', { agent, run: 2 }, { message: 'b', command: null }),
@@ -62,7 +62,7 @@ test('링크되지 않은 워크플로는 이벤트 없이 running으로 남는�
   const t = materialize(
     [
       ev(1, 'run.started', run, { message: 'a', command: null }),
-      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_2', name: 'high', app: 'feedback' } }),
+      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_2', name: 'high', app: 'review' } }),
     ],
     new Map(),
   );
