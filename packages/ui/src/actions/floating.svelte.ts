@@ -19,6 +19,7 @@ export type ReferenceAction = Action<ReferenceElement>;
 export type FloatingAction = Action<FloatingElement, { appendTo?: Element | null } | undefined>;
 export type ArrowAction = Action<HTMLElement>;
 export type UpdatePosition = () => Promise<void>;
+export type SetFloatingReference = (element: ReferenceElement | null) => void;
 
 type PlacementRect = Pick<Rect, 'x' | 'y' | 'width' | 'height'>;
 type PlacementSize = Pick<Rect, 'width' | 'height'>;
@@ -128,6 +129,7 @@ type CreateFloatingActionsReturn = {
   anchor: ReferenceAction;
   floating: FloatingAction;
   arrow: ArrowAction;
+  setReference: SetFloatingReference;
   update: UpdatePosition;
 };
 
@@ -271,6 +273,13 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     cleanupClickHandler = undefined;
   };
 
+  const setReference: SetFloatingReference = (element) => {
+    if (referenceElement === element) return;
+    unmount();
+    referenceElement = element ?? undefined;
+    mount();
+  };
+
   const referenceAction: ReferenceAction = (element) => {
     $effect(() => {
       referenceElement = element;
@@ -334,6 +343,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     anchor: referenceAction,
     floating: floatingAction,
     arrow: arrowAction,
+    setReference,
     update: updatePosition,
   };
 }
