@@ -121,6 +121,8 @@ Entity.implement({
     children: t.field({
       type: [Entity],
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.siteId });
+
         const loader = ctx.loader({
           name: 'Entity.children',
           many: true,
@@ -143,6 +145,8 @@ Entity.implement({
       type: Entity,
       nullable: true,
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.siteId });
+
         const loader = ctx.loader({
           name: 'Entity.firstChild',
           many: true,
@@ -168,6 +172,8 @@ Entity.implement({
       type: Entity,
       nullable: true,
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.siteId });
+
         const loader = ctx.loader({
           name: 'Entity.lastChild',
           many: true,
@@ -192,6 +198,8 @@ Entity.implement({
     deletedChildren: t.field({
       type: [Entity],
       resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.siteId });
+
         const loader = ctx.loader({
           name: 'Entity.deletedChildren',
           many: true,
@@ -318,7 +326,9 @@ Entity.implement({
 
     descendants: t.field({
       type: [Entity],
-      resolve: async (self) => {
+      resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.siteId });
+
         const rows = await db.execute<{ id: string }>(sql`
           WITH RECURSIVE sq AS (
             SELECT ${Entities.id}, ${Entities.depth}
