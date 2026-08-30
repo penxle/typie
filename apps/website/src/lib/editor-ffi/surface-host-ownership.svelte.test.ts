@@ -54,6 +54,10 @@ class FakeEditor {
   readonly externalElements = [];
   readonly pageEls: Record<number, HTMLElement | undefined> = {};
 
+  safeDisplayZoom(): number {
+    return this.displayZoom;
+  }
+
   pageExternalElements(): [] {
     return [];
   }

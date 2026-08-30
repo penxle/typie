@@ -64,14 +64,19 @@ test('비2xx는 PrismApiError로 던진다', async () => {
   );
 });
 
-test('getAgent는 runs·pending·invocations만 남기고, 형태가 어긋나면 malformed-response', async () => {
+test('getAgent는 agent.activations·runs·pending·invocations만 남기고, 형태가 어긋나면 malformed-response', async () => {
   const ok = await createPrismClient(
     fakeHttp(() => ({
       status: 200,
-      json: { agent: { id: 'x' }, runs: [{ runSeq: 1, status: 'running', input: 'm' }], pending: null, invocations: [] },
+      json: {
+        agent: { id: 'x', activations: 3 },
+        runs: [{ runSeq: 1, status: 'running', input: 'm' }],
+        pending: null,
+        invocations: [],
+      },
     })),
   ).getAgent('typie-x');
-  assert.deepEqual(ok, { runs: [{ runSeq: 1, status: 'running' }], pending: null, invocations: [] });
+  assert.deepEqual(ok, { agent: { activations: 3 }, runs: [{ runSeq: 1, status: 'running' }], pending: null, invocations: [] });
   await assert.rejects(
     createPrismClient(fakeHttp(() => ({ status: 200, json: { runs: 'nope' } }))).getAgent('typie-x'),
     (err: unknown) => err instanceof PrismApiError && err.code === 'malformed-response',

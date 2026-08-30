@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { extractGatewayHeaders, extractUsage, textIdentity } from './llm-usage.ts';
+import { extractGatewayHeaders, extractUsage, textIdentity } from './llm-usage-core.ts';
 
 test('textIdentity counts codepoints, not UTF-16 units', () => {
   assert.equal(textIdentity('가나다🙂').textLength, 4);

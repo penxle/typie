@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { prefersReducedMotion } from '@typie/ui/state';
+  import { prefersReducedMotion } from '@typie/ui/state/reduced-motion';
   import { onDestroy } from 'svelte';
   import type { Snippet } from 'svelte';
   import type { NotePresence } from './note-list-state.svelte';
