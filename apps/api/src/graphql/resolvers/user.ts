@@ -322,7 +322,12 @@ User.implement({
     goal: t.withAuth({ session: true }).field({
       type: UserGoal,
       nullable: true,
-      resolve: async (self) => {
+      resolve: async (self, _, ctx) => {
+        // User는 문서 소유자 등 다른 경로에서도 노출되므로 개인 목표는 세션 사용자에게만 반환한다.
+        if (ctx.session.userId !== self.id) {
+          return null;
+        }
+
         const row = await currentUserGoal(self.id);
         return row?.id ?? null;
       },
@@ -330,7 +335,11 @@ User.implement({
 
     goalHistory: t.withAuth({ session: true }).field({
       type: [UserGoalHistory],
-      resolve: async (self) => {
+      resolve: async (self, _, ctx) => {
+        if (ctx.session.userId !== self.id) {
+          return [];
+        }
+
         return await dailyGoalHistory(self.id);
       },
     }),
