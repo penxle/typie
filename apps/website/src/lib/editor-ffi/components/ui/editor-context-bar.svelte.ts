@@ -1,84 +1,28 @@
+import type { TransientVisibilityActivity, TransientVisibilityState } from './transient-visibility.svelte';
+
 export const CONTEXT_BAR_TRANSIENT_VISIBLE_MS = 1500;
 export const CONTEXT_BAR_FADE_IN_MS = 180;
 export const CONTEXT_BAR_FADE_OUT_MS = 400;
 
 export type ContextBarTone = 'transient' | 'engaged';
 
-export type ContextBarSegmentActivity = {
-  transient: boolean;
-  hovered: boolean;
-  focused: boolean;
-  holds: readonly string[];
-};
+export type ContextBarSegmentActivity = TransientVisibilityActivity;
 
 export type ContextBarSegmentPresentation = {
   visible: boolean;
   tone: ContextBarTone;
 };
 
-export class EditorContextBarSegmentState {
-  #hideTimer: ReturnType<typeof setTimeout> | undefined;
-  transient = $state(false);
-  hovered = $state(false);
-  focused = $state(false);
-  holds = $state<string[]>([]);
-
-  get activity(): ContextBarSegmentActivity {
-    return {
-      transient: this.transient,
-      hovered: this.hovered,
-      focused: this.focused,
-      holds: this.holds,
-    };
-  }
-
-  showTemporarily(durationMs: number): void {
-    this.transient = true;
-    clearTimeout(this.#hideTimer);
-    this.#hideTimer = setTimeout(() => {
-      this.transient = false;
-      this.#hideTimer = undefined;
-    }, durationMs);
-  }
-
-  hideTransient(): void {
-    clearTimeout(this.#hideTimer);
-    this.#hideTimer = undefined;
-    this.transient = false;
-  }
-
-  setHovered(hovered: boolean): void {
-    this.hovered = hovered;
-  }
-
-  setFocused(focused: boolean): void {
-    this.focused = focused;
-  }
-
-  hold(reason: string): void {
-    if (!this.holds.includes(reason)) this.holds = [...this.holds, reason];
-  }
-
-  release(reason: string): void {
-    if (this.holds.includes(reason)) this.holds = this.holds.filter((hold) => hold !== reason);
-  }
-
-  destroy(): void {
-    this.hideTransient();
-    this.hovered = false;
-    this.focused = false;
-    this.holds = [];
-  }
-}
+export type EditorContextBarSegmentState = TransientVisibilityState;
 
 type ContextBarPresentationInput = {
-  breadcrumb: ContextBarSegmentActivity;
+  leading: ContextBarSegmentActivity;
   viewControls: ContextBarSegmentActivity;
 };
 
 export type ContextBarPresentation = {
   unified: boolean;
-  breadcrumb: ContextBarSegmentPresentation;
+  leading: ContextBarSegmentPresentation;
   viewControls: ContextBarSegmentPresentation;
 };
 
@@ -102,13 +46,13 @@ export class ContextBarVisibilityCoordinator {
 
   resolve(input: ContextBarPresentationInput): ContextBarPresentation {
     const requested = {
-      breadcrumb: resolveContextBarSegmentRequest(input.breadcrumb),
+      leading: resolveContextBarSegmentRequest(input.leading),
       viewControls: resolveContextBarSegmentRequest(input.viewControls),
     };
 
-    if (!this.#unified && requested.breadcrumb.visible && requested.viewControls.visible) this.#unified = true;
+    if (!this.#unified && requested.leading.visible && requested.viewControls.visible) this.#unified = true;
 
-    if (!requested.breadcrumb.visible && !requested.viewControls.visible) {
+    if (!requested.leading.visible && !requested.viewControls.visible) {
       this.#unified = false;
       return { unified: false, ...requested };
     }
@@ -117,7 +61,7 @@ export class ContextBarVisibilityCoordinator {
 
     return {
       unified: true,
-      breadcrumb: requested.breadcrumb.visible ? requested.breadcrumb : { visible: true, tone: 'transient' },
+      leading: requested.leading.visible ? requested.leading : { visible: true, tone: 'transient' },
       viewControls: requested.viewControls.visible ? requested.viewControls : { visible: true, tone: 'transient' },
     };
   }

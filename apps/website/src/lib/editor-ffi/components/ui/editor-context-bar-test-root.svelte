@@ -1,15 +1,17 @@
 <script lang="ts">
   import { VerticalDivider } from '@typie/ui/components';
+  import { setupAppContext } from '@typie/ui/context';
   import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import EditorBreadcrumb from './EditorBreadcrumb.svelte';
   import EditorContextBar from './EditorContextBar.svelte';
   import EditorFocusModeControl from './EditorFocusModeControl.svelte';
   import EditorZoomControls from './EditorZoomControls.svelte';
+  import FloatingEditorZoomControls from './FloatingEditorZoomControls.svelte';
   import type { DocumentZoomLandmark } from '$lib/editor-ffi/zoom';
   import type { EditorContextBarSegmentRenderProps } from './EditorContextBar.svelte';
 
   type Props = {
-    mode?: 'zoom' | 'context-bar';
+    mode?: 'zoom' | 'context-bar' | 'floating-zoom';
     initialEnabled?: boolean;
     initialZoom?: number;
     initialIndicatorZoom?: number;
@@ -23,6 +25,9 @@
     viewControlsWidth?: number;
     viewControlsPaneEntry?: boolean;
     withinPane?: boolean;
+    preferenceUserId?: string;
+    twoPanes?: boolean;
+    useAppPinned?: boolean;
   };
 
   let {
@@ -40,7 +45,16 @@
     viewControlsWidth = 124,
     viewControlsPaneEntry = true,
     withinPane = true,
+    preferenceUserId = 'editor-context-bar-test',
+    twoPanes = false,
+    useAppPinned = false,
   }: Props = $props();
+  const app = setupAppContext(preferenceUserId);
+  const contextBarPinned = $derived(
+    useAppPinned
+      ? ((app.preference.current as typeof app.preference.current & { contextBarPinned?: boolean }).contextBarPinned ?? true)
+      : false,
+  );
   let enabled = $state(initialEnabled);
   let displayZoom = $state(initialZoom);
   let indicatorZoom = $state(initialIndicatorZoom);
@@ -49,10 +63,12 @@
   let boundaryAttemptLandmark = $state<DocumentZoomLandmark | null>(null);
   let focusMode = $state(false);
   let editorViewSurface = $state<HTMLElement>();
+  let secondEditorViewSurface = $state<HTMLElement>();
   let scrollContainer = $state<HTMLElement>();
   let currentSurfaceWidth = $state(surfaceWidth);
   let currentBreadcrumbWidth = $state(breadcrumbWidth);
   let breadcrumbPathIdentity = $state('folder/document');
+  let contextBarTopOcclusion = $state(0);
 
   const toggleTargetLandmark = $derived<DocumentZoomLandmark | null>(
     initialToggleTargetLandmark === undefined ? (landmark === 'unit' ? 'fit-width' : 'unit') : initialToggleTargetLandmark,
@@ -85,15 +101,47 @@
   export function setSurfaceWidth(nextWidth: number) {
     currentSurfaceWidth = nextWidth;
   }
+
+  export function setPinned(nextPinned: boolean) {
+    (app.preference.current as typeof app.preference.current & { contextBarPinned?: boolean }).contextBarPinned = nextPinned;
+  }
 </script>
 
-<svelte:element this={withinPane ? 'div' : 'section'} data-pane-id={withinPane ? 'zoom-overlay-test-pane' : undefined}>
+<svelte:element
+  this={withinPane ? 'div' : 'section'}
+  data-context-bar-top-occlusion={contextBarTopOcclusion}
+  data-pane-id={withinPane ? 'zoom-overlay-test-pane' : undefined}
+>
   <div data-testid="editor-toolbar"></div>
   <div bind:this={editorViewSurface} style:width={`${currentSurfaceWidth}px`} style="position: relative; height: 120px">
+    {#if mode === 'floating-zoom'}
+      <FloatingEditorZoomControls
+        controls={{
+          atMaximum: landmark === 'maximum',
+          atMinimum: landmark === 'minimum',
+          boundaryAttemptLandmark,
+          boundaryAttemptRequest,
+          displayZoom,
+          enabled,
+          indicatorZoom,
+          landmark,
+          onToggleZoom,
+          onZoomIn,
+          onZoomOut,
+          toggleTargetLandmark,
+        }}
+      />
+    {/if}
     <button data-testid="context-bar-underlay" type="button">본문</button>
     <div bind:this={scrollContainer} data-testid="editor-pane"></div>
     {#if mode === 'zoom' && editorViewSurface && scrollContainer}
-      <EditorContextBar {editorViewSurface} interactiveViewControlsWhenHidden showViewControlsOnPaneEntry={enabled && landmark !== 'unit'}>
+      <EditorContextBar
+        {editorViewSurface}
+        interactiveViewControlsWhenHidden
+        onPinnedChange={setPinned}
+        pinned={contextBarPinned}
+        showViewControlsOnPaneEntry={enabled && landmark !== 'unit'}
+      >
         {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
           <div style="display: flex; align-items: center">
             <EditorZoomControls
@@ -108,8 +156,8 @@
               {onToggleZoom}
               {onZoomIn}
               {onZoomOut}
-              segment={state}
               {toggleTargetLandmark}
+              visibility={state}
               visible={presentation.visible}
             />
             {#if enabled}
@@ -125,7 +173,13 @@
         {/snippet}
       </EditorContextBar>
     {:else if mode === 'context-bar' && editorViewSurface}
-      <EditorContextBar {editorViewSurface} showViewControlsOnPaneEntry={viewControlsPaneEntry}>
+      <EditorContextBar
+        {editorViewSurface}
+        onPinnedChange={setPinned}
+        onTopOcclusionChange={(topOcclusion) => (contextBarTopOcclusion = topOcclusion)}
+        pinned={contextBarPinned}
+        showViewControlsOnPaneEntry={viewControlsPaneEntry}
+      >
         {#snippet breadcrumb({ state }: EditorContextBarSegmentRenderProps)}
           <EditorBreadcrumb
             onPathChange={() => state.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS)}
@@ -150,3 +204,20 @@
     {/if}
   </div>
 </svelte:element>
+
+{#if mode === 'context-bar' && twoPanes}
+  <div bind:this={secondEditorViewSurface} style:width={`${currentSurfaceWidth}px`} style="position: relative; height: 120px">
+    {#if secondEditorViewSurface}
+      <EditorContextBar
+        editorViewSurface={secondEditorViewSurface}
+        onPinnedChange={setPinned}
+        pinned={contextBarPinned}
+        showViewControlsOnPaneEntry={false}
+      >
+        {#snippet viewControls({ state }: EditorContextBarSegmentRenderProps)}
+          <button onclick={() => state.showTemporarily(1000)} type="button">두 번째 보기</button>
+        {/snippet}
+      </EditorContextBar>
+    {/if}
+  </div>
+{/if}

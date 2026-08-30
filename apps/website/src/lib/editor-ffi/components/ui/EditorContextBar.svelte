@@ -2,24 +2,27 @@
   import { css } from '@typie/styled-system/css';
   import { token } from '@typie/styled-system/tokens';
   import { hoverIntent } from '@typie/ui/actions';
+  import { VerticalDivider } from '@typie/ui/components';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import {
     CONTEXT_BAR_FADE_IN_MS,
     CONTEXT_BAR_FADE_OUT_MS,
     CONTEXT_BAR_TRANSIENT_VISIBLE_MS,
     ContextBarVisibilityCoordinator,
-    EditorContextBarSegmentState,
     smootherstep,
   } from './editor-context-bar.svelte';
+  import EditorContextBarPinControl from './EditorContextBarPinControl.svelte';
   import EditorContextBarSegment from './EditorContextBarSegment.svelte';
+  import { TransientVisibilityState } from './transient-visibility.svelte';
   import type { HoverIntentParameter } from '@typie/ui/actions';
   import type { Snippet } from 'svelte';
   import type { ActionReturn } from 'svelte/action';
   import type { ContextBarPresentation, ContextBarSegmentPresentation } from './editor-context-bar.svelte';
 
   export type EditorContextBarSegmentRenderProps = {
-    state: EditorContextBarSegmentState;
+    state: TransientVisibilityState;
     presentation: ContextBarSegmentPresentation;
   };
 
@@ -29,6 +32,9 @@
     breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
     viewControls: Snippet<[EditorContextBarSegmentRenderProps]>;
     interactiveViewControlsWhenHidden?: boolean;
+    pinned?: boolean;
+    onTopOcclusionChange?: (topOcclusion: number) => void;
+    onPinnedChange?: (pinned: boolean) => void;
   };
 
   type SegmentGeometry = {
@@ -42,7 +48,7 @@
   type LanePoint = { x: number; y: number };
 
   type LaneHoverPhase = 'idle' | 'pending' | 'preview' | 'spot' | 'expanding' | 'held';
-  type ContextBarSegmentId = 'breadcrumb' | 'viewControls';
+  type ContextBarSegmentId = 'leading' | 'viewControls';
 
   const FADE_WIDTH = 24;
   const LANE_HOVER_INTENT_DELAY_MS = 400;
@@ -50,18 +56,28 @@
   const LANE_SPOT_DWELL_MS = 500;
   const LANE_SPOT_ENTER_MS = 500;
   const LANE_SPOT_SURFACE_TRANSITION_MS = 600;
-  const LANE_SPOT_EXPAND_MS = 1000;
+  const LANE_BACKGROUND_EXPAND_MS = 900;
+  const LANE_EXPANSION_TOTAL_MS = 1000;
+  const LANE_FOREGROUND_REVEAL_DELAY_MS = 100;
+  const LANE_FOREGROUND_REVEAL_MS = 900;
   const LANE_SPOT_RADIUS = 88;
+  const LANE_ENGAGED_SPOT_RADIUS = 52;
+  const LANE_ENGAGED_SPOT_STRENGTH = 0.85;
+  const LANE_ENGAGED_SPOT_ENTER_DELAY_MS = 500;
   const LANE_SPOT_MASK_INSET = 8;
   const LANE_SPOT_EDGE_WIDTH = 48;
   const LANE_SPOT_SURFACE_STRENGTH = 0.7;
   const LANE_SPOT_EXPANSION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
   const LANE_HOLD_REASON = 'lane-hover';
-  const ACTIVE_SURFACE = token('colors.surface.muted');
-  const TRANSIENT_BASE = token('colors.surface.subtle');
+  const PIN_HOLD_REASON = 'pinned';
+  const MUTED_SURFACE = token('colors.surface.muted');
+  const CONTINUOUS_SURFACE = token('colors.surface.default');
+  const PAGINATED_SURFACE = token('colors.surface.subtle');
+  const TRANSIENT_BASE = `color-mix(in srgb, ${CONTINUOUS_SURFACE} 50%, ${PAGINATED_SURFACE} 50%)`;
+  const ACTIVE_SURFACE = `color-mix(in srgb, ${MUTED_SURFACE} 80%, ${TRANSIENT_BASE} 20%)`;
   const SUBTLE_BORDER = token('colors.border.subtle');
   const DEFAULT_BORDER = token('colors.border.default');
-  const TRANSIENT_SURFACE = `color-mix(in srgb, ${TRANSIENT_BASE} 80%, transparent)`;
+  const TRANSIENT_SURFACE = `color-mix(in srgb, ${TRANSIENT_BASE} 75%, transparent)`;
   const TRANSIENT_EDGE = `color-mix(in srgb, ${TRANSIENT_BASE} 40%, ${SUBTLE_BORDER} 60%)`;
   const ENGAGED_EDGE = `color-mix(in srgb, ${ACTIVE_SURFACE} 36%, ${DEFAULT_BORDER} 64%)`;
 
@@ -71,27 +87,35 @@
     breadcrumb,
     viewControls,
     interactiveViewControlsWhenHidden = false,
+    pinned = false,
+    onTopOcclusionChange,
+    onPinnedChange,
   }: Props = $props();
 
-  const breadcrumbState = new EditorContextBarSegmentState();
-  const viewControlsState = new EditorContextBarSegmentState();
+  const leadingState = new TransientVisibilityState();
+  const viewControlsState = new TransientVisibilityState();
   const visibilityCoordinator = new ContextBarVisibilityCoordinator();
   let lane = $state<HTMLElement>();
-  let breadcrumbElement = $state<HTMLElement>();
+  let leadingElement = $state<HTMLElement>();
   let viewControlsElement = $state<HTMLElement>();
-  let breadcrumbGeometry = $state<SegmentGeometry>();
+  let leadingGeometry = $state<SegmentGeometry>();
   let viewControlsGeometry = $state<SegmentGeometry>();
   let laneWidth = $state(0);
   let laneHeight = $state(0);
   let laneHoverPhase = $state<LaneHoverPhase>('idle');
+  let pointerInLane = $state(false);
   let pointerInLaneGap = $state(false);
   let lanePointerX = $state(0);
   let lanePointerY = $state(0);
+  let laneExpansionOriginX = $state(0);
+  let laneExpansionOriginY = $state(0);
+  let laneForegroundRevealStarted = $state(false);
   let laneExpansionMaskedSegments = $state<ContextBarSegmentId[]>([]);
   let fadingTransientSegments = $state<ContextBarSegmentId[]>([]);
   let transientExitPresentation = $state<ContextBarPresentation>();
   let laneHoverIntent: ActionReturn<HoverIntentParameter> | undefined;
   let laneDwellTimer: ReturnType<typeof setTimeout> | undefined;
+  let laneForegroundRevealTimer: ReturnType<typeof setTimeout> | undefined;
   let laneExpansionTimer: ReturnType<typeof setTimeout> | undefined;
   let hiddenSegmentIntentTimer: ReturnType<typeof setTimeout> | undefined;
   let hiddenSegmentIntentTarget: ContextBarSegmentId | undefined;
@@ -99,10 +123,11 @@
   let transientExitTimer: ReturnType<typeof setTimeout> | undefined;
   const fadingTransientTimers = new SvelteMap<ContextBarSegmentId, ReturnType<typeof setTimeout>>();
   let initialRevealComplete = false;
+  let previousPinned: boolean | undefined;
 
   let presentation = $state<ContextBarPresentation>({
     unified: false,
-    breadcrumb: { visible: false, tone: 'transient' },
+    leading: { visible: false, tone: 'transient' },
     viewControls: { visible: false, tone: 'transient' },
   });
   let previousPresentation = presentation;
@@ -111,10 +136,16 @@
   const unifiedPairVisible = $derived(presentation.unified);
   const unifiedSurfaceVisible = $derived(unifiedPairVisible && laneHoverPhase !== 'expanding');
   const laneSpotVisible = $derived(laneHoverPhase === 'preview' || laneHoverPhase === 'spot' || laneHoverPhase === 'expanding');
+  const hasEngagedSegment = $derived(
+    (presentation.leading.visible && presentation.leading.tone === 'engaged') ||
+      (presentation.viewControls.visible && presentation.viewControls.tone === 'engaged'),
+  );
+  const laneEngagedSpotVisible = $derived(pointerInLane && (laneSpotVisible || laneHoverPhase === 'held' || hasEngagedSegment));
   const laneSpotSurfaceStrength = $derived(
     laneHoverPhase === 'expanding' ? 1 : laneHoverPhase === 'preview' || laneHoverPhase === 'spot' ? LANE_SPOT_SURFACE_STRENGTH : 0,
   );
   const laneSpotOpacityTransitionMs = $derived(unifiedSurfaceVisible ? 0 : LANE_SPOT_ENTER_MS);
+  const laneEngagedSpotEnterDelayMs = $derived(pinned ? 0 : LANE_ENGAGED_SPOT_ENTER_DELAY_MS);
   const laneSpotSurfaceTransitionMs = $derived(
     unifiedSurfaceVisible
       ? 0
@@ -124,29 +155,32 @@
           ? LANE_SPOT_ENTER_MS
           : CONTEXT_BAR_FADE_OUT_MS,
   );
-  const laneSpotRadius = $derived(
-    laneHoverPhase === 'expanding' ? Math.hypot(laneWidth, laneHeight) + FADE_WIDTH + LANE_SPOT_MASK_INSET : LANE_SPOT_RADIUS,
-  );
+  const laneExpansionRadius = $derived(Math.hypot(laneWidth, laneHeight) + FADE_WIDTH + LANE_SPOT_MASK_INSET);
+  const laneSpotRadius = $derived(laneHoverPhase === 'expanding' ? laneExpansionRadius : LANE_SPOT_RADIUS);
+  const laneForegroundRevealRadius = $derived(laneForegroundRevealStarted ? laneExpansionRadius : LANE_SPOT_RADIUS);
+  const laneTransientSpotX = $derived(laneHoverPhase === 'expanding' ? laneExpansionOriginX : lanePointerX);
+  const laneTransientSpotY = $derived(laneHoverPhase === 'expanding' ? laneExpansionOriginY : lanePointerY);
   const laneBlurMask = $derived.by(() => laneBlurMasks().join(', '));
   const laneSurfaceMask = $derived.by(() => laneSurfaceMasks().join(', '));
   const laneSurfaceMaskComposite = $derived(laneHoverPhase === 'preview' && fadingTransientSegments.length === 0 ? 'intersect' : 'add');
   const laneBlurVisible = $derived(
     laneSpotVisible ||
       fadingTransientSegments.length > 0 ||
-      (unifiedSurfaceVisible && (presentation.breadcrumb.tone === 'transient' || presentation.viewControls.tone === 'transient')) ||
+      (unifiedSurfaceVisible && (presentation.leading.tone === 'transient' || presentation.viewControls.tone === 'transient')) ||
       (!unifiedPairVisible &&
-        ((presentation.breadcrumb.visible && presentation.breadcrumb.tone === 'transient') ||
+        ((presentation.leading.visible && presentation.leading.tone === 'transient') ||
           (presentation.viewControls.visible && presentation.viewControls.tone === 'transient'))),
   );
-  const hasVisibleSegment = $derived(presentation.breadcrumb.visible || presentation.viewControls.visible);
+  const hasVisibleSegment = $derived(presentation.leading.visible || presentation.viewControls.visible);
+  const topOcclusion = $derived(hasVisibleSegment || laneSpotVisible || transientExitPresentation ? laneHeight : 0);
   const laneBlurRadius = $derived.by(() => {
     if (!laneBlurVisible) return 0;
     if (!hasVisibleSegment && (laneHoverPhase === 'preview' || laneHoverPhase === 'spot')) return 1.5;
-    return 3;
+    return 2;
   });
   const laneBlurTransitionMs = $derived(
     laneHoverPhase === 'expanding'
-      ? LANE_SPOT_EXPAND_MS
+      ? LANE_BACKGROUND_EXPAND_MS
       : laneHoverPhase === 'preview' || laneHoverPhase === 'spot'
         ? LANE_SPOT_ENTER_MS
         : transientExitPresentation
@@ -174,41 +208,54 @@
     return `linear-gradient(to right, ${samples.join(', ')})`;
   }
 
-  function radialMask(x: number, y: number, opacityVariable = '--context-bar-lane-spot-opacity'): string {
+  function radialMask(
+    x: number,
+    y: number,
+    radiusVariable = '--context-bar-lane-spot-radius',
+    opacityVariable = '--context-bar-lane-spot-opacity',
+  ): string {
     const edgeStops = Array.from({ length: 9 }, (_, index) => {
       const progress = index / 8;
       const alpha = 1 - smootherstep(progress);
-      return `rgb(0 0 0 / calc(${alpha} * var(${opacityVariable}))) calc(var(--context-bar-lane-spot-radius) - ${LANE_SPOT_MASK_INSET + LANE_SPOT_EDGE_WIDTH * (1 - progress)}px)`;
+      return `rgb(0 0 0 / calc(${alpha} * var(${opacityVariable}))) calc(var(${radiusVariable}) - ${LANE_SPOT_MASK_INSET + LANE_SPOT_EDGE_WIDTH * (1 - progress)}px)`;
     });
-    return `radial-gradient(circle at ${x}px ${y}px, rgb(0 0 0 / var(${opacityVariable})) 0, rgb(0 0 0 / var(${opacityVariable})) calc(var(--context-bar-lane-spot-radius) - ${LANE_SPOT_MASK_INSET + LANE_SPOT_EDGE_WIDTH}px), ${edgeStops.join(', ')})`;
+    return `radial-gradient(circle at ${x}px ${y}px, rgb(0 0 0 / var(${opacityVariable})) 0, rgb(0 0 0 / var(${opacityVariable})) calc(var(${radiusVariable}) - ${LANE_SPOT_MASK_INSET + LANE_SPOT_EDGE_WIDTH}px), ${edgeStops.join(', ')})`;
   }
 
   function laneSpotMask(opacityVariable: string): string {
-    return radialMask(lanePointerX, lanePointerY, opacityVariable);
+    return radialMask(laneTransientSpotX, laneTransientSpotY, '--context-bar-lane-spot-radius', opacityVariable);
+  }
+
+  function engagedSpotMask(): string {
+    const stops = Array.from({ length: 9 }, (_, index) => {
+      const progress = index / 8;
+      return `rgb(0 0 0 / ${LANE_ENGAGED_SPOT_STRENGTH * (1 - smootherstep(progress))}) ${LANE_ENGAGED_SPOT_RADIUS * progress}px`;
+    });
+    return `radial-gradient(circle at ${lanePointerX}px ${lanePointerY}px, ${stops.join(', ')})`;
   }
 
   function unifiedTransientMask(): string {
-    if (!breadcrumbGeometry || !viewControlsGeometry) return 'linear-gradient(transparent, transparent)';
+    if (!leadingGeometry || !viewControlsGeometry) return 'linear-gradient(transparent, transparent)';
     const hasTransientSegment =
-      surfaceMaskPresentation.breadcrumb.tone === 'transient' ||
+      surfaceMaskPresentation.leading.tone === 'transient' ||
       surfaceMaskPresentation.viewControls.tone === 'transient' ||
       fadingTransientSegments.length > 0;
     if (hasTransientSegment) return 'linear-gradient(black, black)';
 
-    const breadcrumbEngaged = surfaceMaskPresentation.breadcrumb.tone === 'engaged' && !fadingTransientSegments.includes('breadcrumb');
+    const leadingEngaged = surfaceMaskPresentation.leading.tone === 'engaged' && !fadingTransientSegments.includes('leading');
     const viewControlsEngaged =
       surfaceMaskPresentation.viewControls.tone === 'engaged' && !fadingTransientSegments.includes('viewControls');
-    if (!breadcrumbEngaged && !viewControlsEngaged) return 'linear-gradient(black, black)';
+    if (!leadingEngaged && !viewControlsEngaged) return 'linear-gradient(black, black)';
 
-    const width = viewControlsGeometry.right - breadcrumbGeometry.left;
-    const breadcrumbRight = breadcrumbGeometry.right - breadcrumbGeometry.left;
-    const viewControlsLeft = viewControlsGeometry.left - breadcrumbGeometry.left;
+    const width = viewControlsGeometry.right - leadingGeometry.left;
+    const leadingRight = leadingGeometry.right - leadingGeometry.left;
+    const viewControlsLeft = viewControlsGeometry.left - leadingGeometry.left;
     const positions = [0, width];
     const addPosition = (position: number) => {
       if (!positions.includes(position)) positions.push(position);
     };
-    if (breadcrumbEngaged) {
-      for (let index = 0; index <= 8; index += 1) addPosition(Math.min(width, breadcrumbRight + (FADE_WIDTH * index) / 8));
+    if (leadingEngaged) {
+      for (let index = 0; index <= 8; index += 1) addPosition(Math.min(width, leadingRight + (FADE_WIDTH * index) / 8));
     }
     if (viewControlsEngaged) {
       for (let index = 0; index <= 8; index += 1) addPosition(Math.max(0, viewControlsLeft - FADE_WIDTH + (FADE_WIDTH * index) / 8));
@@ -217,15 +264,15 @@
     const stops = positions
       .toSorted((left, right) => left - right)
       .map((position) => {
-        const breadcrumbAlpha = breadcrumbEngaged ? smootherstep((position - breadcrumbRight) / FADE_WIDTH) : 1;
+        const leadingAlpha = leadingEngaged ? smootherstep((position - leadingRight) / FADE_WIDTH) : 1;
         const viewControlsAlpha = viewControlsEngaged ? 1 - smootherstep((position - (viewControlsLeft - FADE_WIDTH)) / FADE_WIDTH) : 1;
-        return `rgb(0 0 0 / ${Math.min(breadcrumbAlpha, viewControlsAlpha)}) ${position}px`;
+        return `rgb(0 0 0 / ${Math.min(leadingAlpha, viewControlsAlpha)}) ${position}px`;
       });
     return `linear-gradient(to right, ${stops.join(', ')})`;
   }
 
   function segmentLaneMask(segment: ContextBarSegmentId, transientOnly: boolean): string | undefined {
-    const geometry = segment === 'breadcrumb' ? breadcrumbGeometry : viewControlsGeometry;
+    const geometry = segment === 'leading' ? leadingGeometry : viewControlsGeometry;
     const segmentPresentation = surfaceMaskPresentation[segment];
     if (
       !geometry ||
@@ -238,17 +285,17 @@
 
     const samples = Array.from({ length: 9 }, (_, index) => {
       const progress = index / 8;
-      const alpha = segment === 'breadcrumb' ? 1 - smootherstep(progress) : smootherstep(progress);
-      const position = segment === 'breadcrumb' ? geometry.right + FADE_WIDTH * progress : geometry.left - FADE_WIDTH * (1 - progress);
+      const alpha = segment === 'leading' ? 1 - smootherstep(progress) : smootherstep(progress);
+      const position = segment === 'leading' ? geometry.right + FADE_WIDTH * progress : geometry.left - FADE_WIDTH * (1 - progress);
       return `rgb(0 0 0 / ${alpha}) ${position}px`;
     });
-    if (segment === 'breadcrumb') samples.push('transparent 100%');
+    if (segment === 'leading') samples.push('transparent 100%');
     else samples.unshift('transparent 0');
     return `linear-gradient(to right, ${samples.join(', ')})`;
   }
 
   function loneEngagedSegment(): ContextBarSegmentId | undefined {
-    const visibleSegments = (['breadcrumb', 'viewControls'] as const).filter((segment) => presentation[segment].visible);
+    const visibleSegments = (['leading', 'viewControls'] as const).filter((segment) => presentation[segment].visible);
     const segment = visibleSegments.length === 1 ? visibleSegments[0] : undefined;
     if (!segment) return;
     const state = segmentState(segment);
@@ -256,15 +303,15 @@
   }
 
   function outsideEngagedSegmentMask(segment: ContextBarSegmentId): string {
-    const geometry = segment === 'breadcrumb' ? breadcrumbGeometry : viewControlsGeometry;
+    const geometry = segment === 'leading' ? leadingGeometry : viewControlsGeometry;
     if (!geometry) return 'linear-gradient(transparent, transparent)';
     const samples = Array.from({ length: 9 }, (_, index) => {
       const progress = index / 8;
-      const alpha = segment === 'breadcrumb' ? smootherstep(progress) : 1 - smootherstep(progress);
-      const position = segment === 'breadcrumb' ? geometry.right + FADE_WIDTH * progress : geometry.left - FADE_WIDTH * (1 - progress);
+      const alpha = segment === 'leading' ? smootherstep(progress) : 1 - smootherstep(progress);
+      const position = segment === 'leading' ? geometry.right + FADE_WIDTH * progress : geometry.left - FADE_WIDTH * (1 - progress);
       return `rgb(0 0 0 / ${alpha}) ${position}px`;
     });
-    if (segment === 'breadcrumb') samples.push('black 100%');
+    if (segment === 'leading') samples.push('black 100%');
     else samples.unshift('black 0');
     return `linear-gradient(to right, ${samples.join(', ')})`;
   }
@@ -272,7 +319,7 @@
   function laneBlurMasks(): string[] {
     const masks = [laneSpotMask('--context-bar-lane-spot-opacity')];
     const hasTransientSegment =
-      surfaceMaskPresentation.breadcrumb.tone === 'transient' ||
+      surfaceMaskPresentation.leading.tone === 'transient' ||
       surfaceMaskPresentation.viewControls.tone === 'transient' ||
       fadingTransientSegments.length > 0;
     if (unifiedSurfaceVisible || transientExitPresentation?.unified) {
@@ -281,9 +328,9 @@
     }
 
     const includeEngagedSegments = laneSpotVisible;
-    const breadcrumbMask = segmentLaneMask('breadcrumb', !includeEngagedSegments);
+    const leadingMask = segmentLaneMask('leading', !includeEngagedSegments);
     const viewControlsMask = segmentLaneMask('viewControls', !includeEngagedSegments);
-    if (breadcrumbMask) masks.push(breadcrumbMask);
+    if (leadingMask) masks.push(leadingMask);
     if (viewControlsMask) masks.push(viewControlsMask);
     return masks;
   }
@@ -300,16 +347,21 @@
       masks.push(unifiedTransientMask());
       return masks;
     }
-    const breadcrumbMask = segmentLaneMask('breadcrumb', true);
+    const leadingMask = segmentLaneMask('leading', true);
     const viewControlsMask = segmentLaneMask('viewControls', true);
-    if (breadcrumbMask) masks.push(breadcrumbMask);
+    if (leadingMask) masks.push(leadingMask);
     if (viewControlsMask) masks.push(viewControlsMask);
     return masks;
   }
 
   function segmentRevealMask(segment: ContextBarSegmentId, geometry: SegmentGeometry | undefined): string {
     if (!geometry || laneHoverPhase !== 'expanding' || !laneExpansionMaskedSegments.includes(segment)) return 'none';
-    return radialMask(lanePointerX - geometry.left, lanePointerY);
+    return radialMask(
+      laneExpansionOriginX - geometry.left,
+      laneExpansionOriginY,
+      '--context-bar-segment-reveal-radius',
+      '--context-bar-segment-reveal-opacity',
+    );
   }
 
   function syncGeometry(): void {
@@ -327,12 +379,12 @@
         width: rect.width,
       };
     };
-    breadcrumbGeometry = breadcrumbElement ? relativeGeometry(breadcrumbElement) : undefined;
+    leadingGeometry = leadingElement ? relativeGeometry(leadingElement) : undefined;
     viewControlsGeometry = relativeGeometry(viewControlsElement);
   }
 
-  function segmentState(segment: ContextBarSegmentId): EditorContextBarSegmentState {
-    return segment === 'breadcrumb' ? breadcrumbState : viewControlsState;
+  function segmentState(segment: ContextBarSegmentId): TransientVisibilityState {
+    return segment === 'leading' ? leadingState : viewControlsState;
   }
 
   function clearHiddenSegmentIntent(): void {
@@ -406,7 +458,7 @@
   }
 
   function segmentAtPoint(point: LanePoint): ContextBarSegmentId | undefined {
-    if (geometryContainsPoint(breadcrumbGeometry, point)) return 'breadcrumb';
+    if (geometryContainsPoint(leadingGeometry, point)) return 'leading';
     if (geometryContainsPoint(viewControlsGeometry, point)) return 'viewControls';
   }
 
@@ -427,31 +479,50 @@
 
   function clearLaneTimers(): void {
     clearTimeout(laneDwellTimer);
+    clearTimeout(laneForegroundRevealTimer);
     clearTimeout(laneExpansionTimer);
     setLaneHoverIntentEnabled(false);
     laneDwellTimer = undefined;
+    laneForegroundRevealTimer = undefined;
     laneExpansionTimer = undefined;
+    laneForegroundRevealStarted = false;
   }
 
   function holdLane(): void {
     clearLaneTimers();
     laneHoverPhase = 'held';
     laneExpansionMaskedSegments = [];
-    breadcrumbState.hold(LANE_HOLD_REASON);
+    leadingState.hold(LANE_HOLD_REASON);
     viewControlsState.hold(LANE_HOLD_REASON);
   }
 
-  function stopLaneInteraction(linger: boolean): void {
+  function stopLaneInteraction(linger: boolean, pointerStillInLane = false): void {
     const wasHeld = laneHoverPhase === 'held';
+    pointerInLane = pointerStillInLane;
     pointerInLaneGap = false;
     clearLaneTimers();
     laneHoverPhase = 'idle';
     laneExpansionMaskedSegments = [];
-    breadcrumbState.release(LANE_HOLD_REASON);
+    leadingState.release(LANE_HOLD_REASON);
     viewControlsState.release(LANE_HOLD_REASON);
     if (!wasHeld || !linger) return;
-    breadcrumbState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+    leadingState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
     viewControlsState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+  }
+
+  function settlePinnedPresentation(): void {
+    clearHiddenSegmentIntent();
+    releaseHiddenSegmentHover();
+    clearLaneTimers();
+    clearFadingTransientSegments();
+    clearTransientSurfaceExit();
+    laneHoverPhase = 'idle';
+    pointerInLaneGap = false;
+    laneExpansionMaskedSegments = [];
+    leadingState.release(LANE_HOLD_REASON);
+    viewControlsState.release(LANE_HOLD_REASON);
+    leadingState.hold(PIN_HOLD_REASON);
+    viewControlsState.hold(PIN_HOLD_REASON);
   }
 
   function startLaneSpot(): void {
@@ -475,14 +546,25 @@
   }
 
   function startLaneExpansion(): void {
-    laneExpansionMaskedSegments = (['breadcrumb', 'viewControls'] as const).filter((segment) => !presentation[segment].visible);
+    clearLaneTimers();
+    if (prefersReducedMotion.current) {
+      holdLane();
+      return;
+    }
+    laneExpansionOriginX = lanePointerX;
+    laneExpansionOriginY = lanePointerY;
+    laneExpansionMaskedSegments = (['leading', 'viewControls'] as const).filter((segment) => !presentation[segment].visible);
     laneHoverPhase = 'expanding';
-    breadcrumbState.hold(LANE_HOLD_REASON);
+    leadingState.hold(LANE_HOLD_REASON);
     viewControlsState.hold(LANE_HOLD_REASON);
+    laneForegroundRevealTimer = setTimeout(() => {
+      laneForegroundRevealTimer = undefined;
+      laneForegroundRevealStarted = true;
+    }, LANE_FOREGROUND_REVEAL_DELAY_MS);
     laneExpansionTimer = setTimeout(() => {
       laneExpansionTimer = undefined;
       holdLane();
-    }, LANE_SPOT_EXPAND_MS);
+    }, LANE_EXPANSION_TOTAL_MS);
   }
 
   function startLaneIntent(): void {
@@ -501,12 +583,12 @@
   }
 
   function isLaneGap(point: LanePoint): boolean {
-    if (!breadcrumbGeometry || !viewControlsGeometry || viewControlsGeometry.left <= breadcrumbGeometry.right) return false;
-    return point.x > breadcrumbGeometry.right && point.x < viewControlsGeometry.left;
+    if (!leadingGeometry || !viewControlsGeometry || viewControlsGeometry.left <= leadingGeometry.right) return false;
+    return point.x > leadingGeometry.right && point.x < viewControlsGeometry.left;
   }
 
   function handlePanePointerMove(event: PointerEvent): void {
-    if (!breadcrumbElement || event.pointerType === 'touch') {
+    if (!leadingElement || event.pointerType === 'touch') {
       stopLaneInteraction(false);
       clearHiddenSegmentIntent();
       releaseHiddenSegmentHover();
@@ -521,10 +603,12 @@
       return;
     }
 
+    pointerInLane = true;
+    lanePointerX = point.x;
+    lanePointerY = point.y;
+
     if (isLaneGap(point)) {
       pointerInLaneGap = true;
-      lanePointerX = point.x;
-      lanePointerY = point.y;
       clearHiddenSegmentIntent();
       releaseHiddenSegmentHover();
 
@@ -538,7 +622,7 @@
       if (laneHoverPhase === 'held' || presentation.unified) {
         holdLane();
       } else if (laneHoverPhase === 'idle') {
-        if (presentation.breadcrumb.visible || presentation.viewControls.visible) startLaneSpot();
+        if (presentation.leading.visible || presentation.viewControls.visible) startLaneSpot();
         else startLaneIntent();
       }
       return;
@@ -547,13 +631,25 @@
     const segment = segmentAtPoint(point);
     if (segment && loneEngagedSegment() === segment) {
       pointerInLaneGap = false;
-      lanePointerX = point.x;
-      lanePointerY = point.y;
       if (laneHoverPhase !== 'preview') startLanePreview();
       return;
     }
 
-    stopLaneInteraction(true);
+    if (segment && (laneHoverPhase === 'spot' || laneHoverPhase === 'expanding' || laneHoverPhase === 'held')) {
+      pointerInLaneGap = false;
+      if (hiddenSegmentEngaged === segment) return;
+      if (hiddenSegmentEngaged) releaseHiddenSegmentHover();
+      if (presentation[segment].visible) {
+        clearHiddenSegmentIntent();
+        return;
+      }
+
+      const sibling: ContextBarSegmentId = segment === 'leading' ? 'viewControls' : 'leading';
+      if (presentation[sibling].visible) engageHiddenSegment(segment);
+      return;
+    }
+
+    stopLaneInteraction(true, true);
     if (!segment) {
       clearHiddenSegmentIntent();
       releaseHiddenSegmentHover();
@@ -568,7 +664,7 @@
       return;
     }
 
-    const sibling: ContextBarSegmentId = segment === 'breadcrumb' ? 'viewControls' : 'breadcrumb';
+    const sibling: ContextBarSegmentId = segment === 'leading' ? 'viewControls' : 'leading';
     if (presentation[sibling].visible) {
       engageHiddenSegment(segment);
       return;
@@ -591,18 +687,35 @@
   }
 
   $effect(() => {
+    const nextPinned = pinned;
+    untrack(() => {
+      if (nextPinned) {
+        settlePinnedPresentation();
+      } else {
+        leadingState.release(PIN_HOLD_REASON);
+        viewControlsState.release(PIN_HOLD_REASON);
+        if (previousPinned) {
+          leadingState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+          viewControlsState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+        }
+      }
+      previousPinned = nextPinned;
+    });
+  });
+
+  $effect(() => {
     const nextPresentation = visibilityCoordinator.resolve({
-      breadcrumb: breadcrumb ? breadcrumbState.activity : { transient: false, hovered: false, focused: false, holds: [] },
+      leading: leadingState.activity,
       viewControls: viewControlsState.activity,
     });
     const hadTransientSurface =
-      (previousPresentation.breadcrumb.visible && previousPresentation.breadcrumb.tone === 'transient') ||
+      (previousPresentation.leading.visible && previousPresentation.leading.tone === 'transient') ||
       (previousPresentation.viewControls.visible && previousPresentation.viewControls.tone === 'transient');
-    const nextHidden = !nextPresentation.breadcrumb.visible && !nextPresentation.viewControls.visible;
+    const nextHidden = !nextPresentation.leading.visible && !nextPresentation.viewControls.visible;
     if (hadTransientSurface && nextHidden) startTransientSurfaceExit(previousPresentation);
     else if (!nextHidden) clearTransientSurfaceExit();
 
-    for (const segment of ['breadcrumb', 'viewControls'] as const) {
+    for (const segment of ['leading', 'viewControls'] as const) {
       if (
         previousPresentation[segment].visible &&
         previousPresentation[segment].tone === 'transient' &&
@@ -611,6 +724,10 @@
       ) {
         retainTransientDuringEngagement(segment);
       }
+    }
+    if (laneHoverPhase === 'expanding') {
+      const nextMaskedSegments = laneExpansionMaskedSegments.filter((segment) => nextPresentation[segment].tone !== 'engaged');
+      if (nextMaskedSegments.length !== laneExpansionMaskedSegments.length) laneExpansionMaskedSegments = nextMaskedSegments;
     }
     previousPresentation = nextPresentation;
     presentation = nextPresentation;
@@ -621,23 +738,26 @@
   });
 
   $effect(() => {
+    if (laneHoverPhase === 'expanding' && prefersReducedMotion.current) holdLane();
+  });
+
+  $effect(() => {
     const currentLane = lane;
-    const currentBreadcrumb = breadcrumbElement;
+    const currentLeading = leadingElement;
     const currentViewControls = viewControlsElement;
     if (!currentLane || !currentViewControls) return;
     const observer = new ResizeObserver(syncGeometry);
     observer.observe(currentLane);
     observer.observe(currentViewControls);
-    if (currentBreadcrumb) observer.observe(currentBreadcrumb);
+    if (currentLeading) observer.observe(currentLeading);
     syncGeometry();
     return () => observer.disconnect();
   });
 
   $effect(() => {
-    const breadcrumbReady = !breadcrumb || (breadcrumbGeometry?.width ?? 0) > 0;
-    if (initialRevealComplete || !breadcrumbReady || (viewControlsGeometry?.width ?? 0) <= 0) return;
+    if (initialRevealComplete || (leadingGeometry?.width ?? 0) <= 0 || (viewControlsGeometry?.width ?? 0) <= 0) return;
     initialRevealComplete = true;
-    if (breadcrumb) breadcrumbState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+    leadingState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
     viewControlsState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
   });
 
@@ -647,7 +767,7 @@
     laneHoverIntent = currentLaneHoverIntent;
     const handlePointerEnter = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
-      if (breadcrumb) breadcrumbState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+      leadingState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
       if (showViewControlsOnPaneEntry) viewControlsState.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
     };
     target.addEventListener('pointerenter', handlePointerEnter);
@@ -663,12 +783,18 @@
   });
 
   $effect(() => {
+    const nextTopOcclusion = topOcclusion;
+    untrack(() => onTopOcclusionChange?.(nextTopOcclusion));
+  });
+
+  $effect(() => {
     return () => {
+      onTopOcclusionChange?.(0);
       clearHiddenSegmentIntent();
       clearFadingTransientSegments();
       clearTransientSurfaceExit();
       stopLaneInteraction(false);
-      breadcrumbState.destroy();
+      leadingState.destroy();
       viewControlsState.destroy();
     };
   });
@@ -681,7 +807,7 @@
   style:--context-bar-lane-spot-radius={`${laneSpotRadius}px`}
   style:transition={prefersReducedMotion.current
     ? 'none'
-    : `--context-bar-lane-spot-opacity ${laneSpotOpacityTransitionMs}ms ease-out, --context-bar-lane-spot-surface-opacity ${laneSpotSurfaceTransitionMs}ms ease-out, --context-bar-lane-spot-radius ${LANE_SPOT_EXPAND_MS}ms ${LANE_SPOT_EXPANSION_EASING}`}
+    : `--context-bar-lane-spot-opacity ${laneSpotOpacityTransitionMs}ms ease-out, --context-bar-lane-spot-surface-opacity ${laneSpotSurfaceTransitionMs}ms ease-out, --context-bar-lane-spot-radius ${LANE_BACKGROUND_EXPAND_MS}ms ${LANE_SPOT_EXPANSION_EASING}`}
   class={css({
     position: 'absolute',
     top: '0',
@@ -723,38 +849,30 @@
     data-context-bar-lane-surface
     data-context-bar-spot-surface-strength={laneSpotSurfaceStrength}
     data-context-bar-spot-visible={laneSpotVisible}
-    data-context-bar-spot-x={lanePointerX}
-    data-context-bar-spot-y={lanePointerY}
+    data-context-bar-spot-x={laneTransientSpotX}
+    data-context-bar-spot-y={laneTransientSpotY}
   >
     <div style:background={TRANSIENT_EDGE} class={css({ position: 'absolute', right: '0', bottom: '0', left: '0', height: '1px' })}></div>
   </div>
 
-  {#if breadcrumb}
-    <div style:mask-image={segmentRevealMask('breadcrumb', breadcrumbGeometry)} class={css({ minWidth: '0', flex: '[0 1 auto]' })}>
-      <EditorContextBarSegment
-        id="breadcrumb"
-        presentation={presentation.breadcrumb}
-        state={breadcrumbState}
-        bind:element={breadcrumbElement}
-      >
-        {@render breadcrumb({ state: breadcrumbState, presentation: presentation.breadcrumb })}
-      </EditorContextBarSegment>
-    </div>
-  {/if}
+  <div
+    style:background={ACTIVE_SURFACE}
+    style:mask-image={engagedSpotMask()}
+    style:opacity={laneEngagedSpotVisible ? '1' : '0'}
+    style:transition={prefersReducedMotion.current
+      ? 'none'
+      : laneEngagedSpotVisible
+        ? `opacity ${LANE_SPOT_ENTER_MS}ms ease-out ${laneEngagedSpotEnterDelayMs}ms`
+        : `opacity ${CONTEXT_BAR_FADE_OUT_MS}ms ease-out`}
+    class={css({ position: 'absolute', inset: '0', zIndex: '[-1]', pointerEvents: 'none' })}
+    aria-hidden="true"
+    data-context-bar-engaged-spot
+    data-context-bar-spot-visible={laneEngagedSpotVisible}
+    data-context-bar-spot-x={lanePointerX}
+    data-context-bar-spot-y={lanePointerY}
+  ></div>
 
-  <div style:mask-image={segmentRevealMask('viewControls', viewControlsGeometry)} class={css({ flex: 'none', marginLeft: 'auto' })}>
-    <EditorContextBarSegment
-      id="view-controls"
-      interactiveWhenHidden={interactiveViewControlsWhenHidden}
-      presentation={presentation.viewControls}
-      state={viewControlsState}
-      bind:element={viewControlsElement}
-    >
-      {@render viewControls({ state: viewControlsState, presentation: presentation.viewControls })}
-    </EditorContextBarSegment>
-  </div>
-
-  {#each [{ id: 'breadcrumb', side: 'leading', geometry: breadcrumbGeometry, presentation: presentation.breadcrumb }, { id: 'view-controls', side: 'trailing', geometry: viewControlsGeometry, presentation: presentation.viewControls }] as surface (surface.id)}
+  {#each [{ id: 'leading', side: 'leading', geometry: leadingGeometry, presentation: presentation.leading }, { id: 'view-controls', side: 'trailing', geometry: viewControlsGeometry, presentation: presentation.viewControls }] as surface (surface.id)}
     {#if surface.geometry}
       {@const leading = surface.side === 'leading'}
       {@const surfaceVisible = surface.presentation.visible && surface.presentation.tone === 'engaged'}
@@ -778,6 +896,50 @@
       </div>
     {/if}
   {/each}
+
+  <div
+    style:--context-bar-segment-reveal-radius={`${laneForegroundRevealRadius}px`}
+    style:--context-bar-segment-reveal-opacity={laneForegroundRevealStarted ? 1 : 0}
+    style:mask-image={segmentRevealMask('leading', leadingGeometry)}
+    style:transition={prefersReducedMotion.current || !laneExpansionMaskedSegments.includes('leading')
+      ? 'none'
+      : `--context-bar-segment-reveal-radius ${LANE_FOREGROUND_REVEAL_MS}ms ${LANE_SPOT_EXPANSION_EASING}`}
+    class={css({ minWidth: '0', flex: '[0 1 auto]' })}
+  >
+    <EditorContextBarSegment id="leading" presentation={presentation.leading} state={leadingState} bind:element={leadingElement}>
+      <div class={css({ display: 'flex', alignItems: 'center', minWidth: '0', height: '32px', paddingLeft: '16px' })}>
+        <EditorContextBarPinControl onToggle={() => onPinnedChange?.(!pinned)} {pinned} />
+        {#if breadcrumb}
+          <span class={css({ display: 'flex', alignItems: 'center', flex: 'none', marginLeft: '8px' })} data-context-bar-pin-divider>
+            <VerticalDivider style={css.raw({ height: '12px' })} />
+          </span>
+          <div class={css({ minWidth: '0', flex: '[0 1 auto]' })}>
+            {@render breadcrumb({ state: leadingState, presentation: presentation.leading })}
+          </div>
+        {/if}
+      </div>
+    </EditorContextBarSegment>
+  </div>
+
+  <div
+    style:--context-bar-segment-reveal-radius={`${laneForegroundRevealRadius}px`}
+    style:--context-bar-segment-reveal-opacity={laneForegroundRevealStarted ? 1 : 0}
+    style:mask-image={segmentRevealMask('viewControls', viewControlsGeometry)}
+    style:transition={prefersReducedMotion.current || !laneExpansionMaskedSegments.includes('viewControls')
+      ? 'none'
+      : `--context-bar-segment-reveal-radius ${LANE_FOREGROUND_REVEAL_MS}ms ${LANE_SPOT_EXPANSION_EASING}`}
+    class={css({ flex: 'none', marginLeft: 'auto' })}
+  >
+    <EditorContextBarSegment
+      id="view-controls"
+      interactiveWhenHidden={interactiveViewControlsWhenHidden}
+      presentation={presentation.viewControls}
+      state={viewControlsState}
+      bind:element={viewControlsElement}
+    >
+      {@render viewControls({ state: viewControlsState, presentation: presentation.viewControls })}
+    </EditorContextBarSegment>
+  </div>
 </div>
 
 <style>
@@ -794,6 +956,18 @@
   }
 
   @property --context-bar-lane-spot-surface-opacity {
+    syntax: '<number>';
+    inherits: true;
+    initial-value: 0;
+  }
+
+  @property --context-bar-segment-reveal-radius {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 88px;
+  }
+
+  @property --context-bar-segment-reveal-opacity {
     syntax: '<number>';
     inherits: true;
     initial-value: 0;

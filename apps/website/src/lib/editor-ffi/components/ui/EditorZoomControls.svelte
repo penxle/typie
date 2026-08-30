@@ -15,7 +15,7 @@
   import { zoomDiffers } from '$lib/editor-ffi/zoom';
   import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import type { DocumentZoomLandmark } from '$lib/editor-ffi/zoom';
-  import type { EditorContextBarSegmentState } from './editor-context-bar.svelte';
+  import type { TransientVisibilityState } from './transient-visibility.svelte';
 
   export type EditorZoomControlsProps = {
     enabled: boolean;
@@ -27,14 +27,15 @@
     toggleTargetLandmark: DocumentZoomLandmark | null;
     boundaryAttemptRequest?: number;
     boundaryAttemptLandmark?: DocumentZoomLandmark | null;
-    segment: EditorContextBarSegmentState;
+    visibility: TransientVisibilityState;
     visible: boolean;
+    keyboardDiscoverableWhenHidden?: boolean;
     onZoomOut: () => unknown | Promise<unknown>;
     onZoomIn: () => unknown | Promise<unknown>;
     onToggleZoom: () => unknown | Promise<unknown>;
   };
 
-  export type EditorZoomControlsRenderProps = Omit<EditorZoomControlsProps, 'segment' | 'visible'>;
+  export type EditorZoomControlsRenderProps = Omit<EditorZoomControlsProps, 'visibility' | 'visible' | 'keyboardDiscoverableWhenHidden'>;
 
   type ZoomRangeState = 'in-range' | 'below-minimum' | 'above-maximum';
 
@@ -65,8 +66,9 @@
     toggleTargetLandmark,
     boundaryAttemptRequest = 0,
     boundaryAttemptLandmark = null,
-    segment,
+    visibility,
     visible,
+    keyboardDiscoverableWhenHidden = false,
     onZoomOut,
     onZoomIn,
     onToggleZoom,
@@ -84,7 +86,6 @@
   let lastBoundaryAttemptRequest = 0;
   let snapFeedbackRequest = $state(0);
   let snapFeedbackLandmark = $state<DocumentZoomLandmark | null>(null);
-  let wasEnabled = $state(false);
   const prefersReducedMotion = $derived(reducedMotionPreference.current);
 
   const zoomPercent = $derived(Math.round(indicatorZoom * 100));
@@ -136,7 +137,7 @@
   }
 
   function showTemporarily() {
-    segment.showTemporarily(announcedLandmark ? ZOOM_OVERLAY_LANDMARK_VISIBLE_MS : CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+    visibility.showTemporarily(announcedLandmark ? ZOOM_OVERLAY_LANDMARK_VISIBLE_MS : CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
   }
 
   function handleIndicatorPointerDown(event: PointerEvent) {
@@ -179,8 +180,8 @@
   function announceLandmark(next: DocumentZoomLandmark | null, held = false) {
     clearLandmarkTimer();
     announcedLandmark = next;
-    if (next !== null && held) segment.hold('zoom-landmark');
-    else segment.release('zoom-landmark');
+    if (next !== null && held) visibility.hold('zoom-landmark');
+    else visibility.release('zoom-landmark');
     if (!next || held) return;
     landmarkTimer = setTimeout(() => {
       announcedLandmark = null;
@@ -209,13 +210,11 @@
   }
 
   $effect(() => {
-    const entered = enabled && !wasEnabled;
-    wasEnabled = enabled;
     const previousZoom = lastZoom;
     lastZoom = displayZoom;
     const initialObservation = previousZoom === null;
     const zoomChanged = !initialObservation && zoomDiffers(previousZoom, displayZoom);
-    if (enabled && (zoomChanged || entered)) showTemporarily();
+    if (enabled && zoomChanged) showTemporarily();
   });
 
   $effect(() => {
@@ -229,7 +228,7 @@
       lastLandmark = undefined;
       clearLandmarkTimer();
       announcedLandmark = null;
-      segment.release('zoom-landmark');
+      visibility.release('zoom-landmark');
       return;
     }
 
@@ -273,7 +272,7 @@
     return () => {
       clearLandmarkTimer();
       clearTouchClickSuppression();
-      segment.release('zoom-landmark');
+      visibility.release('zoom-landmark');
     };
   });
 </script>
@@ -310,7 +309,7 @@
       aria-label={atMinimum ? '최소 배율입니다' : '페이지 축소'}
       data-at-zoom-boundary={atMinimum}
       onclick={onZoomOut}
-      tabindex={visible ? 0 : -1}
+      tabindex={visible || keyboardDiscoverableWhenHidden ? 0 : -1}
       type="button"
       use:tooltip={{
         message: atMinimum ? '최소 배율입니다' : '페이지 축소',
@@ -340,7 +339,7 @@
       onfocus={handleValueFocus}
       onpointerenter={handleValuePointerEnter}
       onpointerleave={handleValuePointerLeave}
-      tabindex={visible ? 0 : -1}
+      tabindex={visible || keyboardDiscoverableWhenHidden ? 0 : -1}
       type="button"
       use:tooltip={{ message: toggleLabel, keys: toggleKeys, placement: 'bottom' }}
     >
@@ -396,7 +395,7 @@
       aria-label={atMaximum ? '최대 배율입니다' : '페이지 확대'}
       data-at-zoom-boundary={atMaximum}
       onclick={onZoomIn}
-      tabindex={visible ? 0 : -1}
+      tabindex={visible || keyboardDiscoverableWhenHidden ? 0 : -1}
       type="button"
       use:tooltip={{
         message: atMaximum ? '최대 배율입니다' : '페이지 확대',

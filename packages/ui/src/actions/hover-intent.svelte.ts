@@ -98,7 +98,11 @@ export const hoverIntent: Action<HTMLElement, HoverIntentParameter> = (element, 
   };
 
   const handlePointerMove = (event: PointerEvent) => {
-    if (!hovered || intended || event.pointerType === 'touch') return;
+    if (intended || event.pointerType === 'touch') return;
+    if (!hovered) {
+      handlePointerEnter(event);
+      return;
+    }
     pointerEvent = event;
     pointerX = event.clientX;
     pointerY = event.clientY;

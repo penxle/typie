@@ -5,6 +5,45 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import EditorContextBarTestRoot from './editor-context-bar-test-root.svelte';
 import type { DocumentZoomLandmark } from '$lib/editor-ffi/zoom';
 
+const reducedMotionPreference = vi.hoisted(() => {
+  const query = '(prefers-reduced-motion: reduce)';
+  const listeners = new Set<EventListenerOrEventListenerObject>();
+  let matches = false;
+  const mediaQuery = {
+    get matches() {
+      return matches;
+    },
+    media: query,
+    onchange: null,
+    addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => listeners.delete(listener),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: () => true,
+  } satisfies MediaQueryList;
+
+  vi.stubGlobal('matchMedia', (candidate: string) =>
+    candidate === query
+      ? mediaQuery
+      : ({
+          ...mediaQuery,
+          matches: false,
+          media: candidate,
+        } satisfies MediaQueryList),
+  );
+
+  return {
+    set(next: boolean) {
+      matches = next;
+      const event = new Event('change');
+      for (const listener of listeners) {
+        if (typeof listener === 'function') listener(event);
+        else listener.handleEvent(event);
+      }
+    },
+  };
+});
+
 type TestProps = {
   enabled: boolean;
   displayZoom: number;
@@ -21,7 +60,13 @@ type TestProps = {
 const TRANSIENT_VISIBLE_MS = 1500;
 const HOVER_INTENT_SETTLE_MS = 100;
 const LANE_SPOT_DWELL_MS = 500;
-const LANE_SPOT_EXPAND_MS = 1000;
+const LANE_BACKGROUND_EXPAND_MS = 900;
+const LANE_EXPANSION_TOTAL_MS = 1000;
+const LANE_ENGAGED_SPOT_ENTER_DELAY_MS = 500;
+const LANE_ENGAGED_SPOT_STRENGTH = 0.85;
+const LANE_FOREGROUND_REVEAL_DELAY_MS = 100;
+const LANE_FOREGROUND_REVEAL_MS = 900;
+const LANE_SPOT_RADIUS = 88;
 const SURFACE_FADE_IN_MS = 180;
 const SURFACE_FADE_OUT_MS = 400;
 let mounted: Record<string, unknown> | undefined;
@@ -38,13 +83,14 @@ async function mountContextBar(
     viewControlsWidth: number;
     viewControlsPaneEntry: boolean;
     withinPane: boolean;
+    useAppPinned: boolean;
   }> = {},
 ) {
   mounted = mount(EditorContextBarTestRoot, { target: document.body, props: { mode: 'context-bar', ...props } });
   await tick();
   const surface = document.querySelector<HTMLElement>('[data-testid="context-bar-underlay"]')?.parentElement;
   const pane = document.querySelector<HTMLElement>('[data-pane-id="zoom-overlay-test-pane"]');
-  const breadcrumb = document.querySelector<HTMLElement>('[data-context-bar-segment="breadcrumb"]');
+  const breadcrumb = document.querySelector<HTMLElement>('[data-context-bar-segment="leading"]');
   const viewControls = document.querySelector<HTMLElement>('[data-context-bar-segment="view-controls"]');
   const bar = document.querySelector<HTMLElement>('[data-editor-context-bar]');
   const breadcrumbViewport = document.querySelector<HTMLElement>('[data-editor-breadcrumb-viewport]');
@@ -88,16 +134,59 @@ async function mountOverlay(
   return { overlay, paneContainer: paneContainer ?? editorViewSurface, scrollContainer, editorViewSurface, toolbar, host: mounted };
 }
 
+async function mountFloatingOverlay({
+  displayZoom = 1,
+  indicatorZoom = displayZoom,
+  landmark = null,
+}: Partial<Pick<TestProps, 'displayZoom' | 'indicatorZoom' | 'landmark'>> = {}) {
+  mounted = mount(EditorContextBarTestRoot, {
+    target: document.body,
+    props: {
+      mode: 'floating-zoom',
+      initialEnabled: true,
+      initialZoom: displayZoom,
+      initialIndicatorZoom: indicatorZoom,
+      initialLandmark: landmark,
+    },
+  });
+  await tick();
+  return {
+    anchor: document.querySelector<HTMLElement>('[data-floating-editor-zoom-anchor]'),
+    overlay: document.querySelector<HTMLElement>('[data-floating-editor-zoom-controls]'),
+    contextBar: document.querySelector<HTMLElement>('[data-editor-context-bar]'),
+    host: mounted,
+  };
+}
+
 async function expireTransientVisibility() {
   await vi.advanceTimersByTimeAsync(TRANSIENT_VISIBLE_MS);
   await tick();
 }
 
+async function startHiddenLaneGapHover(props: { useAppPinned?: boolean } = {}) {
+  const contextBar = await mountContextBar({ surfaceWidth: 640, ...props });
+  const { pane, breadcrumb, viewControls, bar } = contextBar;
+  if (!pane) throw new Error('Missing pane fixture');
+  enter(pane);
+  await expireTransientVisibility();
+
+  const breadcrumbRect = breadcrumb.getBoundingClientRect();
+  const viewControlsRect = viewControls.getBoundingClientRect();
+  const barRect = bar.getBoundingClientRect();
+  const gapX = (breadcrumbRect.right + viewControlsRect.left) / 2;
+  const gapY = barRect.top + barRect.height / 2;
+  move(pane, gapX, gapY);
+  return { ...contextBar, pane, breadcrumbRect, viewControlsRect, barRect, gapX, gapY };
+}
+
 afterEach(async () => {
   if (mounted) await unmount(mounted);
   mounted = undefined;
+  reducedMotionPreference.set(false);
   vi.useRealTimers();
   vi.restoreAllMocks();
+  localStorage.clear();
+  document.body.style.removeProperty('--usersite-sticky-header-bottom');
   document.body.replaceChildren();
 });
 
@@ -116,9 +205,12 @@ describe('editor context bar', () => {
 
   it('keeps the transient surface mask while the context bar fades out', async () => {
     vi.useFakeTimers();
-    const { breadcrumb, viewControls } = await mountContextBar({ viewControlsPaneEntry: false });
+    const { breadcrumb, viewControls, bar } = await mountContextBar({ viewControlsPaneEntry: false });
     const surface = document.querySelector<HTMLElement>('[data-context-bar-lane-surface]');
     const blur = document.querySelector<HTMLElement>('[data-context-bar-blur-layer]');
+    const fixture = document.querySelector<HTMLElement>('[data-context-bar-top-occlusion]');
+
+    expect(fixture?.dataset.contextBarTopOcclusion).toBe(`${bar.getBoundingClientRect().height}`);
 
     await expireTransientVisibility();
 
@@ -127,10 +219,12 @@ describe('editor context bar', () => {
     expect(surface?.style.opacity).toBe('0');
     expect(surface?.style.maskImage).toContain('linear-gradient(black, black)');
     expect(blur?.style.maskImage).toContain('linear-gradient(black, black)');
+    expect(fixture?.dataset.contextBarTopOcclusion).toBe(`${bar.getBoundingClientRect().height}`);
 
     await vi.advanceTimersByTimeAsync(SURFACE_FADE_OUT_MS);
     expect(surface?.style.maskImage).not.toContain('linear-gradient(black, black)');
     expect(blur?.style.maskImage).not.toContain('linear-gradient(black, black)');
+    expect(fixture?.dataset.contextBarTopOcclusion).toBe('0');
   });
 
   it('preserves view controls and lets a long breadcrumb consume only the remaining width', async () => {
@@ -204,7 +298,7 @@ describe('editor context bar', () => {
     const laneSurface = document.querySelector<HTMLElement>('[data-context-bar-lane-surface]');
     const blurLayer = document.querySelector<HTMLElement>('[data-context-bar-blur-layer]');
     expect(laneSurface?.dataset.contextBarFullLane).toBe('true');
-    expect(document.querySelector<HTMLElement>('[data-context-bar-surface="breadcrumb"]')?.style.opacity).toBe('0');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-surface="leading"]')?.style.opacity).toBe('0');
     expect(document.querySelector<HTMLElement>('[data-context-bar-surface="view-controls"]')?.style.opacity).toBe('0');
 
     enter(viewControls);
@@ -260,13 +354,13 @@ describe('editor context bar', () => {
     await vi.advanceTimersByTimeAsync(LANE_SPOT_DWELL_MS);
     expect(bar.dataset.contextBarLanePhase).toBe('expanding');
     expect(spot?.dataset.contextBarSpotSurfaceStrength).toBe('1');
-    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('3');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('2');
     expect(breadcrumb.style.opacity).toBe('1');
     expect(viewControls.style.opacity).toBe('1');
     expect(breadcrumb.parentElement?.style.maskImage).toContain('radial-gradient');
     expect(viewControls.parentElement?.style.maskImage).toContain('radial-gradient');
 
-    await vi.advanceTimersByTimeAsync(LANE_SPOT_EXPAND_MS);
+    await vi.advanceTimersByTimeAsync(LANE_EXPANSION_TOTAL_MS);
     expect(bar.dataset.contextBarLanePhase).toBe('held');
     expect(breadcrumb.style.opacity).toBe('1');
     expect(viewControls.style.opacity).toBe('1');
@@ -287,6 +381,202 @@ describe('editor context bar', () => {
     expect(viewControls.style.opacity).toBe('0');
   });
 
+  it('finishes a 900ms background wave as the 100ms-delayed foreground reaches the shared 1000ms endpoint', async () => {
+    vi.useFakeTimers();
+    const { breadcrumb, viewControls, bar } = await startHiddenLaneGapHover();
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS);
+
+    const breadcrumbReveal = breadcrumb.parentElement as HTMLElement;
+    const viewControlsReveal = viewControls.parentElement as HTMLElement;
+    const revealRadius = '--context-bar-segment-reveal-radius';
+    const revealOpacity = '--context-bar-segment-reveal-opacity';
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(bar.style.transition).toContain(`${LANE_BACKGROUND_EXPAND_MS}ms`);
+    expect(breadcrumbReveal.style.transition).toContain(`${LANE_FOREGROUND_REVEAL_MS}ms`);
+    expect(viewControlsReveal.style.transition).toContain(`${LANE_FOREGROUND_REVEAL_MS}ms`);
+    expect(breadcrumbReveal.style.getPropertyValue(revealRadius)).toBe(`${LANE_SPOT_RADIUS}px`);
+    expect(viewControlsReveal.style.getPropertyValue(revealRadius)).toBe(`${LANE_SPOT_RADIUS}px`);
+    expect(breadcrumbReveal.style.getPropertyValue(revealOpacity)).toBe('0');
+    expect(viewControlsReveal.style.getPropertyValue(revealOpacity)).toBe('0');
+
+    await vi.advanceTimersByTimeAsync(LANE_FOREGROUND_REVEAL_DELAY_MS - 1);
+    expect(breadcrumbReveal.style.getPropertyValue(revealRadius)).toBe(`${LANE_SPOT_RADIUS}px`);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(breadcrumbReveal.style.getPropertyValue(revealRadius)).not.toBe(`${LANE_SPOT_RADIUS}px`);
+    expect(viewControlsReveal.style.getPropertyValue(revealRadius)).not.toBe(`${LANE_SPOT_RADIUS}px`);
+    expect(breadcrumbReveal.style.getPropertyValue(revealOpacity)).toBe('1');
+    expect(viewControlsReveal.style.getPropertyValue(revealOpacity)).toBe('1');
+
+    await vi.advanceTimersByTimeAsync(LANE_BACKGROUND_EXPAND_MS - LANE_FOREGROUND_REVEAL_DELAY_MS);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(breadcrumbReveal.style.maskImage).toContain('radial-gradient');
+
+    await vi.advanceTimersByTimeAsync(LANE_EXPANSION_TOTAL_MS - LANE_BACKGROUND_EXPAND_MS - 1);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(breadcrumbReveal.style.maskImage).toContain('radial-gradient');
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(breadcrumbReveal.style.maskImage).toBe('none');
+    expect(viewControlsReveal.style.maskImage).toBe('none');
+  });
+
+  it('latches the transient wave while the engaged spot follows the pointer across segments and survives expansion', async () => {
+    vi.useFakeTimers();
+    const { pane, breadcrumb, bar, breadcrumbRect, viewControlsRect, barRect, gapX, gapY } = await startHiddenLaneGapHover();
+    const origin = {
+      x: gapX - barRect.left,
+      y: gapY - barRect.top,
+    };
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS);
+
+    const transientSurface = document.querySelector<HTMLElement>('[data-context-bar-lane-surface]');
+    const engagedSpot = document.querySelector<HTMLElement>('[data-context-bar-engaged-spot]');
+    const blur = document.querySelector<HTMLElement>('[data-context-bar-blur-layer]');
+    if (!transientSurface || !engagedSpot || !blur) throw new Error('Missing context bar surface layers');
+    expect(bar.dataset.contextBarLanePhase).toBe('spot');
+    expect(bar.style.transition).toContain(`--context-bar-lane-spot-opacity 500ms ease-out`);
+    expect(engagedSpot.style.transition).toContain(`opacity 500ms ease-out ${LANE_ENGAGED_SPOT_ENTER_DELAY_MS}ms`);
+    expect(engagedSpot.style.maskImage).toContain(`rgba(0, 0, 0, ${LANE_ENGAGED_SPOT_STRENGTH}) 0px`);
+    expect(engagedSpot.dataset.contextBarSpotVisible).toBe('true');
+    expect(engagedSpot.style.backdropFilter).toBe('');
+    expect(transientSurface.style.maskImage).toContain(`circle at ${origin.x}px ${origin.y}px`);
+    expect(blur.nextElementSibling).toBe(transientSurface);
+    expect(transientSurface.nextElementSibling).toBe(engagedSpot);
+    const layers = [...bar.children];
+    expect(layers.indexOf(engagedSpot)).toBeLessThan(layers.indexOf(breadcrumb.parentElement as HTMLElement));
+
+    await vi.advanceTimersByTimeAsync(LANE_SPOT_DWELL_MS);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+
+    const viewControlsPoint = {
+      x: viewControlsRect.left + viewControlsRect.width / 2,
+      y: viewControlsRect.top + viewControlsRect.height / 2,
+    };
+    move(pane, viewControlsPoint.x, viewControlsPoint.y);
+    await tick();
+
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(transientSurface?.style.maskImage).toContain(`circle at ${origin.x}px ${origin.y}px`);
+    expect(engagedSpot?.dataset.contextBarSpotX).toBe(String(viewControlsPoint.x - barRect.left));
+    expect(engagedSpot?.dataset.contextBarSpotY).toBe(String(viewControlsPoint.y - barRect.top));
+
+    await vi.advanceTimersByTimeAsync(LANE_EXPANSION_TOTAL_MS);
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(engagedSpot?.dataset.contextBarSpotVisible).toBe('true');
+
+    const breadcrumbPoint = {
+      x: breadcrumbRect.left + breadcrumbRect.width / 2,
+      y: breadcrumbRect.top + breadcrumbRect.height / 2,
+    };
+    move(pane, breadcrumbPoint.x, breadcrumbPoint.y);
+    await tick();
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(engagedSpot?.dataset.contextBarSpotX).toBe(String(breadcrumbPoint.x - barRect.left));
+
+    move(pane, breadcrumbPoint.x, barRect.bottom + 20);
+    await tick();
+    expect(engagedSpot?.dataset.contextBarSpotVisible).toBe('false');
+    expect(engagedSpot?.style.transition).toContain(`${SURFACE_FADE_OUT_MS}ms`);
+  });
+
+  it('removes only the expansion masks whose segments become focused or pointer-engaged', async () => {
+    vi.useFakeTimers();
+    const { breadcrumb, viewControls, bar } = await startHiddenLaneGapHover();
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS);
+
+    const breadcrumbReveal = breadcrumb.parentElement as HTMLElement;
+    const viewControlsReveal = viewControls.parentElement as HTMLElement;
+    expect(breadcrumbReveal.style.maskImage).toContain('radial-gradient');
+    expect(viewControlsReveal.style.maskImage).toContain('radial-gradient');
+
+    document.querySelector<HTMLButtonElement>('[data-testid="show-breadcrumb"]')?.focus();
+    await tick();
+    expect(breadcrumb.dataset.contextBarTone).toBe('engaged');
+    expect(breadcrumbReveal.style.maskImage).toBe('none');
+    expect(viewControlsReveal.style.maskImage).toContain('radial-gradient');
+
+    enter(viewControls);
+    await tick();
+    expect(viewControls.dataset.contextBarTone).toBe('engaged');
+    expect(viewControlsReveal.style.maskImage).toBe('none');
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+  });
+
+  it('keeps the engaged spot absent for pointerless transient reveals', async () => {
+    vi.useFakeTimers();
+    const { breadcrumb } = await mountContextBar({ surfaceWidth: 640 });
+    const engagedSpot = document.querySelector<HTMLElement>('[data-context-bar-engaged-spot]');
+
+    expect(breadcrumb.style.opacity).toBe('1');
+    expect(engagedSpot).not.toBeNull();
+    expect(engagedSpot?.dataset.contextBarSpotVisible).toBe('false');
+
+    await expireTransientVisibility();
+    document.querySelector<HTMLButtonElement>('[data-testid="show-breadcrumb"]')?.click();
+    await tick();
+    expect(breadcrumb.style.opacity).toBe('1');
+    expect(engagedSpot?.dataset.contextBarSpotVisible).toBe('false');
+  });
+
+  it('clears a staggered reveal when expansion is interrupted and restarts from the next pointer origin', async () => {
+    vi.useFakeTimers();
+    const { pane, breadcrumb, viewControls, bar, barRect, gapX: firstX, gapY } = await startHiddenLaneGapHover();
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS + LANE_FOREGROUND_REVEAL_DELAY_MS / 2);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+
+    move(pane, firstX, barRect.bottom + 20);
+    await tick();
+    expect(bar.dataset.contextBarLanePhase).toBe('idle');
+    expect(breadcrumb.parentElement?.style.maskImage).toBe('none');
+    expect(viewControls.parentElement?.style.maskImage).toBe('none');
+
+    const secondX = firstX + 48;
+    move(pane, secondX, gapY);
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-lane-surface]')?.style.maskImage).toContain(
+      `circle at ${secondX - barRect.left}px`,
+    );
+    expect(breadcrumb.parentElement?.style.getPropertyValue('--context-bar-segment-reveal-radius')).toBe(`${LANE_SPOT_RADIUS}px`);
+  });
+
+  it('skips the expansion waves under initial reduced motion while retaining the static engaged spot', async () => {
+    vi.useFakeTimers();
+    reducedMotionPreference.set(true);
+    const { breadcrumb, viewControls, bar } = await startHiddenLaneGapHover();
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS);
+
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(bar.style.transition).toBe('none');
+    expect(breadcrumb.parentElement?.style.maskImage).toBe('none');
+    expect(viewControls.parentElement?.style.maskImage).toBe('none');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-engaged-spot]')?.dataset.contextBarSpotVisible).toBe('true');
+  });
+
+  it('finishes an active expansion immediately when reduced motion turns on and does not replay when it turns off', async () => {
+    vi.useFakeTimers();
+    const { breadcrumb, viewControls, bar } = await startHiddenLaneGapHover();
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS + LANE_FOREGROUND_REVEAL_DELAY_MS / 2);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+    expect(breadcrumb.parentElement?.style.maskImage).toContain('radial-gradient');
+
+    reducedMotionPreference.set(true);
+    await tick();
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(breadcrumb.parentElement?.style.maskImage).toBe('none');
+    expect(viewControls.parentElement?.style.maskImage).toBe('none');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-engaged-spot]')?.dataset.contextBarSpotVisible).toBe('true');
+
+    reducedMotionPreference.set(false);
+    await tick();
+    await vi.advanceTimersByTimeAsync(LANE_EXPANSION_TOTAL_MS * 2);
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(breadcrumb.parentElement?.style.maskImage).toBe('none');
+    expect(viewControls.parentElement?.style.maskImage).toBe('none');
+  });
+
   it('shows the lane spot immediately when one segment is already visible', async () => {
     vi.useFakeTimers();
     const { pane, breadcrumb, viewControls, bar } = await mountContextBar({ surfaceWidth: 640 });
@@ -303,7 +593,7 @@ describe('editor context bar', () => {
 
     expect(bar.dataset.contextBarLanePhase).toBe('spot');
     expect(document.querySelector<HTMLElement>('[data-context-bar-lane-spot]')?.dataset.contextBarSpotVisible).toBe('true');
-    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('3');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('2');
     const activeBlurLayers = [...document.querySelectorAll<HTMLElement>('[data-context-bar-blur-layer]')].filter(
       (element) => element.style.opacity !== '0' && element.style.backdropFilter !== 'blur(0px)',
     );
@@ -345,7 +635,7 @@ describe('editor context bar', () => {
     const transientSurface = document.querySelector<HTMLElement>('[data-context-bar-lane-spot]');
     expect(bar.dataset.contextBarLanePhase).toBe('preview');
     expect(blur?.style.maskComposite).toBe('add');
-    expect(blur?.dataset.contextBarBlurRadius).toBe('3');
+    expect(blur?.dataset.contextBarBlurRadius).toBe('2');
     expect(transientSurface?.style.maskComposite).toBe('add');
     expect(blur?.style.maskImage).not.toBe(transientSurface?.style.maskImage);
     expect(viewControls.style.opacity).toBe('0');
@@ -353,7 +643,7 @@ describe('editor context bar', () => {
     await vi.advanceTimersByTimeAsync(SURFACE_FADE_IN_MS);
     expect(transientSurface?.style.maskComposite).toBe('intersect');
 
-    await vi.advanceTimersByTimeAsync(LANE_SPOT_DWELL_MS + LANE_SPOT_EXPAND_MS);
+    await vi.advanceTimersByTimeAsync(LANE_SPOT_DWELL_MS + LANE_EXPANSION_TOTAL_MS);
     expect(bar.dataset.contextBarLanePhase).toBe('preview');
     expect(viewControls.style.opacity).toBe('0');
 
@@ -380,7 +670,7 @@ describe('editor context bar', () => {
     await tick();
 
     expect(breadcrumb.dataset.contextBarTone).toBe('engaged');
-    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('3');
+    expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('2');
 
     await vi.advanceTimersByTimeAsync(SURFACE_FADE_IN_MS);
     expect(document.querySelector<HTMLElement>('[data-context-bar-blur-layer]')?.dataset.contextBarBlurRadius).toBe('0');
@@ -459,19 +749,167 @@ describe('editor context bar', () => {
     expect(breadcrumbViewport.scrollLeft).toBe(0);
   });
 
-  it('derives only the trailing scroll fog from the native scroll position using the smootherstep curve', async () => {
+  it('derives both scroll fogs from native position without masking the fixed pin and divider', async () => {
     const { breadcrumbViewport } = await mountContextBar({ surfaceWidth: 320, breadcrumbWidth: 600 });
     await vi.waitFor(() => expect(breadcrumbViewport.scrollLeft).toBeGreaterThan(0));
+    const pin = document.querySelector<HTMLElement>('[data-context-bar-pin]');
+    const divider = document.querySelector<HTMLElement>('[data-context-bar-pin-divider]');
 
-    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBeUndefined();
-    expect(breadcrumbViewport.style.getPropertyValue('--breadcrumb-leading-fog')).toBe('');
+    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('true');
+    expect(breadcrumbViewport.style.getPropertyValue('--breadcrumb-leading-fog')).toBe('1');
     expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('false');
     expect(breadcrumbViewport.dataset.breadcrumbFogCurve).toBe('smootherstep');
+    expect(breadcrumbViewport.contains(pin)).toBe(false);
+    expect(breadcrumbViewport.contains(divider)).toBe(false);
 
     breadcrumbViewport.scrollLeft = 0;
     breadcrumbViewport.dispatchEvent(new Event('scroll'));
     await tick();
+    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('false');
     expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('true');
+
+    breadcrumbViewport.scrollLeft = 40;
+    breadcrumbViewport.dispatchEvent(new Event('scroll'));
+    await tick();
+    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('true');
+    expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('true');
+
+    reducedMotionPreference.set(true);
+    breadcrumbViewport.scrollLeft = 0;
+    breadcrumbViewport.dispatchEvent(new Event('scroll'));
+    await tick();
+    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('false');
+    expect(breadcrumbViewport.style.transition).toBe('none');
+  });
+});
+
+describe('public viewer floating zoom controls', () => {
+  it('stays hidden on initial enable and reveals only after zoom activity', async () => {
+    vi.useFakeTimers();
+    const { overlay, contextBar, host } = await mountFloatingOverlay({ displayZoom: 1, landmark: 'unit' });
+
+    expect(contextBar).toBeNull();
+    expect(overlay).not.toBeNull();
+    expect(overlay?.style.opacity).toBe('0');
+
+    (
+      host as typeof mounted & { setZoom: (displayZoom: number, indicatorZoom: number, landmark: DocumentZoomLandmark | null) => void }
+    ).setZoom(1.1, 1.1, null);
+    await tick();
+
+    expect(overlay?.style.opacity).toBe('1');
+    await vi.advanceTimersByTimeAsync(TRANSIENT_VISIBLE_MS);
+    expect(overlay?.style.opacity).toBe('0');
+  });
+
+  it('uses a fixed viewport anchor and never exposes a hidden pointer hit area', async () => {
+    document.body.style.setProperty('--usersite-sticky-header-bottom', '52px');
+    const { anchor, overlay } = await mountFloatingOverlay();
+
+    expect(anchor).not.toBeNull();
+    expect(getComputedStyle(anchor as HTMLElement).position).toBe('fixed');
+    expect(getComputedStyle(anchor as HTMLElement).top).toBe('52px');
+    expect(overlay?.style.pointerEvents).toBe('none');
+  });
+
+  it('remains keyboard discoverable and reveals before a hidden control receives interaction', async () => {
+    const { overlay } = await mountFloatingOverlay();
+    const zoomOut = overlay?.querySelector<HTMLButtonElement>('button');
+
+    expect(zoomOut?.tabIndex).toBe(0);
+    zoomOut?.focus();
+    await tick();
+
+    expect(overlay?.style.opacity).toBe('1');
+    expect(overlay?.style.pointerEvents).toBe('auto');
+  });
+});
+
+describe('context bar pin', () => {
+  it('shows the pointer engaged spot without a reveal delay while pinned', async () => {
+    const { pane, breadcrumb, viewControls, bar } = await mountContextBar({ surfaceWidth: 640, useAppPinned: true });
+    if (!pane) throw new Error('Missing pane fixture');
+    const breadcrumbRect = breadcrumb.getBoundingClientRect();
+    const viewControlsRect = viewControls.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+
+    move(pane, (breadcrumbRect.right + viewControlsRect.left) / 2, barRect.top + barRect.height / 2);
+    await tick();
+
+    const engagedSpot = document.querySelector<HTMLElement>('[data-context-bar-engaged-spot]');
+    expect(bar.dataset.contextBarUnified).toBe('true');
+    expect(bar.dataset.contextBarLanePhase).toBe('held');
+    expect(engagedSpot?.dataset.contextBarSpotVisible).toBe('true');
+    expect(engagedSpot?.style.transition).toBe('opacity 500ms ease-out');
+  });
+
+  it('defaults to pinned and restores an explicitly persisted unpinned preference', async () => {
+    mounted = mount(EditorContextBarTestRoot, {
+      target: document.body,
+      props: { mode: 'context-bar', preferenceUserId: 'pin-default', useAppPinned: true },
+    });
+    await tick();
+
+    expect(document.querySelector<HTMLButtonElement>('[data-context-bar-pin]')?.getAttribute('aria-pressed')).toBe('true');
+
+    await unmount(mounted);
+    mounted = undefined;
+    document.body.replaceChildren();
+    localStorage.setItem('typie:pref:pin-persisted', JSON.stringify({ contextBarPinned: false }));
+    mounted = mount(EditorContextBarTestRoot, {
+      target: document.body,
+      props: { mode: 'context-bar', preferenceUserId: 'pin-persisted', useAppPinned: true },
+    });
+    await tick();
+
+    expect(document.querySelector<HTMLButtonElement>('[data-context-bar-pin]')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('updates every pane through one app preference', async () => {
+    mounted = mount(EditorContextBarTestRoot, {
+      target: document.body,
+      props: { mode: 'context-bar', preferenceUserId: 'pin-shared', twoPanes: true, useAppPinned: true },
+    });
+    await tick();
+    const pins = () => [...document.querySelectorAll<HTMLButtonElement>('[data-context-bar-pin]')];
+
+    expect(pins()).toHaveLength(2);
+    pins()[0]?.click();
+    await tick();
+
+    expect(pins().map((pin) => pin.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+  });
+
+  it('keeps the hidden pin keyboard reachable without exposing a pointer hit area', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('typie:pref:editor-context-bar-test', JSON.stringify({ contextBarPinned: false }));
+    const { breadcrumb } = await mountContextBar({ useAppPinned: true });
+    const pin = document.querySelector<HTMLButtonElement>('[data-context-bar-pin]');
+
+    await expireTransientVisibility();
+    expect(breadcrumb.style.opacity).toBe('0');
+    expect(breadcrumb.style.pointerEvents).toBe('none');
+    expect(pin?.tabIndex).toBe(0);
+
+    pin?.focus();
+    await tick();
+    expect(breadcrumb.style.opacity).toBe('1');
+  });
+
+  it('settles an active lane expansion immediately when pinned', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('typie:pref:editor-context-bar-test', JSON.stringify({ contextBarPinned: false }));
+    const { pane, bar, gapX, gapY } = await startHiddenLaneGapHover({ useAppPinned: true });
+
+    move(pane, gapX, gapY);
+    await vi.advanceTimersByTimeAsync(HOVER_INTENT_SETTLE_MS + LANE_SPOT_DWELL_MS);
+    expect(bar.dataset.contextBarLanePhase).toBe('expanding');
+
+    (mounted as typeof mounted & { setPinned: (pinned: boolean) => void }).setPinned(true);
+    await tick();
+
+    expect(bar.dataset.contextBarLanePhase).toBe('idle');
+    expect(bar.dataset.contextBarUnified).toBe('true');
   });
 });
 

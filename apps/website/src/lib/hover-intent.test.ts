@@ -210,4 +210,23 @@ describe('hoverIntent', () => {
 
     action?.destroy?.();
   });
+
+  it('recovers a hover session from pointer movement after attaching inside the target', async () => {
+    const onEnter = vi.fn();
+    const onIntent = vi.fn();
+    const action = hoverIntent(element, { delay: 400, intentEnabled: false, samples: 1, onEnter, onIntent });
+
+    pointer(element, 'pointermove', 10, 10);
+    expect(onEnter).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(400);
+    expect(onIntent).not.toHaveBeenCalled();
+
+    action?.update?.({ delay: 400, intentEnabled: true, samples: 1, onEnter, onIntent });
+    await vi.advanceTimersByTimeAsync(99);
+    expect(onIntent).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(onIntent).toHaveBeenCalledOnce();
+
+    action?.destroy?.();
+  });
 });

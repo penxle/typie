@@ -229,7 +229,7 @@
           <EditorContextBar {editorViewSurface} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
             {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
               <div style="display: flex; align-items: center" aria-label="보기 제어" role="group">
-                <EditorZoomControls {...controls} segment={state} visible={presentation.visible} />
+                <EditorZoomControls {...controls} visibility={state} visible={presentation.visible} />
               </div>
             {/snippet}
           </EditorContextBar>

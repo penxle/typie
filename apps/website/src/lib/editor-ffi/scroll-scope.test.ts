@@ -160,6 +160,22 @@ describe('EditorScrollScope', () => {
     targetBottom: 520,
   };
 
+  it('updates top and bottom occlusions independently', () => {
+    const { scope } = setup(
+      trackedSnapshot('unused', {
+        page_idx: 0,
+        rect: { x: 0, y: 0, width: 1, height: 20 },
+      }),
+    );
+
+    scope.setBottomInset(40);
+    scope.setTopInset(32);
+    expect(scope.visibleArea).toEqual({ topInset: 32, bottomInset: 40 });
+
+    scope.setTopInset(0);
+    expect(scope.visibleArea).toEqual({ topInset: 0, bottomInset: 40 });
+  });
+
   it('lets external content extend the bottom padding without changing the visible area', () => {
     const snapshot = trackedSnapshot('unused', {
       page_idx: 0,

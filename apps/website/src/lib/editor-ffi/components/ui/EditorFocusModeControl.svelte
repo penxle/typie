@@ -5,11 +5,11 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Minimize2Icon from '~icons/lucide/minimize-2';
   import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
-  import type { EditorContextBarSegmentState } from './editor-context-bar.svelte';
+  import type { TransientVisibilityState } from './transient-visibility.svelte';
 
   type Props = {
     enabled: boolean;
-    segment: EditorContextBarSegmentState;
+    segment: TransientVisibilityState;
     visible: boolean;
     onToggle: () => unknown;
   };
