@@ -11,11 +11,9 @@
   import mixpanel from 'mixpanel-browser';
   import { onDestroy, tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import FolderIcon from '~icons/lucide/folder';
   import InfoIcon from '~icons/lucide/info';
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import LockIcon from '~icons/lucide/lock';
@@ -46,6 +44,7 @@
   import { dragPane } from '../@pane/dnd';
   import { getEditorRegistry } from '../@pane/editor-registry.svelte';
   import TabIcon from '../@pane/TabIcon.svelte';
+  import EditorBreadcrumbNavigation from './@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
@@ -67,6 +66,7 @@
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { EditorContextBarSegmentRenderProps } from '$lib/editor-ffi/components/ui/EditorContextBar.svelte';
   import type { DocumentEditorV2_query$key } from '$mearie';
+  import type { EditorBreadcrumbPathEntity } from './@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import type { RemoteChangesetEvent } from './sync/remote-changeset-pipeline';
 
   type Props = {
@@ -112,6 +112,10 @@
           icon
           iconColor
           ...EntityIcon_entity
+
+          site {
+            id
+          }
 
           ancestors {
             id
@@ -289,6 +293,15 @@
   const documentId = $derived(document?.id ?? null);
   const breadcrumbPathIdentity = $derived(entity ? [...entity.ancestors.map((ancestor) => ancestor.id), entity.id].join('/') : '');
   const breadcrumbViewportId = `editor-breadcrumb-${pane.id}`;
+  const breadcrumbAncestors = $derived.by(() => {
+    const path: EditorBreadcrumbPathEntity[] = [];
+    for (const ancestor of entity?.ancestors ?? []) {
+      if (ancestor.node.__typename === 'Folder') {
+        path.push({ id: ancestor.id, name: ancestor.node.name, entity$key: ancestor });
+      }
+    }
+    return path;
+  });
   const isOwner = $derived(query.data.me.id === entity?.user.id || query.data.me.role === 'ADMIN');
 
   let editorAreaWidth = $state(0);
@@ -1302,37 +1315,19 @@
                                 pathIdentity={breadcrumbPathIdentity}
                                 viewportId={breadcrumbViewportId}
                               >
-                                <nav
-                                  class={css({
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    height: '32px',
-                                    paddingLeft: '24px',
-                                    paddingRight: '16px',
-                                    fontSize: '12px',
-                                    fontWeight: 'medium',
-                                    color: 'text.subtle',
-                                  })}
-                                  aria-label="문서 경로"
-                                >
-                                  <ol class={flex({ alignItems: 'center', gap: '2px', listStyle: 'none', whiteSpace: 'nowrap' })}>
-                                    {#each entity.ancestors as ancestor (ancestor.id)}
-                                      {#if ancestor.node.__typename === 'Folder'}
-                                        <li class={flex({ alignItems: 'center', gap: '4px' })}>
-                                          <EntityIcon entity$key={ancestor} fallback={FolderIcon} size={14} />
-                                          <span>{ancestor.node.name}</span>
-                                        </li>
-                                        <li class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
-                                          <Icon icon={ChevronRightIcon} size={14} />
-                                        </li>
-                                      {/if}
-                                    {/each}
-                                    <li class={flex({ alignItems: 'center', gap: '4px' })} aria-current="page">
-                                      <EntityIcon entity$key={entity} size={14} />
-                                      <span>{localTitle || '(제목 없음)'}</span>
-                                    </li>
-                                  </ol>
-                                </nav>
+                                {#key breadcrumbPathIdentity}
+                                  <EditorBreadcrumbNavigation
+                                    ancestors={breadcrumbAncestors}
+                                    current={{ id: entity.id, slug: entity.slug, name: localTitle || '(제목 없음)', entity$key: entity }}
+                                    {isOwner}
+                                    onNavigate={(slug) => {
+                                      paneGroup.replacePane(pane.id, { kind: 'entity', slug });
+                                    }}
+                                    popupId={`${breadcrumbViewportId}-tree`}
+                                    segment={state}
+                                    siteId={entity.site.id}
+                                  />
+                                {/key}
                               </EditorBreadcrumb>
                             {/snippet}
                             {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
