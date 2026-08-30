@@ -49,7 +49,6 @@
       alignItems: 'center',
       justifyContent: 'center',
       textAlign: 'center',
-      outlineOffset: '0',
       transition: 'colors',
       transitionProperty: '[unset]',
       userSelect: 'none',

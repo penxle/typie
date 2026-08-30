@@ -212,6 +212,7 @@
         fontSize: '13px',
         fontWeight: 'medium',
         textAlign: 'left',
+        outlineWidth: '0',
         color: 'text.subtle',
         transition: 'common',
         cursor: 'pointer',

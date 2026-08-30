@@ -303,7 +303,6 @@
         cursor: 'pointer',
         borderRadius: '8px',
         _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-        _focusVisible: { outline: '2px solid token(colors.border.focus)', outlineOffset: '-2px' },
         '&[data-at-zoom-boundary="true"]': { color: 'text.faint', _hover: { color: 'text.faint' } },
       })}
       aria-label={atMinimum ? '최소 배율입니다' : '페이지 축소'}
@@ -331,7 +330,6 @@
         border: '1px solid transparent',
         borderRadius: '8px',
         _hover: { backgroundColor: 'interactive.hover' },
-        _focusVisible: { outline: '2px solid token(colors.border.focus)', outlineOffset: '-2px' },
       })}
       aria-label={toggleLabel}
       onblur={handleValueBlur}
@@ -389,7 +387,6 @@
         cursor: 'pointer',
         borderRadius: '8px',
         _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-        _focusVisible: { outline: '2px solid token(colors.border.focus)', outlineOffset: '-2px' },
         '&[data-at-zoom-boundary="true"]': { color: 'text.faint', _hover: { color: 'text.faint' } },
       })}
       aria-label={atMaximum ? '최대 배율입니다' : '페이지 확대'}

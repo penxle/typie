@@ -77,6 +77,7 @@
         fontSize: '13px',
         fontWeight: 'medium',
         textAlign: 'left',
+        outlineWidth: '0',
         transition: 'common',
         _focus: { backgroundColor: 'surface.muted' },
         _disabled: {

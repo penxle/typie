@@ -27,6 +27,8 @@
       borderBottomWidth: '1px',
       borderColor: 'border.default',
     })}
+    aria-label="아이콘 색상"
+    role="group"
   >
     {#each entityIconColors as c (c.value)}
       <button
@@ -39,8 +41,10 @@
           transition: 'common',
           _hover: { boxShadow: '[0 0 0 2px token(colors.border.strong)]' },
         })}
+        aria-checked={iconColor !== undefined && c.value === iconColor}
         aria-label={c.label}
         onclick={() => onColorSelect(c.value)}
+        role="menuitemradio"
         type="button"
       >
         {#if iconColor !== undefined && c.value === iconColor}
@@ -62,6 +66,8 @@
       scrollbarWidth: '[thin]',
       scrollbarGutter: 'stable both-edges',
     })}
+    aria-label="아이콘"
+    role="group"
   >
     {#each entityIcons as entry, i (entry.name)}
       {@const wave = Math.floor(i / 7) + (i % 7)}
@@ -75,7 +81,10 @@
           transition: 'common',
           _hover: { backgroundColor: 'surface.muted' },
         })}
+        aria-checked={icon !== undefined && entry.name === icon}
+        aria-label={entry.name}
         onclick={() => onIconSelect(entry.name)}
+        role="menuitemradio"
         type="button"
       >
         <span style:color={currentIconColor} style:transition="color 200ms ease" style:transition-delay="{wave * 20}ms">

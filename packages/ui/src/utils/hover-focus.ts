@@ -20,7 +20,7 @@ export const createHoverFocusHandler = (selector: string) => {
     }
 
     if (document.activeElement !== item) {
-      item.focus({ preventScroll: true });
+      item.focus({ preventScroll: true, focusVisible: false });
     }
   };
 };

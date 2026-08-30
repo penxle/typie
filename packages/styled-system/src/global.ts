@@ -82,10 +82,6 @@ export const globalCss = defineGlobalStyles({
     cursor: 'default',
   },
 
-  ':focus-visible': {
-    outline: 'none',
-  },
-
   '::placeholder': {
     color: 'text.disabled',
   },

@@ -471,7 +471,6 @@
                 backgroundColor: 'gray.800',
                 color: 'amber.500',
                 fontSize: '13px',
-                outline: 'none',
                 cursor: 'pointer',
                 _focus: {
                   borderColor: 'amber.400',

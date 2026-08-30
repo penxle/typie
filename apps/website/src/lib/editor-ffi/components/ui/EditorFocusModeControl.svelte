@@ -38,7 +38,6 @@
       borderRadius: '8px',
       cursor: 'pointer',
       _supportHover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-      _focusVisible: { outline: '2px solid token(colors.border.focus)', outlineOffset: '-2px' },
     })}
     aria-label={label}
     aria-pressed={enabled}
