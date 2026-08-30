@@ -15,13 +15,13 @@
     "@prettier/plugin-xml": "^3.4.2",
     "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-simple-import-sort": "^14.0.0",
-    "eslint-plugin-svelte": "^3.22.0",
-    "eslint-plugin-unicorn": "^72.0.0",
-    "globals": "^17.9.0",
+    "eslint-plugin-svelte": "^3.23.0",
+    "eslint-plugin-unicorn": "^74.0.0",
+    "globals": "^17.11.0",
     "ignore": "^7.0.6",
     "prettier-plugin-packagejson": "^3.0.2",
     "prettier-plugin-sh": "^0.19.0",
     "prettier-plugin-svelte": "^4.1.1",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.68.0"
   }
 }

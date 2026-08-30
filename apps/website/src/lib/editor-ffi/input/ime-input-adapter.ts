@@ -127,7 +127,7 @@ const rebaseNativeCompositionContext = (local: ImeContext, incoming: ImeContext,
 };
 
 const readDuplicateCommittedPreeditTarget = (context: ImeContext, input: ImeTextInput, text: string | null): ImeRange | null => {
-  if (!context.composing || text == null || readContextCompositionText(context) !== text) {
+  if (text == null || !context.composing || readContextCompositionText(context) !== text) {
     return null;
   }
 

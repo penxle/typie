@@ -16,7 +16,6 @@ export class AsyncEventQueue<T> {
 
   end(): void {
     this.#done = true;
-    // eslint-disable-next-line unicorn/no-unnecessary-splice -- drain: splice return is iterated
     for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined as never, done: true });
   }
 

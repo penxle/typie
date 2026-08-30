@@ -38,7 +38,6 @@ class Client {
     this.ws = new WebSocket(`ws://127.0.0.1:${port}/sync`, SUBPROTOCOL);
     this.ws.on('message', (data: Buffer) => {
       this.received.push(decodeRaw(new Uint8Array(data)) as ServerMessage);
-      // eslint-disable-next-line unicorn/no-unnecessary-splice -- drain: splice return is iterated
       for (const waiter of this.#waiters.splice(0)) waiter();
     });
   }
