@@ -1,6 +1,21 @@
+import '@typie/lib/dayjs';
+
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { invertCharge, MILLI_PER_CREDIT, splitCharge, toDisplayCredits, toMilli, validateEntry } from './prism-credit-core.ts';
+import dayjs from 'dayjs';
+import {
+  clampExpiringMilli,
+  computeTrialExpiresAt,
+  computeTrialRemainder,
+  invertCharge,
+  MILLI_PER_CREDIT,
+  splitCharge,
+  toDisplayCredits,
+  toMilli,
+  TRIAL_CREDIT_AMOUNT,
+  TRIAL_EXPIRY_DAYS,
+  validateEntry,
+} from './prism-credit-core.ts';
 
 test('splitCharge: 무상 잔액이 충분하면 전액 무상에서 뺀다', () => {
   assert.deepEqual(splitCharge({ free: 5000, amount: 3000 }), { paidDelta: 0, freeDelta: -3000 });
@@ -113,4 +128,73 @@ test('validateEntry: PURCHASE는 paid>0·free=0, BONUS는 free>0·paid=0, REFUND
   assert.throws(() => validateEntry('REFUND_OUT', { paidDelta: 0, freeDelta: 1 }), /REFUND_OUT/);
   assert.throws(() => validateEntry('BONUS', { paidDelta: 0, freeDelta: 0 }), /BONUS/);
   assert.throws(() => validateEntry('BONUS', { paidDelta: 0, freeDelta: -1 }), /BONUS/);
+});
+
+test('validateEntry: EXPIRE는 무상 음수·유상 0만 허용', () => {
+  validateEntry('EXPIRE', { paidDelta: 0, freeDelta: -1000 });
+  assert.throws(() => validateEntry('EXPIRE', { paidDelta: 0, freeDelta: 0 }));
+  assert.throws(() => validateEntry('EXPIRE', { paidDelta: 0, freeDelta: 1000 }));
+  assert.throws(() => validateEntry('EXPIRE', { paidDelta: -1000, freeDelta: -1000 }));
+});
+
+test('computeTrialRemainder: 소진한 만큼만 줄어든다', () => {
+  assert.equal(computeTrialRemainder({ granted: 300_000, consumedNet: -250_000 }), 50_000);
+});
+
+test('computeTrialRemainder: 반환이 소진을 상쇄하면 전액 복원', () => {
+  assert.equal(computeTrialRemainder({ granted: 300_000, consumedNet: 0 }), 300_000);
+});
+
+test('computeTrialRemainder: GRANT 병존 — 소진은 TRIAL부터 깎는다', () => {
+  assert.equal(computeTrialRemainder({ granted: 600_000, consumedNet: -300_000 }), 300_000);
+});
+
+test('computeTrialRemainder: 백필 순서 역전 — TRIAL 이전 소진은 세지 않는다', () => {
+  assert.equal(computeTrialRemainder({ granted: 600_000, consumedNet: 0 }), 600_000);
+});
+
+test('computeTrialRemainder: 지급액을 넘겨 소진하면 0에서 멈춘다', () => {
+  assert.equal(computeTrialRemainder({ granted: 600_000, consumedNet: -700_000 }), 0);
+});
+
+test('computeTrialRemainder: 순합이 양수여도 지급액을 넘지 않는다', () => {
+  assert.equal(computeTrialRemainder({ granted: 300_000, consumedNet: 120_000 }), 300_000);
+});
+
+test('computeTrialExpiresAt: KST 자정 배타적 경계로 30일', () => {
+  const at = computeTrialExpiresAt(dayjs('2026-09-01T15:30:00+09:00'));
+  assert.equal(at.toISOString(), dayjs('2026-10-01T00:00:00+09:00').toISOString());
+});
+
+test('computeTrialExpiresAt: KST 자정 직전 지급도 그날 기준으로 끊는다', () => {
+  const at = computeTrialExpiresAt(dayjs('2026-09-01T23:59:59+09:00'));
+  assert.equal(at.toISOString(), dayjs('2026-10-01T00:00:00+09:00').toISOString());
+});
+
+test('computeTrialExpiresAt: UTC 입력도 KST 날짜로 끊는다', () => {
+  const at = computeTrialExpiresAt(dayjs.utc('2026-08-31T16:00:00Z'));
+  assert.equal(at.toISOString(), dayjs('2026-10-01T00:00:00+09:00').toISOString());
+});
+
+test('computeTrialExpiresAt: UTC 입력이 KST 자정 직전이어도 그날 기준으로 끊는다', () => {
+  const at = computeTrialExpiresAt(dayjs.utc('2026-09-01T14:59:59Z'));
+  assert.equal(at.toISOString(), dayjs('2026-10-01T00:00:00+09:00').toISOString());
+});
+
+test('clampExpiringMilli: 보유 잔액을 넘지 않는다', () => {
+  assert.equal(clampExpiringMilli({ remainder: 600_000, total: 550_000 }), 550_000);
+});
+
+test('clampExpiringMilli: 보유가 넉넉하면 잔량 그대로', () => {
+  assert.equal(clampExpiringMilli({ remainder: 300_000, total: 400_000 }), 300_000);
+});
+
+test('clampExpiringMilli: 보유가 음수면 0', () => {
+  assert.equal(clampExpiringMilli({ remainder: 300_000, total: -50_000 }), 0);
+});
+
+test('상수: 지급량 300 크레딧, 기간 30일', () => {
+  assert.equal(TRIAL_CREDIT_AMOUNT, 300);
+  assert.equal(TRIAL_EXPIRY_DAYS, 30);
+  assert.equal(toMilli(TRIAL_CREDIT_AMOUNT), 300 * MILLI_PER_CREDIT);
 });

@@ -38,6 +38,10 @@ import { builder } from '../builder.ts';
 import type { UserContext } from '#/context.ts';
 import type { Transaction } from '#/db/index.ts';
 
+// 9/1에 프리즘 체험 크레딧 지급과 함께 활성화할 것
+// import { grantPrismCredit } from '#/utils/prism-credit.ts';
+// import { computeTrialExpiresAt, toMilli, TRIAL_CREDIT_AMOUNT } from '#/utils/prism-credit-core.ts';
+
 /**
  * * Mutations
  */
@@ -503,6 +507,14 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, logoI
     startsAt: trialStartsAt,
     expiresAt: trialStartsAt.add(TRIAL_DURATION_DAYS, 'days'),
   });
+
+  // 9/1에 활성화할 것
+  // await grantPrismCredit(tx, {
+  //   userId: user.id,
+  //   kind: 'TRIAL',
+  //   amount: toMilli(TRIAL_CREDIT_AMOUNT),
+  //   expiresAt: computeTrialExpiresAt(trialStartsAt),
+  // });
 
   return user;
 };

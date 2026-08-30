@@ -41,6 +41,7 @@ type AdminPrismCreditBalance {
 type AdminPrismCreditEntry {
   actor: User
   createdAt: DateTime!
+  expiresAt: DateTime
   freeDelta: BigInt!
   id: ID!
   key: String
@@ -1222,6 +1223,8 @@ type PrismCommand {
 
 type PrismCreditBalance {
   balance: Int!
+  expiresAt: DateTime
+  expiringAmount: Int!
 }
 
 type PrismCreditEntry {
@@ -1235,6 +1238,7 @@ enum PrismCreditEntryKind {
   ADJUSTMENT
   BONUS
   CHAT_CHARGE
+  EXPIRE
   GRANT
   PURCHASE
   REFUND_OUT

@@ -762,13 +762,15 @@
                         {entry.paidDelta}m / {entry.freeDelta}m
                       </span>
                     </div>
-                    {#if entry.key || entry.note || entry.actor}
+                    {#if entry.key || entry.note || entry.actor || entry.expiresAt}
                       <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>
                         {#if entry.key}KEY: {entry.key}{/if}
                         {#if entry.actor}
                           BY: {entry.actor.name}{/if}
                         {#if entry.note}
                           NOTE: {entry.note}{/if}
+                        {#if entry.expiresAt}
+                          EXPIRES: {dayjs(entry.expiresAt).formatAsDateTime()}{/if}
                       </div>
                     {/if}
                   </div>

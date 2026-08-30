@@ -40,6 +40,8 @@
 
         prismCredit {
           balance
+          expiringAmount
+          expiresAt
         }
 
         prismCreditPurchases {
@@ -298,6 +300,27 @@
         {/snippet}
       </SettingsRow>
     </SettingsCard>
+
+    {#if user.data.prismCredit.expiringAmount > 0 && user.data.prismCredit.expiresAt}
+      <div
+        class={css({
+          marginTop: '12px',
+          borderRadius: '8px',
+          borderWidth: '1px',
+          borderColor: 'border.subtle',
+          paddingX: '20px',
+          paddingY: '16px',
+          backgroundColor: 'surface.default',
+        })}
+      >
+        <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
+          보유 크레딧 중 {comma(user.data.prismCredit.expiringAmount)} 크레딧은 {dayjs(user.data.prismCredit.expiresAt)
+            .kst()
+            .subtract(1, 'day')
+            .formatAsDate()}까지 사용할 수 있어요.
+        </span>
+      </div>
+    {/if}
 
     <div class={css({ height: '12px' })}></div>
 

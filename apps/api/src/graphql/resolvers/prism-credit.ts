@@ -4,7 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 import { db, PrismCreditEntries, TableCode, validateDbId } from '#/db/index.ts';
 import { pubsub } from '#/pubsub.ts';
 import { assertAdminPermission } from '#/utils/permission.ts';
-import { adjustPrismCredit, grantPrismCredit, readPrismCreditBalance } from '#/utils/prism-credit.ts';
+import { adjustPrismCredit, grantPrismCredit, readActiveTrialExpiry, readPrismCreditBalance } from '#/utils/prism-credit.ts';
 import { toDisplayCredits, toMilli } from '#/utils/prism-credit-core.ts';
 import { builder } from '../builder.ts';
 import { isTypeOf, PrismCreditEntry, User } from '../objects.ts';
@@ -14,6 +14,8 @@ const ENTRY_LIMIT_MAX = 200;
 const PrismCreditBalance = builder.simpleObject('PrismCreditBalance', {
   fields: (t) => ({
     balance: t.int(),
+    expiringAmount: t.int(),
+    expiresAt: t.field({ type: 'DateTime', nullable: true }),
   }),
 });
 
@@ -35,6 +37,7 @@ const AdminPrismCreditEntry = builder.objectRef<typeof PrismCreditEntries.$infer
     key: t.exposeString('key', { nullable: true }),
     note: t.exposeString('note', { nullable: true }),
     actor: t.field({ type: User, nullable: true, resolve: (self) => self.actorId }),
+    expiresAt: t.expose('expiresAt', { type: 'DateTime', nullable: true }),
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
   }),
 });
@@ -73,7 +76,14 @@ builder.objectFields(User, (t) => ({
     resolve: async (self, _, ctx) => {
       assertSelf(self, ctx);
       const balance = await readPrismCreditBalance(db, self.id);
-      return { balance: toDisplayCredits(balance.total) };
+      const expiry = await readActiveTrialExpiry(db, self.id, balance.total);
+      const expiringAmount = expiry ? toDisplayCredits(expiry.milli) : 0;
+
+      return {
+        balance: toDisplayCredits(balance.total),
+        expiringAmount,
+        expiresAt: expiringAmount > 0 ? (expiry?.expiresAt ?? null) : null,
+      };
     },
   }),
 

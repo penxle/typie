@@ -64,6 +64,7 @@ dotum
 ebgp
 edgi
 epub
+expirable
 eulyoo
 ffconcat
 ffffl
@@ -235,6 +236,7 @@ stakater
 stibee
 talosctl
 texel
+timestamptz
 tini
 tlsv
 tmpl

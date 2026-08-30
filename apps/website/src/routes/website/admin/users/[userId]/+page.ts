@@ -92,6 +92,7 @@ export const load = async (event) => {
             freeDelta
             key
             note
+            expiresAt
             createdAt
             actor {
               id
