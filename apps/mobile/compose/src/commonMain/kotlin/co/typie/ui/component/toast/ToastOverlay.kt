@@ -60,8 +60,8 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.ResolvedThemeMode
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,7 +167,7 @@ private fun AnimatedToast(
         .padding(horizontal = 16.dp)
         .fillMaxWidth()
         .clip(AppShapes.rounded(AppShapes.lg))
-        .hazeEffect(LocalHazeState.current) { blurEffect {} }
+        .hazeBlur(input = HazeInput.Sources(LocalHazeState.current))
         .background(toastSurface.copy(alpha = .6f))
         .padding(horizontal = 24.dp, vertical = 16.dp)
   ) {

@@ -37,8 +37,9 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -84,12 +85,14 @@ internal fun EditorToolbarIndicatorPill(
         .height(ToolbarIndicatorHeight)
         .shadow(AppTheme.shadows.sm, ToolbarIndicatorShape)
         .clip(ToolbarIndicatorShape)
-        .hazeEffect(hazeState) {
-          blurEffect {
-            backgroundColor = surfaceColor
-            blurRadius = ToolbarBackdropBlurRadius
-          }
-        }
+        .hazeBlur(
+          input = HazeInput.Sources(hazeState),
+          style =
+            HazeBlurStyle {
+              backgroundColor(surfaceColor)
+              blurRadius(ToolbarBackdropBlurRadius)
+            },
+        )
         .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarIndicatorShape)
   ) {
     EditorToolbarSurfaceBackground(shape = ToolbarIndicatorShape)

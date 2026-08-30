@@ -25,7 +25,7 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.ResolvedThemeMode
-import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -36,7 +36,7 @@ import kotlinx.coroutines.CompletableDeferred
 
 private const val SamplingEffectTag = "sampling-effect"
 
-@OptIn(ExperimentalTestApi::class, ExperimentalHazeApi::class)
+@OptIn(ExperimentalTestApi::class)
 class NavigationTopBarSamplingEffectDesktopTest {
   @Test
   fun inFlightReadbackIsDiscardedWhenSampleSessionChanges() = runComposeUiTest {
@@ -79,7 +79,10 @@ class NavigationTopBarSamplingEffectDesktopTest {
 
       Box(Modifier.size(width = 160.dp, height = 40.dp)) {
         Box(Modifier.fillMaxSize().background(Color.White).hazeSource(hazeState))
-        Box(Modifier.fillMaxSize().hazeEffect(hazeState) { visualEffect = effect })
+        Box(
+          Modifier.fillMaxSize()
+            .hazeEffect(factory = effect, input = HazeInput.Sources(hazeState), style = Unit)
+        )
       }
     }
 
@@ -117,7 +120,10 @@ class NavigationTopBarSamplingEffectDesktopTest {
 
       Box(Modifier.size(width = 160.dp, height = 40.dp)) {
         Box(Modifier.fillMaxSize().background(Color.White).hazeSource(hazeState))
-        Box(Modifier.fillMaxSize().hazeEffect(hazeState) { visualEffect = effect })
+        Box(
+          Modifier.fillMaxSize()
+            .hazeEffect(factory = effect, input = HazeInput.Sources(hazeState), style = Unit)
+        )
       }
     }
     waitForIdle()
@@ -157,7 +163,10 @@ class NavigationTopBarSamplingEffectDesktopTest {
               .background(Color.Black)
           )
         }
-        Box(Modifier.fillMaxSize().hazeEffect(hazeState) { visualEffect = effect })
+        Box(
+          Modifier.fillMaxSize()
+            .hazeEffect(factory = effect, input = HazeInput.Sources(hazeState), style = Unit)
+        )
       }
     }
 
@@ -190,7 +199,10 @@ class NavigationTopBarSamplingEffectDesktopTest {
 
       Box(Modifier.size(width = 160.dp, height = 40.dp)) {
         Canvas(Modifier.fillMaxSize().hazeSource(hazeState)) { drawRect(sourceColor.value) }
-        Box(Modifier.fillMaxSize().hazeEffect(hazeState) { visualEffect = effect })
+        Box(
+          Modifier.fillMaxSize()
+            .hazeEffect(factory = effect, input = HazeInput.Sources(hazeState), style = Unit)
+        )
       }
     }
 
@@ -238,9 +250,9 @@ class NavigationTopBarSamplingEffectDesktopTest {
           )
         }
         Box(
-          Modifier.fillMaxSize().testTag(SamplingEffectTag).hazeEffect(hazeState) {
-            visualEffect = effect
-          }
+          Modifier.fillMaxSize()
+            .testTag(SamplingEffectTag)
+            .hazeEffect(factory = effect, input = HazeInput.Sources(hazeState), style = Unit)
         )
       }
     }

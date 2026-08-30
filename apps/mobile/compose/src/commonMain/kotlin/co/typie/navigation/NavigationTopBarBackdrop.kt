@@ -22,11 +22,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
-import co.typie.ui.component.TypieProgressiveBlurEffect
 import co.typie.ui.component.topbar.LocalTopBarAnimationSource
 import co.typie.ui.component.topbar.TopBarDefaults
+import co.typie.ui.component.typieProgressiveBlur
 import co.typie.ui.theme.ResolvedThemeMode
-import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.delay
@@ -103,7 +103,6 @@ internal fun resolveNavigationTopBarBackdropStyle(
 }
 
 @Composable
-@OptIn(ExperimentalHazeApi::class)
 internal fun NavigationTopBarBackdrop(
   hazeState: HazeState,
   style: () -> NavigationTopBarBackdropStyle,
@@ -212,14 +211,16 @@ internal fun NavigationTopBarBackdrop(
       samplingEffect.requestSample()
     }
   }
-  val blurEffect = remember {
-    TypieProgressiveBlurEffect(
-      blurRadius = TopBarDefaults.BlurRadius,
-      progressiveBrush = navigationTopBarProgressiveBrush(Color.Black),
+  val hazeInput = remember(hazeState) { HazeInput.Sources(hazeState) }
+  val blurProgressiveBrush = remember { navigationTopBarProgressiveBrush(Color.Black) }
+  val blurModifier =
+    typieProgressiveBlur(
+      hazeState = hazeState,
+      radius = TopBarDefaults.BlurRadius,
+      progressiveBrush = blurProgressiveBrush,
       fallbackProgressive = TopBarDefaults.hazeProgressive(),
-      backgroundColor = { styleState.value().background },
+      backdropColor = { styleState.value().background },
     )
-  }
   LaunchedEffect(samplingEffect, sampleRequests, luminanceMode) {
     if (luminanceMode !is NavigationTopBarLuminanceMode.Live) return@LaunchedEffect
     sampleRequests.collect {
@@ -251,20 +252,15 @@ internal fun NavigationTopBarBackdrop(
   Box(modifier = backdropModifier) {
     Column(
       modifier =
-        Modifier.fillMaxWidth().hazeEffect(hazeState) {
-          visualEffect = samplingEffect
-          forceInvalidateOnPreDraw = true
-        }
+        Modifier.fillMaxWidth()
+          .hazeEffect(factory = samplingEffect, input = hazeInput, style = Unit)
     ) {
       Spacer(Modifier.fillMaxWidth().height(topPadding + TopBarDefaults.Height))
       Spacer(Modifier.height(TopBarDefaults.BackdropFadeHeight))
     }
     if (blurAlpha > 0f) {
       Column(
-        modifier =
-          Modifier.fillMaxWidth()
-            .graphicsLayer { alpha = blurAlpha }
-            .hazeEffect(hazeState) { visualEffect = blurEffect }
+        modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = blurAlpha }.then(blurModifier)
       ) {
         Spacer(Modifier.fillMaxWidth().height(topPadding + TopBarDefaults.Height))
         Spacer(Modifier.height(TopBarDefaults.BackdropFadeHeight))

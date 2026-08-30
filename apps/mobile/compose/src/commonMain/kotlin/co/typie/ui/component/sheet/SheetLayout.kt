@@ -33,13 +33,11 @@ import co.typie.ext.navigationBars
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
 import co.typie.ui.component.SmootherstepEasing
-import co.typie.ui.component.TypieProgressiveBlurEffect
+import co.typie.ui.component.typieProgressiveBlur
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.blur.HazeProgressive
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
@@ -65,7 +63,6 @@ data class SheetPadding(
 }
 
 @Composable
-@OptIn(ExperimentalHazeApi::class)
 fun SheetLayout(
   modifier: Modifier = Modifier,
   fillHeight: Boolean = false,
@@ -128,19 +125,20 @@ fun SheetLayout(
   if (overlayHeader) {
     val headerHazeState = rememberHazeState()
     val headerBackgroundColorState = rememberUpdatedState(headerBackgroundColor)
-    val blurEffect = remember {
-      TypieProgressiveBlurEffect(
-        blurRadius = SheetOverlayHeaderBlurRadius,
-        progressiveBrush = sheetOverlayHeaderProgressiveBrush(Color.Black),
+    val headerProgressiveBrush = remember { sheetOverlayHeaderProgressiveBrush(Color.Black) }
+    val headerBlurModifier =
+      typieProgressiveBlur(
+        hazeState = headerHazeState,
+        radius = SheetOverlayHeaderBlurRadius,
+        progressiveBrush = headerProgressiveBrush,
         fallbackProgressive =
           HazeProgressive.verticalGradient(
             easing = SmootherstepEasing,
             startIntensity = 1f,
             endIntensity = 0f,
           ),
-        backgroundColor = { headerBackgroundColorState.value },
+        backdropColor = { headerBackgroundColorState.value },
       )
-    }
     val tintBrush =
       remember(headerBackgroundColor) {
         sheetOverlayHeaderProgressiveBrush(
@@ -161,7 +159,7 @@ fun SheetLayout(
       Column(
         modifier =
           Modifier.fillMaxWidth()
-            .hazeEffect(headerHazeState) { visualEffect = blurEffect }
+            .then(headerBlurModifier)
             .drawBehind { drawRect(tintBrush) }
             .pointerInput(Unit) {}
       ) {

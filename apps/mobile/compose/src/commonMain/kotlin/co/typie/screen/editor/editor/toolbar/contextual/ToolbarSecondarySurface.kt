@@ -36,8 +36,9 @@ import co.typie.screen.editor.editor.toolbar.preserveEditorFocusOnToolbarInterac
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -69,12 +70,14 @@ internal fun ToolbarSecondarySurface(
         .height(ToolbarSecondaryHeight)
         .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
         .clip(ToolbarCapsuleShape)
-        .hazeEffect(hazeState) {
-          blurEffect {
-            backgroundColor = toolbarSurfaceColor
-            blurRadius = ToolbarBackdropBlurRadius
-          }
-        }
+        .hazeBlur(
+          input = HazeInput.Sources(hazeState),
+          style =
+            HazeBlurStyle {
+              backgroundColor(toolbarSurfaceColor)
+              blurRadius(ToolbarBackdropBlurRadius)
+            },
+        )
         .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
         .preserveEditorFocusOnToolbarInteraction()
   ) {

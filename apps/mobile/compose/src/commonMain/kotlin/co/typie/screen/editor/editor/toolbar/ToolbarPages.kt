@@ -69,8 +69,9 @@ import co.typie.screen.editor.editor.toolbar.contextual.editorTableToolbarPage
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.shadow
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -374,13 +375,12 @@ internal fun EditorToolbarPages(
 
     LaunchedEffect(pages, pageMetrics) {
       snapshotFlow {
-          pages.mapIndexedNotNull { index, page ->
-            val scrollState = page.scrollState ?: return@mapIndexedNotNull null
-            val target =
-              pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
-            scrollState to target.coerceIn(0, scrollState.maxValue)
-          }
+        pages.mapIndexedNotNull { index, page ->
+          val scrollState = page.scrollState ?: return@mapIndexedNotNull null
+          val target = pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
+          scrollState to target.coerceIn(0, scrollState.maxValue)
         }
+      }
         .collect { scrollTargets ->
           scrollTargets.forEach { (scrollState, target) ->
             if (scrollState.value != target) {
@@ -551,10 +551,10 @@ internal fun EditorToolbarPages(
         validAutoTargetKey != null && pagerState.lastAppliedAutoTargetKey != validAutoTargetKey
       }
       snapshotFlow {
-          scrollableState.isScrollInProgress ||
-            pagerState.pointerScrollGestureActive ||
-            pagerState.decayFlingInProgress
-        }
+        scrollableState.isScrollInProgress ||
+          pagerState.pointerScrollGestureActive ||
+          pagerState.decayFlingInProgress
+      }
         .first { inProgress -> !inProgress }
       val targetPageKey =
         pendingAutoTargetPageKey
@@ -788,12 +788,14 @@ internal fun EditorToolbarPages(
                 .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
                 .pressScale(ToolbarCapsulePressedScale)
                 .clip(ToolbarCapsuleShape)
-                .hazeEffect(hazeState) {
-                  blurEffect {
-                    backgroundColor = toolbarSurfaceColor
-                    blurRadius = ToolbarBackdropBlurRadius
-                  }
-                }
+                .hazeBlur(
+                  input = HazeInput.Sources(hazeState),
+                  style =
+                    HazeBlurStyle {
+                      backgroundColor(toolbarSurfaceColor)
+                      blurRadius(ToolbarBackdropBlurRadius)
+                    },
+                )
                 .border(ToolbarBorderWidth, AppTheme.colors.borderEmphasis, ToolbarCapsuleShape)
           ) {
             EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)

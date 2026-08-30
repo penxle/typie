@@ -23,9 +23,10 @@ import co.typie.editor.scroll.EditorVisibleArea
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -59,12 +60,14 @@ internal fun EditorTapHint(
         modifier
           .graphicsLayer { this.alpha = alpha.value }
           .clip(shape)
-          .hazeEffect(hazeState) {
-            blurEffect {
-              backgroundColor = colors.surfaceInset
-              blurRadius = 6.dp
-            }
-          }
+          .hazeBlur(
+            input = HazeInput.Sources(hazeState),
+            style =
+              HazeBlurStyle {
+                backgroundColor(colors.surfaceInset)
+                blurRadius(6.dp)
+              },
+          )
           .background(colors.surfaceInset.copy(alpha = 0.36f), shape)
           .semantics { liveRegion = LiveRegionMode.Polite }
           .testTag(EditorTapHintTestTag)

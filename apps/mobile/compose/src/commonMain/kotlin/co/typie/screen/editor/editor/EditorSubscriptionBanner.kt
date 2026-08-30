@@ -31,9 +31,10 @@ import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.ResolvedThemeMode
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.blurEffect
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 
 @Composable
 fun BoxScope.EditorSubscriptionBanner(
@@ -63,12 +64,14 @@ fun BoxScope.EditorSubscriptionBanner(
         .padding(bottom = 12.dp)
         .fillMaxWidth()
         .clip(AppShapes.rounded(AppShapes.lg))
-        .hazeEffect(hazeState) {
-          blurEffect {
-            backgroundColor = backdropColor
-            blurRadius = 20.dp
-          }
-        }
+        .hazeBlur(
+          input = HazeInput.Sources(hazeState),
+          style =
+            HazeBlurStyle {
+              backgroundColor(backdropColor)
+              blurRadius(20.dp)
+            },
+        )
         .background(surface.copy(alpha = .5f))
         .clickable { SubscriptionService.requestSubscribeSheet(GatedAction.Generic) }
         .padding(horizontal = 24.dp, vertical = 16.dp),

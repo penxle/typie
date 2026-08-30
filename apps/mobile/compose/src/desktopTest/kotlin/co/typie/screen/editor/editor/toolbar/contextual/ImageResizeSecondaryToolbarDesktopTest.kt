@@ -121,7 +121,11 @@ class ImageResizeSecondaryToolbarDesktopTest {
           LocalAppShadows provides LightAppShadows,
           LocalThemeMode provides ResolvedThemeMode.Light,
           LocalHazeBlurStyle provides
-            HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+            HazeBlurStyle {
+              blurRadius(20.dp)
+              noiseFactor(0f)
+              colorEffects(emptyList())
+            },
           LocalEditorRuntime provides runtime,
           LocalEditorExternalElementState provides externalState,
         ) {

@@ -12,8 +12,9 @@ internal actual fun rememberTrustedImeInsets(): WindowInsets {
   val rawImeInsets = WindowInsets.ime
   val animationTargetInsets = WindowInsets.imeAnimationTarget
   return remember(rawImeInsets, animationTargetInsets) {
-    trustedImeInsets(rawImeInsets) { density ->
-      animationTargetInsets.getBottom(density).takeIf { it > 0 }
-    }
+    trustedImeInsets(
+      rawImeInsets = rawImeInsets,
+      settledBottom = { density -> animationTargetInsets.getBottom(density).takeIf { it > 0 } },
+    )
   }
 }

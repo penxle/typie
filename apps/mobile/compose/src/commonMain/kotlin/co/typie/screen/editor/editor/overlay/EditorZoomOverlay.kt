@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
@@ -45,7 +44,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -65,6 +63,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hasNonTouchPointer
+import co.typie.ui.input.onPointerEvent
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
@@ -84,7 +83,6 @@ private data class ZoomValuePresentation(
   val isLandmark: Boolean,
 )
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun EditorZoomOverlay(
   state: EditorZoomIndicatorState,
@@ -280,7 +278,6 @@ private fun ZoomIconButton(
   }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ZoomValueButton(
   presentation: ZoomValuePresentation,
