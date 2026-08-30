@@ -76,6 +76,7 @@
   setupEditorPublication(ctx, () => surfaceHost);
 
   let extensionArea = $state<HTMLDivElement>();
+  let editorViewSurface = $state<HTMLDivElement>();
   let scrollRoot = $state<HTMLDivElement>();
   let viewportWidth = $state(360);
   let ready = false;
@@ -197,33 +198,35 @@
   </div>
 {/snippet}
 
-<div
-  bind:this={scrollRoot}
-  style:height={useWindowScroll ? '4000px' : '180px'}
-  style:overflow={useWindowScroll ? 'visible' : 'auto'}
-  style="position: relative; width: 360px; overflow-anchor: none;"
-  {@attach (el) => {
-    editor.scrollContainerEl = el;
-    editor.scrollViewport = useWindowScroll ? windowScrollViewport() : elementScrollViewport(el);
-    editor.scrollRootEl = useWindowScroll ? null : el;
-  }}
-  data-editor-scroll-root
-  onscroll={() => {
-    ctx.scroll?.observeViewportScroll();
-    editor.requestPublication();
-  }}
-  bind:clientWidth={viewportWidth}
->
-  {#if headerHeight > 0}
-    <div style:height={`${headerHeight}px`} data-editor-test-header></div>
-  {/if}
-  {@render editorContent()}
+<div bind:this={editorViewSurface} style="position: relative; width: 360px;">
+  <div
+    bind:this={scrollRoot}
+    style:height={useWindowScroll ? '4000px' : '180px'}
+    style:overflow={useWindowScroll ? 'visible' : 'auto'}
+    style="position: relative; width: 360px; overflow-anchor: none;"
+    {@attach (el) => {
+      editor.scrollContainerEl = el;
+      editor.scrollViewport = useWindowScroll ? windowScrollViewport() : elementScrollViewport(el);
+      editor.scrollRootEl = useWindowScroll ? null : el;
+    }}
+    data-editor-scroll-root
+    onscroll={() => {
+      ctx.scroll?.observeViewportScroll();
+      editor.requestPublication();
+    }}
+    bind:clientWidth={viewportWidth}
+  >
+    {#if headerHeight > 0}
+      <div style:height={`${headerHeight}px`} data-editor-test-header></div>
+    {/if}
+    {@render editorContent()}
+  </div>
 
   {#if withZoom}
-    <EditorZoom active {editor} editorViewSurface={scrollRoot} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
+    <EditorZoom active {editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
       {#snippet zoomControls({ controls, showViewControlsOnPaneEntry })}
-        {#if scrollRoot}
-          <EditorContextBar editorViewSurface={scrollRoot} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
+        {#if editorViewSurface}
+          <EditorContextBar {editorViewSurface} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
             {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
               <div style="display: flex; align-items: center" aria-label="보기 제어" role="group">
                 <EditorZoomControls {...controls} segment={state} visible={presentation.visible} />
@@ -233,9 +236,7 @@
         {/if}
       {/snippet}
     </EditorZoom>
+
+    <Scrollbar />
   {/if}
 </div>
-
-{#if withZoom}
-  <Scrollbar />
-{/if}

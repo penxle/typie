@@ -1463,7 +1463,9 @@ describe('web editor frame synchronization', () => {
     scrollRoot.dispatchEvent(new Event('scroll'));
     await tick();
 
-    const verticalScrollbar = document.querySelector<HTMLElement>('[role="scrollbar"]:not([aria-orientation])');
+    const scrollbarSelector = '[role="scrollbar"]:not([aria-orientation])';
+    await expect.poll(() => document.querySelector(scrollbarSelector)).toBeInstanceOf(HTMLElement);
+    const verticalScrollbar = document.querySelector<HTMLElement>(scrollbarSelector);
     const thumb = verticalScrollbar?.querySelector<HTMLElement>('[role="slider"]');
     const indicator = verticalScrollbar?.previousElementSibling as HTMLElement | null;
     expect(verticalScrollbar).not.toBeNull();
@@ -1491,6 +1493,47 @@ describe('web editor frame synchronization', () => {
     await expect.poll(() => Math.abs(scrollRoot.scrollTop - scrollTopBeforeZoom)).toBeGreaterThan(0.5);
     await expect.poll(() => Number(thumb.getAttribute('aria-valuenow'))).toBeCloseTo(scrollRoot.scrollTop);
     await expect.poll(() => Number.parseFloat(getComputedStyle(indicator).opacity)).toBeLessThan(0.01);
+  });
+
+  it('routes wheel input over the scrollbar lane to editor scroll and zoom', async () => {
+    const { editor, scrollRoot } = await mountEditor(longDoc(), { withZoom: true });
+    await waitForPresentation(editor);
+
+    const scrollbarSelector = '[role="scrollbar"]:not([aria-orientation])';
+    await expect.poll(() => document.querySelector(scrollbarSelector)).toBeInstanceOf(HTMLElement);
+    const verticalScrollbar = document.querySelector<HTMLElement>(scrollbarSelector);
+    expect(verticalScrollbar).not.toBeNull();
+    if (!verticalScrollbar) throw new Error('Expected the vertical scrollbar lane');
+
+    const scrollbarRect = verticalScrollbar.getBoundingClientRect();
+    const eventPosition = {
+      clientX: scrollbarRect.left + scrollbarRect.width / 2,
+      clientY: scrollbarRect.top + scrollbarRect.height / 2,
+    };
+    const scrollEvent = new WheelEvent('wheel', {
+      ...eventPosition,
+      deltaY: 48,
+      bubbles: true,
+      cancelable: true,
+    });
+    verticalScrollbar.dispatchEvent(scrollEvent);
+
+    await expect.poll(() => scrollRoot.scrollTop).toBeGreaterThan(0);
+    expect(scrollEvent.defaultPrevented).toBe(true);
+
+    const zoomBefore = editor.displayZoom;
+    const zoomEvent = new WheelEvent('wheel', {
+      ...eventPosition,
+      deltaY: -24,
+      metaKey: navigator.platform.toUpperCase().includes('MAC'),
+      ctrlKey: !navigator.platform.toUpperCase().includes('MAC'),
+      bubbles: true,
+      cancelable: true,
+    });
+    verticalScrollbar.dispatchEvent(zoomEvent);
+
+    await expect.poll(() => editor.displayZoom).toBeGreaterThan(zoomBefore);
+    expect(zoomEvent.defaultPrevented).toBe(true);
   });
 
   it('delays continuous reflow until the render commit and replaces it coherently', async () => {
