@@ -5,6 +5,7 @@
   import { autosize } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import mixpanel from 'mixpanel-browser';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import RepeatIcon from '~icons/lucide/repeat';
@@ -109,6 +110,7 @@
   };
 
   const openMargin = async () => {
+    mixpanel.track('open_prism_review_margin', { via: 'review_result' });
     requestMarginJump({ documentId: round.document.id, roundId: round.id, itemId: null });
     await goto(`/${round.document.entity.slug}`);
   };
@@ -190,7 +192,17 @@
 
   <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '12px' })}>
     {#if round.hasDetail}
-      <Button style={css.raw({ width: 'full' })} onclick={() => (detailOpen = true)} size="sm" variant="secondary">총평 읽기</Button>
+      <Button
+        style={css.raw({ width: 'full' })}
+        onclick={() => {
+          detailOpen = true;
+          mixpanel.track('open_prism_review_conclusion');
+        }}
+        size="sm"
+        variant="secondary"
+      >
+        총평 읽기
+      </Button>
     {/if}
     <Button style={css.raw({ width: 'full' })} onclick={() => void openMargin()} size="sm" variant="secondary">본문에 표시하기</Button>
   </div>

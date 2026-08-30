@@ -238,7 +238,9 @@
                 return;
               }
 
-              app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen;
+              const next = !app.preference.current.prismPanelOpen;
+              app.preference.current.prismPanelOpen = next;
+              mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'command_palette' });
             },
           },
         ]

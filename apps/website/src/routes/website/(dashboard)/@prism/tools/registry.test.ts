@@ -1,8 +1,10 @@
 import { TOOL_META } from '@typie/prism';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { actionOutcome, actionTail } from './action-cards.ts';
 import { actionCards, toolCallFailureLabels, toolCallLabels, toolCards } from './index.ts';
 import PrismActionCard from './PrismActionCard.svelte';
+
+vi.mock('@sentry/sveltekit', () => ({ captureMessage: vi.fn() }));
 
 describe('registry ↔ TOOL_META 대조', () => {
   it('destructive 도구는 전부 정적 resolver가 user다', () => {

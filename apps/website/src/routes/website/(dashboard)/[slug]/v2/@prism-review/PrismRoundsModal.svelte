@@ -3,6 +3,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal, TimeAgo } from '@typie/ui/components';
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import ReviewLensIcon from '~icons/typie/review-lens';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { getMarginContext } from './context.svelte.ts';
@@ -18,6 +19,7 @@
   const grouped = $derived(groups.length > 1);
 
   const show = (roundId: string) => {
+    mixpanel.track('open_prism_review_margin', { via: 'review_rounds_modal' });
     margin.select(roundId);
     open = false;
   };

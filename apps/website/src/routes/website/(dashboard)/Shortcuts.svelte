@@ -31,7 +31,9 @@
   const handleKeydown = async (event: KeyboardEvent) => {
     if (app.state.prismAccess && (IS_MAC ? event.metaKey : event.ctrlKey) && !event.shiftKey && event.code === 'KeyE') {
       event.preventDefault();
-      app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen;
+      const next = !app.preference.current.prismPanelOpen;
+      app.preference.current.prismPanelOpen = next;
+      mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'shortcut' });
       return;
     }
 
