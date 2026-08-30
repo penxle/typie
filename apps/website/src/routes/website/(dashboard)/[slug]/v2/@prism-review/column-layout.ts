@@ -1,6 +1,20 @@
+import { CURSOR_VISIBLE_MARGIN } from '$lib/editor-ffi/constants';
+
 export type CardEntry = { id: string; desired: number; height: number };
 
 export const CARD_GAP = 12;
+export const CARD_BOTTOM_GAP = CURSOR_VISIBLE_MARGIN;
+
+export const layoutBottomWithin = (element: HTMLElement, ancestor: HTMLElement): number | null => {
+  let bottom = element.offsetHeight;
+  let current: HTMLElement | null = element;
+  while (current !== ancestor) {
+    bottom += current.offsetTop;
+    current = current.offsetParent as HTMLElement | null;
+    if (current === null) return null;
+  }
+  return bottom;
+};
 
 export const layoutCards = (entries: readonly CardEntry[], activeId: string | null): { tops: Record<string, number>; spacer: number } => {
   const sorted = entries.toSorted((a, b) => a.desired - b.desired);
@@ -35,5 +49,5 @@ export const layoutCards = (entries: readonly CardEntry[], activeId: string | nu
   }
 
   const bottoms = sorted.map((entry) => tops[entry.id] + entry.height);
-  return { tops, spacer: (bottoms.length > 0 ? Math.max(...bottoms) : 0) + 8 };
+  return { tops, spacer: (bottoms.length > 0 ? Math.max(...bottoms) : 0) + CARD_BOTTOM_GAP };
 };
