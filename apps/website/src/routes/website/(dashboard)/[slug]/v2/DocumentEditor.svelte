@@ -20,7 +20,6 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
-  import Maximize2Icon from '~icons/lucide/maximize-2';
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
@@ -30,6 +29,7 @@
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
+  import EditorFocusModeControl from '$lib/editor-ffi/components/ui/EditorFocusModeControl.svelte';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
@@ -812,6 +812,12 @@
 
   const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
 
+  function toggleZenMode() {
+    const enabled = !app.preference.current.zenModeEnabled;
+    app.preference.current.zenModeEnabled = enabled;
+    mixpanel.track(enabled ? 'zen_mode_enabled' : 'zen_mode_disabled', { via: 'document' });
+  }
+
   $effect(() => {
     const editor = ctx.liveEditor;
     if (editor) {
@@ -1162,31 +1168,6 @@
                 {/if}
               {/if}
 
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: 'text.faint',
-                  transition: 'common',
-                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-                })}
-                onclick={() => {
-                  app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
-                  if (app.preference.current.zenModeEnabled) {
-                    mixpanel.track('zen_mode_enabled', { via: 'document' });
-                  } else {
-                    mixpanel.track('zen_mode_disabled', { via: 'document' });
-                  }
-                }}
-                onpointerdown={(e) => e.preventDefault()}
-                type="button"
-                use:tooltip={{
-                  message: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
-                  keys: ['Mod', 'Shift', 'M'],
-                }}
-              >
-                <Icon icon={Maximize2Icon} size={16} />
-              </button>
               <CloseButton>
                 <Icon icon={XIcon} size={16} />
               </CloseButton>
@@ -1352,11 +1333,19 @@
                                     {/each}
                                     <li class={flex({ alignItems: 'center', gap: '4px' })} aria-current="page">
                                       <EntityIcon entity$key={entity} size={14} />
-                                      <span>{localTitle || '제목 없음'}</span>
+                                      <span>{localTitle || '(제목 없음)'}</span>
                                     </li>
                                   </ol>
                                 </nav>
                               </EditorBreadcrumb>
+                            {/snippet}
+                            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
+                              <EditorFocusModeControl
+                                enabled={currentViewZenModeEnabled}
+                                onToggle={toggleZenMode}
+                                segment={state}
+                                visible={presentation.visible}
+                              />
                             {/snippet}
                             {#snippet header()}
                               <div
@@ -1508,65 +1497,39 @@
         {/snippet}
       </PrismReviewMargin>
 
-      {#if currentViewZenModeEnabled}
+      {#if currentViewZenModeEnabled && !entity.user.subscription}
         <div
           class={flex({
             position: 'fixed',
-            top: '18px',
+            top: '44px',
             right: '18px',
             zIndex: 'editor',
             alignItems: 'center',
             gap: '8px',
           })}
         >
-          {#if !entity.user.subscription}
-            <button
-              class={flex({
-                alignItems: 'center',
-                gap: '4px',
-                height: '[31.5px]',
-                paddingX: '8px',
-                borderRadius: '6px',
-                borderWidth: '1px',
-                borderColor: 'border.brand',
-                fontSize: '11px',
-                fontWeight: 'semibold',
-                color: 'text.brand',
-                backgroundColor: 'surface.default',
-                cursor: 'pointer',
-                transition: 'common',
-                _hover: { backgroundColor: 'accent.brand.subtle' },
-              })}
-              onclick={() => SubscribeModal.show('document_zen_mode')}
-              type="button"
-            >
-              <Icon icon={CrownIcon} size={12} />
-              <span>업그레이드</span>
-            </button>
-          {/if}
-
           <button
-            class={center({
-              height: '32px',
-              width: '32px',
+            class={flex({
+              alignItems: 'center',
+              gap: '4px',
+              height: '[31.5px]',
+              paddingX: '8px',
               borderWidth: '1px',
-              borderColor: 'border.strong',
-              borderRadius: '8px',
-              color: 'text.subtle',
-              backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
+              borderColor: 'border.brand',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 'semibold',
+              color: 'text.brand',
+              backgroundColor: 'surface.default',
+              cursor: 'pointer',
+              transition: 'common',
+              _hover: { backgroundColor: 'accent.brand.subtle' },
             })}
-            onclick={() => {
-              app.preference.current.zenModeEnabled = false;
-              mixpanel.track('zen_mode_disabled', { via: 'close_button' });
-            }}
-            onpointerdown={(e) => e.preventDefault()}
+            onclick={() => SubscribeModal.show('document_zen_mode')}
             type="button"
-            use:tooltip={{
-              message: '집중 모드 끄기',
-              keys: ['Esc'],
-            }}
           >
-            <Icon icon={XIcon} />
+            <Icon icon={CrownIcon} size={12} />
+            <span>업그레이드</span>
           </button>
         </div>
       {/if}

@@ -215,8 +215,7 @@
     lastZoom = displayZoom;
     const initialObservation = previousZoom === null;
     const zoomChanged = !initialObservation && zoomDiffers(previousZoom, displayZoom);
-    if (enabled && (zoomChanged || (entered && landmark !== 'unit'))) showTemporarily();
-    if (!enabled) segment.hideTransient();
+    if (enabled && (zoomChanged || entered)) showTemporarily();
   });
 
   $effect(() => {

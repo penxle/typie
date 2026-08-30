@@ -23,6 +23,7 @@ const HOVER_INTENT_SETTLE_MS = 100;
 const LANE_SPOT_DWELL_MS = 500;
 const LANE_SPOT_EXPAND_MS = 1000;
 const SURFACE_FADE_IN_MS = 180;
+const SURFACE_FADE_OUT_MS = 400;
 let mounted: Record<string, unknown> | undefined;
 
 const enter = (element: HTMLElement) => element.dispatchEvent(new PointerEvent('pointerenter'));
@@ -84,7 +85,7 @@ async function mountOverlay(
   const editorViewSurface = document.querySelector<HTMLElement>('[data-testid="context-bar-underlay"]')?.parentElement;
   const toolbar = document.querySelector<HTMLElement>('[data-testid="editor-toolbar"]');
   if (!overlay || !scrollContainer || !editorViewSurface || !toolbar) throw new Error('Missing editor view-controls fixture');
-  return { overlay, paneContainer: paneContainer ?? editorViewSurface, scrollContainer, editorViewSurface, toolbar };
+  return { overlay, paneContainer: paneContainer ?? editorViewSurface, scrollContainer, editorViewSurface, toolbar, host: mounted };
 }
 
 async function expireTransientVisibility() {
@@ -111,6 +112,25 @@ describe('editor context bar', () => {
     await expireTransientVisibility();
     expect(breadcrumb.style.opacity).toBe('0');
     expect(viewControls.style.opacity).toBe('0');
+  });
+
+  it('keeps the transient surface mask while the context bar fades out', async () => {
+    vi.useFakeTimers();
+    const { breadcrumb, viewControls } = await mountContextBar({ viewControlsPaneEntry: false });
+    const surface = document.querySelector<HTMLElement>('[data-context-bar-lane-surface]');
+    const blur = document.querySelector<HTMLElement>('[data-context-bar-blur-layer]');
+
+    await expireTransientVisibility();
+
+    expect(breadcrumb.style.opacity).toBe('0');
+    expect(viewControls.style.opacity).toBe('0');
+    expect(surface?.style.opacity).toBe('0');
+    expect(surface?.style.maskImage).toContain('linear-gradient(black, black)');
+    expect(blur?.style.maskImage).toContain('linear-gradient(black, black)');
+
+    await vi.advanceTimersByTimeAsync(SURFACE_FADE_OUT_MS);
+    expect(surface?.style.maskImage).not.toContain('linear-gradient(black, black)');
+    expect(blur?.style.maskImage).not.toContain('linear-gradient(black, black)');
   });
 
   it('preserves view controls and lets a long breadcrumb consume only the remaining width', async () => {
@@ -455,7 +475,24 @@ describe('editor context bar', () => {
   });
 });
 
-describe('editor zoom controls visibility', () => {
+describe('editor view controls visibility', () => {
+  it('reveals view controls when focus mode changes outside the control', async () => {
+    vi.useFakeTimers();
+    const { host, overlay } = await mountOverlay({ displayZoom: 1, indicatorZoom: 1, landmark: 'unit' });
+    const focusModeControl = () => document.querySelector<HTMLButtonElement>('[data-editor-focus-mode-control]');
+
+    expect(focusModeControl()?.ariaLabel).toBe('집중 모드 켜기');
+    await expireTransientVisibility();
+    expect(overlay.style.opacity).toBe('0');
+
+    (host as { setFocusMode: (enabled: boolean) => void }).setFocusMode(true);
+    await tick();
+
+    expect(overlay.style.opacity).toBe('1');
+    expect(focusModeControl()?.ariaLabel).toBe('집중 모드 끄기');
+    expect(focusModeControl()?.tabIndex).toBe(0);
+  });
+
   it('reveals an initial unit zoom for one transient window', async () => {
     vi.useFakeTimers();
     const unit = await mountOverlay({ displayZoom: 1, indicatorZoom: 1, landmark: 'unit' });

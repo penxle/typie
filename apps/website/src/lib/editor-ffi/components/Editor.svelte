@@ -16,6 +16,7 @@
     contentInsetRight?: number;
     contentMotion?: { fromX: number; duration: number; easing: string };
     breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
+    viewControls?: Snippet<[EditorContextBarSegmentRenderProps]>;
     header?: Snippet;
     footer?: Snippet;
     children?: Snippet;
@@ -32,6 +33,7 @@
     contentInsetRight = 0,
     contentMotion,
     breadcrumb,
+    viewControls,
     header,
     footer,
     children,
@@ -62,6 +64,7 @@
     {header}
     {onReady}
     {useWindowScroll}
+    {viewControls}
     {viewer}
   >
     {#if children}
