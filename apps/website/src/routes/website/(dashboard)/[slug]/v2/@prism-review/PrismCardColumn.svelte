@@ -6,7 +6,7 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { layoutCards } from './column-layout.ts';
+  import { CARD_BOTTOM_GAP, layoutBottomWithin, layoutCards } from './column-layout.ts';
   import { getMarginContext } from './context.svelte.ts';
   import { lanePresentation } from './margin-motion.ts';
   import { COLUMN_WIDTH, edgeJumpLabel } from './margin-view.ts';
@@ -124,7 +124,7 @@
     });
   };
 
-  const syncContentBottomOverflow = (cardExtent: number) => {
+  const syncContentBottomOverflow = () => {
     const editor = ctx.editor;
     const scroll = ctx.scroll;
     const area = editor?.extensionAreaEl;
@@ -132,6 +132,12 @@
     if (!scroll || !area || !lastPage) return;
 
     const contentBottom = lastPage.getBoundingClientRect().bottom - area.getBoundingClientRect().top;
+    const cardBottoms = Object.values(cardEls).flatMap((element) => {
+      if (!element) return [];
+      const bottom = layoutBottomWithin(element, area);
+      return bottom === null ? [] : [bottom];
+    });
+    const cardExtent = cardBottoms.length === 0 ? 0 : Math.max(...cardBottoms) + CARD_BOTTOM_GAP;
     scroll.setContentBottomOverflow(Math.max(0, cardExtent - contentBottom));
   };
 
@@ -160,7 +166,7 @@
     const result = layoutCards(entries, margin.activeId);
     tops = result.tops;
     spacer = result.spacer;
-    syncContentBottomOverflow(result.spacer);
+    void tick().then(syncContentBottomOverflow);
     const activation = margin.activation;
     const active = activation.sequence === pendingRevealSequence ? entries.find((entry) => entry.id === activation.id) : undefined;
     const editor = ctx.editor;
@@ -504,6 +510,7 @@
     <div class={flex({ direction: 'column', gap: '10px', marginTop: '12px' })}>
       {#each cards as item (item.id)}
         <div
+          bind:this={cardEls[item.id]}
           style:opacity={presentation.opacity}
           style:transform={`scale(${presentation.scale})`}
           style:will-change={presentationAnimating ? 'opacity, transform' : 'auto'}

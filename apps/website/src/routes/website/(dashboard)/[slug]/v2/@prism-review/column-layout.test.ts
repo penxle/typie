@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_GAP, layoutCards } from './column-layout.ts';
+import { CURSOR_VISIBLE_MARGIN } from '$lib/editor-ffi/constants';
+import { CARD_GAP, layoutBottomWithin, layoutCards } from './column-layout.ts';
 import type { CardEntry } from './column-layout.ts';
 
 const entry = (id: string, desired: number, height = 100): CardEntry => ({ id, desired, height });
+
+const layoutElement = (offsetTop: number, offsetHeight: number, offsetParent: HTMLElement | null): HTMLElement =>
+  ({ offsetTop, offsetHeight, offsetParent }) as HTMLElement;
 
 describe('layoutCards', () => {
   it('겹치지 않으면 각자 앵커 높이에 선다', () => {
@@ -41,6 +45,16 @@ describe('layoutCards', () => {
 
   it('스페이서는 가장 아래 카드의 바닥을 덮는다', () => {
     const { spacer } = layoutCards([entry('a', 0), entry('b', 300)], null);
-    expect(spacer).toBe(300 + 100 + 8);
+    expect(spacer).toBe(300 + 100 + CURSOR_VISIBLE_MARGIN);
+  });
+
+  it('흐름 배치 카드의 하단을 컬럼 조상 좌표로 계산한다', () => {
+    const area = layoutElement(0, 0, null);
+    const column = layoutElement(0, 0, area);
+    const flow = layoutElement(12, 0, column);
+    const card = layoutElement(110, 100, flow);
+
+    expect(layoutBottomWithin).toBeTypeOf('function');
+    expect(layoutBottomWithin(card, area)).toBe(222);
   });
 });
