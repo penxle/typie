@@ -3,6 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon } from '@typie/ui/components';
+  import mixpanel from 'mixpanel-browser';
   import { unwrapError } from '$lib/graphql/error';
   import { actionCards, actionOutcome, actionTail } from './action-cards.ts';
   import type { ToolCardProps } from './index.ts';
@@ -29,6 +30,7 @@
 
     try {
       await resolve({ approve });
+      if (!approve) mixpanel.track('reject_prism_action', { tool: message.tool });
     } catch (err) {
       const error = unwrapError(err);
       if (error instanceof TypieError && error.code === 'prism_tool_settled') return;

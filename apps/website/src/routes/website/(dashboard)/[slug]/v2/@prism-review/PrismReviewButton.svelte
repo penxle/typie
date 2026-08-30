@@ -2,6 +2,7 @@
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
+  import mixpanel from 'mixpanel-browser';
   import ReviewLensIcon from '~icons/typie/review-lens';
   import { tryMarginContext } from './context.svelte';
   import PrismRoundsModal from './PrismRoundsModal.svelte';
@@ -27,7 +28,10 @@
       },
     })}
     aria-pressed={active}
-    onclick={() => (open = true)}
+    onclick={() => {
+      open = true;
+      mixpanel.track('open_prism_review_rounds_modal');
+    }}
     onpointerdown={(event) => event.preventDefault()}
     type="button"
     use:tooltip={{ message: '리뷰' }}

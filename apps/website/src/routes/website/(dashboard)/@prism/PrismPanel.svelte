@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
+  import * as Sentry from '@sentry/sveltekit';
   import { TypieError } from '@typie/lib/errors';
   import { effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css, cx } from '@typie/styled-system/css';
@@ -9,6 +10,7 @@
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
@@ -27,6 +29,7 @@
   import { graphql } from '$mearie';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
+  import { commandGate, commandNameOf } from './lib/commands.ts';
   import { expand, rise, swap } from './lib/motion.ts';
   import { hasUnread, sessionLabel } from './lib/session-groups.ts';
   import { prismAccessUnavailableMessage } from './prism-access.ts';
@@ -47,6 +50,7 @@
   import type { ToolPolicy, WorkflowMessage } from '@typie/prism';
   import type { DashboardLayout_PrismPanel_user$key } from '$mearie';
   import type { PrismAccessReason } from './prism-access.ts';
+  import type { StartChip } from './start-chips.ts';
 
   type Props = {
     user$key: DashboardLayout_PrismPanel_user$key;
@@ -108,6 +112,15 @@
     return null;
   });
   const accessUnavailableMessage = $derived(accessReason === null ? undefined : prismAccessUnavailableMessage(accessReason));
+
+  let seenGateReason: PrismAccessReason | null = null;
+
+  $effect(() => {
+    const reason = accessReason;
+    if (reason === seenGateReason) return;
+    seenGateReason = reason;
+    if (reason !== null) mixpanel.track('view_prism_gate', { reason });
+  });
 
   $effect(() => {
     app.state.prismBadge = user.data.prismSessions.some((session) => hasUnread(session));
@@ -245,6 +258,7 @@
     const sessionId = chat.sessionId;
     if (sessionId === null) {
       app.preference.current.prismToolPolicy = next;
+      mixpanel.track('change_prism_tool_policy', { policy: next, scope: 'default' });
       return;
     }
 
@@ -255,7 +269,10 @@
       );
     } catch {
       Toast.error('설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요');
+      return;
     }
+
+    mixpanel.track('change_prism_tool_policy', { policy: next, scope: 'session' });
   };
 
   const commands = $derived(
@@ -398,11 +415,18 @@
     };
   });
 
-  export const startNewChat = async (nextDraft?: string) => {
+  export const startNewChat = async (via: 'command_palette' | 'header', nextDraft?: string) => {
     selected.current = null;
     listOpen = false;
     if (nextDraft !== undefined) draft = nextDraft;
-    app.preference.current.prismPanelOpen = true;
+
+    mixpanel.track('open_prism_new_chat', { via, with_draft: nextDraft !== undefined });
+
+    if (!app.preference.current.prismPanelOpen) {
+      app.preference.current.prismPanelOpen = true;
+      mixpanel.track('open_prism_panel', { via: 'new_chat' });
+    }
+
     await tick();
     composer?.focus();
   };
@@ -443,7 +467,7 @@
     }
   });
 
-  const archiveSession = async (id: string) => {
+  const archiveSession = async (id: string, via: 'header_menu' | 'session_list') => {
     try {
       await archivePrismSession(
         { input: { sessionId: id } },
@@ -454,12 +478,14 @@
       return;
     }
 
+    mixpanel.track('archive_prism_session', { via });
+
     if (selected.current === id) {
       selected.current = null;
     }
   };
 
-  const unarchiveSession = async (id: string) => {
+  const unarchiveSession = async (id: string, via: 'header_menu' | 'session_list') => {
     try {
       await unarchivePrismSession(
         { input: { sessionId: id } },
@@ -467,10 +493,13 @@
       );
     } catch {
       Toast.error('복원하지 못했어요. 잠시 후 다시 시도해 주세요');
+      return;
     }
+
+    mixpanel.track('unarchive_prism_session', { via });
   };
 
-  const renameSession = async (id: string, title: string) => {
+  const renameSession = async (id: string, title: string, via: 'header_menu' | 'session_list') => {
     try {
       await renamePrismSession(
         { input: { sessionId: id, title } },
@@ -478,10 +507,13 @@
       );
     } catch {
       Toast.error('이름을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요');
+      return;
     }
+
+    mixpanel.track('rename_prism_session', { via });
   };
 
-  const requestDelete = (session: { id: string; title?: string | null }) => {
+  const requestDelete = (session: { id: string; title?: string | null }, via: 'header_menu' | 'session_list') => {
     Dialog.confirm({
       title: '대화를 삭제하시겠어요?',
       message: `"${sessionLabel(session)}" 대화가 목록에서 사라지고 되돌릴 수 없어요.`,
@@ -494,6 +526,8 @@
           Toast.error('삭제하지 못했어요. 잠시 후 다시 시도해 주세요');
           return;
         }
+
+        mixpanel.track('delete_prism_session', { via });
 
         if (selected.current === session.id) {
           selected.current = null;
@@ -524,7 +558,7 @@
     const session = currentSession;
     const title = titleDraft.trim();
     if (!session || title.length === 0 || title === sessionLabel(session)) return;
-    await renameSession(session.id, title);
+    await renameSession(session.id, title, 'header_menu');
   };
 
   $effect(() => {
@@ -538,7 +572,10 @@
     if (sessionId === null) return;
     untrack(() => {
       selected.current = sessionId;
-      app.preference.current.prismPanelOpen = true;
+      if (!app.preference.current.prismPanelOpen) {
+        app.preference.current.prismPanelOpen = true;
+        mixpanel.track('open_prism_panel', { via: 'review_jump' });
+      }
     });
   });
 
@@ -638,6 +675,16 @@
     if (delay === null) {
       reconnecting = false;
       reconnectFailed = true;
+
+      try {
+        Sentry.captureMessage('prism session reconnect exhausted', {
+          level: 'error',
+          extra: { attempts: reconnectAttempts },
+        });
+      } catch {
+        // 보고 실패가 재연결 상태를 바꾸지 않는다
+      }
+
       return;
     }
 
@@ -721,12 +768,28 @@
       const result = await chat.send(text);
       selected.current = result.sessionId;
 
+      const gate = commandGate(text, commands);
+      mixpanel.track('send_prism_message', {
+        new_session: creating,
+        command: gate === 'plain' ? null : gate === 'ok' ? commandNameOf(text) : 'unknown',
+        policy,
+      });
+
       if (creating) {
         cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'prismSessions' });
       }
     } catch (err) {
       const error = unwrapError(err);
       const code = error instanceof TypieError ? error.code : null;
+
+      try {
+        Sentry.captureMessage('prism message send failed', {
+          level: code === null ? 'error' : 'info',
+          extra: { code: code ?? 'unknown' },
+        });
+      } catch {
+        // 보고 실패가 전송 결과를 바꾸지 않는다
+      }
 
       if (code === 'prism_beta_required') {
         betaGate = 'prism_beta_required';
@@ -746,14 +809,16 @@
     }
   };
 
-  const onChipInsert = (text: string) => {
-    draft = text;
+  const onChipInsert = (chip: StartChip) => {
+    draft = chip.insert;
+    mixpanel.track('insert_prism_chip', { label: chip.label });
     composer?.focus();
   };
 
   const cancelRun = async () => {
     try {
       await chat.stop();
+      mixpanel.track('stop_prism_run', { workflow: activeWorkflow?.app ?? null });
       return true;
     } catch {
       Toast.error('중단하지 못했어요. 잠시 후 다시 시도해 주세요');
@@ -886,7 +951,7 @@
                 icon={ArchiveIcon}
                 onclick={() => {
                   close();
-                  void archiveSession(session.id);
+                  void archiveSession(session.id, 'header_menu');
                 }}
               >
                 보관
@@ -896,7 +961,7 @@
                 icon={ArchiveRestoreIcon}
                 onclick={() => {
                   close();
-                  void unarchiveSession(session.id);
+                  void unarchiveSession(session.id, 'header_menu');
                 }}
               >
                 복원
@@ -906,7 +971,7 @@
               icon={TrashIcon}
               onclick={() => {
                 close();
-                requestDelete(session);
+                requestDelete(session, 'header_menu');
               }}
               variant="danger"
             >
@@ -919,7 +984,7 @@
       <button
         class={buttonClass}
         aria-label="새 대화"
-        onclick={() => void startNewChat()}
+        onclick={() => void startNewChat('header')}
         type="button"
         use:tooltip={{ message: '새 대화' }}
       >
@@ -948,15 +1013,15 @@
     {#if listOpen}
       <PrismSessionList
         currentId={selected.current}
-        onArchive={archiveSession}
+        onArchive={(id) => archiveSession(id, 'session_list')}
         onClose={() => (listOpen = false)}
-        onDelete={requestDelete}
-        onRename={renameSession}
+        onDelete={(session) => requestDelete(session, 'session_list')}
+        onRename={(id, title) => renameSession(id, title, 'session_list')}
         onSelect={(id) => {
           selected.current = id;
           listOpen = false;
         }}
-        onUnarchive={unarchiveSession}
+        onUnarchive={(id) => unarchiveSession(id, 'session_list')}
         {sessions}
       />
     {/if}
@@ -1032,7 +1097,7 @@
           <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
           <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
             {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
-              <button class={chipClass} onclick={() => onChipInsert(chip.insert)} tabindex={chipsVisible ? 0 : -1} type="button">
+              <button class={chipClass} onclick={() => onChipInsert(chip)} tabindex={chipsVisible ? 0 : -1} type="button">
                 <Icon icon={chip.icon} size={14} />
                 {chip.label}
               </button>

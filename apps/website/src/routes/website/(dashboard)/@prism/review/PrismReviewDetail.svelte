@@ -3,6 +3,7 @@
   import { css, cva } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal } from '@typie/ui/components';
+  import mixpanel from 'mixpanel-browser';
   import { MediaQuery } from 'svelte/reactivity';
   import PrismIcon from '~icons/typie/prism';
   import { goto } from '$app/navigation';
@@ -96,6 +97,7 @@
 
   const openMargin = async (itemId: string | null) => {
     open = false;
+    mixpanel.track('open_prism_review_margin', { via: 'review_detail' });
     requestMarginJump({ documentId: round.document.id, roundId: round.id, itemId });
     await goto(`/${round.document.entity.slug}`);
   };

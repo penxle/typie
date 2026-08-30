@@ -66,7 +66,7 @@
 
   const app = setupAppContext(query.data.me.id);
   let prismPanel = $state<PrismPanel>();
-  const startPrismNewChat = (draft: string) => void prismPanel?.startNewChat(draft);
+  const startPrismNewChat = (draft: string) => void prismPanel?.startNewChat('command_palette', draft);
 
   const legacyTrial = $derived(
     query.data.me.subscription

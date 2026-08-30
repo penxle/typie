@@ -543,7 +543,11 @@
             transition: 'common',
             _supportHover: { backgroundColor: 'surface.muted' },
           })}
-          onclick={() => (app.preference.current.prismPanelOpen = !app.preference.current.prismPanelOpen)}
+          onclick={() => {
+            const next = !app.preference.current.prismPanelOpen;
+            app.preference.current.prismPanelOpen = next;
+            mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'sidebar' });
+          }}
           type="button"
         >
           <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>

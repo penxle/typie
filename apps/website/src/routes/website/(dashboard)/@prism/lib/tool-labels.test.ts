@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { labelForRequest } from './tool-labels.ts';
+
+vi.mock('@sentry/sveltekit', () => ({ captureMessage: vi.fn() }));
 
 describe('labelForRequest', () => {
   it('성공·미해소는 도구 라벨, 실패 봉투는 실패 라벨을 고른다', () => {

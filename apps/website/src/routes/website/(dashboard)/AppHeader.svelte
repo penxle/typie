@@ -69,7 +69,11 @@
       class={css(button, open ? { backgroundColor: 'surface.muted' } : {})}
       aria-label="PRISM 열기/닫기"
       aria-pressed={open}
-      onclick={() => (app.preference.current.prismPanelOpen = !open)}
+      onclick={() => {
+        const next = !open;
+        app.preference.current.prismPanelOpen = next;
+        mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'header' });
+      }}
       type="button"
       use:tooltip={{ message: open ? 'PRISM 닫기' : 'PRISM 열기', keys: ['Mod', 'E'] }}
     >

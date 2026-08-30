@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation, createQuery } from '@mearie/svelte';
+  import * as Sentry from '@sentry/sveltekit';
   import { TypieError } from '@typie/lib/errors';
   import { ConfirmDecisionSchema, ConfirmHintSchema, quoteReviewCredits } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
@@ -7,6 +8,7 @@
   import { Button, Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
+  import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
@@ -253,7 +255,7 @@
         : (selected?.title ?? null),
   );
 
-  const act = async (input: unknown) => {
+  const act = async (input: unknown, decision: 'confirmed' | 'declined') => {
     if (busy) {
       return;
     }
@@ -262,9 +264,24 @@
 
     try {
       await resolve(input);
+
+      if (decision === 'confirmed') {
+        mixpanel.track('start_prism_review', { tier, lineage: lineageChoice === 'fresh' ? 'fresh' : 'continue' });
+      } else {
+        mixpanel.track('decline_prism_review');
+      }
     } catch (err) {
       const error = unwrapError(err);
       const code = error instanceof TypieError ? error.code : null;
+
+      try {
+        Sentry.captureMessage('prism review start failed', {
+          level: code === null ? 'error' : 'info',
+          extra: { code: code ?? 'unknown', decision },
+        });
+      } catch {
+        // 보고 실패가 확인 결과를 바꾸지 않는다
+      }
 
       if (code === 'prism_tool_settled') {
         Toast.error('이미 처리된 확인이에요');
@@ -306,12 +323,15 @@
       return;
     }
 
-    void act({
-      decision: 'confirmed',
-      versionId: current.versionId,
-      tier: depth.toUpperCase(),
-      ...(lineageChoice !== 'fresh' && { lineageId: lineageChoice }),
-    });
+    void act(
+      {
+        decision: 'confirmed',
+        versionId: current.versionId,
+        tier: depth.toUpperCase(),
+        ...(lineageChoice !== 'fresh' && { lineageId: lineageChoice }),
+      },
+      'confirmed',
+    );
   };
 
   const cardClass = css({
@@ -568,7 +588,9 @@
 
   {#if open}
     <div class={flex({ gap: '8px', justifyContent: 'flex-end' })}>
-      <Button disabled={busy} onclick={() => void act({ decision: 'declined' })} size="sm" variant="ghost">이번엔 안 할래요</Button>
+      <Button disabled={busy} onclick={() => void act({ decision: 'declined' }, 'declined')} size="sm" variant="ghost">
+        이번엔 안 할래요
+      </Button>
       <Button
         style={css.raw({ minWidth: '96px' })}
         disabled={busy || selected === null || tier === null || preparing || current === null || lineagesLoading || insufficient}
