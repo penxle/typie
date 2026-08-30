@@ -12,16 +12,18 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
+  import MinusIcon from '~icons/lucide/minus';
   import PrismCreditIcon from '~icons/typie/prism-credit';
   import { pushState } from '$app/navigation';
   import { unwrapError } from '$lib/graphql/error';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { readReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
-  import { swap } from '../lib/motion.ts';
+  import { expand, swap } from '../lib/motion.ts';
   import PrismCallout from '../PrismCallout.svelte';
   import { lineageRowLabel, pickDefaultLineage } from './lineage-view.ts';
-  import { TIER_OPTIONS } from './tiers.ts';
+  import { stageIntroducedIn, STAGES, TIER_STAGES } from './stages.ts';
+  import { DELIVERABLES, TIER_OPTIONS, tierCovers, tierLabelOf } from './tiers.ts';
   import type { ConfirmHint, PrismReviewTierName } from '@typie/prism';
   import type { ToolCardProps } from '../tools/index.ts';
   import type { LineageOption } from './lineage-view.ts';
@@ -198,13 +200,21 @@
   const balance = $derived(me.data?.me?.prismCredit.balance ?? null);
   const insufficient = $derived(!busy && tier !== null && balance !== null && (quoteOf(tier) ?? 0) > balance);
 
+  // 설명은 고르는 동안만 필요하다 — 티어·문서·계보를 옮겨도 열린 채로 남아야 비교가 되고,
+  // 결정이 끝나면 스스로 접힌다.
+  let detailOpen = $state(false);
+
   let cardEl = $state<HTMLElement>();
   let heightFrom = $state<number>();
   let prevOpen: boolean | undefined;
 
   $effect.pre(() => {
     const next = open;
-    if (prevOpen !== undefined && next !== prevOpen) heightFrom = cardEl?.offsetHeight;
+    if (prevOpen !== undefined && next !== prevOpen) {
+      heightFrom = cardEl?.offsetHeight;
+      if (!next) detailOpen = false;
+    }
+
     prevOpen = next;
   });
   const decidedAt = $derived(message.settledAt ?? null);
@@ -254,6 +264,17 @@
         ? null
         : (selected?.title ?? null),
   );
+
+  // 거절한 카드에만 설 자리가 없다 — 깊이를 고르기 전이야말로 설명이 가장 필요한 자리라, 티어가 없어도 편다.
+  const panelShown = $derived(!readonly || decided);
+  // 고른 깊이가 없으면 열린 것도 없다 — 단계도 산출물도 전부 죽은 채로, 단계에만 어디부터 열리는지 단다.
+  const panelTier = $derived<PrismReviewTierName | null>(readonly ? (decided ? chosenTier : null) : tier);
+  const panelStages = $derived(panelTier === null ? [] : TIER_STAGES[panelTier]);
+  // 「지난 회차보다 나아진 점」은 이어서 보는 회차에만 선다 — 열린 카드는 고른 계보가, 닫힌 카드는 기준 회차가 말해 준다.
+  const panelFollowup = $derived(readonly ? chosenBase !== null : lineageChoice !== 'fresh');
+  const panelDeliverables = $derived(DELIVERABLES.filter((item) => item.followupOnly !== true || panelFollowup));
+  // 고른 깊이가 없으면 세 줄이 그대로 고르는 기준이 된다 — 골랐으면 그 줄만 남고, 형태는 같다.
+  const panelUses = $derived(panelTier === null ? TIER_OPTIONS : TIER_OPTIONS.filter((option) => option.tier === panelTier));
 
   const act = async (input: unknown, decision: 'confirmed' | 'declined') => {
     if (busy) {
@@ -420,6 +441,62 @@
   const spacerClass = css({ flexGrow: '1' });
   const timeStyle = css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
   const timeClass = css(timeStyle);
+
+  const toggleClass = flex({
+    alignItems: 'center',
+    gap: '5px',
+    marginTop: '9px',
+    fontSize: '[11.5px]',
+    color: 'text.faint',
+    transition: '[color 150ms ease]',
+    _hover: { color: 'text.subtle' },
+  });
+  // surface 스케일은 한 단계 올릴수록 라이트에서 어두워지고 다크에서 밝아진다 — 카드가 이미 그 규칙이라
+  // (라이트 default · 다크 subtle), 패널은 카드에서 한 단계 더 올린 자리에 선다.
+  const panelClass = css({
+    marginTop: '8px',
+    padding: '12px',
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '8px',
+    backgroundColor: 'surface.subtle',
+    _dark: { backgroundColor: 'surface.muted' },
+  });
+  // 카드 바깥 라벨(대상 문서·검토 깊이)은 바로 아래에 테두리 있는 행이 붙어 4px로 충분하지만,
+  // 패널 안은 테두리 없는 줄이 이어져 같은 간격이면 제목이 첫 줄에 붙어 읽힌다.
+  const panelLabelClass = css({ marginBottom: '8px', fontSize: '11px', color: 'text.faint' });
+  const useRowClass = flex({ alignItems: 'baseline', gap: '7px', paddingY: '[1.5px]', fontSize: '[11.5px]', color: 'text.subtle' });
+  const useTierClass = css({ flexShrink: '0', fontWeight: 'semibold', color: 'text.default' });
+  const railRowClass = flex({ gap: '9px' });
+  const railColClass = flex({ flexDirection: 'column', alignItems: 'center', flexShrink: '0', width: '9px' });
+  const nodeStyle = css.raw({ flexShrink: '0', size: '9px', marginTop: '4px', borderRadius: 'full' });
+  const nodeOnStyle = css.raw({ backgroundColor: 'text.default' });
+  const nodeOffStyle = css.raw({ borderWidth: '1px', borderColor: 'text.disabled' });
+  const linkStyle = css.raw({ flexGrow: '1', width: '1px', marginTop: '3px' });
+  const linkOnStyle = css.raw({ backgroundColor: 'text.default' });
+  const linkOffStyle = css.raw({
+    backgroundImage: '[repeating-linear-gradient(to bottom, {colors.text.disabled} 0 2px, transparent 2px 4px)]',
+  });
+  const railBodyStyle = css.raw({ flexGrow: '1', minWidth: '0', paddingBottom: '9px' });
+  // 높이를 못으로 박아 둔다 — 태그가 붙고 안 붙고에 따라 행이 들쭉날쭉하면 티어를 옮길 때 레일이 출렁인다.
+  const railNameStyle = flex.raw({ alignItems: 'center', gap: '8px', height: '20px', fontSize: '[12.5px]', fontWeight: 'medium' });
+  const railDescStyle = css.raw({ marginTop: '1px', fontSize: '11px' });
+  const fromTagClass = css({
+    flexShrink: '0',
+    paddingX: '4px',
+    paddingY: '3px',
+    borderWidth: '1px',
+    borderColor: 'border.default',
+    borderRadius: '4px',
+    // 행 높이는 railNameStyle이 못으로 박아 두므로 이 값이 레이아웃을 흔들지 않는다 — 20px 안에 들어가기만 하면 된다.
+    lineHeight: '[1.2]',
+    fontSize: '10px',
+    fontWeight: 'normal',
+    color: 'text.disabled',
+  });
+  const dividerClass = css({ height: '1px', marginY: '11px', backgroundColor: 'border.default' });
+  const itemStyle = css.raw({ display: 'flex', alignItems: 'center', gap: '8px', paddingY: '[2.5px]', fontSize: '12px' });
+  const markStyle = css.raw({ flexShrink: '0' });
 </script>
 
 <div bind:this={cardEl} class={cardClass} aria-busy={loading}>
@@ -539,7 +616,7 @@
   {/if}
 
   <div class={labelClass}>검토 깊이</div>
-  <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: readonly ? '0' : '12px' })}>
+  <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     {#each TIER_OPTIONS as opt (opt.tier)}
       {@const on = readonly ? decided && chosenTier === opt.tier : tier === opt.tier}
       {#if readonly}
@@ -577,9 +654,64 @@
     {/each}
   </div>
 
+  {#if panelShown}
+    <button class={toggleClass} aria-expanded={detailOpen} onclick={() => (detailOpen = !detailOpen)} type="button">
+      <Icon icon={detailOpen ? ChevronUpIcon : ChevronDownIcon} size={12} />
+      <span>검토 깊이에 대해 알고 싶어요</span>
+    </button>
+
+    {#if detailOpen}
+      <div class={panelClass} transition:expand>
+        {#each panelUses as option (option.tier)}
+          <div class={useRowClass}>
+            <span class={useTierClass}>{option.label}</span>
+            <span>{option.use}</span>
+          </div>
+        {/each}
+
+        <div class={dividerClass}></div>
+
+        <div class={panelLabelClass}>진행 순서</div>
+        {#each STAGES as stage, index (stage.key)}
+          {@const on = panelStages.includes(stage.key)}
+          {@const nextOn = index + 1 < STAGES.length && panelStages.includes(STAGES[index + 1].key)}
+          <div class={railRowClass}>
+            <div class={railColClass}>
+              <div class={css(nodeStyle, on ? nodeOnStyle : nodeOffStyle)}></div>
+              {#if index + 1 < STAGES.length}
+                <div class={css(linkStyle, on && nextOn ? linkOnStyle : linkOffStyle)}></div>
+              {/if}
+            </div>
+            <div class={css(railBodyStyle, index + 1 === STAGES.length ? { paddingBottom: '0' } : {})}>
+              <div class={css(railNameStyle, on ? { color: 'text.subtle' } : { color: 'text.disabled' })}>
+                <span>{stage.label}</span>
+                {#if !on}
+                  <span class={spacerClass}></span>
+                  <span class={fromTagClass}>{tierLabelOf(stageIntroducedIn(stage.key))}부터</span>
+                {/if}
+              </div>
+              <div class={css(railDescStyle, on ? { color: 'text.faint' } : { color: 'text.disabled' })}>{stage.description}</div>
+            </div>
+          </div>
+        {/each}
+
+        <div class={dividerClass}></div>
+
+        <div class={panelLabelClass}>받아보는 것</div>
+        {#each panelDeliverables as item (item.label)}
+          {@const on = panelTier !== null && tierCovers(panelTier, item.from)}
+          <div class={css(itemStyle, on ? { color: 'text.subtle' } : { color: 'text.disabled' })}>
+            <Icon style={markStyle} icon={on ? CheckIcon : MinusIcon} size={12} />
+            <span>{item.label}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  {/if}
+
   {#if open && insufficient}
     <PrismCallout
-      style={{ marginBottom: '12px' }}
+      style={{ marginTop: '12px' }}
       action={{ label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism' }) }}
       message="크레딧이 부족해요"
       tone="warning"
@@ -587,7 +719,7 @@
   {/if}
 
   {#if open}
-    <div class={flex({ gap: '8px', justifyContent: 'flex-end' })}>
+    <div class={flex({ gap: '8px', justifyContent: 'flex-end', marginTop: '12px' })}>
       <Button disabled={busy} onclick={() => void act({ decision: 'declined' }, 'declined')} size="sm" variant="ghost">
         이번엔 안 할래요
       </Button>
