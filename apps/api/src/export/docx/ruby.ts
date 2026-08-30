@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/prefer-single-call -- ImportedXmlComponent.push() accepts only one argument */
 import { ImportedXmlComponent } from 'docx';
 
 const DEFAULT_BASE_SIZE_HP = 21; // 10.5pt in half-points (default CJK body text)

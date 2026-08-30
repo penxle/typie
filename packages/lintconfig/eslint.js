@@ -98,6 +98,7 @@ export default defineConfig([
       'unicorn/prefer-uint8array-base64': 'off',
       'unicorn/prevent-abbreviations': 'off',
       'unicorn/require-css-escape': 'off',
+      'unicorn/single-line-block-comment-style': 'off',
       'unicorn/throw-new-error': 'off',
     },
   },
