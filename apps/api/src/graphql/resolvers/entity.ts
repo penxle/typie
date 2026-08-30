@@ -229,6 +229,40 @@ Entity.implement({
       type: EntityGoal,
       nullable: true,
       resolve: async (self, _, ctx) => {
+        const userId = ctx.session?.userId;
+        if (!userId) {
+          return null;
+        }
+
+        // 공유 문서의 목표는 문서 독자에게 보이지만, 상위 폴더 목표는 사이트 소유자에게만 보인다.
+        if (self.type !== EntityType.DOCUMENT) {
+          const permissionLoader = ctx.loader({
+            name: 'Entity.goal.permission',
+            nullable: true,
+            load: async (siteIds: string[]) => {
+              const allowed: { siteId: string }[] = [];
+
+              for (const siteId of siteIds) {
+                try {
+                  await assertSitePermission({ userId, siteId });
+                  allowed.push({ siteId });
+                } catch (err) {
+                  if (!(err instanceof TypieError)) {
+                    throw err;
+                  }
+                }
+              }
+
+              return allowed;
+            },
+            key: (row) => row?.siteId,
+          });
+
+          if (!(await permissionLoader.load(self.siteId))) {
+            return null;
+          }
+        }
+
         const loader = ctx.loader({
           name: 'Entity.goal',
           nullable: true,
