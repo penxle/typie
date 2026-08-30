@@ -374,6 +374,7 @@ export const PrismCreditEntryKind = {
   PURCHASE: 'PURCHASE',
   BONUS: 'BONUS',
   REFUND_OUT: 'REFUND_OUT',
+  EXPIRE: 'EXPIRE',
 } as const;
 
 export type PrismCreditPack = keyof typeof PrismCreditPack;

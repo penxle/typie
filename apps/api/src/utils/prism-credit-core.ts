@@ -1,6 +1,9 @@
 import type { PrismCreditEntryKind } from '@typie/lib/enums';
+import type { Dayjs } from 'dayjs';
 
 export const MILLI_PER_CREDIT = 1000;
+export const TRIAL_CREDIT_AMOUNT = 300;
+export const TRIAL_EXPIRY_DAYS = 30;
 
 export type CreditDelta = { paidDelta: number; freeDelta: number };
 
@@ -50,6 +53,9 @@ export const validateEntry = (kind: PrismCreditEntryKind, { paidDelta, freeDelta
       case 'REFUND_OUT': {
         return paidDelta <= 0 && freeDelta <= 0 && (paidDelta !== 0 || freeDelta !== 0);
       }
+      case 'EXPIRE': {
+        return freeDelta < 0 && paidDelta === 0;
+      }
       case 'ADJUSTMENT': {
         return true;
       }
@@ -78,3 +84,15 @@ export const toMilli = (credits: number): number => {
 
   return credits * MILLI_PER_CREDIT;
 };
+
+export const computeTrialRemainder = ({ granted, consumedNet }: { granted: number; consumedNet: number }): number => {
+  assertInteger(granted, 'granted');
+  assertInteger(consumedNet, 'consumedNet');
+
+  return Math.min(Math.max(granted + consumedNet, 0), granted);
+};
+
+export const computeTrialExpiresAt = (now: Dayjs): Dayjs => now.kst().startOf('day').add(TRIAL_EXPIRY_DAYS, 'day');
+
+export const clampExpiringMilli = ({ remainder, total }: { remainder: number; total: number }): number =>
+  Math.max(Math.min(remainder, total), 0);

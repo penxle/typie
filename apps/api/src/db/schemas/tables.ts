@@ -1017,11 +1017,18 @@ export const PrismCreditEntries = pgTable(
     key: text('key'),
     note: text('note'),
     actorId: text('actor_id').references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    expiresAt: datetime('expires_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [unique().on(t.kind, t.key), index().on(t.userId)],
+  (t) => [
+    unique().on(t.kind, t.key),
+    index().on(t.userId),
+    index('prism_credit_entries_expires_at_index')
+      .on(t.expiresAt)
+      .where(sql`${t.expiresAt} is not null`),
+  ],
 );
 
 export const PrismCreditPurchases = pgTable(

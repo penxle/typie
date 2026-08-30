@@ -1,7 +1,9 @@
 import * as Sentry from '@sentry/node';
 import { sql } from 'drizzle-orm';
-import { dbr, PrismCreditEntries, PrismCreditPurchases, PrismCreditRefunds } from '#/db/index.ts';
+import { db, dbr, PrismCreditEntries, PrismCreditPurchases, PrismCreditRefunds } from '#/db/index.ts';
+import { pubsub } from '#/pubsub.ts';
 import { opsAlert } from '#/utils/ops-alert.ts';
+import { CONSUMED_NET_LATERAL, expireTrialGrant, listExpirableTrialGrants, NOT_EXPIRED } from '#/utils/prism-credit.ts';
 import { reconcilePendingPurchases } from '#/utils/prism-credit-purchase.ts';
 import { defineCron } from '../types.ts';
 import type { SQL } from 'drizzle-orm';
@@ -83,6 +85,30 @@ const INVARIANT_CHECKS: InvariantCheck[] = [
         AND ${PrismCreditRefunds.createdAt} < now() - interval '30 minutes'
     `,
   },
+  {
+    key: 'prism-credit-expire-orphan',
+    violations: sql`
+      SELECT e.id AS id
+      FROM ${PrismCreditEntries} e
+      LEFT JOIN ${PrismCreditEntries} t
+        ON t.kind = 'TRIAL' AND t.id = e.key
+      WHERE e.kind = 'EXPIRE'
+        AND (t.id IS NULL OR t.user_id <> e.user_id)
+    `,
+  },
+  {
+    key: 'prism-credit-expire-overdue',
+    violations: sql`
+      SELECT t.id AS id
+      FROM ${PrismCreditEntries} t
+      ${CONSUMED_NET_LATERAL}
+      WHERE t.kind = 'TRIAL'
+        AND t.expires_at IS NOT NULL
+        AND t.expires_at < now() - interval '1 hour'
+        AND ${NOT_EXPIRED}
+        AND t.free_delta + s.net > 0
+    `,
+  },
 ];
 
 const runInvariantCheck = async (check: InvariantCheck) => {
@@ -115,4 +141,20 @@ export const PrismCreditInvariantsCron = defineCron('prism:credit-invariants', '
 
 export const PrismCreditPurchaseReconcileCron = defineCron('prism:credit-purchase-reconcile', '*/5 * * * *', async () => {
   await reconcilePendingPurchases();
+});
+
+export const PrismCreditExpireCron = defineCron('prism:credit-expire', '* * * * *', async () => {
+  const grants = await listExpirableTrialGrants(db);
+
+  for (const grant of grants) {
+    try {
+      const { applied } = await db.transaction(async (tx) => await expireTrialGrant(tx, grant));
+
+      if (applied) {
+        pubsub.publish('prism:credit', grant.userId, {});
+      }
+    } catch (err) {
+      Sentry.captureException(err, { extra: { trialId: grant.id, userId: grant.userId } });
+    }
+  }
 });
