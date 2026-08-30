@@ -298,7 +298,7 @@ export const renderOutline = (outline: XmlOutline, offset: number): string => {
 };
 
 export const renderAffected = (applied: number, affected: XmlOutline[]): string => {
-  const lines = [`${applied}개 연산을 적용했어요.`];
+  const lines = [`${applied}개 연산을 적용했어요. 작업이 끝났다면 save-document를 한번 불러 저장하세요`];
   let shown = 0;
   let capped = false;
 
