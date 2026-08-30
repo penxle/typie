@@ -16,7 +16,9 @@
   import LineHighlight from './components/LineHighlight.svelte';
   import Scrollbar from './components/Scrollbar.svelte';
   import SelectionHandles from './components/SelectionHandles.svelte';
+  import EditorContextBar from './components/ui/EditorContextBar.svelte';
   import EditorZoom from './components/ui/EditorZoom.svelte';
+  import EditorZoomControls from './components/ui/EditorZoomControls.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
   import { CONTINUOUS_MIN_WIDTH, PAGE_GAP } from './constants';
   import { setupEditorContext } from './editor.svelte';
@@ -25,6 +27,7 @@
   import { setupEditorScroll } from './scroll.svelte';
   import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
+  import type { EditorContextBarSegmentRenderProps } from './components/ui/EditorContextBar.svelte';
   import type { Editor } from './editor.svelte';
   import type { DocumentZoomLayout } from './zoom';
 
@@ -214,12 +217,22 @@
   {#if headerHeight > 0}
     <div style:height={`${headerHeight}px`} data-editor-test-header></div>
   {/if}
+  {@render editorContent()}
+
   {#if withZoom}
     <EditorZoom active {editor} editorViewSurface={scrollRoot} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
-      {@render editorContent()}
+      {#snippet zoomControls({ controls, showViewControlsOnPaneEntry })}
+        {#if scrollRoot}
+          <EditorContextBar editorViewSurface={scrollRoot} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
+            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
+              <div style="display: flex; align-items: center" aria-label="보기 제어" role="group">
+                <EditorZoomControls {...controls} segment={state} visible={presentation.visible} />
+              </div>
+            {/snippet}
+          </EditorContextBar>
+        {/if}
+      {/snippet}
     </EditorZoom>
-  {:else}
-    {@render editorContent()}
   {/if}
 </div>
 

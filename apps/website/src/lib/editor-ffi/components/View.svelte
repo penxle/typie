@@ -39,12 +39,15 @@
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
   import SelectionHandles from './SelectionHandles.svelte';
+  import EditorContextBar from './ui/EditorContextBar.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
+  import EditorZoomControls from './ui/EditorZoomControls.svelte';
   import ViewportOverlay from './ViewportOverlay.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
   import type { DocumentZoomLayout } from '../zoom';
+  import type { EditorContextBarSegmentRenderProps } from './ui/EditorContextBar.svelte';
 
   type Props = {
     document$key: Editor_document$key;
@@ -58,6 +61,7 @@
     contentInsetRight?: number;
     /** 최종 레이아웃으로 바뀐 본문을 이전 화면 위치에서 합성하는 일회성 모션. */
     contentMotion?: { fromX: number; duration: number; easing: string };
+    breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
@@ -73,6 +77,7 @@
     contentInsetLeft = 0,
     contentInsetRight = 0,
     contentMotion,
+    breadcrumb,
     onReady,
     header,
     footer,
@@ -426,111 +431,109 @@
     {/if}
 
     {#if ctx.editor}
-      <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        bind:this={ctx.editor.extensionAreaEl}
+        style:cursor
+        style:min-width="max-content"
+        style:padding-left={`${contentInsetLeft}px`}
+        style:padding-right={`${contentInsetRight}px`}
+        style:padding-bottom={viewer ? '0px' : `${ctx.scroll?.bottomPadding ?? 0}px`}
+        class={css(
+          {
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            flexGrow: '1',
+            isolation: 'isolate',
+            width: 'full',
+            userSelect: 'none',
+          },
+          ctx.editor.readOnly && {
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+          },
+        )}
+        draggable={ctx.editor.isSelectionCollapsed ? undefined : true}
+        onclick={handle(ctx.editor, handleClick)}
+        oncontextmenu={handle(ctx.editor, handleContextMenu)}
+        ondragend={() => handleDragEnd(ctx)}
+        ondragenter={(event) => handleDragEnter(ctx, event)}
+        ondragleave={(event) => handleDragLeave(ctx, event)}
+        ondragover={(event) => handleDragOver(ctx, event)}
+        ondragstart={(event) => handleDragStart(ctx, event)}
+        ondrop={(event) =>
+          handleDrop(ctx, event, ({ file, kind }) => {
+            Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+          })}
+        onfocusin={() => ctx.editor?.focus()}
+        onfocusout={(event) => {
+          if (!window.document.hasFocus()) return;
+          if (event.relatedTarget === ctx.editor?.inputEl) return;
+          ctx.editor?.blur();
+        }}
+        onlostpointercapture={handle(ctx.editor, handlePointerCaptureLost)}
+        onpointercancel={handle(ctx.editor, handlePointerCancel)}
+        onpointerdown={(event) => {
+          ctx.scroll?.cancel();
+          const editor = ctx.editor;
+          if (editor) handlePointerDown(editor, event);
+        }}
+        onpointerleave={() => ctx.editor?.clearLinkHover()}
+        onpointermove={handle(ctx.editor, handlePointerMove)}
+        onpointerup={handle(ctx.editor, handlePointerUp)}
+        role="textbox"
+        tabindex={0}
+        use:touchPanLock={ctx.editor.gesture.panLockActive}
+      >
         <div
-          bind:this={ctx.editor.extensionAreaEl}
-          style:cursor
-          style:min-width="max-content"
-          style:padding-left={`${contentInsetLeft}px`}
-          style:padding-right={`${contentInsetRight}px`}
-          style:padding-bottom={viewer ? '0px' : `${ctx.scroll?.bottomPadding ?? 0}px`}
-          class={css(
-            {
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              flexGrow: '1',
-              isolation: 'isolate',
-              width: 'full',
-              userSelect: 'none',
-            },
-            ctx.editor.readOnly && {
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none',
-            },
-          )}
-          draggable={ctx.editor.isSelectionCollapsed ? undefined : true}
-          onclick={handle(ctx.editor, handleClick)}
-          oncontextmenu={handle(ctx.editor, handleContextMenu)}
-          ondragend={() => handleDragEnd(ctx)}
-          ondragenter={(event) => handleDragEnter(ctx, event)}
-          ondragleave={(event) => handleDragLeave(ctx, event)}
-          ondragover={(event) => handleDragOver(ctx, event)}
-          ondragstart={(event) => handleDragStart(ctx, event)}
-          ondrop={(event) =>
-            handleDrop(ctx, event, ({ file, kind }) => {
-              Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
-            })}
-          onfocusin={() => ctx.editor?.focus()}
-          onfocusout={(event) => {
-            if (!window.document.hasFocus()) return;
-            if (event.relatedTarget === ctx.editor?.inputEl) return;
-            ctx.editor?.blur();
-          }}
-          onlostpointercapture={handle(ctx.editor, handlePointerCaptureLost)}
-          onpointercancel={handle(ctx.editor, handlePointerCancel)}
-          onpointerdown={(event) => {
-            ctx.scroll?.cancel();
-            const editor = ctx.editor;
-            if (editor) handlePointerDown(editor, event);
-          }}
-          onpointerleave={() => ctx.editor?.clearLinkHover()}
-          onpointermove={handle(ctx.editor, handlePointerMove)}
-          onpointerup={handle(ctx.editor, handlePointerUp)}
-          role="textbox"
-          tabindex={0}
-          use:touchPanLock={ctx.editor.gesture.panLockActive}
+          bind:this={ctx.editor.documentTrackEl}
+          style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
+          style:animation={contentAnimation}
+          class={css({
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            flexGrow: '1',
+            flexShrink: '0',
+            width: 'full',
+            ...(isPaginated && {
+              rowGap: 'var(--page-gap)',
+            }),
+          })}
+          data-editor-document-track
         >
-          <div
-            bind:this={ctx.editor.documentTrackEl}
-            style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
-            style:animation={contentAnimation}
-            class={css({
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              flexGrow: '1',
-              flexShrink: '0',
-              width: 'full',
-              ...(isPaginated && {
-                rowGap: 'var(--page-gap)',
-              }),
-            })}
-            data-editor-document-track
-          >
-            <EditorPages editor={ctx.editor} {surfaceHost} />
+          <EditorPages editor={ctx.editor} {surfaceHost} />
 
-            <DocumentOverlayLayer />
+          <DocumentOverlayLayer />
 
-            <Caret />
+          <Caret />
 
-            <LineHighlight />
+          <LineHighlight />
 
-            <PlaceholderOverlay />
-          </div>
-
-          <ViewportOverlay>
-            <Input />
-
-            <RepasteAsText />
-
-            {#if ctx.editor.readOnly}
-              <SelectionHandles />
-            {/if}
-          </ViewportOverlay>
-
-          <ContextMenu />
-
-          <LinkTooltip />
-
-          {#if children}
-            {@render children()}
-          {/if}
+          <PlaceholderOverlay />
         </div>
-      </EditorZoom>
+
+        <ViewportOverlay>
+          <Input />
+
+          <RepasteAsText />
+
+          {#if ctx.editor.readOnly}
+            <SelectionHandles />
+          {/if}
+        </ViewportOverlay>
+
+        <ContextMenu />
+
+        <LinkTooltip />
+
+        {#if children}
+          {@render children()}
+        {/if}
+      </div>
     {/if}
 
     {#if ctx.editor && footer}
@@ -545,6 +548,22 @@
       </div>
     {/if}
   </div>
+
+  {#if ctx.editor}
+    <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
+      {#snippet zoomControls({ controls, showViewControlsOnPaneEntry })}
+        {#if editorViewSurface}
+          <EditorContextBar {breadcrumb} {editorViewSurface} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
+            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
+              <div class={css({ display: 'flex', alignItems: 'center' })} aria-label="보기 제어" role="group">
+                <EditorZoomControls {...controls} segment={state} visible={presentation.visible} />
+              </div>
+            {/snippet}
+          </EditorContextBar>
+        {/if}
+      {/snippet}
+    </EditorZoom>
+  {/if}
 
   {#if ctx.editor && !useWindowScroll}
     <Scrollbar />

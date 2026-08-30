@@ -123,7 +123,7 @@
     style:--pane-skeleton-motion={prefersReducedMotion.current ? 'none' : undefined}
     class="skeleton-motion {flex({ flexDirection: 'column', size: 'full' })}"
   >
-    <!-- Header (36px): breadcrumb ... controls close -->
+    <!-- Header (36px): document title ... controls close -->
     <div
       class={flex({
         alignItems: 'center',
@@ -134,17 +134,13 @@
         flexShrink: '0',
       })}
     >
-      <!-- Breadcrumb (left) -->
+      <!-- Document icon and title (left) -->
       <div class={flex({ alignItems: 'center', gap: '4px', overflow: 'hidden' })}>
-        <div style:width="12px" style:height="12px" class={bar}></div>
-        <div style:width="36px" style:height="12px" class={bar}></div>
-        <div style:width="12px" style:height="12px" style:border-radius="2px" class={bar}></div>
+        <div style:width="14px" style:height="14px" style:border-radius="3px" class={bar}></div>
         <div style:width="60px" style:height="12px" class={bar}></div>
       </div>
       <!-- Controls (right) -->
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <!-- Feedback button -->
-        <div style:width="87px" style:height="22px" style:border-radius="4px" class={bar}></div>
         <!-- Panel tabs -->
         {#each { length: 7 }}
           <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
