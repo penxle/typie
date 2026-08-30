@@ -27,6 +27,7 @@
   let viewport = $state<HTMLElement>();
   let content = $state<HTMLElement>();
   let metrics = $state<Metrics>({ viewportWidth: 0, contentWidth: 0 });
+  let overflowLeading = $state(false);
   let overflowTrailing = $state(false);
   let pendingTrailingAlignment = true;
   let lastPathIdentity: string | undefined;
@@ -35,16 +36,22 @@
   let fogTransitionFrame: number | undefined;
   let trailingAlignmentFrame: number | undefined;
 
+  const leadingMaskStops = Array.from({ length: FOG_SAMPLES + 1 }, (_, index) => {
+    const progress = index / FOG_SAMPLES;
+    const alphaGain = smootherstep(progress);
+    return `rgb(0 0 0 / calc(1 - var(--breadcrumb-leading-fog) * ${1 - alphaGain})) ${(index / FOG_SAMPLES) * FOG_WIDTH}px`;
+  });
   const trailingMaskStops = Array.from({ length: FOG_SAMPLES + 1 }, (_, index) => {
     const offset = (index / FOG_SAMPLES) * FOG_WIDTH;
     const alphaLoss = smootherstep(index / FOG_SAMPLES);
     return `rgb(0 0 0 / calc(1 - var(--breadcrumb-trailing-fog) * ${alphaLoss})) calc(100% - ${FOG_WIDTH - offset}px)`;
   });
-  const maskImage = `linear-gradient(to right, black 0, ${trailingMaskStops.join(', ')})`;
+  const maskImage = `linear-gradient(to right, ${leadingMaskStops.join(', ')}, black ${FOG_WIDTH}px, black calc(100% - ${FOG_WIDTH}px), ${trailingMaskStops.join(', ')})`;
 
   function updateOverflow() {
     if (!viewport) return;
     const maximum = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    overflowLeading = viewport.scrollLeft > AT_END_EPSILON;
     overflowTrailing = viewport.scrollLeft < maximum - AT_END_EPSILON;
   }
 
@@ -145,12 +152,14 @@
     bind:this={viewport}
     id={viewportId}
     style:mask-image={maskImage}
+    style:--breadcrumb-leading-fog={overflowLeading ? 1 : 0}
     style:--breadcrumb-trailing-fog={overflowTrailing ? 1 : 0}
     style:transition={fogTransitionReady && !prefersReducedMotion.current
-      ? `--breadcrumb-trailing-fog ${FOG_TRANSITION_MS}ms ease-out`
+      ? `--breadcrumb-leading-fog ${FOG_TRANSITION_MS}ms ease-out, --breadcrumb-trailing-fog ${FOG_TRANSITION_MS}ms ease-out`
       : 'none'}
     class={css({ width: 'full', minWidth: '0', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' })}
     data-breadcrumb-fog-curve="smootherstep"
+    data-breadcrumb-fog-leading={overflowLeading}
     data-breadcrumb-fog-trailing={overflowTrailing}
     data-editor-breadcrumb-viewport
     onscroll={updateOverflow}
@@ -164,6 +173,12 @@
 </div>
 
 <style>
+  @property --breadcrumb-leading-fog {
+    syntax: '<number>';
+    inherits: false;
+    initial-value: 0;
+  }
+
   @property --breadcrumb-trailing-fog {
     syntax: '<number>';
     inherits: false;

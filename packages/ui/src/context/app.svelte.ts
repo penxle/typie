@@ -28,6 +28,8 @@ export type AppPreference = {
 
   zenModeEnabled: boolean;
 
+  contextBarPinned: boolean;
+
   searchMatchWholeWord: boolean;
 
   exportFormat: 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
@@ -161,6 +163,8 @@ export const setupAppContext = (userId: string) => {
       autoSurroundEnabled: true,
 
       zenModeEnabled: false,
+
+      contextBarPinned: true,
 
       searchMatchWholeWord: false,
 

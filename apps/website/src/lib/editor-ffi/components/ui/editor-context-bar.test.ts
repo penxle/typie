@@ -32,9 +32,9 @@ describe('editor context bar visibility', () => {
   it('unifies two visible segments regardless of whether their fade wings meet', () => {
     const coordinator = new ContextBarVisibilityCoordinator();
 
-    expect(coordinator.resolve({ breadcrumb: transient(), viewControls: engaged() })).toEqual({
+    expect(coordinator.resolve({ leading: transient(), viewControls: engaged() })).toEqual({
       unified: true,
-      breadcrumb: { visible: true, tone: 'transient' },
+      leading: { visible: true, tone: 'transient' },
       viewControls: { visible: true, tone: 'engaged' },
     });
   });
@@ -42,10 +42,10 @@ describe('editor context bar visibility', () => {
   it('retains both segments while either unified segment still has a visibility reason', () => {
     const coordinator = new ContextBarVisibilityCoordinator();
 
-    coordinator.resolve({ breadcrumb: transient(), viewControls: engaged() });
-    expect(coordinator.resolve({ breadcrumb: idle(), viewControls: engaged() })).toEqual({
+    coordinator.resolve({ leading: transient(), viewControls: engaged() });
+    expect(coordinator.resolve({ leading: idle(), viewControls: engaged() })).toEqual({
       unified: true,
-      breadcrumb: { visible: true, tone: 'transient' },
+      leading: { visible: true, tone: 'transient' },
       viewControls: { visible: true, tone: 'engaged' },
     });
   });
@@ -53,9 +53,9 @@ describe('editor context bar visibility', () => {
   it('does not reveal a sibling until both segments have appeared together', () => {
     const coordinator = new ContextBarVisibilityCoordinator();
 
-    expect(coordinator.resolve({ breadcrumb: transient(), viewControls: idle() })).toEqual({
+    expect(coordinator.resolve({ leading: transient(), viewControls: idle() })).toEqual({
       unified: false,
-      breadcrumb: { visible: true, tone: 'transient' },
+      leading: { visible: true, tone: 'transient' },
       viewControls: { visible: false, tone: 'transient' },
     });
   });
@@ -63,21 +63,21 @@ describe('editor context bar visibility', () => {
   it('dismisses a unified pair only after both segments have no visibility reason', () => {
     const coordinator = new ContextBarVisibilityCoordinator();
 
-    coordinator.resolve({ breadcrumb: transient(), viewControls: engaged() });
+    coordinator.resolve({ leading: transient(), viewControls: engaged() });
     expect(
       coordinator.resolve({
-        breadcrumb: idle(),
+        leading: idle(),
         viewControls: { ...idle(), holds: ['landmark'] },
       }),
     ).toEqual({
       unified: true,
-      breadcrumb: { visible: true, tone: 'transient' },
+      leading: { visible: true, tone: 'transient' },
       viewControls: { visible: true, tone: 'transient' },
     });
 
-    expect(coordinator.resolve({ breadcrumb: idle(), viewControls: idle() })).toEqual({
+    expect(coordinator.resolve({ leading: idle(), viewControls: idle() })).toEqual({
       unified: false,
-      breadcrumb: { visible: false, tone: 'transient' },
+      leading: { visible: false, tone: 'transient' },
       viewControls: { visible: false, tone: 'transient' },
     });
   });

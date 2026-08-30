@@ -620,6 +620,15 @@ export class EditorScrollScope {
     });
   }
 
+  setTopInset(topInset: number): void {
+    untrack(() => {
+      this.setVisibleArea({
+        topInset,
+        bottomInset: this.visibleArea.bottomInset,
+      });
+    });
+  }
+
   setContentBottomOverflow(bottomOverflow: number): void {
     const next = sanitizeInset(bottomOverflow);
     if (this.#contentBottomOverflow === next) return;

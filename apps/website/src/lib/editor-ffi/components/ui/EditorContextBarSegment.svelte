@@ -5,11 +5,12 @@
   import { prefersReducedMotion } from '@typie/ui/state';
   import { CONTEXT_BAR_FADE_IN_MS, CONTEXT_BAR_FADE_OUT_MS, CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import type { Snippet } from 'svelte';
-  import type { ContextBarSegmentPresentation, EditorContextBarSegmentState } from './editor-context-bar.svelte';
+  import type { ContextBarSegmentPresentation } from './editor-context-bar.svelte';
+  import type { TransientVisibilityState } from './transient-visibility.svelte';
 
   type Props = {
-    id: 'breadcrumb' | 'view-controls';
-    state: EditorContextBarSegmentState;
+    id: 'leading' | 'view-controls';
+    state: TransientVisibilityState;
     presentation: ContextBarSegmentPresentation;
     interactiveWhenHidden?: boolean;
     element?: HTMLElement;

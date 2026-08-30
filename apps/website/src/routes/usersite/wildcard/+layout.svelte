@@ -38,6 +38,21 @@
   const theme = getThemeContext();
 
   let themeMenuOpen = $state(false);
+  let environmentBannerHeight = $state(0);
+  let stickyHeader = $state<HTMLElement>();
+  let stickyHeaderHeight = $state(52);
+  let stickyHeaderBottom = $state(52);
+
+  function syncStickyHeaderBottom(): void {
+    stickyHeaderBottom = stickyHeader?.getBoundingClientRect().bottom ?? stickyHeaderHeight;
+  }
+
+  $effect(() => {
+    void environmentBannerHeight;
+    void stickyHeaderHeight;
+    syncStickyHeaderBottom();
+  });
+
   onMount(() => {
     if (!query.data.me && !document.cookie.includes('typie-af')) {
       location.assign(
@@ -82,9 +97,14 @@
   );
 </script>
 
-<div class={flex({ flexDirection: 'column', minHeight: '[100dvh]' })}>
-  <EnvironmentBanner />
+<svelte:window onresize={syncStickyHeaderBottom} onscroll={syncStickyHeaderBottom} />
+
+<div style:--usersite-sticky-header-bottom={`${stickyHeaderBottom}px`} class={flex({ flexDirection: 'column', minHeight: '[100dvh]' })}>
+  <div bind:clientHeight={environmentBannerHeight}>
+    <EnvironmentBanner />
+  </div>
   <header
+    bind:this={stickyHeader}
     class={flex({
       flexDirection: 'column',
       position: 'sticky',
@@ -92,6 +112,7 @@
       zIndex: '50',
       backgroundColor: 'surface.default',
     })}
+    bind:clientHeight={stickyHeaderHeight}
   >
     <AdminImpersonateBanner query$key={query.data} />
 
