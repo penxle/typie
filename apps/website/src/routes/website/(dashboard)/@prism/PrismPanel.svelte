@@ -33,6 +33,7 @@
   import { createPrismChat } from './prism-chat.svelte';
   import { fetchTranscript, toFrame } from './prism-data';
   import { createPrismSessionState } from './prism-session.svelte';
+  import PrismBadgeDot from './PrismBadgeDot.svelte';
   import PrismComposer from './PrismComposer.svelte';
   import PrismGateCard from './PrismGateCard.svelte';
   import PrismPanelHeader from './PrismPanelHeader.svelte';
@@ -933,7 +934,12 @@
         type="button"
         use:tooltip={{ message: listToggleLabel }}
       >
-        <Icon icon={HistoryIcon} size={16} />
+        <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+          <Icon icon={HistoryIcon} size={16} />
+          {#if app.state.prismBadge}
+            <PrismBadgeDot />
+          {/if}
+        </span>
       </button>
     {/snippet}
   </PrismPanelHeader>
