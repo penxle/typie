@@ -29,5 +29,5 @@ export type WorkflowApp = {
 };
 
 export const workflowApps: Record<string, WorkflowApp | undefined> = {
-  feedback: { block: PrismReviewPassage, composer: reviewComposerCopy },
+  review: { block: PrismReviewPassage, composer: reviewComposerCopy },
 };

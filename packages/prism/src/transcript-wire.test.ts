@@ -48,7 +48,7 @@ const session = [
   ev(4, 'turn.completed', turn1, { text: null, toolCalls: [{ kind: 'parsed', id: 'c1', name: 'list-open-documents', input: {} }] }),
   ev(5, 'tool.requested', call, { tool: 'list-open-documents', data: {} }),
   ev(6, 'tool.resolved', call, { tool: 'list-open-documents', ok: true, data: { documents: [] } }),
-  ev(7, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'feedback' } }),
+  ev(7, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review' } }),
   wf(1, 'step.started', { step: 'classify-0' }, {}),
   wf(2, 'tool.requested', { agent: child, run: 1, turn: 1, attempt: 1, toolCallId: 'k1' }, { tool: 'ask-user', data: { questions: [] } }),
   wf(
@@ -103,7 +103,7 @@ describe('toGraphQL', () => {
     const workflow = wire.runs[0].items.find((item) => item.kind === 'workflow');
     expect(workflow).toMatchObject({
       prismWorkflowId: 'wf_1',
-      app: 'feedback',
+      app: 'review',
       name: 'high',
       status: 'COMPLETED',
       invocation: 'inv_1',
@@ -138,7 +138,7 @@ describe('fromGraphQL', () => {
   it('미해소 요청·진행 중 워크플로·진행 중 턴도 왕복된다', () => {
     const frames = [
       ev(1, 'run.started', run1, { message: 'a', command: null }),
-      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'feedback' } }),
+      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review' } }),
       wf(
         1,
         'tool.requested',
@@ -155,7 +155,7 @@ describe('fromGraphQL', () => {
   it('모든 live는 왕복에서 비워진다 — 워크플로 안쪽 live도 구독이 다시 채운다', () => {
     const frames: ProjectedStreamFrame[] = [
       ev(1, 'run.started', run1, { message: 'a', command: null }),
-      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'feedback' } }),
+      ev(2, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review' } }),
       {
         type: 'delta',
         delta: { context: { agent: child, run: 1, turn: 1, attempt: 1 }, channel: 'text', offset: 0, data: '스트리밍', workflowId: 'wf_1' },

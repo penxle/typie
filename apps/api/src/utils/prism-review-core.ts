@@ -45,9 +45,11 @@ export type OutcomeSummary = {
 export const summarizeOutcome = (outcome: ReviewOutcome | null): OutcomeSummary => {
   if (outcome === null) return { rejection: null, conclusion: null, issueCount: 0 };
   if (outcome.kind === 'rejected') return { rejection: { message: outcome.rejected.message }, conclusion: null, issueCount: 0 };
-  if (outcome.kind === 'issues') return { rejection: null, conclusion: null, issueCount: outcome.issues.length };
 
+  // 총평이 없는 티어(low)의 결과는 지적 수만 낸다 — 총평 유무는 kind가 아니라 절의 유무가 가른다(prism result.ts).
   const c = outcome.conclusion;
+  if (c === undefined) return { rejection: null, conclusion: null, issueCount: outcome.issues.length };
+
   return {
     rejection: null,
     conclusion: {
@@ -101,10 +103,9 @@ export const outcomeAnchorSites = (outcome: ReviewOutcome | null): AnchorSite[] 
   const sites: AnchorSite[] = outcome.issues.flatMap((issue, item) =>
     issue.anchors.map((anchor, at) => ({ kind: 'issue' as const, item, at, anchor })),
   );
-  if (outcome.kind !== 'feedback') return sites;
 
   sites.push(
-    ...(outcome.conclusion.strengths ?? []).flatMap((strength, item) =>
+    ...(outcome.conclusion?.strengths ?? []).flatMap((strength, item) =>
       strength.anchors.map((anchor, at) => ({ kind: 'strength' as const, item, at, anchor })),
     ),
     ...(outcome.elevations ?? []).flatMap((elevation, item) =>
@@ -119,10 +120,10 @@ export const assembleOutcomeAnchors = (
   sites: readonly AnchorSite[],
   hits: readonly (AnchorHit | null)[],
 ): OutcomeAnchors => {
-  const issues = outcome === null || outcome.kind === 'rejected' ? [] : outcome.issues.map((issue) => issue.anchors.map(unresolved));
-  const strengths =
-    outcome?.kind === 'feedback' ? (outcome.conclusion.strengths ?? []).map((strength) => strength.anchors.map(unresolved)) : [];
-  const elevations = outcome?.kind === 'feedback' ? (outcome.elevations ?? []).map((elevation) => elevation.anchors.map(unresolved)) : [];
+  const reviewed = outcome !== null && outcome.kind !== 'rejected' ? outcome : null;
+  const issues = reviewed === null ? [] : reviewed.issues.map((issue) => issue.anchors.map(unresolved));
+  const strengths = (reviewed?.conclusion?.strengths ?? []).map((strength) => strength.anchors.map(unresolved));
+  const elevations = (reviewed?.elevations ?? []).map((elevation) => elevation.anchors.map(unresolved));
   const buckets = { issue: issues, strength: strengths, elevation: elevations };
 
   for (const [index, site] of sites.entries()) {
@@ -137,9 +138,10 @@ export const assembleOutcomeAnchors = (
 export const unresolvedOutcomeAnchors = (outcome: ReviewOutcome | null): OutcomeAnchors => assembleOutcomeAnchors(outcome, [], []);
 
 export const detailOutcome = (outcome: ReviewOutcome | null, conclusionAnchors: ConclusionAnchors | null): OutcomeDetail | null => {
-  if (outcome === null || outcome.kind !== 'feedback') return null;
+  if (outcome === null || outcome.kind === 'rejected') return null;
 
   const { conclusion, issues } = outcome;
+  if (conclusion === undefined) return null;
 
   return {
     understanding: conclusion.understanding,
@@ -164,9 +166,10 @@ export const detailOutcome = (outcome: ReviewOutcome | null, conclusionAnchors: 
 };
 
 export const hasDetail = (outcome: ReviewOutcome | null): boolean => {
-  if (outcome === null || outcome.kind !== 'feedback') return false;
+  if (outcome === null || outcome.kind === 'rejected') return false;
 
   const { conclusion } = outcome;
+  if (conclusion === undefined) return false;
 
   return (
     (conclusion.understanding ?? '').trim().length > 0 ||

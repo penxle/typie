@@ -21,4 +21,4 @@ export type PrismAppHooks = {
   onRunTerminal?(executor: Database | Transaction, sessionId: string, runSeq: number): Promise<void>;
 };
 
-export const prismApps: Record<string, PrismAppHooks> = { feedback: reviewHooks };
+export const prismApps: Record<string, PrismAppHooks> = { review: reviewHooks };

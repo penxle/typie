@@ -28,7 +28,7 @@ import type { AnchorHit } from './prism-review-core.ts';
 test('summarizeOutcome: feedback은 집계, issues는 건수만, rejected는 문면, null은 전부 비움', () => {
   const summarized = summarizeOutcome({
     version: 1,
-    kind: 'feedback',
+    kind: 'reviewed',
     issues: [{ trait: 't', pass: 'judgment', body: null, anchors: [] }],
     conclusion: {
       understanding: '리드',
@@ -51,7 +51,7 @@ test('summarizeOutcome: feedback은 집계, issues는 건수만, rejected는 문
     },
     issueCount: 1,
   });
-  assert.deepEqual(summarizeOutcome({ version: 1, kind: 'issues', issues: [] }), { rejection: null, conclusion: null, issueCount: 0 });
+  assert.deepEqual(summarizeOutcome({ version: 1, kind: 'reviewed', issues: [] }), { rejection: null, conclusion: null, issueCount: 0 });
   assert.deepEqual(summarizeOutcome({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '안내', basis: null } }), {
     rejection: { message: '안내' },
     conclusion: null,
@@ -103,7 +103,7 @@ test('ConfirmInputSchema: declined는 단독, confirmed는 versionId·대문자 
 
 const feedback = {
   version: 1,
-  kind: 'feedback',
+  kind: 'reviewed',
   issues: [
     { id: 'judgment-1', trait: '인물', pass: 'judgment', body: '본문1', anchors: [] },
     { id: 'stylistic-1', trait: '문장', pass: 'stylistic', body: '본문2', anchors: [] },
@@ -174,7 +174,7 @@ test('detailOutcome: 참조는 번호로도 오고, 못 찾은 참조는 접히�
 });
 
 test('detailOutcome: 총평이 없는 결과는 전부 null이다', () => {
-  assert.equal(detailOutcome({ version: 1, kind: 'issues', issues: [] }, null), null);
+  assert.equal(detailOutcome({ version: 1, kind: 'reviewed', issues: [] }, null), null);
   assert.equal(detailOutcome({ version: 1, kind: 'rejected', rejected: { category: 'diary', message: '안내', basis: null } }, null), null);
   assert.equal(detailOutcome(null, null), null);
 });
@@ -182,7 +182,7 @@ test('detailOutcome: 총평이 없는 결과는 전부 null이다', () => {
 test('hasDetail: 설 섹션이 하나라도 있어야 참이다', () => {
   const bare = {
     version: 1,
-    kind: 'feedback',
+    kind: 'reviewed',
     issues: [],
     conclusion: { understanding: null, patterns: [], priorities: [] },
   } satisfies ReviewOutcome;
@@ -192,7 +192,7 @@ test('hasDetail: 설 섹션이 하나라도 있어야 참이다', () => {
   assert.equal(hasDetail({ ...bare, conclusion: { ...bare.conclusion, understanding: '리드' } }), true);
   assert.equal(hasDetail({ ...bare, verdicts: [{ trait: 't', point: 1, note: null }] }), true);
   assert.equal(hasDetail(feedback), true);
-  assert.equal(hasDetail({ version: 1, kind: 'issues', issues: [] }), false);
+  assert.equal(hasDetail({ version: 1, kind: 'reviewed', issues: [] }), false);
   assert.equal(hasDetail(null), false);
 });
 
@@ -208,7 +208,7 @@ test('planProjection - 거부 회차와 빈 결과는 행이 없다', () => {
 test('planProjection - 이슈마다 번호와 계열을 붙인다', () => {
   const outcome = {
     version: 1,
-    kind: 'issues',
+    kind: 'reviewed',
     issues: [
       {
         id: 'i-1',
@@ -235,7 +235,7 @@ test('planProjection - 이슈마다 번호와 계열을 붙인다', () => {
 test('planProjection - feedback 결과도 같은 방식으로 편다', () => {
   const outcome = {
     version: 1,
-    kind: 'feedback',
+    kind: 'reviewed',
     issues: [{ trait: '군더더기', pass: 'stylistic', body: null, anchors: [] }],
     conclusion: { understanding: null, patterns: [], priorities: [] },
   } satisfies ReviewOutcome;
@@ -333,7 +333,7 @@ test('seedUploads: from→seeds/<round>/<to>로 옮기고 하나라도 없으면
 test('planProjection: thread 표지 없는 이슈는 fresh, 있는 이슈는 carried, dispositions는 그대로', () => {
   const outcome: ReviewOutcome = {
     version: 1,
-    kind: 'issues',
+    kind: 'reviewed',
     issues: [
       { trait: 'a', pass: 'judgment', body: null, anchors: [{ head: 'h', tail: 't' }] },
       { id: 'i-2', trait: 'b', pass: 'stylistic', body: 'x', anchors: [{ head: 'h', tail: 't' }], thread: 'PRTH9' },
@@ -354,7 +354,7 @@ test('planProjection: thread 표지 없는 이슈는 fresh, 있는 이슈는 car
     dispositions: [],
   });
   assert.deepEqual(dispositionSummary(outcome), { carried: 1, resolved: 1, withdrawn: 0, new: 1 });
-  assert.equal(dispositionSummary({ version: 1, kind: 'issues', issues: [] }), null);
+  assert.equal(dispositionSummary({ version: 1, kind: 'reviewed', issues: [] }), null);
 });
 
 test('threadIsNew·lineageLocked·aiCommentId', () => {
@@ -399,7 +399,7 @@ test('outcomeAnchorSites: 지적→강점→격상 순으로 평탄화하고, is
   assert.deepEqual(
     outcomeAnchorSites({
       version: 1,
-      kind: 'issues',
+      kind: 'reviewed',
       issues: [{ trait: 't', pass: 'judgment', body: null, anchors: [{ head: 'h', tail: 't' }] }],
     }).map((site) => site.kind),
     ['issue'],
@@ -461,7 +461,7 @@ test('assembleOutcomeAnchors: 사이트별 결과를 결과와 평행한 배열�
       elevations: [[{ head: '', tail: '', selection: null, text: null }]],
     },
   });
-  assert.deepEqual(unresolvedOutcomeAnchors({ version: 1, kind: 'issues', issues: [] }), {
+  assert.deepEqual(unresolvedOutcomeAnchors({ version: 1, kind: 'reviewed', issues: [] }), {
     issues: [],
     conclusion: { strengths: [], elevations: [] },
   });

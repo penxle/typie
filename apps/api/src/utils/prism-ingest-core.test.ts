@@ -77,11 +77,11 @@ test('agent 펌프의 도메인 op — run 시작·종결·링크·제목·도�
         4,
         'invocation.started',
         { ...call, invocation: 'inv_1' },
-        { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'feedback', ref: 'PRRR1' } },
+        { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review', ref: 'PRRR1' } },
       ),
       3,
     ).ops,
-    [{ op: 'workflow-link', descriptor: { prismWorkflowId: 'wf_1', app: 'feedback', name: 'high', ref: 'PRRR1', startedAt: 1004 } }],
+    [{ op: 'workflow-link', descriptor: { prismWorkflowId: 'wf_1', app: 'review', name: 'high', ref: 'PRRR1', startedAt: 1004 } }],
   );
   assert.deepEqual(
     planEvent('agent', ev(5, 'invocation.started', { ...call, invocation: 'inv_2' }, { target: { kind: 'agent' } }), 4).ops,
@@ -124,11 +124,11 @@ test('agent 펌프는 workflow.* 를 무시하고, workflow 펌프는 run.*·inv
 
 test('workflow 펌프의 정산 op — usage 사영과 reason', () => {
   const usage = { settled: true, complete: true, folds: [] };
-  assert.deepEqual(planEvent('workflow', ev(1, 'workflow.completed', {}, { result: { kind: 'feedback' }, usage }), 0).ops, [
+  assert.deepEqual(planEvent('workflow', ev(1, 'workflow.completed', {}, { result: { kind: 'reviewed' }, usage }), 0).ops, [
     {
       op: 'workflow-settle',
       state: 'COMPLETED',
-      result: { kind: 'feedback' },
+      result: { kind: 'reviewed' },
       usage: { complete: true, folds: [] },
       error: null,
       at: 1001,
