@@ -59,6 +59,10 @@ data class AppColors(
   val dangerSubtle: Color,
   val textOnDanger: Color,
   val textOnDangerSubtle: Color,
+  val warning: Color,
+  val warningSubtle: Color,
+  val textOnWarning: Color,
+  val textOnWarningSubtle: Color,
   val success: Color,
   val successSubtle: Color,
   val textOnSuccess: Color,
@@ -94,6 +98,10 @@ val LightColors =
     dangerSubtle = Color(0xFFF7DDE1),
     textOnDanger = AppColor.white,
     textOnDangerSubtle = Color(0xFF7A1E35),
+    warning = Color(0xFFA15D11),
+    warningSubtle = Color(0xFFFBE4D1),
+    textOnWarning = AppColor.white,
+    textOnWarningSubtle = Color(0xFF693B08),
     success = Color(0xFF137D56),
     successSubtle = Color(0xFFD8F3E2),
     textOnSuccess = AppColor.white,
@@ -123,6 +131,10 @@ val DarkColors =
     dangerSubtle = Color(0xFF3F1B28),
     textOnDanger = AppColor.dark.gray.s900,
     textOnDangerSubtle = Color(0xFFDEB6BF),
+    warning = Color(0xFFB97945),
+    warningSubtle = Color(0xFF442911),
+    textOnWarning = AppColor.dark.gray.s900,
+    textOnWarningSubtle = Color(0xFFE1C5B0),
     success = Color(0xFF3F8A66),
     successSubtle = Color(0xFF1A3D2C),
     textOnSuccess = Color(0xFF040404),
@@ -182,7 +194,8 @@ fun AppTheme(content: @Composable () -> Unit) {
     LocalAppColors provides if (isDark) DarkColors else LightColors,
     LocalAppShadows provides if (isDark) DarkAppShadows else LightAppShadows,
     LocalThemeMode provides if (isDark) ResolvedThemeMode.Dark else ResolvedThemeMode.Light,
-    LocalHazeBlurStyle provides HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+    LocalHazeBlurStyle provides
+      HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
   ) {
     content()
   }

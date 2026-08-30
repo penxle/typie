@@ -1,0 +1,21 @@
+fragment EntityGoalGlyph_entity on Entity {
+  id
+
+  goal {
+    ...EntityGoalFields_goal
+  }
+
+  node {
+    __typename
+
+    ... on Document {
+      id
+      characterCount
+    }
+
+    ... on Folder {
+      id
+      characterCount
+    }
+  }
+}

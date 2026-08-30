@@ -70,6 +70,8 @@ private fun placeholderData() =
   HomeScreen_Query.Data(PlaceholderResolver) {
     site = buildSite { name = text(5..10) }
     me = buildUser {
+      goal = null
+      goalHistory = emptyList()
       recentlyViewedEntities =
         List(15) {
           buildEntity {

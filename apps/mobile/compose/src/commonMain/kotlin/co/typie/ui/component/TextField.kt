@@ -223,6 +223,7 @@ fun TextField(
   autoFocus: Boolean = false,
   isPassword: Boolean = false,
   contentType: ContentType? = null,
+  visualTransformation: VisualTransformation = VisualTransformation.None,
   onBlur: (() -> Unit)? = null,
   keyboardType: KeyboardType = KeyboardType.Text,
   imeAction: ImeAction? = null,
@@ -387,7 +388,7 @@ fun TextField(
       keyboardActions =
         KeyboardActions(onNext = { onImeAction?.invoke() }, onDone = { onImeAction?.invoke() }),
       visualTransformation =
-        if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+        if (isPassword) PasswordVisualTransformation() else visualTransformation,
       singleLine = true,
       decorationBox = { innerTextField ->
         Box(
@@ -407,7 +408,9 @@ fun TextField(
               Modifier.fillMaxWidth()
                 .align(if (isInternal) Alignment.BottomCenter else Alignment.Center)
                 .then(if (isInternal) Modifier.padding(bottom = verticalPadding) else Modifier)
-                .then(if (showStatusIcon && !hasSuffix) Modifier.padding(end = 28.dp) else Modifier),
+                .then(
+                  if (showStatusIcon && !hasSuffix) Modifier.padding(end = 28.dp) else Modifier
+                ),
           ) {
             if (leadingIcon != null) {
               leadingIcon()

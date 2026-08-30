@@ -8,6 +8,7 @@ subscription MainShell_SiteUpdateStream_Subscription($siteId: ID!) {
 
       entities {
         ...EntityRow_entity
+        ...EntityGoalGlyph_entity
       }
     }
 
@@ -21,6 +22,7 @@ subscription MainShell_SiteUpdateStream_Subscription($siteId: ID!) {
 
       children {
         ...EntityRow_entity
+        ...EntityGoalGlyph_entity
       }
     }
   }
