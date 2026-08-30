@@ -11,7 +11,7 @@ android_logger = "0.15"
 base62 = "2"
 base64 = "0.23"
 bitcode = "0.6"
-bytemuck = { version = "1.24", features = ["derive"] }
+bytemuck = { version = "1.25", features = ["derive"] }
 rapidhash = "4"
 bytecount = { version = "0.6", features = ["runtime-dispatch-simd"] }
 cfg-if = "1"
@@ -23,7 +23,7 @@ env_logger = "0.11"
 fancy-regex = "0.19"
 fontique = { version = "0.11", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
-glam = "0.30"
+glam = "0.33"
 csscolorparser = "0.8"
 cssparser = "0.37"
 ego-tree = "0.11"
@@ -75,7 +75,7 @@ serde_json = { version = "1", features = ["unbounded_depth"] }
 serde_stacker = "0.1"
 serde-wasm-bindgen = "0.6"
 serde_bytes = "0.11"
-skrifa = "0.45"
+skrifa = "0.46"
 smallvec = { version = "1", features = ["serde"] }
 strum = { version = "0.28", features = ["derive"] }
 syn = { version = "3", features = ["full", "extra-traits"] }
@@ -85,14 +85,14 @@ trybuild = "1"
 tsify = { version = "0.5", features = ["js"] }
 unicode-segmentation = "1"
 uniffi = "0.32"
-vello = "0.9"
+vello = "0.10"
 wasm-bindgen = "0.2"
 wasm-bindgen-cli = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
 web-time = "1"
 wgpu = "30"
-write-fonts = "0.51"
+write-fonts = "0.52"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zeno = "0.3"
 zune-png = "0.5"
