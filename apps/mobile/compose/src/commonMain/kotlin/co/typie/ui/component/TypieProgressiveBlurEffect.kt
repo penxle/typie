@@ -1,12 +1,14 @@
 package co.typie.ui.component
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
-import androidx.compose.ui.geometry.takeOrElse
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsContext
@@ -19,23 +21,73 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.roundToIntSize
-import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeEffectDrawScope
+import dev.chrisbanes.haze.HazeEffectFactory
+import dev.chrisbanes.haze.HazeEffectLayoutScope
+import dev.chrisbanes.haze.HazeEffectLifecycleScope
+import dev.chrisbanes.haze.HazeEffectRenderer
+import dev.chrisbanes.haze.HazeEffectRendererDrawHooks
+import dev.chrisbanes.haze.HazeEffectRendererLifecycle
+import dev.chrisbanes.haze.HazeEffectRuntimeDrawScope
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeProgressive
+import dev.chrisbanes.haze.HazeSampling
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.InternalHazeApi
 import dev.chrisbanes.haze.PlatformRenderEffect
 import dev.chrisbanes.haze.TrimMemoryLevel
-import dev.chrisbanes.haze.VisualEffect
-import dev.chrisbanes.haze.VisualEffectContext
 import dev.chrisbanes.haze.asComposeRenderEffect
-import dev.chrisbanes.haze.blur.BlurVisualEffect
-import dev.chrisbanes.haze.blur.HazeProgressive
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.createRuntimeEffect
 import dev.chrisbanes.haze.createRuntimeShaderRenderEffect
+import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.isRuntimeShaderRenderEffectSupported
 import dev.chrisbanes.haze.then
+
+/**
+ * Applies the continuous progressive blur where runtime shaders exist, and falls back to Haze's
+ * built-in progressive blur elsewhere.
+ */
+@Composable
+@OptIn(InternalHazeApi::class)
+internal fun typieProgressiveBlur(
+  hazeState: HazeState,
+  radius: Dp,
+  progressiveBrush: Brush,
+  fallbackProgressive: HazeProgressive,
+  backdropColor: () -> Color,
+): Modifier {
+  val input = remember(hazeState) { HazeInput.Sources(hazeState) }
+
+  if (!isRuntimeShaderRenderEffectSupported()) {
+    val resolvedBackdropColor = backdropColor()
+    return Modifier.hazeBlur(
+      input = input,
+      style =
+        HazeBlurStyle {
+          blurRadius(radius)
+          backgroundColor(resolvedBackdropColor)
+          progressive(fallbackProgressive)
+        },
+    )
+  }
+
+  val currentBackdropColor = rememberUpdatedState(backdropColor)
+  val factory =
+    remember(radius, progressiveBrush) {
+      TypieProgressiveBlurEffect(
+        blurRadius = radius,
+        progressiveBrush = progressiveBrush,
+        backgroundColor = { currentBackdropColor.value() },
+      )
+    }
+
+  return Modifier.hazeEffect(factory = factory, input = input, style = Unit)
+}
 
 /**
  * Workaround for Haze's quantized progressive blur radius.
@@ -44,172 +96,145 @@ import dev.chrisbanes.haze.then
  * progressive blur and the focused pixel regressions pass with its built-in effect.
  */
 @Stable
-@OptIn(ExperimentalHazeApi::class, InternalHazeApi::class)
+@OptIn(InternalHazeApi::class)
 internal class TypieProgressiveBlurEffect(
   private val blurRadius: Dp,
   private val progressiveBrush: Brush,
-  fallbackProgressive: HazeProgressive,
   private val backgroundColor: () -> Color,
-) : VisualEffect {
-  private var resolvedBackgroundColor: Color = Color.Unspecified
-  private val fallbackEffect =
-    BlurVisualEffect().apply {
-      this.blurRadius = blurRadius
-      this.backgroundColor = Color.Unspecified
-      progressive = fallbackProgressive
-    }
+) : HazeEffectFactory<Unit> {
+  override fun createRenderer(): HazeEffectRenderer<Unit> = Renderer()
 
-  private var graphicsContext: GraphicsContext? = null
-  private var contentLayer: GraphicsLayer? = null
-  private var contentLayerSize: IntSize? = null
-  private var renderEffect: RenderEffect? = null
-  private var renderEffectKey: RenderEffectKey? = null
+  private inner class Renderer :
+    HazeEffectRenderer<Unit>, HazeEffectRendererLifecycle<Unit>, HazeEffectRendererDrawHooks<Unit> {
+    private var resolvedBackgroundColor: Color = Color.Unspecified
 
-  override fun attach(context: VisualEffectContext) {
-    fallbackEffect.attach(context)
-  }
+    private var graphicsContext: GraphicsContext? = null
+    private var contentLayer: GraphicsLayer? = null
+    private var contentLayerSize: IntSize? = null
+    private var renderEffect: RenderEffect? = null
+    private var renderEffectKey: RenderEffectKey? = null
 
-  override fun update(context: VisualEffectContext) {
-    val currentBackgroundColor = backgroundColor()
-    if (currentBackgroundColor != resolvedBackgroundColor) {
-      resolvedBackgroundColor = currentBackgroundColor
-      fallbackEffect.backgroundColor = currentBackgroundColor
-      context.invalidateDraw()
-    }
-    fallbackEffect.update(context)
-  }
-
-  override fun DrawScope.draw(context: VisualEffectContext) {
-    if (!isRuntimeShaderRenderEffectSupported()) {
-      with(fallbackEffect) { draw(context) }
-      return
-    }
-
-    drawRuntimeEffect(context)
-  }
-
-  override fun detach(context: VisualEffectContext) {
-    releaseRuntimeResources()
-    fallbackEffect.detach(context)
-  }
-
-  override fun onTrimMemory(context: VisualEffectContext, level: TrimMemoryLevel) {
-    releaseRuntimeResources()
-    fallbackEffect.onTrimMemory(context, level)
-    context.invalidateDraw()
-  }
-
-  override fun shouldDrawContentBehind(context: VisualEffectContext): Boolean =
-    fallbackEffect.shouldDrawContentBehind(context)
-
-  override fun shouldClipToNodeBounds(): Boolean = true
-
-  override fun shouldPreferClipToAreaBounds(): Boolean =
-    resolvedBackgroundColor.isSpecified && resolvedBackgroundColor.alpha < 0.9f
-
-  override fun calculateLayerBounds(rect: Rect, density: Density): Rect {
-    val blurRadiusPx = with(density) { blurRadius.toPx() }
-    return if (blurRadiusPx >= 1f) rect.inflate(blurRadiusPx) else rect
-  }
-
-  private fun DrawScope.drawRuntimeEffect(context: VisualEffectContext) {
-    val layerSize = context.layerSize.roundToIntSize()
-    if (layerSize.width <= 0 || layerSize.height <= 0) return
-
-    val layer = requireContentLayer(context, layerSize)
-    layer.record(size = layerSize) {
-      if (resolvedBackgroundColor.isSpecified) {
-        drawRect(resolvedBackgroundColor)
+    override fun update(scope: HazeEffectLifecycleScope, style: Unit, sampling: HazeSampling) {
+      val currentBackgroundColor = backgroundColor()
+      if (currentBackgroundColor != resolvedBackgroundColor) {
+        resolvedBackgroundColor = currentBackgroundColor
+        scope.invalidateDraw()
       }
+    }
 
-      val sourceOffset = context.layerOffset - context.position
-      translate(sourceOffset.x, sourceOffset.y) {
-        for (area in context.areas) {
-          val areaPosition = Snapshot.withoutReadObservation {
-            area.position.takeOrElse { Offset.Zero }
-          }
-          val areaLayer = Snapshot.withoutReadObservation {
-            area.contentLayer
-              ?.takeUnless { it.isReleased }
-              ?.takeUnless { it.size.width <= 0 || it.size.height <= 0 }
-          }
+    override fun HazeEffectDrawScope.draw(style: Unit) {
+      drawRuntimeEffect(this as HazeEffectRuntimeDrawScope)
+    }
 
-          if (areaLayer != null) {
-            translate(areaPosition.x, areaPosition.y) { drawLayer(areaLayer) }
-          }
+    override fun detach() {
+      releaseRuntimeResources()
+    }
+
+    override fun onTrimMemory(level: TrimMemoryLevel) {
+      releaseRuntimeResources()
+    }
+
+    override fun dispose() {
+      releaseRuntimeResources()
+    }
+
+    override fun shouldClipToNodeBounds(): Boolean = true
+
+    override fun shouldPreferClipToInputBounds(): Boolean =
+      resolvedBackgroundColor.isSpecified && resolvedBackgroundColor.alpha < 0.9f
+
+    override fun HazeEffectLayoutScope.calculateLayerBounds(style: Unit): Rect {
+      val blurRadiusPx = blurRadius.toPx()
+      return if (blurRadiusPx >= 1f) modifierBounds.inflate(blurRadiusPx) else modifierBounds
+    }
+
+    private fun DrawScope.drawRuntimeEffect(scope: HazeEffectRuntimeDrawScope) {
+      val layerSize = scope.layerSize.roundToIntSize()
+      if (layerSize.width <= 0 || layerSize.height <= 0) return
+
+      val layer = requireContentLayer(scope, layerSize)
+      layer.record(size = layerSize) {
+        val recordScope: DrawScope = this
+        if (resolvedBackgroundColor.isSpecified) {
+          drawRect(resolvedBackgroundColor)
         }
+
+        with(scope) { recordScope.drawInput() }
+      }
+
+      layer.clip = true
+      layer.renderEffect = getOrCreateRenderEffect(scope)
+
+      clipRect {
+        val drawOffset = -scope.layerOffset
+        translate(drawOffset.x, drawOffset.y) { drawLayer(layer) }
       }
     }
 
-    layer.clip = true
-    layer.renderEffect = getOrCreateRenderEffect(context)
-
-    clipRect {
-      val drawOffset = -context.layerOffset
-      translate(drawOffset.x, drawOffset.y) { drawLayer(layer) }
-    }
-  }
-
-  private fun requireContentLayer(context: VisualEffectContext, size: IntSize): GraphicsLayer {
-    val current = contentLayer
-    if (current != null && !current.isReleased && contentLayerSize == size) {
-      return current
-    }
-
-    releaseContentLayer()
-    val currentGraphicsContext = context.requireGraphicsContext()
-    return currentGraphicsContext.createGraphicsLayer().also {
-      graphicsContext = currentGraphicsContext
-      contentLayer = it
-      contentLayerSize = size
-    }
-  }
-
-  private fun getOrCreateRenderEffect(context: VisualEffectContext): RenderEffect {
-    val blurRadiusPx = with(context.requireDensity()) { blurRadius.toPx() }
-    val renderSize = context.size.takeIf { it.isSpecified } ?: Size.Zero
-    val key =
-      RenderEffectKey(
-        blurRadiusPx = blurRadiusPx,
-        layerSize = context.layerSize,
-        layerOffset = context.layerOffset,
-        renderSize = renderSize,
-      )
-    renderEffect
-      ?.takeIf { renderEffectKey == key }
-      ?.let {
-        return it
+    private fun requireContentLayer(
+      scope: HazeEffectRuntimeDrawScope,
+      size: IntSize,
+    ): GraphicsLayer {
+      val current = contentLayer
+      if (current != null && !current.isReleased && contentLayerSize == size) {
+        return current
       }
 
-    val mask = progressiveBrush.toShader(renderSize)
-    return createProgressiveBlurRenderEffect(
-        blurRadiusPx = blurRadiusPx,
-        size = renderSize,
-        offset = context.layerOffset,
-        mask = mask,
-      )
-      .asComposeRenderEffect()
-      .also {
-        renderEffect = it
-        renderEffectKey = key
+      releaseContentLayer()
+      val currentGraphicsContext = scope.requireGraphicsContext()
+      return currentGraphicsContext.createGraphicsLayer().also {
+        graphicsContext = currentGraphicsContext
+        contentLayer = it
+        contentLayerSize = size
       }
-  }
-
-  private fun releaseRuntimeResources() {
-    releaseContentLayer()
-    renderEffect = null
-    renderEffectKey = null
-  }
-
-  private fun releaseContentLayer() {
-    val layer = contentLayer
-    val context = graphicsContext
-    if (layer != null && context != null && !layer.isReleased) {
-      context.releaseGraphicsLayer(layer)
     }
-    contentLayer = null
-    contentLayerSize = null
-    graphicsContext = null
+
+    private fun getOrCreateRenderEffect(scope: HazeEffectRuntimeDrawScope): RenderEffect {
+      val blurRadiusPx = with(scope.requireDensity()) { blurRadius.toPx() }
+      val renderSize = scope.modifierSize.takeIf { it.isSpecified } ?: Size.Zero
+      val key =
+        RenderEffectKey(
+          blurRadiusPx = blurRadiusPx,
+          layerSize = scope.layerSize,
+          layerOffset = scope.layerOffset,
+          renderSize = renderSize,
+        )
+      renderEffect
+        ?.takeIf { renderEffectKey == key }
+        ?.let {
+          return it
+        }
+
+      val mask = progressiveBrush.toShader(renderSize)
+      return createProgressiveBlurRenderEffect(
+          blurRadiusPx = blurRadiusPx,
+          size = renderSize,
+          offset = scope.layerOffset,
+          mask = mask,
+        )
+        .asComposeRenderEffect()
+        .also {
+          renderEffect = it
+          renderEffectKey = key
+        }
+    }
+
+    private fun releaseRuntimeResources() {
+      releaseContentLayer()
+      renderEffect = null
+      renderEffectKey = null
+    }
+
+    private fun releaseContentLayer() {
+      val layer = contentLayer
+      val context = graphicsContext
+      if (layer != null && context != null && !layer.isReleased) {
+        context.releaseGraphicsLayer(layer)
+      }
+      contentLayer = null
+      contentLayerSize = null
+      graphicsContext = null
+    }
   }
 }
 

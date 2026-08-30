@@ -182,7 +182,12 @@ fun AppTheme(content: @Composable () -> Unit) {
     LocalAppColors provides if (isDark) DarkColors else LightColors,
     LocalAppShadows provides if (isDark) DarkAppShadows else LightAppShadows,
     LocalThemeMode provides if (isDark) ResolvedThemeMode.Dark else ResolvedThemeMode.Light,
-    LocalHazeBlurStyle provides HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+    LocalHazeBlurStyle provides
+      HazeBlurStyle {
+        blurRadius(20.dp)
+        noiseFactor(0f)
+        colorEffects(emptyList())
+      },
   ) {
     content()
   }

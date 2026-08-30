@@ -36,7 +36,13 @@ import co.typie.ext.ScrollGestureLockScope
 import co.typie.ext.clickable as typieClickable
 import co.typie.ext.verticalScroll
 import co.typie.ui.theme.LocalHazeState
+import dev.chrisbanes.haze.HazeEffectDrawScope
+import dev.chrisbanes.haze.HazeEffectFactory
+import dev.chrisbanes.haze.HazeEffectRenderer
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeSourceSelection
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -428,11 +434,21 @@ class EditorResizableSheetSurfaceDesktopTest {
 
   @Test
   fun resizableSubPaneParticipatesInToolbarBackdropHazeAboveTheEditorViewport() = runComposeUiTest {
-    lateinit var hazeState: HazeState
+    val observedSourceZIndices = mutableListOf<Float>()
 
     setContent {
       val state = remember { HazeState() }
-      SideEffect { hazeState = state }
+      val probeInput =
+        remember(state) {
+          HazeInput.Sources(
+            state = state,
+            selection =
+              HazeSourceSelection.All.where { metadata ->
+                observedSourceZIndices += metadata.zIndex
+                true
+              },
+          )
+        }
       CompositionLocalProvider(LocalHazeState provides state) {
         ScrollGestureLockScope {
           Box(Modifier.size(width = 400.dp, height = 800.dp)) {
@@ -450,13 +466,17 @@ class EditorResizableSheetSurfaceDesktopTest {
             ) {
               Box(Modifier.fillMaxSize())
             }
+            Box(
+              Modifier.size(1.dp)
+                .hazeEffect(factory = HazeSourceProbeFactory, input = probeInput, style = Unit)
+            )
           }
         }
       }
     }
     waitForIdle()
 
-    assertEquals(listOf(1f), hazeState.areas.map { it.zIndex })
+    assertEquals(listOf(1f), observedSourceZIndices.distinct())
   }
 
   @Test
@@ -799,6 +819,13 @@ class EditorResizableSheetSurfaceDesktopTest {
     waitForIdle()
 
     assertEquals(0, backgroundClicks)
+  }
+
+  private object HazeSourceProbeFactory : HazeEffectFactory<Unit> {
+    override fun createRenderer(): HazeEffectRenderer<Unit> =
+      object : HazeEffectRenderer<Unit> {
+        override fun HazeEffectDrawScope.draw(style: Unit) = Unit
+      }
   }
 
   private companion object {

@@ -1,12 +1,8 @@
 package co.typie.navigation
 
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.isSpecified
-import androidx.compose.ui.geometry.takeOrElse
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -16,16 +12,20 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.roundToIntSize
 import co.typie.ui.theme.ResolvedThemeMode
-import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeEffectDrawScope
+import dev.chrisbanes.haze.HazeEffectFactory
+import dev.chrisbanes.haze.HazeEffectLifecycleScope
+import dev.chrisbanes.haze.HazeEffectRenderer
+import dev.chrisbanes.haze.HazeEffectRendererDrawHooks
+import dev.chrisbanes.haze.HazeEffectRendererLifecycle
+import dev.chrisbanes.haze.HazeEffectRuntimeDrawScope
+import dev.chrisbanes.haze.HazeSampling
 import dev.chrisbanes.haze.InternalHazeApi
 import dev.chrisbanes.haze.TrimMemoryLevel
-import dev.chrisbanes.haze.VisualEffect
-import dev.chrisbanes.haze.VisualEffectContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
@@ -77,7 +77,7 @@ internal val LocalNavigationTopBarSampleRequester =
  * policy. Only the 64 x 16 analysis layer crosses back to the CPU; the full scene never does.
  */
 @Stable
-@OptIn(ExperimentalHazeApi::class, InternalHazeApi::class)
+@OptIn(InternalHazeApi::class)
 internal class NavigationTopBarSamplingEffect(
   private val sampleTopInset: Dp,
   private val sampleHeight: Dp,
@@ -88,257 +88,262 @@ internal class NavigationTopBarSamplingEffect(
   },
   private val readPixels: (suspend (GraphicsLayer) -> NavigationTopBarPixelSample?)? = null,
   private val onPixels: (token: NavigationTopBarSampleToken, pixels: IntArray, width: Int) -> Unit,
-) : VisualEffect {
-  private var resolvedBackgroundColor = Color.Unspecified
+) : HazeEffectFactory<Unit> {
+  private var activeRenderer: Renderer? = null
 
-  private var graphicsContext: GraphicsContext? = null
-  private var contentLayer: GraphicsLayer? = null
-  private var contentLayerSize: IntSize? = null
-  private var analysisLayer: GraphicsLayer? = null
-  private var sampleJob: Job? = null
-  private var trailingSampleJob: Job? = null
-  private var sampleRequestedWhileActive = false
-  private var lastSampleStartedAt: TimeMark? = null
-  private var visualEffectContext: VisualEffectContext? = null
-
-  override fun attach(context: VisualEffectContext) {
-    visualEffectContext = context
-  }
-
-  override fun update(context: VisualEffectContext) {
-    visualEffectContext = context
-    val currentBackgroundColor = backgroundColor()
-    if (currentBackgroundColor != resolvedBackgroundColor) {
-      resolvedBackgroundColor = currentBackgroundColor
-      context.invalidateDraw()
-    }
-  }
-
-  override fun DrawScope.draw(context: VisualEffectContext) {
-    visualEffectContext = context
-    val layerSize = context.layerSize.roundToIntSize()
-    if (layerSize.width <= 0 || layerSize.height <= 0) return
-
-    val layer = requireContentLayer(context, layerSize)
-    layer.record(size = layerSize) {
-      if (resolvedBackgroundColor.isSpecified) {
-        drawRect(resolvedBackgroundColor)
-      }
-
-      val sourceOffset = context.layerOffset - context.position
-      translate(sourceOffset.x, sourceOffset.y) {
-        for (area in context.areas) {
-          val areaPosition = Snapshot.withoutReadObservation {
-            area.position.takeOrElse { Offset.Zero }
-          }
-          val areaLayer = Snapshot.withoutReadObservation {
-            area.contentLayer
-              ?.takeUnless { it.isReleased }
-              ?.takeUnless { it.size.width <= 0 || it.size.height <= 0 }
-          }
-
-          if (areaLayer != null) {
-            translate(areaPosition.x, areaPosition.y) { drawLayer(areaLayer) }
-          }
-        }
-      }
-    }
-
-    if (samplingEnabled()) {
-      scheduleSample(context = context, content = layer)
-    }
-
-    clipRect {
-      val drawOffset = -context.layerOffset
-      translate(drawOffset.x, drawOffset.y) { drawLayer(layer) }
-    }
-  }
-
-  override fun detach(context: VisualEffectContext) {
-    if (visualEffectContext === context) {
-      visualEffectContext = null
-    }
-    releaseResources()
-  }
-
-  override fun onTrimMemory(context: VisualEffectContext, level: TrimMemoryLevel) {
-    releaseResources()
-    context.invalidateDraw()
-  }
-
-  override fun shouldClipToNodeBounds(): Boolean = true
-
-  override fun shouldPreferClipToAreaBounds(): Boolean =
-    resolvedBackgroundColor.isSpecified && resolvedBackgroundColor.alpha < 0.9f
-
-  override fun calculateLayerBounds(rect: Rect, density: Density): Rect = rect
+  override fun createRenderer(): HazeEffectRenderer<Unit> = Renderer().also { activeRenderer = it }
 
   internal fun requestSample() {
-    visualEffectContext?.invalidateDraw()
+    activeRenderer?.requestSample()
   }
 
-  private fun DrawScope.scheduleSample(context: VisualEffectContext, content: GraphicsLayer) {
-    if (sampleJob?.isActive == true) {
-      sampleRequestedWhileActive = true
-      return
+  private inner class Renderer :
+    HazeEffectRenderer<Unit>, HazeEffectRendererLifecycle<Unit>, HazeEffectRendererDrawHooks<Unit> {
+    private var resolvedBackgroundColor = Color.Unspecified
+
+    private var graphicsContext: GraphicsContext? = null
+    private var contentLayer: GraphicsLayer? = null
+    private var contentLayerSize: IntSize? = null
+    private var analysisLayer: GraphicsLayer? = null
+    private var sampleJob: Job? = null
+    private var trailingSampleJob: Job? = null
+    private var sampleRequestedWhileActive = false
+    private var lastSampleStartedAt: TimeMark? = null
+    private var lifecycleScope: HazeEffectLifecycleScope? = null
+
+    override fun attach(scope: HazeEffectLifecycleScope) {
+      lifecycleScope = scope
     }
-    val previousStart = lastSampleStartedAt
-    if (previousStart != null) {
-      val elapsed = previousStart.elapsedNow()
-      if (elapsed < MINIMUM_LUMINANCE_SAMPLE_INTERVAL) {
-        scheduleTrailingSample(context, MINIMUM_LUMINANCE_SAMPLE_INTERVAL - elapsed)
+
+    override fun update(scope: HazeEffectLifecycleScope, style: Unit, sampling: HazeSampling) {
+      lifecycleScope = scope
+      val currentBackgroundColor = backgroundColor()
+      if (currentBackgroundColor != resolvedBackgroundColor) {
+        resolvedBackgroundColor = currentBackgroundColor
+        scope.invalidateDraw()
+      }
+    }
+
+    override fun HazeEffectDrawScope.draw(style: Unit) {
+      val scope = this as HazeEffectRuntimeDrawScope
+      val layerSize = scope.layerSize.roundToIntSize()
+      if (layerSize.width <= 0 || layerSize.height <= 0) return
+
+      val layer = requireContentLayer(scope, layerSize)
+      layer.record(size = layerSize) {
+        val recordScope: DrawScope = this
+        if (resolvedBackgroundColor.isSpecified) {
+          drawRect(resolvedBackgroundColor)
+        }
+
+        with(scope) { recordScope.drawInput() }
+      }
+
+      if (samplingEnabled()) {
+        scheduleSample(scope = scope, content = layer)
+      }
+
+      clipRect {
+        val drawOffset = -scope.layerOffset
+        translate(drawOffset.x, drawOffset.y) { drawLayer(layer) }
+      }
+    }
+
+    override fun detach() {
+      lifecycleScope = null
+      releaseResources()
+    }
+
+    override fun onTrimMemory(level: TrimMemoryLevel) {
+      releaseResources()
+      lifecycleScope?.invalidateDraw()
+    }
+
+    override fun dispose() {
+      releaseResources()
+      if (activeRenderer === this) {
+        activeRenderer = null
+      }
+    }
+
+    override fun shouldClipToNodeBounds(): Boolean = true
+
+    override fun shouldPreferClipToInputBounds(): Boolean =
+      resolvedBackgroundColor.isSpecified && resolvedBackgroundColor.alpha < 0.9f
+
+    fun requestSample() {
+      lifecycleScope?.invalidateDraw()
+    }
+
+    private fun DrawScope.scheduleSample(
+      scope: HazeEffectRuntimeDrawScope,
+      content: GraphicsLayer,
+    ) {
+      if (sampleJob?.isActive == true) {
+        sampleRequestedWhileActive = true
         return
       }
-    }
-    trailingSampleJob?.cancel()
-    trailingSampleJob = null
-
-    val region = resolveSampleRegion(context) ?: return
-    val token = sampleToken() ?: return
-
-    val analysis = requireAnalysisLayer(context)
-    analysis.record(size = IntSize(LUMINANCE_ANALYSIS_WIDTH, LUMINANCE_ANALYSIS_HEIGHT)) {
-      val scaleX = LUMINANCE_ANALYSIS_WIDTH / region.renderWidth
-      val scaleY = LUMINANCE_ANALYSIS_HEIGHT / region.height
-      scale(scaleX = scaleX, scaleY = scaleY, pivot = Offset.Zero) {
-        translate(left = -context.layerOffset.x, top = -(context.layerOffset.y + region.top)) {
-          drawLayer(content)
+      val previousStart = lastSampleStartedAt
+      if (previousStart != null) {
+        val elapsed = previousStart.elapsedNow()
+        if (elapsed < MINIMUM_LUMINANCE_SAMPLE_INTERVAL) {
+          scheduleTrailingSample(MINIMUM_LUMINANCE_SAMPLE_INTERVAL - elapsed)
+          return
         }
       }
+      trailingSampleJob?.cancel()
+      trailingSampleJob = null
+
+      val region = resolveSampleRegion(scope) ?: return
+      val token = sampleToken() ?: return
+
+      val analysis = requireAnalysisLayer(scope)
+      analysis.record(size = IntSize(LUMINANCE_ANALYSIS_WIDTH, LUMINANCE_ANALYSIS_HEIGHT)) {
+        val scaleX = LUMINANCE_ANALYSIS_WIDTH / region.renderWidth
+        val scaleY = LUMINANCE_ANALYSIS_HEIGHT / region.height
+        scale(scaleX = scaleX, scaleY = scaleY, pivot = Offset.Zero) {
+          translate(left = -scope.layerOffset.x, top = -(scope.layerOffset.y + region.top)) {
+            drawLayer(content)
+          }
+        }
+      }
+
+      lastSampleStartedAt = TimeSource.Monotonic.markNow()
+      sampleJob =
+        scope.coroutineScope.launch {
+          try {
+            val reader = readPixels
+            val sample =
+              if (reader != null) {
+                reader.invoke(analysis)
+              } else {
+                readAnalysisPixels(analysis)
+              } ?: return@launch
+            if (sampleToken() == token) {
+              onPixels(token, sample.pixels, sample.width)
+            }
+          } finally {
+            sampleJob = null
+            if (sampleRequestedWhileActive && lifecycleScope != null) {
+              sampleRequestedWhileActive = false
+              scheduleTrailingSample()
+            }
+          }
+        }
     }
 
-    lastSampleStartedAt = TimeSource.Monotonic.markNow()
-    sampleJob =
-      context.coroutineScope.launch {
+    private fun resolveSampleRegion(scope: HazeEffectRuntimeDrawScope): LuminanceSampleRegion? {
+      val density = scope.requireDensity()
+      val renderWidth = scope.modifierSize.width.takeIf { it.isFinite() && it > 0f } ?: return null
+      val renderHeight =
+        scope.modifierSize.height.takeIf { it.isFinite() && it > 0f } ?: return null
+      val topInsetPx = with(density) { sampleTopInset.toPx() }.coerceAtLeast(0f)
+      val requestedHeightPx = with(density) { sampleHeight.toPx() }.coerceAtLeast(0f)
+      val top = topInsetPx.coerceAtMost(renderHeight)
+      val height = (top + requestedHeightPx).coerceAtMost(renderHeight) - top
+      if (height <= 0f) return null
+      return LuminanceSampleRegion(renderWidth = renderWidth, top = top, height = height)
+    }
+
+    private suspend fun readAnalysisPixels(analysis: GraphicsLayer): NavigationTopBarPixelSample? {
+      // Leave the draw pass before snapshotting the recorded analysis layer.
+      yield()
+      val image =
         try {
-          val sample =
-            if (readPixels != null) {
-              readPixels.invoke(analysis)
-            } else {
-              readAnalysisPixels(analysis)
-            } ?: return@launch
-          if (sampleToken() == token) {
-            onPixels(token, sample.pixels, sample.width)
-          }
-        } finally {
-          sampleJob = null
-          if (sampleRequestedWhileActive && visualEffectContext === context) {
-            sampleRequestedWhileActive = false
-            scheduleTrailingSample(context)
+          analysis.toImageBitmap()
+        } catch (cancellation: CancellationException) {
+          throw cancellation
+        } catch (_: Exception) {
+          return null
+        }
+      val pixels =
+        try {
+          IntArray(image.width * image.height).also { image.readPixels(it) }
+        } catch (cancellation: CancellationException) {
+          throw cancellation
+        } catch (_: Exception) {
+          return null
+        }
+      return NavigationTopBarPixelSample(pixels = pixels, width = image.width)
+    }
+
+    private fun scheduleTrailingSample(delayDuration: Duration = remainingSampleInterval()) {
+      if (trailingSampleJob?.isActive == true) return
+      val scope = lifecycleScope ?: return
+      trailingSampleJob =
+        scope.coroutineScope.launch {
+          if (delayDuration.isPositive()) delay(delayDuration)
+          trailingSampleJob = null
+          if (lifecycleScope === scope) {
+            scope.invalidateDraw()
           }
         }
-      }
-  }
+    }
 
-  private fun resolveSampleRegion(context: VisualEffectContext): LuminanceSampleRegion? {
-    val density = context.requireDensity()
-    val renderWidth = context.size.width.takeIf { it.isFinite() && it > 0f } ?: return null
-    val renderHeight = context.size.height.takeIf { it.isFinite() && it > 0f } ?: return null
-    val topInsetPx = with(density) { sampleTopInset.toPx() }.coerceAtLeast(0f)
-    val requestedHeightPx = with(density) { sampleHeight.toPx() }.coerceAtLeast(0f)
-    val top = topInsetPx.coerceAtMost(renderHeight)
-    val height = (top + requestedHeightPx).coerceAtMost(renderHeight) - top
-    if (height <= 0f) return null
-    return LuminanceSampleRegion(renderWidth = renderWidth, top = top, height = height)
-  }
+    private fun remainingSampleInterval(): Duration {
+      val previousStart = lastSampleStartedAt ?: return Duration.ZERO
+      return (MINIMUM_LUMINANCE_SAMPLE_INTERVAL - previousStart.elapsedNow()).coerceAtLeast(
+        Duration.ZERO
+      )
+    }
 
-  private suspend fun readAnalysisPixels(analysis: GraphicsLayer): NavigationTopBarPixelSample? {
-    // Leave the draw pass before snapshotting the recorded analysis layer.
-    yield()
-    val image =
-      try {
-        analysis.toImageBitmap()
-      } catch (cancellation: CancellationException) {
-        throw cancellation
-      } catch (_: Exception) {
-        return null
+    private fun requireContentLayer(
+      scope: HazeEffectRuntimeDrawScope,
+      size: IntSize,
+    ): GraphicsLayer {
+      val current = contentLayer
+      if (current != null && !current.isReleased && contentLayerSize == size) {
+        return current
       }
-    val pixels =
-      try {
-        IntArray(image.width * image.height).also { image.readPixels(it) }
-      } catch (cancellation: CancellationException) {
-        throw cancellation
-      } catch (_: Exception) {
-        return null
-      }
-    return NavigationTopBarPixelSample(pixels = pixels, width = image.width)
-  }
 
-  private fun scheduleTrailingSample(
-    context: VisualEffectContext,
-    delayDuration: Duration = remainingSampleInterval(),
-  ) {
-    if (trailingSampleJob?.isActive == true) return
-    trailingSampleJob =
-      context.coroutineScope.launch {
-        if (delayDuration.isPositive()) delay(delayDuration)
-        trailingSampleJob = null
-        if (visualEffectContext === context) {
-          context.invalidateDraw()
+      releaseContentLayer()
+      val currentGraphicsContext = scope.requireGraphicsContext()
+      return currentGraphicsContext.createGraphicsLayer().also {
+        graphicsContext = currentGraphicsContext
+        contentLayer = it
+        contentLayerSize = size
+      }
+    }
+
+    private fun requireAnalysisLayer(scope: HazeEffectRuntimeDrawScope): GraphicsLayer {
+      analysisLayer
+        ?.takeUnless { it.isReleased }
+        ?.let {
+          return it
         }
+      val currentGraphicsContext = graphicsContext ?: scope.requireGraphicsContext()
+      return currentGraphicsContext.createGraphicsLayer().also {
+        graphicsContext = currentGraphicsContext
+        analysisLayer = it
       }
-  }
-
-  private fun remainingSampleInterval(): Duration {
-    val previousStart = lastSampleStartedAt ?: return Duration.ZERO
-    return (MINIMUM_LUMINANCE_SAMPLE_INTERVAL - previousStart.elapsedNow()).coerceAtLeast(
-      Duration.ZERO
-    )
-  }
-
-  private fun requireContentLayer(context: VisualEffectContext, size: IntSize): GraphicsLayer {
-    val current = contentLayer
-    if (current != null && !current.isReleased && contentLayerSize == size) {
-      return current
     }
 
-    releaseContentLayer()
-    val currentGraphicsContext = context.requireGraphicsContext()
-    return currentGraphicsContext.createGraphicsLayer().also {
-      graphicsContext = currentGraphicsContext
-      contentLayer = it
-      contentLayerSize = size
+    private fun releaseResources() {
+      sampleRequestedWhileActive = false
+      sampleJob?.cancel()
+      sampleJob = null
+      trailingSampleJob?.cancel()
+      trailingSampleJob = null
+      lastSampleStartedAt = null
+      releaseLayer(analysisLayer)
+      analysisLayer = null
+      releaseContentLayer()
     }
-  }
 
-  private fun requireAnalysisLayer(context: VisualEffectContext): GraphicsLayer {
-    analysisLayer
-      ?.takeUnless { it.isReleased }
-      ?.let {
-        return it
+    private fun releaseContentLayer() {
+      releaseLayer(contentLayer)
+      contentLayer = null
+      contentLayerSize = null
+      if (analysisLayer == null) {
+        graphicsContext = null
       }
-    val currentGraphicsContext = graphicsContext ?: context.requireGraphicsContext()
-    return currentGraphicsContext.createGraphicsLayer().also {
-      graphicsContext = currentGraphicsContext
-      analysisLayer = it
     }
-  }
 
-  private fun releaseResources() {
-    sampleRequestedWhileActive = false
-    sampleJob?.cancel()
-    sampleJob = null
-    trailingSampleJob?.cancel()
-    trailingSampleJob = null
-    lastSampleStartedAt = null
-    releaseLayer(analysisLayer)
-    analysisLayer = null
-    releaseContentLayer()
-  }
-
-  private fun releaseContentLayer() {
-    releaseLayer(contentLayer)
-    contentLayer = null
-    contentLayerSize = null
-    if (analysisLayer == null) {
-      graphicsContext = null
-    }
-  }
-
-  private fun releaseLayer(layer: GraphicsLayer?) {
-    val context = graphicsContext
-    if (layer != null && context != null && !layer.isReleased) {
-      context.releaseGraphicsLayer(layer)
+    private fun releaseLayer(layer: GraphicsLayer?) {
+      val context = graphicsContext
+      if (layer != null && context != null && !layer.isReleased) {
+        context.releaseGraphicsLayer(layer)
+      }
     }
   }
 }

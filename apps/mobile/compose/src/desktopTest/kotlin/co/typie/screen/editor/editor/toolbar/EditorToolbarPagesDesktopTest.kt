@@ -2339,7 +2339,11 @@ class EditorToolbarPagesDesktopTest {
       LocalAppShadows provides LightAppShadows,
       LocalThemeMode provides ResolvedThemeMode.Light,
       LocalHazeBlurStyle provides
-        HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+        HazeBlurStyle {
+          blurRadius(20.dp)
+          noiseFactor(0f)
+          colorEffects(emptyList())
+        },
     ) {
       if (hapticFeedback == null) {
         content()

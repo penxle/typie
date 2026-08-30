@@ -46,7 +46,11 @@ class EditorSettingsControlsDesktopTest {
         LocalAppShadows provides LightAppShadows,
         LocalThemeMode provides ResolvedThemeMode.Light,
         LocalHazeBlurStyle provides
-          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
       ) {
         Box(Modifier.size(width = 400.dp, height = 280.dp)) {
           EditorSettingsFontSection(
@@ -96,7 +100,11 @@ class EditorSettingsControlsDesktopTest {
         LocalAppShadows provides LightAppShadows,
         LocalThemeMode provides ResolvedThemeMode.Light,
         LocalHazeBlurStyle provides
-          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
       ) {
         Box(Modifier.size(width = 400.dp, height = 600.dp)) {
           EditorSettingsLayoutSection(layout = layout, sheet = sheet, onLayoutChange = {})

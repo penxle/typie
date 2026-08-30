@@ -97,7 +97,11 @@ class NoteListDesktopTest {
         LocalAppShadows provides LightAppShadows,
         LocalThemeMode provides ResolvedThemeMode.Light,
         LocalHazeBlurStyle provides
-          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
         LocalToast provides Toast(),
       ) {
         val scope = rememberCoroutineScope()
@@ -232,7 +236,11 @@ class NoteListDesktopTest {
         LocalAppShadows provides LightAppShadows,
         LocalThemeMode provides ResolvedThemeMode.Light,
         LocalHazeBlurStyle provides
-          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
         LocalToast provides Toast(),
         LocalPopoverOverlayState provides popoverOverlayState,
       ) {
@@ -308,7 +316,11 @@ class NoteListDesktopTest {
         LocalAppShadows provides LightAppShadows,
         LocalThemeMode provides ResolvedThemeMode.Light,
         LocalHazeBlurStyle provides
-          HazeBlurStyle(blurRadius = 20.dp, noiseFactor = 0f, colorEffects = listOf()),
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
         LocalToast provides Toast(),
       ) {
         val item =
