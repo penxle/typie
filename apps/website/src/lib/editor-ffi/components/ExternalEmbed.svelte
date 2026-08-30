@@ -19,6 +19,10 @@
     element: ExternalElement;
   };
 
+  const ACTION_SIZE = 28;
+  const ACTION_INSET = 8;
+  const ACTION_GAP = 4;
+
   let { element }: Props = $props();
 
   const ctx = getEditorContext();
@@ -28,9 +32,20 @@
   const asset = $derived(embedId ? ctx.editor?.embedAssets.get(embedId) : undefined);
   const inflight = $derived(ctx.editor?.inflightEmbeds.get(element.node));
   const canEdit = $derived(!ctx.editor?.readOnly);
+  const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
 
   let inflightUrl = $state('');
   let error = $state(false);
+  let componentWidth = $state(0);
+  let componentHeight = $state(0);
+
+  const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
+  const visibleActionCount = $derived.by(() => {
+    const availableWidth = componentWidth * displayZoom - ACTION_INSET * displayZoom;
+    const availableHeight = componentHeight * displayZoom - ACTION_INSET * displayZoom;
+    if (availableWidth < ACTION_SIZE || availableHeight < ACTION_SIZE) return 0;
+    return availableWidth >= ACTION_SIZE * 2 + ACTION_GAP * displayZoom ? 2 : 1;
+  });
 
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
   const isOnlySelectedElement = $derived(
@@ -122,7 +137,7 @@
 </script>
 
 <ExternalElementWrapper {element} minHeight={asset ? undefined : '48px'}>
-  <div class={css({ position: 'relative', width: 'full' })}>
+  <div class={css({ position: 'relative', width: 'full' })} bind:clientWidth={componentWidth} bind:clientHeight={componentHeight}>
     {#if asset}
       {#if asset.html}
         <div class={css({ display: 'contents' }, canEdit && { pointerEvents: 'none' })}>
@@ -169,30 +184,13 @@
         </div>
       {/if}
 
-      <div class={flex({ position: 'absolute', top: '8px', right: '8px', gap: '4px' })}>
-        <button
-          class={css({
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '4px',
-            color: 'text.bright',
-            backgroundColor: '[#363839/70]',
-            size: '28px',
-            _hover: { backgroundColor: '[#363839/40]' },
-          })}
-          aria-label="링크 열기"
-          onclick={() => window.open(asset.url, '_blank', 'noopener,noreferrer')}
-          onpointerdown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          type="button"
+      {#if visibleActionCount > 0}
+        <div
+          style:gap={`${ACTION_GAP * displayZoom}px`}
+          style:transform={fixedControlTransform}
+          style:transform-origin="top right"
+          class={flex({ position: 'absolute', top: '8px', right: '8px' })}
         >
-          <Icon icon={ExternalLinkIcon} size={16} />
-        </button>
-
-        {#if canEdit}
           <button
             class={css({
               display: 'flex',
@@ -204,18 +202,42 @@
               size: '28px',
               _hover: { backgroundColor: '[#363839/40]' },
             })}
-            aria-label="임베드 삭제"
-            onclick={deleteNode}
+            aria-label="링크 열기"
+            onclick={() => window.open(asset.url, '_blank', 'noopener,noreferrer')}
             onpointerdown={(e) => {
               e.preventDefault();
               e.stopPropagation();
             }}
             type="button"
           >
-            <Icon icon={Trash2Icon} size={16} />
+            <Icon icon={ExternalLinkIcon} size={16} />
           </button>
-        {/if}
-      </div>
+
+          {#if canEdit && visibleActionCount > 1}
+            <button
+              class={css({
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px',
+                color: 'text.bright',
+                backgroundColor: '[#363839/70]',
+                size: '28px',
+                _hover: { backgroundColor: '[#363839/40]' },
+              })}
+              aria-label="임베드 삭제"
+              onclick={deleteNode}
+              onpointerdown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              type="button"
+            >
+              <Icon icon={Trash2Icon} size={16} />
+            </button>
+          {/if}
+        </div>
+      {/if}
     {:else}
       <div
         class={flex({

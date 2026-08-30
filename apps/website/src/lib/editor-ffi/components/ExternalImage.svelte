@@ -29,6 +29,14 @@
     boundsWidth: number;
   };
 
+  const ACTION_SIZE = 28;
+  const ACTION_INSET = 10;
+  const ACTION_GAP = 6;
+  const RESIZE_HANDLE_MAX_HEIGHT = 72;
+  const RESIZE_HANDLE_MIN_HEIGHT = 24;
+  const UPLOAD_SPINNER_SIZE = 24;
+  const UPLOAD_SPINNER_MIN_SIZE = 12;
+
   let { element }: Props = $props();
 
   const ctx = getEditorContext();
@@ -59,7 +67,9 @@
   const imageSrc = $derived(asset?.url ?? inflight?.url);
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
+  const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
   const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
+  const liveHeight = $derived(originalWidth > 0 ? liveWidth * (originalHeight / originalWidth) : 0);
   const containerSize = $derived(
     calculateImageContainerSize({
       boundsWidth: element.bounds.width,
@@ -68,6 +78,20 @@
       originalHeight,
     }),
   );
+  const displayedWidth = $derived(liveWidth * displayZoom);
+  const displayedHeight = $derived(liveHeight * displayZoom);
+  const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
+  const visibleActionCount = $derived.by(() => {
+    const availableWidth = displayedWidth - ACTION_INSET * displayZoom;
+    const availableHeight = displayedHeight - ACTION_INSET * displayZoom;
+    if (availableWidth < ACTION_SIZE || availableHeight < ACTION_SIZE) return 0;
+    return availableWidth >= ACTION_SIZE * 2 + ACTION_GAP * displayZoom ? 2 : 1;
+  });
+  const resizeHandleVisualHeight = $derived(
+    Math.max(RESIZE_HANDLE_MIN_HEIGHT, Math.min(liveHeight / 3, RESIZE_HANDLE_MAX_HEIGHT, displayedHeight)),
+  );
+  const uploadSpinnerVisualSize = $derived(Math.min(UPLOAD_SPINNER_SIZE, displayedWidth, displayedHeight));
+  const showUploadSpinner = $derived(uploadSpinnerVisualSize >= UPLOAD_SPINNER_MIN_SIZE);
   const canEdit = $derived(!ctx.editor?.readOnly);
   const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
   const isOnlySelectedElement = $derived(
@@ -328,13 +352,27 @@
       />
 
       {#if stage === 'uploading'}
-        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })}>
-          <RingSpinner style={css.raw({ size: '24px', color: 'text.disabled' })} />
+        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })} aria-label="이미지 업로드 중" role="status">
+          {#if showUploadSpinner}
+            <div
+              style:width={`${uploadSpinnerVisualSize}px`}
+              style:height={`${uploadSpinnerVisualSize}px`}
+              style:transform={fixedControlTransform}
+              style:transform-origin="center"
+            >
+              <RingSpinner style={css.raw({ size: 'full', color: 'text.disabled' })} />
+            </div>
+          {/if}
         </div>
       {/if}
 
-      {#if canEdit && stage === 'ready'}
-        <div class={flex({ position: 'absolute', top: '10px', right: '10px', gap: '6px', zIndex: '10' })}>
+      {#if canEdit && stage === 'ready' && visibleActionCount > 0}
+        <div
+          style:gap={`${ACTION_GAP * displayZoom}px`}
+          style:transform={fixedControlTransform}
+          style:transform-origin="top right"
+          class={flex({ position: 'absolute', top: '10px', right: '10px', zIndex: '10' })}
+        >
           <button
             class={center({
               borderRadius: '4px',
@@ -356,37 +394,42 @@
             <Icon icon={Maximize2Icon} size={16} />
           </button>
 
-          <button
-            class={center({
-              borderRadius: '4px',
-              size: '28px',
-              color: 'text.bright',
-              backgroundColor: '[#363839/70]',
-              opacity: '0',
-              transition: 'opacity',
-              _hover: { backgroundColor: '[#363839/40]' },
-              _groupHover: { opacity: '100' },
-            })}
-            aria-label="이미지 삭제"
-            onclick={deleteNode}
-            onpointerdown={(event) => {
-              event.stopPropagation();
-            }}
-            type="button"
-          >
-            <Icon icon={Trash2Icon} size={16} />
-          </button>
+          {#if visibleActionCount > 1}
+            <button
+              class={center({
+                borderRadius: '4px',
+                size: '28px',
+                color: 'text.bright',
+                backgroundColor: '[#363839/70]',
+                opacity: '0',
+                transition: 'opacity',
+                _hover: { backgroundColor: '[#363839/40]' },
+                _groupHover: { opacity: '100' },
+              })}
+              aria-label="이미지 삭제"
+              onclick={deleteNode}
+              onpointerdown={(event) => {
+                event.stopPropagation();
+              }}
+              type="button"
+            >
+              <Icon icon={Trash2Icon} size={16} />
+            </button>
+          {/if}
         </div>
+      {/if}
 
+      {#if canEdit && stage === 'ready'}
         <div class={flex({ position: 'absolute', top: '0', bottom: '0', left: '10px', alignItems: 'center', pointerEvents: 'none' })}>
           <button
+            style:height={`${resizeHandleVisualHeight}px`}
+            style:transform={fixedControlTransform}
+            style:transform-origin="left center"
             class={css({
               borderRadius: '4px',
               backgroundColor: 'white/50',
               mixBlendMode: 'difference',
               width: '8px',
-              height: '1/3',
-              maxHeight: '72px',
               cursor: 'col-resize',
               opacity: '0',
               transition: 'opacity',
@@ -408,13 +451,14 @@
 
         <div class={flex({ position: 'absolute', top: '0', bottom: '0', right: '10px', alignItems: 'center', pointerEvents: 'none' })}>
           <button
+            style:height={`${resizeHandleVisualHeight}px`}
+            style:transform={fixedControlTransform}
+            style:transform-origin="right center"
             class={css({
               borderRadius: '4px',
               backgroundColor: 'white/50',
               mixBlendMode: 'difference',
               width: '8px',
-              height: '1/3',
-              maxHeight: '72px',
               cursor: 'col-resize',
               opacity: '0',
               transition: 'opacity',

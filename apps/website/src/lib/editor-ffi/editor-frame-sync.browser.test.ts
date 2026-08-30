@@ -12,6 +12,10 @@ import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/brow
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('@mearie/svelte', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@mearie/svelte')>();
+  return { ...original, createMutation: () => [vi.fn()] };
+});
 
 const PAGE_WIDTH = 320;
 const PAGE_HEIGHT = 220;
@@ -146,6 +150,12 @@ function continuousDoc(text = ''): PlainDoc {
       ...document.root,
       node: { type: 'root', layout_mode: { type: 'continuous', max_width: 600 } },
     },
+  };
+}
+
+function externalComponentDoc(node: PlainNode): PlainDoc {
+  return {
+    root: entry({ type: 'root', layout_mode: { type: 'continuous', max_width: PAGE_WIDTH } }, [entry(node)]),
   };
 }
 
@@ -303,6 +313,12 @@ async function mountEditor(
   await tick();
   await vi.waitFor(() => expect(editor?.published?.frames.get(0)).toBeDefined());
   return { editor, ...result };
+}
+
+async function setDisplayZoom(editor: Editor, displayZoom: number): Promise<void> {
+  editor.displayZoom = displayZoom;
+  await tick();
+  await nextAnimationFrame();
 }
 
 async function mountEditorWithPublishedReady(plain: PlainDoc, options: { headerHeight?: number } = {}) {
@@ -1578,6 +1594,160 @@ describe('web editor frame synchronization', () => {
     expect(editor.published?.frames.get(0)?.canvas.height).toBeGreaterThan(0);
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
     expectActualCanvas(editor, 0, false);
+  });
+
+  it('keeps image component chrome fixed while content, inset, and gaps follow display zoom', async () => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 }));
+    editor.imageAssets.set('asset', {
+      id: 'asset',
+      url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
+      originalUrl: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
+      width: 100,
+      height: 100,
+      placeholder: '',
+    });
+
+    await expect.poll(() => document.querySelectorAll('[aria-label="이미지 크기 조절"]').length).toBe(2);
+    const image = document.querySelector<HTMLElement>('img[alt="본문 이미지"]');
+    expect(image).not.toBeNull();
+    if (!image) throw new Error('Expected a ready image');
+
+    const readChrome = () => {
+      const expand = document.querySelector<HTMLElement>('[aria-label="이미지 확대 보기"]');
+      const remove = document.querySelector<HTMLElement>('[aria-label="이미지 삭제"]');
+      const handles = [...document.querySelectorAll<HTMLElement>('[aria-label="이미지 크기 조절"]')];
+      expect(expand).not.toBeNull();
+      expect(remove).not.toBeNull();
+      expect(handles).toHaveLength(2);
+      if (!expand || !remove || handles.length !== 2) throw new Error('Expected ready image chrome');
+      const imageRect = image.getBoundingClientRect();
+      const expandRect = expand.getBoundingClientRect();
+      const removeRect = remove.getBoundingClientRect();
+      const handleRect = handles[0].getBoundingClientRect();
+      const iconRect = expand.querySelector('svg')?.getBoundingClientRect();
+      if (!iconRect) throw new Error('Expected an image action icon');
+      return {
+        imageRect,
+        expandRect,
+        removeRect,
+        handleRect,
+        iconRect,
+        rightInset: imageRect.right - removeRect.right,
+        gap: removeRect.left - expandRect.right,
+      };
+    };
+
+    const unit = readChrome();
+    expect(unit.imageRect.width).toBeCloseTo(100, 0);
+    expect(unit.expandRect.width).toBeCloseTo(28, 0);
+    expect(unit.iconRect.width).toBeCloseTo(16, 0);
+    expect(unit.handleRect.width).toBeCloseTo(8, 0);
+    expect(unit.handleRect.height).toBeCloseTo(100 / 3, 0);
+    expect(unit.rightInset).toBeCloseTo(10, 0);
+    expect(unit.gap).toBeCloseTo(6, 0);
+
+    await setDisplayZoom(editor, 2);
+    const doubled = readChrome();
+    expect(doubled.imageRect.width).toBeCloseTo(200, 0);
+    expect(doubled.expandRect.width).toBeCloseTo(unit.expandRect.width, 0);
+    expect(doubled.iconRect.width).toBeCloseTo(unit.iconRect.width, 0);
+    expect(doubled.handleRect.width).toBeCloseTo(unit.handleRect.width, 0);
+    expect(doubled.handleRect.height).toBeCloseTo(unit.handleRect.height, 0);
+    expect(doubled.rightInset).toBeCloseTo(unit.rightInset * 2, 0);
+    expect(doubled.gap).toBeCloseTo(unit.gap * 2, 0);
+
+    await setDisplayZoom(editor, 0.5);
+    const compactExpand = document.querySelector<HTMLElement>('[aria-label="이미지 확대 보기"]');
+    expect(compactExpand?.getBoundingClientRect().width).toBeCloseTo(28, 0);
+    expect(document.querySelector('[aria-label="이미지 삭제"]')).toBeNull();
+    expect(document.querySelectorAll('[aria-label="이미지 크기 조절"]')).toHaveLength(2);
+
+    await setDisplayZoom(editor, 0.2);
+    expect(image.getBoundingClientRect().width).toBeCloseTo(20, 0);
+    expect(document.querySelector('[aria-label="이미지 확대 보기"]')).toBeNull();
+    expect(document.querySelector('[aria-label="이미지 삭제"]')).toBeNull();
+    const minimumHandles = [...document.querySelectorAll<HTMLElement>('[aria-label="이미지 크기 조절"]')];
+    expect(minimumHandles).toHaveLength(2);
+    expect(minimumHandles[0]?.getBoundingClientRect().height).toBeCloseTo(24, 0);
+  });
+
+  it('keeps uploading image status accessible while its spinner fits available space', async () => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 }));
+    const image = editor.appliedSnapshot.externalElements[0];
+    if (!image) throw new Error('Expected an image external element');
+    editor.inflightImages.set(image.node, {
+      uploadId: 'uploading-image',
+      url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"/>',
+      width: 40,
+      height: 40,
+    });
+
+    await expect.poll(() => document.querySelector('[role="status"][aria-label="이미지 업로드 중"]')).not.toBeNull();
+    const status = document.querySelector<HTMLElement>('[role="status"][aria-label="이미지 업로드 중"]');
+    const spinner = status?.querySelector<SVGElement>('svg');
+    expect(spinner?.getBoundingClientRect().width).toBeCloseTo(24, 0);
+
+    await setDisplayZoom(editor, 0.5);
+    const compactSpinner = status?.querySelector<SVGElement>('svg');
+    expect(compactSpinner?.getBoundingClientRect().width).toBeCloseTo(20, 0);
+
+    await setDisplayZoom(editor, 0.2);
+    expect(status?.isConnected).toBe(true);
+    expect(status?.querySelector('svg')).toBeNull();
+  });
+
+  it('keeps embed component chrome fixed and removes it when the embed cannot contain one action', async () => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'embed', id: 'embed' }));
+    editor.embedAssets.set('embed', {
+      id: 'embed',
+      url: 'https://example.com',
+      title: 'Example',
+      description: 'Embedded content',
+      thumbnailUrl: null,
+      html: null,
+    });
+
+    await expect.poll(() => document.querySelector('[aria-label="링크 열기"]')).not.toBeNull();
+    const readChrome = () => {
+      const wrapper = document.querySelector<HTMLElement>('[data-external-element]');
+      const open = document.querySelector<HTMLElement>('[aria-label="링크 열기"]');
+      const remove = document.querySelector<HTMLElement>('[aria-label="임베드 삭제"]');
+      expect(wrapper).not.toBeNull();
+      expect(open).not.toBeNull();
+      expect(remove).not.toBeNull();
+      if (!wrapper || !open || !remove) throw new Error('Expected ready embed chrome');
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const openRect = open.getBoundingClientRect();
+      const removeRect = remove.getBoundingClientRect();
+      const iconRect = open.querySelector('svg')?.getBoundingClientRect();
+      if (!iconRect) throw new Error('Expected an embed action icon');
+      return {
+        wrapperRect,
+        openRect,
+        removeRect,
+        iconRect,
+        rightInset: wrapperRect.right - removeRect.right,
+        gap: removeRect.left - openRect.right,
+      };
+    };
+
+    const unit = readChrome();
+    expect(unit.openRect.width).toBeCloseTo(28, 0);
+    expect(unit.iconRect.width).toBeCloseTo(16, 0);
+    expect(unit.rightInset).toBeCloseTo(8, 0);
+    expect(unit.gap).toBeCloseTo(4, 0);
+
+    await setDisplayZoom(editor, 2);
+    const doubled = readChrome();
+    expect(doubled.wrapperRect.width).toBeCloseTo(unit.wrapperRect.width * 2, 0);
+    expect(doubled.openRect.width).toBeCloseTo(unit.openRect.width, 0);
+    expect(doubled.iconRect.width).toBeCloseTo(unit.iconRect.width, 0);
+    expect(doubled.rightInset).toBeCloseTo(unit.rightInset * 2, 0);
+    expect(doubled.gap).toBeCloseTo(unit.gap * 2, 0);
+
+    await setDisplayZoom(editor, 0.2);
+    expect(document.querySelector('[aria-label="링크 열기"]')).toBeNull();
+    expect(document.querySelector('[aria-label="임베드 삭제"]')).toBeNull();
   });
 
   it('commits a large continuous scale gap with coherent layout and surface publication', async () => {
