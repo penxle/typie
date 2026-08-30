@@ -10,28 +10,39 @@
   };
 
   let { label, children }: Props = $props();
+  let menuOpen = $state(false);
+  let menuPresented = $state(false);
+
+  $effect(() => {
+    if (menuOpen) menuPresented = true;
+  });
 </script>
 
 <Menu
-  style={css.raw({
-    display: 'none',
-    flexShrink: '0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '4px',
-    size: '16px',
-    color: 'text.disabled',
-    cursor: 'pointer',
-    transition: 'common',
-    _hover: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
-    _focusVisible: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
-    _groupHover: { display: 'flex' },
-    _groupFocusWithin: { display: 'flex' },
-    _expanded: { display: 'flex', backgroundColor: 'interactive.hover', color: 'text.subtle' },
-    '@media (pointer: coarse)': { display: 'flex' },
-  })}
+  style={css.raw(
+    {
+      display: 'none',
+      flexShrink: '0',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: '4px',
+      size: '16px',
+      color: 'text.disabled',
+      cursor: 'pointer',
+      transition: 'common',
+      _hover: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+      _focusVisible: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+      _groupHover: { display: 'flex' },
+      _groupFocusWithin: { display: 'flex' },
+      _expanded: { display: 'flex', backgroundColor: 'interactive.hover', color: 'text.subtle' },
+      '@media (pointer: coarse)': { display: 'flex' },
+    },
+    menuPresented && { display: 'flex' },
+  )}
   buttonAriaLabel={label}
+  ontransitionend={() => (menuPresented = false)}
   placement="bottom-start"
+  bind:open={menuOpen}
 >
   {#snippet button({ open })}
     <span class={css({ display: 'flex', alignItems: 'center', justifyContent: 'center', size: 'full' })} aria-pressed={open}>
