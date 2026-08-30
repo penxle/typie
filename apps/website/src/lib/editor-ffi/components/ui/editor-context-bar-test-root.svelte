@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { VerticalDivider } from '@typie/ui/components';
   import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import EditorBreadcrumb from './EditorBreadcrumb.svelte';
   import EditorContextBar from './EditorContextBar.svelte';
+  import EditorFocusModeControl from './EditorFocusModeControl.svelte';
   import EditorZoomControls from './EditorZoomControls.svelte';
   import type { DocumentZoomLandmark } from '$lib/editor-ffi/zoom';
   import type { EditorContextBarSegmentRenderProps } from './EditorContextBar.svelte';
@@ -45,6 +47,7 @@
   let landmark = $state<DocumentZoomLandmark | null>(initialLandmark);
   let boundaryAttemptRequest = $state(0);
   let boundaryAttemptLandmark = $state<DocumentZoomLandmark | null>(null);
+  let focusMode = $state(false);
   let editorViewSurface = $state<HTMLElement>();
   let scrollContainer = $state<HTMLElement>();
   let currentSurfaceWidth = $state(surfaceWidth);
@@ -63,6 +66,10 @@
 
   export function setEnabled(nextEnabled: boolean) {
     enabled = nextEnabled;
+  }
+
+  export function setFocusMode(nextEnabled: boolean) {
+    focusMode = nextEnabled;
   }
 
   export function requestBoundaryAttempt(nextLandmark: DocumentZoomLandmark) {
@@ -88,22 +95,33 @@
     {#if mode === 'zoom' && editorViewSurface && scrollContainer}
       <EditorContextBar {editorViewSurface} interactiveViewControlsWhenHidden showViewControlsOnPaneEntry={enabled && landmark !== 'unit'}>
         {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
-          <EditorZoomControls
-            atMaximum={landmark === 'maximum'}
-            atMinimum={landmark === 'minimum'}
-            {boundaryAttemptLandmark}
-            {boundaryAttemptRequest}
-            {displayZoom}
-            {enabled}
-            {indicatorZoom}
-            {landmark}
-            {onToggleZoom}
-            {onZoomIn}
-            {onZoomOut}
-            segment={state}
-            {toggleTargetLandmark}
-            visible={presentation.visible}
-          />
+          <div style="display: flex; align-items: center">
+            <EditorZoomControls
+              atMaximum={landmark === 'maximum'}
+              atMinimum={landmark === 'minimum'}
+              {boundaryAttemptLandmark}
+              {boundaryAttemptRequest}
+              {displayZoom}
+              {enabled}
+              {indicatorZoom}
+              {landmark}
+              {onToggleZoom}
+              {onZoomIn}
+              {onZoomOut}
+              segment={state}
+              {toggleTargetLandmark}
+              visible={presentation.visible}
+            />
+            {#if enabled}
+              <VerticalDivider style={{ height: '12px' }} />
+            {/if}
+            <EditorFocusModeControl
+              enabled={focusMode}
+              onToggle={() => (focusMode = !focusMode)}
+              segment={state}
+              visible={presentation.visible}
+            />
+          </div>
         {/snippet}
       </EditorContextBar>
     {:else if mode === 'context-bar' && editorViewSurface}

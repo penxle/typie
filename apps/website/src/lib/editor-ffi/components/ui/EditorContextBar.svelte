@@ -89,12 +89,14 @@
   let lanePointerY = $state(0);
   let laneExpansionMaskedSegments = $state<ContextBarSegmentId[]>([]);
   let fadingTransientSegments = $state<ContextBarSegmentId[]>([]);
+  let transientExitPresentation = $state<ContextBarPresentation>();
   let laneHoverIntent: ActionReturn<HoverIntentParameter> | undefined;
   let laneDwellTimer: ReturnType<typeof setTimeout> | undefined;
   let laneExpansionTimer: ReturnType<typeof setTimeout> | undefined;
   let hiddenSegmentIntentTimer: ReturnType<typeof setTimeout> | undefined;
   let hiddenSegmentIntentTarget: ContextBarSegmentId | undefined;
   let hiddenSegmentEngaged: ContextBarSegmentId | undefined;
+  let transientExitTimer: ReturnType<typeof setTimeout> | undefined;
   const fadingTransientTimers = new SvelteMap<ContextBarSegmentId, ReturnType<typeof setTimeout>>();
   let initialRevealComplete = false;
 
@@ -104,6 +106,7 @@
     viewControls: { visible: false, tone: 'transient' },
   });
   let previousPresentation = presentation;
+  const surfaceMaskPresentation = $derived(transientExitPresentation ?? presentation);
 
   const unifiedPairVisible = $derived(presentation.unified);
   const unifiedSurfaceVisible = $derived(unifiedPairVisible && laneHoverPhase !== 'expanding');
@@ -146,7 +149,9 @@
       ? LANE_SPOT_EXPAND_MS
       : laneHoverPhase === 'preview' || laneHoverPhase === 'spot'
         ? LANE_SPOT_ENTER_MS
-        : 320,
+        : transientExitPresentation
+          ? CONTEXT_BAR_FADE_OUT_MS
+          : 320,
   );
 
   function toneColor(tone: ContextBarSegmentPresentation['tone']): string {
@@ -185,11 +190,14 @@
   function unifiedTransientMask(): string {
     if (!breadcrumbGeometry || !viewControlsGeometry) return 'linear-gradient(transparent, transparent)';
     const hasTransientSegment =
-      presentation.breadcrumb.tone === 'transient' || presentation.viewControls.tone === 'transient' || fadingTransientSegments.length > 0;
+      surfaceMaskPresentation.breadcrumb.tone === 'transient' ||
+      surfaceMaskPresentation.viewControls.tone === 'transient' ||
+      fadingTransientSegments.length > 0;
     if (hasTransientSegment) return 'linear-gradient(black, black)';
 
-    const breadcrumbEngaged = presentation.breadcrumb.tone === 'engaged' && !fadingTransientSegments.includes('breadcrumb');
-    const viewControlsEngaged = presentation.viewControls.tone === 'engaged' && !fadingTransientSegments.includes('viewControls');
+    const breadcrumbEngaged = surfaceMaskPresentation.breadcrumb.tone === 'engaged' && !fadingTransientSegments.includes('breadcrumb');
+    const viewControlsEngaged =
+      surfaceMaskPresentation.viewControls.tone === 'engaged' && !fadingTransientSegments.includes('viewControls');
     if (!breadcrumbEngaged && !viewControlsEngaged) return 'linear-gradient(black, black)';
 
     const width = viewControlsGeometry.right - breadcrumbGeometry.left;
@@ -218,7 +226,7 @@
 
   function segmentLaneMask(segment: ContextBarSegmentId, transientOnly: boolean): string | undefined {
     const geometry = segment === 'breadcrumb' ? breadcrumbGeometry : viewControlsGeometry;
-    const segmentPresentation = presentation[segment];
+    const segmentPresentation = surfaceMaskPresentation[segment];
     if (
       !geometry ||
       !segmentPresentation.visible ||
@@ -264,8 +272,10 @@
   function laneBlurMasks(): string[] {
     const masks = [laneSpotMask('--context-bar-lane-spot-opacity')];
     const hasTransientSegment =
-      presentation.breadcrumb.tone === 'transient' || presentation.viewControls.tone === 'transient' || fadingTransientSegments.length > 0;
-    if (unifiedSurfaceVisible) {
+      surfaceMaskPresentation.breadcrumb.tone === 'transient' ||
+      surfaceMaskPresentation.viewControls.tone === 'transient' ||
+      fadingTransientSegments.length > 0;
+    if (unifiedSurfaceVisible || transientExitPresentation?.unified) {
       if (hasTransientSegment) masks.push('linear-gradient(black, black)');
       return masks;
     }
@@ -286,7 +296,7 @@
       masks.push(fadingMask ?? (engagedSegment ? outsideEngagedSegmentMask(engagedSegment) : 'linear-gradient(transparent, transparent)'));
       return masks;
     }
-    if (unifiedSurfaceVisible) {
+    if (unifiedSurfaceVisible || transientExitPresentation?.unified) {
       masks.push(unifiedTransientMask());
       return masks;
     }
@@ -353,6 +363,22 @@
     for (const timer of fadingTransientTimers.values()) clearTimeout(timer);
     fadingTransientTimers.clear();
     fadingTransientSegments = [];
+  }
+
+  function clearTransientSurfaceExit(): void {
+    clearTimeout(transientExitTimer);
+    transientExitTimer = undefined;
+    transientExitPresentation = undefined;
+  }
+
+  function startTransientSurfaceExit(previous: ContextBarPresentation): void {
+    clearTransientSurfaceExit();
+    if (prefersReducedMotion.current) return;
+    transientExitPresentation = previous;
+    transientExitTimer = setTimeout(() => {
+      transientExitTimer = undefined;
+      transientExitPresentation = undefined;
+    }, CONTEXT_BAR_FADE_OUT_MS);
   }
 
   function releaseHiddenSegmentHover(): void {
@@ -569,6 +595,13 @@
       breadcrumb: breadcrumb ? breadcrumbState.activity : { transient: false, hovered: false, focused: false, holds: [] },
       viewControls: viewControlsState.activity,
     });
+    const hadTransientSurface =
+      (previousPresentation.breadcrumb.visible && previousPresentation.breadcrumb.tone === 'transient') ||
+      (previousPresentation.viewControls.visible && previousPresentation.viewControls.tone === 'transient');
+    const nextHidden = !nextPresentation.breadcrumb.visible && !nextPresentation.viewControls.visible;
+    if (hadTransientSurface && nextHidden) startTransientSurfaceExit(previousPresentation);
+    else if (!nextHidden) clearTransientSurfaceExit();
+
     for (const segment of ['breadcrumb', 'viewControls'] as const) {
       if (
         previousPresentation[segment].visible &&
@@ -633,6 +666,7 @@
     return () => {
       clearHiddenSegmentIntent();
       clearFadingTransientSegments();
+      clearTransientSurfaceExit();
       stopLaneInteraction(false);
       breadcrumbState.destroy();
       viewControlsState.destroy();
@@ -680,6 +714,8 @@
     style:background={TRANSIENT_SURFACE}
     style:mask-image={laneSurfaceMask}
     style:mask-composite={laneSurfaceMaskComposite}
+    style:opacity={laneBlurVisible ? '1' : '0'}
+    style:transition={prefersReducedMotion.current ? 'none' : `opacity ${laneBlurVisible ? 0 : CONTEXT_BAR_FADE_OUT_MS}ms ease-out`}
     class={css({ position: 'absolute', inset: '0', zIndex: '[-1]', pointerEvents: 'none' })}
     aria-hidden="true"
     data-context-bar-full-lane={unifiedSurfaceVisible}

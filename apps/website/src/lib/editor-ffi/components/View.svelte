@@ -2,6 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { token } from '@typie/styled-system/tokens';
+  import { VerticalDivider } from '@typie/ui/components';
   import { getThemeContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
@@ -62,6 +63,7 @@
     /** 최종 레이아웃으로 바뀐 본문을 이전 화면 위치에서 합성하는 일회성 모션. */
     contentMotion?: { fromX: number; duration: number; easing: string };
     breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
+    viewControls?: Snippet<[EditorContextBarSegmentRenderProps]>;
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
@@ -78,6 +80,7 @@
     contentInsetRight = 0,
     contentMotion,
     breadcrumb,
+    viewControls: additionalViewControls,
     onReady,
     header,
     footer,
@@ -557,6 +560,10 @@
             {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
               <div class={css({ display: 'flex', alignItems: 'center' })} aria-label="보기 제어" role="group">
                 <EditorZoomControls {...controls} segment={state} visible={presentation.visible} />
+                {#if controls.enabled && additionalViewControls}
+                  <VerticalDivider style={css.raw({ height: '12px' })} />
+                {/if}
+                {@render additionalViewControls?.({ state, presentation })}
               </div>
             {/snippet}
           </EditorContextBar>
