@@ -20,7 +20,7 @@ pub fn insert_slice_at(
         return Err(CommandError::NodeNotFound(position.node));
     }
     let plan = match fit_slice(tr.state(), Selection::collapsed(position), slice)? {
-        FitOutcome::Plan(plan) => plan,
+        FitOutcome::Plan(plan) => *plan,
         FitOutcome::NoOp | FitOutcome::NoFit => return Ok(None),
     };
     apply_fitted_slice(tr, plan, provenance).map(Some)

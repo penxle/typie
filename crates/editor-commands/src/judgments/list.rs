@@ -89,9 +89,8 @@ pub fn judge_indent_list(view: &DocView, selection: &Selection) -> Verdict<Inden
                 .map(|index| index > 0)
                 .unwrap_or(false)
         });
-    if any_sinkable {
-        Verdict::Change(IndentPlan { items })
-    } else if is_materializable_synthetic(selection.anchor.node)
+    if any_sinkable
+        || is_materializable_synthetic(selection.anchor.node)
         || is_materializable_synthetic(selection.head.node)
     {
         Verdict::Change(IndentPlan { items })

@@ -505,7 +505,10 @@ fn delete_selection_range_carry(
                 CommandError::Corrupted("non-cell deletion has no linear range".into())
             })?;
             let join = plan_linear_join(&view, &plan)?;
-            Plan::Linear { plan, join }
+            Plan::Linear {
+                plan: Box::new(plan),
+                join,
+            }
         }
     };
 
@@ -560,7 +563,7 @@ enum Plan {
         anchor_id: Dot,
     },
     Linear {
-        plan: LinearDeletionPlan,
+        plan: Box<LinearDeletionPlan>,
         join: Option<LinearJoinExecution>,
     },
 }

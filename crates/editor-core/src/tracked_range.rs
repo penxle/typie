@@ -74,9 +74,11 @@ impl TrackedRangeRegistry {
     pub fn add(&mut self, range: TrackedRange) -> Option<TrackedRange> {
         let id = range.id.clone();
         let new_group = range.group.clone();
-        let sensitive_blocks = Self::range_is_verifiable(&range)
-            .then(|| range.covered_blocks.clone())
-            .unwrap_or_default();
+        let sensitive_blocks = if Self::range_is_verifiable(&range) {
+            range.covered_blocks.clone()
+        } else {
+            Default::default()
+        };
         let prev = self.by_id.insert(id.clone(), range);
         if let Some(prev_range) = &prev {
             let prev_blocks = prev_range.covered_blocks.clone();

@@ -54,7 +54,7 @@ fn placeholder_metrics_for_node(
     let elem_id = nv.id();
     let entry = layout_index.box_entry(&elem_id)?;
     let page_rect = layout_index.page_rect(entry.rect)?;
-    let indent = placeholder_indent(&nv);
+    let indent = placeholder_indent(nv);
     let rect = Rect::from_xywh(
         page_rect.rect.x + indent,
         page_rect.rect.y,
@@ -66,21 +66,21 @@ fn placeholder_metrics_for_node(
         page_idx: page_rect.page_idx,
         rect,
         font_size: Some(resolve_u32(
-            &modifiers,
+            modifiers,
             ModifierType::FontSize,
             DEFAULT_FONT_SIZE,
         )),
         line_height: Some(resolve_u32(
-            &modifiers,
+            modifiers,
             ModifierType::LineHeight,
             DEFAULT_LINE_HEIGHT,
         )),
         letter_spacing: Some(resolve_i32(
-            &modifiers,
+            modifiers,
             ModifierType::LetterSpacing,
             DEFAULT_LETTER_SPACING,
         )),
-        align: Some(resolve_align(&modifiers)),
+        align: Some(resolve_align(modifiers)),
     })
 }
 

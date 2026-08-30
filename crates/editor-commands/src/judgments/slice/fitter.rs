@@ -11,7 +11,7 @@ use super::table_fitter::{
 use crate::CommandError;
 
 pub enum FitOutcome {
-    Plan(SliceFitPlan),
+    Plan(Box<SliceFitPlan>),
     NoOp,
     NoFit,
 }
@@ -67,19 +67,18 @@ pub fn fit_slice(
         return Ok(FitOutcome::NoFit);
     }
 
-    if is_pure_table_grid_slice(&slice) {
-        if selection
+    if is_pure_table_grid_slice(&slice)
+        && (selection
             .resolve(&view)
             .is_some_and(|resolved| resolved.as_cell_rect().is_some())
-            || selection_is_wholly_in_one_cell(&view, selection)
-        {
-            return Ok(match fit_table_grid(&view, selection, &slice)? {
-                Some(plan) => FitOutcome::Plan(SliceFitPlan {
-                    kind: SliceFitPlanKind::TableGrid(plan),
-                }),
-                None => FitOutcome::NoFit,
-            });
-        }
+            || selection_is_wholly_in_one_cell(&view, selection))
+    {
+        return Ok(match fit_table_grid(&view, selection, &slice)? {
+            Some(plan) => FitOutcome::Plan(Box::new(SliceFitPlan {
+                kind: SliceFitPlanKind::TableGrid(plan),
+            })),
+            None => FitOutcome::NoFit,
+        });
     }
 
     if selection
@@ -90,9 +89,9 @@ pub fn fit_slice(
             return Ok(FitOutcome::NoFit);
         }
         return Ok(match fit_cell_fill(&view, selection, &slice) {
-            Some(plan) => FitOutcome::Plan(SliceFitPlan {
+            Some(plan) => FitOutcome::Plan(Box::new(SliceFitPlan {
                 kind: SliceFitPlanKind::CellFill(plan),
-            }),
+            })),
             None => FitOutcome::NoFit,
         });
     }
@@ -102,9 +101,9 @@ pub fn fit_slice(
     }
 
     match fit_linear_slice(&view, selection, slice)? {
-        LinearFitOutcome::Plan(plan) => Ok(FitOutcome::Plan(SliceFitPlan {
-            kind: SliceFitPlanKind::Linear(plan),
-        })),
+        LinearFitOutcome::Plan(plan) => Ok(FitOutcome::Plan(Box::new(SliceFitPlan {
+            kind: SliceFitPlanKind::Linear(*plan),
+        }))),
         LinearFitOutcome::NoOp => Ok(FitOutcome::NoOp),
         LinearFitOutcome::NoFit => Ok(FitOutcome::NoFit),
     }
