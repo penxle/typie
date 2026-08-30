@@ -160,7 +160,7 @@ impl PlannedEndpoint {
 }
 
 fn capture_ancestry(node: &editor_model::NodeView<'_>) -> Option<Vec<PlannedAncestorSlot>> {
-    let mut current = node.clone();
+    let mut current = *node;
     let mut ancestry = Vec::new();
     while let Some(parent) = current.parent() {
         let parent_id = parent.id();
@@ -192,7 +192,7 @@ fn ancestry_matches(
     node: &editor_model::NodeView<'_>,
     ancestry: &[PlannedAncestorSlot],
 ) -> bool {
-    let mut current = node.clone();
+    let mut current = *node;
     for slot in ancestry {
         let Some(parent) = current.parent() else {
             return false;

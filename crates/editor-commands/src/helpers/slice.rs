@@ -40,10 +40,15 @@ impl InlineMode {
     }
 }
 
-fn carry_from_paint(paint: &[Modifier]) -> Vec<Modifier> {
+fn carry_from_paint(view: &DocView, block: Dot, paint: &[Modifier]) -> Vec<Modifier> {
+    let effective = view.node(block).map(|node| node.effective());
     paint
         .iter()
         .filter(|m| m.as_type().is_carry_kind())
+        .filter(|m| match effective {
+            Some(effective) => effective.get(&m.as_type()) != Some(*m),
+            None => true,
+        })
         .cloned()
         .collect()
 }
@@ -104,7 +109,11 @@ pub(crate) fn paint_block_uniformly(
         }
     };
     apply_inline_modifiers(tr, &dots, paint)?;
-    tr.replace_carry(block, carry_from_paint(paint))?;
+    let carry = {
+        let view = tr.state().view();
+        carry_from_paint(&view, block, paint)
+    };
+    tr.replace_carry(block, carry)?;
     Ok(())
 }
 
@@ -1101,9 +1110,9 @@ pub(crate) fn split_block_wrapper_before_child(
         let moving: Vec<Dot> = wrapper_view
             .children()
             .skip(first_right_index)
-            .filter_map(|child| match child {
-                ChildView::Block(block) => Some(block.id()),
-                ChildView::Leaf(leaf) => Some(leaf.dot()),
+            .map(|child| match child {
+                ChildView::Block(block) => block.id(),
+                ChildView::Leaf(leaf) => leaf.dot(),
             })
             .filter(|dot| dot.as_op_dot().is_some())
             .collect();
@@ -1495,7 +1504,7 @@ fn paint_inserted_subtree(
         let Some(root) = view.node(root) else {
             return Ok(());
         };
-        std::iter::once(root.clone())
+        std::iter::once(root)
             .chain(root.descendants().filter_map(|child| match child {
                 ChildView::Block(block) => Some(block),
                 ChildView::Leaf(_) => None,
@@ -1824,7 +1833,7 @@ impl TextblockSplicePlan {
             && self
                 .blocks
                 .first()
-                .is_some_and(|block| paragraph_ends_with_page_break(block))
+                .is_some_and(paragraph_ends_with_page_break)
         {
             SliceOutputRelation::AfterTerminalPageBreak
         } else {
@@ -1940,15 +1949,13 @@ pub(crate) fn plan_textblock_splice_target(
         .skip(unjoined_start)
         .map(|fragment| (*fragment).clone())
         .collect::<Vec<_>>();
-    let mut completed_len = final_types.len();
-    for insertion in completion {
+    for (completed_len, insertion) in (final_types.len()..).zip(completion) {
         // Root's trailing editable paragraph is derived projection state. Other
         // required children belong to the accepted authored replacement and
         // must be inserted by this plan before projection observes the result.
         let projection_owned_trailing_paragraph = container.node_type == NodeType::Root
             && insertion.node_type == NodeType::Paragraph
             && insertion.index == completed_len;
-        completed_len += 1;
         if projection_owned_trailing_paragraph {
             continue;
         }
@@ -1988,7 +1995,7 @@ pub(crate) fn plan_textblock_splice_target(
 
     let unjoined_ends_with_page_break = inserted_blocks
         .last()
-        .is_some_and(|fragment| paragraph_ends_with_page_break(fragment));
+        .is_some_and(paragraph_ends_with_page_break);
     let final_caret_at_right_boundary = (merge_end && !merge_end_emits)
         || (split_emits && inserted_blocks.is_empty() && !join_start_emits && !merge_end_emits);
     let insert_at = textblock_index + usize::from(has_left);
@@ -2109,11 +2116,14 @@ fn insert_blocks_in_textblock(
         let left_id = left_id.expect("merge start requires left destination content");
         let first = blocks[0];
         let inline = first.children.to_vec();
-        let insertable_inline = inline
+        let insertable_inline = if inline
             .last()
             .is_some_and(|fragment| fragment.node.as_type() == NodeType::PageBreak)
-            .then(|| &inline[..inline.len() - 1])
-            .unwrap_or(&inline);
+        {
+            &inline[..inline.len() - 1]
+        } else {
+            &inline[..]
+        };
         let position = position_at_end_of_block(tr, left_id)?;
         append_inline_outputs_at_position(
             tr,
@@ -2187,7 +2197,11 @@ fn insert_blocks_in_textblock(
             |index| SliceOutputSource::TextblockEndInline { index },
         )?;
         if let Some(paint) = mode.plain_paint() {
-            tr.replace_carry(right_id, carry_from_paint(paint))?;
+            let carry = {
+                let view = tr.state().view();
+                carry_from_paint(&view, right_id, paint)
+            };
+            tr.replace_carry(right_id, carry)?;
         }
     }
 

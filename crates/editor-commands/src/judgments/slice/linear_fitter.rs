@@ -18,7 +18,7 @@ use crate::helpers::{
 };
 
 pub(super) enum LinearFitOutcome {
-    Plan(LinearFitPlan),
+    Plan(Box<LinearFitPlan>),
     NoOp,
     NoFit,
 }
@@ -36,7 +36,7 @@ pub(crate) enum LinearFinalSelection {
 
 pub(crate) enum LinearMutation {
     PointInsertion {
-        insertion: SliceInsertionPlan,
+        insertion: Box<SliceInsertionPlan>,
     },
     RangeReplacement {
         deletion: LinearDeletionSemantics,
@@ -45,18 +45,18 @@ pub(crate) enum LinearMutation {
 }
 
 pub(crate) enum RangePlacement {
-    Joined(JoinedReplacementPlan),
-    PreservedBoundary(PlannedBoundaryInsertion),
+    Joined(Box<JoinedReplacementPlan>),
+    PreservedBoundary(Box<PlannedBoundaryInsertion>),
     SeparatedBranches {
-        boundary: PlannedBranchInsertion,
+        boundary: Box<PlannedBranchInsertion>,
     },
     SeparatedOpenEdges {
-        left: PlannedBoundaryInsertion,
-        middle: PlannedBranchInsertion,
-        right: PlannedBoundaryInsertion,
+        left: Box<PlannedBoundaryInsertion>,
+        middle: Box<PlannedBranchInsertion>,
+        right: Box<PlannedBoundaryInsertion>,
     },
     DeletionOnly {
-        join: Option<PlannedJoin>,
+        join: Option<Box<PlannedJoin>>,
     },
 }
 
@@ -126,11 +126,13 @@ pub(super) fn fit_linear_slice(
             CommandError::Corrupted("cannot capture Slice insertion target".into())
         })?;
         return Ok(match place_slice_at_frontier(&target, slice) {
-            PlacementOutcome::Placed(insertion) => LinearFitOutcome::Plan(LinearFitPlan {
-                selection: planned_selection,
-                mutation: LinearMutation::PointInsertion { insertion },
-                final_selection: LinearFinalSelection::InsertedContent,
-            }),
+            PlacementOutcome::Placed(insertion) => {
+                LinearFitOutcome::Plan(Box::new(LinearFitPlan {
+                    selection: planned_selection,
+                    mutation: LinearMutation::PointInsertion { insertion },
+                    final_selection: LinearFinalSelection::InsertedContent,
+                }))
+            }
             PlacementOutcome::CompleteNoOutput => LinearFitOutcome::NoOp,
             PlacementOutcome::NoFit => LinearFitOutcome::NoFit,
         });
@@ -141,29 +143,29 @@ pub(super) fn fit_linear_slice(
     };
     let fit = fit_range_replacement(view, selection, &deletion, &slice)?;
     Ok(match fit {
-        RangeFit::Placed(placement) => LinearFitOutcome::Plan(LinearFitPlan {
+        RangeFit::Placed(placement) => LinearFitOutcome::Plan(Box::new(LinearFitPlan {
             selection: planned_selection,
             mutation: LinearMutation::RangeReplacement {
                 deletion: deletion.semantics(),
                 placement,
             },
             final_selection: LinearFinalSelection::InsertedContent,
-        }),
-        RangeFit::DeletionOnly(join) => LinearFitOutcome::Plan(LinearFitPlan {
+        })),
+        RangeFit::DeletionOnly(join) => LinearFitOutcome::Plan(Box::new(LinearFitPlan {
             selection: planned_selection,
             mutation: LinearMutation::RangeReplacement {
                 deletion: deletion.semantics(),
                 placement: RangePlacement::DeletionOnly { join },
             },
             final_selection: LinearFinalSelection::DeletionBoundary,
-        }),
+        })),
         RangeFit::NoFit => LinearFitOutcome::NoFit,
     })
 }
 
 enum RangeFit {
     Placed(RangePlacement),
-    DeletionOnly(Option<PlannedJoin>),
+    DeletionOnly(Option<Box<PlannedJoin>>),
     NoFit,
 }
 
@@ -232,7 +234,11 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
         }
         Ok(self
             .fit_separated_branches(slice)?
-            .map(|boundary| RangeFit::Placed(RangePlacement::SeparatedBranches { boundary }))
+            .map(|boundary| {
+                RangeFit::Placed(RangePlacement::SeparatedBranches {
+                    boundary: Box::new(boundary),
+                })
+            })
             .unwrap_or(RangeFit::NoFit))
     }
 
@@ -251,7 +257,7 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
         let target = preview.target;
         Ok(match place_slice_at_frontier(&target, slice.clone()) {
             PlacementOutcome::Placed(insertion) => Some(RangeFit::Placed(RangePlacement::Joined(
-                JoinedReplacementPlan {
+                Box::new(JoinedReplacementPlan {
                     destination: PlannedEndpoint::capture(self.view, target.position())
                         .ok_or_else(|| {
                             CommandError::Corrupted(
@@ -259,10 +265,10 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
                             )
                         })?,
                     join,
-                    insertion,
-                },
+                    insertion: *insertion,
+                }),
             ))),
-            PlacementOutcome::CompleteNoOutput => Some(RangeFit::DeletionOnly(join)),
+            PlacementOutcome::CompleteNoOutput => Some(RangeFit::DeletionOnly(join.map(Box::new))),
             PlacementOutcome::NoFit => None,
         })
     }
@@ -323,15 +329,15 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
             return Ok(None);
         };
         Ok(Some(RangePlacement::SeparatedOpenEdges {
-            left,
-            middle,
-            right,
+            left: Box::new(left),
+            middle: Box::new(middle),
+            right: Box::new(right),
         }))
     }
 
     fn fit_unjoined_boundary(&self, use_left: bool, slice: &Slice) -> Option<RangePlacement> {
         self.fit_unjoined_insertion(use_left, slice)
-            .map(RangePlacement::PreservedBoundary)
+            .map(|insertion| RangePlacement::PreservedBoundary(Box::new(insertion)))
     }
 
     fn fit_unjoined_insertion(
@@ -355,14 +361,14 @@ impl<'a, 'doc> OriginalRangeFrontiers<'a, 'doc> {
                 affinity: resolved.to().position().affinity,
             }
         };
-        let PlacementOutcome::Placed(insertion) = place_slice_at_frontier(&target, slice.clone())
+        let PlacementOutcome::Placed(insertion) = place_slice_at_frontier(target, slice.clone())
         else {
             return None;
         };
         Some(PlannedBoundaryInsertion {
             destination: PlannedEndpoint::capture(self.view, position)?,
-            target: SliceInsertionTargetShape::capture(&target),
-            insertion,
+            target: SliceInsertionTargetShape::capture(target),
+            insertion: *insertion,
         })
     }
 }
@@ -439,29 +445,27 @@ fn capture_planned_join(
 /// is deliberately not consulted here: source placement chooses among the
 /// joined and separated candidates after both destination boundaries exist.
 fn separated_branch_lca(view: &DocView, selection: Selection) -> Option<Dot> {
-    let Some(resolved) = selection.resolve(view) else {
-        return None;
-    };
+    let resolved = selection.resolve(view)?;
     let from = resolved.from().position();
     let to = resolved.to().position();
     if from.node == to.node {
         return None;
     }
 
-    let Some(lca) = find_lowest_common_ancestor(view, from.node, to.node) else {
-        return None;
-    };
-    let Some(from_path) = path_from_ancestor(view, from.node, lca) else {
-        return None;
-    };
-    let Some(to_path) = path_from_ancestor(view, to.node, lca) else {
-        return None;
-    };
-    let Some((&from_branch, &to_branch)) = from_path.first().zip(to_path.first()) else {
-        return None;
-    };
+    let lca = find_lowest_common_ancestor(view, from.node, to.node)?;
+    let from_path = path_from_ancestor(view, from.node, lca)?;
+    let to_path = path_from_ancestor(view, to.node, lca)?;
+    let (&from_branch, &to_branch) = from_path.first().zip(to_path.first())?;
     (from_branch < to_branch).then_some(lca)
 }
+
+type PreservedBranchBoundaryFit = (
+    PlannedEndpoint,
+    Vec<PlannedBranchSplit>,
+    PlannedBranchNode,
+    Vec<Fragment>,
+    Vec<crate::helpers::PlannedListMerge>,
+);
 
 /// Fit a closed structural source at the first schema-valid frontier that
 /// retains both original destination branches.
@@ -470,16 +474,7 @@ fn fit_at_preserved_branch_boundary(
     selection: Selection,
     lca: Dot,
     slice: &Slice,
-) -> Result<
-    Option<(
-        PlannedEndpoint,
-        Vec<PlannedBranchSplit>,
-        PlannedBranchNode,
-        Vec<Fragment>,
-        Vec<crate::helpers::PlannedListMerge>,
-    )>,
-    CommandError,
-> {
+) -> Result<Option<PreservedBranchBoundaryFit>, CommandError> {
     let (parent, blocks) = {
         let mut candidate = lca;
         loop {
@@ -488,10 +483,9 @@ fn fit_at_preserved_branch_boundary(
             };
             if block_boundary_fragments(slice, node.node_type()).is_some()
                 && can_split_from_lca_to(view, lca, candidate)
-                && let PlacementOutcome::Placed(SliceInsertionPlan {
-                    kind: SliceInsertionKind::BlockBoundary { blocks, .. },
-                    ..
-                }) = place_slice_at_position(view, Position::new(candidate, 0), slice.clone())
+                && let PlacementOutcome::Placed(placed) =
+                    place_slice_at_position(view, Position::new(candidate, 0), slice.clone())
+                && let SliceInsertionKind::BlockBoundary { blocks, .. } = placed.kind
             {
                 break (candidate, blocks);
             }
@@ -610,7 +604,7 @@ mod tests {
         Fragment, PlainNode, PlainPageBreakNode, PlainParagraphNode, PlainTextNode,
     };
 
-    use super::super::{FitOutcome, SliceFitPlan, SliceFitPlanKind, fit_slice};
+    use super::super::{FitOutcome, SliceFitPlanKind, fit_slice};
     use super::*;
 
     #[test]
@@ -718,16 +712,18 @@ mod tests {
             0,
         );
 
+        let FitOutcome::Plan(plan) = fit_slice(&state, state.selection.unwrap(), slice).unwrap()
+        else {
+            panic!("deletion-only replacement must fit");
+        };
         assert!(matches!(
-            fit_slice(&state, state.selection.unwrap(), slice).unwrap(),
-            FitOutcome::Plan(SliceFitPlan {
-                kind: SliceFitPlanKind::Linear(LinearFitPlan {
-                    mutation: LinearMutation::RangeReplacement {
-                        placement: RangePlacement::DeletionOnly { .. },
-                        ..
-                    },
+            plan.kind,
+            SliceFitPlanKind::Linear(LinearFitPlan {
+                mutation: LinearMutation::RangeReplacement {
+                    placement: RangePlacement::DeletionOnly { .. },
                     ..
-                }),
+                },
+                ..
             })
         ));
     }

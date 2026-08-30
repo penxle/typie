@@ -65,7 +65,7 @@ enum SliceInsertionKind {
 }
 
 pub(super) enum PlacementOutcome {
-    Placed(SliceInsertionPlan),
+    Placed(Box<SliceInsertionPlan>),
     CompleteNoOutput,
     NoFit,
 }
@@ -89,7 +89,7 @@ pub(super) fn place_slice_at_frontier(
         return PlacementOutcome::CompleteNoOutput;
     }
     try_place_slice_at_frontier(target, slice)
-        .map(PlacementOutcome::Placed)
+        .map(|plan| PlacementOutcome::Placed(Box::new(plan)))
         .unwrap_or(PlacementOutcome::NoFit)
 }
 
@@ -120,39 +120,30 @@ fn try_place_slice_at_frontier(
             && top_level
                 .iter()
                 .any(|fragment| is_insertable_inline_fragment(fragment));
-        if direct_inline {
-            if let Some(fragments) = fit_fragment_forest(slice.content.clone(), &textblock_path)
-                && inline_fragments_fit_target(target, &fragments)
-                && fragments.iter().any(is_insertable_inline_fragment)
-            {
-                let output = planned_inline_output(&fragments, target.position().affinity)?;
-                return Some(SliceInsertionPlan {
-                    kind: SliceInsertionKind::DirectInline { fragments },
-                    output,
-                });
-            }
+        if direct_inline
+            && let Some(fragments) = fit_fragment_forest(slice.content.clone(), &textblock_path)
+            && inline_fragments_fit_target(target, &fragments)
+            && fragments.iter().any(is_insertable_inline_fragment)
+        {
+            let output = planned_inline_output(&fragments, target.position().affinity)?;
+            return Some(SliceInsertionPlan {
+                kind: SliceInsertionKind::DirectInline { fragments },
+                output,
+            });
         }
 
         if let Some(mut splice) = open_ancestor_splice_for_target(target, &slice) {
-            let Some(outer_index) = target
+            let outer_index = target
                 .path()
                 .iter()
-                .position(|node| node.id == splice.destination[0])
-            else {
-                return None;
-            };
-            let Some(parent_path) = outer_index.checked_sub(1).map(|parent_index| {
+                .position(|node| node.id == splice.destination[0])?;
+            let parent_path = outer_index.checked_sub(1).map(|parent_index| {
                 target.path()[..=parent_index]
                     .iter()
                     .map(|node| node.node_type)
                     .collect::<Vec<_>>()
-            }) else {
-                return None;
-            };
-            let Some(mut fitted) = fit_fragment_forest(vec![splice.source.clone()], &parent_path)
-            else {
-                return None;
-            };
+            })?;
+            let mut fitted = fit_fragment_forest(vec![splice.source.clone()], &parent_path)?;
             if fitted.len() != 1 {
                 return None;
             }
@@ -183,7 +174,7 @@ fn try_place_slice_at_frontier(
         let parent_fitted = parent_path.as_ref().and_then(|parent_path| {
             fit_slice_for_textblock_target_parent(target, &slice)
                 .and_then(|candidate| {
-                    let content = fit_fragment_forest(candidate.content, &parent_path)?;
+                    let content = fit_fragment_forest(candidate.content, parent_path)?;
                     Some(Slice::new(
                         content,
                         candidate.open_start,
@@ -225,11 +216,8 @@ fn try_place_slice_at_frontier(
 
         let candidate = parent_fitted.as_ref().unwrap_or(&slice);
         if let Some(fragments) = open_inline_content_for_target(target, candidate) {
-            let Some(fragments) =
-                fit_fragment_forest(fragments.into_iter().cloned().collect(), &textblock_path)
-            else {
-                return None;
-            };
+            let fragments =
+                fit_fragment_forest(fragments.into_iter().cloned().collect(), &textblock_path)?;
             if !inline_fragments_fit_target(target, &fragments) {
                 return None;
             }
@@ -257,17 +245,13 @@ fn try_place_slice_at_frontier(
         {
             return None;
         }
-        let Some(blocks) = block_boundary_fragments(&slice, container.node_type) else {
-            return None;
-        };
+        let blocks = block_boundary_fragments(&slice, container.node_type)?;
         let container_path = target
             .path()
             .iter()
             .map(|node| node.node_type)
             .collect::<Vec<_>>();
-        let Some(blocks) = fit_fragment_forest(blocks, &container_path) else {
-            return None;
-        };
+        let blocks = fit_fragment_forest(blocks, &container_path)?;
         let position = target.position();
         let left = position.offset.checked_sub(1).and_then(|index| {
             Some(ExistingBlock {
@@ -693,19 +677,18 @@ mod tests {
         };
         let position = Position::new(p1, 2);
         let outcome = fit_slice(&state, Selection::collapsed(position), text_slice("x")).unwrap();
+        let FitOutcome::Plan(plan) = outcome else {
+            panic!("inline insertion must fit");
+        };
+        let SliceFitPlanKind::Linear(linear) = plan.kind else {
+            panic!("inline insertion must be linear");
+        };
+        let LinearMutation::PointInsertion { insertion } = linear.mutation else {
+            panic!("inline insertion must be a point insertion");
+        };
         assert!(matches!(
-            outcome,
-            FitOutcome::Plan(SliceFitPlan {
-                kind: SliceFitPlanKind::Linear(LinearFitPlan {
-                    mutation: LinearMutation::PointInsertion {
-                        insertion: SliceInsertionPlan {
-                            kind: SliceInsertionKind::DirectInline { .. },
-                            ..
-                        },
-                    },
-                    ..
-                })
-            })
+            insertion.kind,
+            SliceInsertionKind::DirectInline { .. }
         ));
     }
 
@@ -832,12 +815,10 @@ mod tests {
         };
         let outcome =
             fit_slice(&state, Selection::collapsed(position), paragraph_slice("x")).unwrap();
-        assert!(matches!(
-            outcome,
-            FitOutcome::Plan(SliceFitPlan {
-                kind: SliceFitPlanKind::Linear(_)
-            })
-        ));
+        let FitOutcome::Plan(plan) = outcome else {
+            panic!("block insertion must fit");
+        };
+        assert!(matches!(plan.kind, SliceFitPlanKind::Linear(_)));
     }
 
     #[test]
@@ -856,21 +837,22 @@ mod tests {
         let inline = fit_slice(&state, selection, text_slice("x")).unwrap();
         let block = fit_slice(&state, selection, paragraph_slice("x")).unwrap();
         assert!(matches!(inline, FitOutcome::Plan(_)));
-        assert!(matches!(
-            block,
-            FitOutcome::NoFit
-                | FitOutcome::Plan(SliceFitPlan {
-                    kind: SliceFitPlanKind::Linear(LinearFitPlan {
-                        mutation: LinearMutation::PointInsertion {
-                            insertion: SliceInsertionPlan {
-                                kind: SliceInsertionKind::OpenInline { .. },
-                                ..
-                            },
-                        },
-                        ..
-                    })
-                })
-        ));
+        match block {
+            FitOutcome::NoFit => {}
+            FitOutcome::Plan(plan) => {
+                let SliceFitPlanKind::Linear(linear) = plan.kind else {
+                    panic!("fold title insertion must be linear");
+                };
+                let LinearMutation::PointInsertion { insertion } = linear.mutation else {
+                    panic!("fold title insertion must be a point insertion");
+                };
+                assert!(matches!(
+                    insertion.kind,
+                    SliceInsertionKind::OpenInline { .. }
+                ));
+            }
+            FitOutcome::NoOp => panic!("fold title insertion must not be a no-op"),
+        }
     }
 
     fn state_under_distinct_actor(source: &editor_state::State, actor: u64) -> editor_state::State {

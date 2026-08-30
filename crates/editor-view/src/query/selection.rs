@@ -92,6 +92,19 @@ pub struct SelectionEndpoints {
     pub to_position: Position,
 }
 
+/// Read-only context threaded through the selection-rect walk. The mutable
+/// accumulators (`phase`, `rects`) stay separate parameters.
+#[derive(Clone, Copy)]
+struct SelectionWalk<'a, 'doc> {
+    layout_index: &'a LayoutIndex,
+    from: &'a Position,
+    to: &'a Position,
+    from_owner: Option<&'a LayoutEntry>,
+    to_owner: Option<&'a LayoutEntry>,
+    pages: &'a [LayoutPage],
+    selection: &'a ResolvedSelection<'doc>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EndpointEdge {
     Leading,
@@ -151,18 +164,17 @@ fn selection_rect_sets(
     let mut phase = Phase::Before;
     let mut rects = SelectionRectSets::empty();
 
-    visit_node(
-        &layout_index.tree().root,
+    let walk = SelectionWalk {
         layout_index,
-        &from,
-        &to,
+        from: &from,
+        to: &to,
         from_owner,
         to_owner,
-        &mut phase,
-        &mut rects,
         pages,
         selection,
-    );
+    };
+
+    visit_node(&layout_index.tree().root, &walk, &mut phase, &mut rects);
 
     rects.sort_by_position();
 
@@ -541,46 +553,23 @@ fn text_area_height(line: &LayoutLine) -> f32 {
 
 fn visit_node(
     node: &LayoutNode,
-    layout_index: &LayoutIndex,
-    from: &Position,
-    to: &Position,
-    from_owner: Option<&LayoutEntry>,
-    to_owner: Option<&LayoutEntry>,
+    walk: &SelectionWalk<'_, '_>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
-    pages: &[LayoutPage],
-    selection: &ResolvedSelection<'_>,
 ) {
     match &node.content {
-        LayoutContent::Box(b) => visit_box(
+        LayoutContent::Box(b) => visit_box(node, b, walk, phase, rects),
+        LayoutContent::Line(l) => visit_line(node, l, walk, phase, rects),
+        LayoutContent::Atom(a) => visit_atom(
             node,
-            b,
-            layout_index,
-            from,
-            to,
-            from_owner,
-            to_owner,
+            a,
+            walk.from,
+            walk.to,
             phase,
             rects,
-            pages,
-            selection,
+            walk.pages,
+            walk.selection.view(),
         ),
-        LayoutContent::Line(l) => visit_line(
-            node,
-            l,
-            layout_index,
-            from,
-            to,
-            from_owner,
-            to_owner,
-            phase,
-            rects,
-            pages,
-            selection,
-        ),
-        LayoutContent::Atom(a) => {
-            visit_atom(node, a, from, to, phase, rects, pages, selection.view())
-        }
         LayoutContent::Spacing(_) => {}
     }
 }
@@ -588,16 +577,19 @@ fn visit_node(
 fn visit_line(
     node: &LayoutNode,
     line: &LayoutLine,
-    layout_index: &LayoutIndex,
-    from: &Position,
-    to: &Position,
-    from_owner: Option<&LayoutEntry>,
-    to_owner: Option<&LayoutEntry>,
+    walk: &SelectionWalk<'_, '_>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
-    pages: &[LayoutPage],
-    selection: &ResolvedSelection<'_>,
 ) {
+    let SelectionWalk {
+        layout_index,
+        from,
+        to,
+        from_owner,
+        to_owner,
+        pages,
+        selection,
+    } = *walk;
     let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
     let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
 
@@ -713,16 +705,19 @@ fn visit_atom(
 fn visit_box(
     node: &LayoutNode,
     bx: &LayoutBox,
-    layout_index: &LayoutIndex,
-    from: &Position,
-    to: &Position,
-    from_owner: Option<&LayoutEntry>,
-    to_owner: Option<&LayoutEntry>,
+    walk: &SelectionWalk<'_, '_>,
     phase: &mut Phase,
     rects: &mut SelectionRectSets,
-    pages: &[LayoutPage],
-    selection: &ResolvedSelection<'_>,
 ) {
+    let SelectionWalk {
+        layout_index,
+        from,
+        to,
+        from_owner,
+        to_owner,
+        pages,
+        selection,
+    } = *walk;
     let from_at_box_level = from.node == bx.node && from_owner.is_none();
     let to_at_box_level = to.node == bx.node && to_owner.is_none();
 
@@ -743,18 +738,7 @@ fn visit_box(
     for child in &bx.children {
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
 
-        visit_node(
-            child,
-            layout_index,
-            from,
-            to,
-            from_owner,
-            to_owner,
-            phase,
-            rects,
-            pages,
-            selection,
-        );
+        visit_node(child, walk, phase, rects);
 
         if !is_spacing {
             has_content_child = true;

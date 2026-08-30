@@ -710,9 +710,9 @@ mod tests {
         let root = view.node(Dot::ROOT).unwrap();
         let inserted: Vec<_> = root
             .children()
-            .filter_map(|child| match child {
-                ChildView::Block(block) => Some((block.id(), block.node_type())),
-                ChildView::Leaf(leaf) => Some((leaf.dot(), leaf.node_type())),
+            .map(|child| match child {
+                ChildView::Block(block) => (block.id(), block.node_type()),
+                ChildView::Leaf(leaf) => (leaf.dot(), leaf.node_type()),
             })
             .filter(|(node_id, node_type)| {
                 *node_id != existing_image

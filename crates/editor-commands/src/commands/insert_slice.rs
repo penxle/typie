@@ -29,7 +29,7 @@ pub fn insert_slice(
         return Ok(false);
     };
     let plan = match fit_slice(tr.state(), selection, slice)? {
-        FitOutcome::Plan(plan) => plan,
+        FitOutcome::Plan(plan) => *plan,
         FitOutcome::NoOp | FitOutcome::NoFit => return Ok(false),
     };
     let inserted = apply_fitted_slice(tr, plan, provenance)?;
@@ -85,18 +85,19 @@ fn apply_linear_fit_plan(
     match mutation {
         LinearMutation::PointInsertion { insertion } => {
             let planned = install_planned_selection(tr, &planned_selection)?;
-            let applied = apply_slice_insertion_plan(tr, planned.head, insertion, provenance)?;
+            let applied = apply_slice_insertion_plan(tr, planned.head, *insertion, provenance)?;
             bind_insertion_result(&mut applied_insertion, applied)?;
         }
         LinearMutation::RangeReplacement {
             deletion,
             placement,
         } => match placement {
-            RangePlacement::Joined(JoinedReplacementPlan {
-                destination,
-                join,
-                insertion,
-            }) => {
+            RangePlacement::Joined(joined) => {
+                let JoinedReplacementPlan {
+                    destination,
+                    join,
+                    insertion,
+                } = *joined;
                 materialize_planned_selection(tr, &planned_selection)?;
                 let destination = materialize_planned_endpoint(tr, &destination)?;
                 let join = join
@@ -120,7 +121,7 @@ fn apply_linear_fit_plan(
             }
             RangePlacement::PreservedBoundary(insertion) => {
                 materialize_planned_selection(tr, &planned_selection)?;
-                let insertion = materialize_boundary_insertion(tr, insertion)?;
+                let insertion = materialize_boundary_insertion(tr, *insertion)?;
                 let actual = current_materialized_selection(tr)?;
                 let deletion = remap_linear_deletion_plan(&tr.view(), &deletion, actual)?;
                 if !apply_cross_range_removal_without_join(tr, &deletion)? {
@@ -133,7 +134,7 @@ fn apply_linear_fit_plan(
             }
             RangePlacement::SeparatedBranches { boundary } => {
                 materialize_planned_selection(tr, &planned_selection)?;
-                let boundary = materialize_branch_insertion(tr, boundary)?;
+                let boundary = materialize_branch_insertion(tr, *boundary)?;
                 let actual = current_materialized_selection(tr)?;
                 let deletion = remap_linear_deletion_plan(&tr.view(), &deletion, actual)?;
                 if !apply_cross_range_removal_without_join(tr, &deletion)? {
@@ -150,9 +151,9 @@ fn apply_linear_fit_plan(
                 right,
             } => {
                 materialize_planned_selection(tr, &planned_selection)?;
-                let left = materialize_boundary_insertion(tr, left)?;
-                let middle = materialize_branch_insertion(tr, middle)?;
-                let right = materialize_boundary_insertion(tr, right)?;
+                let left = materialize_boundary_insertion(tr, *left)?;
+                let middle = materialize_branch_insertion(tr, *middle)?;
+                let right = materialize_boundary_insertion(tr, *right)?;
                 let actual = current_materialized_selection(tr)?;
                 let deletion = remap_linear_deletion_plan(&tr.view(), &deletion, actual)?;
                 if !apply_cross_range_removal_without_join(tr, &deletion)? {
@@ -175,7 +176,7 @@ fn apply_linear_fit_plan(
             RangePlacement::DeletionOnly { join } => {
                 materialize_planned_selection(tr, &planned_selection)?;
                 let join = join
-                    .map(|join| materialize_planned_join(tr, join))
+                    .map(|join| materialize_planned_join(tr, *join))
                     .transpose()?;
                 let actual = current_materialized_selection(tr)?;
                 let deletion = remap_linear_deletion_plan(&tr.view(), &deletion, actual)?;
@@ -824,7 +825,7 @@ mod tests {
         let SliceFitPlanKind::Linear(LinearFitPlan {
             mutation:
                 LinearMutation::RangeReplacement {
-                    placement: RangePlacement::Joined(JoinedReplacementPlan { destination, .. }),
+                    placement: RangePlacement::Joined(joined),
                     ..
                 },
             ..
@@ -832,11 +833,11 @@ mod tests {
         else {
             panic!("expected joined replacement");
         };
-        *destination = target;
+        joined.destination = target;
         let mut tr = Transaction::new(&initial);
 
         assert!(
-            apply_fitted_slice(&mut tr, plan, SliceProvenance::Formatted).is_err(),
+            apply_fitted_slice(&mut tr, *plan, SliceProvenance::Formatted).is_err(),
             "the deliberately stale plan must fail"
         );
         let (actual, steps, ..) = tr.commit();
@@ -875,7 +876,7 @@ mod tests {
 
         let mut tr = Transaction::new(&initial);
         assert!(
-            apply_fitted_slice(&mut tr, plan, SliceProvenance::Formatted).is_err(),
+            apply_fitted_slice(&mut tr, *plan, SliceProvenance::Formatted).is_err(),
             "an inconsistent planned selection contract must reject the whole execution"
         );
         let (actual, steps, ..) = tr.commit();
@@ -2124,7 +2125,7 @@ mod tests {
             panic!("separated open edges must produce a fitted plan");
         };
         let mut tr = Transaction::new(&initial);
-        let inserted = apply_fitted_slice(&mut tr, plan, SliceProvenance::Formatted).unwrap();
+        let inserted = apply_fitted_slice(&mut tr, *plan, SliceProvenance::Formatted).unwrap();
         let (actual, _, recorded, ..) = tr.commit();
         let right_survivor = {
             let view = actual.view();
