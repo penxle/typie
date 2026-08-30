@@ -139,27 +139,30 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
   let cleanupClickHandler: (() => void) | undefined;
 
   const updatePosition: UpdatePosition = async () => {
-    if (!referenceElement || !floatingElement) {
+    const reference = referenceElement;
+    const floating = floatingElement;
+    const arrowEl = arrowElement;
+    if (!reference || !floating) {
       return;
     }
 
     const middleware = options?.middleware ?? createDefaultMiddleware();
 
-    const { x, y, placement, strategy, middlewareData } = await computePosition(referenceElement, floatingElement, {
+    const { x, y, placement, strategy, middlewareData } = await computePosition(reference, floating, {
       strategy: 'absolute',
       placement: options?.placement,
       middleware: [
         !!options?.offset && offset(options.offset),
         ...middleware,
-        !!options?.arrow && arrowElement && arrow({ element: arrowElement, padding: 16 }),
+        !!options?.arrow && arrowEl && arrow({ element: arrowEl, padding: 16 }),
       ],
     });
 
-    if (!referenceElement || !floatingElement) {
+    if (referenceElement !== reference || floatingElement !== floating || arrowElement !== arrowEl) {
       return;
     }
 
-    Object.assign(floatingElement.style, {
+    Object.assign(floating.style, {
       position: strategy,
       top: `${y}px`,
       left: `${x}px`,
@@ -167,7 +170,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
 
     if (middlewareData.hide) {
       const isHidden = middlewareData.hide.referenceHidden || middlewareData.hide.escaped;
-      Object.assign(floatingElement.style, {
+      Object.assign(floating.style, {
         visibility: isHidden ? 'hidden' : 'visible',
         // Reset position when hidden to prevent overflow
         top: isHidden ? '0' : `${y}px`,
@@ -175,7 +178,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       });
     }
 
-    if (arrowElement && middlewareData.arrow) {
+    if (arrowEl && middlewareData.arrow) {
       const { x, y } = middlewareData.arrow;
 
       const side = match(placement)
@@ -192,10 +195,10 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
         .with('right', 'right-start', 'right-end', () => 'rotate(-45deg)')
         .exhaustive();
 
-      Object.assign(arrowElement.style, {
+      Object.assign(arrowEl.style, {
         left: x === undefined ? '' : `${x}px`,
         top: y === undefined ? '' : `${y}px`,
-        [side]: `${-arrowElement.offsetHeight / 2}px`,
+        [side]: `${-arrowEl.offsetHeight / 2}px`,
         transform,
         visibility: middlewareData.bubble?.bubbled ? 'hidden' : 'visible',
       });
@@ -230,18 +233,28 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
   };
 
   const mount = async () => {
-    if (!referenceElement || !floatingElement) {
+    const reference = referenceElement;
+    const floating = floatingElement;
+    const arrowEl = arrowElement;
+    if (!reference || !floating) {
       return;
     }
 
     await updatePosition();
+    if (referenceElement !== reference || floatingElement !== floating || arrowElement !== arrowEl) {
+      return;
+    }
 
     if (options?.disableAutoUpdate !== true) {
       cleanupAutoUpdate?.();
-      cleanupAutoUpdate = autoUpdate(referenceElement, floatingElement, updatePosition, { animationFrame: true });
+      cleanupAutoUpdate = autoUpdate(reference, floating, updatePosition, { animationFrame: true });
     }
 
     setTimeout(() => {
+      if (referenceElement !== reference || floatingElement !== floating || arrowElement !== arrowEl) {
+        return;
+      }
+
       cleanupClickHandler?.();
 
       cleanupClickHandler = on(window, 'click', handleClick);

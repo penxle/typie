@@ -6,6 +6,7 @@
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, deactivateFocusTrap, focusTrap, portal, updateFocusTrapContainers } from '../actions';
   import { tryAppContext } from '../context';
+  import { prefersReducedMotion } from '../state/reduced-motion.svelte';
   import { createHoverFocusHandler, pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -289,7 +290,7 @@
       // NOTE: 우클릭으로 연 경우 buttonEl이 없으며 포커스 되돌리지 않음
       returnFocusOnDeactivate: !!buttonEl,
     }}
-    transition:scale={{ start: 0.95, duration: 150 }}
+    transition:scale={{ start: 0.95, duration: prefersReducedMotion.current ? 0 : 150 }}
   >
     {#if action}
       <li>
