@@ -114,6 +114,12 @@ describe('parseMarkdown', () => {
     expect(wordsOf(inlineOf("그리고 **'두 존재'**를 엮어"))).toEqual(['그리고', "'두", "존재'", '를', '엮어']);
   });
 
+  it('물결표 한 겹은 취소선이 아니라 범위 표기로 남는다', () => {
+    expect(nestedOf(inlineOf('회의는 8:56~9:03에 열리고 10~11시에 끝난다'))).toEqual([]);
+    expect(wordsOf(inlineOf('앞 ~가나~ 뒤'))).toEqual(['앞', '~가나~', '뒤']);
+    expect(nestedOf(inlineOf('앞 ~~가나~~ 뒤'))).toEqual(['del']);
+  });
+
   it('한글이 없으면 CommonMark 그대로다 — 영문 거동과 별표 리터럴은 바뀌지 않는다', () => {
     expect(nestedOf(inlineOf("and **'the thing'**was here"))).toEqual([]);
     expect(nestedOf(inlineOf('2 * 3 * 4 = 24'))).toEqual([]);
