@@ -12,6 +12,14 @@ export default defineConfig({
   hash: true,
   minify: true,
 
+  globalCss: {
+    ':focus-visible:not(:is(textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="tel"], input[type="url"], input[type="number"]))':
+      {
+        outline: '2px solid token(colors.accent.info.default)',
+        outlineOffset: '-1px',
+      },
+  },
+
   theme: {
     extend: {
       keyframes: {

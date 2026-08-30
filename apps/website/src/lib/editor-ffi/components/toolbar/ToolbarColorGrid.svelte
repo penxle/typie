@@ -116,17 +116,18 @@
   {#each items as { label, value, color } (value)}
     <button
       style:background-color={value === 'none' ? 'transparent' : color}
-      style:outline-color={value === 'none' || value === 'white' ? token('colors.border.default') : color}
+      style:--toolbar-color-outline={value === 'none' || value === 'white' ? token('colors.border.default') : color}
       class={center({
         borderWidth: '1px',
         borderRadius: shape === 'circle' ? 'full' : '4px',
-        outlineWidth: currentValue === value ? '2px' : '0',
-        outlineOffset: '1px',
         size: '20px',
         position: 'relative',
-        // Keyboard focus outlines are intentionally omitted for now because
-        // reusing the selection outline makes the first auto-focused swatch look
-        // selected. Restore them with a consistent toolbar-wide focus treatment.
+        '&[data-active="true"]:not(:focus-visible)': {
+          outlineColor: 'var(--toolbar-color-outline)',
+          outlineOffset: '1px',
+          outlineStyle: 'solid',
+          outlineWidth: '2px',
+        },
       })}
       aria-label={label}
       data-active={currentValue === value}

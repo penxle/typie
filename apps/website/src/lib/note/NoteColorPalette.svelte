@@ -68,11 +68,6 @@
     background: var(--note-color);
   }
 
-  .note-color-button:focus-visible {
-    outline: 2px solid var(--note-color);
-    outline-offset: 2px;
-  }
-
   .note-color-button > span {
     position: absolute;
     width: 1px;

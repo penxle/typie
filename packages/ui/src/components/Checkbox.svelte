@@ -39,7 +39,6 @@
       backgroundColor: 'surface.default',
       transition: 'common',
       cursor: 'pointer',
-      outline: 'none',
       _hover: {
         backgroundColor: 'surface.subtle',
       },
