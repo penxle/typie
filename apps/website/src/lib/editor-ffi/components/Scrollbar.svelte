@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '@typie/ui/actions';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import { scrollElementFromWheel } from '@typie/ui/utils';
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import type { Size } from '@typie/editor-ffi/browser';
@@ -247,6 +248,12 @@
     if (axis === 'y') scrollContainer.scrollTop = ratio * geometryetry.maxScroll;
     else scrollContainer.scrollLeft = ratio * geometryetry.maxScroll;
   }
+
+  function handleWheel(event: WheelEvent) {
+    ctx.scroll?.cancel();
+    if (!scrollContainer) return;
+    scrollElementFromWheel(scrollContainer, event);
+  }
 </script>
 
 {#snippet track(axis: 'x' | 'y', geometry: AxisGeometry)}
@@ -283,6 +290,7 @@
       hoverAxis = null;
       show('user');
     }}
+    onwheel={handleWheel}
     role="scrollbar"
     tabindex="-1"
   >

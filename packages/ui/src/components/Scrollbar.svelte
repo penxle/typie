@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '../actions';
   import { prefersReducedMotion } from '../state/reduced-motion.svelte';
+  import { scrollElementFromWheel } from '../utils/scroll-viewport';
 
   const HIDE_DELAY = 1000;
   const MIN_THUMB_SIZE = 30;
@@ -205,6 +206,11 @@
     moveDrag(session, event);
     finishDrag();
   }
+
+  function handleWheel(event: WheelEvent) {
+    if (!scrollContainer) return;
+    scrollElementFromWheel(scrollContainer, event);
+  }
 </script>
 
 {#if geometry.canScroll}
@@ -235,6 +241,7 @@
     onpointerdown={jumpTo}
     onpointerenter={handlePointerEnter}
     onpointerleave={handlePointerLeave}
+    onwheel={handleWheel}
     role="scrollbar"
     tabindex="-1"
   >

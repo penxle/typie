@@ -34,6 +34,12 @@ const drag = (target: HTMLElement, deltaX: number, deltaY: number) => {
   pointer(target, 'pointerup', { button: 0, clientX: startX + deltaX, clientY: startY + deltaY });
 };
 
+const wheel = (target: HTMLElement, init: WheelEventInit) => {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init });
+  target.dispatchEvent(event);
+  return event;
+};
+
 const mountFixture = async (orientation: Orientation, size: Size) => {
   const layout = {
     horizontal: {
@@ -136,5 +142,63 @@ describe('shared custom scrollbar', () => {
 
     fixture.content.style.height = '100%';
     await expect.poll(() => fixture.wrapper.querySelector('[role="scrollbar"]')).toBeNull();
+  });
+
+  it('scrolls the controlled container when wheel input starts on the hit lane', async () => {
+    const horizontal = await mountFixture('horizontal', 'sm');
+    const vertical = await mountFixture('vertical', 'md');
+
+    const horizontalEvent = wheel(horizontal.track, { deltaX: 40 });
+    const verticalEvent = wheel(vertical.track, { deltaY: 40 });
+    await frame();
+
+    expect(horizontal.container.scrollLeft).toBeCloseTo(40);
+    expect(horizontal.container.scrollTop).toBe(0);
+    expect(horizontalEvent.defaultPrevented).toBe(true);
+    expect(vertical.container.scrollTop).toBeCloseTo(40);
+    expect(vertical.container.scrollLeft).toBe(0);
+    expect(verticalEvent.defaultPrevented).toBe(true);
+  });
+
+  it('converts line and page wheel deltas for the controlled viewport', async () => {
+    const horizontal = await mountFixture('horizontal', 'sm');
+    const vertical = await mountFixture('vertical', 'md');
+    vertical.container.style.lineHeight = '20px';
+
+    wheel(vertical.track, { deltaY: 2, deltaMode: WheelEvent.DOM_DELTA_LINE });
+    wheel(horizontal.track, { deltaX: 0.5, deltaMode: WheelEvent.DOM_DELTA_PAGE });
+    await frame();
+
+    expect(vertical.container.scrollTop).toBeCloseTo(40);
+    expect(horizontal.container.scrollLeft).toBeCloseTo(horizontal.container.clientWidth / 2);
+  });
+
+  it('maps Shift-wheel input to horizontal scrolling', async () => {
+    const fixture = await mountFixture('horizontal', 'sm');
+
+    const event = wheel(fixture.track, { deltaY: 40, shiftKey: true });
+    await frame();
+
+    expect(fixture.container.scrollLeft).toBeCloseTo(40);
+    expect(fixture.container.scrollTop).toBe(0);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('leaves modified, prevented, and boundary wheel input unconsumed', async () => {
+    const fixture = await mountFixture('vertical', 'md');
+
+    const modifiedEvent = wheel(fixture.track, { ctrlKey: true, deltaY: 40 });
+    expect(fixture.container.scrollTop).toBe(0);
+    expect(modifiedEvent.defaultPrevented).toBe(false);
+
+    const preventedEvent = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 });
+    preventedEvent.preventDefault();
+    fixture.track.dispatchEvent(preventedEvent);
+    expect(fixture.container.scrollTop).toBe(0);
+
+    fixture.container.scrollTop = fixture.container.scrollHeight - fixture.container.clientHeight;
+    const boundaryEvent = wheel(fixture.track, { deltaY: 40 });
+    expect(fixture.container.scrollTop).toBe(fixture.container.scrollHeight - fixture.container.clientHeight);
+    expect(boundaryEvent.defaultPrevented).toBe(false);
   });
 });
