@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu, VerticalDivider } from '@typie/ui/components';
+  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Tip, Toast } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
@@ -852,7 +852,7 @@
   function toggleEditLock() {
     if (!SubscribeModal.gate('document_lock')) return;
 
-    const newValue = !(ctx.editor?.readOnly ?? false);
+    const newValue = !(document?.locked ?? false);
 
     if (documentId) {
       updateDocument(
@@ -1060,6 +1060,7 @@
               <EntityIcon entity$key={entity} size={14} />
               <button
                 class={css({
+                  minWidth: '0',
                   fontSize: '12px',
                   fontWeight: 'medium',
                   color: 'text.subtle',
@@ -1072,6 +1073,16 @@
               >
                 {title || '(제목 없음)'}
               </button>
+              {#if document.locked}
+                <span
+                  class={center({ flexShrink: '0', color: 'text.faint' })}
+                  aria-label="편집이 잠겨있는 문서예요."
+                  role="img"
+                  use:tooltip={{ message: '편집이 잠겨있는 문서예요.' }}
+                >
+                  <Icon icon={LockIcon} size={12} />
+                </span>
+              {/if}
             </div>
 
             <div class={flex({ alignItems: 'center', gap: '4px' })}>
@@ -1143,29 +1154,14 @@
                     </button>
                   {/snippet}
 
-                  <DocumentMenu {document} {entity} via="editor" />
+                  <DocumentMenu {document} {entity} via="editor">
+                    {#if query.data.me.entitled}
+                      <MenuItem icon={document.locked ? LockOpenIcon : LockIcon} onclick={() => toggleEditLock()}>
+                        {document.locked ? '편집 잠금 해제' : '편집 잠금'}
+                      </MenuItem>
+                    {/if}
+                  </DocumentMenu>
                 </Menu>
-
-                {#if query.data.me.entitled}
-                  <button
-                    class={center({
-                      borderRadius: '4px',
-                      size: '24px',
-                      color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.default' : 'text.faint',
-                      transition: 'common',
-                      _hover: {
-                        color: (ctx.editor?.readOnly ?? false) ? 'accent.brand.hover' : 'text.subtle',
-                        backgroundColor: 'surface.muted',
-                      },
-                    })}
-                    onclick={() => toggleEditLock()}
-                    onpointerdown={(e) => e.preventDefault()}
-                    type="button"
-                    use:tooltip={{ message: (ctx.editor?.readOnly ?? false) ? '편집 잠금 해제' : '편집 잠금' }}
-                  >
-                    <Icon icon={(ctx.editor?.readOnly ?? false) ? LockIcon : LockOpenIcon} size={16} />
-                  </button>
-                {/if}
               {/if}
 
               <CloseButton>

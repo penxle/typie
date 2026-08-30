@@ -148,10 +148,6 @@
         <div style:width="1px" style:height="12px" class={verticalDivider}></div>
         <!-- Menu button -->
         <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
-        <!-- Lock button -->
-        <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
-        <!-- Zen mode button -->
-        <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
         <!-- Close button spacer -->
         <div style:width="24px" style:height="24px" style:flex-shrink="0"></div>
       </div>
