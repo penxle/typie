@@ -1046,6 +1046,7 @@ type Mutation {
   subscribePlanWithBillingKey(input: SubscribePlanWithBillingKeyInput!): Subscription_!
   subscribePlanWithTrial: Subscription_!
   unarchivePrismSession(input: UnarchivePrismSessionInput!): PrismSession!
+  undoPrismDocumentEdit(input: UndoPrismDocumentEditInput!): PrismDocumentEdit!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
   unregisterPushNotificationToken(input: UnregisterPushNotificationTokenInput!): Boolean!
@@ -1290,6 +1291,12 @@ enum PrismCreditRefundMethod {
 enum PrismCreditRefundState {
   DONE
   PENDING
+}
+
+type PrismDocumentEdit {
+  changedAfter: Boolean!
+  undoable: Boolean!
+  undone: Boolean!
 }
 
 type PrismNotification {
@@ -1541,6 +1548,7 @@ type PrismToolRequest {
   at: DateTime!
   data: JSON
   key: String!
+  resolvedBy: PrismToolResolver
   result: JSON
   seq: Int!
   settledAt: DateTime
@@ -1682,6 +1690,7 @@ type Query {
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
+  prismDocumentEdit(sessionId: ID!, toolCallId: String!): PrismDocumentEdit!
   prismEntities(ids: [ID!]!): [Entity!]!
   prismNotes(ids: [ID!]!): [Note!]!
   prismReviewRound(roundId: ID!): PrismReviewRound!
@@ -2009,6 +2018,11 @@ enum TextReplacementState {
 
 input UnarchivePrismSessionInput {
   sessionId: ID!
+}
+
+input UndoPrismDocumentEditInput {
+  sessionId: ID!
+  toolCallId: String!
 }
 
 input UnfurlEmbedInput {

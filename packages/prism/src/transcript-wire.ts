@@ -26,6 +26,7 @@ export type RunItemWire =
       data: unknown;
       status: 'PENDING' | 'RESOLVED' | 'CLOSED';
       result: unknown;
+      resolvedBy: 'USER' | 'SERVER' | null;
       settledAt: string | null;
       at: string;
     }
@@ -142,6 +143,7 @@ const itemToWire = (message: TranscriptMessage): RunItemWire =>
       data: m.data ?? null,
       status: m.status === 'pending' ? ('PENDING' as const) : m.status === 'resolved' ? ('RESOLVED' as const) : ('CLOSED' as const),
       result: m.result ?? null,
+      resolvedBy: m.resolvedBy === undefined ? null : m.resolvedBy === 'user' ? ('USER' as const) : ('SERVER' as const),
       settledAt: isoOrNull(m.settledAt),
       at: iso(m.at),
     }))
@@ -191,6 +193,7 @@ const itemFromWire = (item: RunItemWire, runSeq: number | null): TranscriptMessa
       data: i.data,
       status: i.status === 'PENDING' ? ('pending' as const) : i.status === 'RESOLVED' ? ('resolved' as const) : ('closed' as const),
       ...(i.result !== null && { result: i.result }),
+      ...(i.resolvedBy !== null && { resolvedBy: i.resolvedBy === 'USER' ? ('user' as const) : ('server' as const) }),
       ...(i.settledAt !== null && { settledAt: ms(i.settledAt) }),
       at: ms(i.at),
     }))

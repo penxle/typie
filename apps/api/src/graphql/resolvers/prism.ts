@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import {
   EntityAvailability,
+  EntityState,
   PrismReaction,
   PrismRunState,
   PrismToolPhase,
@@ -24,11 +25,13 @@ import {
   db,
   Dividers,
   Documents,
+  DocumentSweeps,
   Entities,
   first,
   firstOrThrow,
   Folders,
   Notes,
+  PrismDocumentEdits,
   PrismReviewRounds,
   PrismRuns,
   PrismSessionEvents,
@@ -42,9 +45,13 @@ import { lane } from '#/env.ts';
 import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
 import { ensureIngest } from '#/mq/prism-queue.ts';
 import { pubsub } from '#/pubsub.ts';
+import { getLiveHeads, readMergedGraph } from '#/utils/changeset.ts';
+import { publishBundle } from '#/utils/document-bundle.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { assertActiveSubscription } from '#/utils/plan.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
+import { changedAfter, undoTarget } from '#/utils/prism-document-edit-undo-core.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
 import {
@@ -59,6 +66,7 @@ import { prismTools } from '#/utils/prism-tools.ts';
 import { materialize } from '#/utils/prism-transcript.ts';
 import { cancelActiveRun, cancelSessionWorkflows, closeRun } from '#/utils/prism-workflows.ts';
 import { entityRefFilter } from '#/utils/prism-workspace.ts';
+import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import { Entity, Note, PrismSession, PrismWorkflow, User } from '../objects.ts';
 import type {
@@ -178,6 +186,7 @@ const PrismToolRequest = builder.objectRef<ItemOf<'toolRequest'>>('PrismToolRequ
     data: t.field({ type: 'JSON', nullable: true, resolve: (s) => s.data }),
     status: t.field({ type: PrismToolRequestStatus, resolve: (s) => s.status }),
     result: t.field({ type: 'JSON', nullable: true, resolve: (s) => s.result }),
+    resolvedBy: t.field({ type: PrismToolResolver, nullable: true, resolve: (s) => s.resolvedBy }),
     settledAt: t.field({ type: 'DateTime', nullable: true, resolve: (s) => atOrNull(s.settledAt) }),
     at: t.field({ type: 'DateTime', resolve: (s) => at(s.at) }),
   }),
@@ -479,6 +488,43 @@ builder.objectFields(User, (t) => ({
   }),
 }));
 
+const PrismDocumentEdit = builder.simpleObject('PrismDocumentEdit', {
+  fields: (t) => ({
+    undoable: t.boolean(),
+    undone: t.boolean(),
+    changedAfter: t.boolean(),
+  }),
+});
+
+type PrismDocumentEditRow = typeof PrismDocumentEdits.$inferSelect;
+
+const editRow = async (sessionId: string, toolCallId: string): Promise<PrismDocumentEditRow | undefined> =>
+  await db
+    .select()
+    .from(PrismDocumentEdits)
+    .where(and(eq(PrismDocumentEdits.sessionId, sessionId), eq(PrismDocumentEdits.toolCallId, toolCallId)))
+    .then(first);
+
+const isLatestEdit = async (row: PrismDocumentEditRow): Promise<boolean> => {
+  const latest = await db
+    .select({ id: PrismDocumentEdits.id })
+    .from(PrismDocumentEdits)
+    .where(eq(PrismDocumentEdits.documentId, row.documentId))
+    .orderBy(desc(PrismDocumentEdits.createdAt), desc(PrismDocumentEdits.id))
+    .limit(1)
+    .then(first);
+  return latest?.id === row.id;
+};
+
+const liveDocumentSite = async (documentId: string): Promise<string | null> =>
+  await db
+    .select({ siteId: Entities.siteId })
+    .from(Documents)
+    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+    .where(and(eq(Documents.id, documentId), eq(Entities.state, EntityState.ACTIVE)))
+    .then(first)
+    .then((r) => r?.siteId ?? null);
+
 builder.queryFields((t) => ({
   prismSession: t.withAuth({ session: true }).field({
     type: PrismSession,
@@ -514,6 +560,35 @@ builder.queryFields((t) => ({
       );
 
       return entities;
+    },
+  }),
+
+  prismDocumentEdit: t.withAuth({ session: true }).field({
+    type: PrismDocumentEdit,
+    args: {
+      sessionId: t.arg.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
+      toolCallId: t.arg.string(),
+    },
+    resolve: async (_, args, ctx) => {
+      const session = await ownedSession(args.sessionId, ctx.session.userId);
+      const row = await editRow(session.id, args.toolCallId);
+      if (!row) return { undoable: false, undone: false, changedAfter: false };
+
+      const changed = changedAfter(await getLiveHeads(row.documentId), row.checkpointHeads);
+      const shape = { undone: row.undone, changedAfter: changed };
+
+      if (!(await isLatestEdit(row))) return { ...shape, undoable: false };
+
+      const siteId = await liveDocumentSite(row.documentId);
+      if (siteId === null) return { ...shape, undoable: false };
+
+      try {
+        await assertSitePermission({ userId: ctx.session.userId, siteId });
+      } catch {
+        return { ...shape, undoable: false };
+      }
+
+      return { ...shape, undoable: true };
     },
   }),
 
@@ -700,6 +775,63 @@ builder.mutationFields((t) => ({
       if (childWorkflowId !== null) await ensureIngest({ kind: 'workflow', workflowId: childWorkflowId });
 
       return updated;
+    },
+  }),
+
+  undoPrismDocumentEdit: t.withAuth({ session: true }).fieldWithInput({
+    type: PrismDocumentEdit,
+    input: {
+      sessionId: t.input.id({ validate: validateDbId(TableCode.PRISM_SESSIONS) }),
+      toolCallId: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const session = await ownedSession(input.sessionId, ctx.session.userId);
+      const row = await editRow(session.id, input.toolCallId);
+      if (!row) throw new TypieError({ code: 'not_found', status: 404 });
+      if (!(await isLatestEdit(row))) throw new TypieError({ code: 'prism_edit_superseded', status: 409 });
+
+      const siteId = await liveDocumentSite(row.documentId);
+      if (siteId === null) throw new TypieError({ code: 'not_found', status: 404 });
+      await assertSitePermission({ userId: ctx.session.userId, siteId });
+      await assertActiveSubscription({ userId: ctx.session.userId });
+
+      const graph = await readMergedGraph(row.documentId);
+      const sweeps = await db
+        .select({ zombieDots: DocumentSweeps.zombieDots })
+        .from(DocumentSweeps)
+        .where(eq(DocumentSweeps.documentId, row.documentId));
+      const sweepTombstones = [...new Set(sweeps.flatMap((sweep) => sweep.zombieDots))];
+
+      const target = undoTarget(row);
+      const { revert, opsCount, advanced } = await wasmFfi.use((host) => {
+        const revert = host.revert(graph, target, sweepTombstones);
+        return {
+          revert,
+          opsCount: host.peek_changeset_ops_count(revert),
+          advanced: host.update_heads(host.heads(graph), revert),
+        };
+      });
+
+      let checkpointHeads = row.checkpointHeads;
+      if (opsCount > 0) {
+        await publishBundle(row.documentId, revert, ctx.session.userId, ctx.session.deviceId);
+        checkpointHeads = advanced;
+      }
+
+      const updated = await db
+        .update(PrismDocumentEdits)
+        .set({ undone: !row.undone, checkpointHeads, updatedAt: dayjs() })
+        .where(and(eq(PrismDocumentEdits.id, row.id), eq(PrismDocumentEdits.undone, row.undone)))
+        .returning()
+        .then(first);
+
+      if (!updated) throw new TypieError({ code: 'prism_edit_superseded', status: 409 });
+
+      return {
+        undoable: true,
+        undone: updated.undone,
+        changedAfter: changedAfter(await getLiveHeads(row.documentId), updated.checkpointHeads),
+      };
     },
   }),
 

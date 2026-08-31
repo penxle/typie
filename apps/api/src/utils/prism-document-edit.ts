@@ -1,7 +1,7 @@
 import { logger } from '@typie/lib';
 import { toolFailure } from '@typie/prism';
 import { eq } from 'drizzle-orm';
-import { db, DocumentSweeps } from '#/db/index.ts';
+import { db, DocumentSweeps, PrismDocumentEdits } from '#/db/index.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
 import { readMergedGraph } from './changeset.ts';
 import { publishBundle } from './document-bundle.ts';
@@ -152,7 +152,10 @@ const saveDocument: PrismToolHandler = async (ctx, input) => {
   const graph = await readMergedGraph(document.documentId);
   const sweep = await sweepTombstonesOf(document.documentId);
   const wasmStarted = performance.now();
-  const result = await wasmFfi.use((host) => host.edit_from_xml(graph, sweep, xml));
+  const { beforeHeads, result } = await wasmFfi.use((host) => ({
+    beforeHeads: host.heads(graph),
+    result: host.edit_from_xml(graph, sweep, xml),
+  }));
   const wasmMs = Math.round(performance.now() - wasmStarted);
   if (result.error) {
     log.info('save-document refused: {documentId} {sessionId} {detail}', {
@@ -182,7 +185,19 @@ const saveDocument: PrismToolHandler = async (ctx, input) => {
       return toolFailure('error', fileErrorMessage(err, SAVE_TOO_LARGE_MESSAGE, REWRITE_FAILED_MESSAGE, document.documentId));
     }
 
+    const afterHeads = await wasmFfi.use((host) => host.update_heads(beforeHeads, result.bundle));
+
     await publishBundle(document.documentId, result.bundle, PRISM_USER_ID, PRISM_DEVICE_ID);
+
+    await ctx.executor.insert(PrismDocumentEdits).values({
+      sessionId: ctx.session.id,
+      toolCallId: ctx.toolCallId,
+      documentId: document.documentId,
+      beforeHeads,
+      afterHeads,
+      checkpointHeads: afterHeads,
+      undone: false,
+    });
   }
 
   log.info('save-document: {documentId} {sessionId} {bytes} {wasmMs} {totalMs} {unchanged} {*}', {

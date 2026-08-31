@@ -39,7 +39,7 @@ describe('toRunItem', () => {
     ).toEqual({ kind: 'tool', key: 't1', name: 'read', phase: 'EXECUTED', ok: null, at: '2026-08-24T00:00:02.000Z' });
   });
 
-  it('PrismToolRequest — requestStatus 별칭과 nullable 4종', () => {
+  it('PrismToolRequest — requestStatus 별칭과 nullable 5종', () => {
     expect(
       toRunItem({
         __typename: 'PrismToolRequest',
@@ -52,6 +52,7 @@ describe('toRunItem', () => {
         data: null,
         requestStatus: 'PENDING',
         result: null,
+        resolvedBy: null,
         settledAt: null,
         at: '2026-08-24T00:00:03.000Z',
       }),
@@ -66,6 +67,7 @@ describe('toRunItem', () => {
       data: null,
       status: 'PENDING',
       result: null,
+      resolvedBy: null,
       settledAt: null,
       at: '2026-08-24T00:00:03.000Z',
     });

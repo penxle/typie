@@ -9,11 +9,14 @@ import DeleteEntitiesBody from './DeleteEntitiesBody.svelte';
 import DeleteGoalBody from './DeleteGoalBody.svelte';
 import DeleteNoteBody from './DeleteNoteBody.svelte';
 import SaveDocumentBody from './SaveDocumentBody.svelte';
+import SaveDocumentUndo from './SaveDocumentUndo.svelte';
 import UpdateSharingBody from './UpdateSharingBody.svelte';
 import type { ToolRequestMessage } from '@typie/prism';
 import type { Component } from 'svelte';
 
 export type ActionBodyProps = { input: unknown; result: unknown; onReady: (ready: boolean) => void };
+
+export type TailActionProps = { sessionId: string | null; toolCallId: string; doneLabel: string };
 
 export type ActionCard = {
   title: string;
@@ -23,6 +26,7 @@ export type ActionCard = {
   action: 'danger' | 'primary';
   doneLabel: string;
   unchangedLabel?: string;
+  tailAction?: Component<TailActionProps>;
 };
 
 export const actionCards: Record<string, ActionCard | undefined> = {
@@ -66,6 +70,7 @@ export const actionCards: Record<string, ActionCard | undefined> = {
     action: 'primary',
     doneLabel: '저장했어요',
     unchangedLabel: '바뀐 것이 없었어요',
+    tailAction: SaveDocumentUndo,
   },
 };
 

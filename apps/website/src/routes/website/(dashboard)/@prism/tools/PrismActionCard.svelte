@@ -8,7 +8,7 @@
   import { actionCards, actionOutcome, actionTail } from './action-cards.ts';
   import type { ToolCardProps } from './index.ts';
 
-  let { message, open, resolve }: ToolCardProps = $props();
+  let { message, sessionId, open, resolve }: ToolCardProps = $props();
 
   const entry = $derived(actionCards[message.tool]);
 
@@ -88,7 +88,12 @@
       </div>
     {:else}
       <div class={tailClass}>
-        <span>{actionTail(outcome, entry)}</span>
+        {#if entry.tailAction && outcome === 'done'}
+          {@const Tail = entry.tailAction}
+          <Tail doneLabel={entry.doneLabel} {sessionId} toolCallId={message.toolCallId} />
+        {:else}
+          <span>{actionTail(outcome, entry)}</span>
+        {/if}
       </div>
     {/if}
   </div>
