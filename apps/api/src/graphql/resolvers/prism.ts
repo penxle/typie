@@ -364,16 +364,13 @@ PrismSession.implement({
         const loader = ctx.loader({
           name: 'PrismSession.awaitingWorkflow',
           nullable: true,
-          load: async (sessionIds: string[]) => {
+          load: async () => {
             return await db
               .selectDistinct({ sessionId: PrismWorkflows.sessionId })
               .from(PrismWorkflows)
+              .innerJoin(PrismSessions, eq(PrismSessions.id, PrismWorkflows.sessionId))
               .where(
-                and(
-                  inArray(PrismWorkflows.sessionId, sessionIds),
-                  eq(PrismWorkflows.state, 'RUNNING'),
-                  isNotNull(PrismWorkflows.awaitingUserAt),
-                ),
+                and(eq(PrismSessions.userId, self.userId), eq(PrismWorkflows.state, 'RUNNING'), isNotNull(PrismWorkflows.awaitingUserAt)),
               );
           },
           key: (row) => row?.sessionId,
@@ -388,14 +385,14 @@ PrismSession.implement({
         const loader = ctx.loader({
           name: 'PrismSession.unseenResponses',
           nullable: true,
-          load: async (sessionIds: string[]) => {
+          load: async () => {
             return await db
               .select({ sessionId: PrismRuns.sessionId, count: count(PrismRuns.id) })
               .from(PrismRuns)
               .innerJoin(PrismSessions, eq(PrismSessions.id, PrismRuns.sessionId))
               .where(
                 and(
-                  inArray(PrismRuns.sessionId, sessionIds),
+                  eq(PrismSessions.userId, self.userId),
                   inArray(PrismRuns.state, [PrismRunState.COMPLETED, PrismRunState.FAILED]),
                   isNotNull(PrismRuns.finishedAt),
                   or(isNull(PrismSessions.seenAt), gt(PrismRuns.finishedAt, PrismSessions.seenAt)),
@@ -416,12 +413,13 @@ PrismSession.implement({
         const loader = ctx.loader({
           name: 'PrismSession.completedReviewRounds',
           many: true,
-          load: async (sessionIds: string[]) => {
+          load: async () => {
             return await db
               .select({ sessionId: PrismReviewRounds.sessionId, finishedAt: PrismWorkflows.finishedAt })
               .from(PrismReviewRounds)
+              .innerJoin(PrismSessions, eq(PrismSessions.id, PrismReviewRounds.sessionId))
               .innerJoin(PrismWorkflows, eq(PrismWorkflows.id, PrismReviewRounds.workflowId))
-              .where(and(inArray(PrismReviewRounds.sessionId, sessionIds), eq(PrismWorkflows.state, 'COMPLETED')));
+              .where(and(eq(PrismSessions.userId, self.userId), eq(PrismWorkflows.state, 'COMPLETED')));
           },
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           key: ({ sessionId }) => sessionId!,
