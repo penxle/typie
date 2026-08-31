@@ -15,6 +15,7 @@ const setup = () => {
     },
     fetchTicket: async () => 'TK',
     pingIntervalMs: 120_000,
+    reconnectJitterMs: 0,
   });
   const channels = new DocumentChannels(connection, 10);
   return { channels, connection, sockets };

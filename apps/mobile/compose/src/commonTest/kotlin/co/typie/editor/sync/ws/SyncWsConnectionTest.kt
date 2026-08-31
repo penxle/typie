@@ -22,6 +22,7 @@ private data class ConnectionHarness(
 private fun TestScope.harness(
   pingIntervalMs: Long = 30_000,
   reconnectBaseMs: Long = 1_000,
+  reconnectJitterMs: Long = 0,
   idleTimeoutMs: Long = 60_000,
   pongTimeoutMs: Long = 10_000,
   probeTimeoutMs: Long = 5_000,
@@ -40,6 +41,7 @@ private fun TestScope.harness(
       scope = CoroutineScope(coroutineContext),
       pingIntervalMs = pingIntervalMs,
       reconnectBaseMs = reconnectBaseMs,
+      reconnectJitterMs = reconnectJitterMs,
       idleTimeoutMs = idleTimeoutMs,
       pongTimeoutMs = pongTimeoutMs,
       probeTimeoutMs = probeTimeoutMs,
