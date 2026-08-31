@@ -41,6 +41,7 @@ import co.typie.editor.ffi.Revision
 import co.typie.editor.ffi.SearchOptions
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionEndpoints
+import co.typie.editor.ffi.SelectionKind
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StablePosition
 import co.typie.editor.ffi.StableSelection
@@ -297,6 +298,8 @@ internal class FakeFfiEditor(
   }
 
   override fun selection(): Selection? = selectionProvider()
+
+  override fun selectionKind(): SelectionKind? = null
 
   override fun rootAttrs(): PlainRootNode = rootAttrsProvider()
 
