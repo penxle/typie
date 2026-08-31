@@ -669,7 +669,7 @@
           cursor: 'row-resize',
           touchAction: 'none',
           userSelect: 'none',
-          '&:hover > div': { backgroundColor: 'border.default' },
+          '&:hover > div': { height: '2px', backgroundColor: 'border.strong' },
         })}
         use:pointerCapture={{
           start: startNavigationResizer,
@@ -681,14 +681,15 @@
         <div
           class={css({
             position: 'absolute',
-            top: '4px',
+            top: '1/2',
             left: '8px',
             right: '8px',
-            height: '1px',
+            height: navigationClipPreview === null ? '1px' : '2px',
             borderRadius: 'full',
-            backgroundColor: navigationClipPreview === null ? 'border.subtle' : 'border.strong',
+            backgroundColor: navigationClipPreview === null ? 'border.default' : 'border.strong',
             pointerEvents: 'none',
-            transition: 'colors',
+            transform: 'translateY(-50%)',
+            transition: '[background-color 150ms ease, height 150ms ease]',
           })}
         ></div>
       </div>
