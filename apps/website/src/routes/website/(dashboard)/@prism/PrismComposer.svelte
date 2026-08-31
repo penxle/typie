@@ -17,6 +17,7 @@
   import type { PrismCommand } from './lib/commands.ts';
 
   type Props = {
+    generation: number;
     running: boolean;
     sendDisabled: boolean;
     blocked: boolean;
@@ -28,7 +29,7 @@
     text?: string;
   };
 
-  let { running, sendDisabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
+  let { generation, running, sendDisabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
 
   const policyOptions: { value: ToolPolicy; label: string; description: string; icon: Component }[] = [
     { value: 'READ_ONLY', label: '읽기 전용', description: '스페이스를 읽기만 하고 바꾸지 않아요.', icon: BookOpenIcon },
@@ -81,7 +82,8 @@
     _active: { transform: 'scale(0.97)' },
   });
 
-  let busy = $state(false);
+  let busyGeneration = $state<number | null>(null);
+  const busy = $derived(busyGeneration === generation);
   let commandError = $state(false);
   let textarea = $state<HTMLTextAreaElement>();
   let boxEl = $state<HTMLElement>();
@@ -128,6 +130,7 @@
 
   const submit = async () => {
     const value = text.trim();
+    const submissionGeneration = generation;
 
     if (busy || running || sendDisabled || blocked || value.length === 0) {
       return;
@@ -138,18 +141,20 @@
       return;
     }
 
-    busy = true;
+    busyGeneration = submissionGeneration;
     text = '';
 
     try {
       await onSend(value);
     } catch {
-      if (text.length === 0) {
+      if (generation === submissionGeneration && text.length === 0) {
         text = value;
       }
     } finally {
-      busy = false;
-      textarea?.focus();
+      if (generation === submissionGeneration) {
+        busyGeneration = null;
+        textarea?.focus();
+      }
     }
   };
 

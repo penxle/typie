@@ -435,7 +435,11 @@
   });
 
   export const startNewChat = async (via: 'command_palette' | 'header', nextDraft?: string) => {
-    selected.current = null;
+    if (selected.current === null) {
+      void chat.load(null);
+    } else {
+      selected.current = null;
+    }
     listOpen = false;
     if (nextDraft !== undefined) draft = nextDraft;
 
@@ -789,6 +793,7 @@
   );
 
   const onSend = async (text: string) => {
+    const generation = chat.generation;
     const creating = chat.sessionId === null;
     indicatorWaitSeen = false;
     indicatorSpinnerPlaybackStartedAt = undefined;
@@ -796,7 +801,7 @@
 
     try {
       const result = await chat.send(text);
-      selected.current = result.sessionId;
+      if (generation === chat.generation) selected.current = result.sessionId;
 
       const gate = commandGate(text, commands);
       mixpanel.track('send_prism_message', {
@@ -809,6 +814,8 @@
         cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'prismSessions' });
       }
     } catch (err) {
+      if (generation !== chat.generation) return;
+
       const error = unwrapError(err);
       const code = error instanceof TypieError ? error.code : null;
 
@@ -1147,6 +1154,7 @@
       bind:this={composer}
       {blocked}
       {commands}
+      generation={chat.generation}
       {onSend}
       {onStop}
       policy={{ current: policy, onChange: onPolicyChange }}
