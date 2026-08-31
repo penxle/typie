@@ -17,7 +17,7 @@
     match(reason)
       .with('ai_opt_in_required', () => ({
         message: 'PRISM을 사용하려면 AI 기능을 활성화해주세요',
-        action: { label: '설정 열기', run: () => pushState('', { shallowRoute: '/preference/prism' }) },
+        action: { label: '설정 열기', run: () => pushState('', { shallowRoute: '/preference/prism/general' }) },
         tone: 'info' as const,
       }))
       .with('subscription_required', () => ({
@@ -32,7 +32,7 @@
       }))
       .with('prism_credit_insufficient', () => ({
         message: '크레딧이 부족해요',
-        action: { label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism' }) },
+        action: { label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism/credits' }) },
         tone: 'warning' as const,
       }))
       .exhaustive(),

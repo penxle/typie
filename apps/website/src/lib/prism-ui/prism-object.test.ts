@@ -4,6 +4,8 @@ import PrismObject from './PrismObject.svelte';
 import PrismSpinner from './PrismSpinner.svelte';
 import type { PrismTarget } from '@typie/prism-ui';
 
+const app = vi.hoisted(() => ({ preference: { current: { prismHdrEnabled: true } } }));
+
 const runtime = vi.hoisted(() => {
   const object = {
     destroy: vi.fn(),
@@ -26,9 +28,11 @@ const runtime = vi.hoisted(() => {
 });
 
 vi.mock('./runtime.ts', () => ({ prismRuntime: runtime }));
+vi.mock('@typie/ui/context', () => ({ getAppContext: () => app }));
 
 afterEach(() => {
   vi.clearAllMocks();
+  app.preference.current.prismHdrEnabled = true;
   document.body.replaceChildren();
 });
 
@@ -44,12 +48,13 @@ describe('Typie Prism wrappers', () => {
       expect(runtime.mountObject).toHaveBeenCalledOnce();
       expect(runtime.mountObject).toHaveBeenCalledWith(expect.any(HTMLElement), {
         edgeColor: 'rgb(120 120 120)',
+        hdr: 'auto',
         preload: false,
         reducedMotion: true,
         target: 'icon',
       });
       expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
-      expect(runtime.object.update).toHaveBeenCalledWith({ edgeColor: 'rgb(120 120 120)', reducedMotion: true });
+      expect(runtime.object.update).toHaveBeenCalledWith({ edgeColor: 'rgb(120 120 120)', hdr: 'auto', reducedMotion: true });
     } finally {
       await unmount(component);
     }
@@ -62,6 +67,7 @@ describe('Typie Prism wrappers', () => {
     try {
       await tick();
       expect(runtime.mountSpinner).toHaveBeenCalledOnce();
+      expect(runtime.mountSpinner).toHaveBeenCalledWith(expect.any(HTMLElement), { hdr: 'auto', reducedMotion: true });
       expect(runtime.mountObject).not.toHaveBeenCalled();
       expect(target.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('응답을 기다리는 중');
     } finally {
@@ -80,6 +86,7 @@ describe('Typie Prism wrappers', () => {
       await tick();
       expect(runtime.mountObject).toHaveBeenCalledWith(expect.any(HTMLElement), {
         edgeColor: undefined,
+        hdr: 'auto',
         preload: true,
         reducedMotion: false,
         target: 'icon',
@@ -88,6 +95,22 @@ describe('Typie Prism wrappers', () => {
       expect(runtime.object.setTarget).toHaveBeenCalledWith('spinner', { spinnerPlaybackStartedAt: 1234, totalDurationMs: 2200 });
     } finally {
       await unmount(component);
+    }
+  });
+
+  it('disables HDR for both wrapper types from the local preference', async () => {
+    app.preference.current.prismHdrEnabled = false;
+    const objectTarget = document.createElement('div');
+    const spinnerTarget = document.createElement('div');
+    const object = mount(PrismObject, { target: objectTarget, props: { target: 'prism' as PrismTarget } });
+    const spinner = mount(PrismSpinner, { target: spinnerTarget, props: { label: '응답을 기다리는 중' } });
+    try {
+      await tick();
+      expect(runtime.mountObject).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ hdr: 'off' }));
+      expect(runtime.mountSpinner).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ hdr: 'off' }));
+    } finally {
+      await unmount(spinner);
+      await unmount(object);
     }
   });
 });

@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { getAppContext } from '@typie/ui/context';
   import { onMount } from 'svelte';
   import { prismRuntime } from './runtime.ts';
-  import type { PrismRuntimeSnapshot } from '@typie/prism-ui';
+  import type { PrismHdrMode, PrismRuntimeSnapshot } from '@typie/prism-ui';
   import type { HTMLAttributes } from 'svelte/elements';
 
   type Props = HTMLAttributes<HTMLDivElement> & {
@@ -11,11 +12,13 @@
   };
 
   let { class: className, label, onStateChange, reducedMotion = false, ...rest }: Props = $props();
+  const app = getAppContext();
+  const hdr: PrismHdrMode = $derived(app.preference.current.prismHdrEnabled ? 'auto' : 'off');
   let host: HTMLDivElement;
   let mounted: ReturnType<typeof prismRuntime.mountSpinner> | null = null;
 
   onMount(() => {
-    mounted = prismRuntime.mountSpinner(host, { reducedMotion });
+    mounted = prismRuntime.mountSpinner(host, { hdr, reducedMotion });
     const unsubscribe = mounted.subscribe((snapshot) => onStateChange?.(snapshot));
     return () => {
       unsubscribe();
@@ -25,8 +28,8 @@
   });
 
   $effect(() => {
-    const nextReducedMotion = reducedMotion;
-    mounted?.update({ reducedMotion: nextReducedMotion });
+    const next = { hdr, reducedMotion };
+    mounted?.update(next);
   });
 </script>
 

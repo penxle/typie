@@ -18,6 +18,7 @@
   import TypeIcon from '~icons/lucide/type';
   import UserIcon from '~icons/lucide/user';
   import PrismIcon from '~icons/typie/prism';
+  import PrismCreditIcon from '~icons/typie/prism-credit';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$mearie';
@@ -28,7 +29,8 @@
   import LaboratoryTab from './LaboratoryTab.svelte';
   import PlanTab from './PlanTab.svelte';
   import PresetTab from './PresetTab.svelte';
-  import PrismTab from './PrismTab.svelte';
+  import PrismCreditsTab from './PrismCreditsTab.svelte';
+  import PrismGeneralTab from './PrismGeneralTab.svelte';
   import ProfileTab from './ProfileTab.svelte';
   import ReferralTab from './ReferralTab.svelte';
   import RevenueTab from './RevenueTab.svelte';
@@ -57,6 +59,7 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_user on User {
         id
+        prismAccess
 
         ...DashboardLayout_PreferenceModal_ProfileTab_user
         ...DashboardLayout_PreferenceModal_SecurityTab_user
@@ -70,7 +73,8 @@
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
-        ...DashboardLayout_PreferenceModal_PrismTab_user
+        ...DashboardLayout_PreferenceModal_PrismGeneralTab_user
+        ...DashboardLayout_PreferenceModal_PrismCreditsTab_user
         ...DashboardLayout_PreferenceModal_TextReplacementTab_user
       }
     `),
@@ -82,7 +86,7 @@
     tabs: Tab[];
   };
 
-  const tabGroups: TabGroup[] = [
+  const tabGroups = $derived.by<TabGroup[]>(() => [
     {
       label: '계정',
       tabs: [
@@ -115,6 +119,11 @@
           icon: LayoutIcon,
           component: InterfaceTab,
         },
+      ],
+    },
+    {
+      label: '편집',
+      tabs: [
         {
           path: '/preference/editor',
           label: '에디터',
@@ -139,6 +148,27 @@
           icon: TextCursorInputIcon,
           component: TextReplacementTab,
         },
+      ],
+    },
+    {
+      label: '프리즘',
+      tabs: [
+        {
+          path: '/preference/prism/general',
+          label: '일반',
+          icon: PrismIcon,
+          component: PrismGeneralTab,
+        },
+        ...(user.data.prismAccess
+          ? [
+              {
+                path: '/preference/prism/credits',
+                label: '크레딧',
+                icon: PrismCreditIcon,
+                component: PrismCreditsTab,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -174,12 +204,6 @@
       label: '고급',
       tabs: [
         {
-          path: '/preference/prism',
-          label: '프리즘',
-          icon: PrismIcon,
-          component: PrismTab,
-        },
-        {
           path: '/preference/laboratory',
           label: '실험실',
           icon: FlaskConicalIcon,
@@ -193,9 +217,9 @@
         },
       ],
     },
-  ];
+  ]);
 
-  const tabs = tabGroups.flatMap((group) => group.tabs);
+  const tabs = $derived(tabGroups.flatMap((group) => group.tabs));
 
   const currentTab = $derived(tabs.find((tab) => tab.path === page.state.shallowRoute));
 </script>

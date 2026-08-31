@@ -51,8 +51,11 @@ export type PrismRuntimeOptions = {
   loadRenderer: () => Promise<PrismRendererModule>;
 };
 
+export type PrismHdrMode = 'auto' | 'off' | 'on';
+
 export type PrismRuntimeObjectOptions = {
   edgeColor?: PrismEdgeColor;
+  hdr?: PrismHdrMode;
   interactive?: boolean;
   preload?: boolean;
   reducedMotion?: boolean;
@@ -60,8 +63,15 @@ export type PrismRuntimeObjectOptions = {
 };
 
 export type PrismRuntimeSpinnerOptions = {
+  hdr?: PrismHdrMode;
   reducedMotion?: boolean;
 };
+
+function resolvePrismSpinnerAtlas(devicePixelRatio: number, hdr: PrismHdrMode) {
+  const { atlas } = resolvePrismSpinnerAssets(devicePixelRatio);
+  if (atlas.hdr) atlas.hdr.mode = hdr;
+  return atlas;
+}
 
 export type PrismTargetRequestOptions = {
   spinnerPlaybackStartedAt?: number;
@@ -82,7 +92,7 @@ export type MountedPrismObject = {
   readonly snapshot: PrismRuntimeSnapshot;
   setTarget(target: PrismTarget, options?: PrismTargetRequestOptions): void;
   subscribe(listener: (snapshot: PrismRuntimeSnapshot) => void): () => void;
-  update(options: Pick<PrismRuntimeObjectOptions, 'edgeColor' | 'interactive' | 'reducedMotion'>): void;
+  update(options: Pick<PrismRuntimeObjectOptions, 'edgeColor' | 'hdr' | 'interactive' | 'reducedMotion'>): void;
   whenReady(): Promise<PrismModeReadiness>;
 };
 
@@ -90,7 +100,7 @@ export type MountedPrismSpinner = {
   destroy(): void;
   readonly snapshot: PrismRuntimeSnapshot;
   subscribe(listener: (snapshot: PrismRuntimeSnapshot) => void): () => void;
-  update(options: Pick<PrismRuntimeSpinnerOptions, 'reducedMotion'>): void;
+  update(options: Pick<PrismRuntimeSpinnerOptions, 'hdr' | 'reducedMotion'>): void;
 };
 
 export type PrismRuntime = {
@@ -236,6 +246,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     element.replaceChildren(root);
 
     let edgeColor = normalizeEdgeColor(initialOptions.edgeColor, element);
+    let hdr = initialOptions.hdr ?? 'auto';
     let reducedMotion = Boolean(initialOptions.reducedMotion);
     let interactive = Boolean(initialOptions.interactive);
     let destroyed = false;
@@ -607,7 +618,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       cancelAtlasPreload();
       if (atlasPromise) return atlasPromise;
       atlasPromise = atlasPlayer
-        .connect(resolvePrismSpinnerAssets(devicePixelRatio).atlas)
+        .connect(resolvePrismSpinnerAtlas(devicePixelRatio, hdr))
         .then(() => {
           if (destroyed) return;
           atlasReadiness = 'ready';
@@ -635,6 +646,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       controller = mountPrismObject(canvas, {
         canvasSize: CANVAS_SIZE,
         createRenderer,
+        hdr,
         iconEdgeColor: edgeColor,
         iconSize: ICON_SIZE,
         period: PRISM_PERIOD_SECONDS,
@@ -1012,6 +1024,11 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
           edgeColor = normalizeEdgeColor(next.edgeColor, element);
           controller?.update({ iconEdgeColor: edgeColor });
         }
+        if (next.hdr !== undefined && next.hdr !== hdr) {
+          hdr = next.hdr;
+          controller?.update({ hdr });
+          atlasPlayer.setHdrMode(hdr);
+        }
         if (next.reducedMotion !== undefined) {
           reducedMotion = Boolean(next.reducedMotion);
           route.setReducedMotion(reducedMotion);
@@ -1064,6 +1081,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const listeners = new Set<(snapshot: PrismRuntimeSnapshot) => void>();
     let destroyed = false;
     let reducedMotion = Boolean(spinnerOptions.reducedMotion);
+    let hdr = spinnerOptions.hdr ?? 'auto';
     let apngLoadGeneration = 0;
     let playbackStartedAt: number | undefined;
     const apngHdrPlayer = new PrismSpinnerPreRenderedHdrPlayer(hdrCanvas);
@@ -1097,7 +1115,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const player = new PrismSpinnerPreRenderedPlayer(canvas, hdrCanvas);
       atlasPlayer = player;
       atlasPromise = player
-        .connect(resolvePrismSpinnerAssets(devicePixelRatio).atlas)
+        .connect(resolvePrismSpinnerAtlas(devicePixelRatio, hdr))
         .then(() => {
           if (destroyed || atlasPlayer !== player) return;
           if (reducedMotion) player.setPhase(0);
@@ -1123,7 +1141,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       atlasPlayer?.dispose();
       atlasPlayer = null;
       atlasPromise = null;
-      apngHdrPlayer.connect(assets.hdr);
+      apngHdrPlayer.connect({ ...assets.hdr, mode: hdr });
       const loadedAt = new Promise<number>((resolve, reject) => {
         const cleanup = () => {
           image.removeEventListener('load', onLoad);
@@ -1190,14 +1208,24 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         return () => listeners.delete(listener);
       },
       update(next) {
-        if (destroyed || next.reducedMotion === undefined) return;
-        const nextReducedMotion = Boolean(next.reducedMotion);
-        if (nextReducedMotion === reducedMotion) return;
-        reducedMotion = nextReducedMotion;
-        if (reducedMotion) {
-          void ensureAtlas().then(() => atlasPlayer?.setPhase(0));
-        } else {
-          void loadApng();
+        if (destroyed) return;
+        if (next.hdr !== undefined && next.hdr !== hdr) {
+          hdr = next.hdr;
+          if (atlasPlayer) atlasPlayer.setHdrMode(hdr);
+          else {
+            const assets = resolvePrismSpinnerAssets(devicePixelRatio);
+            apngHdrPlayer.connect({ ...assets.hdr, mode: hdr });
+          }
+        }
+        if (next.reducedMotion !== undefined) {
+          const nextReducedMotion = Boolean(next.reducedMotion);
+          if (nextReducedMotion === reducedMotion) return;
+          reducedMotion = nextReducedMotion;
+          if (reducedMotion) {
+            void ensureAtlas().then(() => atlasPlayer?.setPhase(0));
+          } else {
+            void loadApng();
+          }
         }
       },
     };

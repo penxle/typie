@@ -450,6 +450,14 @@ export class PrismSpinnerPreRenderedPlayer {
     this.syncFrameSubscription();
   }
 
+  setHdrMode(mode: PrismSpinnerHdrMode): void {
+    const configuration = this.configuration;
+    if (!configuration?.hdr || !this.hdrPlayer) return;
+    const nextConfiguration = { ...configuration.hdr, mode };
+    configuration.hdr = nextConfiguration;
+    this.hdrPlayer.connect(nextConfiguration);
+  }
+
   phaseAt(now = performance.now()): number {
     return this.playback.phaseAt(now);
   }

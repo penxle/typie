@@ -712,7 +712,7 @@
   {#if open && insufficient}
     <PrismCallout
       style={{ marginTop: '12px' }}
-      action={{ label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism' }) }}
+      action={{ label: '충전하기', run: () => pushState('', { shallowRoute: '/preference/prism/credits' }) }}
       message="크레딧이 부족해요"
       tone="warning"
     />
