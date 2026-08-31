@@ -2,12 +2,15 @@
   import { awaitingRunClose, effectiveResolver, pendingRootRequests, runningWorkflows } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
   import { Icon, Scrollbar } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
+  import { fade } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import PrismIcon from '~icons/typie/prism';
   import { parseMarkdown } from './lib/markdown.ts';
-  import { pop, reducedMotion, rise } from './lib/motion.ts';
+  import { fadeIn, pop, reducedMotion, rise } from './lib/motion.ts';
   import { PacedText } from './lib/paced-text.svelte.ts';
   import { foldToolCalls } from './lib/tool-calls.ts';
   import { labelForRequest } from './lib/tool-labels.ts';
@@ -459,88 +462,96 @@
     })}
     onscroll={onScroll}
   >
-    <div bind:this={content} class={contentClass}>
-      {#if loading && pending === null}
-        <div
-          class={css({
-            height: '14px',
-            width: '[60%]',
-            borderRadius: '4px',
-            backgroundColor: 'surface.muted',
-            animation: 'pulse 1.6s ease-in-out infinite',
-          })}
-        ></div>
-      {/if}
+    {#key loading}
+      <div bind:this={content} class={contentClass} in:fade={{ ...fadeIn, duration: loading ? 0 : 200 }}>
+        {#if loading && pending === null}
+          <div
+            style:color={token('colors.border.default')}
+            class={flex({
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexGrow: '1',
+              animation: 'pulse 1.6s ease-in-out infinite',
+              _motionReduce: { animation: 'none' },
+            })}
+            aria-hidden="true"
+          >
+            <PrismIcon height="44" width="44" />
+          </div>
+        {/if}
 
-      {#each rendered as item (item.key)}
-        <div
-          class={entryClass}
-          data-role={item.kind === 'entry' ? item.entry.role : 'assistant'}
-          in:rise={{
-            skip: !settled || item.kind === 'markdown' || item.entry.role === 'user',
-            block: item.kind === 'markdown' || item.entry.role !== 'tool-calls',
-          }}
-        >
-          {#if item.kind === 'markdown'}
-            <PrismMarkdown blocks={item.blocks} plain={item.plain} settled={item.settled} />
-          {:else if item.entry.role === 'tool-calls'}
-            <PrismToolCalls count={item.entry.count} rows={item.entry.rows} />
-          {:else if item.entry.role === 'tool-request'}
-            <PrismToolRequest
-              {failedIds}
-              message={item.entry}
-              {onRetry}
-              resolve={onResolve}
-              {sessionId}
-              {transcript}
-              {unavailableMessage}
-            />
-          {:else if item.entry.role === 'run-failed'}
-            <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>응답을 마치지 못했어요. 다시 보내 주세요</div>
-          {:else if item.entry.role === 'workflow'}
-            {#if sessionId !== null}
-              <PrismWorkflow
+        {#each rendered as item (item.key)}
+          <div
+            class={entryClass}
+            data-role={item.kind === 'entry' ? item.entry.role : 'assistant'}
+            in:rise={{
+              skip: !settled || item.kind === 'markdown' || item.entry.role === 'user',
+              block: item.kind === 'markdown' || item.entry.role !== 'tool-calls',
+            }}
+          >
+            {#if item.kind === 'markdown'}
+              <PrismMarkdown blocks={item.blocks} plain={item.plain} settled={item.settled} />
+            {:else if item.entry.role === 'tool-calls'}
+              <PrismToolCalls count={item.entry.count} rows={item.entry.rows} />
+            {:else if item.entry.role === 'tool-request'}
+              <PrismToolRequest
                 {failedIds}
                 message={item.entry}
                 {onRetry}
-                {reconnecting}
                 resolve={onResolve}
                 {sessionId}
                 {transcript}
                 {unavailableMessage}
               />
+            {:else if item.entry.role === 'run-failed'}
+              <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>
+                응답을 마치지 못했어요. 다시 보내 주세요
+              </div>
+            {:else if item.entry.role === 'workflow'}
+              {#if sessionId !== null}
+                <PrismWorkflow
+                  {failedIds}
+                  message={item.entry}
+                  {onRetry}
+                  {reconnecting}
+                  resolve={onResolve}
+                  {sessionId}
+                  {transcript}
+                  {unavailableMessage}
+                />
+              {/if}
+            {:else}
+              <PrismMessage message={item.entry} />
             {/if}
-          {:else}
-            <PrismMessage message={item.entry} />
-          {/if}
-        </div>
-      {/each}
+          </div>
+        {/each}
 
-      {#if pending !== null}
-        <div
-          class={css({
-            alignSelf: 'flex-end',
-            maxWidth: '[86%]',
-            paddingX: '12px',
-            paddingY: '8px',
-            borderRadius: '12px',
-            borderBottomRightRadius: '2px',
-            backgroundColor: 'surface.muted',
-            fontSize: '14px',
-            lineHeight: '[1.6]',
-            whiteSpace: 'pre-wrap',
-            animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
-            _motionReduce: { animation: 'none' },
-          })}
-        >
-          {pending}
-        </div>
-      {/if}
+        {#if pending !== null}
+          <div
+            class={css({
+              alignSelf: 'flex-end',
+              maxWidth: '[86%]',
+              paddingX: '12px',
+              paddingY: '8px',
+              borderRadius: '12px',
+              borderBottomRightRadius: '2px',
+              backgroundColor: 'surface.muted',
+              fontSize: '14px',
+              lineHeight: '[1.6]',
+              whiteSpace: 'pre-wrap',
+              animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
+              _motionReduce: { animation: 'none' },
+            })}
+          >
+            {pending}
+          </div>
+        {/if}
 
-      {#if waitState !== null}
-        <PrismWaitRow label={waitState.label} {onSpinnerPlaybackChange} text={waitText} bind:spinnerAnchor={waitSpinnerAnchor} />
-      {/if}
-    </div>
+        {#if waitState !== null}
+          <PrismWaitRow label={waitState.label} {onSpinnerPlaybackChange} text={waitText} bind:spinnerAnchor={waitSpinnerAnchor} />
+        {/if}
+      </div>
+    {/key}
   </div>
 
   <Scrollbar controls={transcriptScrollId} label="대화 본문 세로 스크롤" orientation="vertical" scrollContainer={container} size="md" />
