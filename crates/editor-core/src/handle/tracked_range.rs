@@ -175,7 +175,7 @@ fn handle_replace_groups_from_prose(
     for (index, registration) in ranges.into_iter().enumerate() {
         let selection = (registration.start < registration.end)
             .then(|| {
-                prose.to_selection(
+                prose.to_selection_utf16(
                     &view,
                     (registration.start as usize)..(registration.end as usize),
                 )
@@ -519,6 +519,49 @@ mod tests {
             1
         );
         assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);
+    }
+
+    #[test]
+    fn prose_registration_offsets_are_utf16_code_units() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("😀😀지하 1층") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(replace_groups_from_prose(
+            "😀😀지하 1층",
+            vec![prose_registration("e1", "g1", 4, 6)],
+        ));
+
+        assert_install_outcome(&events, ProseRangeInstallOutcome::Applied);
+        assert_eq!(
+            editor
+                .tracked_ranges()
+                .get("e1")
+                .and_then(|range| range.captured_text.as_deref()),
+            Some("지하")
+        );
+    }
+
+    #[test]
+    fn prose_registration_inside_surrogate_pair_is_invalid() {
+        let (state, ..) = state! {
+            doc { root { p1: paragraph { text("😀😀지하 1층") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let events = editor.apply(replace_groups_from_prose(
+            "😀😀지하 1층",
+            vec![prose_registration("e1", "g1", 1, 6)],
+        ));
+
+        assert_install_outcome(
+            &events,
+            ProseRangeInstallOutcome::InvalidRanges { indices: vec![0] },
+        );
+        assert!(!editor.tracked_ranges().contains("e1"));
     }
 
     #[test]

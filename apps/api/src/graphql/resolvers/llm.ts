@@ -908,18 +908,6 @@ builder.subscriptionFields((t) => ({
 
         const chunks = createChunks(text);
 
-        const utf16ToCodepoint = (utf16Index: number): number => {
-          let i = 0;
-          let count = 0;
-          while (i < utf16Index) {
-            const cp = text.codePointAt(i);
-            if (cp === undefined) break;
-            i += cp > 0xff_ff ? 2 : 1;
-            count++;
-          }
-          return count;
-        };
-
         const normalizedFind = createNormalizedFind(text);
 
         const findRange = (startText: string, endText: string, searchStart: number) => {
@@ -1020,8 +1008,8 @@ builder.subscriptionFields((t) => ({
                     type: 'feedback',
                     data: {
                       id: nanoid(),
-                      start: utf16ToCodepoint(range.rangeStart),
-                      end: utf16ToCodepoint(range.rangeEnd),
+                      start: range.rangeStart,
+                      end: range.rangeEnd,
                       startText: feedback.start,
                       endText: feedback.end,
                       feedback: feedback.feedback,
