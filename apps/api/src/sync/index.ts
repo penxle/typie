@@ -2,8 +2,9 @@ import { checkBootstrap } from '#/bootstrap.ts';
 import { createProductionDeps } from './deps.ts';
 import { createSyncServer } from './server.ts';
 import type { Server } from 'node:http';
+import type { SyncServer } from './server.ts';
 
-export const attachSyncServer = (server: Server): void => {
+export const attachSyncServer = (server: Server): SyncServer => {
   const sync = createSyncServer({
     deps: createProductionDeps(),
     checkMaintenance: async (ip, bypassKeyHash) => {
@@ -16,4 +17,6 @@ export const attachSyncServer = (server: Server): void => {
     if (!sync.shouldHandle(request)) return;
     sync.handleUpgrade(request, socket, head);
   });
+
+  return sync;
 };

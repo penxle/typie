@@ -33,11 +33,17 @@ prismWorker.on('error', (error) => {
   Sentry.captureException(error);
 });
 
-if (!process.env.SCRIPT && !process.env.NO_WORKER) {
-  prismWorker.run();
+const running = !process.env.SCRIPT && !process.env.NO_WORKER;
 
-  process.once('SIGTERM', () => {
-    shutdown.abort();
-    void Promise.race([prismWorker.close(), new Promise((resolve) => setTimeout(resolve, 5000))]).finally(() => process.exit(0));
-  });
+if (running) {
+  prismWorker.run();
 }
+
+export const stopPrismWorker = async () => {
+  if (!running) {
+    return;
+  }
+
+  shutdown.abort();
+  await Promise.race([prismWorker.close(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+};
