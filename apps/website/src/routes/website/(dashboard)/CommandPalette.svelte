@@ -225,26 +225,22 @@
         }
       },
     },
-    ...(app.state.prismAccess
-      ? [
-          {
-            name: prismDraft ? 'PRISM과 새 대화' : app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',
-            label: prismDraft ? `PRISM과 새 대화: “${prismDraft}”` : undefined,
-            aliases: prismDraft ? [prismDraft] : ['ai', 'assistant'],
-            icon: PrismIcon,
-            action: () => {
-              if (prismDraft) {
-                onPrismNewChat(prismDraft);
-                return;
-              }
+    {
+      name: prismDraft ? 'PRISM과 새 대화' : app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',
+      label: prismDraft ? `PRISM과 새 대화: “${prismDraft}”` : undefined,
+      aliases: prismDraft ? [prismDraft] : ['ai', 'assistant'],
+      icon: PrismIcon,
+      action: () => {
+        if (prismDraft) {
+          onPrismNewChat(prismDraft);
+          return;
+        }
 
-              const next = !app.preference.current.prismPanelOpen;
-              app.preference.current.prismPanelOpen = next;
-              mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'command_palette' });
-            },
-          },
-        ]
-      : []),
+        const next = !app.preference.current.prismPanelOpen;
+        app.preference.current.prismPanelOpen = next;
+        mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'command_palette' });
+      },
+    },
     {
       name: '설정 열기',
       aliases: [],

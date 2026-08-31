@@ -43,7 +43,6 @@ const schema = z.object({
   PORTONE_KAKAOPAY_CHANNEL_KEY: z.string(),
   PRISM_API_URL: z.string(),
   PRISM_API_TOKEN: z.string(),
-  PRISM_BETA_USER_IDS: z.string().default(''),
   REDIS_URL: z.string(),
   SENTRY_DSN: z.string().optional(),
   IMAGE_TAG: z.string().optional(),

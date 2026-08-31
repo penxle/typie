@@ -17,7 +17,7 @@ const app = {
       zenModeEnabled: false,
     },
   },
-  state: { prismAccess: true },
+  state: {},
 };
 
 let component: ReturnType<typeof mount> | undefined;
@@ -30,7 +30,6 @@ beforeEach(() => {
   app.preference.current.prismPanelOpen = true;
   app.preference.current.prismPanelWidth = 432;
   app.preference.current.zenModeEnabled = false;
-  app.state.prismAccess = true;
   document.documentElement.dataset.theme = 'light';
   document.documentElement.dataset.variantLight = 'white';
   document.documentElement.dataset.variantDark = 'charcoal';

@@ -2,6 +2,7 @@ export const createTtlCache = <T>(opts: {
   load: () => Promise<T>;
   ttlMs: number;
   failureTtlMs?: number;
+  onFailure?: (err: unknown) => void;
   now?: () => number;
 }): (() => Promise<T>) => {
   const now = opts.now ?? (() => Date.now());
@@ -17,6 +18,7 @@ export const createTtlCache = <T>(opts: {
       return value;
     } catch (err) {
       failure = { error: err, at: now() };
+      opts.onFailure?.(err);
       throw err;
     }
   };

@@ -64,7 +64,6 @@ type AppState = {
   goalOpen: string[];
   userGoalOpen: boolean;
   shortcutsOpen: boolean;
-  prismAccess: boolean;
   sidebarPeek: boolean;
   prismBadge: boolean;
   prismViewingSessionId: string | null;
@@ -118,7 +117,6 @@ export const setupAppContext = (userId: string) => {
     goalOpen: [],
     userGoalOpen: false,
     shortcutsOpen: false,
-    prismAccess: false,
     sidebarPeek: false,
     prismBadge: false,
     prismViewingSessionId: null,

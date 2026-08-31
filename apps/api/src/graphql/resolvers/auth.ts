@@ -33,14 +33,12 @@ import * as aws from '#/external/aws.ts';
 import { apple, google, kakao, naver } from '#/external/sso/index.ts';
 import { generateFractionalOrder, generateRandomAvatar, generateRandomName, persistBlobAsImage } from '#/utils/index.ts';
 import { createTrialSubscription } from '#/utils/plan.ts';
+import { grantPrismCredit } from '#/utils/prism-credit.ts';
+import { computeTrialExpiresAt, toMilli, TRIAL_CREDIT_AMOUNT } from '#/utils/prism-credit-core.ts';
 import { createSite } from '#/utils/site.ts';
 import { builder } from '../builder.ts';
 import type { UserContext } from '#/context.ts';
 import type { Transaction } from '#/db/index.ts';
-
-// 9/1에 프리즘 체험 크레딧 지급과 함께 활성화할 것
-// import { grantPrismCredit } from '#/utils/prism-credit.ts';
-// import { computeTrialExpiresAt, toMilli, TRIAL_CREDIT_AMOUNT } from '#/utils/prism-credit-core.ts';
 
 /**
  * * Mutations
@@ -508,13 +506,12 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, logoI
     expiresAt: trialStartsAt.add(TRIAL_DURATION_DAYS, 'days'),
   });
 
-  // 9/1에 활성화할 것
-  // await grantPrismCredit(tx, {
-  //   userId: user.id,
-  //   kind: 'TRIAL',
-  //   amount: toMilli(TRIAL_CREDIT_AMOUNT),
-  //   expiresAt: computeTrialExpiresAt(trialStartsAt),
-  // });
+  await grantPrismCredit(tx, {
+    userId: user.id,
+    kind: 'TRIAL',
+    amount: toMilli(TRIAL_CREDIT_AMOUNT),
+    expiresAt: computeTrialExpiresAt(trialStartsAt),
+  });
 
   return user;
 };

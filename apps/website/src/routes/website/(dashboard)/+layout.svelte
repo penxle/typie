@@ -312,7 +312,6 @@
 
   $effect(() => {
     app.state.subscribed = query.data.me.entitled;
-    app.state.prismAccess = query.data.me.prismAccess;
   });
 
   $effect(() => {

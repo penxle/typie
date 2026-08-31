@@ -27,6 +27,7 @@
   import { takeSessionJump } from '$lib/prism/session-jump.svelte';
   import PrismSpinner from '$lib/prism-ui/PrismSpinner.svelte';
   import { graphql } from '$mearie';
+  import { AI_OPT_IN_FAILURE_MESSAGE } from './lib/ai-opt-in.ts';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
   import { commandGate, commandNameOf } from './lib/commands.ts';
@@ -72,7 +73,6 @@
         id
         entitled
         preferences
-        prismAccess
 
         prismCredit {
           balance
@@ -103,10 +103,7 @@
     () => user$key,
   );
   const aiOptIn = $derived((user.data.preferences.aiOptIn as boolean | undefined) ?? false);
-  let betaGate = $state<'prism_beta_required' | null>(null);
   const accessReason: PrismAccessReason | null = $derived.by(() => {
-    if (betaGate !== null) return betaGate;
-    if (!user.data.prismAccess) return 'prism_beta_required';
     if (!user.data.entitled) return 'subscription_required';
     if (!aiOptIn) return 'ai_opt_in_required';
     if (user.data.prismCredit.balance <= 0) return 'prism_credit_insufficient';
@@ -230,6 +227,26 @@
       }
     `),
   );
+
+  const [updatePreferences] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismPanel_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+        updatePreferences(input: $input) {
+          id
+          preferences
+        }
+      }
+    `),
+  );
+
+  const enableAiOptIn = async () => {
+    try {
+      await updatePreferences({ input: { value: { aiOptIn: true } } });
+      mixpanel.track('ai_opt_in', { enabled: true, via: 'prism_gate' });
+    } catch {
+      Toast.error(AI_OPT_IN_FAILURE_MESSAGE);
+    }
+  };
 
   const selected = createPrismSessionState(user.data.id);
   const sessions = $derived(user.data.prismSessions);
@@ -594,7 +611,6 @@
   const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
 
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
-  const panelVisible = $derived(app.state.prismAccess || panelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
   const welcomeAdmission = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null);
   let visibilityState = $state<DocumentVisibilityState>('hidden');
@@ -766,13 +782,7 @@
 
         chat.receive(toFrame(data.prismSessionEvents));
       },
-      onError: (err) => {
-        const error = unwrapError(err);
-        if (error instanceof TypieError && error.code === 'prism_beta_required') {
-          betaGate = 'prism_beta_required';
-          return;
-        }
-
+      onError: () => {
         scheduleReconnect();
       },
     }),
@@ -811,9 +821,7 @@
         // 보고 실패가 전송 결과를 바꾸지 않는다
       }
 
-      if (code === 'prism_beta_required') {
-        betaGate = 'prism_beta_required';
-      } else if (code === 'prism_credit_insufficient') {
+      if (code === 'prism_credit_insufficient') {
         Toast.error('크레딧이 부족해요');
       } else if (code === 'prism_run_active') {
         Toast.error('답변이 끝난 뒤에 보낼 수 있어요');
@@ -873,281 +881,279 @@
   </span>
 {/snippet}
 
-{#if panelVisible}
-  <PrismPanelHeader>
-    {#snippet children(buttonClass)}
-      {#if titleEditing}
-        <input
-          bind:this={titleInput}
-          class={css({
-            marginLeft: 'auto',
-            minWidth: '0',
-            maxWidth: '220px',
-            width: 'full',
-            paddingX: '8px',
-            paddingY: '3px',
-            borderWidth: '1px',
-            borderColor: 'border.strong',
-            borderRadius: '6px',
-            fontSize: '12px',
-            backgroundColor: 'surface.default',
-            outline: 'none',
-          })}
-          aria-label="대화 제목"
-          maxlength="100"
-          onblur={() => void commitTitleEdit()}
-          onkeydown={(event) => {
-            if (event.isComposing) return;
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void commitTitleEdit();
-            } else if (event.key === 'Escape') {
-              event.preventDefault();
-              event.stopPropagation();
-              titleEditing = false;
-            }
-          }}
-          type="text"
-          bind:value={titleDraft}
-        />
-      {:else}
-        <button
-          bind:this={currentTitleButton}
-          class={css({
-            marginLeft: 'auto',
-            minWidth: '0',
-            maxWidth: '220px',
-            paddingX: '8px',
-            paddingY: '4px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            color: 'text.subtle',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
-            backgroundColor: listOpen ? 'surface.muted' : 'transparent',
-            _hover: { backgroundColor: 'surface.muted' },
-          })}
-          aria-label={`${listToggleLabel}: ${currentTitle}`}
-          onclick={() => (listOpen = !listOpen)}
-          type="button"
-          bind:clientWidth={currentTitleClientWidth}
-          use:tooltip={{ message: currentTitleTruncated ? currentTitleTooltip : listToggleLabel, arrow: !currentTitleTruncated }}
-        >
-          {currentTitle}
-        </button>
-      {/if}
-
-      {#if currentSession}
-        {@const session = currentSession}
-        <Menu
-          ontransitionend={() => {
-            if (!pendingTitleEdit) return;
-            pendingTitleEdit = false;
-            void startTitleEdit();
-          }}
-          placement="bottom-end"
-        >
-          {#snippet button({ open })}
-            <div
-              class={cx(buttonClass, open ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
-              aria-label="대화 메뉴"
-              use:tooltip={{ message: '대화 메뉴' }}
-            >
-              <Icon icon={EllipsisIcon} size={16} />
-            </div>
-          {/snippet}
-
-          {#snippet children({ close })}
-            <MenuItem
-              icon={PencilIcon}
-              onclick={() => {
-                pendingTitleEdit = true;
-                close();
-              }}
-            >
-              이름 바꾸기
-            </MenuItem>
-            {#if session.archivedAt == null}
-              <MenuItem
-                icon={ArchiveIcon}
-                onclick={() => {
-                  close();
-                  void archiveSession(session.id, 'header_menu');
-                }}
-              >
-                보관
-              </MenuItem>
-            {:else}
-              <MenuItem
-                icon={ArchiveRestoreIcon}
-                onclick={() => {
-                  close();
-                  void unarchiveSession(session.id, 'header_menu');
-                }}
-              >
-                복원
-              </MenuItem>
-            {/if}
-            <MenuItem
-              icon={TrashIcon}
-              onclick={() => {
-                close();
-                requestDelete(session, 'header_menu');
-              }}
-              variant="danger"
-            >
-              삭제
-            </MenuItem>
-          {/snippet}
-        </Menu>
-      {/if}
-
+<PrismPanelHeader>
+  {#snippet children(buttonClass)}
+    {#if titleEditing}
+      <input
+        bind:this={titleInput}
+        class={css({
+          marginLeft: 'auto',
+          minWidth: '0',
+          maxWidth: '220px',
+          width: 'full',
+          paddingX: '8px',
+          paddingY: '3px',
+          borderWidth: '1px',
+          borderColor: 'border.strong',
+          borderRadius: '6px',
+          fontSize: '12px',
+          backgroundColor: 'surface.default',
+          outline: 'none',
+        })}
+        aria-label="대화 제목"
+        maxlength="100"
+        onblur={() => void commitTitleEdit()}
+        onkeydown={(event) => {
+          if (event.isComposing) return;
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            void commitTitleEdit();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            titleEditing = false;
+          }
+        }}
+        type="text"
+        bind:value={titleDraft}
+      />
+    {:else}
       <button
-        class={buttonClass}
-        aria-label="새 대화"
-        onclick={() => void startNewChat('header')}
-        type="button"
-        use:tooltip={{ message: '새 대화' }}
-      >
-        <Icon icon={PlusIcon} size={16} />
-      </button>
-
-      <button
-        class={cx(buttonClass, listOpen ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
-        aria-label={app.state.prismBadge ? '대화 목록, 확인할 항목 있음' : '대화 목록'}
-        aria-pressed={listOpen}
+        bind:this={currentTitleButton}
+        class={css({
+          marginLeft: 'auto',
+          minWidth: '0',
+          maxWidth: '220px',
+          paddingX: '8px',
+          paddingY: '4px',
+          borderRadius: '6px',
+          fontSize: '12px',
+          color: 'text.subtle',
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+          backgroundColor: listOpen ? 'surface.muted' : 'transparent',
+          _hover: { backgroundColor: 'surface.muted' },
+        })}
+        aria-label={`${listToggleLabel}: ${currentTitle}`}
         onclick={() => (listOpen = !listOpen)}
         type="button"
-        use:tooltip={{ message: listToggleLabel }}
+        bind:clientWidth={currentTitleClientWidth}
+        use:tooltip={{ message: currentTitleTruncated ? currentTitleTooltip : listToggleLabel, arrow: !currentTitleTruncated }}
       >
-        <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
-          <Icon icon={HistoryIcon} size={16} />
-          {#if app.state.prismBadge}
-            <PrismBadgeDot />
-          {/if}
-        </span>
+        {currentTitle}
       </button>
-    {/snippet}
-  </PrismPanelHeader>
+    {/if}
+
+    {#if currentSession}
+      {@const session = currentSession}
+      <Menu
+        ontransitionend={() => {
+          if (!pendingTitleEdit) return;
+          pendingTitleEdit = false;
+          void startTitleEdit();
+        }}
+        placement="bottom-end"
+      >
+        {#snippet button({ open })}
+          <div
+            class={cx(buttonClass, open ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
+            aria-label="대화 메뉴"
+            use:tooltip={{ message: '대화 메뉴' }}
+          >
+            <Icon icon={EllipsisIcon} size={16} />
+          </div>
+        {/snippet}
+
+        {#snippet children({ close })}
+          <MenuItem
+            icon={PencilIcon}
+            onclick={() => {
+              pendingTitleEdit = true;
+              close();
+            }}
+          >
+            이름 바꾸기
+          </MenuItem>
+          {#if session.archivedAt == null}
+            <MenuItem
+              icon={ArchiveIcon}
+              onclick={() => {
+                close();
+                void archiveSession(session.id, 'header_menu');
+              }}
+            >
+              보관
+            </MenuItem>
+          {:else}
+            <MenuItem
+              icon={ArchiveRestoreIcon}
+              onclick={() => {
+                close();
+                void unarchiveSession(session.id, 'header_menu');
+              }}
+            >
+              복원
+            </MenuItem>
+          {/if}
+          <MenuItem
+            icon={TrashIcon}
+            onclick={() => {
+              close();
+              requestDelete(session, 'header_menu');
+            }}
+            variant="danger"
+          >
+            삭제
+          </MenuItem>
+        {/snippet}
+      </Menu>
+    {/if}
+
+    <button
+      class={buttonClass}
+      aria-label="새 대화"
+      onclick={() => void startNewChat('header')}
+      type="button"
+      use:tooltip={{ message: '새 대화' }}
+    >
+      <Icon icon={PlusIcon} size={16} />
+    </button>
+
+    <button
+      class={cx(buttonClass, listOpen ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
+      aria-label={app.state.prismBadge ? '대화 목록, 확인할 항목 있음' : '대화 목록'}
+      aria-pressed={listOpen}
+      onclick={() => (listOpen = !listOpen)}
+      type="button"
+      use:tooltip={{ message: listToggleLabel }}
+    >
+      <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+        <Icon icon={HistoryIcon} size={16} />
+        {#if app.state.prismBadge}
+          <PrismBadgeDot />
+        {/if}
+      </span>
+    </button>
+  {/snippet}
+</PrismPanelHeader>
+
+<div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
+  {#if listOpen}
+    <PrismSessionList
+      currentId={selected.current}
+      onArchive={(id) => archiveSession(id, 'session_list')}
+      onClose={() => (listOpen = false)}
+      onDelete={(session) => requestDelete(session, 'session_list')}
+      onRename={(id, title) => renameSession(id, title, 'session_list')}
+      onSelect={(id) => {
+        selected.current = id;
+        listOpen = false;
+      }}
+      onUnarchive={(id) => unarchiveSession(id, 'session_list')}
+      {sessions}
+    />
+  {/if}
 
   <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
-    {#if listOpen}
-      <PrismSessionList
-        currentId={selected.current}
-        onArchive={(id) => archiveSession(id, 'session_list')}
-        onClose={() => (listOpen = false)}
-        onDelete={(session) => requestDelete(session, 'session_list')}
-        onRename={(id, title) => renameSession(id, title, 'session_list')}
-        onSelect={(id) => {
-          selected.current = id;
-          listOpen = false;
-        }}
-        onUnarchive={(id) => unarchiveSession(id, 'session_list')}
-        {sessions}
-      />
-    {/if}
-
-    <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
-      {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
-        {#key chat.generation}
-          <PrismPanelIndicator
-            destination={indicatorDestination}
-            phase={indicatorPhase}
-            prismEnabled={app.preference.current.prismWelcomeObjectEnabled}
-            reducedMotion={prefersReducedMotion.current}
-            rowSpinnerPlaybackStartedAt={indicatorSpinnerPlaybackStartedAt}
-            themeVariant={theme.currentThemeVariant}
-            {welcomeAdmission}
-          />
-        {/key}
-      {/if}
-
+    {#if app.preference.current.prismPanelOpen && indicatorPhase !== 'hidden'}
       {#key chat.generation}
-        <PrismTranscript
-          failedIds={autoResolver.failedIds}
-          loading={chat.loading}
-          onResolve={resolveTool}
-          onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
-          onSpinnerPlaybackChange={(startedAt) => (indicatorSpinnerPlaybackStartedAt = startedAt)}
-          pending={chat.pending}
-          {policy}
-          reconnecting={disconnected}
-          sessionId={chat.sessionId}
-          transcript={chat.transcript}
-          unavailableMessage={accessUnavailableMessage}
-          bind:waitSpinnerAnchor={indicatorDestination}
+        <PrismPanelIndicator
+          destination={indicatorDestination}
+          phase={indicatorPhase}
+          prismEnabled={app.preference.current.prismWelcomeObjectEnabled}
+          reducedMotion={prefersReducedMotion.current}
+          rowSpinnerPlaybackStartedAt={indicatorSpinnerPlaybackStartedAt}
+          themeVariant={theme.currentThemeVariant}
+          {welcomeAdmission}
         />
       {/key}
-
-      {#if statusKind !== null}
-        <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
-          <div bind:this={statusEl} class={css({ position: 'relative', zIndex: '2' })}>
-            {#if statusKind === 'reconnecting'}
-              <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                <PrismSpinner label="다시 연결하는 중" />
-                <span class={calloutTextClass}>다시 연결하는 중이에요</span>
-              </div>
-            {:else if statusKind === 'error'}
-              <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                <span class={calloutTextClass}>{chat.error}</span>
-                <Button style={css.raw({ flexShrink: '0' })} onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">
-                  다시 불러오기
-                </Button>
-              </div>
-            {:else}
-              <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-                <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-                <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
-                <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      {#if !chat.loading && emptySession}
-        <div
-          class={css(
-            { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
-            chipsVisible ? {} : { opacity: '0', pointerEvents: 'none' },
-          )}
-          aria-hidden={!chipsVisible}
-          in:rise
-        >
-          <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
-          <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
-            {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
-              <button class={chipClass} onclick={() => onChipInsert(chip)} tabindex={chipsVisible ? 0 : -1} type="button">
-                <Icon icon={chip.icon} size={14} />
-                {chip.label}
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <PrismPushCard visible={app.state.prismBadge} />
-
-    {#if accessReason !== null}
-      <PrismGateCard reason={accessReason} />
     {/if}
 
-    {#if !chat.loading}
-      <PrismComposer
-        bind:this={composer}
-        {blocked}
-        {commands}
-        {onSend}
-        {onStop}
-        policy={{ current: policy, onChange: onPolicyChange }}
-        running={chat.transcript.run === 'running'}
-        sendDisabled={accessReason !== null}
-        status={composerStatus}
-        bind:text={draft}
+    {#key chat.generation}
+      <PrismTranscript
+        failedIds={autoResolver.failedIds}
+        loading={chat.loading}
+        onResolve={resolveTool}
+        onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
+        onSpinnerPlaybackChange={(startedAt) => (indicatorSpinnerPlaybackStartedAt = startedAt)}
+        pending={chat.pending}
+        {policy}
+        reconnecting={disconnected}
+        sessionId={chat.sessionId}
+        transcript={chat.transcript}
+        unavailableMessage={accessUnavailableMessage}
+        bind:waitSpinnerAnchor={indicatorDestination}
       />
+    {/key}
+
+    {#if statusKind !== null}
+      <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
+        <div bind:this={statusEl} class={css({ position: 'relative', zIndex: '2' })}>
+          {#if statusKind === 'reconnecting'}
+            <div class={css(calloutStyle, calloutNeutralStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+              <PrismSpinner label="다시 연결하는 중" />
+              <span class={calloutTextClass}>다시 연결하는 중이에요</span>
+            </div>
+          {:else if statusKind === 'error'}
+            <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+              <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+              <span class={calloutTextClass}>{chat.error}</span>
+              <Button style={css.raw({ flexShrink: '0' })} onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">
+                다시 불러오기
+              </Button>
+            </div>
+          {:else}
+            <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
+              <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
+              <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
+              <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    {#if !chat.loading && emptySession}
+      <div
+        class={css(
+          { paddingX: '12px', paddingBottom: '24px', transition: '[opacity 150ms ease]' },
+          chipsVisible ? {} : { opacity: '0', pointerEvents: 'none' },
+        )}
+        aria-hidden={!chipsVisible}
+        in:rise
+      >
+        <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
+        <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
+          {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
+            <button class={chipClass} onclick={() => onChipInsert(chip)} tabindex={chipsVisible ? 0 : -1} type="button">
+              <Icon icon={chip.icon} size={14} />
+              {chip.label}
+            </button>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
-{/if}
+
+  <PrismPushCard visible={app.state.prismBadge} />
+
+  {#if accessReason !== null}
+    <PrismGateCard onEnableAi={enableAiOptIn} reason={accessReason} />
+  {/if}
+
+  {#if !chat.loading}
+    <PrismComposer
+      bind:this={composer}
+      {blocked}
+      {commands}
+      {onSend}
+      {onStop}
+      policy={{ current: policy, onChange: onPolicyChange }}
+      running={chat.transcript.run === 'running'}
+      sendDisabled={accessReason !== null}
+      status={composerStatus}
+      bind:text={draft}
+    />
+  {/if}
+</div>

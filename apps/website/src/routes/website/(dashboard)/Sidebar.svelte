@@ -532,41 +532,39 @@
         </div>
       </button>
 
-      {#if app.state.prismAccess}
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '8px',
-            paddingX: '8px',
-            paddingY: '5px',
-            borderRadius: '6px',
-            transition: 'common',
-            _supportHover: { backgroundColor: 'surface.muted' },
-          })}
-          onclick={() => {
-            const next = !app.preference.current.prismPanelOpen;
-            app.preference.current.prismPanelOpen = next;
-            mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'sidebar' });
-          }}
-          type="button"
-        >
-          <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={PrismIcon} size={16} />
-            {#if app.state.prismBadge}
-              <PrismBadgeDot />
-            {/if}
-          </span>
-          <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
-          <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
-            {#if navigator.platform.includes('Mac')}
-              <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
-            {:else}
-              <span>Ctrl+</span>
-            {/if}
-            <span>E</span>
-          </div>
-        </button>
-      {/if}
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '8px',
+          paddingY: '5px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          const next = !app.preference.current.prismPanelOpen;
+          app.preference.current.prismPanelOpen = next;
+          mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'sidebar' });
+        }}
+        type="button"
+      >
+        <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+          <Icon style={css.raw({ color: 'text.faint' })} icon={PrismIcon} size={16} />
+          {#if app.state.prismBadge}
+            <PrismBadgeDot />
+          {/if}
+        </span>
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
+        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
+          {#if navigator.platform.includes('Mac')}
+            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+          {:else}
+            <span>Ctrl+</span>
+          {/if}
+          <span>E</span>
+        </div>
+      </button>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '8px' })}>
