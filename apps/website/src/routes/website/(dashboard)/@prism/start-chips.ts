@@ -1,5 +1,6 @@
 import BarChart3Icon from '~icons/lucide/bar-chart-3';
 import BookOpenIcon from '~icons/lucide/book-open';
+import BookTextIcon from '~icons/lucide/book-text';
 import ListTreeIcon from '~icons/lucide/list-tree';
 import StickyNoteIcon from '~icons/lucide/sticky-note';
 import TargetIcon from '~icons/lucide/target';
@@ -12,6 +13,12 @@ const openDocumentChip: StartChip = {
   label: '열린 문서 훑어보기',
   insert: '지금 열어 둔 문서를 읽고 어떤 글인지 정리해 주세요.',
   icon: BookOpenIcon,
+};
+
+const rubyChip: StartChip = {
+  label: '일본 라이트노벨풍 루비 달기',
+  insert: '지금 열어 둔 문서에 있는 주요 단어들에 일본 라이트노벨풍의 서브컬처스러운 루비를 달아주세요.',
+  icon: BookTextIcon,
 };
 
 const commonChips: StartChip[] = [
@@ -27,4 +34,4 @@ const commonChips: StartChip[] = [
 ];
 
 export const startChipsFor = (hasOpenDocument: boolean): StartChip[] =>
-  hasOpenDocument ? [commonChips[0], openDocumentChip, ...commonChips.slice(1)] : commonChips;
+  hasOpenDocument ? [commonChips[0], openDocumentChip, ...commonChips.slice(1), rubyChip] : commonChips;
