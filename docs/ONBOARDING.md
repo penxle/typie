@@ -884,14 +884,14 @@ typecheck를 실행한다. 모두 통과하면 첫 날 목표를 달성한 것�
 
 PR 등록 이후 동작하는 워크플로는 다음과 같다.
 
-| 워크플로         | 트리거       | 하는 일                                       |
-| ---------------- | ------------ | --------------------------------------------- |
-| `ci.yml`         | PR, push, MQ | eslint, prettier, spellcheck, svelte-check    |
-| `build-wasm.yml` | 관련 변경    | editor-ffi 브라우저/서버 WASM artifact        |
-| `build.yml`      | 관련 변경    | Turbo prune, API/website Docker, GHCR/ECR     |
-| `cd.yml`         | main push    | WASM과 이미지 빌드, dev 배포                  |
-| `production.yml` | 수동         | dev 이미지를 prod 태그로 재태깅 후 prod 배포  |
-| `deployment.yml` | 배포 후      | `penxle/kube`, `penxle/kube2` 매니페스트 갱신 |
+| 워크플로         | 트리거       | 하는 일                                      |
+| ---------------- | ------------ | -------------------------------------------- |
+| `ci.yml`         | PR, push, MQ | eslint, prettier, spellcheck, svelte-check   |
+| `build-wasm.yml` | 관련 변경    | editor-ffi 브라우저/서버 WASM artifact       |
+| `build.yml`      | 관련 변경    | Turbo prune, API/website Docker, ECR 푸시    |
+| `cd.yml`         | main push    | WASM과 이미지 빌드, dev 배포                 |
+| `production.yml` | 수동         | dev 이미지를 prod 태그로 재태깅 후 prod 배포 |
+| `deployment.yml` | 배포 후      | `penxle/kube2` 매니페스트 갱신               |
 
 ---
 
