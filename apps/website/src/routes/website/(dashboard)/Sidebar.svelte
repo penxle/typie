@@ -317,6 +317,7 @@
 
   let treeScrollEl = $state<HTMLDivElement>();
   const treeScrollId = 'sidebar-entity-tree-scroll';
+  let treeSectionHeaderHeight = $state(0);
   let canScrollUp = $state(false);
   let canScrollDown = $state(false);
 
@@ -698,7 +699,8 @@
         <div
           bind:this={treeScrollEl}
           id={treeScrollId}
-          class={css({
+          class={flex({
+            flexDirection: 'column',
             height: 'full',
             overflowY: 'auto',
             overflowX: 'hidden',
@@ -715,6 +717,7 @@
               position: 'sticky',
               top: '0',
               zIndex: '1',
+              flexShrink: '0',
               justifyContent: 'space-between',
               alignItems: 'center',
               paddingX: '12px',
@@ -725,6 +728,7 @@
               borderColor: 'border.subtle',
               transition: '[border-width 150ms ease]',
             })}
+            bind:offsetHeight={treeSectionHeaderHeight}
           >
             <span class={css({ paddingX: '8px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>글</span>
 
@@ -806,7 +810,14 @@
           <EntityTree site$key={site} />
         </div>
 
-        <Scrollbar controls={treeScrollId} label="트리 세로 스크롤" orientation="vertical" scrollContainer={treeScrollEl} size="md" />
+        <Scrollbar
+          controls={treeScrollId}
+          label="트리 세로 스크롤"
+          orientation="vertical"
+          scrollContainer={treeScrollEl}
+          size="md"
+          trackInsetStart={treeSectionHeaderHeight}
+        />
       </div>
     </div>
 

@@ -40,7 +40,7 @@ const wheel = (target: HTMLElement, init: WheelEventInit) => {
   return event;
 };
 
-const mountFixture = async (orientation: Orientation, size: Size) => {
+const mountFixture = async (orientation: Orientation, size: Size, trackInsetStart?: number) => {
   const layout = {
     horizontal: {
       wrapper: 'width:240px;height:64px',
@@ -77,6 +77,7 @@ const mountFixture = async (orientation: Orientation, size: Size) => {
         orientation,
         scrollContainer: container,
         size,
+        trackInsetStart,
       },
     }),
   );
@@ -135,6 +136,25 @@ describe('shared custom scrollbar', () => {
     await frame();
     expect(vertical.container.scrollTop).toBeGreaterThan(0);
     expect(vertical.container.scrollLeft).toBe(0);
+  });
+
+  it('starts the track after its logical start inset', async () => {
+    const horizontal = await mountFixture('horizontal', 'sm', 24);
+    const vertical = await mountFixture('vertical', 'md', 36);
+
+    const horizontalWrapperBounds = horizontal.wrapper.getBoundingClientRect();
+    const horizontalTrackBounds = horizontal.track.getBoundingClientRect();
+    const verticalWrapperBounds = vertical.wrapper.getBoundingClientRect();
+    const verticalTrackBounds = vertical.track.getBoundingClientRect();
+
+    expect(horizontalTrackBounds.left - horizontalWrapperBounds.left).toBeCloseTo(24, 0);
+    expect(horizontalTrackBounds.width).toBeCloseTo(horizontalWrapperBounds.width - 24, 0);
+    expect(verticalTrackBounds.top - verticalWrapperBounds.top).toBeCloseTo(36, 0);
+    expect(verticalTrackBounds.height).toBeCloseTo(verticalWrapperBounds.height - 36, 0);
+
+    drag(vertical.thumb, 0, verticalTrackBounds.height);
+    await frame();
+    expect(vertical.container.scrollTop).toBe(vertical.container.scrollHeight - vertical.container.clientHeight);
   });
 
   it('removes the control when its container no longer overflows', async () => {
