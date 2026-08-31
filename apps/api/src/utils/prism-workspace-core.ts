@@ -7,12 +7,13 @@ import { TableCode } from '#/db/schemas/codes.ts';
 import { decodeDbId } from '#/db/schemas/id.ts';
 import type { Dayjs } from 'dayjs';
 
-export type EntityRefKind = 'entity' | 'document' | 'folder';
+export type EntityRefKind = 'entity' | 'document' | 'folder' | 'divider';
 
 const ENTITY_REF_KINDS: Record<string, EntityRefKind | undefined> = {
   [TableCode.ENTITIES]: 'entity',
   [TableCode.DOCUMENTS]: 'document',
   [TableCode.FOLDERS]: 'folder',
+  [TableCode.DIVIDERS]: 'divider',
 };
 
 export const entityRefKind = (id: string): EntityRefKind | null => ENTITY_REF_KINDS[decodeDbId(id)] ?? null;
@@ -66,7 +67,8 @@ export type EntityRef =
       icon: string;
       iconColor: string;
     }
-  | { kind: 'folder'; folderId: string; entityId: string; name: string; icon: string; iconColor: string };
+  | { kind: 'folder'; folderId: string; entityId: string; name: string; icon: string; iconColor: string }
+  | { kind: 'divider'; dividerId: string; entityId: string };
 export const BATCH_MAX = 50;
 const batch = <T extends z.ZodType>(item: T) => z.array(item).min(1).max(BATCH_MAX);
 
@@ -77,6 +79,7 @@ export const CreateFoldersInput = z.object({
 });
 export const DeleteEntitiesInput = z.object({ ids: batch(z.string()) });
 export const CreateDocumentsInput = z.object({ items: batch(z.object({ folderId: z.string().optional(), ...placement })) });
+export const CreateDividersInput = z.object({ items: batch(z.object({ folderId: z.string().optional(), ...placement })) });
 export const UpdateFoldersInput = z.object({ items: batch(z.object({ folderId: z.string(), name: z.string().min(1).max(100) })) });
 const titleField = z
   .string()

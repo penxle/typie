@@ -52,6 +52,7 @@
       if (node === undefined) return null;
       if (node.__typename === 'Folder') return { kind: 'folder' as const, name: node.name };
       if (node.__typename === 'Document') return { kind: 'document' as const, name: node.title };
+      if (node.__typename === 'Divider') return { kind: 'divider' as const };
       return null;
     }),
   );
@@ -59,6 +60,7 @@
   const loading = $derived(ids.length > 0 && query.loading);
   const resolved = $derived(ids.length > 0 && !loading && query.error === undefined && targets.every((target) => target !== null));
   const hasFolder = $derived(resolved && targets.some((target) => target?.kind === 'folder'));
+  const hasRecoverable = $derived(resolved && targets.some((target) => target !== null && target.kind !== 'divider'));
 
   $effect(() => {
     onReady(resolved);
@@ -77,10 +79,16 @@
   <div class={listClass}>
     {#each targets as target, index (ids[index])}
       {#if target}
-        <p class={itemClass}>{target.kind === 'folder' ? '폴더' : '문서'} 「{target.name}」</p>
+        {#if target.kind === 'divider'}
+          <p class={itemClass}>구분선</p>
+        {:else}
+          <p class={itemClass}>{target.kind === 'folder' ? '폴더' : '문서'} 「{target.name}」</p>
+        {/if}
       {/if}
     {/each}
   </div>
 
-  <p class={consequenceClass}>{hasFolder ? '폴더 안의 것도 함께 삭제돼요. ' : ''}삭제 후 30일 동안 휴지통에 보관돼요.</p>
+  {#if hasRecoverable}
+    <p class={consequenceClass}>{hasFolder ? '폴더 안의 것도 함께 삭제돼요. ' : ''}삭제 후 30일 동안 휴지통에 보관돼요.</p>
+  {/if}
 {/if}

@@ -6,6 +6,7 @@ import { ENTITY_ICON_COLORS, ENTITY_ICON_NAMES } from '@typie/lib/catalogs';
 import dayjs from 'dayjs';
 import {
   COMMENT_PAGE_SIZE,
+  CreateDividersInput,
   CreateDocumentsInput,
   CreateFoldersInput,
   CreateNotesInput,
@@ -123,6 +124,19 @@ test('입력 미러: create-folders', () => {
       ],
     },
   );
+});
+
+test('입력 미러: create-dividers', () => {
+  assert.deepEqual(CreateDividersInput.parse({ items: [{}] }), { items: [{}] });
+  assert.deepEqual(CreateDividersInput.parse({ items: [{ folderId: 'F0ABC' }, {}] }), {
+    items: [{ folderId: 'F0ABC' }, {}],
+  });
+  assert.deepEqual(CreateDividersInput.parse({ items: [{ after: 'DIV0ABC' }, { before: 'D0ABC' }] }), {
+    items: [{ after: 'DIV0ABC' }, { before: 'D0ABC' }],
+  });
+  assert.equal(CreateDividersInput.safeParse({ items: [] }).success, false);
+  assert.equal(CreateDividersInput.safeParse({}).success, false);
+  assert.equal(CreateDividersInput.safeParse({ items: Array.from({ length: 51 }, () => ({})) }).success, false);
 });
 
 test('입력 미러: delete-entities', () => {
@@ -354,10 +368,11 @@ test('입력 미러: update-sharing', () => {
   assert.equal(UpdateSharingInput.safeParse({ ids: ['E1'], visibility: 'SECRET' }).success, false);
 });
 
-test('entityRefKind: TableCode 접두로 entity·document·folder를 가르고 그 밖은 null', () => {
+test('entityRefKind: TableCode 접두로 entity·document·folder·divider를 가르고 그 밖은 null', () => {
   assert.equal(entityRefKind('E0ABCDEFGHIJ'), 'entity');
   assert.equal(entityRefKind('D0ABCDEFGHIJKLMN'), 'document');
   assert.equal(entityRefKind('F0ABCDEFGHIJ'), 'folder');
+  assert.equal(entityRefKind('DIV0ABCDEFGHIJ'), 'divider');
   assert.equal(entityRefKind('N0ABCDEFGHIJKLMN'), null);
   assert.equal(entityRefKind('EG0ABCDEFGHIJ'), null);
   assert.equal(entityRefKind(''), null);

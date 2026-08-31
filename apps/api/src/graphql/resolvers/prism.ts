@@ -2,7 +2,6 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import {
   EntityAvailability,
-  EntityType,
   PrismReaction,
   PrismRunState,
   PrismToolPhase,
@@ -16,13 +15,14 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
 import { ApproveInputSchema, DECLINED_MESSAGE, effectiveResolver, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { redis } from '#/cache.ts';
 import { clearLoaders } from '#/context.ts';
 import {
   db,
+  Dividers,
   Documents,
   Entities,
   first,
@@ -499,7 +499,8 @@ builder.queryFields((t) => ({
         .from(Entities)
         .leftJoin(Documents, eq(Documents.entityId, Entities.id))
         .leftJoin(Folders, eq(Folders.entityId, Entities.id))
-        .where(and(entityRefFilter(ids), ne(Entities.type, EntityType.DIVIDER)));
+        .leftJoin(Dividers, eq(Dividers.entityId, Entities.id))
+        .where(entityRefFilter(ids));
       const entities = [...new Map(rows.map((row) => [row.entity.id, row.entity])).values()];
 
       const privateSiteIds = [
