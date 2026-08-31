@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import co.typie.dev.ProvideDesktopDebugKeyboardPresentation
 import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.popover.PopoverOverlay
 import co.typie.ui.component.popover.PopoverOverlayState
@@ -41,27 +42,29 @@ class DocumentExportSheetDesktopTest {
     val model = DocumentViewModel()
 
     setContent {
-      CompositionLocalProvider(
-        LocalAppColors provides LightColors,
-        LocalAppShadows provides LightAppShadows,
-        LocalThemeMode provides ResolvedThemeMode.Light,
-        LocalHazeBlurStyle provides
-          HazeBlurStyle {
-            blurRadius(20.dp)
-            noiseFactor(0f)
-            colorEffects(emptyList())
-          },
-        LocalToast provides Toast(),
-        LocalPopoverOverlayState provides popoverOverlayState,
-      ) {
-        Box(Modifier.size(width = 400.dp, height = 800.dp)) {
-          LaunchedEffect(Unit) {
-            sheet.present {
-              DocumentExportSheet(model = model, documentId = "doc-1", documentLayout = null)
+      ProvideDesktopDebugKeyboardPresentation {
+        CompositionLocalProvider(
+          LocalAppColors provides LightColors,
+          LocalAppShadows provides LightAppShadows,
+          LocalThemeMode provides ResolvedThemeMode.Light,
+          LocalHazeBlurStyle provides
+            HazeBlurStyle {
+              blurRadius(20.dp)
+              noiseFactor(0f)
+              colorEffects(emptyList())
+            },
+          LocalToast provides Toast(),
+          LocalPopoverOverlayState provides popoverOverlayState,
+        ) {
+          Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+            LaunchedEffect(Unit) {
+              sheet.present {
+                DocumentExportSheet(model = model, documentId = "doc-1", documentLayout = null)
+              }
             }
+            SheetOverlay(sheet)
+            PopoverOverlay(popoverOverlayState)
           }
-          SheetOverlay(sheet)
-          PopoverOverlay(popoverOverlayState)
         }
       }
     }

@@ -36,8 +36,11 @@ class EditorTerminalCoordinationDesktopTest {
         runCatching { editor.receiveResourceUpdate(FakeResourceUpdate()) }
       }
 
-    assertIs<IllegalStateException>(failure)
-    assertEquals(expected.message, failure.message)
+    // 코어 실패는 EditorFailureSignal 로 감싸 전달된다(34e5732ee) — 프로덕션이 함께 제공하는
+    // unwrapEditorFailureSignal 로 원래 실패를 꺼내 검증한다.
+    val unwrapped = failure.unwrapEditorFailureSignal()
+    assertIs<IllegalStateException>(unwrapped)
+    assertEquals(expected.message, unwrapped.message)
   }
 
   private fun terminalCannotMissRequestReceipt(

@@ -568,6 +568,7 @@ class SyncWsConnectionTest {
         fetchTicket = { "TK" },
         scope = CoroutineScope(coroutineContext),
         reconnectBaseMs = 1_000,
+        reconnectJitterMs = 0,
       )
     val pushDeferred = async { connection.push("D1", byteArrayOf(1)) }
     runCurrent()

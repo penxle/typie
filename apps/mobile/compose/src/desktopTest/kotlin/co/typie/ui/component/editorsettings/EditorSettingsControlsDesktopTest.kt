@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import co.typie.dev.ProvideDesktopDebugKeyboardPresentation
 import co.typie.editor.ffi.LayoutMode
 import co.typie.graphql.fragment.EditorSettingsFontFamily_family
 import co.typie.graphql.type.FontFamilySource
@@ -41,25 +42,27 @@ class EditorSettingsControlsDesktopTest {
     val families = (0 until 8).map(::fontFamily)
 
     setContent {
-      CompositionLocalProvider(
-        LocalAppColors provides LightColors,
-        LocalAppShadows provides LightAppShadows,
-        LocalThemeMode provides ResolvedThemeMode.Light,
-        LocalHazeBlurStyle provides
-          HazeBlurStyle {
-            blurRadius(20.dp)
-            noiseFactor(0f)
-            colorEffects(emptyList())
-          },
-      ) {
-        Box(Modifier.size(width = 400.dp, height = 280.dp)) {
-          EditorSettingsFontSection(
-            style = EditorStyleSettings(fontFamily = "Family 7"),
-            fontFamilies = families,
-            sheet = sheet,
-            onStyleChange = {},
-          )
-          SheetOverlay(sheet)
+      ProvideDesktopDebugKeyboardPresentation {
+        CompositionLocalProvider(
+          LocalAppColors provides LightColors,
+          LocalAppShadows provides LightAppShadows,
+          LocalThemeMode provides ResolvedThemeMode.Light,
+          LocalHazeBlurStyle provides
+            HazeBlurStyle {
+              blurRadius(20.dp)
+              noiseFactor(0f)
+              colorEffects(emptyList())
+            },
+        ) {
+          Box(Modifier.size(width = 400.dp, height = 280.dp)) {
+            EditorSettingsFontSection(
+              style = EditorStyleSettings(fontFamily = "Family 7"),
+              fontFamilies = families,
+              sheet = sheet,
+              onStyleChange = {},
+            )
+            SheetOverlay(sheet)
+          }
         }
       }
     }

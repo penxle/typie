@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import co.typie.dev.DesktopDebugKeyboard
+import co.typie.dev.ProvideDesktopDebugKeyboardPresentation
 import co.typie.ext.ime
 import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
@@ -243,18 +244,20 @@ class BottomBarActionButtonDesktopTest {
 
   @Composable
   private fun BottomBarTestTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(
-      LocalAppColors provides LightColors,
-      LocalAppShadows provides LightAppShadows,
-      LocalThemeMode provides ResolvedThemeMode.Light,
-      LocalHazeBlurStyle provides
-        HazeBlurStyle {
-          blurRadius(20.dp)
-          noiseFactor(0f)
-          colorEffects(emptyList())
-        },
-      content = content,
-    )
+    ProvideDesktopDebugKeyboardPresentation {
+      CompositionLocalProvider(
+        LocalAppColors provides LightColors,
+        LocalAppShadows provides LightAppShadows,
+        LocalThemeMode provides ResolvedThemeMode.Light,
+        LocalHazeBlurStyle provides
+          HazeBlurStyle {
+            blurRadius(20.dp)
+            noiseFactor(0f)
+            colorEffects(emptyList())
+          },
+        content = content,
+      )
+    }
   }
 
   private companion object {
