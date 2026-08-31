@@ -17,7 +17,7 @@ import {
 import type { JWSRenewalInfoDecodedPayload, JWSTransactionDecodedPayload } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import type { EntitlementSubscriptionRow } from './entitlement.ts';
-import type { AppleStatusItem, IapPriorPeriod, NormalizedIap } from './iap-normalize.ts';
+import type { AppleStatusItem, IapEnrollBinding, IapPriorPeriod, NormalizedIap } from './iap-normalize.ts';
 
 const now = dayjs('2026-08-15T03:00:00.000Z');
 
@@ -1238,43 +1238,86 @@ const enrollRow = (over: Partial<EntitlementSubscriptionRow> = {}): EntitlementS
   ...over,
 });
 
-test('등록 사전 판정: 다른 스토어 바인딩이 있으면 계약 상태와 무관하게 거절한다', () => {
-  const withRows = (rows: EntitlementSubscriptionRow[]) =>
-    precheckIapEnroll({
-      rows,
-      binding: { store: InAppPurchaseStore.APP_STORE },
-      store: InAppPurchaseStore.GOOGLE_PLAY,
-      iapPlanAvailable: true,
-      now,
-    });
+const iapBinding = (over: Partial<IapEnrollBinding> = {}): IapEnrollBinding => ({
+  id: 'bind_1',
+  store: InAppPurchaseStore.GOOGLE_PLAY,
+  canonical: enrollRow({ planAvailability: PlanAvailability.IN_APP_PURCHASE }),
+  ...over,
+});
 
-  assert.deepEqual(withRows([]), { allowed: false, reason: 'cross-store-binding' });
-  assert.deepEqual(withRows([enrollRow({ state: SubscriptionState.EXPIRED, planAvailability: PlanAvailability.IN_APP_PURCHASE })]), {
+const precheck = (over: Partial<Parameters<typeof precheckIapEnroll>[0]> = {}) =>
+  precheckIapEnroll({ rows: [], bindings: [], excludeBindingIds: [], iapPlanAvailable: true, now, ...over });
+
+test('등록 사전 판정: 살아 있는 계약을 가진 다른 계보는 스토어와 무관하게 거절한다', () => {
+  assert.deepEqual(precheck({ bindings: [iapBinding({ store: InAppPurchaseStore.APP_STORE })] }), {
     allowed: false,
-    reason: 'cross-store-binding',
+    reason: 'live-contract',
+    bindingIds: ['bind_1'],
+  });
+  assert.deepEqual(precheck({ bindings: [iapBinding({ store: InAppPurchaseStore.GOOGLE_PLAY })] }), {
+    allowed: false,
+    reason: 'live-contract',
+    bindingIds: ['bind_1'],
   });
 });
 
-test('등록 사전 판정: 살아있는 비-IAP·비-트라이얼 구독이 있으면 거절한다', () => {
-  const result = precheckIapEnroll({
-    rows: [enrollRow()],
-    binding: null,
-    store: InAppPurchaseStore.GOOGLE_PLAY,
-    iapPlanAvailable: true,
-    now,
+test('등록 사전 판정: 기간이 남은 해지 계약도 살아 있는 계약이다', () => {
+  const canonical = enrollRow({
+    planAvailability: PlanAvailability.IN_APP_PURCHASE,
+    state: SubscriptionState.WILL_EXPIRE,
+    currentPeriodEndsAt: now.add(1, 'day'),
   });
+  assert.deepEqual(precheck({ bindings: [iapBinding({ canonical })] }), {
+    allowed: false,
+    reason: 'live-contract',
+    bindingIds: ['bind_1'],
+  });
+});
 
-  assert.deepEqual(result, { allowed: false, reason: 'non-iap-subscription' });
+test('등록 사전 판정: 종료된 계보·canonical 없는 계보는 막지 않는다', () => {
+  const expired = enrollRow({ planAvailability: PlanAvailability.IN_APP_PURCHASE, state: SubscriptionState.EXPIRED });
+  const lapsed = enrollRow({
+    planAvailability: PlanAvailability.IN_APP_PURCHASE,
+    state: SubscriptionState.WILL_EXPIRE,
+    currentPeriodEndsAt: now.subtract(1, 'minute'),
+  });
+  assert.deepEqual(
+    precheck({
+      bindings: [
+        iapBinding({ canonical: expired }),
+        iapBinding({ id: 'bind_2', canonical: lapsed }),
+        iapBinding({ id: 'bind_3', canonical: null }),
+      ],
+    }),
+    {
+      allowed: true,
+    },
+  );
+});
+
+test('등록 사전 판정: 제외 목록의 계보는 살아 있어도 막지 않는다 — 같은 스토어 플랜 변경', () => {
+  assert.deepEqual(precheck({ bindings: [iapBinding()], excludeBindingIds: ['bind_1'] }), { allowed: true });
+  assert.deepEqual(
+    precheck({
+      bindings: [iapBinding(), iapBinding({ id: 'bind_2', store: InAppPurchaseStore.APP_STORE })],
+      excludeBindingIds: ['bind_1'],
+    }),
+    {
+      allowed: false,
+      reason: 'live-contract',
+      bindingIds: ['bind_2'],
+    },
+  );
+});
+
+test('등록 사전 판정: 살아있는 비-IAP·비-트라이얼 구독이 있으면 거절한다', () => {
+  assert.deepEqual(precheck({ rows: [enrollRow()] }), { allowed: false, reason: 'non-iap-subscription' });
 });
 
 test('등록 사전 판정: 유예 마감이 지난 빌링키 구독(종결 잡 지연)은 등록을 막지 않는다', () => {
   const withPeriodEnd = (currentPeriodEndsAt: dayjs.Dayjs) =>
-    precheckIapEnroll({
+    precheck({
       rows: [enrollRow({ state: SubscriptionState.IN_GRACE_PERIOD, currentPeriodStartsAt: now.subtract(40, 'days'), currentPeriodEndsAt })],
-      binding: null,
-      store: InAppPurchaseStore.GOOGLE_PLAY,
-      iapPlanAvailable: true,
-      now,
     });
 
   assert.deepEqual(withPeriodEnd(now.subtract(2, 'days')), { allowed: false, reason: 'non-iap-subscription' });
@@ -1282,34 +1325,16 @@ test('등록 사전 판정: 유예 마감이 지난 빌링키 구독(종결 잡 
 });
 
 test('등록 사전 판정: 판매 중인 IAP 플랜이 없으면 거절한다', () => {
-  const result = precheckIapEnroll({
-    rows: [],
-    binding: null,
-    store: InAppPurchaseStore.GOOGLE_PLAY,
-    iapPlanAvailable: false,
-    now,
-  });
-
-  assert.deepEqual(result, { allowed: false, reason: 'no-iap-plan' });
+  assert.deepEqual(precheck({ iapPlanAvailable: false }), { allowed: false, reason: 'no-iap-plan' });
 });
 
-test('등록 사전 판정: 같은 스토어 바인딩·트라이얼·기간 경과 행은 등록을 막지 않는다', () => {
-  const allowedWith = (rows: EntitlementSubscriptionRow[]) =>
-    precheckIapEnroll({
-      rows,
-      binding: { store: InAppPurchaseStore.GOOGLE_PLAY },
-      store: InAppPurchaseStore.GOOGLE_PLAY,
-      iapPlanAvailable: true,
-      now,
-    });
-
-  assert.deepEqual(allowedWith([enrollRow({ planAvailability: PlanAvailability.IN_APP_PURCHASE })]), { allowed: true });
-  assert.deepEqual(allowedWith([enrollRow({ planAvailability: PlanAvailability.TRIAL })]), { allowed: true });
-  assert.deepEqual(allowedWith([enrollRow({ state: SubscriptionState.WILL_EXPIRE, currentPeriodEndsAt: now.subtract(1, 'minute') })]), {
-    allowed: true,
-  });
-  assert.deepEqual(allowedWith([enrollRow({ state: SubscriptionState.WILL_ACTIVATE })]), { allowed: true });
-  assert.deepEqual(allowedWith([enrollRow({ state: SubscriptionState.EXPIRED })]), { allowed: true });
+test('등록 사전 판정: 트라이얼·기간 경과 행은 등록을 막지 않는다', () => {
+  assert.deepEqual(precheck({ rows: [enrollRow({ planAvailability: PlanAvailability.IN_APP_PURCHASE })] }), { allowed: true });
+  assert.deepEqual(precheck({ rows: [enrollRow({ planAvailability: PlanAvailability.TRIAL })] }), { allowed: true });
+  assert.deepEqual(
+    precheck({ rows: [enrollRow({ state: SubscriptionState.WILL_EXPIRE, currentPeriodEndsAt: now.subtract(1, 'minute') })] }),
+    { allowed: true },
+  );
 });
 
 const OWNER_UUID = '018f0000-0000-7000-8000-0000000000aa';

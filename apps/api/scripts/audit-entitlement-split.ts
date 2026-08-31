@@ -283,14 +283,14 @@ const buildChecks = (frozenInvoiceIds: string[]): Check[] => [
     `,
   },
   {
-    // NULL 자체는 DDL 로 막지 않는다 — 해소 불가능한 바인딩은 마커로 명시 격리해야 무음 join 탈락과 구분된다.
+    // NULL 자체는 DDL 로 막지 않는다 — 해소 불가능한 바인딩은 terminated_at 으로 명시 격리해야 무음 join 탈락과 구분된다.
     key: 'iap-binding-unresolved',
-    title: '바인딩 subscription_id NULL ∧ reconcile_suspended_at 마커 없음',
+    title: '바인딩 subscription_id NULL ∧ terminated_at 없음',
     violations: sql`
       SELECT ${UserInAppPurchases.id} AS id
       FROM ${UserInAppPurchases}
       WHERE ${UserInAppPurchases.subscriptionId} IS NULL
-        AND ${UserInAppPurchases.reconcileSuspendedAt} IS NULL
+        AND ${UserInAppPurchases.terminatedAt} IS NULL
     `,
   },
   {

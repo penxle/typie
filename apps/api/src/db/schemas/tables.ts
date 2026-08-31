@@ -1391,12 +1391,11 @@ export const UserInAppPurchases = pgTable(
       .$defaultFn(() => createDbId(TableCode.USER_IN_APP_PURCHASES)),
     userId: text('user_id')
       .notNull()
-      .unique()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     store: E._InAppPurchaseStore('store').notNull(),
     identifier: text('identifier').notNull(),
     subscriptionId: text('subscription_id'),
-    reconcileSuspendedAt: datetime('reconcile_suspended_at'),
+    terminatedAt: datetime('terminated_at'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
