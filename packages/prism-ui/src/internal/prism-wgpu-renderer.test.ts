@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPrismFrameUniformWriter, FRAME_UNIFORM_BYTES } from './prism-wgpu-renderer.ts';
+import { createDeferredPrismWgpuSurface, createPrismFrameUniformWriter, FRAME_UNIFORM_BYTES } from './prism-wgpu-renderer.ts';
 
 test('frame uniform writer matches the Rust ABI', () => {
   const writer = createPrismFrameUniformWriter();
@@ -42,4 +42,55 @@ test('frame uniform writer matches the Rust ABI', () => {
   assert.equal(view.getFloat32(636, true), 1);
   assert.ok(Math.abs(view.getFloat32(640, true) - 4.2) < 0.000001);
   assert.equal(view.getFloat32(652, true), 1);
+});
+
+test('HDR mode controls renderer surface selection', async () => {
+  const originalMatchMedia = Object.getOwnPropertyDescriptor(globalThis, 'matchMedia');
+  let rendererHdrEnabled = false;
+  let rendererFreed = false;
+  const rendererPreferences: boolean[] = [];
+  Object.defineProperty(globalThis, 'matchMedia', {
+    configurable: true,
+    value: () => ({
+      matches: true,
+    }),
+  });
+
+  const renderer = {
+    frameUniformByteLength: FRAME_UNIFORM_BYTES,
+    free: () => {
+      rendererFreed = true;
+    },
+    render: () => assert.fail('surface initialization rendered unexpectedly'),
+    renderComputed: () => assert.fail('surface initialization rendered unexpectedly'),
+    setHdrEnabled(enabled: boolean) {
+      rendererHdrEnabled = enabled;
+    },
+    whenSubmittedWorkDone: () => Promise.resolve(),
+  };
+
+  try {
+    const surface = createDeferredPrismWgpuSurface(
+      { height: 1, width: 1 } as HTMLCanvasElement,
+      async (_canvas, preferHdr) => {
+        rendererPreferences.push(preferHdr);
+        rendererHdrEnabled = preferHdr;
+        return renderer;
+      },
+      'off',
+    );
+    await surface.whenReady();
+
+    assert.deepEqual(rendererPreferences, [false]);
+    assert.equal(rendererHdrEnabled, false);
+    surface.setHdrMode('auto');
+    assert.equal(rendererHdrEnabled, true);
+    surface.setHdrMode('off');
+    assert.equal(rendererHdrEnabled, false);
+    surface.dispose();
+    assert.equal(rendererFreed, true);
+  } finally {
+    if (originalMatchMedia) Object.defineProperty(globalThis, 'matchMedia', originalMatchMedia);
+    else Reflect.deleteProperty(globalThis, 'matchMedia');
+  }
 });
