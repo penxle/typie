@@ -19,6 +19,7 @@ export type CheckMaintenance = (ip: string, bypassKeyHash: string | undefined) =
 export type SyncServer = {
   shouldHandle: (request: IncomingMessage) => boolean;
   handleUpgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
+  close: () => void;
 };
 
 export const createSyncServer = (options: { deps: SyncDeps; checkMaintenance: CheckMaintenance; path?: string }): SyncServer => {
@@ -111,6 +112,13 @@ export const createSyncServer = (options: { deps: SyncDeps; checkMaintenance: Ch
         }
         wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
       })();
+    },
+    close: () => {
+      for (const ws of wss.clients) {
+        ws.close(1001, 'Server is shutting down');
+      }
+
+      wss.close();
     },
   };
 };

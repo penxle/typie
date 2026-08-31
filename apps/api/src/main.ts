@@ -11,6 +11,7 @@ import { checkBootstrap } from '#/bootstrap.ts';
 import { deriveContext } from '#/context.ts';
 import { env } from '#/env.ts';
 import { graphql } from '#/graphql/index.ts';
+import { stopPrismWorker } from '#/mq/prism-worker.ts';
 import { rest } from '#/rest/index.ts';
 import { attachSyncServer } from '#/sync/index.ts';
 
@@ -77,4 +78,42 @@ const server = serve(
   },
 );
 
-attachSyncServer(server as import('node:http').Server);
+const httpServer = server as import('node:http').Server;
+const sync = attachSyncServer(httpServer);
+
+const SHUTDOWN_TIMEOUT_MS = 20_000;
+
+const shutdown = async () => {
+  for (const ws of wss.clients) {
+    ws.close(1001, 'Server is shutting down');
+  }
+
+  sync.close();
+
+  const closed = new Promise<void>((resolve) => {
+    httpServer.close(() => resolve());
+  });
+
+  httpServer.closeIdleConnections();
+
+  await Promise.all([closed, stopPrismWorker()]);
+};
+
+process.once('SIGTERM', () => {
+  log.info('Received SIGTERM, shutting down');
+
+  const timeout = setTimeout(() => {
+    log.warn('Shutdown timed out, exiting');
+    process.exit(0);
+  }, SHUTDOWN_TIMEOUT_MS);
+  timeout.unref();
+
+  void shutdown()
+    .catch((err) => {
+      log.error('Shutdown failed {*}', { error: err });
+    })
+    .finally(() => {
+      clearTimeout(timeout);
+      process.exit(0);
+    });
+});

@@ -119,4 +119,16 @@ export const serve = async ({ Server, manifest, prerendered }) => {
   });
   server.requestTimeout = 60_000;
   server.keepAliveTimeout = 60_000;
+
+  process.once('SIGTERM', () => {
+    const timeout = setTimeout(() => process.exit(0), 20_000);
+    timeout.unref();
+
+    server.close(() => {
+      clearTimeout(timeout);
+      process.exit(0);
+    });
+
+    server.closeIdleConnections();
+  });
 };
