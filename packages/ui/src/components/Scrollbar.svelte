@@ -40,6 +40,7 @@
     orientation: Orientation;
     scrollContainer: HTMLElement | undefined;
     size: ScrollbarSize;
+    trackInsetStart?: number;
   };
 
   type Metrics = {
@@ -55,7 +56,7 @@
     thumbTravel: number;
   };
 
-  let { controls, label, orientation, scrollContainer, size }: Props = $props();
+  let { controls, label, orientation, scrollContainer, size, trackInsetStart = 0 }: Props = $props();
 
   let metrics = $state<Metrics>({ contentSize: 0, scrollPosition: 0, viewportSize: 0 });
   let transientVisible = $state(false);
@@ -70,7 +71,7 @@
 
   const geometry = $derived.by(() => {
     const maxScroll = Math.max(0, metrics.contentSize - metrics.viewportSize);
-    const trackSize = Math.max(0, metrics.viewportSize - TRACK_PADDING * 2);
+    const trackSize = Math.max(0, metrics.viewportSize - trackInsetStart - TRACK_PADDING * 2);
     const canScroll = scrollContainer !== undefined && maxScroll > 0 && trackSize > 0;
     const idealThumbSize = metrics.contentSize > 0 ? (metrics.viewportSize / metrics.contentSize) * trackSize : trackSize;
     const thumbSize = Math.min(trackSize, Math.max(MIN_THUMB_SIZE, idealThumbSize));
@@ -215,10 +216,10 @@
 
 {#if geometry.canScroll}
   <div
-    style:top={vertical ? '0' : undefined}
+    style:top={vertical ? `${trackInsetStart}px` : undefined}
     style:right="0"
     style:bottom="0"
-    style:left={vertical ? undefined : '0'}
+    style:left={vertical ? undefined : `${trackInsetStart}px`}
     style:width={vertical ? `${dimensions.hitLane}px` : undefined}
     style:height={vertical ? undefined : `${dimensions.hitLane}px`}
     style:opacity={visible ? 1 : 0}

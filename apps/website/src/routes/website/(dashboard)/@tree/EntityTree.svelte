@@ -953,7 +953,8 @@
   bind:this={tree}
   class={flex({
     flexDirection: 'column',
-    minHeight: 'full',
+    flexGrow: '1',
+    flexShrink: '0',
     paddingX: '12px',
     paddingY: '4px',
     userSelect: 'none',
