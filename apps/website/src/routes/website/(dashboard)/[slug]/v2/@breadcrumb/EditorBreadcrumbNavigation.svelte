@@ -54,6 +54,7 @@
   const expandedFolderIds = new SvelteSet<string>();
   const activeSegment = $derived(segments.find((candidate) => candidate.id === activeSegmentId));
   const activeTriggerId = $derived(activeSegment ? triggerId(activeSegment.id) : '');
+  let navigationElement = $state<HTMLElement>();
   let activeTrigger = $state<HTMLButtonElement>();
   const paneGroup = getPaneGroup();
   const documentDrag = new BreadcrumbDocumentDragController({ paneGroup, onDropSuccess: () => dismiss(false) });
@@ -110,7 +111,8 @@
 
   function handlePopupFocusOut(event: FocusEvent) {
     const popup = event.currentTarget as HTMLElement;
-    if (event.relatedTarget instanceof Node && popup.contains(event.relatedTarget)) return;
+    if (event.relatedTarget instanceof Node && (popup.contains(event.relatedTarget) || navigationElement?.contains(event.relatedTarget)))
+      return;
     dismiss(false);
   }
 
@@ -134,6 +136,7 @@
 <svelte:window oncontextmenu={(event) => documentDrag.contextMenu(event)} onkeydown={handleWindowKeydown} />
 
 <nav
+  bind:this={navigationElement}
   class={css({
     display: 'flex',
     alignItems: 'center',
