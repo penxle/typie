@@ -12,6 +12,7 @@ export type AppPreference = {
   prismPanelWidth: number;
   prismNotificationSoundEnabled: boolean;
   prismWelcomeObjectEnabled: boolean;
+  prismHdrEnabled: boolean;
 
   defaultPrimaryToolbar: 'insert' | 'format';
 
@@ -151,6 +152,7 @@ export const setupAppContext = (userId: string) => {
       prismPanelWidth: 420,
       prismNotificationSoundEnabled: true,
       prismWelcomeObjectEnabled: true,
+      prismHdrEnabled: true,
 
       defaultPrimaryToolbar: 'format',
 

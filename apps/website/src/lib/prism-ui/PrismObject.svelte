@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { getAppContext } from '@typie/ui/context';
   import { onMount } from 'svelte';
   import { prismRuntime } from './runtime.ts';
-  import type { PrismRuntimeSnapshot, PrismTarget } from '@typie/prism-ui';
+  import type { PrismHdrMode, PrismRuntimeSnapshot, PrismTarget } from '@typie/prism-ui';
   import type { HTMLAttributes } from 'svelte/elements';
 
   type EdgeColor = string | readonly [number, number, number, number];
@@ -28,12 +29,15 @@
     targetDurationMs,
     ...rest
   }: Props = $props();
+  const app = getAppContext();
+  const hdr: PrismHdrMode = $derived(app.preference.current.prismHdrEnabled ? 'auto' : 'off');
   let host: HTMLDivElement;
   let mounted: ReturnType<typeof prismRuntime.mountObject> | null = null;
 
   onMount(() => {
     mounted = prismRuntime.mountObject(host, {
       edgeColor,
+      hdr,
       ...(interactive && { interactive: true }),
       preload,
       reducedMotion,
@@ -61,7 +65,7 @@
   });
 
   $effect(() => {
-    const next = { edgeColor, reducedMotion };
+    const next = { edgeColor, hdr, reducedMotion };
     mounted?.update(next);
   });
 

@@ -30,7 +30,9 @@
 
   const [purchasePrismCreditPack] = createMutation(
     graphql(`
-      mutation DashboardLayout_PreferenceModal_PrismTab_PurchasePrismCreditModal_Purchase_Mutation($input: PurchasePrismCreditPackInput!) {
+      mutation DashboardLayout_PreferenceModal_PrismCreditsTab_PurchasePrismCreditModal_Purchase_Mutation(
+        $input: PurchasePrismCreditPackInput!
+      ) {
         purchasePrismCreditPack(input: $input) {
           id
         }
