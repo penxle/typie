@@ -3,6 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
+  import { scrollFog } from '@typie/ui/actions';
   import { Icon, Scrollbar } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
@@ -369,19 +370,10 @@
     }
 
     lastTop = element.scrollTop;
-    updateOverflow();
   };
 
   let content = $state<HTMLElement>();
   const transcriptScrollId = 'prism-transcript-scroll';
-  let overflowTop = $state(false);
-  let overflowBottom = $state(false);
-
-  const updateOverflow = () => {
-    if (!container) return;
-    overflowTop = container.scrollTop > 1;
-    overflowBottom = container.scrollTop + container.clientHeight < container.scrollHeight - 1;
-  };
 
   $effect(() => {
     const scroller = container;
@@ -390,7 +382,6 @@
       if (follow) {
         chaseBottom(scroller);
       }
-      updateOverflow();
     });
     observer.observe(scroller);
     observer.observe(content);
@@ -460,20 +451,12 @@
     const id = setTimeout(() => (waitText = next), WAIT_DEBOUNCE_MS);
     return () => clearTimeout(id);
   });
-
-  const maskImage = $derived.by(() => {
-    if (!overflowTop && !overflowBottom) return;
-    const from = overflowTop ? 'transparent, black 24px' : 'black, black 24px';
-    const to = overflowBottom ? 'black calc(100% - 24px), transparent' : 'black calc(100% - 24px), black';
-    return `linear-gradient(to bottom, ${from}, ${to})`;
-  });
 </script>
 
 <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', minHeight: '0' })}>
   <div
     bind:this={container}
     id={transcriptScrollId}
-    style:mask-image={maskImage}
     class={flex({
       flexDirection: 'column',
       flexGrow: '1',
@@ -485,6 +468,7 @@
       paddingBottom: '40px',
     })}
     onscroll={onScroll}
+    use:scrollFog={{ orientation: 'vertical' }}
   >
     {#key loading}
       <div bind:this={content} class={contentClass} in:fade={{ ...fadeIn, duration: loading ? 0 : 200 }}>

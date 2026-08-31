@@ -26,13 +26,6 @@ export type ContextBarPresentation = {
   viewControls: ContextBarSegmentPresentation;
 };
 
-const clampUnit = (value: number): number => Math.min(1, Math.max(0, value));
-
-export function smootherstep(value: number): number {
-  const x = clampUnit(value);
-  return x * x * x * (x * (x * 6 - 15) + 10);
-}
-
 export function resolveContextBarSegmentRequest(activity: ContextBarSegmentActivity): ContextBarSegmentPresentation {
   const engaged = activity.hovered || activity.focused;
   return {

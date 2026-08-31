@@ -2,7 +2,7 @@
   import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { pointerCapture, tooltip } from '@typie/ui/actions';
+  import { pointerCapture, scrollFog, tooltip } from '@typie/ui/actions';
   import { Icon, ProgressRing, Scrollbar } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -261,15 +261,12 @@
   let navigationScrollEl = $state<HTMLDivElement>();
   let navigationIntrinsicHeight = $state(0);
   let navigationMinimumContentHeight = $state(0);
-  let navigationViewportClientHeight = $state(0);
-  let navigationScrollTop = $state(0);
   let navigationClipPreview = $state<number | null>(null);
   const navigationScrollId = 'sidebar-primary-navigation-scroll';
-  const NAVIGATION_SCROLL_FOG_SIZE = 16;
-  const NAVIGATION_MINIMUM_SCROLL_FOG_SIZE = 8;
+  const NAVIGATION_SCROLL_FOG_SIZE = 8;
 
   const navigationMinimumHeight = $derived(
-    Math.min(navigationMinimumContentHeight + NAVIGATION_MINIMUM_SCROLL_FOG_SIZE, navigationIntrinsicHeight),
+    Math.min(navigationMinimumContentHeight + NAVIGATION_SCROLL_FOG_SIZE, navigationIntrinsicHeight),
   );
   const storedNavigationClip = $derived(app.preference.current.sidebarNavigationClip ?? 0);
   const navigationGeometry = $derived(
@@ -279,18 +276,6 @@
   const navigationViewportHeight = $derived(
     navigationIntrinsicHeight > 0 ? `${navigationIntrinsicHeight - currentNavigationClip}px` : undefined,
   );
-  const navigationScrollRange = $derived(Math.max(0, navigationIntrinsicHeight - navigationViewportClientHeight));
-  const effectiveNavigationScrollTop = $derived(clamp(navigationScrollTop, 0, navigationScrollRange));
-  const canScrollNavigationUp = $derived(effectiveNavigationScrollTop > 1);
-  const canScrollNavigationDown = $derived(navigationViewportClientHeight > 0 && effectiveNavigationScrollTop < navigationScrollRange - 1);
-  const navigationMaskImage = $derived.by(() => {
-    const maximallyClippedAtTop = currentNavigationClip >= navigationGeometry.maxClip - 1 && !canScrollNavigationUp;
-    const fogSize = maximallyClippedAtTop ? NAVIGATION_MINIMUM_SCROLL_FOG_SIZE : NAVIGATION_SCROLL_FOG_SIZE;
-    if (!canScrollNavigationUp && !canScrollNavigationDown) return;
-    const top = canScrollNavigationUp ? `transparent, black ${fogSize}px` : `black, black ${fogSize}px`;
-    const bottom = canScrollNavigationDown ? `black calc(100% - ${fogSize}px), transparent` : `black calc(100% - ${fogSize}px), black`;
-    return `linear-gradient(to bottom, ${top}, ${bottom})`;
-  });
 
   const startNavigationResizer = (event: PointerEvent): SidebarNavigationResizeSession | null => {
     if (navigationIntrinsicHeight === 0 || !event.isPrimary || event.button !== 0) return null;
@@ -524,10 +509,8 @@
         <div
           bind:this={navigationScrollEl}
           id={navigationScrollId}
-          style:mask-image={navigationMaskImage}
           class={css({ height: 'full', overflowY: 'auto', overflowX: 'hidden', scrollbar: 'hidden' })}
-          onscroll={(event) => (navigationScrollTop = event.currentTarget.scrollTop)}
-          bind:clientHeight={navigationViewportClientHeight}
+          use:scrollFog={{ orientation: 'vertical', size: NAVIGATION_SCROLL_FOG_SIZE }}
         >
           <!-- 주요 내비게이션 -->
           <div

@@ -6,6 +6,11 @@ export const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);
 };
 
+export const smootherstep = (value: number) => {
+  const x = clamp(value, 0, 1);
+  return x * x * x * (x * (x * 6 - 15) + 10);
+};
+
 export const closest = (value: number, array: number[]) => {
   if (Number.isNaN(value) || array.length === 0) {
     return null;

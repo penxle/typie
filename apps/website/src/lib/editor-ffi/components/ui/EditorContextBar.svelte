@@ -4,6 +4,7 @@
   import { hoverIntent } from '@typie/ui/actions';
   import { VerticalDivider } from '@typie/ui/components';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import { smootherstep } from '@typie/ui/utils';
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import {
@@ -11,7 +12,6 @@
     CONTEXT_BAR_FADE_OUT_MS,
     CONTEXT_BAR_TRANSIENT_VISIBLE_MS,
     ContextBarVisibilityCoordinator,
-    smootherstep,
   } from './editor-context-bar.svelte';
   import EditorContextBarPinControl from './EditorContextBarPinControl.svelte';
   import EditorContextBarSegment from './EditorContextBarSegment.svelte';

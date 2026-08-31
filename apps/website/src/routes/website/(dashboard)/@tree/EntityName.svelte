@@ -1,6 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { hoverIntent } from '@typie/ui/actions';
+  import { hoverIntent, scrollFog } from '@typie/ui/actions';
   import { prefersReducedMotion as reducedMotionPreference } from '@typie/ui/state';
   import { onDestroy, onMount } from 'svelte';
   import { advanceEntityNameMotion } from './entity-name-motion';
@@ -12,30 +12,18 @@
 
   let { name, active = false }: Props = $props();
 
-  const FOG_WIDTH = 24;
-  const FOG_TRANSITION_DURATION = 160;
   const HOVER_DELAY = 400;
 
   let viewport = $state<HTMLSpanElement>();
   let viewportWidth = $state(0);
   let contentWidth = $state(0);
-  let overflowLeft = $state(false);
-  let overflowRight = $state(false);
-  let fogTransitionReady = $state(false);
   const prefersReducedMotion = $derived(reducedMotionPreference.current);
   let animationFrame: number | undefined;
-  let fogTransitionFrame: number | undefined;
-  let fogTransitionScheduled = false;
   let hovered = false;
   let hoverReady = $state(false);
   let motionPosition = 0;
   let motionVelocity = 0;
   let previousFrameTime: number | undefined;
-
-  const updateOverflow = () => {
-    overflowLeft = (viewport?.scrollLeft ?? 0) > 1;
-    overflowRight = viewport ? viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1 : false;
-  };
 
   const cancelAnimation = () => {
     if (animationFrame !== undefined) {
@@ -50,14 +38,12 @@
     cancelAnimation();
     motionPosition = position;
     element.scrollLeft = position;
-    updateOverflow();
   };
 
   const reset = () => {
     cancelAnimation();
     motionPosition = 0;
     if (viewport) viewport.scrollLeft = 0;
-    updateOverflow();
   };
 
   const startMotion = () => {
@@ -89,7 +75,6 @@
       motionPosition = next.position;
       element.scrollLeft = next.position;
       motionVelocity = next.velocity;
-      updateOverflow();
 
       if (next.position < maximum) {
         animationFrame = window.requestAnimationFrame(advance);
@@ -102,8 +87,6 @@
     animationFrame = window.requestAnimationFrame(advance);
   };
 
-  const maskImage = `linear-gradient(to right, rgb(0 0 0 / var(--entity-name-leading-mask-alpha)), black ${FOG_WIDTH}px, black calc(100% - ${FOG_WIDTH}px), rgb(0 0 0 / var(--entity-name-trailing-mask-alpha)))`;
-
   $effect(() => {
     void name;
     reset();
@@ -113,18 +96,7 @@
   $effect(() => {
     void viewportWidth;
     void contentWidth;
-    updateOverflow();
     if (hoverReady) startMotion();
-
-    if (!fogTransitionScheduled && viewportWidth > 0 && contentWidth > 0) {
-      fogTransitionScheduled = true;
-      fogTransitionFrame = window.requestAnimationFrame(() => {
-        fogTransitionFrame = window.requestAnimationFrame(() => {
-          fogTransitionFrame = undefined;
-          fogTransitionReady = true;
-        });
-      });
-    }
   });
 
   $effect(() => {
@@ -151,10 +123,7 @@
           },
         })
       : undefined;
-    updateOverflow();
-
     return () => {
-      if (fogTransitionFrame !== undefined) window.cancelAnimationFrame(fogTransitionFrame);
       hoverIntentAction?.destroy?.();
     };
   });
@@ -164,12 +133,6 @@
 
 <span
   bind:this={viewport}
-  style:mask-image={maskImage}
-  style:--entity-name-leading-mask-alpha={overflowLeft ? 0 : 1}
-  style:--entity-name-trailing-mask-alpha={overflowRight ? 0 : 1}
-  style:transition={fogTransitionReady && !prefersReducedMotion
-    ? `--entity-name-leading-mask-alpha ${FOG_TRANSITION_DURATION}ms ease-in-out, --entity-name-trailing-mask-alpha ${FOG_TRANSITION_DURATION}ms ease-in-out`
-    : 'none'}
   class={css(
     {
       display: 'block',
@@ -186,22 +149,8 @@
     },
     active && { fontWeight: 'bold', color: 'text.default' },
   )}
-  onscroll={updateOverflow}
   bind:clientWidth={viewportWidth}
+  use:scrollFog={{ orientation: 'horizontal' }}
 >
   <span class={css({ display: 'inline-block' })} bind:offsetWidth={contentWidth}>{name}</span>
 </span>
-
-<style>
-  @property --entity-name-leading-mask-alpha {
-    syntax: '<number>';
-    inherits: false;
-    initial-value: 1;
-  }
-
-  @property --entity-name-trailing-mask-alpha {
-    syntax: '<number>';
-    inherits: false;
-    initial-value: 1;
-  }
-</style>
