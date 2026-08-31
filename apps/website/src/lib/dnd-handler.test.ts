@@ -1,4 +1,4 @@
-import { createDndHandler } from '@typie/ui/utils';
+import { createDndHandler, pushEscapeHandler, runEscapeStack } from '@typie/ui/utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const pointerEvent = (type: string, pointerId = 1, clientX = 0) => {
@@ -169,5 +169,31 @@ describe('createDndHandler', () => {
 
     expect(onDragCancel).toHaveBeenCalledOnce();
     expect(handler.state().isDragging).toBe(false);
+  });
+
+  it('places an active drag above an existing Escape owner and removes it after cancellation', () => {
+    const element = createElement();
+    installPointerCapture(element);
+    const frames = installAnimationFrames();
+    const lowerEscapeHandler = vi.fn(() => true);
+    const removeLowerEscapeHandler = pushEscapeHandler(lowerEscapeHandler);
+    const onDragCancel = vi.fn();
+    const handler = createDndHandler(element, { threshold: 0, showGhost: false, onDragCancel });
+
+    try {
+      element.dispatchEvent(pointerEvent('pointerdown'));
+      element.dispatchEvent(pointerEvent('pointermove', 1, 10));
+      frames.flush();
+
+      expect(runEscapeStack()).toBe(true);
+      expect(onDragCancel).toHaveBeenCalledOnce();
+      expect(lowerEscapeHandler).not.toHaveBeenCalled();
+
+      expect(runEscapeStack()).toBe(true);
+      expect(lowerEscapeHandler).toHaveBeenCalledOnce();
+    } finally {
+      handler.destroy();
+      removeLowerEscapeHandler();
+    }
   });
 });

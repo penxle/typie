@@ -5,6 +5,7 @@
   import { Icon } from '@typie/ui/components';
   import { entityIconMap } from '@typie/ui/constants';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import { onDestroy, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { scale } from 'svelte/transition';
@@ -116,15 +117,17 @@
     dismiss(false);
   }
 
-  function handleWindowKeydown(event: KeyboardEvent) {
-    if (activeSegmentId === null || event.defaultPrevented) return;
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    if (!documentDrag.cancel({ suppressClick: true })) dismiss(true);
-  }
-
   $effect(() => {
     if (!isOwner) dismiss(false);
+  });
+
+  $effect(() => {
+    if (activeSegmentId === null) return;
+
+    return pushEscapeHandler(() => {
+      dismiss(true);
+      return true;
+    });
   });
 
   onDestroy(() => {
@@ -133,7 +136,7 @@
   });
 </script>
 
-<svelte:window oncontextmenu={(event) => documentDrag.contextMenu(event)} onkeydown={handleWindowKeydown} />
+<svelte:window oncontextmenu={(event) => documentDrag.contextMenu(event)} />
 
 <nav
   bind:this={navigationElement}
@@ -224,7 +227,6 @@
       highlightedEntityId={activeSegment.id}
       labelledBy={activeTriggerId}
       onActivateDocument={activateDocument}
-      onDismiss={() => dismiss(true)}
       onToggleFolder={toggleFolder}
       treeId={popupId}
     />

@@ -702,6 +702,8 @@ export type RootNodeAttr = { type: "layout_mode"; value: LayoutMode };
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
 
+export type SelectionKind = "caret" | "unit" | "range";
+
 export type SelectionOp = { type: "set"; selection: Selection } | { type: "set_frozen"; selection: StableSelection } | { type: "unset" } | { type: "set_at"; page: number; x: number; y: number } | { type: "set_flat"; start: number; end: number } | { type: "extend_to"; anchor: Position; head_page: number; head_x: number; head_y: number; base_selection: Selection | undefined; allow_collapse?: boolean } | { type: "select_unit_at"; page: number; x: number; y: number; unit: SelectionPointUnit } | { type: "expand"; unit: SelectionExpansionUnit };
 
 export type SelectionPointUnit = "word" | "sentence" | "paragraph";
@@ -826,6 +828,7 @@ declare class Editor {
     selection_endpoints(): SelectionEndpoints | undefined;
     selection_hit_rects(): PageRect[];
     selection_hit_test(page: number, x: number, y: number): boolean;
+    selection_kind(): SelectionKind | undefined;
     set_doc(plain: PlainDoc): void;
     split_changesets(payload: Uint8Array): ChangesetEntry[];
     surface_backend(page: number): string;

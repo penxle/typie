@@ -371,12 +371,15 @@
   });
 
   const handleKeyDown = async (event: KeyboardEvent) => {
+    if (event.isComposing || event.defaultPrevented) return;
+
     const metaOrCtrlKeyOnly = (event.metaKey && !event.ctrlKey) || (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey);
     if (metaOrCtrlKeyOnly && event.key === 'k') {
       event.preventDefault();
       app.state.commandPaletteOpen = !app.state.commandPaletteOpen;
     } else if (app.state.commandPaletteOpen) {
       if (event.key === 'Escape') {
+        event.preventDefault();
         event.stopPropagation();
         close();
         return;

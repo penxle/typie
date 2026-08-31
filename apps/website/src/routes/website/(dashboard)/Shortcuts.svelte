@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
   import { getAppContext } from '@typie/ui/context';
+  import { runEscapeStack } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { graphql } from '$mearie';
@@ -65,6 +66,14 @@
     }
 
     if (event.code === 'Escape') {
+      if (event.isComposing || event.defaultPrevented) return;
+
+      if (runEscapeStack()) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
       if (paneGroup.state.current.focusedPaneId && paneGroup.findReplaceOpenByPaneId[paneGroup.state.current.focusedPaneId]) {
         return;
       }

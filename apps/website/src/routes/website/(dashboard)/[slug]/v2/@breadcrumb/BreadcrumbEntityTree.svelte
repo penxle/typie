@@ -17,7 +17,6 @@
     labelledBy: string;
     onActivateDocument: (slug: string) => void;
     documentDrag: BreadcrumbDocumentDragController;
-    onDismiss: () => void;
     onToggleFolder: (entityId: string) => void;
     treeId: string;
   };
@@ -30,7 +29,6 @@
     highlightedEntityId,
     labelledBy,
     onActivateDocument,
-    onDismiss,
     onToggleFolder,
     treeId,
   }: Props = $props();
@@ -95,13 +93,6 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      if (!documentDrag.cancel({ suppressClick: true })) onDismiss();
-      return;
-    }
-
     const current = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[role="treeitem"]') : null;
     if (!current) return;
     const items = visibleItems();

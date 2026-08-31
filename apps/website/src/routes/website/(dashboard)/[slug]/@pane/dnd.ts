@@ -1,4 +1,5 @@
 import { pointerCapture } from '@typie/ui/actions';
+import { pushEscapeHandler } from '@typie/ui/utils';
 import mixpanel from 'mixpanel-browser';
 import { findMemberById } from './tree';
 import type { Action } from 'svelte/action';
@@ -128,6 +129,7 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
   let holdActivated = false;
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
   let activeSession: DragPaneSession | null = null;
+  let removeEscapeHandler: (() => void) | null = null;
   const HOLD_DURATION = 300;
   const IMMEDIATE_DRAG_THRESHOLD = 8;
   const POST_HOLD_DRAG_THRESHOLD = 5;
@@ -149,6 +151,8 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     isDragging = false;
     holdActivated = false;
     activeSession = null;
+    removeEscapeHandler?.();
+    removeEscapeHandler = null;
     options.paneGroup.draggingPaneId = null;
     node.style.cursor = 'grab';
     document.body.style.cursor = '';
@@ -167,6 +171,10 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
 
     const session = { startX: e.clientX, startY: e.clientY };
     activeSession = session;
+    removeEscapeHandler = pushEscapeHandler(() => {
+      capture.cancel();
+      return true;
+    });
 
     holdActivated = false;
     holdTimer = setTimeout(() => {
@@ -232,21 +240,12 @@ export const dragPane: Action<HTMLElement, DragPaneOptions> = (node, options) =>
     cancel: handlePointerCancel,
   });
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && (holdActivated || holdTimer)) {
-      capture.cancel();
-    }
-  };
-
-  document.addEventListener('keydown', handleKeyDown);
-
   return {
     update(newOptions: DragPaneOptions) {
       options = newOptions;
     },
     destroy() {
       capture.destroy();
-      document.removeEventListener('keydown', handleKeyDown);
     },
   };
 };

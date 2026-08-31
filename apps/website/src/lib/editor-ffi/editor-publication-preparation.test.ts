@@ -9,6 +9,7 @@ const snapshot = (overrides: Partial<EditorSnapshot>): EditorSnapshot => ({
   cursor: undefined,
   placeholder: undefined,
   selection: undefined,
+  selectionKind: undefined,
   selectionEndpoints: undefined,
   lastHistoryTag: undefined,
   pageSizes: [],

@@ -69,6 +69,8 @@
       e.preventDefault();
       void submit();
     } else if (e.key === 'Escape') {
+      if (e.isComposing || e.defaultPrevented) return;
+      e.preventDefault();
       e.stopPropagation();
       if (value.trim() === '') {
         oncancel?.();

@@ -6,7 +6,7 @@
   import { Icon } from '@typie/ui/components';
   import { entityIconMap } from '@typie/ui/constants';
   import { Toast } from '@typie/ui/notification';
-  import { createDragScroll, elementScrollViewport } from '@typie/ui/utils';
+  import { createDragScroll, elementScrollViewport, pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onDestroy, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
@@ -243,6 +243,7 @@
   let dragScroll: ReturnType<typeof createDragScroll> | null = null;
   let folderHoverTimeout = $state<NodeJS.Timeout | null>(null);
   let hoveredFolderId = $state<string | null>(null);
+  let removeDragEscapeHandler: (() => void) | null = null;
 
   let lastPointerX = $state<number>(0);
   let lastPointerY = $state<number>(0);
@@ -350,6 +351,18 @@
   const clearPendingTouchDrag = () => {
     clearDragTimeout();
     pendingTouchDrag = null;
+    if (!dragging) {
+      removeDragEscapeHandler?.();
+      removeDragEscapeHandler = null;
+    }
+  };
+
+  const registerDragEscapeHandler = () => {
+    removeDragEscapeHandler?.();
+    removeDragEscapeHandler = pushEscapeHandler(() => {
+      endDragging(true);
+      return true;
+    });
   };
 
   const handlePointerDown: PointerEventHandler<HTMLDivElement> = (e) => {
@@ -381,6 +394,7 @@
         startY: e.clientY,
         lastY: e.clientY,
       };
+      registerDragEscapeHandler();
       dragTimeout = setTimeout(() => {
         if (!pendingTouchDrag || pendingTouchDrag.event.pointerId !== e.pointerId) {
           return;
@@ -430,6 +444,7 @@
         element,
         indicator: {},
       };
+      registerDragEscapeHandler();
     }
   };
 
@@ -928,11 +943,6 @@
     } else {
       e.preventDefault();
       e.stopPropagation();
-    }
-  }}
-  onkeydown={(e) => {
-    if (e.key === 'Escape') {
-      endDragging(true);
     }
   }}
 />

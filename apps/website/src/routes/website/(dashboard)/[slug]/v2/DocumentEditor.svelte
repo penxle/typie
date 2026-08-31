@@ -835,6 +835,25 @@
 
   $effect(() => {
     const editor = ctx.liveEditor;
+    if (!editor) return;
+
+    const handler = () => {
+      if (!currentViewZenModeEnabled || editor.appliedSnapshot.selectionKind === 'range') return false;
+
+      app.preference.current.zenModeEnabled = false;
+      mixpanel.track('zen_mode_disabled', { via: 'esc' });
+      return true;
+    };
+
+    editor.escapeKeyHandler = handler;
+
+    return () => {
+      if (editor.escapeKeyHandler === handler) editor.escapeKeyHandler = null;
+    };
+  });
+
+  $effect(() => {
+    const editor = ctx.liveEditor;
     if (editor) {
       editor.readOnly = (document?.locked ?? false) || !query.data.me.entitled;
     }

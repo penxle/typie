@@ -1,3 +1,4 @@
+import { pushEscapeHandler, runEscapeStack } from '@typie/ui/utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dragPane } from '../routes/website/(dashboard)/[slug]/@pane/dnd';
 import type { PaneGroup } from '../routes/website/(dashboard)/[slug]/@pane/context.svelte';
@@ -101,5 +102,28 @@ describe('dragPane', () => {
 
     expect(element.setPointerCapture).not.toHaveBeenCalled();
     action?.destroy?.();
+  });
+
+  it('places a pane drag above an existing Escape owner and removes it after cancellation', () => {
+    const element = createElement();
+    const paneGroup = createPaneGroup();
+    const lowerEscapeHandler = vi.fn(() => true);
+    const removeLowerEscapeHandler = pushEscapeHandler(lowerEscapeHandler);
+    const action = dragPane(element, { paneGroup, paneId: 'pane-1' });
+
+    try {
+      element.dispatchEvent(pointerEvent({ type: 'pointerdown' }));
+      element.dispatchEvent(pointerEvent({ type: 'pointermove', clientX: 20 }));
+
+      expect(runEscapeStack()).toBe(true);
+      expect(paneGroup.cancelDrag).toHaveBeenCalledOnce();
+      expect(lowerEscapeHandler).not.toHaveBeenCalled();
+
+      expect(runEscapeStack()).toBe(true);
+      expect(lowerEscapeHandler).toHaveBeenCalledOnce();
+    } finally {
+      action?.destroy?.();
+      removeLowerEscapeHandler();
+    }
   });
 });

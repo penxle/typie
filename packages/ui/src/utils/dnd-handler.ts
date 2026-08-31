@@ -1,5 +1,6 @@
 import { token } from '@typie/styled-system/tokens';
 import { thresholdDrag } from '../actions/threshold-drag.svelte';
+import { pushEscapeHandler } from './escape-stack';
 
 export type Ghost = {
   element: HTMLElement;
@@ -89,6 +90,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
   let isDragActive = false;
   let ghost: Ghost | null = null;
   let hoveredTarget: HTMLElement | null = null;
+  let removeEscapeHandler: (() => void) | null = null;
 
   const updateCursor = (e: PointerEvent | null) => {
     if (dragging) {
@@ -126,6 +128,8 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     }
     dragging = false;
     isDragActive = false;
+    removeEscapeHandler?.();
+    removeEscapeHandler = null;
     updateCursor(null);
   };
 
@@ -152,6 +156,10 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
       }
 
       dragging = true;
+      removeEscapeHandler = pushEscapeHandler(() => {
+        drag.cancel();
+        return true;
+      });
       updateCursor(e);
       return { target: extractedTarget };
     },
@@ -185,16 +193,7 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     updateCursor(e);
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (!(dragging && e.key === 'Escape')) {
-      return;
-    }
-
-    drag.cancel();
-  };
-
   node.addEventListener('pointermove', handlePointerHoverMove);
-  window.addEventListener('keydown', handleKeyDown);
 
   updateCursor(null);
 
@@ -206,7 +205,6 @@ export const createDndHandler = (node: HTMLElement, options: DndHandlerOptions) 
     destroy: () => {
       drag.destroy();
       node.removeEventListener('pointermove', handlePointerHoverMove);
-      window.removeEventListener('keydown', handleKeyDown);
     },
   };
 };

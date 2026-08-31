@@ -202,7 +202,7 @@
   };
 
   const handleFontSizeKeydown = (e: KeyboardEvent) => {
-    if (e.isComposing) return;
+    if (e.isComposing || e.defaultPrevented) return;
 
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -211,6 +211,8 @@
       fontSizeInputElement?.blur();
       fontSizeOpened = false;
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       fontSizeInputValue = String(currentFontSize / 100);
       fontSizeInputElement?.blur();
       fontSizeOpened = false;

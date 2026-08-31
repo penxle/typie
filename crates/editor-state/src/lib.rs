@@ -82,7 +82,7 @@ pub use position::{Position, ResolvedPosition, inline_leaf_dots_in_range};
 pub use projected_state::*;
 pub use prose::{ProseText, prose, prose_annotated};
 pub use replacement::replacement_paint;
-pub use selection::{ResolvedSelection, Selection};
+pub use selection::{ResolvedSelection, Selection, SelectionKind, selection_kind};
 pub use selection_expansion::{
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion,

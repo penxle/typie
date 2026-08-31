@@ -89,6 +89,8 @@
       e.preventDefault();
       void save();
     } else if (e.key === 'Escape') {
+      if (e.isComposing || e.defaultPrevented) return;
+      e.preventDefault();
       e.stopPropagation();
       if (editText === comment.data.content) {
         cancel();
