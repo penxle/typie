@@ -63,18 +63,21 @@ impl PrismWebRuntime {
             .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
             .map_err(js_error)?;
         let capabilities = surface.get_capabilities(&self.adapter);
-        let hdr_surface = prefer_hdr
-            && capabilities
-                .formats
-                .contains(&wgpu::TextureFormat::Rgba16Float);
+        let hdr_supported = capabilities
+            .formats
+            .contains(&wgpu::TextureFormat::Rgba16Float);
+        let hdr_surface = prefer_hdr && hdr_supported;
+        let sdr_format = capabilities
+            .formats
+            .iter()
+            .copied()
+            .find(|format| *format != wgpu::TextureFormat::Rgba16Float)
+            .or_else(|| capabilities.formats.first().copied())
+            .ok_or_else(|| JsValue::from_str("No WebGPU surface format is available."))?;
         let format = if hdr_surface {
             wgpu::TextureFormat::Rgba16Float
         } else {
-            capabilities
-                .formats
-                .first()
-                .copied()
-                .ok_or_else(|| JsValue::from_str("No WebGPU surface format is available."))?
+            sdr_format
         };
         let mut surface_config = surface
             .get_default_config(&self.adapter, width, height)
@@ -95,7 +98,9 @@ impl PrismWebRuntime {
             surface_config,
             renderer: PrismRenderer::new(self.device.clone(), self.queue.clone(), format),
             optical_paths: OpticalPathLookup::default(),
+            hdr_supported,
             hdr_surface,
+            sdr_format,
         })
     }
 }
@@ -106,11 +111,38 @@ pub struct PrismWebRenderer {
     surface_config: wgpu::SurfaceConfiguration,
     renderer: PrismRenderer,
     optical_paths: OpticalPathLookup,
+    hdr_supported: bool,
     hdr_surface: bool,
+    sdr_format: wgpu::TextureFormat,
 }
 
 #[wasm_bindgen]
 impl PrismWebRenderer {
+    #[wasm_bindgen(js_name = setHdrEnabled)]
+    pub fn set_hdr_enabled(&mut self, enabled: bool) {
+        let hdr_surface = enabled && self.hdr_supported;
+        if hdr_surface == self.hdr_surface {
+            return;
+        }
+
+        let format = if hdr_surface {
+            wgpu::TextureFormat::Rgba16Float
+        } else {
+            self.sdr_format
+        };
+        self.surface_config.format = format;
+        self.surface_config.color_space = if hdr_surface {
+            wgpu::SurfaceColorSpace::ExtendedSrgb
+        } else {
+            wgpu::SurfaceColorSpace::Auto
+        };
+        let device = self.renderer.device().clone();
+        let queue = self.renderer.queue().clone();
+        self.surface.configure(&device, &self.surface_config);
+        self.renderer = PrismRenderer::new(device, queue, format);
+        self.hdr_surface = hdr_surface;
+    }
+
     #[wasm_bindgen(getter, js_name = frameUniformByteLength)]
     pub fn frame_uniform_byte_length(&self) -> usize {
         std::mem::size_of::<FrameUniforms>()

@@ -3,6 +3,7 @@
 export type PrismWebRenderer = {
   frameUniformByteLength: number;
   free(): void;
+  setHdrEnabled(enabled: boolean): void;
   whenSubmittedWorkDone(): Promise<void>;
   render(
     frameUniformBytes: Uint8Array,
@@ -199,13 +200,17 @@ export function createPrismFrameUniformWriter() {
   };
 }
 
-export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, createRenderer: CreatePrismWebRenderer) {
+export function createDeferredPrismWgpuSurface(
+  canvas: HTMLCanvasElement,
+  createRenderer: CreatePrismWebRenderer,
+  initialHdrMode: HdrMode = 'auto',
+) {
   const frame = createPrismFrameUniformWriter();
   const dynamicRange = globalThis.matchMedia?.('(dynamic-range: high)') ?? null;
   let renderer: PrismWebRenderer | null = null;
   let disposed = false;
   let readiness: 'loading' | 'ready' | 'unavailable' = 'loading';
-  let hdrMode: HdrMode = 'auto';
+  let hdrMode = initialHdrMode;
   let hdrHeadroom = 1.25;
   let lightSize = { height: 1, width: 1 };
   let materialSize = { height: 1, width: 1 };
@@ -222,6 +227,10 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
   const { promise: firstFramePresented, resolve: resolveFirstFramePresented } = Promise.withResolvers<void>();
   let firstFrameRequested = false;
   let unavailableError: unknown;
+
+  function shouldEnableHdr() {
+    return hdrMode === 'on' || (hdrMode === 'auto' && dynamicRange?.matches === true);
+  }
 
   function settleReadiness(state: 'ready' | 'unavailable', error?: unknown) {
     if (readiness !== 'loading') return;
@@ -246,7 +255,7 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
 
   void (async () => {
     try {
-      const nextRenderer = await createRenderer(canvas, dynamicRange?.matches === true);
+      const nextRenderer = await createRenderer(canvas, shouldEnableHdr());
       if (disposed) {
         nextRenderer.free();
         return;
@@ -256,6 +265,7 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
         nextRenderer.free();
         throw new RangeError(`Prism frame-uniform ABI mismatch: expected ${FRAME_UNIFORM_BYTES} bytes, received ${actualLength}.`);
       }
+      nextRenderer.setHdrEnabled(shouldEnableHdr());
       renderer = nextRenderer;
       settleReadiness('ready');
     } catch (err: unknown) {
@@ -266,8 +276,7 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
   })();
 
   function effectiveHeadroom() {
-    const enabled = hdrMode === 'on' || (hdrMode === 'auto' && dynamicRange?.matches);
-    return enabled ? hdrHeadroom : 1;
+    return shouldEnableHdr() ? hdrHeadroom : 1;
   }
 
   return {
@@ -292,7 +301,9 @@ export function createDeferredPrismWgpuSurface(canvas: HTMLCanvasElement, create
       return () => unavailableCallbacks.delete(callback);
     },
     setHdrMode(mode: HdrMode) {
+      if (hdrMode === mode) return;
       hdrMode = mode;
+      renderer?.setHdrEnabled(shouldEnableHdr());
     },
     setHdrHeadroom(value: number) {
       hdrHeadroom = Math.max(1, Math.min(value || 1, 2.5));

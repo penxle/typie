@@ -387,7 +387,7 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
   let surfaceCandidate: ReturnType<typeof createDeferredPrismWgpuSurface> | null = null;
   try {
     if (options.createRenderer && globalThis.navigator?.gpu) {
-      surfaceCandidate = createDeferredPrismWgpuSurface(canvas, options.createRenderer);
+      surfaceCandidate = createDeferredPrismWgpuSurface(canvas, options.createRenderer, options.hdr);
     }
   } catch (err) {
     console.warn('[Typie Prism] prism spinner shader failed.', err);

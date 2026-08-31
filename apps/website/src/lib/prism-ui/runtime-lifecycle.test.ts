@@ -50,6 +50,7 @@ const createRuntimeFixture = () => {
     free: vi.fn(),
     render: vi.fn(),
     renderComputed: vi.fn(),
+    setHdrEnabled: vi.fn(),
     whenSubmittedWorkDone: vi.fn(() => Promise.resolve()),
   };
   const rendererRuntime = {
