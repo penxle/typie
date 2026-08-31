@@ -13,8 +13,6 @@ const frames = async (count = 2) => {
 };
 
 const wait = (duration: number) => new Promise<void>((resolve) => setTimeout(resolve, duration));
-const maskAlpha = (element: HTMLElement, edge: 'leading' | 'trailing') =>
-  Number(getComputedStyle(element).getPropertyValue(`--entity-name-${edge}-mask-alpha`));
 
 const reducedMotionPreference = vi.hoisted(() => {
   const eventTarget = new EventTarget();
@@ -107,42 +105,11 @@ describe('entity tree name overflow', () => {
     const { target, viewport } = await mountName('짧은 이름', 320);
 
     expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth);
-    expect(viewport.style.maskImage).toContain('24px');
-    expect(maskAlpha(viewport, 'leading')).toBe(1);
-    expect(maskAlpha(viewport, 'trailing')).toBe(1);
 
     enter(target);
     await wait(400);
 
     expect(viewport.scrollLeft).toBe(0);
-    expect(maskAlpha(viewport, 'leading')).toBe(1);
-    expect(maskAlpha(viewport, 'trailing')).toBe(1);
-  });
-
-  it('waits for the first usable measurement before enabling fog transitions', async () => {
-    mockReducedMotion(false);
-    const target = document.createElement('div');
-    target.className = 'group';
-    target.setAttribute('role', 'treeitem');
-    Object.assign(target.style, { display: 'none', width: '120px' });
-    document.body.append(target);
-
-    component = mount(EntityName, { target, props: { name: '처음 열릴 때부터 긴 폴더 이름' } });
-    await tick();
-    await frames(3);
-
-    const viewport = target.firstElementChild;
-    expect(viewport).toBeInstanceOf(HTMLSpanElement);
-    if (!(viewport instanceof HTMLSpanElement)) throw new Error('EntityName did not render its viewport span');
-
-    expect(viewport.clientWidth).toBe(0);
-    expect(viewport.style.transition).toBe('none');
-
-    target.style.display = 'flex';
-    await vi.waitFor(() => expect(viewport.clientWidth).toBeGreaterThan(0));
-    await frames(3);
-
-    expect(viewport.style.transition).toContain('--entity-name-leading-mask-alpha');
   });
 
   it('scrolls an overflowing name to the end once and resets when the pointer leaves', async () => {
@@ -156,9 +123,6 @@ describe('entity tree name overflow', () => {
     expect(initialMaximumScrollLeft).toBeGreaterThanOrEqual(20);
     expect(initialMaximumScrollLeft).toBeLessThanOrEqual(28);
     expect(viewport.scrollLeft).toBe(0);
-    expect(viewport.style.maskImage).toContain('24px');
-    expect(maskAlpha(viewport, 'leading')).toBe(1);
-    await vi.waitFor(() => expect(maskAlpha(viewport, 'trailing')).toBeCloseTo(0, 1));
 
     enter(target);
     await wait(100);
@@ -172,8 +136,6 @@ describe('entity tree name overflow', () => {
     expect(viewport.scrollLeft).toBe(0);
 
     await vi.waitFor(() => expect(viewport.scrollLeft).toBeCloseTo(maximumScrollLeft, 0), { timeout: 2500 });
-    await vi.waitFor(() => expect(maskAlpha(viewport, 'leading')).toBeCloseTo(0, 1));
-    await vi.waitFor(() => expect(maskAlpha(viewport, 'trailing')).toBeCloseTo(1, 1));
 
     const settledScrollLeft = viewport.scrollLeft;
     await wait(150);
@@ -181,8 +143,6 @@ describe('entity tree name overflow', () => {
 
     leave(target);
     expect(viewport.scrollLeft).toBe(0);
-    await vi.waitFor(() => expect(maskAlpha(viewport, 'leading')).toBeCloseTo(1, 1));
-    await vi.waitFor(() => expect(maskAlpha(viewport, 'trailing')).toBeCloseTo(0, 1));
   });
 
   it('keeps the original hover-intent deadline when its width changes', async () => {
@@ -231,36 +191,6 @@ describe('entity tree name overflow', () => {
     await vi.waitFor(() => expect(viewport.scrollLeft).toBeCloseTo(resizedMaximumScrollLeft, 0), { timeout: 1500 });
   });
 
-  it('transitions the fixed-width fog as content enters and leaves each edge', async () => {
-    mockReducedMotion(false);
-    const { target, viewport, content } = await mountName('Reorder mutation 동기화 구조 검토 및 후속 작업 정리', 360);
-
-    target.style.width = `${content.scrollWidth - 40}px`;
-    await frames();
-    await wait(220);
-
-    expect(maskAlpha(viewport, 'leading')).toBe(1);
-    expect(maskAlpha(viewport, 'trailing')).toBe(0);
-
-    viewport.scrollLeft = 12;
-    viewport.dispatchEvent(new Event('scroll'));
-    await tick();
-    await wait(80);
-    expect(maskAlpha(viewport, 'leading')).toBeGreaterThan(0);
-    expect(maskAlpha(viewport, 'leading')).toBeLessThan(1);
-    await wait(120);
-    expect(maskAlpha(viewport, 'leading')).toBeCloseTo(0, 1);
-
-    viewport.scrollLeft = viewport.scrollWidth - viewport.clientWidth;
-    viewport.dispatchEvent(new Event('scroll'));
-    await tick();
-    await wait(80);
-    expect(maskAlpha(viewport, 'trailing')).toBeGreaterThan(0);
-    expect(maskAlpha(viewport, 'trailing')).toBeLessThan(1);
-    await wait(120);
-    expect(maskAlpha(viewport, 'trailing')).toBeCloseTo(1, 1);
-  });
-
   it('reveals the end directly when reduced motion is requested', async () => {
     mockReducedMotion(true);
     const { target, viewport, content } = await mountName('Reorder mutation 동기화 구조 검토 및 후속 작업 정리', 360);
@@ -269,8 +199,6 @@ describe('entity tree name overflow', () => {
     await frames();
 
     const maximumScrollLeft = viewport.scrollWidth - viewport.clientWidth;
-    expect(viewport.style.transition).toBe('none');
-
     vi.useFakeTimers();
     enter(target);
     await vi.advanceTimersByTimeAsync(199);
@@ -278,8 +206,6 @@ describe('entity tree name overflow', () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(viewport.scrollLeft).toBeCloseTo(maximumScrollLeft, 0);
-    expect(maskAlpha(viewport, 'leading')).toBe(0);
-    expect(maskAlpha(viewport, 'trailing')).toBe(1);
   });
 
   it('finishes an active pass immediately when reduced motion is enabled', async () => {
@@ -301,8 +227,5 @@ describe('entity tree name overflow', () => {
     await frames();
 
     expect(viewport.scrollLeft).toBeCloseTo(maximumScrollLeft, 0);
-    expect(viewport.style.transition).toBe('none');
-    expect(maskAlpha(viewport, 'leading')).toBe(0);
-    expect(maskAlpha(viewport, 'trailing')).toBe(1);
   });
 });

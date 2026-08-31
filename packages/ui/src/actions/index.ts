@@ -8,6 +8,7 @@ export * from './infinite-scroll.svelte';
 export * from './outside-click.svelte';
 export * from './pointer-capture.svelte';
 export * from './portal.svelte';
+export * from './scroll-fog.svelte';
 export * from './scroll-lock.svelte';
 export * from './textarea-scrollpadding.svelte';
 export * from './threshold-drag.svelte';

@@ -1,0 +1,11 @@
+@property --scroll-fog-leading {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fog-trailing {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}

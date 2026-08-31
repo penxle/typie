@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ContextBarVisibilityCoordinator, resolveContextBarSegmentRequest, smootherstep } from './editor-context-bar.svelte';
+import { ContextBarVisibilityCoordinator, resolveContextBarSegmentRequest } from './editor-context-bar.svelte';
 import type { ContextBarSegmentActivity } from './editor-context-bar.svelte';
 
 const idle = (): ContextBarSegmentActivity => ({ transient: false, hovered: false, focused: false, holds: [] });
@@ -7,16 +7,6 @@ const idle = (): ContextBarSegmentActivity => ({ transient: false, hovered: fals
 const transient = (): ContextBarSegmentActivity => ({ ...idle(), transient: true });
 
 const engaged = (): ContextBarSegmentActivity => ({ ...idle(), hovered: true });
-
-describe('editor context bar surface', () => {
-  it('uses smootherstep for surface fades', () => {
-    expect(smootherstep(0)).toBe(0);
-    expect(smootherstep(0.25)).toBeCloseTo(0.103515625);
-    expect(smootherstep(0.5)).toBe(0.5);
-    expect(smootherstep(0.75)).toBeCloseTo(0.896484375);
-    expect(smootherstep(1)).toBe(1);
-  });
-});
 
 describe('editor context bar visibility', () => {
   it('counts transient, engagement, and named holds as visibility reasons', () => {

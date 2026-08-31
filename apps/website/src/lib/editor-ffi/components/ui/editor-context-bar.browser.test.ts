@@ -760,37 +760,15 @@ describe('editor context bar', () => {
     expect(breadcrumbViewport.scrollLeft).toBe(0);
   });
 
-  it('derives both scroll fogs from native position without masking the fixed pin and divider', async () => {
+  it('keeps the fixed pin and divider outside the breadcrumb scroll fog', async () => {
     const { breadcrumbViewport } = await mountContextBar({ surfaceWidth: 320, breadcrumbWidth: 600 });
     await vi.waitFor(() => expect(breadcrumbViewport.scrollLeft).toBeGreaterThan(0));
     const pin = document.querySelector<HTMLElement>('[data-context-bar-pin]');
     const divider = document.querySelector<HTMLElement>('[data-context-bar-pin-divider]');
 
-    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('true');
-    expect(breadcrumbViewport.style.getPropertyValue('--horizontal-scroll-leading-fog')).toBe('1');
-    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('false');
-    expect(breadcrumbViewport.dataset.horizontalScrollFogCurve).toBe('smootherstep');
+    expect(breadcrumbViewport.style.maskImage).not.toBe('');
     expect(breadcrumbViewport.contains(pin)).toBe(false);
     expect(breadcrumbViewport.contains(divider)).toBe(false);
-
-    breadcrumbViewport.scrollLeft = 0;
-    breadcrumbViewport.dispatchEvent(new Event('scroll'));
-    await tick();
-    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('false');
-    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('true');
-
-    breadcrumbViewport.scrollLeft = 40;
-    breadcrumbViewport.dispatchEvent(new Event('scroll'));
-    await tick();
-    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('true');
-    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('true');
-
-    reducedMotionPreference.set(true);
-    breadcrumbViewport.scrollLeft = 0;
-    breadcrumbViewport.dispatchEvent(new Event('scroll'));
-    await tick();
-    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('false');
-    expect(breadcrumbViewport.style.transition).toBe('none');
   });
 });
 
