@@ -4,7 +4,6 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
-  import type { EditorContextBarSegmentRenderProps } from './ui/EditorContextBar.svelte';
 
   type Props = {
     document$key: Editor_document$key;
@@ -15,8 +14,7 @@
     contentInsetLeft?: number;
     contentInsetRight?: number;
     contentMotion?: { fromX: number; duration: number; easing: string };
-    breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
-    viewControls?: Snippet<[EditorContextBarSegmentRenderProps]>;
+    floatingZoomRightInset?: number;
     header?: Snippet;
     footer?: Snippet;
     children?: Snippet;
@@ -32,8 +30,7 @@
     contentInsetLeft = 0,
     contentInsetRight = 0,
     contentMotion,
-    breadcrumb,
-    viewControls,
+    floatingZoomRightInset = 0,
     header,
     footer,
     children,
@@ -55,16 +52,15 @@
   <View
     style={css.raw({ flex: '1' }, style)}
     {active}
-    {breadcrumb}
     {contentInsetLeft}
     {contentInsetRight}
     {contentMotion}
     {document$key}
+    {floatingZoomRightInset}
     {footer}
     {header}
     {onReady}
     {useWindowScroll}
-    {viewControls}
     {viewer}
   >
     {#if children}

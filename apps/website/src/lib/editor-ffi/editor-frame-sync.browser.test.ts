@@ -1370,6 +1370,10 @@ describe('web editor frame synchronization', () => {
 
   it('leaves keyboard focus on zoom indicator controls after they run', async () => {
     const { editor } = await mountEditor(doc('zoom focus'), { withZoom: true });
+    const floatingAnchor = document.querySelector<HTMLElement>('[data-floating-editor-zoom-anchor]');
+    expect(document.querySelector('[data-editor-context-bar]')).toBeNull();
+    expect(floatingAnchor).not.toBeNull();
+    expect(getComputedStyle(floatingAnchor as HTMLElement).position).toBe('absolute');
     editor.focus();
     expect(document.activeElement).toBe(editor.inputEl);
 

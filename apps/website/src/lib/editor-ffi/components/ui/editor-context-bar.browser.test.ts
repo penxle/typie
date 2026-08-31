@@ -138,7 +138,14 @@ async function mountFloatingOverlay({
   displayZoom = 1,
   indicatorZoom = displayZoom,
   landmark = null,
-}: Partial<Pick<TestProps, 'displayZoom' | 'indicatorZoom' | 'landmark'>> = {}) {
+  fixed = true,
+  revealOnHover = false,
+  rightInset = 0,
+}: Partial<Pick<TestProps, 'displayZoom' | 'indicatorZoom' | 'landmark'>> & {
+  fixed?: boolean;
+  revealOnHover?: boolean;
+  rightInset?: number;
+} = {}) {
   mounted = mount(EditorContextBarTestRoot, {
     target: document.body,
     props: {
@@ -147,6 +154,9 @@ async function mountFloatingOverlay({
       initialZoom: displayZoom,
       initialIndicatorZoom: indicatorZoom,
       initialLandmark: landmark,
+      floatingFixed: fixed,
+      floatingRevealOnHover: revealOnHover,
+      floatingRightInset: rightInset,
     },
   });
   await tick();
@@ -154,6 +164,7 @@ async function mountFloatingOverlay({
     anchor: document.querySelector<HTMLElement>('[data-floating-editor-zoom-anchor]'),
     overlay: document.querySelector<HTMLElement>('[data-floating-editor-zoom-controls]'),
     contextBar: document.querySelector<HTMLElement>('[data-editor-context-bar]'),
+    pane: document.querySelector<HTMLElement>('[data-pane-id="zoom-overlay-test-pane"]'),
     host: mounted,
   };
 }
@@ -802,7 +813,7 @@ describe('public viewer floating zoom controls', () => {
     expect(overlay?.style.opacity).toBe('0');
   });
 
-  it('uses a fixed viewport anchor and never exposes a hidden pointer hit area', async () => {
+  it('uses a fixed viewport anchor and does not reveal a hidden viewer control on hover', async () => {
     document.body.style.setProperty('--usersite-sticky-header-bottom', '52px');
     const { anchor, overlay } = await mountFloatingOverlay();
 
@@ -810,6 +821,41 @@ describe('public viewer floating zoom controls', () => {
     expect(getComputedStyle(anchor as HTMLElement).position).toBe('fixed');
     expect(getComputedStyle(anchor as HTMLElement).top).toBe('52px');
     expect(overlay?.style.pointerEvents).toBe('none');
+    enter(overlay as HTMLElement);
+    await tick();
+    expect(overlay?.style.opacity).toBe('0');
+  });
+
+  it('anchors to the pane surface, shifts for focus-mode exit, and uses a rounded transient surface without an edge fade', async () => {
+    const { anchor, overlay } = await mountFloatingOverlay({ fixed: false, rightInset: 36 });
+    const blur = document.querySelector<HTMLElement>('[data-floating-editor-zoom-blur]');
+    const surface = document.querySelector<HTMLElement>('[data-floating-editor-zoom-surface]');
+
+    expect(getComputedStyle(anchor as HTMLElement).position).toBe('absolute');
+    expect(getComputedStyle(anchor as HTMLElement).top).toBe('0px');
+    expect(getComputedStyle(anchor as HTMLElement).right).toBe('36px');
+    expect(anchor?.dataset.floatingEditorZoomRightInset).toBe('36');
+    expect(getComputedStyle(overlay as HTMLElement).borderRadius).toBe('8px');
+    expect(overlay?.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(blur?.getBoundingClientRect().height).toBe(overlay?.getBoundingClientRect().height);
+    expect(surface?.getBoundingClientRect().height).toBe(overlay?.getBoundingClientRect().height);
+    expect(blur?.style.maskImage).toBe('');
+    expect(surface?.style.maskImage).toBe('');
+    expect(document.querySelector('[data-floating-editor-zoom-edge]')).toBeNull();
+  });
+
+  it('reveals only when the hidden editor zoom footprint is hovered', async () => {
+    const { overlay, pane } = await mountFloatingOverlay({ fixed: false, revealOnHover: true });
+
+    expect(overlay?.style.opacity).toBe('0');
+    enter(pane as HTMLElement);
+    await tick();
+    expect(overlay?.style.opacity).toBe('0');
+    expect(overlay?.style.pointerEvents).toBe('auto');
+
+    enter(overlay as HTMLElement);
+    await tick();
+    expect(overlay?.style.opacity).toBe('1');
   });
 
   it('remains keyboard discoverable and reveals before a hidden control receives interaction', async () => {

@@ -36,7 +36,7 @@
     isOwner: boolean;
     onNavigate: (slug: string) => void;
     popupId: string;
-    segment: EditorContextBarSegmentState;
+    segment?: EditorContextBarSegmentState;
     siteId: string;
   };
 
@@ -79,7 +79,7 @@
     expandedFolderIds.clear();
     activeTrigger = undefined;
     setReference(null);
-    segment.release(POPUP_HOLD_REASON);
+    segment?.release(POPUP_HOLD_REASON);
     if (restoreFocus) void tick().then(() => trigger?.isConnected && trigger.focus());
   }
 
@@ -95,7 +95,7 @@
     expandedFolderIds.clear();
     activeTrigger = trigger;
     setReference(trigger);
-    if (wasClosed) segment.hold(POPUP_HOLD_REASON);
+    if (wasClosed) segment?.hold(POPUP_HOLD_REASON);
   }
 
   function toggleFolder(entityId: string) {
@@ -142,7 +142,7 @@
     alignItems: 'center',
     height: '32px',
     paddingLeft: '8px',
-    paddingRight: '16px',
+    paddingRight: '4px',
     fontSize: '12px',
     fontWeight: 'medium',
     color: 'text.subtle',

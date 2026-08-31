@@ -93,6 +93,14 @@ afterEach(async () => {
 });
 
 describe('reduced-motion presentations', () => {
+  it('reserves the focus-mode control immediately before the pane close button', () => {
+    const focusModeControl = document.querySelector('[data-pane-skeleton-focus-mode-control]');
+    const closeButton = document.querySelector('[data-pane-skeleton-close-button]');
+
+    expect(focusModeControl).not.toBeNull();
+    expect(focusModeControl?.nextElementSibling).toBe(closeButton);
+  });
+
   it('keeps the existing interpolation with normal motion', () => {
     const elements = presentationElements();
 

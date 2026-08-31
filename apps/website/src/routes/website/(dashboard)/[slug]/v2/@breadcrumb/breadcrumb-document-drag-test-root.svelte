@@ -11,6 +11,12 @@
   import type { DragItem, DragPane, DropZone, PaneGroup } from '../../@pane/context.svelte';
   import type { EditorBreadcrumbPathEntity } from './EditorBreadcrumbNavigation.svelte';
 
+  type Props = {
+    withSegment?: boolean;
+  };
+
+  let { withSegment = true }: Props = $props();
+
   const currentDocument = {
     __typename: 'Entity',
     id: 'document-current',
@@ -160,7 +166,7 @@
   isOwner
   onNavigate={(slug) => (navigatedSlug = slug)}
   popupId="breadcrumb-document-drag-test"
-  {segment}
+  segment={withSegment ? segment : undefined}
   siteId="site-1"
 />
 
