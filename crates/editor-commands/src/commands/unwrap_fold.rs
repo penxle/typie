@@ -110,7 +110,7 @@ pub fn unwrap_fold(tr: &mut Transaction, node_id: Dot) -> CommandResult {
                     tr.move_node(*child_id, parent_id, next_index + i)?;
                 }
                 ContentChild::Leaf(subtree) => {
-                    tr.insert_subtree(parent_id, next_index + i, subtree.clone())?;
+                    tr.reissue_subtree(parent_id, next_index + i, subtree.clone())?;
                 }
             }
         }
@@ -234,6 +234,57 @@ mod tests {
             selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn unwrap_fold_keeps_a_content_atom_in_its_alias_class() {
+        let (initial, f, ..) = state! {
+            doc {
+                root {
+                    f: fold {
+                        fold_title {}
+                        fold_content {
+                            paragraph { text("body") }
+                            image
+                        }
+                    }
+                    paragraph { text("tail") }
+                }
+            }
+            selection: (f, 0)
+        };
+        let old_atom = {
+            let view = initial.view();
+            let fold = view.node(f).unwrap();
+            let content = fold.fold_content().unwrap();
+            content
+                .children()
+                .find_map(|c| match c {
+                    ChildView::Leaf(l) => Some(l.dot()),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let (actual, ..) = transact!(initial, |tr| unwrap_fold(&mut tr, f));
+        let view = actual.view();
+        let new_atom = view
+            .root()
+            .unwrap()
+            .children()
+            .find_map(|c| match c {
+                ChildView::Leaf(l) => Some(l.dot()),
+                _ => None,
+            })
+            .unwrap();
+        assert_ne!(new_atom, old_atom);
+        assert!(
+            view.alias_classes()
+                .members_of(new_atom)
+                .is_some_and(|m| m.contains(&old_atom)),
+            "펼친 원자는 옛 dot과 같은 동치류"
+        );
+        assert!(actual.projected.projected().hidden.is_empty());
+        assert_projection_integrity(&actual);
     }
 
     #[test]

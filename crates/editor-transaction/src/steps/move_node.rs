@@ -58,8 +58,10 @@ pub(crate) fn apply_to(
 
     let subtree = support::capture_subtree(&batched.projected, block)
         .ok_or(StepError::NodeNotFound(block))?;
-    let dots =
-        support::subtree_dots(&batched.projected, block).ok_or(StepError::NodeNotFound(block))?;
+    let dots = support::with_hidden_copies(
+        &batched.projected,
+        support::subtree_dots(&batched.projected, block).ok_or(StepError::NodeNotFound(block))?,
+    );
 
     let fast = new_parent != old_parent && !dots.contains(&new_parent);
 

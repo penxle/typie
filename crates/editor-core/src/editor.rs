@@ -2250,7 +2250,12 @@ impl Editor {
                             editor_model::ChildView::Block(b) => b.id(),
                             editor_model::ChildView::Leaf(l) => l.dot(),
                         };
-                        editor_transaction::capture_subtree(&template_state.projected, id)
+                        editor_transaction::capture_subtree(&template_state.projected, id).map(
+                            |mut s| {
+                                s.strip_source_dots();
+                                s
+                            },
+                        )
                     })
                     .collect(),
                 None => Vec::new(),

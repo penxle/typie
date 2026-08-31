@@ -1,7 +1,7 @@
-use editor_crdt::{Dot, ListOp};
-use editor_model::EditOp;
+use editor_crdt::Dot;
 use editor_state::BatchedState;
 
+use crate::steps::support;
 use crate::{Step, StepError};
 
 pub(crate) fn inverse(block: Dot, offset: usize) -> Step {
@@ -37,13 +37,15 @@ pub(crate) fn apply_to(
             }
         }
     };
-    let del_pos = batched
-        .projected
-        .seq_flat_pos(sib_dot)
-        .ok_or(StepError::MergeNoSibling { block })?;
-    batched.apply(EditOp::Seq(ListOp::Del {
-        pos: del_pos,
-        len: 1,
-    }))?;
+    let ops = {
+        let ps = &batched.projected;
+        ps.seq_flat_pos(sib_dot)
+            .ok_or(StepError::MergeNoSibling { block })?;
+        let dots = support::with_hidden_copies(ps, vec![sib_dot]);
+        support::delete_dots_ops(ps, &dots)
+    };
+    for op in ops {
+        batched.apply(op)?;
+    }
     Ok(())
 }

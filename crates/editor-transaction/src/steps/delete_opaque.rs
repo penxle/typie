@@ -17,7 +17,8 @@ pub(crate) fn inverse_of_undelete() -> Step {
 }
 
 pub(crate) fn apply_to(batched: &mut BatchedState, dots: &[Dot]) -> Result<(), StepError> {
-    let ops = support::delete_dots_ops(&batched.projected, dots);
+    let dots = support::with_hidden_copies(&batched.projected, dots.to_vec());
+    let ops = support::delete_dots_ops(&batched.projected, &dots);
     for op in ops {
         batched.apply(op)?;
     }

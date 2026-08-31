@@ -95,7 +95,7 @@ fn revive_node(
 ) -> Result<(), StepError> {
     let subtree =
         support::capture_subtree(&target.projected, cid).ok_or(StepError::NodeNotFound(cid))?;
-    tr.insert_subtree(parent, index, subtree)?;
+    tr.reissue_subtree(parent, index, subtree)?;
     Ok(())
 }
 
@@ -148,6 +148,7 @@ enum InlineLeafToken {
 #[derive(Clone, Debug)]
 struct InlineLeafUnit {
     slot: usize,
+    dot: Dot,
     token: InlineLeafToken,
 }
 
@@ -160,6 +161,7 @@ fn inline_leaf_units(node: &NodeView<'_>) -> Vec<InlineLeafUnit> {
         if let Some(ch) = leaf.as_char() {
             units.push(InlineLeafUnit {
                 slot,
+                dot: leaf.dot(),
                 token: InlineLeafToken::Char {
                     ch,
                     modifiers: node.leaf_own_modifiers_at(slot),
@@ -170,6 +172,7 @@ fn inline_leaf_units(node: &NodeView<'_>) -> Vec<InlineLeafUnit> {
             let modifiers = node.leaf_own_modifiers_at(slot);
             units.push(InlineLeafUnit {
                 slot,
+                dot: leaf.dot(),
                 token: InlineLeafToken::Atom {
                     node: atom_node,
                     modifiers,
@@ -259,7 +262,14 @@ fn insert_inline_leaf_units(
                 i = j;
             }
             InlineLeafToken::Atom { node, modifiers } => {
-                tr.insert_subtree(
+                let dot = units[i].dot;
+                let live = tr.view().leaf(dot).is_some();
+                let source_dots = if dot.is_synthetic() || live {
+                    Vec::new()
+                } else {
+                    vec![dot]
+                };
+                tr.reissue_subtree(
                     id,
                     units[i].slot,
                     Subtree {
@@ -267,7 +277,7 @@ fn insert_inline_leaf_units(
                         modifiers: modifiers.clone(),
                         carry: Vec::new(),
                         children: Vec::new(),
-                        source_dots: Vec::new(),
+                        source_dots,
                     },
                 )?;
                 i += 1;
@@ -382,6 +392,19 @@ mod tests {
             walk(&root, 0, &mut out);
         }
         out
+    }
+
+    fn tab_dot(state: &State, block: Dot) -> Dot {
+        state
+            .view()
+            .node(block)
+            .unwrap()
+            .children()
+            .find_map(|c| match c {
+                ChildView::Leaf(l) if l.node_type() == NodeType::Tab => Some(l.dot()),
+                _ => None,
+            })
+            .unwrap()
     }
 
     fn block_mod(state: &State, id: &Dot, ty: ModifierType) -> Option<Modifier> {
@@ -746,5 +769,157 @@ mod tests {
                 && !slot_has_bold(&reverted, p1, 3),
             "revert must restore the target's exact per-run paint"
         );
+    }
+
+    #[test]
+    fn revert_of_a_move_revives_the_paragraph_inside_its_alias_class() {
+        let (target, p1, _p2) = state! {
+            doc { root { p1: paragraph { text("one") } p2: paragraph { text("two") } } }
+            selection: (p1, 0)
+        };
+        let mut mv = Transaction::new(&target);
+        let moved = mv.move_node(p1, Dot::ROOT, 1).unwrap();
+        let (changed, ..) = mv.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+        assert_eq!(snapshot(&reverted), snapshot(&target));
+
+        let view = reverted.view();
+        let revived = view.root().unwrap().child_blocks().next().unwrap().id();
+        let classes = view.alias_classes();
+        assert!(classes.contains(revived), "복구 사본은 원본과 같은 동치류");
+        assert_eq!(classes.members_of(revived), classes.members_of(p1));
+        assert_eq!(classes.members_of(moved.root), classes.members_of(p1));
+    }
+
+    #[test]
+    fn a_stable_selection_on_the_original_resolves_into_the_revived_copy() {
+        use editor_state::{Position, Selection, StableResolveCtx, StableSelection};
+        let (target, p1, _p2) = state! {
+            doc { root { p1: paragraph { text("one") } p2: paragraph { text("two") } } }
+            selection: (p1, 0)
+        };
+        let sel = Selection::new(Position::new(p1, 0), Position::new(p1, 3));
+        let stable = StableSelection::capture(&sel, &target.view());
+
+        let mut mv = Transaction::new(&target);
+        mv.move_node(p1, Dot::ROOT, 1).unwrap();
+        let (changed, ..) = mv.commit();
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        let view = reverted.view();
+        let ctx = StableResolveCtx::from_live(&view, reverted.projected.seq_checkout());
+        let resolved = stable.resolve(&ctx).unwrap();
+        assert_eq!(resolved.resolve(&view).unwrap().collect_text(), "one");
+    }
+
+    #[test]
+    fn a_stale_move_after_a_revert_still_shows_one_copy() {
+        let (target, p1, _p2) = state! {
+            doc { root { p1: paragraph { text("one") } p2: paragraph { text("two") } } }
+            selection: (p1, 0)
+        };
+        let mut mv = Transaction::new(&target);
+        let moved = mv.move_node(p1, Dot::ROOT, 1).unwrap();
+        let (live1, ..) = mv.commit();
+        let stale = State::from_changesets(live1.graph().changesets_as_vec(), None).unwrap();
+
+        let tr = build_revert_transaction(&live1, &target).unwrap();
+        let (live2, ..) = tr.commit();
+
+        let mut again = Transaction::new(&stale);
+        again.move_node(moved.root, Dot::ROOT, 0).unwrap();
+        let (stale_moved, ..) = again.commit();
+
+        let heads: hashbrown::HashSet<Dot> = live2.graph().current_heads().copied().collect();
+        let css = stale_moved.missing_changesets_tolerant(&heads);
+        let (merged, _) = live2.receive_remote_changesets(css).unwrap();
+        let texts: Vec<String> = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect();
+        assert_eq!(texts.iter().filter(|t| *t == "one").count(), 1, "{texts:?}");
+        let cold = State::from_changesets(merged.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), merged.projected.projected());
+    }
+
+    #[test]
+    fn reverting_a_deleted_atom_revives_it_into_its_old_alias_class() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { text("a") tab text("b") } } }
+            selection: (p1, 0)
+        };
+        let old_atom = tab_dot(&target, p1);
+
+        let mut pre = Transaction::new(&target);
+        pre.remove_child_slots(p1, 1, 2).unwrap();
+        let (changed, ..) = pre.commit();
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+        let new_atom = tab_dot(&reverted, p1);
+        assert_ne!(new_atom, old_atom);
+        let view = reverted.view();
+        assert!(
+            view.alias_classes()
+                .members_of(new_atom)
+                .is_some_and(|m| m.contains(&old_atom)),
+            "되살린 원자는 옛 dot과 같은 동치류"
+        );
+        assert!(reverted.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(reverted.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), reverted.projected.projected());
+    }
+
+    #[test]
+    fn reverting_one_of_two_identical_atoms_keeps_the_live_twin() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { tab tab text("a") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_child_slots(p1, 0, 1).unwrap();
+        let (changed, ..) = pre.commit();
+        assert_eq!(changed.view().node(p1).unwrap().children().count(), 2);
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+        assert_eq!(
+            reverted.view().node(p1).unwrap().children().count(),
+            3,
+            "살아 있는 쌍둥이 원자가 회수되면 안 된다"
+        );
+        let cold = State::from_changesets(reverted.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), reverted.projected.projected());
+    }
+
+    #[test]
+    fn reverting_an_atom_and_its_trailing_text_together_succeeds() {
+        let (target, p1) = state! {
+            doc { root { p1: paragraph { tab tab text("q") } } }
+            selection: (p1, 0)
+        };
+        let mut pre = Transaction::new(&target);
+        pre.remove_child_slots(p1, 2, 3).unwrap();
+        pre.remove_child_slots(p1, 0, 1).unwrap();
+        let (changed, ..) = pre.commit();
+        assert_eq!(changed.view().node(p1).unwrap().children().count(), 1);
+
+        let tr = build_revert_transaction(&changed, &target).unwrap();
+        let (reverted, ..) = tr.commit();
+
+        assert_state_eq!(&reverted, &target);
+        assert_eq!(reverted.view().node(p1).unwrap().children().count(), 3);
+        let cold = State::from_changesets(reverted.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), reverted.projected.projected());
     }
 }

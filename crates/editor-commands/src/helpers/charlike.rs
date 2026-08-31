@@ -58,7 +58,7 @@ pub(crate) fn insert_charlike_slots(
             }
             CharlikeSlot::Atom { subtree } => {
                 flush_charlike_text(tr, block, &mut offset, &mut text, &mut modifiers)?;
-                tr.insert_subtree(block, offset, subtree.clone())?;
+                tr.reissue_subtree(block, offset, subtree.clone())?;
                 offset += 1;
             }
         }
@@ -108,4 +108,68 @@ fn flush_charlike_text(
     text.clear();
     modifiers.clear();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_macros::state;
+    use editor_model::NodeType;
+    use editor_state::State;
+
+    use super::*;
+
+    fn atom_dot(state: &State, block: Dot) -> Dot {
+        state
+            .view()
+            .node(block)
+            .unwrap()
+            .children()
+            .find_map(|c| match c {
+                ChildView::Leaf(l) if l.node_type() == NodeType::Tab => Some(l.dot()),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn reinserted_charlike_atom_keeps_its_alias_class() {
+        let (initial, source, target) = state! {
+            doc { root {
+                source: paragraph { text("ab") tab }
+                target: paragraph { text("cd") }
+            } }
+            selection: (source, 0)
+        };
+        let old_atom = atom_dot(&initial, source);
+
+        let (slots, target_len, source_len) = {
+            let view = initial.view();
+            let src = view.node(source).unwrap();
+            let len = src.children().count();
+            let slots = capture_charlike_slots(&initial.projected, &src, 0, len).unwrap();
+            let target_len = view.node(target).unwrap().children().count();
+            (slots, target_len, len)
+        };
+
+        let mut tr = Transaction::new(&initial);
+        insert_charlike_slots(&mut tr, target, target_len, &slots).unwrap();
+        let (actual, ..) = tr.commit();
+
+        let view = actual.view();
+        assert_eq!(view.node(target).unwrap().inline_text(), "cdab");
+        let new_atom = atom_dot(&actual, target);
+        assert_ne!(new_atom, old_atom);
+        assert!(
+            view.alias_classes()
+                .members_of(new_atom)
+                .is_some_and(|m| m.contains(&old_atom)),
+            "옮겨 적은 원자는 옛 dot과 같은 동치류"
+        );
+        assert_eq!(
+            view.node(source).unwrap().children().count(),
+            source_len - 1,
+            "원본에서 원자가 빠진다"
+        );
+        assert!(actual.projected.projected().hidden.is_empty());
+    }
 }

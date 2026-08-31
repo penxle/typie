@@ -1192,6 +1192,7 @@ fn collect_zombie_dots(state: &editor_state::State) -> Vec<editor_crdt::Dot> {
         .subtree_real_dots(editor_crdt::Dot::ROOT)
         .into_iter()
         .collect();
+    let hidden = &ps.projected().hidden;
     let mut zombies = Vec::new();
     for op in state.graph().iter_all() {
         if !matches!(
@@ -1200,7 +1201,7 @@ fn collect_zombie_dots(state: &editor_state::State) -> Vec<editor_crdt::Dot> {
         ) {
             continue;
         }
-        if reachable.contains(&op.id) {
+        if reachable.contains(&op.id) || hidden.contains(op.id) {
             continue;
         }
         if ps.seq_visible_pos(op.id).is_some() {
@@ -2950,6 +2951,170 @@ mod tests {
             .and_then(|rest| rest.split('"').next())
             .expect("the attribute has a value")
             .to_string()
+    }
+
+    fn plain_doc(paragraphs: &[&str]) -> editor_model::PlainDoc {
+        use editor_model::{
+            PlainDoc, PlainNode, PlainNodeEntry, PlainParagraphNode, PlainRootNode, PlainTextNode,
+        };
+        PlainDoc {
+            root: PlainNodeEntry {
+                node: PlainNode::Root(PlainRootNode::default()),
+                modifiers: Default::default(),
+                carry: Vec::new(),
+                children: paragraphs
+                    .iter()
+                    .map(|t| PlainNodeEntry {
+                        node: PlainNode::Paragraph(PlainParagraphNode::default()),
+                        modifiers: Default::default(),
+                        carry: Vec::new(),
+                        children: vec![PlainNodeEntry {
+                            node: PlainNode::Text(PlainTextNode {
+                                text: (*t).to_string(),
+                            }),
+                            modifiers: Default::default(),
+                            carry: Vec::new(),
+                            children: vec![],
+                        }],
+                    })
+                    .collect(),
+            },
+        }
+    }
+
+    fn swap_first_two_paragraphs(xml: &str) -> String {
+        let mut lines: Vec<&str> = xml.lines().collect();
+        let paras: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.trim_start().starts_with("<paragraph"))
+            .map(|(i, _)| i)
+            .collect();
+        assert!(paras.len() >= 2, "{xml}");
+        lines.swap(paras[0], paras[1]);
+        lines.join("\n")
+    }
+
+    fn paragraph_texts_of(css: Vec<Changeset<EditOp>>) -> Vec<String> {
+        let state = editor_state::State::from_changesets(css, None).unwrap();
+        state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect()
+    }
+
+    fn move_on_base(server: &EditorServer, base_graph: &[u8]) -> Vec<u8> {
+        let xml = render(server, base_graph.to_vec());
+        let swapped = swap_first_two_paragraphs(&xml);
+        let tree = editor_xml::from_xml(&swapped).unwrap();
+        let base = crate::graph::build_state_tolerant(dec_css(base_graph), &[]).unwrap();
+        let base_heads: hashbrown::HashSet<Dot> = base.graph().current_heads().copied().collect();
+        let outcome = editor_xml::edit(base, &tree).unwrap();
+        let new_css = outcome
+            .state
+            .graph()
+            .local_changesets_since(&base_heads)
+            .unwrap();
+        editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+            new_css,
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_stale_move_merged_over_a_timeline_revert_leaves_one_copy() {
+        let server = EditorServer::new_test();
+        let g0 = server.to_graph(plain_doc(&["alpha", "beta"])).unwrap();
+        let heads0 = server.heads(g0.clone()).unwrap();
+
+        let m1 = move_on_base(&server, &g0);
+        let live1 = server.apply(g0.clone(), m1).unwrap();
+        assert_eq!(paragraph_texts_of(dec_css(&live1)), vec!["beta", "alpha"]);
+
+        let revert = server.revert(live1.clone(), heads0, Vec::new()).unwrap();
+        assert!(!revert.is_empty());
+        let live2 = server.apply(live1.clone(), revert.clone()).unwrap();
+        assert_eq!(paragraph_texts_of(dec_css(&live2)), vec!["alpha", "beta"]);
+
+        let m2 = move_on_base(&server, &live1);
+
+        let replay = server.apply(live2.clone(), m2.clone()).unwrap();
+        let texts = paragraph_texts_of(dec_css(&replay));
+        assert_eq!(
+            texts.iter().filter(|t| *t == "alpha").count(),
+            1,
+            "from_changesets: {texts:?}"
+        );
+        assert_eq!(texts.len(), 2, "from_changesets: {texts:?}");
+
+        let live2_state = editor_state::State::from_changesets(dec_css(&live2), None).unwrap();
+        let (merged, _) = live2_state.receive_remote_changesets(dec_css(&m2)).unwrap();
+        let texts: Vec<String> = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect();
+        assert_eq!(
+            texts.iter().filter(|t| *t == "alpha").count(),
+            1,
+            "receive_remote: {texts:?}"
+        );
+        assert_eq!(texts.len(), 2, "receive_remote: {texts:?}");
+
+        let folded = server.collect_fold(live2, pack(&[m2])).unwrap();
+        assert_eq!(folded.statuses, vec![BundleStatus::Applied]);
+        assert_eq!(folded.totality_violations, 0);
+        assert_eq!(folded.text.matches("alpha").count(), 1, "{:?}", folded.text);
+    }
+
+    #[test]
+    fn sweep_does_not_treat_hidden_copies_as_zombies() {
+        let server = EditorServer::new_test();
+        let g0 = server
+            .to_graph(plain_doc(&["alpha", "beta", "gamma"]))
+            .unwrap();
+        let m_a = move_on_base(&server, &g0);
+        let m_b = {
+            let xml = render(&server, g0.clone());
+            let mut lines: Vec<&str> = xml.lines().collect();
+            let paras: Vec<usize> = lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.trim_start().starts_with("<paragraph"))
+                .map(|(i, _)| i)
+                .collect();
+            let first = lines.remove(paras[0]);
+            lines.insert(paras[2], first);
+            let tree = editor_xml::from_xml(&lines.join("\n")).unwrap();
+            let base = crate::graph::build_state_tolerant(dec_css(&g0), &[]).unwrap();
+            let heads: hashbrown::HashSet<Dot> = base.graph().current_heads().copied().collect();
+            let outcome = editor_xml::edit(base, &tree).unwrap();
+            let css = outcome
+                .state
+                .graph()
+                .local_changesets_since(&heads)
+                .unwrap();
+            editor_codec::encode_changesets(editor_codec::ReencodableChangesets::from_local_ops(
+                css,
+            ))
+            .unwrap()
+        };
+        let merged = server
+            .apply(server.apply(g0.clone(), m_a).unwrap(), m_b)
+            .unwrap();
+        let state = crate::graph::build_state_tolerant(dec_css(&merged), &[]).unwrap();
+        assert!(
+            !state.projected.projected().hidden.is_empty(),
+            "동시 이동으로 hidden 사본이 있어야 프로브가 유효"
+        );
+        let swept = server.sweep(merged.clone()).unwrap();
+        assert!(swept.is_empty(), "hidden 사본은 좀비가 아니다");
+        assert_eq!(server.zombie_dots(merged).unwrap().len(), 0);
     }
 
     /// A thousand paragraphs and a hundred thousand characters, the same shape

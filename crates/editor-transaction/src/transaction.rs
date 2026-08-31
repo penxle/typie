@@ -274,6 +274,10 @@ impl Transaction {
         index: usize,
         subtree: Subtree,
     ) -> Result<Option<Dot>, StepError> {
+        debug_assert!(
+            !subtree.carries_source_dots(),
+            "captured content must be reissued, not inserted"
+        );
         self.apply_step_with(
             Step::InsertSubtree {
                 parent,
@@ -2304,5 +2308,561 @@ mod tests {
             into_step,
             "inverse() is involutive"
         );
+    }
+    fn fork_state(state: &State) -> State {
+        State::from_changesets(state.graph().changesets_as_vec(), None).unwrap()
+    }
+
+    fn sync_state(dst: &State, src: &State) -> State {
+        let heads: hashbrown::HashSet<Dot> = dst.graph().current_heads().copied().collect();
+        let css = src.missing_changesets_tolerant(&heads);
+        dst.receive_remote_changesets(css).unwrap().0
+    }
+
+    fn paragraph_texts(state: &State) -> Vec<String> {
+        state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect()
+    }
+
+    #[test]
+    fn deleting_the_winner_also_deletes_the_hidden_copy() {
+        let (base, p1, _p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("moved") }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p1, 0)
+        };
+        let peer = fork_state(&base);
+        let mut ta = Transaction::new(&base);
+        ta.move_node(p1, Dot::ROOT, 2).unwrap();
+        let (a, ..) = ta.commit();
+        let mut tb = Transaction::new(&peer);
+        tb.move_node(p1, Dot::ROOT, 0).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&a, &b);
+        assert_eq!(
+            paragraph_texts(&merged)
+                .iter()
+                .filter(|t| *t == "moved")
+                .count(),
+            1
+        );
+        assert!(!merged.projected.projected().hidden.is_empty());
+
+        let winner = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.inline_text() == "moved")
+            .unwrap()
+            .id();
+        let mut td = Transaction::new(&merged);
+        td.remove_subtree(winner).unwrap();
+        let (deleted, ..) = td.commit();
+        assert_eq!(
+            paragraph_texts(&deleted),
+            vec!["second".to_string(), "third".to_string()]
+        );
+        assert!(
+            deleted.projected.projected().hidden.is_empty(),
+            "hidden 사본도 함께 죽는다"
+        );
+
+        let other = sync_state(&b, &deleted);
+        assert_eq!(
+            paragraph_texts(&other),
+            vec!["second".to_string(), "third".to_string()]
+        );
+    }
+
+    #[test]
+    fn merging_away_the_winner_also_deletes_the_hidden_copy() {
+        let (base, p1, _p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("moved") }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p1, 0)
+        };
+        let peer = fork_state(&base);
+        let mut ta = Transaction::new(&base);
+        ta.move_node(p1, Dot::ROOT, 2).unwrap();
+        let (a, ..) = ta.commit();
+        let mut tb = Transaction::new(&peer);
+        tb.move_node(p1, Dot::ROOT, 1).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&a, &b);
+        assert!(!merged.projected.projected().hidden.is_empty());
+
+        let texts = paragraph_texts(&merged);
+        let at = texts.iter().position(|t| t == "moved").unwrap();
+        assert!(at > 0, "{texts:?}");
+        let prev = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .nth(at - 1)
+            .unwrap()
+            .id();
+        let mut expected = texts.clone();
+        expected.remove(at);
+        expected[at - 1] = format!("{}moved", texts[at - 1]);
+
+        let mut tm = Transaction::new(&merged);
+        tm.merge_node(prev).unwrap();
+        let (after, ..) = tm.commit();
+
+        assert_eq!(paragraph_texts(&after), expected);
+        assert!(
+            after.projected.projected().hidden.is_empty(),
+            "hidden 사본도 함께 죽는다"
+        );
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn reissue_retires_a_live_source_that_sits_before_the_target_slot() {
+        let (state, p1, ..) = state! {
+            doc { root {
+                p1: paragraph { text("one") }
+                p2: paragraph { text("two") }
+                p3: paragraph { text("three") }
+            } }
+            selection: (p1, 0)
+        };
+        let subtree = support::capture_subtree(&state.projected, p1).unwrap();
+
+        let mut tr = Transaction::new(&state);
+        tr.reissue_subtree(Dot::ROOT, 2, subtree).unwrap();
+        let (after, ..) = tr.commit();
+
+        assert!(
+            after.projected.seq_visible_pos(p1).is_none(),
+            "옛 사본은 seq에서 사라진다"
+        );
+        assert_eq!(
+            paragraph_texts(&after),
+            vec!["two".to_string(), "one".to_string(), "three".to_string()]
+        );
+        let view = after.view();
+        let new_copy = view.root().unwrap().child_blocks().nth(1).unwrap().id();
+        let members = view.alias_classes().members_of(new_copy).unwrap();
+        assert!(members.contains(&p1));
+        assert_eq!(
+            members.iter().filter(|m| view.node(**m).is_some()).count(),
+            1,
+            "동치류에 보이는 사본은 하나뿐"
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn deleting_an_unknown_winner_also_deletes_its_hidden_copy() {
+        use editor_crdt::ListOp;
+        use editor_model::{AliasOp, AliasRun, AtomLeaf, ChildView, EditOp, SeqItem, UnknownNode};
+
+        let (base, root, p1) = state! {
+            doc { root: root { p1: paragraph { text("ab") } } }
+            selection: (p1, 0)
+        };
+        let mut state = base;
+        let unknown = |state: &mut State, index: usize| {
+            let pos =
+                support::child_seq_insert_pos(&state.projected, p1, index, NodeType::HardBreak)
+                    .unwrap();
+            state
+                .projected_mut()
+                .apply(EditOp::Seq(ListOp::Ins {
+                    pos,
+                    item: SeqItem::BlockAtom {
+                        leaf: AtomLeaf::Unknown(UnknownNode),
+                        parents: vec![root, p1],
+                    },
+                }))
+                .unwrap()
+                .id
+        };
+        let u1 = unknown(&mut state, 2);
+        let u2 = unknown(&mut state, 3);
+        state
+            .projected_mut()
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: u1,
+                    len: 1,
+                    new_start: u2,
+                }],
+            }))
+            .unwrap();
+
+        let (winner, loser) = if state.projected.projected().hidden.contains(u1) {
+            (u2, u1)
+        } else {
+            (u1, u2)
+        };
+        assert!(state.projected.projected().hidden.contains(loser));
+        let slot = state
+            .view()
+            .node(p1)
+            .unwrap()
+            .children()
+            .position(|c| matches!(c, ChildView::Leaf(l) if l.dot() == winner))
+            .unwrap();
+
+        let mut tr = Transaction::new(&state);
+        tr.remove_child_slots(p1, slot, slot + 1).unwrap();
+        let (after, ..) = tr.commit();
+
+        assert!(after.view().leaf(winner).is_none());
+        assert!(
+            after.view().leaf(loser).is_none(),
+            "hidden 사본도 함께 죽는다"
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        assert_eq!(after.view().node(p1).unwrap().children().count(), 2);
+    }
+
+    #[test]
+    fn moving_the_winner_also_retires_the_hidden_copy() {
+        let (base, p1, _p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("moved") }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p1, 0)
+        };
+        let peer = fork_state(&base);
+        let mut ta = Transaction::new(&base);
+        ta.move_node(p1, Dot::ROOT, 2).unwrap();
+        let (a, ..) = ta.commit();
+        let mut tb = Transaction::new(&peer);
+        tb.move_node(p1, Dot::ROOT, 0).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&a, &b);
+        let winner = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.inline_text() == "moved")
+            .unwrap()
+            .id();
+        let mut tm = Transaction::new(&merged);
+        tm.move_node(winner, Dot::ROOT, 0).unwrap();
+        let (again, ..) = tm.commit();
+        assert_eq!(
+            paragraph_texts(&again),
+            vec![
+                "moved".to_string(),
+                "second".to_string(),
+                "third".to_string()
+            ]
+        );
+        assert!(again.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(again.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), again.projected.projected());
+    }
+    fn child_texts(state: &State, block: Dot) -> Vec<String> {
+        state
+            .view()
+            .node(block)
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect()
+    }
+
+    fn merged_with_hidden_copy() -> (State, Dot, Dot, Dot) {
+        let (base, p1, bq, p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("moved") }
+                bq: blockquote { paragraph { text("quoted") } }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p1, 0)
+        };
+        let peer = fork_state(&base);
+        let mut ta = Transaction::new(&base);
+        ta.move_node(p1, Dot::ROOT, 3).unwrap();
+        let (a, ..) = ta.commit();
+        let mut tb = Transaction::new(&peer);
+        tb.move_node(p1, Dot::ROOT, 0).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&a, &b);
+        assert_eq!(
+            paragraph_texts(&merged)
+                .iter()
+                .filter(|t| *t == "moved")
+                .count(),
+            1
+        );
+        assert!(!merged.projected.projected().hidden.is_empty());
+        let winner = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.inline_text() == "moved")
+            .unwrap()
+            .id();
+        (merged, winner, bq, p2)
+    }
+
+    #[test]
+    fn moving_the_winner_across_parents_retires_the_hidden_copy() {
+        let (merged, winner, bq, _p2) = merged_with_hidden_copy();
+        let mut tr = Transaction::new(&merged);
+        tr.move_node(winner, bq, 0).unwrap();
+        let (after, ..) = tr.commit();
+        assert_eq!(
+            paragraph_texts(&after),
+            vec![String::new(), "second".to_string(), "third".to_string()]
+        );
+        assert_eq!(
+            child_texts(&after, bq),
+            vec!["moved".to_string(), "quoted".to_string()]
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn wrapping_the_winner_in_a_fresh_container_retires_the_hidden_copy() {
+        let (merged, winner, ..) = merged_with_hidden_copy();
+        let container = Subtree::leaf(NodeType::Blockquote.into_node().to_plain());
+        let mut tr = Transaction::new(&merged);
+        let (wrapper, moved) = tr
+            .insert_subtree_with_moved(Dot::ROOT, 0, container, &[winner])
+            .unwrap();
+        assert_eq!(moved.len(), 1);
+        let (after, ..) = tr.commit();
+        assert_eq!(child_texts(&after, wrapper), vec!["moved".to_string()]);
+        assert_eq!(paragraph_texts(&after).len(), 4);
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn moving_the_winner_with_a_sibling_retires_the_hidden_copy() {
+        let (merged, winner, bq, p2) = merged_with_hidden_copy();
+        let mut tr = Transaction::new(&merged);
+        let moved = tr.move_nodes_consecutive(&[winner, p2], bq, 0).unwrap();
+        assert_eq!(moved.len(), 2);
+        let (after, ..) = tr.commit();
+        assert_eq!(
+            paragraph_texts(&after),
+            vec![String::new(), "third".to_string()]
+        );
+        assert_eq!(
+            child_texts(&after, bq),
+            vec![
+                "moved".to_string(),
+                "second".to_string(),
+                "quoted".to_string()
+            ]
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn replacing_the_winners_block_type_retires_the_hidden_copy() {
+        let (base, list, _p, _p2, _p3) = state! {
+            doc { root {
+                list: ordered_list { list_item { p: paragraph { text("moved") } } }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p, 0)
+        };
+        let peer = fork_state(&base);
+        let mut ta = Transaction::new(&base);
+        ta.move_node(list, Dot::ROOT, 1).unwrap();
+        let (a, ..) = ta.commit();
+        let mut tb = Transaction::new(&peer);
+        tb.move_node(list, Dot::ROOT, 0).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&a, &b);
+        assert!(!merged.projected.projected().hidden.is_empty());
+
+        let lists: Vec<Dot> = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .filter(|b| b.node_type() == NodeType::OrderedList)
+            .map(|b| b.id())
+            .collect();
+        assert_eq!(lists.len(), 1);
+        let winner = lists[0];
+
+        let mut tr = Transaction::new(&merged);
+        tr.replace_block_type(winner, NodeType::BulletList).unwrap();
+        let (after, ..) = tr.commit();
+
+        let types: Vec<NodeType> = after
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.node_type())
+            .collect();
+        assert_eq!(
+            types,
+            vec![
+                NodeType::BulletList,
+                NodeType::Paragraph,
+                NodeType::Paragraph
+            ]
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+    fn fork_with_actor(state: &State, actor: u64) -> State {
+        let mut g = editor_crdt::OpGraph::<EditOp>::with_actor(actor);
+        for cs in state.graph().changesets_as_vec() {
+            g.receive_changeset_mut(cs).unwrap();
+        }
+        State::new(ProjectedState::from_graph(g).unwrap(), None)
+    }
+
+    fn assert_loser_precedes_winner(state: &State, winner: Dot) -> Dot {
+        let roots: Vec<Dot> = state.projected.projected().hidden.roots().collect();
+        assert_eq!(roots.len(), 1);
+        let loser = roots[0];
+        let loser_pos = state.projected.seq_flat_pos(loser).unwrap();
+        let winner_pos = state.projected.seq_flat_pos(winner).unwrap();
+        assert!(
+            loser_pos < winner_pos,
+            "패자가 승자보다 앞에 있어야 before 보정이 발동한다: {loser_pos} < {winner_pos}"
+        );
+        loser
+    }
+
+    #[test]
+    fn moving_the_winner_across_parents_when_the_hidden_copy_precedes_it() {
+        let (base, p1, bq, _p2, _p3) = state! {
+            doc { root {
+                p1: paragraph { text("moved") }
+                bq: blockquote { paragraph { text("quoted") } }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p1, 0)
+        };
+        let front = fork_with_actor(&base, 2);
+        let back = fork_with_actor(&base, 3);
+        let mut tf = Transaction::new(&front);
+        tf.move_node(p1, Dot::ROOT, 0).unwrap();
+        let (f, ..) = tf.commit();
+        let mut tb = Transaction::new(&back);
+        tb.move_node(p1, Dot::ROOT, 3).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&b, &f);
+
+        let winner = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .find(|b| b.inline_text() == "moved")
+            .unwrap()
+            .id();
+        assert_loser_precedes_winner(&merged, winner);
+
+        let mut tr = Transaction::new(&merged);
+        tr.move_node(winner, bq, 0).unwrap();
+        let (after, ..) = tr.commit();
+        assert_eq!(
+            paragraph_texts(&after),
+            vec![String::new(), "second".to_string(), "third".to_string()]
+        );
+        assert_eq!(
+            child_texts(&after, bq),
+            vec!["moved".to_string(), "quoted".to_string()]
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
+    }
+
+    #[test]
+    fn replacing_the_winners_block_type_when_the_hidden_copy_precedes_it() {
+        let (base, list, _p, _p2, _p3) = state! {
+            doc { root {
+                list: ordered_list { list_item { p: paragraph { text("moved") } } }
+                p2: paragraph { text("second") }
+                p3: paragraph { text("third") }
+            } }
+            selection: (p, 0)
+        };
+        let front = fork_with_actor(&base, 2);
+        let back = fork_with_actor(&base, 3);
+        let mut tf = Transaction::new(&front);
+        tf.move_node(list, Dot::ROOT, 0).unwrap();
+        let (f, ..) = tf.commit();
+        let mut tb = Transaction::new(&back);
+        tb.move_node(list, Dot::ROOT, 1).unwrap();
+        let (b, ..) = tb.commit();
+        let merged = sync_state(&b, &f);
+
+        let lists: Vec<Dot> = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .filter(|b| b.node_type() == NodeType::OrderedList)
+            .map(|b| b.id())
+            .collect();
+        assert_eq!(lists.len(), 1);
+        let winner = lists[0];
+        assert_loser_precedes_winner(&merged, winner);
+
+        let mut tr = Transaction::new(&merged);
+        tr.replace_block_type(winner, NodeType::BulletList).unwrap();
+        let (after, ..) = tr.commit();
+
+        let types: Vec<NodeType> = after
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.node_type())
+            .collect();
+        assert_eq!(
+            types,
+            vec![
+                NodeType::Paragraph,
+                NodeType::BulletList,
+                NodeType::Paragraph
+            ]
+        );
+        assert_eq!(
+            paragraph_texts(&after),
+            vec!["second".to_string(), String::new(), "third".to_string()]
+        );
+        assert!(after.projected.projected().hidden.is_empty());
+        let cold = State::from_changesets(after.graph().changesets_as_vec(), None).unwrap();
+        assert_eq!(cold.projected.projected(), after.projected.projected());
     }
 }

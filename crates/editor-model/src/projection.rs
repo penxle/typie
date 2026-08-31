@@ -3,11 +3,12 @@ use std::collections::BTreeMap;
 
 use editor_crdt::OpLog;
 use editor_crdt::sequence::{Bias, Boundary, SeqCheckout, SeqResolve, checkout_with_resolver};
-use editor_crdt::{Dot, FastMap};
+use editor_crdt::{Dot, FastMap, FastSet};
 
 use crate::{
-    AliasClasses, AliasLog, BlockNode, BlockTree, Child, Modifier, ModifierAttrLog, ModifierType,
-    NodeType, OwnModifier, ProjectError, SchemaError, anchor_dot,
+    AliasClasses, AliasLog, BlockNode, BlockTree, Child, HiddenCopies, Modifier, ModifierAttrLog,
+    ModifierType, NodeType, Outside, OwnModifier, ProjectError, SchemaError, anchor_dot,
+    hide_losers, place_redirects, redirect_anchors,
 };
 use crate::{
     Node, NodeAttrLog, RepairStats, SeqItem, SpanLog, normalize_with_stats,
@@ -20,6 +21,7 @@ pub enum ProjectionError {
     LeafTypedBlock { dot: Dot, node_type: NodeType },
     RootTypedBlock { dot: Dot },
     SchemaInvalid(SchemaError),
+    Escalate { dot: Dot },
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +62,12 @@ pub struct ProjectedDoc {
     pub node_attrs: FastMap<Dot, Node>,
     pub node_carries: FastMap<Dot, BTreeMap<ModifierType, Modifier>>,
     pub alias_classes: AliasClasses,
+    pub hidden: HiddenCopies,
+    /// Leaves this projection moved off their sequence slot onto a surviving copy,
+    /// mapped to the slot target they were placed against. Derived state, like
+    /// `hidden`: the warm promotion predicates read it to tell an ordinary leaf from
+    /// one whose block is no longer in sequence order.
+    pub redirected: FastMap<Dot, Dot>,
     /// Repairs applied while producing THIS projection pass (revival attachments,
     /// WRAP / SPLIT-HOIST). Per-pass, not deduplicated: a persistent damaged state
     /// re-counts every time the tree is re-derived. `drops`/`totality_violations`
@@ -134,6 +142,8 @@ impl PartialEq for ProjectedDoc {
             && self.node_carries == o.node_carries
             && self.seg_index == o.seg_index
             && self.alias_classes == o.alias_classes
+            && self.hidden == o.hidden
+            && self.redirected == o.redirected
     }
 }
 
@@ -411,6 +421,11 @@ impl BlockPaths {
 pub struct ProjectionIndexes {
     pub paths: BlockPaths,
     pub span_index: crate::span::AnchorIntervalIndex,
+    /// Reverse views of `ProjectedDoc.redirected`, so the warm promotion predicates
+    /// answer in hash lookups instead of scanning the map: the slot targets leaves
+    /// were placed against, and the blocks currently holding a placed leaf.
+    pub redirect_values: FastSet<Dot>,
+    pub redirect_blocks: FastSet<Dot>,
 }
 
 impl ProjectionIndexes {
@@ -419,14 +434,35 @@ impl ProjectionIndexes {
         spans: &SpanLog,
         seq: &editor_crdt::sequence::SeqCheckout,
     ) -> Self {
+        let paths = BlockPaths::from_tree(&projected.tree);
+        let (redirect_values, redirect_blocks) = redirect_reverse(&projected.redirected, &paths);
         Self {
-            paths: BlockPaths::from_tree(&projected.tree),
+            paths,
             span_index: crate::span::AnchorIntervalIndex::build(
                 seq,
                 crate::span::span_intervals(spans),
             ),
+            redirect_values,
+            redirect_blocks,
         }
     }
+}
+
+/// The two reverse views of a redirect map, given the paths index that says which
+/// block each placed leaf currently lives in.
+pub fn redirect_reverse(
+    redirected: &FastMap<Dot, Dot>,
+    paths: &BlockPaths,
+) -> (FastSet<Dot>, FastSet<Dot>) {
+    let mut values: FastSet<Dot> = FastSet::default();
+    let mut blocks: FastSet<Dot> = FastSet::default();
+    for (leaf, target) in redirected {
+        values.insert(*target);
+        if let Some(b) = paths.block_of(*leaf) {
+            blocks.insert(b);
+        }
+    }
+    (values, blocks)
 }
 
 /// Derive a segment's `(effective, own)` from its key directly. The canonical
@@ -733,8 +769,26 @@ pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError>
 }
 
 pub fn project_from(logs: &DocLogs, seq: &SeqCheckout) -> Result<ProjectedDoc, ProjectionError> {
-    let elements = seq.snapshot(&logs.seq);
-    project_core(&elements, seq, logs)
+    if logs.aliases.is_empty() {
+        let elements = seq.snapshot(&logs.seq);
+        return project_core(&elements, seq, logs);
+    }
+    let (elements, origins) = seq.snapshot_with_origins(&logs.seq);
+    let prev = |d: Dot| seq.prev_in_order(&logs.seq, d);
+    let enclosing = |d: Dot| {
+        seq.enclosing_marker(&logs.seq, d, &|item: &SeqItem| {
+            matches!(item, SeqItem::Block { .. })
+        })
+    };
+    project_core_with_origins(
+        &elements,
+        Some(&origins),
+        seq,
+        logs,
+        &prev,
+        &|_| Outside::Absent,
+        &enclosing,
+    )
 }
 
 pub struct OverlayResolve<R: SeqResolve> {
@@ -799,20 +853,69 @@ pub fn project_with_overlay(
     if overlay.is_empty() {
         return project_from(logs, seq);
     }
-    let hidden: HashSet<Dot> = overlay.iter().copied().collect();
-    let elements: Vec<(Dot, SeqItem)> = seq
-        .snapshot(&logs.seq)
-        .into_iter()
-        .filter(|(d, _)| !hidden.contains(d))
-        .collect();
+    let swept: HashSet<Dot> = overlay.iter().copied().collect();
     let resolver = OverlayResolve::new(seq, overlay);
-    project_core(&elements, &resolver, logs)
+    if logs.aliases.is_empty() {
+        let elements: Vec<(Dot, SeqItem)> = seq
+            .snapshot(&logs.seq)
+            .into_iter()
+            .filter(|(d, _)| !swept.contains(d))
+            .collect();
+        return project_core(&elements, &resolver, logs);
+    }
+    let (all, all_origins) = seq.snapshot_with_origins(&logs.seq);
+    let mut elements = Vec::with_capacity(all.len());
+    let mut origins = Vec::with_capacity(all.len());
+    for (e, o) in all.into_iter().zip(all_origins) {
+        if !swept.contains(&e.0) {
+            elements.push(e);
+            origins.push(o);
+        }
+    }
+    let prev = |d: Dot| seq.prev_in_order(&logs.seq, d);
+    // The overlay drops swept ops from the elements, so a swept marker is gone from
+    // this projection even though the sequence still carries it as visible.
+    let enclosing = |d: Dot| {
+        seq.enclosing_marker(&logs.seq, d, &|item: &SeqItem| {
+            matches!(item, SeqItem::Block { .. })
+        })
+        .map(|(m, visible)| (m, visible && !swept.contains(&m)))
+    };
+    project_core_with_origins(
+        &elements,
+        Some(&origins),
+        &resolver,
+        logs,
+        &prev,
+        &|_| Outside::Absent,
+        &enclosing,
+    )
 }
 
 pub fn project_core<R: SeqResolve>(
     elements: &[(Dot, SeqItem)],
     resolver: &R,
     logs: &DocLogs,
+) -> Result<ProjectedDoc, ProjectionError> {
+    project_core_with_origins(
+        elements,
+        None,
+        resolver,
+        logs,
+        &|_| None,
+        &|_| Outside::Absent,
+        &|_| None,
+    )
+}
+
+pub fn project_core_with_origins<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    origins: Option<&[Option<Dot>]>,
+    resolver: &R,
+    logs: &DocLogs,
+    prev: &dyn Fn(Dot) -> Option<(Dot, bool)>,
+    outside: &dyn Fn(Dot) -> Outside,
+    enclosing_marker: &dyn Fn(Dot) -> Option<(Dot, bool)>,
 ) -> Result<ProjectedDoc, ProjectionError> {
     for (d, item) in elements {
         if let SeqItem::Block { node_type, .. } = item {
@@ -829,10 +932,34 @@ pub fn project_core<R: SeqResolve>(
     }
 
     let mut stats = RepairStats::default();
-    let raw_tree = normalize_with_stats(
-        project_blocks_with_stats(elements, &mut stats).map_err(ProjectionError::Project)?,
-        &mut stats,
-    );
+    let mut raw =
+        project_blocks_with_stats(elements, &mut stats).map_err(ProjectionError::Project)?;
+    let classes = AliasClasses::from_log(&logs.aliases);
+    let hidden = hide_losers(&mut raw, &classes, outside)
+        .map_err(|e| ProjectionError::Escalate { dot: e.dot })?;
+    let mut placed: Vec<(Dot, Dot)> = Vec::new();
+    if let Some(origins) = origins {
+        let visible: HashSet<Dot> = elements.iter().map(|(d, _)| *d).collect();
+        let is_dead = |d: Dot| !visible.contains(&d);
+        let is_hidden = |d: Dot| hidden.contains(d);
+        // A leaf only follows a copy it was typed INSIDE of: its enclosing marker has
+        // to be the one that went away.
+        let in_dead_block = |leaf: Dot| match enclosing_marker(leaf) {
+            Some((m, visible)) => !visible || hidden.contains(m),
+            None => false,
+        };
+        let redirects = redirect_anchors(
+            elements,
+            origins,
+            &classes,
+            &is_dead,
+            &is_hidden,
+            &in_dead_block,
+        );
+        placed = place_redirects(&mut raw, &redirects, &classes, prev, outside)
+            .map_err(|e| ProjectionError::Escalate { dot: e.dot })?;
+    }
+    let raw_tree = normalize_with_stats(raw, &mut stats);
     let tree = BlockTree::from_raw(&raw_tree);
     // A degraded projection (repair-pass cap reached) preserves totality and order
     // but not necessarily schema validity — surface it via telemetry rather than
@@ -841,9 +968,20 @@ pub fn project_core<R: SeqResolve>(
         validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
     }
 
-    let mut pd = project_from_tree(elements, tree, resolver, logs);
+    let mut pd = project_from_tree(elements, tree, resolver, logs, classes);
     pd.repair_stats = stats;
-    totality_check(elements, &pd.tree, &mut pd.repair_stats);
+    if hidden.is_empty() {
+        totality_check(elements, &pd.tree, &mut pd.repair_stats);
+    } else {
+        let shown: Vec<(Dot, SeqItem)> = elements
+            .iter()
+            .filter(|(d, _)| !hidden.contains(*d))
+            .cloned()
+            .collect();
+        totality_check(&shown, &pd.tree, &mut pd.repair_stats);
+    }
+    pd.hidden = hidden;
+    pd.redirected = placed.into_iter().collect();
     Ok(pd)
 }
 
@@ -928,6 +1066,7 @@ pub fn project_from_tree<R: SeqResolve>(
     tree: BlockTree,
     resolver: &R,
     logs: &DocLogs,
+    alias_classes: AliasClasses,
 ) -> ProjectedDoc {
     let node_of = collect_real_nodes(&tree);
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
@@ -941,7 +1080,6 @@ pub fn project_from_tree<R: SeqResolve>(
     let node_carries = collect_node_carries(&tree, &logs.node_carries);
 
     let block_effective = block_effective_all(&tree, &logs.block_modifiers, &node_attrs);
-    let alias_classes = AliasClasses::from_log(&logs.aliases);
 
     let mut pd = ProjectedDoc {
         tree,
@@ -951,6 +1089,8 @@ pub fn project_from_tree<R: SeqResolve>(
         node_attrs,
         node_carries,
         alias_classes,
+        hidden: HiddenCopies::default(),
+        redirected: FastMap::default(),
         repair_stats: RepairStats::default(),
     };
 
@@ -1086,6 +1226,8 @@ mod tests {
             node_attrs: FastMap::new(),
             node_carries: FastMap::new(),
             alias_classes: AliasClasses::default(),
+            hidden: HiddenCopies::default(),
+            redirected: FastMap::default(),
             repair_stats: RepairStats::default(),
         };
         let idx = ProjectionIndexes::rebuild_from(
@@ -1284,6 +1426,21 @@ mod tests {
         assert_ne!(
             a, b,
             "alias 맵만 다른 두 ProjectedDoc은 PartialEq에서 달라야 한다"
+        );
+    }
+
+    #[test]
+    fn projected_doc_eq_covers_hidden() {
+        let (elems, _root, _para) = para_abc();
+        let logs = logs_of(&elems);
+        let base = project_document(&logs).unwrap();
+        let mut hidden = base.clone();
+        hidden
+            .hidden
+            .insert_root(Dot::new(9, 9), vec![Dot::new(9, 9)]);
+        assert_ne!(
+            base, hidden,
+            "hidden만 다른 두 투영은 부등해야 오라클이 산다"
         );
     }
 

@@ -245,6 +245,33 @@ pub(crate) fn subtree_dots(ps: &ProjectedState, block: Dot) -> Option<Vec<Dot>> 
         .map(|_| vec![block])
 }
 
+pub(crate) fn with_hidden_copies(ps: &ProjectedState, dots: Vec<Dot>) -> Vec<Dot> {
+    let doc = ps.projected();
+    if doc.hidden.is_empty() {
+        return dots;
+    }
+    let mut out = dots;
+    let seed_len = out.len();
+    for i in 0..seed_len {
+        let d = out[i];
+        let Some(members) = doc.alias_classes.members_of(d) else {
+            continue;
+        };
+        for &m in members {
+            if let Some(sub) = doc.hidden.dots_of_root(m) {
+                out.extend(
+                    sub.iter()
+                        .copied()
+                        .filter(|&d| ps.seq_visible_pos(d).is_some()),
+                );
+            }
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 pub(crate) fn insert_text_ops(
     ps: &ProjectedState,
     block: Dot,
