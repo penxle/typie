@@ -69,7 +69,7 @@ import { evaluateCouponCondition } from '#/utils/coupon.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
-import { opsAlert } from '#/utils/ops-alert.ts';
+import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
@@ -270,26 +270,26 @@ User.implement({
       resolve: async (self, args, ctx) => {
         const { rows, now } = await loadSessionEntitlement(self, ctx);
 
-        const binding = await inAppPurchaseBindingLoader(ctx).load(self.id);
+        const bindings = await inAppPurchaseBindingsLoader(ctx).load(self.id);
         const iapPlan = await planAvailabilityExistsLoader(ctx).load(PlanAvailability.IN_APP_PURCHASE);
 
+        // 조회 시점엔 토큰이 없어 대상 계보를 못 정한다 — 같은 스토어의 살아 있는 계약은 플랜 변경 후보이지 충돌이 아니다.
         const precheck = precheckIapEnroll({
           rows,
-          binding,
-          store: args.store,
+          bindings,
+          excludeBindingIds: bindings.filter((binding) => binding.store === args.store).map((binding) => binding.id),
           iapPlanAvailable: !!iapPlan,
           now,
         });
 
-        // 정상 모바일 흐름은 여기서 끝나므로 등록 mutation 의 알람만으로는 거절 신호가 최빈 경로에서 사라진다.
-        if (!precheck.allowed && precheck.reason === 'cross-store-binding') {
-          void alertCrossStoreEnrollRejectionOnce(`${self.id}:${args.store}`, {
+        // 앱이 이 판정으로 게이팅하므로 거절은 여기서만 관측된다 — 뮤테이션 알람은 도달하지 않는다.
+        if (!precheck.allowed && precheck.reason === 'live-contract') {
+          void opsAlertOnce('iap-live-contract-enroll-rejected', `${self.id}:${args.store}`, {
             source: 'graphql/User.canEnrollInAppPurchase',
             userId: self.id,
             store: args.store,
-            boundStore: binding?.store,
-            bindingId: binding?.id,
-          });
+            liveBindingIds: precheck.bindingIds,
+          }).catch((err: unknown) => Sentry.captureException(err));
         }
 
         return precheck.allowed;
@@ -1200,28 +1200,6 @@ builder.mutationFields((t) => ({
  * * Utils
  */
 
-const OPS_ALERT_DEDUPE_TTL_SECONDS = 86_400;
-
-// 조회 필드라 alias 반복으로 요청 1건 안에서도 여러 번 평가된다 — 디듀프 없이는 유저 1명이 알람 N건을 만든다.
-const alertCrossStoreEnrollRejectionOnce = async (key: string, context: Record<string, unknown>) => {
-  let acquired: boolean;
-
-  // 디듀프가 죽었다고 거절 신호까지 사라지면 안 된다 — Redis 실패는 발화 쪽으로 기운다.
-  try {
-    acquired =
-      (await redis.set(`ops-alert-dedupe:iap-cross-store-enroll-rejected:${key}`, '1', 'EX', OPS_ALERT_DEDUPE_TTL_SECONDS, 'NX')) === 'OK';
-  } catch {
-    acquired = true;
-  }
-
-  if (!acquired) {
-    return;
-  }
-
-  // 거절 반환값과 무관한 부수효과라 호출부가 응답을 기다리지 않는다 — 실패가 조용히 사라지지 않게 여기서 잡는다.
-  await opsAlert('iap-cross-store-enroll-rejected', context).catch((err: unknown) => Sentry.captureException(err));
-};
-
 // 권한·대표 구독·shim 이 같은 스냅샷을 보게 하는 단일 로더. resolver 마다 따로 질의하면 질의 사이의
 // 상태 변화가 서로 모순된 값을 함께 반환하고 목록 API 에서 N+1 이 된다.
 const entitlementLoader = (ctx: Context) =>
@@ -1240,17 +1218,39 @@ const entitlementLoader = (ctx: Context) =>
     key: (row) => row.userId,
   });
 
-const inAppPurchaseBindingLoader = (ctx: Context) =>
+const inAppPurchaseBindingsLoader = (ctx: Context) =>
   ctx.loader({
-    name: 'User.inAppPurchaseBinding',
-    nullable: true,
+    name: 'User.inAppPurchaseBindings',
+    many: true,
     load: async (userIds: string[]) => {
-      return await db
-        .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, store: UserInAppPurchases.store })
+      const rows = await db
+        .select({
+          id: UserInAppPurchases.id,
+          userId: UserInAppPurchases.userId,
+          store: UserInAppPurchases.store,
+          state: Subscriptions.state,
+          planAvailability: Plans.availability,
+          startsAt: Subscriptions.startsAt,
+          currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+          currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+        })
         .from(UserInAppPurchases)
-        .where(inArray(UserInAppPurchases.userId, userIds));
+        .leftJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
+        .leftJoin(Plans, eq(Subscriptions.planId, Plans.id))
+        .where(inArray(UserInAppPurchases.userId, userIds))
+        .orderBy(asc(UserInAppPurchases.createdAt), asc(UserInAppPurchases.id));
+
+      return rows.map(({ id, userId, store, state, planAvailability, startsAt, currentPeriodStartsAt, currentPeriodEndsAt }) => ({
+        id,
+        userId,
+        store,
+        canonical:
+          state !== null && planAvailability !== null && startsAt !== null && currentPeriodStartsAt !== null && currentPeriodEndsAt !== null
+            ? { state, planAvailability, startsAt, currentPeriodStartsAt, currentPeriodEndsAt }
+            : null,
+      }));
     },
-    key: (row) => row?.userId,
+    key: (row) => row.userId,
   });
 
 const planAvailabilityExistsLoader = (ctx: Context) =>

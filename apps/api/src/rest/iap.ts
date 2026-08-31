@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
-import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
+import { InAppPurchaseStore, PlanAvailability } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as uuid from 'uuid';
 import { redis } from '#/cache.ts';
@@ -12,16 +12,21 @@ import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as slack from '#/external/slack.ts';
 import { enqueueJob } from '#/mq/index.ts';
+import { selectApplePredecessor } from '#/utils/iap-lineage.ts';
 import { discoverAppleSuccessor, mapUnsupportedStorePayloadReason, normalizeGoogle, selectAppleStatusItem } from '#/utils/iap-normalize.ts';
-import { applyNormalizedIapLocked, resolveAcknowledgeDuty } from '#/utils/iap-sync.ts';
+import { applyNormalizedIapLocked, loadConflictCandidates, resolveAcknowledgeDuty } from '#/utils/iap-sync.ts';
+import { findPromotionConflict, selectGooglePredecessor } from '#/utils/iap-sync-core.ts';
 import { opsAlert, opsAlertOnce } from '#/utils/ops-alert.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import type { PlanInterval } from '@typie/lib/enums';
+import type { SQL } from 'drizzle-orm';
 import type { Env } from '#/context.ts';
 import type { Transaction } from '#/db/index.ts';
 import type { DeveloperNotification } from '#/external/googleplay.ts';
+import type { EntitlementJudgmentRow } from '#/utils/entitlement.ts';
+import type { ApplePredecessorCandidate } from '#/utils/iap-lineage.ts';
 import type { IapPriorPeriod } from '#/utils/iap-normalize.ts';
 import type { IapAcknowledgeDuty } from '#/utils/iap-sync.ts';
 import type { OpsAlertId } from '#/utils/ops-alert.ts';
@@ -94,30 +99,13 @@ const findBinding = async (store: InAppPurchaseStore, identifier: string) => {
     .then(first);
 };
 
-// 승격 전 충돌 검사는 primitive 를 직접 부르는 경로가 스스로 해야 한다 — syncIapBinding 을 우회하면 검사도 함께
-// 우회된다. 유니크 위반은 경합의 최후 방어일 뿐이고, WILL_ACTIVATE 는 부분 유니크가 분리되어 DB 가 잡지도 못한다.
-const findPromotionConflict = async (tx: Transaction, { userId, subscriptionId }: { userId: string; subscriptionId: string }) => {
-  return await tx
-    .select({ id: Subscriptions.id })
-    .from(Subscriptions)
-    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
-    .where(
-      and(
-        eq(Subscriptions.userId, userId),
-        ne(Subscriptions.id, subscriptionId),
-        ne(Plans.availability, PlanAvailability.IN_APP_PURCHASE),
-        inArray(Subscriptions.state, [SubscriptionState.ACTIVE, SubscriptionState.WILL_ACTIVATE]),
-      ),
-    )
-    .then(first);
-};
-
 type LockedSuccession =
   | {
       kind: 'ok';
       binding: { id: string; userId: string; store: InAppPurchaseStore; identifier: string; subscriptionId: string };
       prior: IapPriorPeriod;
       canonicalId: string;
+      canonical: EntitlementJudgmentRow & { id: string };
     }
   | { kind: 'changed' }
   | { kind: 'invariant'; reason: string; bindingId: string };
@@ -149,12 +137,15 @@ const loadLockedSuccession = async (tx: Transaction, captured: SuccessionBinding
     .select({
       id: Subscriptions.id,
       state: Subscriptions.state,
+      planAvailability: Plans.availability,
+      startsAt: Subscriptions.startsAt,
       currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
       currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
     })
     .from(Subscriptions)
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
     .where(eq(Subscriptions.id, binding.subscriptionId))
-    .for('no key update')
+    .for('no key update', { of: Subscriptions })
     .then(first);
 
   if (!canonical) {
@@ -170,6 +161,7 @@ const loadLockedSuccession = async (tx: Transaction, captured: SuccessionBinding
       currentPeriodEndsAt: canonical.currentPeriodEndsAt,
     },
     canonicalId: canonical.id,
+    canonical,
   };
 };
 
@@ -190,38 +182,52 @@ type SuccessionOutcome =
 // 등록 경합 완충 구간에서는 정상 국면이라 알람을 신선도로 거른다.
 type AppleUnresolved = { kind: 'unresolved'; reason: string; candidates: number; enrollmentRace: boolean };
 
-type AppleSuccessionOutcome = SuccessionOutcome | AppleUnresolved | { kind: 'lookup-failed' };
+type AppleSuccessionOutcome = SuccessionOutcome | AppleUnresolved | { kind: 'lookup-failed' } | { kind: 'foreign'; userIds: string[] };
 
-type AppleCandidate = AppleUnresolved | { kind: 'found'; binding: SuccessionBinding } | { kind: 'lookup-failed' };
+type ApplePredecessorRow = ApplePredecessorCandidate;
+
+type AppleCandidates =
+  AppleUnresolved | { kind: 'lookup-failed' } | { kind: 'ok'; ownerUserId: string | null; candidates: ApplePredecessorRow[] };
+
+const loadApplePredecessorRows = async (where: SQL): Promise<ApplePredecessorRow[]> =>
+  await db
+    .select({
+      id: UserInAppPurchases.id,
+      userId: UserInAppPurchases.userId,
+      identifier: UserInAppPurchases.identifier,
+      canonicalState: Subscriptions.state,
+    })
+    .from(UserInAppPurchases)
+    .leftJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
+    .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE), where));
 
 // appAccountToken 은 구매 시점에 스토어가 서명해 박은 소유 증거다 — users.uuid 로 소유자를 직접 찾는다.
-// 유저는 찾았는데 APP_STORE 바인딩이 없으면 등록이 아직 안 온 것이다(경합).
-const findAppleBindingByAccountToken = async (appAccountToken: string): Promise<AppleCandidate> => {
-  if (!uuid.validate(appAccountToken)) {
-    return { kind: 'unresolved', reason: 'apple-account-token-unmatched', candidates: 0, enrollmentRace: false };
+const collectAppleCandidates = async ({
+  originalTransactionId,
+  appAccountToken,
+}: {
+  originalTransactionId: string;
+  appAccountToken: string | null;
+}): Promise<AppleCandidates> => {
+  if (appAccountToken !== null) {
+    if (!uuid.validate(appAccountToken)) {
+      return { kind: 'unresolved', reason: 'apple-account-token-invalid', candidates: 0, enrollmentRace: false };
+    }
+
+    const owner = await db.select({ id: Users.id }).from(Users).where(eq(Users.uuid, appAccountToken)).then(first);
+    if (!owner) {
+      return { kind: 'unresolved', reason: 'apple-account-token-user-missing', candidates: 0, enrollmentRace: false };
+    }
+
+    const candidates = await loadApplePredecessorRows(eq(UserInAppPurchases.userId, owner.id));
+    // 유저는 찾았는데 APP_STORE 바인딩이 없으면 등록이 아직 안 온 것이다(경합).
+    if (candidates.length === 0) {
+      return { kind: 'unresolved', reason: 'apple-owner-no-bindings', candidates: 0, enrollmentRace: true };
+    }
+
+    return { kind: 'ok', ownerUserId: owner.id, candidates };
   }
 
-  const matched = await db
-    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
-    .from(Users)
-    .innerJoin(UserInAppPurchases, and(eq(UserInAppPurchases.userId, Users.id), eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE)))
-    .where(eq(Users.uuid, appAccountToken));
-
-  if (matched.length !== 1) {
-    return {
-      kind: 'unresolved',
-      reason: matched.length === 0 ? 'apple-account-token-unmatched' : 'apple-account-token-ambiguous',
-      candidates: matched.length,
-      enrollmentRace: matched.length === 0,
-    };
-  }
-
-  return { kind: 'found', binding: matched[0] };
-};
-
-// 토큰 없는 앱 밖 구매의 정상 경로다 — 새 ID 조회는 같은 고객의 전 구독을 반환하므로 응답 안의 다른 원거래 ID로
-// 기존 바인딩을 역발견한다.
-const findAppleBindingByStatuses = async (originalTransactionId: string): Promise<AppleCandidate> => {
   const statuses = await appstore.getSubscriptionStatuses(originalTransactionId);
   if (statuses.kind === 'error') {
     return { kind: 'lookup-failed' };
@@ -234,26 +240,16 @@ const findAppleBindingByStatuses = async (originalTransactionId: string): Promis
         .filter((identifier): identifier is string => !!identifier && identifier !== originalTransactionId),
     ),
   ];
-
   if (identifiers.length === 0) {
     return { kind: 'unresolved', reason: 'apple-reverse-discovery-empty', candidates: 0, enrollmentRace: true };
   }
 
-  const bindings = await db
-    .select({ id: UserInAppPurchases.id, userId: UserInAppPurchases.userId, identifier: UserInAppPurchases.identifier })
-    .from(UserInAppPurchases)
-    .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE), inArray(UserInAppPurchases.identifier, identifiers)));
-
-  if (bindings.length !== 1) {
-    return {
-      kind: 'unresolved',
-      reason: bindings.length === 0 ? 'apple-reverse-discovery-unbound' : 'apple-reverse-discovery-ambiguous',
-      candidates: bindings.length,
-      enrollmentRace: bindings.length === 0,
-    };
+  const candidates = await loadApplePredecessorRows(inArray(UserInAppPurchases.identifier, identifiers));
+  if (candidates.length === 0) {
+    return { kind: 'unresolved', reason: 'apple-reverse-discovery-unbound', candidates: 0, enrollmentRace: true };
   }
 
-  return { kind: 'found', binding: bindings[0] };
+  return { kind: 'ok', ownerUserId: null, candidates };
 };
 
 const adoptUnboundAppleNotification = async ({
@@ -263,18 +259,28 @@ const adoptUnboundAppleNotification = async ({
   originalTransactionId: string;
   appAccountToken: string | null;
 }): Promise<AppleSuccessionOutcome> => {
-  const candidate = appAccountToken
-    ? await findAppleBindingByAccountToken(appAccountToken)
-    : await findAppleBindingByStatuses(originalTransactionId);
-
-  if (candidate.kind !== 'found') {
-    return candidate;
+  const collected = await collectAppleCandidates({ originalTransactionId, appAccountToken });
+  if (collected.kind !== 'ok') {
+    return collected;
   }
 
-  const captured = candidate.binding;
+  const userIds = [...new Set(collected.candidates.map((row) => row.userId))];
+  if (collected.ownerUserId !== null && userIds.some((userId) => userId !== collected.ownerUserId)) {
+    return { kind: 'foreign', userIds: userIds.filter((userId) => userId !== collected.ownerUserId) };
+  }
+  if (userIds.length !== 1) {
+    return {
+      kind: 'unresolved',
+      reason: 'apple-reverse-discovery-ambiguous',
+      candidates: collected.candidates.length,
+      enrollmentRace: false,
+    };
+  }
+
+  const lockUserId = userIds[0];
 
   return await db.transaction(async (tx): Promise<AppleSuccessionOutcome> => {
-    await lockUserSubscriptionState(tx, captured.userId);
+    await lockUserSubscriptionState(tx, lockUserId);
 
     // 락 대기 중 등록 경로가 이 원거래 ID 를 선점했으면 (store, identifier) 유니크가 교체를 막는다 — 점유자에게 넘긴다.
     const occupant = await tx
@@ -287,27 +293,71 @@ const adoptUnboundAppleNotification = async ({
       return { kind: 'bound', bindingId: occupant.id };
     }
 
-    const locked = await loadLockedSuccession(tx, captured);
-    if (locked.kind !== 'ok') {
-      return locked;
+    const candidates = await tx
+      .select({
+        id: UserInAppPurchases.id,
+        userId: UserInAppPurchases.userId,
+        identifier: UserInAppPurchases.identifier,
+        canonicalState: Subscriptions.state,
+      })
+      .from(UserInAppPurchases)
+      .leftJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
+      .where(
+        and(
+          eq(UserInAppPurchases.userId, lockUserId),
+          eq(UserInAppPurchases.store, InAppPurchaseStore.APP_STORE),
+          inArray(
+            UserInAppPurchases.id,
+            collected.candidates.map((row) => row.id),
+          ),
+        ),
+      );
+
+    if (candidates.length !== collected.candidates.length) {
+      return { kind: 'changed' };
     }
 
     const now = dayjs();
 
     // 확정 조회는 유저 락 안이다 — 라이브 응답이 곧 최신이라 stale 판별 규칙이 사라진다.
-    const statuses = await appstore.getSubscriptionStatuses(locked.binding.identifier);
+    const statuses = await appstore.getSubscriptionStatuses(originalTransactionId);
     if (statuses.kind === 'error') {
       return { kind: 'lookup-failed' };
     }
 
-    const selection = selectAppleStatusItem(statuses.items, locked.binding.identifier);
-    if (selection.kind === 'unknown') {
-      return { kind: 'unresolved', reason: selection.reason, candidates: 0, enrollmentRace: false };
+    const selection = selectApplePredecessor({
+      candidates,
+      items: statuses.items,
+      notifiedOriginalTransactionId: originalTransactionId,
+      ownerUserId: collected.ownerUserId,
+    });
+
+    if (selection.kind === 'foreign') {
+      return selection;
+    }
+    if (selection.kind === 'none') {
+      return { kind: 'unresolved', reason: 'apple-predecessor-unmatched', candidates: collected.candidates.length, enrollmentRace: true };
+    }
+    if (selection.kind === 'ambiguous') {
+      return { kind: 'unresolved', reason: 'apple-reverse-discovery-ambiguous', candidates: selection.count, enrollmentRace: false };
+    }
+    if (selection.kind === 'live') {
+      return { kind: 'unresolved', reason: 'apple-predecessor-live', candidates: selection.count, enrollmentRace: false };
+    }
+
+    const locked = await loadLockedSuccession(tx, selection.candidate);
+    if (locked.kind !== 'ok') {
+      return locked;
+    }
+
+    const predecessor = selectAppleStatusItem(statuses.items, locked.binding.identifier);
+    if (predecessor.kind === 'unknown') {
+      return { kind: 'unresolved', reason: predecessor.reason, candidates: 0, enrollmentRace: false };
     }
 
     const successor = discoverAppleSuccessor({
       items: statuses.items,
-      selected: selection.item,
+      selected: predecessor.item,
       requestedOriginalTransactionId: locked.binding.identifier,
       prior: locked.prior,
       now,
@@ -327,18 +377,21 @@ const adoptUnboundAppleNotification = async ({
       return { kind: 'unresolved', reason: 'apple-successor-identifier-mismatch', candidates: 1, enrollmentRace: false };
     }
 
-    if (successor.normalized.kind === 'tracked' && successor.normalized.state === SubscriptionState.ACTIVE) {
-      const conflict = await findPromotionConflict(tx, { userId: locked.binding.userId, subscriptionId: locked.canonicalId });
-      if (conflict) {
-        // 전이는 막아도 승인 의무는 남는다 — 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
-        return {
-          kind: 'conflict',
-          userId: locked.binding.userId,
-          subscriptionId: locked.canonicalId,
-          conflictingSubscriptionId: conflict.id,
-          acknowledge: resolveAcknowledgeDuty(successor.normalized, originalTransactionId),
-        };
-      }
+    const conflict = findPromotionConflict({
+      candidates: await loadConflictCandidates(tx, { userId: locked.binding.userId, excludeSubscriptionId: locked.canonicalId }),
+      canonical: locked.canonical,
+      normalized: successor.normalized,
+      now,
+    });
+    if (conflict) {
+      // 전이는 막아도 승인 의무는 남는다 — 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
+      return {
+        kind: 'conflict',
+        userId: locked.binding.userId,
+        subscriptionId: locked.canonicalId,
+        conflictingSubscriptionId: conflict.id,
+        acknowledge: resolveAcknowledgeDuty(successor.normalized, originalTransactionId),
+      };
     }
 
     const { acknowledge } = await applyNormalizedIapLocked(tx, {
@@ -415,6 +468,13 @@ iap.post('/appstore', async (c) => {
   if (outcome.kind === 'applied') {
     await settleAcknowledge(outcome.acknowledge);
     await enqueueJob('iap:ingest', { bindingId: outcome.bindingId });
+  } else if (outcome.kind === 'foreign') {
+    await opsAlert('iap-foreign-predecessor-observed', {
+      source: 'rest/appstore',
+      identifier: originalTransactionId,
+      appAccountToken: notification.data.transaction?.appAccountToken ?? null,
+      predecessorUserIds: outcome.userIds,
+    });
   } else if (outcome.kind === 'bound') {
     await enqueueJob('iap:sync', { bindingId: outcome.bindingId });
   } else if (outcome.kind === 'conflict') {
@@ -474,6 +534,8 @@ const adoptUnboundGoogleNotification = async ({
       return locked;
     }
 
+    const now = dayjs();
+
     // 세션 없는 경로는 승계까지만 한다 — 스토어가 알려준 소유자가 predecessor 바인딩의 유저와 다르면 이전이고,
     // 회수·이전은 소유 증거가 있는 등록 경로의 몫이다.
     const obfuscatedAccountId =
@@ -494,7 +556,7 @@ const adoptUnboundGoogleNotification = async ({
       .where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE));
     const planIntervals: Record<string, PlanInterval> = Object.fromEntries(plans.map((plan) => [plan.id, plan.interval]));
 
-    const normalized = normalizeGoogle({ purchase, prior: locked.prior, planIntervals, now: dayjs() });
+    const normalized = normalizeGoogle({ purchase, prior: locked.prior, planIntervals, now });
 
     // unknown 이 곧바로 아래에서 'not-adopted' 로 접히며 reason 을 잃는다 — 접히기 전, 사유가 실제로 관측·폐기되는
     // 이 지점에서 알람 배선을 한다(등록·재조정과 같은 사유 집합을 공유하는 매핑 함수).
@@ -515,19 +577,22 @@ const adoptUnboundGoogleNotification = async ({
       return { kind: 'not-adopted', reason: normalized.kind, bindingId: locked.binding.id };
     }
 
-    if (normalized.state === SubscriptionState.ACTIVE) {
-      const conflict = await findPromotionConflict(tx, { userId: locked.binding.userId, subscriptionId: locked.canonicalId });
-      if (conflict) {
-        // 전이는 막아도 승인 의무는 남는다 — 토큰을 교체하지 않았어도 스토어는 이 토큰을 이미 확인했으므로
-        // 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
-        return {
-          kind: 'conflict',
-          userId: locked.binding.userId,
-          subscriptionId: locked.canonicalId,
-          conflictingSubscriptionId: conflict.id,
-          acknowledge: resolveAcknowledgeDuty(normalized, purchaseToken),
-        };
-      }
+    const conflict = findPromotionConflict({
+      candidates: await loadConflictCandidates(tx, { userId: locked.binding.userId, excludeSubscriptionId: locked.canonicalId }),
+      canonical: locked.canonical,
+      normalized,
+      now,
+    });
+    if (conflict) {
+      // 전이는 막아도 승인 의무는 남는다 — 토큰을 교체하지 않았어도 스토어는 이 토큰을 이미 확인했으므로
+      // 승격을 스킵했다고 3일 자동 환불을 방치하면 돈의 불변식이 깨진다.
+      return {
+        kind: 'conflict',
+        userId: locked.binding.userId,
+        subscriptionId: locked.canonicalId,
+        conflictingSubscriptionId: conflict.id,
+        acknowledge: resolveAcknowledgeDuty(normalized, purchaseToken),
+      };
     }
 
     const { acknowledge } = await applyNormalizedIapLocked(tx, {
@@ -641,7 +706,7 @@ iap.post('/googleplay', async (c) => {
     .from(UserInAppPurchases)
     .where(and(eq(UserInAppPurchases.store, InAppPurchaseStore.GOOGLE_PLAY), inArray(UserInAppPurchases.identifier, successorTokens)));
 
-  const captured = successorTokens.flatMap((token) => predecessors.filter((row) => row.identifier === token))[0] ?? null;
+  const captured = selectGooglePredecessor(successorTokens, predecessors);
 
   if (!captured) {
     // 연속 플랜 변경의 역순 도착이면 선행 알림 처리로 자연 해소된다 — 재전송을 유도하되, 해소되지 않으면 알람이다.

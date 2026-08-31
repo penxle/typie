@@ -5,7 +5,7 @@ import { isSubscriptionLive } from './entitlement.ts';
 import type { JWSRenewalInfoDecodedPayload, JWSTransactionDecodedPayload } from '@apple/app-store-server-library';
 import type { androidpublisher_v3 } from '@googleapis/androidpublisher';
 import type { InAppPurchaseStore } from '@typie/lib/enums';
-import type { EntitlementSubscriptionRow } from './entitlement.ts';
+import type { EntitlementJudgmentRow, EntitlementSubscriptionRow } from './entitlement.ts';
 import type { OpsAlertId } from './ops-alert.ts';
 
 export type IapRenewalIntent = 'ON' | 'OFF' | 'unknown';
@@ -572,32 +572,40 @@ export const normalizeGoogle = ({
   };
 };
 
+export type IapEnrollBinding = { id: string; store: InAppPurchaseStore; canonical: EntitlementJudgmentRow | null };
+
 export type IapEnrollPrecheck =
-  { allowed: true } | { allowed: false; reason: 'cross-store-binding' | 'non-iap-subscription' | 'no-iap-plan' };
+  | { allowed: true }
+  | { allowed: false; reason: 'non-iap-subscription' | 'no-iap-plan' }
+  | { allowed: false; reason: 'live-contract'; bindingIds: string[] };
 
 export const precheckIapEnroll = ({
   rows,
-  binding,
-  store,
+  bindings,
+  excludeBindingIds,
   iapPlanAvailable,
   now,
 }: {
   rows: EntitlementSubscriptionRow[];
-  binding: { store: InAppPurchaseStore } | null;
-  store: InAppPurchaseStore;
+  bindings: IapEnrollBinding[];
+  excludeBindingIds: string[];
   iapPlanAvailable: boolean;
   now: dayjs.Dayjs;
 }): IapEnrollPrecheck => {
-  // 다른 스토어 바인딩은 그 계약 상태와 무관하게 거절한다 — 살아 있으면 이중 과금이고, 확정 종료였어도
-  // 바인딩을 교체하는 순간 구 스토어의 환불 철회 복권 주소가 사라진다.
-  if (binding && binding.store !== store) {
-    return { allowed: false, reason: 'cross-store-binding' };
-  }
-
   const live = rows.filter((row) => isSubscriptionLive(row, now));
 
   if (live.some((row) => row.planAvailability !== PlanAvailability.IN_APP_PURCHASE && row.planAvailability !== PlanAvailability.TRIAL)) {
     return { allowed: false, reason: 'non-iap-subscription' };
+  }
+
+  const liveBindingIds = bindings
+    .filter(
+      (binding) => !excludeBindingIds.includes(binding.id) && binding.canonical !== null && isSubscriptionLive(binding.canonical, now),
+    )
+    .map((binding) => binding.id);
+
+  if (liveBindingIds.length > 0) {
+    return { allowed: false, reason: 'live-contract', bindingIds: liveBindingIds };
   }
 
   if (!iapPlanAvailable) {

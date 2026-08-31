@@ -2,6 +2,7 @@ import { InAppPurchaseStore } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
+import { appleLineageTokens } from './iap-lineage.ts';
 import {
   extractIapRegistrationOwnership,
   isAppleTerminated,
@@ -64,33 +65,6 @@ export type IapEnrollNormalization =
 
 const untrackedDetail = (normalized: NormalizedIap): string =>
   normalized.kind === 'tracked' || normalized.kind === 'expired' ? normalized.kind : `${normalized.kind}:${normalized.reason}`;
-
-// 같은 고객·같은 구독 그룹의 다른 원거래 ID. Apple 은 승계 포인터를 싣지 않으므로 계보가 그 자리를 대신한다.
-const appleLineageTokens = (items: AppleStatusItem[], selected: AppleStatusItem, requestedOriginalTransactionId: string): string[] => {
-  const appTransactionId = selected.transaction?.appTransactionId;
-  const subscriptionGroupIdentifier = selected.subscriptionGroupIdentifier;
-  if (!appTransactionId || !subscriptionGroupIdentifier) {
-    return [];
-  }
-
-  return [
-    ...new Set(
-      items.flatMap((item) => {
-        const originalTransactionId = item.transaction?.originalTransactionId;
-        if (
-          !originalTransactionId ||
-          originalTransactionId === requestedOriginalTransactionId ||
-          item.transaction?.appTransactionId !== appTransactionId ||
-          item.subscriptionGroupIdentifier !== subscriptionGroupIdentifier
-        ) {
-          return [];
-        }
-
-        return [originalTransactionId];
-      }),
-    ),
-  ];
-};
 
 const fetchApple = async (originalTransactionId: string): Promise<IapEnrollFetch> => {
   const statuses = await appstore.getSubscriptionStatuses(originalTransactionId);
@@ -328,3 +302,10 @@ export const normalizeIapEnrollment = async ({
 
   return await normalizeGoogleEnrollment({ source, prior, planIntervals, now });
 };
+
+export const enrollmentLineageTokens = (source: IapEnrollSource): string[] =>
+  source.store === InAppPurchaseStore.APP_STORE
+    ? appleLineageTokens(source.items, source.selected, source.requestedOriginalTransactionId)
+    : [source.purchase.linkedPurchaseToken, source.purchase.outOfAppPurchaseContext?.expiredPurchaseToken].filter(
+        (token): token is string => !!token,
+      );

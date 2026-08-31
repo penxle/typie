@@ -1,0 +1,1 @@
+ALTER TABLE "user_in_app_purchases" DROP COLUMN "reconcile_suspended_at";

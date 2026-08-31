@@ -9,6 +9,7 @@ import { computeNextPeriodEnd } from '#/utils/billing-period.ts';
 import { deriveGraceDeadline } from '#/utils/entitlement.ts';
 import { ingestIapPayments } from '#/utils/iap-ingest.ts';
 import { syncIapBinding } from '#/utils/iap-sync.ts';
+import { reconcileWindowStart } from '#/utils/iap-sync-core.ts';
 import { attemptInvoicePayment, enrichPaymentRecordReceipt, hasBillableUsageDuring } from '#/utils/index.ts';
 import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { derivePaymentKey } from '#/utils/payment-key.ts';
@@ -679,13 +680,13 @@ export const IapSyncJob = defineJob('iap:sync', async (payload: { bindingId: str
 });
 
 export const SubscriptionReconcileInAppPurchaseCron = defineCron('subscription:reconcile-iap', '0 4 * * *', async () => {
-  // canonical FK 조인 — subscriptionId 가 없는 마커(gone) 행은 자동 제외된다. 상태 필터는 없다: EXPIRED 도
-  // 포함해야 환불 철회 복권 백스톱이 성립한다. reconcileSuspendedAt 만 걸러 재조정 비활성 바인딩을 뺀다.
+  // canonical FK 조인 — subscriptionId 가 없는 행은 자동 제외된다. 상태 필터는 없다 — EXPIRED 도 창 안에서는
+  // 환불 철회 복권 백스톱의 대상이다.
   const bindings = await db
     .select({ id: UserInAppPurchases.id })
     .from(UserInAppPurchases)
     .innerJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
-    .where(isNull(UserInAppPurchases.reconcileSuspendedAt));
+    .where(or(isNull(UserInAppPurchases.terminatedAt), gt(UserInAppPurchases.terminatedAt, reconcileWindowStart(dayjs()))));
 
   const cycle = dayjs().toISOString();
   log.info('reconcile-iap cycle {*}', { cycle, targets: bindings.length });

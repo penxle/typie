@@ -12,7 +12,7 @@ const QUEUE_STUCK_THRESHOLD_MS = 30 * 60 * 1000;
 type InvariantCheck = { key: string; violations: SQL };
 
 // 권한이 상태에서만 나오므로 크론이 죽으면 유저는 잠기지 않고 무료로 더 쓴다(fail-open, 의도된 방향).
-// 상태 고착은 조용히 새므로 이 13개가 그 대가로 서는 상시 감시다 — 각 행은 규범 목록을 그대로 옮긴 것이다.
+// 상태 고착은 조용히 새므로 이 14개가 그 대가로 서는 상시 감시다 — 각 행은 규범 목록을 그대로 옮긴 것이다.
 const INVARIANT_CHECKS: InvariantCheck[] = [
   {
     key: 'billing-overdue-scan',
@@ -47,6 +47,23 @@ const INVARIANT_CHECKS: InvariantCheck[] = [
         AND NOT EXISTS (
           SELECT 1 FROM ${UserInAppPurchases} WHERE ${UserInAppPurchases.subscriptionId} = ${Subscriptions.id}
         )
+    `,
+  },
+  {
+    // Plans 조인 없이 센다 — 바인딩된 구독의 planId 쓰기 지점이 전부 availability = IN_APP_PURCHASE 로 필터돼 있어
+    // 바인딩이 가리키는 행은 IAP 플랜을 벗어나지 않는다.
+    key: 'iap-multiple-live-contracts',
+    violations: sql`
+      SELECT ${UserInAppPurchases.userId} AS id
+      FROM ${UserInAppPurchases}
+      INNER JOIN ${Subscriptions} ON ${Subscriptions.id} = ${UserInAppPurchases.subscriptionId}
+      WHERE (
+              ${Subscriptions.state} = 'ACTIVE'
+              OR (${Subscriptions.state} = 'WILL_EXPIRE' AND ${Subscriptions.currentPeriodEndsAt} > now())
+              OR (${Subscriptions.state} = 'IN_GRACE_PERIOD' AND ${Subscriptions.currentPeriodEndsAt} + interval '31 days' > now())
+            )
+      GROUP BY ${UserInAppPurchases.userId}
+      HAVING COUNT(*) >= 2
     `,
   },
   {
@@ -180,7 +197,7 @@ const INVARIANT_CHECKS: InvariantCheck[] = [
   },
 ];
 
-// 체크 1개의 쿼리 오류가 나머지 12개·큐 계측을 막지 않는다 — 격리 없이 하나가 던지면 루프가 끊겨 그 뒤 체크가
+// 체크 1개의 쿼리 오류가 나머지 13개·큐 계측을 막지 않는다 — 격리 없이 하나가 던지면 루프가 끊겨 그 뒤 체크가
 // 통째로 30분(다음 스케줄)을 건너뛴다.
 const runInvariantCheck = async (check: InvariantCheck) => {
   try {

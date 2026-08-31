@@ -15,7 +15,7 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { supportsPlanInterval } from '@typie/lib/plan';
 import { cardSchema, redeemCodeSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
-import { and, desc, eq, gt, inArray, ne, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, notInArray } from 'drizzle-orm';
 import * as uuid from 'uuid';
 import {
   CreditCodes,
@@ -41,7 +41,13 @@ import { enqueueJob } from '#/mq/index.ts';
 import { verifyEasyPayBillingKey } from '#/utils/billing-key.ts';
 import { computeNextPeriodEnd, floorToHourKst } from '#/utils/billing-period.ts';
 import { deriveExpiresAtShim, isSubscriptionLive } from '#/utils/entitlement.ts';
-import { fetchIapEnrollment, normalizeIapEnrollment, probeIapBoundContractTermination } from '#/utils/iap-enroll.ts';
+import {
+  enrollmentLineageTokens,
+  fetchIapEnrollment,
+  normalizeIapEnrollment,
+  probeIapBoundContractTermination,
+} from '#/utils/iap-enroll.ts';
+import { resolveEnrollTarget } from '#/utils/iap-lineage.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { applyNormalizedIapLocked } from '#/utils/iap-sync.ts';
 import { attemptInvoicePayment, enrichPaymentRecordReceipt, hasBillableUsageDuring } from '#/utils/index.ts';
@@ -744,18 +750,34 @@ builder.mutationFields((t) => ({
         .from(Plans)
         .where(eq(Plans.availability, PlanAvailability.IN_APP_PURCHASE));
 
-      // 선행 주기는 락 밖에서도 읽는다 — 없이 정규화하면 1차 판정이 락 안 판정과 갈라져(주기 역산 불가 등)
-      // 락 안에서라면 수용될 등록이 락 전에 거절된다. 주기는 소유자의 것이다 — 소유자 확정이 정규화보다 앞서는 이유.
-      const probePrior = await db
+      const probeBindings = await db
         .select({
-          state: Subscriptions.state,
-          currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
-          currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+          id: UserInAppPurchases.id,
+          store: UserInAppPurchases.store,
+          identifier: UserInAppPurchases.identifier,
+          subscriptionId: UserInAppPurchases.subscriptionId,
         })
         .from(UserInAppPurchases)
-        .innerJoin(Subscriptions, eq(UserInAppPurchases.subscriptionId, Subscriptions.id))
-        .where(and(eq(UserInAppPurchases.userId, ownerUserId), eq(UserInAppPurchases.store, input.store)))
-        .then(first);
+        .where(eq(UserInAppPurchases.userId, ownerUserId));
+
+      const probeTarget = resolveEnrollTarget(probeBindings, {
+        store: input.store,
+        identifier: input.data,
+        lineageTokens: enrollmentLineageTokens(probeFetch.source),
+      });
+
+      // 선행 주기는 대상 계보의 것이다 — 다른 계보의 주기로 정규화하면 남의 계약으로 주기를 계산한다.
+      const probePrior = probeTarget?.subscriptionId
+        ? await db
+            .select({
+              state: Subscriptions.state,
+              currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+              currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+            })
+            .from(Subscriptions)
+            .where(eq(Subscriptions.id, probeTarget.subscriptionId))
+            .then(first)
+        : null;
 
       const probe = await normalizeIapEnrollment({
         source: probeFetch.source,
@@ -799,56 +821,91 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
         }
 
-        const binding = await tx
+        const bindings = await tx
           .select({
             id: UserInAppPurchases.id,
             store: UserInAppPurchases.store,
             identifier: UserInAppPurchases.identifier,
             subscriptionId: UserInAppPurchases.subscriptionId,
+            terminatedAt: UserInAppPurchases.terminatedAt,
           })
           .from(UserInAppPurchases)
           .where(eq(UserInAppPurchases.userId, ownerUserId))
-          .for('no key update')
-          .then(first);
+          .for('no key update');
 
-        // canonical FK 가 빈 바인딩(백필 전 레거시·마커 격리)은 등록을 진행시키지 않는다 — 새 행을 만들면 그 바인딩이
-        // 가리켰어야 할 구 행과 이중화되고, 어느 쪽이 canonical 인지 아무도 판정할 수 없다. 사람이 잇는다.
-        if (binding && !binding.subscriptionId) {
+        // canonical FK 가 빈 바인딩(백필 전 레거시)은 등록을 진행시키지 않는다 — 사람이 잇는다.
+        const unresolved = bindings.find((row) => !row.subscriptionId && !row.terminatedAt);
+        if (unresolved) {
           await opsAlert('invariant-violation', {
             ...alertContext,
             check: 'enroll-binding-null-canonical',
-            bindingId: binding.id,
-            boundIdentifier: binding.identifier,
+            bindingId: unresolved.id,
+            boundIdentifier: unresolved.identifier,
           });
 
           throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
         }
 
-        const canonical = binding?.subscriptionId
-          ? await tx
-              .select({
-                id: Subscriptions.id,
-                state: Subscriptions.state,
-                currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
-                currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
-              })
-              .from(Subscriptions)
-              .where(eq(Subscriptions.id, binding.subscriptionId))
-              .for('no key update')
-              .then(first)
-          : null;
+        // 종료 확정된 canonical-NULL 행은 계보 해석에서 빠지지만 (store, identifier) 는 계속 점유한다 —
+        // 요청 토큰을 쥐고 있으면 아래 쓰기가 유니크 위반으로 죽으므로 여기서 사람에게 넘긴다.
+        const occupied = bindings.find((row) => !row.subscriptionId && row.store === input.store && row.identifier === input.data);
+        if (occupied) {
+          await opsAlert('invariant-violation', {
+            ...alertContext,
+            check: 'enroll-binding-null-canonical',
+            bindingId: occupied.id,
+            boundIdentifier: occupied.identifier,
+          });
+
+          throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
+        }
+
+        const boundRows = bindings.flatMap((row) => (row.subscriptionId ? [{ ...row, subscriptionId: row.subscriptionId }] : []));
+
+        const canonicalRows =
+          boundRows.length > 0
+            ? await tx
+                .select({
+                  id: Subscriptions.id,
+                  state: Subscriptions.state,
+                  planAvailability: Plans.availability,
+                  startsAt: Subscriptions.startsAt,
+                  currentPeriodStartsAt: Subscriptions.currentPeriodStartsAt,
+                  currentPeriodEndsAt: Subscriptions.currentPeriodEndsAt,
+                })
+                .from(Subscriptions)
+                .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+                .where(
+                  inArray(
+                    Subscriptions.id,
+                    boundRows.map((row) => row.subscriptionId),
+                  ),
+                )
+                .for('no key update', { of: Subscriptions })
+            : [];
+
+        const canonicalOf = (row: { subscriptionId: string }) =>
+          canonicalRows.find((canonical) => canonical.id === row.subscriptionId) ?? null;
 
         // 복합 FK 가 강제하는 참조라 도달하지 않는다 — 도달했다면 사람이 고칠 불변식 위반이다.
-        if (!canonical && binding?.subscriptionId) {
+        const dangling = boundRows.find((row) => !canonicalOf(row));
+        if (dangling) {
           await opsAlert('invariant-violation', {
             ...alertContext,
             reason: 'iap binding canonical subscription missing',
-            bindingId: binding.id,
-            subscriptionId: binding.subscriptionId,
+            bindingId: dangling.id,
+            subscriptionId: dangling.subscriptionId,
           });
 
           throw new TypieError({ code: 'in_app_purchase_registration_conflict', status: 409 });
         }
+
+        const target = resolveEnrollTarget(boundRows, {
+          store: input.store,
+          identifier: input.data,
+          lineageTokens: enrollmentLineageTokens(lockedFetch.source),
+        });
+        const targetCanonical = target ? canonicalOf(target) : null;
 
         const plans = await tx
           .select({ id: Plans.id, interval: Plans.interval })
@@ -861,16 +918,13 @@ builder.mutationFields((t) => ({
         // stale 한 상태가 되살아난다.
         const lookup = await normalizeIapEnrollment({
           source: lockedFetch.source,
-          // 선행 주기는 같은 스토어 계약의 사실이다 — 크로스 스토어 바인딩의 주기를 먹이면 남의 계약으로 주기를 계산한다
-          // (그 등록 자체는 아래 precheck 이 거절한다).
-          prior:
-            canonical && binding?.store === input.store
-              ? {
-                  state: canonical.state,
-                  currentPeriodStartsAt: canonical.currentPeriodStartsAt,
-                  currentPeriodEndsAt: canonical.currentPeriodEndsAt,
-                }
-              : null,
+          prior: targetCanonical
+            ? {
+                state: targetCanonical.state,
+                currentPeriodStartsAt: targetCanonical.currentPeriodStartsAt,
+                currentPeriodEndsAt: targetCanonical.currentPeriodEndsAt,
+              }
+            : null,
           planIntervals: planIntervalsOf(plans),
           now,
         });
@@ -911,48 +965,69 @@ builder.mutationFields((t) => ({
           .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
           .where(and(eq(Subscriptions.userId, ownerUserId), ne(Subscriptions.state, SubscriptionState.EXPIRED)));
 
+        // 머리 토큰 교체는 검증된 승계뿐이다 — 계보로 찾았어도 스토어가 종료를 확인해 주지 않은 행은 새 계보의 이웃일 뿐이다.
+        const replaceable =
+          target !== null &&
+          targetCanonical !== null &&
+          (target.identifier === input.data || observation.successionSources.includes(target.identifier));
+
         // preflight 는 신뢰하지 않는다 — 서버가 같은 판정을 다시 수행한다.
         const precheck = precheckIapEnroll({
           rows: subscriptionRows,
-          binding: binding ? { store: binding.store } : null,
-          store: input.store,
+          bindings: boundRows.map((row) => ({ id: row.id, store: row.store, canonical: canonicalOf(row) })),
+          excludeBindingIds: replaceable && target ? [target.id] : [],
           iapPlanAvailable: plans.length > 0,
           now,
         });
 
-        if (!precheck.allowed) {
-          if (precheck.reason === 'cross-store-binding') {
-            // 거절은 알람을 남긴다 — CS 유입 신호다.
-            await opsAlert('iap-cross-store-enroll-rejected', { ...alertContext, boundStore: binding?.store, bindingId: binding?.id });
-            throw new TypieError({ code: 'subscription_already_exists' });
-          }
+        if (!precheck.allowed && precheck.reason === 'non-iap-subscription') {
+          throw new TypieError({ code: 'subscription_already_exists' });
+        }
 
-          if (precheck.reason === 'non-iap-subscription') {
-            throw new TypieError({ code: 'subscription_already_exists' });
-          }
-
+        if (!precheck.allowed && precheck.reason === 'no-iap-plan') {
           throw new Error('no in-app purchase plan is available');
         }
 
-        // 같은 스토어의 허용은 동일 토큰 재등록 또는 검증된 승계뿐이다 — 연결 없는 독립 토큰을 등록하면
-        // 유저당 1행인 바인딩이 기존 계약의 추적 주소를 잃는다. 단 기존 계약의 확정 종료를 스토어가 확인해
-        // 주면 잃을 추적이 없다 — 만료 후 재구독은 스토어가 승계 포인터를 싣지 않아 독립 토큰으로만 도착하므로,
-        // 이 재확인 없이는 죽은 바인딩이 정당한 재구독을 영구 거절한다.
-        if (binding && binding.identifier !== input.data && !observation.successionSources.includes(binding.identifier)) {
-          const boundContract = await probeIapBoundContractTermination({ store: binding.store, identifier: binding.identifier, now });
+        // 처리되지 않은 거절 사유는 통과시키지 않는다 — 사유가 늘어날 때 이 경로가 무음 허용으로 열리지 않게 한다.
+        if (!precheck.allowed && precheck.reason !== 'live-contract') {
+          throw new Error(`unhandled in-app purchase enroll precheck reason: ${precheck.reason}`);
+        }
 
-          if (boundContract.kind === 'lookup-failed') {
-            throw new Error(`in-app purchase bound contract lookup failed: ${boundContract.detail}`);
-          }
+        if (!precheck.allowed && precheck.reason === 'live-contract') {
+          // DB 의 live 는 동기화 지연일 수 있다 — 스토어가 종료를 확인해 주면 그 사실을 여기서 확정하고 진행한다.
+          for (const bindingId of precheck.bindingIds) {
+            const stale = boundRows.find((row) => row.id === bindingId);
+            if (!stale) {
+              throw new Error(`in-app purchase live binding vanished: ${bindingId}`);
+            }
 
-          if (boundContract.kind === 'live') {
-            await opsAlert('iap-independent-token-rejected', {
-              ...alertContext,
-              bindingId: binding.id,
-              boundIdentifier: binding.identifier,
+            const contract = await probeIapBoundContractTermination({ store: stale.store, identifier: stale.identifier, now });
+
+            if (contract.kind === 'lookup-failed') {
+              throw new Error(`in-app purchase bound contract lookup failed: ${contract.detail}`);
+            }
+
+            if (contract.kind === 'live') {
+              await opsAlert('iap-live-contract-enroll-rejected', {
+                ...alertContext,
+                liveBindingId: stale.id,
+                liveStore: stale.store,
+                liveIdentifier: stale.identifier,
+              });
+
+              throw new TypieError({ code: 'subscription_already_exists' });
+            }
+
+            await applyNormalizedIapLocked(tx, {
+              binding: {
+                id: stale.id,
+                userId: ownerUserId,
+                store: stale.store,
+                identifier: stale.identifier,
+                subscriptionId: stale.subscriptionId,
+              },
+              normalized: { kind: 'expired', observed: null },
             });
-
-            throw new TypieError({ code: 'subscription_already_exists' });
           }
         }
 
@@ -1010,7 +1085,16 @@ builder.mutationFields((t) => ({
                   ),
             );
 
-          await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.id, foreign.id));
+          // 요청 토큰을 쥔 타 유저 행은 지운다 — 같은 (store, identifier) 를 이 트랜잭션이 소유자 행으로 다시 만들므로
+          // 라우팅은 새 행이 잇는다. 그 밖의 predecessor 는 남겨야 그 토큰의 후속 알림이 계속 라우팅된다.
+          if (foreign.identifier === input.data) {
+            await tx.delete(UserInAppPurchases).where(eq(UserInAppPurchases.id, foreign.id));
+          } else {
+            await tx
+              .update(UserInAppPurchases)
+              .set({ terminatedAt: now })
+              .where(and(eq(UserInAppPurchases.id, foreign.id), isNull(UserInAppPurchases.terminatedAt)));
+          }
         }
 
         // 스토어가 선언한 승계 포인터가 전역에도 없으면 신규로 취급하되 남긴다 — 계정 이전·재설치 변칙의 신호다.
@@ -1028,7 +1112,7 @@ builder.mutationFields((t) => ({
         await retireReservation(tx, { userId: ownerUserId });
 
         // canonical 은 정리 대상에서 뺀다 — 여기서 EXPIRED 로 만들면 적용 primitive 의 복권 게이트가 방금 등록한 계약을 되돌린다.
-        const canonicalExclusion = canonical ? ne(Subscriptions.id, canonical.id) : undefined;
+        const canonicalExclusion = replaceable && targetCanonical ? ne(Subscriptions.id, targetCanonical.id) : undefined;
 
         // 트라이얼 행을 같은 락 안에서 종료하지 않으면 재조정이 매일 승격 충돌로 스킵한다.
         await tx
@@ -1072,25 +1156,18 @@ builder.mutationFields((t) => ({
 
         let lockedBinding: { id: string; userId: string; store: InAppPurchaseStore; identifier: string; subscriptionId: string };
 
-        if (binding && canonical) {
-          // 바인딩이 있으면 canonical 은 그 FK 가 가리키는 한 행이다 — upsert 는 목표 상태가 ACTIVE 가 아닐 때
-          // 충돌 없이 새 행을 만들어 한 행 원칙을 깬다. 상태·주기는 아래 primitive 가 이 행 ID 로 갱신한다.
-          // 토큰 교체와 재조정 비활성 마커 해제는 같은 UPDATE 다 — 갈라지면 승계된 토큰이 재조정에서 영구 제외된다.
+        if (replaceable && target && targetCanonical) {
           await tx
             .update(UserInAppPurchases)
-            .set({
-              identifier: input.data,
-              subscriptionId: canonical.id,
-              ...(binding.identifier !== input.data && { reconcileSuspendedAt: null }),
-            })
-            .where(eq(UserInAppPurchases.id, binding.id));
+            .set({ identifier: input.data, subscriptionId: targetCanonical.id })
+            .where(eq(UserInAppPurchases.id, target.id));
 
           lockedBinding = {
-            id: binding.id,
+            id: target.id,
             userId: ownerUserId,
             store: input.store,
             identifier: input.data,
-            subscriptionId: canonical.id,
+            subscriptionId: targetCanonical.id,
           };
         } else {
           const plan = await tx
@@ -1129,15 +1206,9 @@ builder.mutationFields((t) => ({
             .returning({ id: Subscriptions.id })
             .then(firstOrThrow);
 
-          // 크로스 스토어 덮어쓰기는 하지 않는다(precheck 이 이미 거절했다) — setWhere 가 없으면 경합이 그 문을 다시 연다.
           const bound = await tx
             .insert(UserInAppPurchases)
             .values({ userId: ownerUserId, store: input.store, identifier: input.data, subscriptionId: created.id })
-            .onConflictDoUpdate({
-              target: [UserInAppPurchases.userId],
-              set: { identifier: input.data, subscriptionId: created.id, reconcileSuspendedAt: null },
-              setWhere: eq(UserInAppPurchases.store, input.store),
-            })
             .returning({ id: UserInAppPurchases.id })
             .then(firstOrThrow);
 
