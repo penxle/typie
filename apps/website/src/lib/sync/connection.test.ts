@@ -12,6 +12,7 @@ const setup = () => {
       return socket;
     },
     fetchTicket: vi.fn(async () => `TK-${sockets.length + 1}`),
+    reconnectJitterMs: 0,
   });
   return { connection, sockets };
 };

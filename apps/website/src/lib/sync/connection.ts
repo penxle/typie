@@ -3,6 +3,7 @@ import type { ClientMessage, ServerMessage, SnapshotCursor } from './protocol';
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_CAP_MS = 30_000;
+const RECONNECT_JITTER_MS = 1000;
 const PING_INTERVAL_MS = 30_000;
 const PONG_TIMEOUT_MS = 10_000;
 const PROBE_TIMEOUT_MS = 5000;
@@ -26,6 +27,7 @@ export type ConnectionOpts = {
   pongTimeoutMs?: number;
   probeTimeoutMs?: number;
   helloTimeoutMs?: number;
+  reconnectJitterMs?: number;
 };
 
 type PendingRequest = {
@@ -42,6 +44,7 @@ export class SyncConnection {
   private readonly pongTimeoutMs: number;
   private readonly probeTimeoutMs: number;
   private readonly helloTimeoutMs: number;
+  private readonly reconnectJitterMs: number;
   private socket: SyncSocketLike | null = null;
   private readySocket: SyncSocketLike | null = null;
   private connecting = false;
@@ -68,6 +71,7 @@ export class SyncConnection {
     this.pongTimeoutMs = opts.pongTimeoutMs ?? PONG_TIMEOUT_MS;
     this.probeTimeoutMs = opts.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
     this.helloTimeoutMs = opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
+    this.reconnectJitterMs = opts.reconnectJitterMs ?? RECONNECT_JITTER_MS;
   }
 
   private request(message: ClientMessage & { id: string }): Promise<ServerMessage> {
@@ -245,7 +249,7 @@ export class SyncConnection {
     if (this.disposed || this.reconnectTimer) return;
     if (this.outbox.length === 0 && this.channelHandlers.size === 0 && this.pending.size === 0) return;
     this.attempts += 1;
-    const delay = Math.min(RECONNECT_BASE_MS * 2 ** (this.attempts - 1), RECONNECT_CAP_MS);
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** (this.attempts - 1), RECONNECT_CAP_MS) + Math.random() * this.reconnectJitterMs;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connecting = true;

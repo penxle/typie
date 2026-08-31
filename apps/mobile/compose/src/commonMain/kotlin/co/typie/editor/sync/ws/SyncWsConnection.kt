@@ -5,6 +5,7 @@ import co.typie.editor.sync.PullResult
 import co.typie.editor.sync.PushResult
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.concurrent.Volatile
+import kotlin.random.Random
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CancellationException
@@ -42,6 +43,7 @@ class SyncWsConnection(
   private val scope: CoroutineScope,
   private val pingIntervalMs: Long = 30_000,
   private val reconnectBaseMs: Long = 1_000,
+  private val reconnectJitterMs: Long = 1_000,
   private val idleTimeoutMs: Long = 60_000,
   private val pongTimeoutMs: Long = 10_000,
   private val probeTimeoutMs: Long = 5_000,
@@ -432,7 +434,8 @@ class SyncWsConnection(
     if (pending.isEmpty() && channelHandlers.isEmpty()) return
     attempts += 1
     val delayMs =
-      minOf(reconnectBaseMs * (1L shl (attempts - 1).coerceAtMost(16)), RECONNECT_CAP_MS)
+      minOf(reconnectBaseMs * (1L shl (attempts - 1).coerceAtMost(16)), RECONNECT_CAP_MS) +
+        if (reconnectJitterMs > 0) Random.nextLong(reconnectJitterMs) else 0L
     Logger.w {
       "SyncWsConnection: reconnecting (attempt $attempts) in ${delayMs}ms after close $lastCloseCode"
     }
