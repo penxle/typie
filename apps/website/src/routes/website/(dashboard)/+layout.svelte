@@ -37,6 +37,8 @@
   import UserGoalModal from './@goal/UserGoalModal.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
+  import { createPrismAudioPlayer } from './@prism/prism-audio';
+  import { createPrismNotifications } from './@prism/prism-notifications';
   import PrismPanel from './@prism/PrismPanel.svelte';
   import PrismPanelBoundary from './@prism/PrismPanelBoundary.svelte';
   import PrismPanelShell from './@prism/PrismPanelShell.svelte';
@@ -66,6 +68,8 @@
 
   const app = setupAppContext(query.data.me.id);
   let prismPanel = $state<PrismPanel>();
+
+  let prismNotifications: ReturnType<typeof createPrismNotifications> | undefined;
   const startPrismNewChat = (draft: string) => void prismPanel?.startNewChat('command_palette', draft);
 
   const legacyTrial = $derived(
@@ -188,6 +192,25 @@
 
   createSubscription(
     graphql(`
+      subscription DashboardLayout_PrismNotificationStream {
+        prismNotificationStream {
+          id
+          sessionId
+          kind
+          elapsedMs
+        }
+      }
+    `),
+    undefined,
+    () => ({
+      onData: (data) => {
+        prismNotifications?.handle(data.prismNotificationStream);
+      },
+    }),
+  );
+
+  createSubscription(
+    graphql(`
       subscription DashboardLayout_PrismCreditStream {
         prismCreditStream {
           id
@@ -222,6 +245,32 @@
     }
 
     void refreshPushToken().catch(() => null);
+  });
+
+  onMount(() => {
+    const audio = createPrismAudioPlayer();
+    const notifications = createPrismNotifications({
+      userId,
+      enabled: app.preference.current.prismNotificationSoundEnabled,
+      viewingSessionId: app.state.prismViewingSessionId,
+      canPlay: audio.canPlay,
+      play: audio.play,
+    });
+    prismNotifications = notifications;
+
+    return () => {
+      audio.destroy();
+      if (prismNotifications === notifications) prismNotifications = undefined;
+    };
+  });
+
+  $effect(() => {
+    const enabled = app.preference.current.prismNotificationSoundEnabled;
+    const viewingSessionId = app.state.prismViewingSessionId;
+    prismNotifications?.update({
+      enabled,
+      viewingSessionId,
+    });
   });
 
   const paneGroup = setupPaneGroup(siteId, {

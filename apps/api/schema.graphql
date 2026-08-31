@@ -1291,6 +1291,18 @@ enum PrismCreditRefundState {
   PENDING
 }
 
+type PrismNotification {
+  elapsedMs: Float!
+  id: ID!
+  kind: PrismNotificationKind!
+  sessionId: ID!
+}
+
+enum PrismNotificationKind {
+  TURN_RESOLVED
+  USER_ACTION_REQUIRED
+}
+
 enum PrismReaction {
   DOWN
   UP
@@ -1937,6 +1949,7 @@ type Subscription {
   noteUpdateStream(clientId: String!, siteId: ID!): NoteUpdateStreamPayload!
   prismBadgeStream: PrismSession!
   prismCreditStream: User!
+  prismNotificationStream: PrismNotification!
   prismReviewStream(documentId: ID!): PrismReviewRound!
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!

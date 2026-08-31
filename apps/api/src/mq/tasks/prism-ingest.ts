@@ -24,6 +24,7 @@ import {
   STALE_BEATS,
   staleBeats,
 } from '#/utils/prism-ingest-core.ts';
+import { prismNotificationUserActionKey, prismRunNotification } from '#/utils/prism-notification.ts';
 import { serveTool } from '#/utils/prism-serve.ts';
 import { resolvedToolCallIds, toolResolverOf } from '#/utils/prism-tool-calls.ts';
 import { closeRun, linkWorkflowFromEvent, titleSession } from '#/utils/prism-workflows.ts';
@@ -130,16 +131,20 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
         .update(PrismRuns)
         .set({ state: op.state, finishedAt: dayjs(op.at) })
         .where(and(where, eq(PrismRuns.state, 'RUNNING')))
-        .returning({ id: PrismRuns.id })
+        .returning({ id: PrismRuns.id, state: PrismRuns.state, startedAt: PrismRuns.startedAt, finishedAt: PrismRuns.finishedAt })
         .then(first);
       const run =
         updated ??
-        (await tx.select({ id: PrismRuns.id }).from(PrismRuns).where(where).then(first)) ??
+        (await tx
+          .select({ id: PrismRuns.id, state: PrismRuns.state, startedAt: PrismRuns.startedAt, finishedAt: PrismRuns.finishedAt })
+          .from(PrismRuns)
+          .where(where)
+          .then(first)) ??
         (await tx
           .insert(PrismRuns)
           .values({ sessionId: session.id, runSeq: op.runSeq, state: op.state, startedAt: dayjs(op.at), finishedAt: dayjs(op.at) })
           .onConflictDoNothing({ target: [PrismRuns.sessionId, PrismRuns.runSeq] })
-          .returning({ id: PrismRuns.id })
+          .returning({ id: PrismRuns.id, state: PrismRuns.state, startedAt: PrismRuns.startedAt, finishedAt: PrismRuns.finishedAt })
           .then(first));
 
       await closeRun(tx, session.id, op.runSeq);
@@ -156,6 +161,21 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
         if (unknownCharge) {
           const dedupeKey = unknownCharge === 'unknown-price' ? 'global' : `run:${session.id}:${op.runSeq}`;
           await opsAlertOnce('prism-credit-charge-unknown', dedupeKey, { cause: unknownCharge, sessionId: session.id, runSeq: op.runSeq });
+        }
+        if (run?.finishedAt) {
+          const rawUserActionAt = await redis.get(prismNotificationUserActionKey(session.prismAgentId)).catch((err) => {
+            log.warn('prism notification action timestamp unavailable: {sessionId} {*}', { sessionId: session.id, error: err });
+            return null;
+          });
+          const notification = prismRunNotification({
+            sessionId: session.id,
+            runSeq: op.runSeq,
+            state: run.state,
+            startedAt: run.startedAt.valueOf(),
+            lastUserActionAt: rawUserActionAt === null ? undefined : Number(rawUserActionAt),
+            finishedAt: run.finishedAt.valueOf(),
+          });
+          if (notification) pubsub.publish('prism:notification', session.userId, notification);
         }
         pubsub.publish('prism:credit', session.userId, {});
       };
@@ -181,7 +201,7 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
       const { toolCallId, tool, input, agentId, runSeq, at } = op;
       return async () => {
         try {
-          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input, at });
+          await serveTool({ sessionId: session.id, agentId, origin: { kind: 'run', runSeq }, toolCallId, tool, input, at });
         } catch (err) {
           throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
         }
@@ -219,10 +239,18 @@ const applyWorkflowOp = async (
     }
 
     case 'tool-serve': {
-      const { toolCallId, tool, input, agentId, runSeq, at } = op;
+      const { toolCallId, tool, input, agentId, at } = op;
       return async () => {
         try {
-          await serveTool({ sessionId: session.id, agentId, runSeq, toolCallId, tool, input, at });
+          await serveTool({
+            sessionId: session.id,
+            agentId,
+            origin: { kind: 'workflow', startedAt: workflow.startedAt.valueOf() },
+            toolCallId,
+            tool,
+            input,
+            at,
+          });
         } catch (err) {
           throw new Error(`prism tool serve failed for ${toolCallId}`, { cause: err });
         }
@@ -261,7 +289,8 @@ const runPump = async (ctx: PumpContext): Promise<PumpOutcome> => {
     await serveTool({
       sessionId: session.id,
       agentId: request.agentId,
-      runSeq: request.runSeq,
+      origin:
+        ctx.workflow === null ? { kind: 'run', runSeq: request.runSeq } : { kind: 'workflow', startedAt: ctx.workflow.startedAt.valueOf() },
       toolCallId: request.toolCallId,
       tool: request.tool,
       input: request.input,

@@ -595,7 +595,16 @@
   const panelVisible = $derived(app.state.prismAccess || panelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
   const welcomeAdmission = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null);
+  const viewingSessionId = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null ? selected.current : null);
   let prevPanelOpen: boolean | null = null;
+
+  $effect(() => {
+    app.state.prismViewingSessionId = viewingSessionId;
+
+    return () => {
+      if (app.state.prismViewingSessionId === viewingSessionId) app.state.prismViewingSessionId = null;
+    };
+  });
 
   $effect(() => {
     const open = panelOpen;

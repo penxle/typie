@@ -14,7 +14,7 @@ import {
 } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
-import { ApproveInputSchema, DECLINED_MESSAGE, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
+import { ApproveInputSchema, DECLINED_MESSAGE, effectiveResolver, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
@@ -48,6 +48,11 @@ import { parseAllowlist } from '#/utils/prism-access-core.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
+import {
+  PRISM_NOTIFICATION_KINDS,
+  PRISM_NOTIFICATION_USER_ACTION_TTL_SECONDS,
+  prismNotificationUserActionKey,
+} from '#/utils/prism-notification.ts';
 import { runSite } from '#/utils/prism-serve.ts';
 import { recordToolResolution, withToolLedger } from '#/utils/prism-tool-calls.ts';
 import { ERROR_MESSAGE } from '#/utils/prism-tool-messages.ts';
@@ -67,6 +72,7 @@ import type {
   TurnLive,
   WorkflowTranscriptWire,
 } from '@typie/prism';
+import type { PrismNotificationPayload } from '#/utils/prism-notification.ts';
 import type { StoredEvent } from '#/utils/prism-transcript.ts';
 
 const log = logger.getChild('prism');
@@ -112,6 +118,16 @@ const PrismCommand = builder.simpleObject('PrismCommand', {
     name: t.string(),
     description: t.string(),
     argumentHint: t.string({ nullable: true }),
+  }),
+});
+
+const PrismNotificationKind = builder.enumType('PrismNotificationKind', { values: PRISM_NOTIFICATION_KINDS });
+const PrismNotification = builder.objectRef<PrismNotificationPayload>('PrismNotification').implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    sessionId: t.exposeID('sessionId'),
+    kind: t.field({ type: PrismNotificationKind, resolve: (notification) => notification.kind }),
+    elapsedMs: t.exposeFloat('elapsedMs'),
   }),
 });
 
@@ -594,6 +610,7 @@ builder.mutationFields((t) => ({
       const tool = agent.pending.tool;
       const meta = TOOL_META[tool];
       if (meta?.resolver === 'server') throw new TypieError({ code: 'prism_tool_not_resolvable', status: 400 });
+      const userActionAt = effectiveResolver(tool, session.toolPolicy) === 'user' ? Date.now() : null;
 
       const handler = prismTools[tool];
       let result = input.input;
@@ -635,6 +652,12 @@ builder.mutationFields((t) => ({
       }
 
       await prism.resolveTool(agentId, input.toolCallId, result).catch(prismError);
+
+      if (userActionAt !== null) {
+        await redis
+          .setex(prismNotificationUserActionKey(agentId), PRISM_NOTIFICATION_USER_ACTION_TTL_SECONDS, String(userActionAt))
+          .catch((err) => log.warn('prism notification action timestamp failed: {sessionId} {*}', { sessionId: session.id, error: err }));
+      }
 
       const running = agentId === session.prismAgentId ? activeRun(agent.runs) : null;
 
@@ -819,6 +842,12 @@ builder.subscriptionFields((t) => ({
       clearLoaders(ctx);
       return payload.sessionId;
     },
+  }),
+
+  prismNotificationStream: t.withAuth({ session: true }).field({
+    type: PrismNotification,
+    subscribe: async (_, __, ctx) => pubsub.subscribe('prism:notification', ctx.session.userId),
+    resolve: (payload) => payload,
   }),
 
   prismCreditStream: t.withAuth({ session: true }).field({

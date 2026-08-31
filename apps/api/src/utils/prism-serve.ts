@@ -2,14 +2,17 @@ import { logger } from '@typie/lib';
 import { PrismToolResolver, SiteState } from '@typie/lib/enums';
 import { serveVerdict, TOOL_META, toolFailure } from '@typie/prism';
 import { and, asc, eq } from 'drizzle-orm';
+import { redis } from '#/cache.ts';
 import { db, first, PrismRuns, PrismSessions, Sites } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { prism, PrismApiError } from '#/external/prism.ts';
+import { pubsub } from '#/pubsub.ts';
+import { prismNotificationUserActionKey, prismUserActionNotification } from './prism-notification.ts';
 import { pushCopy, pushKey, shouldPushAsk } from './prism-push-core.ts';
 import { recordToolResolution, withToolLedger } from './prism-tool-calls.ts';
 import { DENIED_MESSAGE, ERROR_MESSAGE } from './prism-tool-messages.ts';
 import { prismPreflights, prismTools } from './prism-tools.ts';
-import type { AgentState, ToolFailure, ToolPolicy } from '@typie/prism';
+import type { AgentState, ToolFailure } from '@typie/prism';
 
 const log = logger.getChild('prism-serve');
 
@@ -49,10 +52,7 @@ const pendingAgent = async (agentId: string, toolCallId: string): Promise<AgentS
 const pushAsk = async (
   session: { id: string; userId: string; title: string | null },
   ask: { toolCallId: string; tool: string; data: unknown; at: number },
-  policy: ToolPolicy,
 ): Promise<void> => {
-  if (!shouldPushAsk(ask.tool, policy)) return;
-
   const { PUSH_TTL_SECONDS, sendPushNotificationOnce } = await import('#/external/firebase.ts');
   if (Date.now() - ask.at > PUSH_TTL_SECONDS * 1000) return;
 
@@ -67,6 +67,29 @@ const pushAsk = async (
   });
 
   if (delivery === 'failed') throw new Error(`prism ask push failed for ${ask.toolCallId}`);
+};
+
+const notifyAsk = async (
+  session: { id: string; userId: string; title: string | null },
+  ask: { agentId: string; toolCallId: string; tool: string; data: unknown; at: number; startedAt: number },
+): Promise<void> => {
+  const rawUserActionAt = await redis.get(prismNotificationUserActionKey(ask.agentId)).catch((err) => {
+    log.warn('prism notification action timestamp unavailable: {agentId} {*}', { agentId: ask.agentId, error: err });
+    return null;
+  });
+
+  pubsub.publish(
+    'prism:notification',
+    session.userId,
+    prismUserActionNotification({
+      sessionId: session.id,
+      toolCallId: ask.toolCallId,
+      startedAt: ask.startedAt,
+      lastUserActionAt: rawUserActionAt === null ? undefined : Number(rawUserActionAt),
+      requestedAt: ask.at,
+    }),
+  );
+  await pushAsk(session, ask);
 };
 
 type PreflightOutcome = { state: 'gone' | 'clear' } | { state: 'failed'; failure: ToolFailure };
@@ -97,7 +120,7 @@ const preflight = async (
 export const serveTool = async (args: {
   sessionId: string;
   agentId: string;
-  runSeq: number | null;
+  origin: { kind: 'run'; runSeq: number | null } | { kind: 'workflow'; startedAt: number };
   toolCallId: string;
   tool: string;
   input: unknown;
@@ -106,10 +129,12 @@ export const serveTool = async (args: {
   const session = await db.select().from(PrismSessions).where(eq(PrismSessions.id, args.sessionId)).then(first);
   if (!session || session.deletedAt !== null) return;
 
+  const runSeq = args.origin.kind === 'run' ? args.origin.runSeq : null;
+
   const call = { toolCallId: args.toolCallId, tool: args.tool, resolver: PrismToolResolver.SERVER };
   const verdict = serveVerdict(args.tool, session.toolPolicy);
   if (verdict === null) {
-    const outcome = await preflight(session, args);
+    const outcome = await preflight(session, { ...args, runSeq });
     if (outcome.state === 'gone') return;
 
     if (outcome.state === 'failed') {
@@ -118,7 +143,26 @@ export const serveTool = async (args: {
       return;
     }
 
-    await pushAsk(session, { toolCallId: args.toolCallId, tool: args.tool, data: args.input, at: args.at }, session.toolPolicy);
+    if (!shouldPushAsk(args.tool, session.toolPolicy)) return;
+
+    const notificationRunSeq = args.origin.kind === 'run' ? (args.origin.runSeq ?? session.openRunSeq) : null;
+    const run =
+      notificationRunSeq === null
+        ? null
+        : await db
+            .select({ startedAt: PrismRuns.startedAt })
+            .from(PrismRuns)
+            .where(and(eq(PrismRuns.sessionId, session.id), eq(PrismRuns.runSeq, notificationRunSeq)))
+            .then(first);
+
+    await notifyAsk(session, {
+      agentId: args.agentId,
+      toolCallId: args.toolCallId,
+      tool: args.tool,
+      data: args.input,
+      at: args.at,
+      startedAt: args.origin.kind === 'workflow' ? args.origin.startedAt : (run?.startedAt.valueOf() ?? args.at),
+    });
     return;
   }
 
@@ -131,7 +175,7 @@ export const serveTool = async (args: {
     await recordToolResolution(session, call, result);
   } else {
     const handler = prismTools[args.tool];
-    const siteId = await runSite(session, args.runSeq);
+    const siteId = await runSite(session, runSeq);
     if (handler === undefined || siteId === null) {
       result = toolFailure('error', ERROR_MESSAGE);
     } else {

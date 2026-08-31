@@ -266,6 +266,20 @@
 
     <SettingsRow>
       {#snippet label()}
+        알림음
+      {/snippet}
+      {#snippet description()}
+        답변이나 확인 요청을 놓치기 쉬울 때 소리로 알려요.
+      {/snippet}
+      {#snippet value()}
+        <Switch bind:checked={app.preference.current.prismNotificationSoundEnabled} />
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsDivider />
+
+    <SettingsRow>
+      {#snippet label()}
         새 대화의 3D 프리즘
       {/snippet}
       {#snippet description()}
