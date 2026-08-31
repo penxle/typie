@@ -21,6 +21,7 @@
     disabled?: boolean;
     onchange: (value: T, options?: { shouldFocus?: boolean }) => void;
     onEscape?: () => void;
+    onOpenChange?: (opened: boolean) => void;
     getLabel?: (value: T) => string;
     renderItem?: Snippet<[{ value: T; label: string }]>;
     extraItems?: { onclick: () => void; content: Snippet }[];
@@ -36,6 +37,7 @@
     disabled = false,
     onchange,
     onEscape,
+    onOpenChange,
     getLabel,
     renderItem,
     extraItems = [],
@@ -98,11 +100,15 @@
     if (anchorElement) {
       anchorWidth = anchorElement.getBoundingClientRect().width;
     }
+    if (opened) return;
     opened = true;
+    onOpenChange?.(true);
   };
 
   const close = () => {
+    if (!opened) return;
     opened = false;
+    onOpenChange?.(false);
   };
 
   $effect(() => {

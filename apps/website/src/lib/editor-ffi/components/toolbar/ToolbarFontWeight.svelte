@@ -20,6 +20,13 @@
 
   const ctx = getEditorContext();
 
+  let dropdownOpened = $state(false);
+
+  $effect(() => {
+    if (!dropdownOpened) return;
+    return ctx.editor?.retainFocus();
+  });
+
   const currentWeight = $derived(
     ctx.editor?.modifierState?.font_weight?.type === 'uniform' ? ctx.editor.modifierState.font_weight.value.value : undefined,
   );
@@ -68,6 +75,7 @@
   items={weightItems}
   label="폰트 굵기"
   onEscape={() => ctx.editor?.focus()}
+  onOpenChange={(opened) => (dropdownOpened = opened)}
   onchange={(weight, options) => {
     ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_weight', value: weight } } });
     if (options?.shouldFocus) {

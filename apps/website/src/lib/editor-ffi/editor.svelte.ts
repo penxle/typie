@@ -387,7 +387,8 @@ export class Editor {
   #toolbarSyncSuspended = false;
   #toolbarSyncDirty = false;
   #focused = $state(false);
-  #nativeDragAdmissionRetainsFocus = false;
+  #focusRetentionHolds = 0;
+  #nativeDragFocusRelease: (() => void) | null = null;
   #effectCleanup: (() => void) | null = null;
   #scrollIntoView: ((options: EditorScrollIntoViewOptions, request: EditorRequest | undefined) => Promise<void> | undefined) | null = null;
   #viewportScrollObserver: (() => void) | null = null;
@@ -1022,13 +1023,13 @@ export class Editor {
           this.#setFocused(true);
         };
         const onBlur = () => {
-          if (this.#nativeDragAdmissionRetainsFocus) {
+          if (this.#focusRetentionHolds > 0) {
             return;
           }
 
           // DOM 제거 중 blur가 Svelte 렌더 안에서 $state를 갱신하지 않도록 다음 microtask로 미룬다.
           queueMicrotask(() => {
-            if (this.#destroyed) return;
+            if (this.#destroyed || this.#focusRetentionHolds > 0) return;
             this.#setFocused(document.activeElement === this.inputEl);
           });
         };
@@ -1330,23 +1331,41 @@ export class Editor {
     this.inputEl?.blur();
   }
 
+  retainFocus(): () => void {
+    this.#focusRetentionHolds += 1;
+    untrack(() => this.#setFocused(true));
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+
+      this.#focusRetentionHolds -= 1;
+      if (this.#focusRetentionHolds > 0) return;
+      untrack(() => {
+        if (!this.inputEl || document.activeElement !== this.inputEl) {
+          this.#setFocused(false);
+        }
+      });
+    };
+  }
+
   beginNativeDragAdmission() {
-    this.#nativeDragAdmissionRetainsFocus = true;
-    this.#setFocused(true);
+    this.#nativeDragFocusRelease ??= this.retainFocus();
   }
 
   endNativeDragAdmission({ restoreFocus }: { restoreFocus: boolean }) {
-    const wasRetainingFocus = this.#nativeDragAdmissionRetainsFocus;
-    this.#nativeDragAdmissionRetainsFocus = false;
-    if (!wasRetainingFocus) {
+    const release = this.#nativeDragFocusRelease;
+    if (!release) {
       return;
     }
 
+    this.#nativeDragFocusRelease = null;
     if (restoreFocus && this.selection !== undefined) {
       this.focus();
-    } else if (!this.inputEl || document.activeElement !== this.inputEl) {
-      this.#setFocused(false);
     }
+
+    release();
   }
 
   openContextMenu(opts: {

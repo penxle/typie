@@ -21,6 +21,13 @@
 
   const ctx = getEditorContext();
 
+  let dropdownOpened = $state(false);
+
+  $effect(() => {
+    if (!dropdownOpened) return;
+    return ctx.editor?.retainFocus();
+  });
+
   const currentFontFamilyValue = $derived(
     ctx.editor?.modifierState?.font_family?.type === 'uniform' ? ctx.editor.modifierState.font_family.value.value : undefined,
   );
@@ -86,6 +93,7 @@
   items={fontFamilyItems.map((f) => ({ value: f.familyName, label: f.displayName }))}
   label="폰트 패밀리"
   onEscape={() => ctx.editor?.focus()}
+  onOpenChange={(opened) => (dropdownOpened = opened)}
   onchange={(familyName, options) => {
     ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_family', value: familyName } } });
     if (options?.shouldFocus) {
