@@ -1,0 +1,59 @@
+# cspell:ignore focusin
+diff --git a/index.d.ts b/index.d.ts
+index 1900adce8b72ee79236da73456cbc67dd155fda4..20ec07820310463505d1100eed0b86f0888eaa56 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -139,6 +139,8 @@ declare module 'focus-trap' {
+      * will result in the default behavior.
+      */
+     initialFocus?: FocusTargetOrFalse | undefined | (() => void);
++    /** Options applied only when focus is initially moved into the trap. */
++    initialFocusOptions?: Pick<FocusOptions, 'focusVisible'>;
+     /**
+      * By default, an error will be thrown if the focus trap contains no
+      * elements in its tab order. With this option you can specify a
+diff --git a/index.js b/index.js
+index d8d893663591d47dfad164324807033bf0ae4220..9599bb20006ad12d681f746c628ef35988e49cbb 100644
+--- a/index.js
++++ b/index.js
+@@ -484,7 +484,7 @@ const createFocusTrap = function (elements, userOptions) {
+     }
+   };
+ 
+-  const tryFocus = function (node) {
++  const tryFocus = function (node, focusOptions) {
+     if (node === false) {
+       return;
+     }
+@@ -494,11 +494,14 @@ const createFocusTrap = function (elements, userOptions) {
+     }
+ 
+     if (!node || !node.focus) {
+-      tryFocus(getInitialFocusNode());
++      tryFocus(getInitialFocusNode(), focusOptions);
+       return;
+     }
+ 
+-    node.focus({ preventScroll: !!config.preventScroll });
++    node.focus({
++      preventScroll: !!config.preventScroll,
++      ...focusOptions,
++    });
+     // NOTE: focus() API does not trigger focusIn event so set MRU node manually
+     state.mostRecentlyFocusedNode = node;
+ 
+@@ -874,12 +877,12 @@ const createFocusTrap = function (elements, userOptions) {
+       //  since we need to capture the timer ID immediately
+       promise = new Promise((resolve) => {
+         state.delayInitialFocusTimer = delay(function () {
+-          tryFocus(getInitialFocusNode());
++          tryFocus(getInitialFocusNode(), config.initialFocusOptions);
+           resolve();
+         });
+       });
+     } else {
+-      tryFocus(getInitialFocusNode());
++      tryFocus(getInitialFocusNode(), config.initialFocusOptions);
+     }
+ 
+     doc.addEventListener('focusin', checkFocusIn, true);
