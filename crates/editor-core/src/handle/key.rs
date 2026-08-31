@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use editor_commands::{self as commands};
-use editor_state::Selection;
+use editor_state::{Selection, SelectionKind, selection_kind};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -164,16 +164,13 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
         }),
         (Key::Escape, _) => editor.transact(|tr| {
             if let Some(current) = tr.selection() {
-                let collapsed = Selection::collapsed(current.head);
-                let normalized = collapsed.normalize(&tr.view()).unwrap_or(collapsed);
-                // Unit selections re-normalize to the direction-flipped form;
-                // an anchor/head swap brackets the same content.
-                let unchanged = normalized == current
-                    || (normalized.anchor == current.head && normalized.head == current.anchor);
-                if unchanged {
-                    tr.set_selection(None)?;
-                } else {
-                    tr.set_selection(Some(collapsed))?;
+                match selection_kind(&current, &tr.view()) {
+                    SelectionKind::Range => {
+                        tr.set_selection(Some(Selection::collapsed(current.head)))?;
+                    }
+                    SelectionKind::Caret | SelectionKind::Unit => {
+                        tr.set_selection(None)?;
+                    }
                 }
                 tr.clear_pending_format()?;
             }

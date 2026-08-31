@@ -13,7 +13,7 @@ export function runEscapeStack(): boolean {
 }
 
 function handleGlobalEscape(e: KeyboardEvent) {
-  if (!(e.key === 'Escape' && runEscapeStack())) {
+  if (e.isComposing || e.defaultPrevented || !(e.key === 'Escape' && runEscapeStack())) {
     return;
   }
 

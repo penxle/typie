@@ -3,6 +3,7 @@
   import { center } from '@typie/styled-system/patterns';
   import { portal, scrollLock } from '@typie/ui/actions';
   import { ContentProtect, Icon, Img } from '@typie/ui/components';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import { cubicOut } from 'svelte/easing';
   import { Tween } from 'svelte/motion';
   import XIcon from '~icons/lucide/x';
@@ -71,9 +72,16 @@
     await progress.set(0);
     onclose();
   };
+
+  $effect(() =>
+    pushEscapeHandler(() => {
+      void handleClose();
+      return true;
+    }),
+  );
 </script>
 
-<svelte:window onclickcapture={handleClose} onkeydown={(event) => event.key === 'Escape' && handleClose()} />
+<svelte:window onclickcapture={handleClose} />
 
 <div class={css({ position: 'fixed', inset: '0', size: 'full', zIndex: 'modal' })} use:portal use:scrollLock>
   <ContentProtect>

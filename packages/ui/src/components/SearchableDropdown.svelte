@@ -130,9 +130,11 @@
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
-    if (e.isComposing) return;
+    if (e.isComposing || e.defaultPrevented) return;
 
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       inputValue = currentLabel;
       inputElement?.blur();
       close();

@@ -410,6 +410,16 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
+    pub fn selection_kind(&self) -> EditorResult<Option<Complex<editor_state::SelectionKind>>> {
+        self.with_inner(|inner| {
+            let state = inner.editor.state();
+            let Some(selection) = state.selection.as_ref() else {
+                return Ok(None);
+            };
+            Ok(Some(editor_state::selection_kind(selection, &state.view())).into_ffi()?)
+        })
+    }
+
     pub fn copy_selection(
         &self,
     ) -> EditorResult<Option<Complex<editor_clipboard::ClipboardPayload>>> {

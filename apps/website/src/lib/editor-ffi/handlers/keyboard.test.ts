@@ -1,13 +1,15 @@
+import { pushEscapeHandler } from '@typie/ui/utils';
 import { describe, expect, it, vi } from 'vitest';
 import { handleKeyDown } from './keyboard';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 
-const createEditor = (messages: Message[]) =>
+const createEditor = (messages: Message[], escapeKeyHandler: (() => boolean) | null = null) =>
   ({
     enqueue: vi.fn((message: Message) => {
       messages.push(message);
     }),
+    escapeKeyHandler,
     scrollIntoView: vi.fn(),
     updateNow: vi.fn((build: () => void) => {
       build();
@@ -105,6 +107,65 @@ describe('handleKeyDown', () => {
     expect(messages).toEqual([]);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(event.stopPropagation).not.toHaveBeenCalled();
+  });
+
+  it('leaves composing Escape before the document Escape handler', () => {
+    const messages: Message[] = [];
+    const escapeKeyHandler = vi.fn(() => true);
+    const editor = createEditor(messages, escapeKeyHandler);
+    const event = composingEvent('Escape');
+
+    handleKeyDown(editor, event);
+
+    expect(escapeKeyHandler).not.toHaveBeenCalled();
+    expect(messages).toEqual([]);
+  });
+
+  it('lets the document consume Escape before the core binding', () => {
+    const messages: Message[] = [];
+    const escapeKeyHandler = vi.fn(() => true);
+    const editor = createEditor(messages, escapeKeyHandler);
+    const event = { ...composingEvent('Escape'), isComposing: false } as TestKeyboardEvent;
+
+    handleKeyDown(editor, event);
+
+    expect(escapeKeyHandler).toHaveBeenCalledOnce();
+    expect(messages).toEqual([]);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+  });
+
+  it('lets the topmost transient UI consume Escape before the document handler', () => {
+    const messages: Message[] = [];
+    const transientHandler = vi.fn(() => true);
+    const removeTransientHandler = pushEscapeHandler(transientHandler);
+    const escapeKeyHandler = vi.fn(() => true);
+    const editor = createEditor(messages, escapeKeyHandler);
+    const event = { ...composingEvent('Escape'), isComposing: false } as TestKeyboardEvent;
+
+    try {
+      handleKeyDown(editor, event);
+
+      expect(transientHandler).toHaveBeenCalledOnce();
+      expect(escapeKeyHandler).not.toHaveBeenCalled();
+      expect(messages).toEqual([]);
+    } finally {
+      removeTransientHandler();
+    }
+  });
+
+  it('runs the core Escape binding when the document declines it', () => {
+    const messages: Message[] = [];
+    const escapeKeyHandler = vi.fn(() => false);
+    const editor = createEditor(messages, escapeKeyHandler);
+    const event = { ...composingEvent('Escape'), isComposing: false } as TestKeyboardEvent;
+
+    handleKeyDown(editor, event);
+
+    expect(escapeKeyHandler).toHaveBeenCalledOnce();
+    expect(messages).toEqual([{ type: 'key', event: { key: 'escape' } }]);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
   });
 
   it('defers Mod+Enter until after the active composition is committed', () => {

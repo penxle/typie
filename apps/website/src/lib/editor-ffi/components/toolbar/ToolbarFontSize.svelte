@@ -97,6 +97,8 @@
   });
 
   const handleKeydown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.defaultPrevented) return;
+
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
@@ -105,6 +107,8 @@
       close();
       ctx.editor?.focus();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
       inputElement?.blur();
       close();

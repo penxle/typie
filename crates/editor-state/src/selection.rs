@@ -8,6 +8,15 @@ use crate::{Position, ResolvedPosition};
 #[ffi]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum SelectionKind {
+    Caret,
+    Unit,
+    Range,
+}
+
+#[ffi]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Selection {
     pub anchor: Position,
     pub head: Position,
@@ -37,6 +46,22 @@ impl Selection {
         let anchor = self.anchor.resolve(view)?;
         let head = self.head.resolve(view)?;
         Some(ResolvedSelection { view, anchor, head })
+    }
+}
+
+pub fn selection_kind(selection: &Selection, view: &DocView) -> SelectionKind {
+    if selection.is_collapsed() {
+        return SelectionKind::Caret;
+    }
+
+    let collapsed = Selection::collapsed(selection.head);
+    let normalized = collapsed.normalize(view).unwrap_or(collapsed);
+    if normalized == *selection
+        || (normalized.anchor == selection.head && normalized.head == selection.anchor)
+    {
+        SelectionKind::Unit
+    } else {
+        SelectionKind::Range
     }
 }
 

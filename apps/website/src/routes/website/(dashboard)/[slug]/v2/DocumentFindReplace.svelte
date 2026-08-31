@@ -4,6 +4,7 @@
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import { onMount, tick, untrack } from 'svelte';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
@@ -81,18 +82,13 @@
   });
 
   const handleKeydown = (e: KeyboardEvent) => {
+    if (e.isComposing || e.defaultPrevented) return;
+
     if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF') {
       e.preventDefault();
       tick().then(() => {
         findInputEl?.select();
       });
-      return;
-    }
-
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      close();
     }
   };
 
@@ -117,6 +113,10 @@
   };
 
   onMount(() => {
+    const removeEscapeHandler = pushEscapeHandler(() => {
+      close();
+      return true;
+    });
     const selectionText = editor && !editor.isSelectionCollapsed ? editor.copySelection()?.text : undefined;
     if (selectionText !== undefined) {
       findText = toSingleLineText(selectionText);
@@ -127,6 +127,7 @@
     });
 
     return () => {
+      removeEscapeHandler();
       const session = focusReturnSession;
       focusReturnSession = null;
       session?.discard();

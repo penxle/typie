@@ -1,4 +1,5 @@
 import { pointerCapture } from '@typie/ui/actions';
+import { pushEscapeHandler } from '@typie/ui/utils';
 import type { PointerCaptureCancelReason } from '@typie/ui/actions';
 import type { Action } from 'svelte/action';
 import type { PaneGroup } from '../../@pane/context.svelte';
@@ -58,6 +59,7 @@ export class BreadcrumbDocumentDragController {
   #session = $state.raw<PointerSession | null>(null);
   #clickSuppression: ClickSuppression | null = null;
   #cancelCapture: (() => void) | null = null;
+  #removeEscapeHandler: (() => void) | null = null;
   #suppressProgrammaticCancelClick = false;
 
   ghost = $state<BreadcrumbDocumentDragGhost | null>(null);
@@ -123,6 +125,8 @@ export class BreadcrumbDocumentDragController {
     if (this.#session !== session) return;
     this.#session = null;
     this.#cancelCapture = null;
+    this.#removeEscapeHandler?.();
+    this.#removeEscapeHandler = null;
     this.ghost = null;
 
     if (session.holdTimeout) clearTimeout(session.holdTimeout);
@@ -151,6 +155,10 @@ export class BreadcrumbDocumentDragController {
       touchHoldCanceled: false,
     };
     this.#session = session;
+    this.#removeEscapeHandler = pushEscapeHandler(() => {
+      this.cancel({ suppressClick: true });
+      return true;
+    });
 
     if (session.pointerType === 'touch') {
       session.holdTimeout = setTimeout(() => {

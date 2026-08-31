@@ -315,11 +315,12 @@
           defaultValue={folder.data.name}
           onblur={(e) => e.currentTarget.form?.requestSubmit()}
           onkeydown={(e) => {
-            if (e.key !== 'Escape') {
+            if (e.key !== 'Escape' || e.isComposing || e.defaultPrevented) {
               return;
             }
 
             e.preventDefault();
+            e.stopPropagation();
             e.currentTarget.form?.reset();
             editing = false;
           }}

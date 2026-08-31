@@ -322,6 +322,12 @@ export const handleKeyDown = (editor: Editor, e: KeyboardEvent & { currentTarget
     return;
   }
 
+  if (e.key === 'Escape' && editor.escapeKeyHandler?.()) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
   if (binding) {
     e.preventDefault();
     e.stopPropagation();

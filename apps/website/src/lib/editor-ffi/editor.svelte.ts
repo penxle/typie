@@ -43,6 +43,7 @@ import type {
   ResourceUpdate,
   Selection,
   SelectionEndpoints,
+  SelectionKind,
   Size,
   StableSelection,
   StateField,
@@ -102,6 +103,7 @@ export type EditorSnapshot = Readonly<{
   cursor: CursorMetrics | undefined;
   placeholder: PlaceholderMetrics | undefined;
   selection: Selection | undefined;
+  selectionKind: SelectionKind | undefined;
   selectionEndpoints: SelectionEndpoints | undefined;
   lastHistoryTag: HistoryTag | undefined;
   pageSizes: Size[];
@@ -357,6 +359,7 @@ export class Editor {
     cursor: undefined,
     placeholder: undefined,
     selection: undefined,
+    selectionKind: undefined,
     selectionEndpoints: undefined,
     lastHistoryTag: undefined,
     pageSizes: [],
@@ -469,6 +472,7 @@ export class Editor {
   readOnly = $state(false);
   protectContent = $state(false);
   editBlockedHandler: (() => void) | null = null;
+  escapeKeyHandler: (() => boolean) | null = null;
 
   imageAssets = $state(new SvelteMap<string, ImageAsset>());
   inflightImages = $state(new SvelteMap<string, { uploadId: string; url?: string; width: number; height: number }>());
@@ -632,6 +636,7 @@ export class Editor {
         cursor: fields.has('cursor') ? core.cursor() : previous.cursor,
         placeholder: fields.has('placeholder') ? (core.placeholder() ?? undefined) : previous.placeholder,
         selection: fields.has('selection') || fields.has('doc') ? core.selection() : previous.selection,
+        selectionKind: fields.has('selection') || fields.has('doc') ? core.selection_kind() : previous.selectionKind,
         selectionEndpoints:
           fields.has('selection') || fields.has('cursor') || fields.has('doc') || fields.has('page_sizes')
             ? core.selection_endpoints()

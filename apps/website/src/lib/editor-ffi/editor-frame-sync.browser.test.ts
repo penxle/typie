@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
-import { pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
+import { isSelectionCollapsed, pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
 import { computeSelectionHandleVisual } from './gesture.svelte';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
@@ -657,6 +657,72 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it('orders text selection collapse, focus-mode exit, and editor blur across Escape presses', async () => {
+    const { editor } = await mountEditor(doc('hello'));
+    const range = editor.proseToSelection(1, 4);
+    expect(range).toBeDefined();
+    if (!range) throw new Error('Expected a text range');
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set', selection: range } }));
+
+    let focusModeEnabled = true;
+    editor.escapeKeyHandler = () => {
+      if (!focusModeEnabled || editor.appliedSnapshot.selectionKind === 'range') return false;
+      focusModeEnabled = false;
+      return true;
+    };
+    editor.focus();
+    expect(editor.focused).toBe(true);
+
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(focusModeEnabled).toBe(true);
+    expect(isSelectionCollapsed(editor.appliedSnapshot.selection)).toBe(true);
+    const collapsed = editor.appliedSnapshot.selection;
+
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(focusModeEnabled).toBe(false);
+    expect(editor.appliedSnapshot.selection).toEqual(collapsed);
+    expect(editor.focused).toBe(true);
+
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(editor.appliedSnapshot.selection).toBeUndefined();
+    await expect.poll(() => editor.focused).toBe(false);
+  });
+
+  it('exits focus mode without clearing a unit selection or blurring the editor', async () => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 }));
+    const image = editor.appliedSnapshot.externalElements[0];
+    expect(image).toBeDefined();
+    if (!image) throw new Error('Expected an image external element');
+    editor.updateNow((request) =>
+      request.enqueue({
+        type: 'selection',
+        op: {
+          type: 'set_at',
+          page: image.page_idx,
+          x: image.bounds.x + image.bounds.width / 2,
+          y: image.bounds.y + image.bounds.height / 2,
+        },
+      }),
+    );
+    const unitSelection = editor.appliedSnapshot.selection;
+    expect(unitSelection).toBeDefined();
+    expect(editor.appliedSnapshot.selectionKind).toBe('unit');
+
+    let focusModeEnabled = true;
+    editor.escapeKeyHandler = () => {
+      if (!focusModeEnabled || editor.appliedSnapshot.selectionKind === 'range') return false;
+      focusModeEnabled = false;
+      return true;
+    };
+    editor.focus();
+
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+
+    expect(focusModeEnabled).toBe(false);
+    expect(editor.appliedSnapshot.selection).toEqual(unitSelection);
+    expect(editor.focused).toBe(true);
+  });
+
   it('resolves pointer coordinates from the document track without measuring individual pages', async () => {
     const { editor } = await mountEditor(paginatedDocWithPageBreaks(3));
     await waitForPresentation(editor);

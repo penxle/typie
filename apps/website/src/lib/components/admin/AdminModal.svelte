@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import XIcon from '~icons/lucide/x';
   import { AdminIcon } from '$lib/components/admin';
   import type { Snippet } from 'svelte';
@@ -33,11 +34,21 @@
     }
   };
 
-  const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+  const handleBackdropKeydown = (e: KeyboardEvent) => {
+    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
       open = false;
     }
   };
+
+  $effect(() => {
+    if (!open) return;
+
+    return pushEscapeHandler(() => {
+      open = false;
+      return true;
+    });
+  });
 </script>
 
 {#if open}
@@ -54,7 +65,7 @@
       zIndex: '[1000]',
     })}
     onclick={handleBackdropClick}
-    onkeydown={handleKeydown}
+    onkeydown={handleBackdropKeydown}
     role="button"
     tabindex="-1"
   >
