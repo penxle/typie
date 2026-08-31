@@ -32,7 +32,6 @@
       open = true;
       mixpanel.track('open_prism_review_rounds_modal');
     }}
-    onpointerdown={(event) => event.preventDefault()}
     type="button"
     use:tooltip={{ message: '리뷰' }}
   >
