@@ -24,7 +24,7 @@ const trigger = (name: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('[aria-haspopup="tree"]')].find((button) => button.textContent?.includes(name));
 
 const mountFixture = async () => {
-  component = mount(BreadcrumbDocumentDragTestRoot, { target: document.body });
+  component = mount(BreadcrumbDocumentDragTestRoot, { target: document.body, props: { withSegment: false } });
   await tick();
 };
 

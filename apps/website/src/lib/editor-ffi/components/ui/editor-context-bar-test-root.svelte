@@ -28,6 +28,9 @@
     preferenceUserId?: string;
     twoPanes?: boolean;
     useAppPinned?: boolean;
+    floatingFixed?: boolean;
+    floatingRevealOnHover?: boolean;
+    floatingRightInset?: number;
   };
 
   let {
@@ -48,6 +51,9 @@
     preferenceUserId = 'editor-context-bar-test',
     twoPanes = false,
     useAppPinned = false,
+    floatingFixed = true,
+    floatingRevealOnHover = false,
+    floatingRightInset = 0,
   }: Props = $props();
   const app = setupAppContext(preferenceUserId);
   const contextBarPinned = $derived(
@@ -130,6 +136,9 @@
           onZoomOut,
           toggleTargetLandmark,
         }}
+        fixed={floatingFixed}
+        revealOnHover={floatingRevealOnHover}
+        rightInset={floatingRightInset}
       />
     {/if}
     <button data-testid="context-bar-underlay" type="button">본문</button>

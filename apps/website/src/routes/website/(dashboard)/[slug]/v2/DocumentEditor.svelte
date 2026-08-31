@@ -18,6 +18,7 @@
   import LightbulbIcon from '~icons/lucide/lightbulb';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
+  import Maximize2Icon from '~icons/lucide/maximize-2';
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
@@ -25,9 +26,7 @@
   import XIcon from '~icons/lucide/x';
   import { desktop } from '$lib/desktop';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
-  import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
-  import EditorFocusModeControl from '$lib/editor-ffi/components/ui/EditorFocusModeControl.svelte';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
@@ -36,7 +35,6 @@
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
-  import EntityIcon from '../../@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import CloseButton from '../@pane/CloseButton.svelte';
@@ -64,7 +62,6 @@
   import { RemoteChangesetPipeline } from './sync/remote-changeset-pipeline';
   import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
-  import type { EditorContextBarSegmentRenderProps } from '$lib/editor-ffi/components/ui/EditorContextBar.svelte';
   import type { DocumentEditorV2_query$key } from '$mearie';
   import type { EditorBreadcrumbPathEntity } from './@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import type { RemoteChangesetEvent } from './sync/remote-changeset-pipeline';
@@ -831,6 +828,11 @@
     mixpanel.track(enabled ? 'zen_mode_enabled' : 'zen_mode_disabled', { via: 'document' });
   }
 
+  function exitZenModeFromCloseButton() {
+    app.preference.current.zenModeEnabled = false;
+    mixpanel.track('zen_mode_disabled', { via: 'close_button' });
+  }
+
   $effect(() => {
     const editor = ctx.liveEditor;
     if (editor) {
@@ -995,15 +997,6 @@
     }
   }
 
-  function focusTitleFromHeader() {
-    if (ctx.editor?.scrollContainerEl) {
-      ctx.editor.scrollContainerEl.scrollTop = 0;
-    }
-
-    titleEl?.focus();
-    titleEl?.select();
-  }
-
   function handleGlobalKeydown(e: KeyboardEvent) {
     const targetPaneId = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-pane-id]')?.dataset.paneId : undefined;
 
@@ -1059,7 +1052,7 @@
               alignItems: 'center',
               gap: '6px',
               flexShrink: '0',
-              paddingLeft: '24px',
+              paddingLeft: '16px',
               paddingRight: '8px',
               height: '36px',
               backgroundColor: 'surface.default',
@@ -1069,23 +1062,21 @@
             role="region"
             use:dragPane={dragPaneProps}
           >
-            <div class={flex({ alignItems: 'center', gap: '4px', overflowX: 'hidden' })}>
-              <EntityIcon entity$key={entity} size={14} />
-              <button
-                class={css({
-                  minWidth: '0',
-                  fontSize: '12px',
-                  fontWeight: 'medium',
-                  color: 'text.subtle',
-                  lineClamp: 1,
-                  _hover: { color: 'text.default' },
-                  transition: 'common',
-                })}
-                onclick={focusTitleFromHeader}
-                type="button"
-              >
-                {title || '(제목 없음)'}
-              </button>
+            <div class={flex({ alignItems: 'center', minWidth: '0', overflowX: 'hidden' })}>
+              <EditorBreadcrumb pathIdentity={breadcrumbPathIdentity} viewportId={breadcrumbViewportId}>
+                {#key breadcrumbPathIdentity}
+                  <EditorBreadcrumbNavigation
+                    ancestors={breadcrumbAncestors}
+                    current={{ id: entity.id, slug: entity.slug, name: localTitle || '(제목 없음)', entity$key: entity }}
+                    {isOwner}
+                    onNavigate={(slug) => {
+                      paneGroup.replacePane(pane.id, { kind: 'entity', slug });
+                    }}
+                    popupId={`${breadcrumbViewportId}-tree`}
+                    siteId={entity.site.id}
+                  />
+                {/key}
+              </EditorBreadcrumb>
               {#if document.locked}
                 <span
                   class={center({ flexShrink: '0', color: 'text.faint' })}
@@ -1098,7 +1089,7 @@
               {/if}
             </div>
 
-            <div class={flex({ alignItems: 'center', gap: '4px' })}>
+            <div class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}>
               {#if !entity.user.subscription}
                 <button
                   class={flex({
@@ -1177,6 +1168,24 @@
                 </Menu>
               {/if}
 
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: 'text.faint',
+                  transition: 'common',
+                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                })}
+                aria-label="집중 모드 켜기"
+                data-editor-focus-mode-control
+                onclick={toggleZenMode}
+                onpointerdown={(event) => event.preventDefault()}
+                type="button"
+                use:tooltip={{ message: '집중 모드 켜기', keys: ['Mod', 'Shift', 'M'] }}
+              >
+                <Icon icon={Maximize2Icon} size={16} />
+              </button>
+
               <CloseButton>
                 <Icon icon={XIcon} size={16} />
               </CloseButton>
@@ -1220,6 +1229,29 @@
                     })}
                     bind:clientWidth={editorAreaWidth}
                   >
+                    {#if currentViewZenModeEnabled}
+                      <button
+                        class={center({
+                          position: 'absolute',
+                          top: '0',
+                          right: '0',
+                          zIndex: 'overEditor',
+                          size: '32px',
+                          borderRadius: '8px',
+                          color: 'text.subtle',
+                          backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
+                        })}
+                        aria-label="집중 모드 끄기"
+                        data-editor-focus-mode-close
+                        onclick={exitZenModeFromCloseButton}
+                        onpointerdown={(event) => event.preventDefault()}
+                        type="button"
+                        use:tooltip={{ message: '집중 모드 끄기', keys: ['Esc'] }}
+                      >
+                        <Icon icon={XIcon} />
+                      </button>
+                    {/if}
+
                     {#if showEditLockedToast}
                       <div
                         class={flex({
@@ -1307,37 +1339,9 @@
                             contentInsetRight={insets.right}
                             contentMotion={insets.contentMotion}
                             document$key={document}
+                            floatingZoomRightInset={currentViewZenModeEnabled ? 36 : 0}
                             onReady={handleEditorReady}
                           >
-                            {#snippet breadcrumb({ state }: EditorContextBarSegmentRenderProps)}
-                              <EditorBreadcrumb
-                                onPathChange={() => state.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS)}
-                                pathIdentity={breadcrumbPathIdentity}
-                                viewportId={breadcrumbViewportId}
-                              >
-                                {#key breadcrumbPathIdentity}
-                                  <EditorBreadcrumbNavigation
-                                    ancestors={breadcrumbAncestors}
-                                    current={{ id: entity.id, slug: entity.slug, name: localTitle || '(제목 없음)', entity$key: entity }}
-                                    {isOwner}
-                                    onNavigate={(slug) => {
-                                      paneGroup.replacePane(pane.id, { kind: 'entity', slug });
-                                    }}
-                                    popupId={`${breadcrumbViewportId}-tree`}
-                                    segment={state}
-                                    siteId={entity.site.id}
-                                  />
-                                {/key}
-                              </EditorBreadcrumb>
-                            {/snippet}
-                            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
-                              <EditorFocusModeControl
-                                enabled={currentViewZenModeEnabled}
-                                onToggle={toggleZenMode}
-                                segment={state}
-                                visible={presentation.visible}
-                              />
-                            {/snippet}
                             {#snippet header()}
                               <div
                                 class={flex({

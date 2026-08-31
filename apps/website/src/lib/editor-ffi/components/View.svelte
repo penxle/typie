@@ -2,8 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { token } from '@typie/styled-system/tokens';
-  import { VerticalDivider } from '@typie/ui/components';
-  import { getThemeContext, tryAppContext } from '@typie/ui/context';
+  import { getThemeContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, windowScrollViewport } from '@typie/ui/utils';
   import { onDestroy, untrack } from 'svelte';
@@ -40,16 +39,13 @@
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
   import SelectionHandles from './SelectionHandles.svelte';
-  import EditorContextBar from './ui/EditorContextBar.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
-  import EditorZoomControls from './ui/EditorZoomControls.svelte';
   import FloatingEditorZoomControls from './ui/FloatingEditorZoomControls.svelte';
   import ViewportOverlay from './ViewportOverlay.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
   import type { DocumentZoomLayout } from '../zoom';
-  import type { EditorContextBarSegmentRenderProps } from './ui/EditorContextBar.svelte';
 
   type Props = {
     document$key: Editor_document$key;
@@ -63,8 +59,7 @@
     contentInsetRight?: number;
     /** 최종 레이아웃으로 바뀐 본문을 이전 화면 위치에서 합성하는 일회성 모션. */
     contentMotion?: { fromX: number; duration: number; easing: string };
-    breadcrumb?: Snippet<[EditorContextBarSegmentRenderProps]>;
-    viewControls?: Snippet<[EditorContextBarSegmentRenderProps]>;
+    floatingZoomRightInset?: number;
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
@@ -80,8 +75,7 @@
     contentInsetLeft = 0,
     contentInsetRight = 0,
     contentMotion,
-    breadcrumb,
-    viewControls: additionalViewControls,
+    floatingZoomRightInset = 0,
     onReady,
     header,
     footer,
@@ -90,30 +84,16 @@
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
-  const app = tryAppContext();
-  const contextBarPinned = $derived(app?.preference.current.contextBarPinned ?? false);
-
-  function setContextBarPinned(pinned: boolean): void {
-    if (app) app.preference.current.contextBarPinned = pinned;
-  }
 
   // 이 View 인스턴스가 소유한다. 공유 컨텍스트에 두면 {#key ctx.editor}로 View가 교체될 때
   // 새 인스턴스가 옛 인스턴스의 host를 읽어버린다 (새 브랜치 생성이 옛 브랜치 파괴보다 먼저다).
   let surfaceHost = $state<EditorSurfaceHost>();
   let editorViewSurface = $state<HTMLElement>();
-  let contextBarTopOcclusion = $state(0);
 
   setupEditorScroll(ctx);
   setupEditorPublication(ctx, () => surfaceHost);
   onDestroy(() => {
     if (ctx.editor) cancelPointerInteraction(ctx.editor);
-  });
-
-  $effect(() => {
-    const scroll = ctx.scroll;
-    const topInset = contextBarTopOcclusion;
-    if (!scroll) return;
-    untrack(() => scroll.setTopInset(topInset));
   });
 
   $effect(() => {
@@ -374,30 +354,13 @@
 >
   {#if ctx.editor}
     <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
-      {#snippet zoomControls({ controls, showViewControlsOnPaneEntry })}
-        {#if viewer}
-          <FloatingEditorZoomControls {controls} />
-        {:else if editorViewSurface}
-          <EditorContextBar
-            {breadcrumb}
-            {editorViewSurface}
-            interactiveViewControlsWhenHidden
-            onPinnedChange={setContextBarPinned}
-            onTopOcclusionChange={(topOcclusion) => (contextBarTopOcclusion = topOcclusion)}
-            pinned={contextBarPinned}
-            {showViewControlsOnPaneEntry}
-          >
-            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
-              <div class={css({ display: 'flex', alignItems: 'center' })} aria-label="보기 제어" role="group">
-                <EditorZoomControls {...controls} visibility={state} visible={presentation.visible} />
-                {#if controls.enabled && additionalViewControls}
-                  <VerticalDivider style={css.raw({ height: '12px' })} />
-                {/if}
-                {@render additionalViewControls?.({ state, presentation })}
-              </div>
-            {/snippet}
-          </EditorContextBar>
-        {/if}
+      {#snippet zoomControls({ controls })}
+        <FloatingEditorZoomControls
+          {controls}
+          fixed={useWindowScroll}
+          revealOnHover={!useWindowScroll}
+          rightInset={floatingZoomRightInset}
+        />
       {/snippet}
     </EditorZoom>
   {/if}

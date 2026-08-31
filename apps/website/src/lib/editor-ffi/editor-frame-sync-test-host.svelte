@@ -16,9 +16,8 @@
   import LineHighlight from './components/LineHighlight.svelte';
   import Scrollbar from './components/Scrollbar.svelte';
   import SelectionHandles from './components/SelectionHandles.svelte';
-  import EditorContextBar from './components/ui/EditorContextBar.svelte';
   import EditorZoom from './components/ui/EditorZoom.svelte';
-  import EditorZoomControls from './components/ui/EditorZoomControls.svelte';
+  import FloatingEditorZoomControls from './components/ui/FloatingEditorZoomControls.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
   import { CONTINUOUS_MIN_WIDTH, PAGE_GAP } from './constants';
   import { setupEditorContext } from './editor.svelte';
@@ -27,7 +26,6 @@
   import { setupEditorScroll } from './scroll.svelte';
   import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
-  import type { EditorContextBarSegmentRenderProps } from './components/ui/EditorContextBar.svelte';
   import type { Editor } from './editor.svelte';
   import type { DocumentZoomLayout } from './zoom';
 
@@ -224,16 +222,8 @@
 
   {#if withZoom}
     <EditorZoom active {editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
-      {#snippet zoomControls({ controls, showViewControlsOnPaneEntry })}
-        {#if editorViewSurface}
-          <EditorContextBar {editorViewSurface} interactiveViewControlsWhenHidden {showViewControlsOnPaneEntry}>
-            {#snippet viewControls({ state, presentation }: EditorContextBarSegmentRenderProps)}
-              <div style="display: flex; align-items: center" aria-label="보기 제어" role="group">
-                <EditorZoomControls {...controls} visibility={state} visible={presentation.visible} />
-              </div>
-            {/snippet}
-          </EditorContextBar>
-        {/if}
+      {#snippet zoomControls({ controls })}
+        <FloatingEditorZoomControls {controls} fixed={useWindowScroll} revealOnHover={!useWindowScroll} />
       {/snippet}
     </EditorZoom>
 
