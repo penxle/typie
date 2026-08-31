@@ -89,4 +89,14 @@ describe('확인 카드 꼬리말 판정', () => {
     expect(actionTail('unchanged', { doneLabel: '삭제했어요' })).toBe('삭제했어요');
     expect(actionTail('done', { doneLabel: '저장했어요', unchangedLabel: '바뀐 것이 없었어요' })).toBe('저장했어요');
   });
+
+  it('꼬리말 액션은 save-document에만 달린다', () => {
+    for (const [tool, card] of Object.entries(actionCards)) {
+      if (tool === 'save-document') {
+        expect(card?.tailAction, tool).toBeDefined();
+      } else {
+        expect(card?.tailAction, tool).toBeUndefined();
+      }
+    }
+  });
 });

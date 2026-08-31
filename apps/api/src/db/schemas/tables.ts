@@ -755,6 +755,33 @@ export const PrismToolCalls = pgTable(
   (t) => [uniqueIndex().on(t.sessionId, t.toolCallId), index().on(t.sessionId)],
 );
 
+export const PrismDocumentEdits = pgTable(
+  'prism_document_edits',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PRISM_DOCUMENT_EDITS)),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => PrismSessions.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    toolCallId: text('tool_call_id').notNull(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    beforeHeads: bytea('before_heads').notNull(),
+    afterHeads: bytea('after_heads').notNull(),
+    checkpointHeads: bytea('checkpoint_heads').notNull(),
+    undone: boolean('undone').notNull().default(false),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.sessionId, t.toolCallId), index().on(t.documentId, t.createdAt)],
+);
+
 export const PrismWorkflows = pgTable(
   'prism_workflows',
   {

@@ -47,7 +47,7 @@ const session = [
   ev(3, 'turn.started', turn1, {}),
   ev(4, 'turn.completed', turn1, { text: null, toolCalls: [{ kind: 'parsed', id: 'c1', name: 'list-open-documents', input: {} }] }),
   ev(5, 'tool.requested', call, { tool: 'list-open-documents', data: {} }),
-  ev(6, 'tool.resolved', call, { tool: 'list-open-documents', ok: true, data: { documents: [] } }),
+  ev(6, 'tool.resolved', call, { tool: 'list-open-documents', ok: true, data: { documents: [] }, resolvedBy: 'user' }),
   ev(7, 'invocation.started', inv, { target: { kind: 'workflow', id: 'wf_1', name: 'high', app: 'review' } }),
   wf(1, 'step.started', { step: 'classify-0' }, {}),
   wf(2, 'tool.requested', { agent: child, run: 1, turn: 1, attempt: 1, toolCallId: 'k1' }, { tool: 'ask-user', data: { questions: [] } }),
@@ -95,6 +95,7 @@ describe('toGraphQL', () => {
       'assistant',
     ]);
     expect(wire.runs[1].items.map((item) => item.kind)).toEqual(['user', 'tool', 'runFailure']);
+    expect(wire.runs[0].items[2]).toMatchObject({ kind: 'toolRequest', toolCallId: 'c1', status: 'RESOLVED', resolvedBy: 'USER' });
     expect(wire).toMatchObject({ cursor: 14, title: '제목', agentId: agent.id, turn: 'IDLE', retrying: false });
   });
 

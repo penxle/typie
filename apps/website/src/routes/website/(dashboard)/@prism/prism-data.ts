@@ -53,6 +53,7 @@ const transcriptQuery = graphql(`
               data
               requestStatus: status
               result
+              resolvedBy
               settledAt
               at
             }
@@ -138,6 +139,7 @@ export const toRunItem = (item: TranscriptQueryItem): RunItemWire => {
         data: item.data ?? null,
         status: item.requestStatus,
         result: item.result ?? null,
+        resolvedBy: item.resolvedBy ?? null,
         settledAt: item.settledAt ?? null,
         at: item.at,
       };

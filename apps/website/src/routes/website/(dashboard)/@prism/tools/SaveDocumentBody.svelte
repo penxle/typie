@@ -62,5 +62,5 @@
 {:else}
   <p class={itemClass}>문서 「{title}」</p>
   <p class={summaryClass}>{view.summary}</p>
-  <p class={consequenceClass}>히스토리에서 되돌릴 수 있어요.</p>
+  <p class={consequenceClass}>타임라인에서 되돌릴 수 있어요.</p>
 {/if}
