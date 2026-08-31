@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Switch } from '@typie/ui/components';
@@ -10,24 +9,7 @@
   import { BROWSER_PUSH_STORAGE_KEY, browserPushEnabled, readCurrentBrowserPushIntent } from '$lib/browser-push';
   import { SettingsCard, SettingsRow } from '$lib/components';
   import { getBrowserPushManager, pushPermission, pushSupported } from '$lib/push';
-  import { graphql } from '$mearie';
   import type { BrowserPushIntent } from '$lib/browser-push';
-  import type { DashboardLayout_PreferenceModal_NotificationsTab_user$key } from '$mearie';
-
-  type Props = {
-    user$key: DashboardLayout_PreferenceModal_NotificationsTab_user$key;
-  };
-
-  let { user$key }: Props = $props();
-
-  const user = createFragment(
-    graphql(`
-      fragment DashboardLayout_PreferenceModal_NotificationsTab_user on User {
-        prismAccess
-      }
-    `),
-    () => user$key,
-  );
 
   let busy = $state(false);
   let supported = $state(false);
@@ -123,11 +105,9 @@
       알림과 관련해 자주 찾는 설정으로 바로 이동할 수 있어요.
     </p>
     <div class={flex({ alignItems: 'center', gap: '16px', marginTop: '8px' })}>
-      {#if user.data.prismAccess}
-        <button class={relatedLinkClass} onclick={() => pushState('', { shallowRoute: '/preference/prism/general' })} type="button">
-          프리즘 알림음 <Icon icon={ChevronRightIcon} size={12} />
-        </button>
-      {/if}
+      <button class={relatedLinkClass} onclick={() => pushState('', { shallowRoute: '/preference/prism/general' })} type="button">
+        프리즘 알림음 <Icon icon={ChevronRightIcon} size={12} />
+      </button>
 
       <button class={relatedLinkClass} onclick={() => pushState('', { shallowRoute: '/preference/profile' })} type="button">
         마케팅 수신 <Icon icon={ChevronRightIcon} size={12} />

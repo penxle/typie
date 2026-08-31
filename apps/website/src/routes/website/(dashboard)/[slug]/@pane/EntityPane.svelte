@@ -16,17 +16,19 @@
   import DocumentV2 from '../v2/Document.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
+  import PaneHeader from './PaneHeader.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
   import TabIcon from './TabIcon.svelte';
-  import type { Pane } from './types';
+  import type { Pane, PaneHeaderPlacement } from './types';
 
   type EntityPane = Extract<Pane, { kind: 'entity' }>;
 
   type Props = {
+    headerPlacement: PaneHeaderPlacement;
     pane: EntityPane;
   };
 
-  let { pane }: Props = $props();
+  let { headerPlacement, pane }: Props = $props();
 
   const query = createQuery(
     graphql(`
@@ -97,6 +99,7 @@
   const entity = $derived(query.data?.entity);
   const documentLayoutMode = $derived(entity?.node.__typename === 'Document' ? entity.node.layoutMode : null);
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
+  const documentHeaderVisible = $derived(entity?.state === EntityState.ACTIVE && entity.node.__typename === 'Document');
 
   $effect(() => {
     if (query.loading) {
@@ -192,6 +195,7 @@
       {#if entity?.node.__typename === 'Document'}
         <DocumentV2
           {focused}
+          {headerPlacement}
           onEditorFailed={() => {
             liveEditorFailed = true;
           }}
@@ -205,21 +209,38 @@
       {/if}
     {:else}
       {@const name = '문서'}
-      {#if focused}
-        <Helmet title={`삭제된 ${name}`} />
-        <TabIcon icon="file-x" />
-      {/if}
+      <div class={flex({ flexDirection: 'column', size: 'full' })}>
+        {#if focused}
+          <Helmet title={`삭제된 ${name}`} />
+          <TabIcon icon="file-x" />
+        {/if}
 
-      <div class={center({ flexDirection: 'column', gap: '20px', size: 'full', textAlign: 'center' })}>
-        <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
+        <PaneHeader placement={headerPlacement}>
+          {#snippet fixedActions()}
+            {#if !app.preference.current.zenModeEnabled}
+              <CloseButton>
+                <Icon icon={XIcon} size={16} />
+              </CloseButton>
+            {/if}
+          {/snippet}
 
-        <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-          <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>{name}가 삭제되었어요</h1>
-          <p class={css({ fontSize: '14px', color: 'text.faint' })}>
-            {name}가 삭제되어 더 이상 접근할 수 없어요.
-            <br />
-            다른 {name}를 선택해주세요
-          </p>
+          <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', fontSize: '12px', color: 'text.subtle' })}>
+            <Icon icon={FileXIcon} size={14} />
+            <span>{name}</span>
+          </div>
+        </PaneHeader>
+
+        <div class={center({ flexDirection: 'column', gap: '20px', flexGrow: '1', minHeight: '0', textAlign: 'center' })}>
+          <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
+
+          <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+            <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>{name}가 삭제되었어요</h1>
+            <p class={css({ fontSize: '14px', color: 'text.faint' })}>
+              {name}가 삭제되어 더 이상 접근할 수 없어요.
+              <br />
+              다른 {name}를 선택해주세요
+            </p>
+          </div>
         </div>
       </div>
     {/if}
@@ -229,19 +250,16 @@
     <div
       class={css({
         position: 'absolute',
-        inset: '0',
+        top: documentHeaderVisible ? '37px' : '0',
+        right: '0',
+        bottom: '0',
+        left: '0',
         zIndex: 'overEditor',
         backgroundColor: 'surface.default',
       })}
       out:fade={{ duration: 150 }}
     >
-      <PaneSkeleton {documentId} {documentLayoutMode} {pane} />
+      <PaneSkeleton {documentId} {documentLayoutMode} {headerPlacement} {pane} showHeader={!documentHeaderVisible} />
     </div>
-
-    {#if !app.preference.current.zenModeEnabled}
-      <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: 'overEditor' })}>
-        <Icon icon={XIcon} size={16} />
-      </CloseButton>
-    {/if}
   {/if}
 </div>

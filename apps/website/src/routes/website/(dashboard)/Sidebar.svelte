@@ -271,57 +271,70 @@
   let spaceMenuOpen = $state(false);
   let profileOpen = $state(false);
 
-  let hideTimeout = $state<NodeJS.Timeout | null>(null);
+  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let hovered = $state(false);
 
   type SidebarState = 'hidden' | 'visible';
   let sidebarState = $state<SidebarState>('hidden');
+  let animateTransform = $state(false);
 
   const transform = $derived.by(() => {
-    if (!app.preference.current.sidebarHidden) {
-      return 'translateX(0)';
-    }
-
+    if (!app.preference.current.sidebarHidden) return 'translateX(0)';
     return sidebarState === 'visible' ? 'translateX(0)' : 'translateX(-100%)';
   });
 
   $effect(() => {
-    if (!app.preference.current.sidebarHidden) return;
+    const sidebarHidden = app.preference.current.sidebarHidden;
 
-    if (!hovered && !app.state.sidebarPeek && app.state.openMenuCount === 0) {
-      untrack(() => {
-        if (hideTimeout) {
-          clearTimeout(hideTimeout);
-        }
+    untrack(() => {
+      animateTransform = false;
+      if (sidebarHidden) sidebarState = app.state.sidebarPeek ? 'visible' : 'hidden';
+    });
+  });
 
-        hideTimeout = setTimeout(() => {
-          sidebarState = 'hidden';
-          hideTimeout = null;
-        }, 300);
-      });
-    }
+  const cancelHide = () => {
+    if (hideTimeout === null) return;
+    clearTimeout(hideTimeout);
+    hideTimeout = null;
+  };
+
+  const shouldHide = () =>
+    app.preference.current.sidebarHidden &&
+    !hovered &&
+    !app.state.sidebarPeek &&
+    app.state.openMenuCount === 0 &&
+    sidebarState !== 'hidden';
+
+  $effect(() => {
+    const hide = shouldHide();
+
+    untrack(() => {
+      cancelHide();
+      if (!hide) return;
+
+      hideTimeout = setTimeout(() => {
+        hideTimeout = null;
+        if (!shouldHide()) return;
+
+        animateTransform = true;
+        sidebarState = 'hidden';
+      }, 300);
+    });
+
+    return cancelHide;
   });
 
   $effect(() => {
-    if (sidebarState !== 'hidden') {
-      return;
-    }
-
+    if (sidebarState !== 'hidden') return;
     spaceMenuOpen = false;
     profileOpen = false;
   });
 
   $effect(() => {
-    if (!app.state.sidebarPeek || !app.preference.current.sidebarHidden) {
-      return;
-    }
+    if (!app.state.sidebarPeek || !app.preference.current.sidebarHidden) return;
 
     untrack(() => {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
-
+      animateTransform = true;
       sidebarState = 'visible';
     });
   });
@@ -329,57 +342,16 @@
   const handleMouseEnter = () => {
     hovered = true;
 
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-      hideTimeout = null;
-    }
-
     if (app.preference.current.sidebarHidden) {
+      animateTransform = true;
       sidebarState = 'visible';
     }
   };
 
   const handleMouseLeave = () => {
     hovered = false;
-
-    if (!app.preference.current.sidebarHidden) return;
-
-    if (app.state.sidebarPeek) return;
-
-    if (app.state.openMenuCount > 0) return;
-
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-    }
-
-    hideTimeout = setTimeout(() => {
-      if (app.state.openMenuCount === 0) {
-        sidebarState = 'hidden';
-      }
-      hideTimeout = null;
-    }, 300);
   };
 </script>
-
-{#if app.preference.current.sidebarHidden && sidebarState === 'visible'}
-  <!-- 헤더 버튼과 사이드바 사이의 빈 구간 — 여기서 hover가 끊기면 사이드바가 닫혀버린다.
-       96px는 사이드바 세로 여백(100vh - clamp 높이)의 최댓값이다 -->
-  <div
-    style:--width={`${newWidth}px`}
-    class={css({
-      position: 'fixed',
-      top: '0',
-      left: '0',
-      width: 'var(--width)',
-      height: '96px',
-      zIndex: 'widget',
-    })}
-    onmouseenter={handleMouseEnter}
-    onmouseleave={handleMouseLeave}
-    role="button"
-    tabindex="-1"
-  ></div>
-{/if}
 
 <div
   style:--min-width="240px"
@@ -399,7 +371,7 @@
     width: app.preference.current.sidebarHidden ? 'var(--width)' : undefined,
     zIndex: app.preference.current.sidebarHidden ? 'sidebar' : undefined,
     opacity: '100',
-    transitionDuration: '300ms',
+    transitionDuration: animateTransform && app.preference.current.sidebarHidden ? '300ms' : '0ms',
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     transitionProperty: '[transform]',
   })}

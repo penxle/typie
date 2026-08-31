@@ -18,24 +18,28 @@
   import XIcon from '~icons/lucide/x';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
+  import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
   import { todayProgress } from '$lib/goal';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import TrialBanner from '../../@subscription/TrialBanner.svelte';
+  import EditorBreadcrumbNavigation from '../v2/@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
+  import PaneHeader from './PaneHeader.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
   import TabIcon from './TabIcon.svelte';
-  import type { Pane } from './types';
+  import type { Pane, PaneHeaderPlacement } from './types';
 
   type HomePane = Extract<Pane, { kind: 'home' }>;
 
   type Props = {
+    headerPlacement: PaneHeaderPlacement;
     pane: HomePane;
   };
 
-  let { pane }: Props = $props();
+  let { headerPlacement, pane }: Props = $props();
 
   const app = getAppContext();
 
@@ -139,6 +143,7 @@
 
   const currentSite = $derived(query.data?.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data?.me.sites[0]);
   const paneGroup = getPaneGroup();
+  const breadcrumbViewportId = `home-breadcrumb-${pane.id}`;
 
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
 
@@ -203,6 +208,7 @@
 <div
   class={flex({
     position: 'relative',
+    flexDirection: 'column',
     size: 'full',
     backgroundColor: 'surface.default',
     overflow: 'hidden',
@@ -222,192 +228,211 @@
   role="tabpanel"
   tabindex={0}
 >
-  {#if query.data}
-    {#if focused}
-      <Helmet title="홈" />
-      <TabIcon icon="home" />
-    {/if}
+  <PaneHeader placement={headerPlacement}>
+    {#snippet fixedActions()}
+      {#if paneGroup.enabled && !app.preference.current.zenModeEnabled}
+        <CloseButton>
+          <Icon icon={XIcon} size={16} />
+        </CloseButton>
+      {/if}
+    {/snippet}
 
-    <div class={css({ width: 'full', height: 'full', overflow: 'auto' })}>
-      <div
-        class={flex({
-          flexDirection: 'column',
-          justifyContent: 'center',
-          gap: '32px',
-          width: '800px',
-          maxWidth: 'full',
-          minWidth: '400px',
-          minHeight: 'full',
-          marginX: 'auto',
-          padding: '64px',
-        })}
-      >
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <Logo class={css({ size: '32px' })} />
-          {#if mounted}
-            <h1
-              class={css({
-                fontSize: '24px',
-                fontWeight: 'bold',
-                color: 'text.default',
-                minHeight: '36px',
-                width: '800px',
-                maxWidth: 'full',
-              })}
-              transition:typewriter={{ speed: 50 }}
-            >
-              {query.data.me.name}님, {getGreeting()}
-            </h1>
-          {/if}
-        </div>
+    <EditorBreadcrumb pathIdentity="home" viewportId={breadcrumbViewportId}>
+      <EditorBreadcrumbNavigation
+        ancestors={[]}
+        current={{ kind: 'home' }}
+        isOwner
+        onNavigate={(target) => {
+          if (target.kind === 'entity') paneGroup.replacePane(pane.id, { kind: 'entity', slug: target.slug });
+        }}
+        popupId={`${breadcrumbViewportId}-tree`}
+        siteId={paneGroup.currentSiteId}
+      />
+    </EditorBreadcrumb>
+  </PaneHeader>
 
-        <TrialBanner user$key={query.data.me} />
+  <div class={css({ position: 'relative', flexGrow: '1', minHeight: '0', overflow: 'hidden' })}>
+    {#if query.data}
+      {#if focused}
+        <Helmet title="홈" />
+        <TabIcon icon="home" />
+      {/if}
 
-        {#if currentSite?.firstEntity}
-          {#if query.data.me.recentlyViewedEntities.length > 0}
-            <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px', maxWidth: 'full' })}>
-              <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
-              <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-                {#each query.data.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
-                  <a
-                    class={css({
-                      padding: '12px',
-                      borderRadius: '8px',
-                      backgroundColor: 'surface.subtle',
-                      transition: 'background',
-                      transitionDuration: '150ms',
-                      _hover: {
-                        backgroundColor: 'surface.muted',
-                      },
-                    })}
-                    href="/{entity.slug}"
-                  >
-                    <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-                      <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                        <Icon
-                          style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
-                          icon={entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE
-                            ? LayoutTemplateIcon
-                            : FileIcon}
-                        />
-                        <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
-                          {entity.node.__typename === 'Document' ? entity.node.title : ''}
-                        </div>
-                      </div>
-                      {#if entity.node.__typename === 'Document' && entity.node.excerpt}
-                        <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
-                          {entity.node.excerpt}
-                        </div>
-                      {/if}
-                    </div>
-                  </a>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        {:else}
-          <div
-            class={center({
-              width: 'full',
-              flexDirection: 'column',
-              gap: '20px',
-              paddingY: '50px',
-              borderRadius: '8px',
-              borderWidth: '1px',
-              textAlign: 'center',
-            })}
-          >
-            <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
-
-            <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 문서를 만들어보세요</h1>
-              <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 문서를 만들 수 있어요</p>
-            </div>
-
-            <Button
-              onclick={async () => {
-                if (!currentSite || !query.data) return;
-
-                if (!SubscribeModal.gate('home_create_document')) {
-                  return;
-                }
-
-                const resp = await createDocument({
-                  input: {
-                    siteId: currentSite.id,
-                    v2: true,
-                  },
-                });
-
-                mixpanel.track('create_document', { via: 'empty_home' });
-
-                await goto(`/${resp.createDocument.entity.slug}`);
-              }}
-            >
-              새 문서 만들기
-            </Button>
+      <div class={css({ width: 'full', height: 'full', overflow: 'auto' })}>
+        <div
+          class={flex({
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: '32px',
+            width: '800px',
+            maxWidth: 'full',
+            minWidth: '400px',
+            minHeight: 'full',
+            marginX: 'auto',
+            padding: '64px',
+          })}
+        >
+          <div class={flex({ flexDirection: 'column', gap: '12px' })}>
+            <Logo class={css({ size: '32px' })} />
+            {#if mounted}
+              <h1
+                class={css({
+                  fontSize: '24px',
+                  fontWeight: 'bold',
+                  color: 'text.default',
+                  minHeight: '36px',
+                  width: '800px',
+                  maxWidth: 'full',
+                })}
+                transition:typewriter={{ speed: 50 }}
+              >
+                {query.data.me.name}님, {getGreeting()}
+              </h1>
+            {/if}
           </div>
-        {/if}
 
-        <div class={flex({ alignItems: 'center', gap: '12px', width: 'full' })}>
-          {#if query.data.me.goal}
-            {@const goal = query.data.me.goal}
-            {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
-            <button
-              class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
-              onclick={() => {
-                app.state.userGoalOpen = true;
-                mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
-              }}
-              type="button"
-            >
-              <ProgressRing
-                progress={progress.additions / goal.targetCharacterCount}
-                size={24}
-                state={progress.achieved ? 'achieved' : 'under'}
-              />
-              <span class={css({ fontSize: '14px', color: 'text.subtle' })}>
-                오늘 {comma(progress.additions)} / {comma(goal.targetCharacterCount)}자
-              </span>
-            </button>
+          <TrialBanner user$key={query.data.me} />
+
+          {#if currentSite?.firstEntity}
+            {#if query.data.me.recentlyViewedEntities.length > 0}
+              <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px', maxWidth: 'full' })}>
+                <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
+                <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+                  {#each query.data.me.recentlyViewedEntities.slice(0, 5) as entity (entity.id)}
+                    <a
+                      class={css({
+                        padding: '12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'surface.subtle',
+                        transition: 'background',
+                        transitionDuration: '150ms',
+                        _hover: {
+                          backgroundColor: 'surface.muted',
+                        },
+                      })}
+                      href="/{entity.slug}"
+                    >
+                      <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+                        <div class={flex({ alignItems: 'center', gap: '8px' })}>
+                          <Icon
+                            style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
+                            icon={entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE
+                              ? LayoutTemplateIcon
+                              : FileIcon}
+                          />
+                          <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'medium' })}>
+                            {entity.node.__typename === 'Document' ? entity.node.title : ''}
+                          </div>
+                        </div>
+                        {#if entity.node.__typename === 'Document' && entity.node.excerpt}
+                          <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
+                            {entity.node.excerpt}
+                          </div>
+                        {/if}
+                      </div>
+                    </a>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           {:else}
-            <button
-              class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
-              onclick={() => {
-                app.state.userGoalOpen = true;
-                mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
-              }}
-              type="button"
+            <div
+              class={center({
+                width: 'full',
+                flexDirection: 'column',
+                gap: '20px',
+                paddingY: '50px',
+                borderRadius: '8px',
+                borderWidth: '1px',
+                textAlign: 'center',
+              })}
             >
-              일일 목표 정하기
-            </button>
-          {/if}
-        </div>
+              <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
 
-        <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
-          <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
-          <ActivityGrid user$key={query.data.me} />
+              <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
+                <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 문서를 만들어보세요</h1>
+                <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 문서를 만들 수 있어요</p>
+              </div>
+
+              <Button
+                onclick={async () => {
+                  if (!currentSite || !query.data) return;
+
+                  if (!SubscribeModal.gate('home_create_document')) {
+                    return;
+                  }
+
+                  const resp = await createDocument({
+                    input: {
+                      siteId: currentSite.id,
+                      v2: true,
+                    },
+                  });
+
+                  mixpanel.track('create_document', { via: 'empty_home' });
+
+                  await goto(`/${resp.createDocument.entity.slug}`);
+                }}
+              >
+                새 문서 만들기
+              </Button>
+            </div>
+          {/if}
+
+          <div class={flex({ alignItems: 'center', gap: '12px', width: 'full' })}>
+            {#if query.data.me.goal}
+              {@const goal = query.data.me.goal}
+              {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
+              <button
+                class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
+                onclick={() => {
+                  app.state.userGoalOpen = true;
+                  mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
+                }}
+                type="button"
+              >
+                <ProgressRing
+                  progress={progress.additions / goal.targetCharacterCount}
+                  size={24}
+                  state={progress.achieved ? 'achieved' : 'under'}
+                />
+                <span class={css({ fontSize: '14px', color: 'text.subtle' })}>
+                  오늘 {comma(progress.additions)} / {comma(goal.targetCharacterCount)}자
+                </span>
+              </button>
+            {:else}
+              <button
+                class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+                onclick={() => {
+                  app.state.userGoalOpen = true;
+                  mixpanel.track('open_user_goal_modal', { via: 'home_pane' });
+                }}
+                type="button"
+              >
+                일일 목표 정하기
+              </button>
+            {/if}
+          </div>
+
+          <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
+            <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
+            <ActivityGrid user$key={query.data.me} />
+          </div>
         </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  {#if !query.data}
-    <div
-      class={css({
-        position: 'absolute',
-        inset: '0',
-        backgroundColor: 'surface.default',
-      })}
-      out:fade={{ duration: 150 }}
-    >
-      <PaneSkeleton {pane} />
-    </div>
-  {/if}
-
-  {#if paneGroup.enabled && !app.preference.current.zenModeEnabled}
-    <CloseButton style={css.raw({ position: 'absolute', top: '6px', right: '8px', zIndex: '1' })}>
-      <Icon icon={XIcon} size={16} />
-    </CloseButton>
-  {/if}
+    {#if !query.data}
+      <div
+        class={css({
+          position: 'absolute',
+          inset: '0',
+          backgroundColor: 'surface.default',
+        })}
+        out:fade={{ duration: 150 }}
+      >
+        <PaneSkeleton {headerPlacement} {pane} />
+      </div>
+    {/if}
+  </div>
 </div>

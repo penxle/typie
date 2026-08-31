@@ -9,13 +9,15 @@
   import type { EditorContextBarSegmentState } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
   import type { DragItem, DragPane, DropZone, PaneGroup } from '../../@pane/context.svelte';
-  import type { EditorBreadcrumbPathEntity } from './EditorBreadcrumbNavigation.svelte';
+  import type { EditorBreadcrumbCurrent, EditorBreadcrumbPathEntity, EditorBreadcrumbTarget } from './EditorBreadcrumbNavigation.svelte';
 
   type Props = {
+    currentKind?: 'entity' | 'home';
+    rootQueryLoading?: boolean;
     withSegment?: boolean;
   };
 
-  let { withSegment = true }: Props = $props();
+  let { currentKind = 'entity', rootQueryLoading = false, withSegment = true }: Props = $props();
 
   const currentDocument = {
     __typename: 'Entity',
@@ -69,6 +71,14 @@
       pipe(
         operations,
         filter((operation) => operation.variant === 'request'),
+        filter(
+          (operation) =>
+            !(
+              rootQueryLoading &&
+              operation.variant === 'request' &&
+              operation.artifact.name === 'EditorBreadcrumbNavigation_SiteEntities_Query'
+            ),
+        ),
         map((operation): OperationResult => {
           return {
             operation,
@@ -102,6 +112,7 @@
   let cancelCount = $state(0);
   let holds = $state<string[]>([]);
   let navigatedSlug = $state('');
+  let navigationTarget = $state<EditorBreadcrumbTarget | null>(null);
   const ancestors: EditorBreadcrumbPathEntity[] = [
     {
       id: 'folder-1',
@@ -109,6 +120,17 @@
       entity$key: rootEntities[0] as unknown as EntityIcon_entity$key,
     },
   ];
+  const current = $derived<EditorBreadcrumbCurrent>(
+    currentKind === 'home'
+      ? { kind: 'home' }
+      : {
+          kind: 'entity',
+          id: 'document-current',
+          slug: 'document-current',
+          name: 'Current document',
+          entity$key: currentDocument as unknown as EntityIcon_entity$key,
+        },
+  );
 
   const paneGroup = {
     get activeZone() {
@@ -156,15 +178,13 @@
   </select>
 </label>
 <EditorBreadcrumbNavigation
-  {ancestors}
-  current={{
-    id: 'document-current',
-    slug: 'document-current',
-    name: 'Current document',
-    entity$key: currentDocument as unknown as EntityIcon_entity$key,
-  }}
+  ancestors={currentKind === 'home' ? [] : ancestors}
+  {current}
   isOwner
-  onNavigate={(slug) => (navigatedSlug = slug)}
+  onNavigate={(target) => {
+    navigationTarget = target;
+    navigatedSlug = target.kind === 'entity' ? target.slug : '';
+  }}
   popupId="breadcrumb-document-drag-test"
   segment={withSegment ? segment : undefined}
   siteId="site-1"
@@ -175,3 +195,4 @@
 <output data-pane-cancel-count>{cancelCount}</output>
 <output data-holds>{JSON.stringify(holds)}</output>
 <output data-navigated-slug>{navigatedSlug}</output>
+<output data-navigation-target>{JSON.stringify(navigationTarget)}</output>

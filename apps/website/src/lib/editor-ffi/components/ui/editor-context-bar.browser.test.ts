@@ -93,7 +93,7 @@ async function mountContextBar(
   const breadcrumb = document.querySelector<HTMLElement>('[data-context-bar-segment="leading"]');
   const viewControls = document.querySelector<HTMLElement>('[data-context-bar-segment="view-controls"]');
   const bar = document.querySelector<HTMLElement>('[data-editor-context-bar]');
-  const breadcrumbViewport = document.querySelector<HTMLElement>('[data-editor-breadcrumb-viewport]');
+  const breadcrumbViewport = document.querySelector<HTMLElement>('[data-horizontal-scroll-viewport="breadcrumb"]');
   if (!surface || !breadcrumb || !viewControls || !bar || !breadcrumbViewport) throw new Error('Missing editor context bar fixture');
   return { surface, pane, breadcrumb, breadcrumbViewport, viewControls, bar, host: mounted };
 }
@@ -766,30 +766,30 @@ describe('editor context bar', () => {
     const pin = document.querySelector<HTMLElement>('[data-context-bar-pin]');
     const divider = document.querySelector<HTMLElement>('[data-context-bar-pin-divider]');
 
-    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('true');
-    expect(breadcrumbViewport.style.getPropertyValue('--breadcrumb-leading-fog')).toBe('1');
-    expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('false');
-    expect(breadcrumbViewport.dataset.breadcrumbFogCurve).toBe('smootherstep');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('true');
+    expect(breadcrumbViewport.style.getPropertyValue('--horizontal-scroll-leading-fog')).toBe('1');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('false');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogCurve).toBe('smootherstep');
     expect(breadcrumbViewport.contains(pin)).toBe(false);
     expect(breadcrumbViewport.contains(divider)).toBe(false);
 
     breadcrumbViewport.scrollLeft = 0;
     breadcrumbViewport.dispatchEvent(new Event('scroll'));
     await tick();
-    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('false');
-    expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('true');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('false');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('true');
 
     breadcrumbViewport.scrollLeft = 40;
     breadcrumbViewport.dispatchEvent(new Event('scroll'));
     await tick();
-    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('true');
-    expect(breadcrumbViewport.dataset.breadcrumbFogTrailing).toBe('true');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('true');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogTrailing).toBe('true');
 
     reducedMotionPreference.set(true);
     breadcrumbViewport.scrollLeft = 0;
     breadcrumbViewport.dispatchEvent(new Event('scroll'));
     await tick();
-    expect(breadcrumbViewport.dataset.breadcrumbFogLeading).toBe('false');
+    expect(breadcrumbViewport.dataset.horizontalScrollFogLeading).toBe('false');
     expect(breadcrumbViewport.style.transition).toBe('none');
   });
 });

@@ -33,10 +33,10 @@
   });
 
   type Props = {
-    currentDocumentEntityId: string;
+    currentDocumentEntityId: string | null;
     entity$key: EditorBreadcrumbNavigation_Entity_entity$key;
     expandedFolderIds: ReadonlySet<string>;
-    highlightedEntityId: string;
+    highlightedEntityId: string | null;
     level: number;
     nested?: boolean;
     parentEntityId?: string;
@@ -188,6 +188,7 @@
     aria-selected={entity.data.id === highlightedEntityId}
     data-breadcrumb-entity-id={entity.data.id}
     data-breadcrumb-entity-kind={folder ? 'folder' : 'document'}
+    data-breadcrumb-tree-item-key={entity.data.id}
     data-parent-entity-id={parentEntityId}
     onclick={handleClick}
     onkeydown={handleKeydown}

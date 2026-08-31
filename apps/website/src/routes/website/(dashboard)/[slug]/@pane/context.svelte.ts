@@ -65,7 +65,7 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
   const paneRects = new Map<string, Rect>();
 
   let currentKey = `typie:panegroup:${initialSiteId}`;
-  let currentSiteId = initialSiteId;
+  let currentSiteId = $state(initialSiteId);
   let lastNavigatedSlug: string | undefined;
 
   const state = new LocalStore<PaneGroupState>(currentKey, defaultPaneGroupState);
@@ -93,6 +93,9 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
 
   const context: PaneGroup = {
     state,
+    get currentSiteId() {
+      return currentSiteId;
+    },
     get panes() {
       return panes;
     },

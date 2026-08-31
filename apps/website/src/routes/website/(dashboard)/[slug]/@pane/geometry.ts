@@ -12,6 +12,44 @@ export type ResizerInfo = {
   axisSize: number;
 };
 
+export type TopCornerPaneIds = {
+  topLeftPaneId: string | null;
+  topRightPaneId: string | null;
+};
+
+export function resolveTopCornerPaneIds(panes: ReadonlyMap<string, Rect>): TopCornerPaneIds {
+  let minimumTop = Infinity;
+
+  for (const rect of panes.values()) {
+    minimumTop = Math.min(minimumTop, rect.top);
+  }
+
+  if (!Number.isFinite(minimumTop)) {
+    return { topLeftPaneId: null, topRightPaneId: null };
+  }
+
+  let topLeft: { id: string; left: number } | null = null;
+  let topRight: { id: string; right: number } | null = null;
+
+  for (const [id, rect] of panes) {
+    if (rect.top !== minimumTop) continue;
+
+    if (!topLeft || rect.left < topLeft.left) {
+      topLeft = { id, left: rect.left };
+    }
+
+    const right = rect.left + rect.width;
+    if (!topRight || right > topRight.right) {
+      topRight = { id, right };
+    }
+  }
+
+  return {
+    topLeftPaneId: topLeft?.id ?? null,
+    topRightPaneId: topRight?.id ?? null,
+  };
+}
+
 export function computeLayout(node: Member, bounds: Rect): { panes: Map<string, Rect>; resizers: ResizerInfo[] } {
   const panes = new Map<string, Rect>();
   const resizers: ResizerInfo[] = [];
