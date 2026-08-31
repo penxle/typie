@@ -21,6 +21,7 @@
   import { EnvironmentBanner, Img } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
+  import { cleanupBrowserPushForLogout } from '$lib/push';
   import type { Theme } from '@typie/ui/context';
   import type { Component } from 'svelte';
 
@@ -205,15 +206,13 @@
               icon={LogOutIcon}
               onclick={() => {
                 mixpanel.track('logout', { via: 'header' });
-
-                location.assign(
-                  qs.stringifyUrl({
-                    url: '/logout',
-                    query: {
-                      redirect_uri: page.url.href,
-                    },
-                  }),
-                );
+                const logoutUrl = qs.stringifyUrl({
+                  url: '/logout',
+                  query: {
+                    redirect_uri: page.url.href,
+                  },
+                });
+                void cleanupBrowserPushForLogout().finally(() => location.assign(logoutUrl));
               }}
             >
               로그아웃

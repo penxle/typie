@@ -1048,6 +1048,7 @@ type Mutation {
   unarchivePrismSession(input: UnarchivePrismSessionInput!): PrismSession!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
+  unregisterPushNotificationToken(input: UnregisterPushNotificationTokenInput!): Boolean!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBillingKeyWithEasyPay(input: UpdateBillingKeyWithEasyPayInput!): UserBillingKey!
@@ -2017,6 +2018,10 @@ input UnfurlEmbedInput {
 input UnlockDocumentViewInput {
   documentId: ID!
   password: String!
+}
+
+input UnregisterPushNotificationTokenInput {
+  token: String!
 }
 
 input UnresolveDocumentCommentThreadInput {

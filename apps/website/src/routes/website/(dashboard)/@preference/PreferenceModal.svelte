@@ -3,6 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
+  import BellIcon from '~icons/lucide/bell';
   import CoinsIcon from '~icons/lucide/coins';
   import CreditCardIcon from '~icons/lucide/credit-card';
   import FlaskConicalIcon from '~icons/lucide/flask-conical';
@@ -27,6 +28,7 @@
   import FontTab from './FontTab.svelte';
   import InterfaceTab from './InterfaceTab.svelte';
   import LaboratoryTab from './LaboratoryTab.svelte';
+  import NotificationsTab from './NotificationsTab.svelte';
   import PlanTab from './PlanTab.svelte';
   import PresetTab from './PresetTab.svelte';
   import PrismCreditsTab from './PrismCreditsTab.svelte';
@@ -73,6 +75,7 @@
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
+        ...DashboardLayout_PreferenceModal_NotificationsTab_user
         ...DashboardLayout_PreferenceModal_PrismGeneralTab_user
         ...DashboardLayout_PreferenceModal_PrismCreditsTab_user
         ...DashboardLayout_PreferenceModal_TextReplacementTab_user
@@ -118,6 +121,12 @@
           label: '인터페이스',
           icon: LayoutIcon,
           component: InterfaceTab,
+        },
+        {
+          path: '/preference/notifications',
+          label: '알림',
+          icon: BellIcon,
+          component: NotificationsTab,
         },
       ],
     },

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
+  import { createQuery, createSubscription } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -24,7 +24,7 @@
   import { hydrateQuery } from '$lib/graphql';
   import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
-  import { acquirePushToken, pushPermission } from '$lib/push';
+  import { cleanupBrowserPushForLogout, getBrowserPushManager } from '$lib/push';
   import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
@@ -223,29 +223,10 @@
     `),
   );
 
-  const [registerPushNotificationToken] = createMutation(
-    graphql(`
-      mutation DashboardLayout_RegisterPushToken_Mutation($input: RegisterPushNotificationTokenInput!) {
-        registerPushNotificationToken(input: $input)
-      }
-    `),
-  );
-
-  const refreshPushToken = async () => {
-    const token = await acquirePushToken();
-    if (token === null) {
-      return;
-    }
-
-    await registerPushNotificationToken({ input: { token } });
-  };
-
   onMount(() => {
-    if (pushPermission() !== 'granted') {
-      return;
-    }
-
-    void refreshPushToken().catch(() => null);
+    void getBrowserPushManager()
+      .reconcile()
+      .catch(() => null);
   });
 
   onMount(() => {
@@ -599,15 +580,13 @@
           style={css.raw({ width: 'full' })}
           onclick={() => {
             mixpanel.track('logout', { via: 'mobile_dashboard' });
-
-            location.assign(
-              qs.stringifyUrl({
-                url: '/logout',
-                query: {
-                  redirect_uri: env.PUBLIC_WEBSITE_URL,
-                },
-              }),
-            );
+            const logoutUrl = qs.stringifyUrl({
+              url: '/logout',
+              query: {
+                redirect_uri: env.PUBLIC_WEBSITE_URL,
+              },
+            });
+            void cleanupBrowserPushForLogout().finally(() => location.assign(logoutUrl));
           }}
           size="lg"
           variant="secondary"
