@@ -8,13 +8,11 @@
   import { clamp } from '@typie/ui/utils';
   import { onDestroy } from 'svelte';
   import ConstructionIcon from '~icons/lucide/construction';
-  import LightbulbIcon from '~icons/lucide/lightbulb';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
-  import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelComment from './DocumentPanelComment.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
   import DocumentPanelNote from './DocumentPanelNote.svelte';
@@ -50,7 +48,6 @@
           ...DocumentPanelV2_Note_entity
         }
 
-        ...DocumentPanelV2_Ai_document
         ...DocumentPanelV2_Info_document
         ...DocumentPanelV2_Settings_document
         ...DocumentPanelV2_Spellcheck_document
@@ -66,7 +63,6 @@
         id
         entitled
 
-        ...DocumentPanelV2_Ai_user
         ...DocumentPanelV2_Info_user
         ...DocumentPanelV2_Spellcheck_user
       }
@@ -201,12 +197,6 @@
           <DocumentPanelSpellcheck document$key={document.data} editor={ctx.editor} user$key={user.data} />
         {:else}
           {@render planUpgradePrompt(SpellCheckIcon, '맞춤법 검사', '글의 맞춤법과 띄어쓰기를\n자동으로 검사하고 수정할 수 있어요.')}
-        {/if}
-      {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
-        {#if user.data.entitled}
-          <DocumentPanelAi document$key={document.data} editor={ctx.editor} user$key={user.data} />
-        {:else}
-          {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
         {/if}
       {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'comment'}
         <DocumentPanelComment editor={ctx.editor} />

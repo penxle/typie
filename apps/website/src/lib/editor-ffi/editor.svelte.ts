@@ -81,14 +81,6 @@ export type SpellcheckError = {
   explanation: string;
 };
 
-export type AiFeedback = {
-  id: string;
-  startText: string;
-  endText: string;
-  feedback: string;
-  category: string | null;
-};
-
 export type TrackedRangePosition = Pick<TrackedRange, 'anchor' | 'head'>;
 
 type PageSnapshot = Readonly<{
@@ -131,7 +123,6 @@ type PublishedFrame = Readonly<{
 
 const HIDDEN_TICK = Symbol('hidden-tick');
 const SPELLCHECK_MEMBERSHIP_GROUPS = new Set(['spellcheck', 'spellcheck-active']);
-const AI_FEEDBACK_MEMBERSHIP_GROUPS = new Set(['ai-feedback', 'ai-feedback-active']);
 const COMMENT_MEMBERSHIP_GROUPS = new Set(['comment', 'comment-active']);
 const sameIds = (a: readonly string[] | null, b: readonly string[]): boolean =>
   a !== null && a.length === b.length && a.every((id, index) => id === b[index]);
@@ -421,9 +412,6 @@ export class Editor {
   #spellcheckDecorationsInstalled = false;
   #spellcheckMembershipIds: string[] | null = null;
 
-  #aiFeedbackDecorationsInstalled = false;
-  #aiFeedbackMembershipIds: string[] | null = null;
-
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #registeredCommentIds = new Set<string>();
@@ -490,9 +478,6 @@ export class Editor {
 
   spellcheckErrors = $state<SpellcheckError[]>([]);
   activeSpellcheckErrorId = $state<string | null>(null);
-
-  aiFeedbacks = $state<AiFeedback[]>([]);
-  activeAiFeedbackId = $state<string | null>(null);
 
   activeCommentId = $state<string | null>(null);
   commentClickHandler: ((id: string) => void) | null = null;
@@ -679,14 +664,11 @@ export class Editor {
       if (this.activeSpellcheckErrorId !== null && !rangeIds.has(this.activeSpellcheckErrorId)) {
         this.activeSpellcheckErrorId = null;
       }
-      this.aiFeedbacks = this.aiFeedbacks.filter((feedback) => rangeIds.has(feedback.id));
-      if (this.activeAiFeedbackId !== null && !rangeIds.has(this.activeAiFeedbackId)) this.activeAiFeedbackId = null;
     }
 
-    const hasMembershipConsumers = this.spellcheckErrors.length > 0 || this.aiFeedbacks.length > 0;
+    const hasMembershipConsumers = this.spellcheckErrors.length > 0;
     if (!hasMembershipConsumers || !snapshot.selection) {
       this.#spellcheckMembershipIds = null;
-      this.#aiFeedbackMembershipIds = null;
     }
 
     if (hasMembershipConsumers) {
@@ -695,7 +677,6 @@ export class Editor {
       );
       if (membership !== undefined) {
         this.#syncActiveSpellcheckErrorFromMembership(membership);
-        this.#syncActiveAiFeedbackFromMembership(membership);
       }
     }
 
@@ -991,21 +972,6 @@ export class Editor {
       this.setActiveSpellcheckError(member.id);
     } else if (this.activeSpellcheckErrorId !== null) {
       this.setActiveSpellcheckError(null);
-    }
-  }
-
-  #syncActiveAiFeedbackFromMembership(membership: readonly TrackedRangeEndpoints[]): void {
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const ownedIds = new Set(this.aiFeedbacks.map((feedback) => feedback.id));
-    const membershipIds = trackedRangeMembershipIds(membership, AI_FEEDBACK_MEMBERSHIP_GROUPS, ownedIds);
-    if (sameIds(this.#aiFeedbackMembershipIds, membershipIds)) return;
-    this.#aiFeedbackMembershipIds = membershipIds;
-    const member = selectTrackedRangeMember(membership, AI_FEEDBACK_MEMBERSHIP_GROUPS, this.activeAiFeedbackId, ownedIds);
-
-    if (member) {
-      this.setActiveAiFeedback(member.id);
-    } else if (this.activeAiFeedbackId !== null) {
-      this.setActiveAiFeedback(null);
     }
   }
 
@@ -2318,14 +2284,6 @@ export class Editor {
     return this.#invokeCore((core) => core.prose_to_selection(start, end)) ?? undefined;
   }
 
-  proseTextAnnotated(): string {
-    return this.#invokeCore((core) => core.prose_text_annotated());
-  }
-
-  proseToSelectionAnnotated(start: number, end: number): Selection | undefined {
-    return this.#invokeCore((core) => core.prose_to_selection_annotated(start, end)) ?? undefined;
-  }
-
   updateCharacterCounts(): void {
     if (this.#characterCountsDebounceTimer) {
       clearTimeout(this.#characterCountsDebounceTimer);
@@ -2372,33 +2330,6 @@ export class Editor {
         group: 'spellcheck-active',
         style: { background: 'bg.red', underline },
         enabled: true,
-      },
-    });
-  }
-
-  installAiFeedbackDecorations(): void {
-    if (this.#aiFeedbackDecorationsInstalled) return;
-    this.#aiFeedbackDecorationsInstalled = true;
-
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'ai-feedback',
-        style: { background: 'bg.blue', background_radius: 2, background_inset: 2, underline: undefined },
-        enabled: true,
-        z_index: 0,
-      },
-    });
-
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'set_group_decoration',
-        group: 'ai-feedback-active',
-        style: { background: 'bg.purple', background_radius: 2, background_inset: 2, underline: undefined },
-        enabled: true,
-        z_index: 1,
       },
     });
   }
@@ -2510,51 +2441,6 @@ export class Editor {
     this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'spellcheck-active' } });
     this.spellcheckErrors = [];
     this.activeSpellcheckErrorId = null;
-  }
-
-  addAiFeedback(item: {
-    id: string;
-    selection: Selection;
-    startText: string;
-    endText: string;
-    feedback: string;
-    category: string | null;
-  }): void {
-    this.enqueue({
-      type: 'tracked_range',
-      op: {
-        type: 'add',
-        id: item.id,
-        group: 'ai-feedback',
-        selection: item.selection,
-        metadata: '',
-      },
-    });
-    this.aiFeedbacks = [
-      ...this.aiFeedbacks,
-      {
-        id: item.id,
-        startText: item.startText,
-        endText: item.endText,
-        feedback: item.feedback,
-        category: item.category,
-      },
-    ];
-  }
-
-  removeAiFeedback(id: string): void {
-    this.enqueue({ type: 'tracked_range', op: { type: 'remove', id } });
-    this.aiFeedbacks = this.aiFeedbacks.filter((f) => f.id !== id);
-    if (this.activeAiFeedbackId === id) {
-      this.activeAiFeedbackId = null;
-    }
-  }
-
-  clearAiFeedbacks(): void {
-    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback' } });
-    this.enqueue({ type: 'tracked_range', op: { type: 'clear_group', group: 'ai-feedback-active' } });
-    this.aiFeedbacks = [];
-    this.activeAiFeedbackId = null;
   }
 
   setPrismReviewRanges(items: { id: string; selection: StableSelection; tone: 'issue' | 'strength' }[]): void {
@@ -2714,36 +2600,6 @@ export class Editor {
       } else {
         this.activeCommentId = null;
       }
-    }
-  }
-
-  setActiveAiFeedback(id: string | null): void {
-    if (this.activeAiFeedbackId === id) return;
-
-    const restoreToNormalGroup = (feedbackId: string) => {
-      if (this.#applied.trackedRanges.every((r) => r.id !== feedbackId)) return;
-      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback' } });
-    };
-
-    const promoteToActiveGroup = (feedbackId: string): boolean => {
-      if (this.#applied.trackedRanges.every((r) => r.id !== feedbackId)) return false;
-      this.enqueue({ type: 'tracked_range', op: { type: 'set_group', id: feedbackId, group: 'ai-feedback-active' } });
-      return true;
-    };
-
-    if (this.activeAiFeedbackId !== null) {
-      restoreToNormalGroup(this.activeAiFeedbackId);
-    }
-
-    this.activeAiFeedbackId = id;
-
-    if (id !== null) {
-      const ok = promoteToActiveGroup(id);
-      if (!ok) {
-        this.activeAiFeedbackId = null;
-        return;
-      }
-      this.revealTrackedItem(id);
     }
   }
 

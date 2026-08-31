@@ -15,7 +15,6 @@
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import InfoIcon from '~icons/lucide/info';
-  import LightbulbIcon from '~icons/lucide/lightbulb';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import Maximize2Icon from '~icons/lucide/maximize-2';
@@ -1146,7 +1145,6 @@
               <DocumentPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
               <DocumentPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="comment" />
               <DocumentPanelTabButton icon={SpellCheckIcon} label="맞춤법" tab="spellcheck" />
-              <DocumentPanelTabButton icon={LightbulbIcon} label="AI 피드백" tab="ai" />
               <DocumentPanelTabButton icon={ClockFadingIcon} label="타임라인" tab="timeline" />
               <DocumentPanelTabButton icon={SettingsIcon} label="본문 설정" tab="settings" />
 
