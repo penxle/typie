@@ -4,6 +4,7 @@ import { createStableContext } from './stable-context';
 export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
+  sidebarNavigationClip: number;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
@@ -142,6 +143,7 @@ export const setupAppContext = (userId: string) => {
     preference: new LocalStore<AppPreference>(`typie:pref:${userId}`, {
       sidebarWidth: 240,
       sidebarHidden: false,
+      sidebarNavigationClip: 0,
 
       hasOpenedPanelOnce: false,
       panelWidth: 250,

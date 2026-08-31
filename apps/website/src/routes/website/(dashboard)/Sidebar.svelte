@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { pointerCapture, tooltip } from '@typie/ui/actions';
-  import { Icon, Scrollbar } from '@typie/ui/components';
+  import { Icon, ProgressRing, Scrollbar } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import dayjs from 'dayjs';
@@ -16,8 +16,10 @@
   import SearchIcon from '~icons/lucide/search';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
+  import TargetIcon from '~icons/lucide/target';
   import PrismIcon from '~icons/typie/prism';
   import { goto } from '$app/navigation';
+  import { streaks, todayProgress } from '$lib/goal';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import ChangelogPopover from './@changelog/ChangelogPopover.svelte';
@@ -28,8 +30,10 @@
   import EntityTree from './@tree/EntityTree.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
+  import { resolveSidebarNavigationDrag, resolveSidebarNavigationGeometry } from './sidebar-navigation-resize';
   import SpaceMenu from './SpaceMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
+  import type { SidebarNavigationResizeSession } from './sidebar-navigation-resize';
 
   type Props = {
     user$key: DashboardLayout_Sidebar_user$key;
@@ -70,6 +74,16 @@
           additions
         }
 
+        goal {
+          targetCharacterCount
+        }
+
+        goalHistory {
+          date
+          additions
+          achieved
+        }
+
         ...DashboardLayout_SpaceMenu_user
         ...DashboardLayout_Profile_user
         ...DashboardLayout_TrialWidget_user
@@ -98,6 +112,35 @@
 
     return streak;
   });
+
+  const dailyGoal = $derived.by(() => {
+    if (!user.data.goal) return null;
+    const today = dayjs.kst();
+    return {
+      ...todayProgress(user.data.goalHistory, today),
+      target: user.data.goal.targetCharacterCount,
+      streak: streaks(user.data.goalHistory, today).current,
+    };
+  });
+
+  const primaryNavigationItemClass = flex({
+    alignItems: 'center',
+    gap: '8px',
+    paddingX: '8px',
+    paddingY: '5px',
+    borderRadius: '6px',
+    transition: 'common',
+    _supportHover: { backgroundColor: 'surface.muted' },
+    '&[aria-current="page"]': { backgroundColor: 'surface.muted' },
+  });
+  const primaryNavigationLabelClass = css({
+    fontSize: '13px',
+    fontWeight: 'medium',
+    color: 'text.muted',
+    '[aria-current="page"] > &': { fontWeight: 'bold', color: 'text.default' },
+  });
+  const primaryNavigationIconStyle = css.raw({ flexShrink: '0', color: 'text.faint' });
+  const primaryNavigationShortcutClass = flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' });
 
   const site = $derived(user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]);
 
@@ -213,6 +256,63 @@
     deltaX: number;
     startWidth: number;
     startX: number;
+  };
+
+  let navigationScrollEl = $state<HTMLDivElement>();
+  let navigationIntrinsicHeight = $state(0);
+  let navigationMinimumContentHeight = $state(0);
+  let navigationViewportClientHeight = $state(0);
+  let navigationScrollTop = $state(0);
+  let navigationClipPreview = $state<number | null>(null);
+  const navigationScrollId = 'sidebar-primary-navigation-scroll';
+  const NAVIGATION_SCROLL_FOG_SIZE = 16;
+  const NAVIGATION_MINIMUM_SCROLL_FOG_SIZE = 8;
+
+  const navigationMinimumHeight = $derived(
+    Math.min(navigationMinimumContentHeight + NAVIGATION_MINIMUM_SCROLL_FOG_SIZE, navigationIntrinsicHeight),
+  );
+  const storedNavigationClip = $derived(app.preference.current.sidebarNavigationClip ?? 0);
+  const navigationGeometry = $derived(
+    resolveSidebarNavigationGeometry(navigationIntrinsicHeight, navigationMinimumHeight, storedNavigationClip),
+  );
+  const currentNavigationClip = $derived(clamp(navigationClipPreview ?? navigationGeometry.clip, 0, navigationGeometry.maxClip));
+  const navigationViewportHeight = $derived(
+    navigationIntrinsicHeight > 0 ? `${navigationIntrinsicHeight - currentNavigationClip}px` : undefined,
+  );
+  const navigationScrollRange = $derived(Math.max(0, navigationIntrinsicHeight - navigationViewportClientHeight));
+  const effectiveNavigationScrollTop = $derived(clamp(navigationScrollTop, 0, navigationScrollRange));
+  const canScrollNavigationUp = $derived(effectiveNavigationScrollTop > 1);
+  const canScrollNavigationDown = $derived(navigationViewportClientHeight > 0 && effectiveNavigationScrollTop < navigationScrollRange - 1);
+  const navigationMaskImage = $derived.by(() => {
+    const maximallyClippedAtTop = currentNavigationClip >= navigationGeometry.maxClip - 1 && !canScrollNavigationUp;
+    const fogSize = maximallyClippedAtTop ? NAVIGATION_MINIMUM_SCROLL_FOG_SIZE : NAVIGATION_SCROLL_FOG_SIZE;
+    if (!canScrollNavigationUp && !canScrollNavigationDown) return;
+    const top = canScrollNavigationUp ? `transparent, black ${fogSize}px` : `black, black ${fogSize}px`;
+    const bottom = canScrollNavigationDown ? `black calc(100% - ${fogSize}px), transparent` : `black calc(100% - ${fogSize}px), black`;
+    return `linear-gradient(to bottom, ${top}, ${bottom})`;
+  });
+
+  const startNavigationResizer = (event: PointerEvent): SidebarNavigationResizeSession | null => {
+    if (navigationIntrinsicHeight === 0 || !event.isPrimary || event.button !== 0) return null;
+    event.preventDefault();
+    navigationClipPreview = navigationGeometry.clip;
+    return { startClip: navigationGeometry.clip, startY: event.clientY };
+  };
+
+  const moveNavigationResizer = (session: SidebarNavigationResizeSession, event: PointerEvent) => {
+    navigationClipPreview = resolveSidebarNavigationDrag(session, event.clientY, navigationGeometry.maxClip).clip;
+  };
+
+  const endNavigationResizer = (session: SidebarNavigationResizeSession, event: PointerEvent) => {
+    const { clip, clipChanged } = resolveSidebarNavigationDrag(session, event.clientY, navigationGeometry.maxClip);
+    if (clipChanged) {
+      app.preference.current.sidebarNavigationClip = clip;
+    }
+    navigationClipPreview = null;
+  };
+
+  const cancelNavigationResizer = () => {
+    navigationClipPreview = null;
   };
 
   let treeScrollEl = $state<HTMLDivElement>();
@@ -399,8 +499,7 @@
       transitionProperty: '[border, border-radius, box-shadow]',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
-      overflowY: 'auto',
-      overflowX: 'hidden',
+      overflow: 'hidden',
     })}
   >
     <!-- 사이트 스위쳐 -->
@@ -416,266 +515,298 @@
       <SpaceMenu user$key={user.data} bind:open={spaceMenuOpen} />
     </div>
 
-    <!-- 스페이스 네비게이션 -->
-    <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '4px' })}>
-      <a
-        class={css({
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: '8px',
-          paddingY: '5px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-          '&[aria-current="page"]': {
-            backgroundColor: 'surface.muted',
-          },
-        })}
-        aria-current={paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId)?.kind === 'home' ? 'page' : undefined}
-        href="/home"
-      >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={HomeIcon} size={16} />
-        <span
-          class={css({
-            fontSize: '13px',
-            fontWeight: 'medium',
-            color: 'text.muted',
-            '[aria-current="page"] > &': {
-              fontWeight: 'bold',
-              color: 'text.default',
-            },
-          })}
-        >
-          홈
-        </span>
-      </a>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: '8px',
-          paddingY: '5px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => (app.state.commandPaletteOpen = true)}
-        type="button"
-      >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SearchIcon} size={16} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>검색</span>
-        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
-          {#if navigator.platform.includes('Mac')}
-            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
-          {:else}
-            <span>Ctrl+</span>
-          {/if}
-          <span>K</span>
-        </div>
-      </button>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: '8px',
-          paddingY: '5px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          app.state.notesOpen = true;
-          mixpanel.track('open_notes_modal');
-        }}
-        type="button"
-      >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={StickyNoteIcon} size={16} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
-        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
-          {#if navigator.platform.includes('Mac')}
-            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
-          {:else}
-            <span>Ctrl+</span>
-          {/if}
-          <span>J</span>
-        </div>
-      </button>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: '8px',
-          paddingY: '5px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          const next = !app.preference.current.prismPanelOpen;
-          app.preference.current.prismPanelOpen = next;
-          mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'sidebar' });
-        }}
-        type="button"
-      >
-        <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={PrismIcon} size={16} />
-          {#if app.state.prismBadge}
-            <PrismBadgeDot />
-          {/if}
-        </span>
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>PRISM</span>
-        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
-          {#if navigator.platform.includes('Mac')}
-            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
-          {:else}
-            <span>Ctrl+</span>
-          {/if}
-          <span>E</span>
-        </div>
-      </button>
-    </div>
-
-    <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '8px' })}>
-      <div class={css({ marginX: '8px', marginBottom: '6px', borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '8px',
-          paddingX: '8px',
-          paddingY: '5px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          app.state.statsOpen = true;
-          mixpanel.track('open_stats_modal');
-        }}
-        type="button"
-      >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={BarChart3Icon} size={16} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>통계</span>
-        {#if currentStreak > 0}
-          <span class={css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>
-            {currentStreak}일 연속
-          </span>
-        {/if}
-      </button>
-    </div>
-
-    <div class={css({ marginX: '20px', marginTop: '8px', borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
-
-    <!-- 문서 트리 -->
-    <div
-      class={flex({
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingX: '12px',
-        marginTop: '8px',
-        marginBottom: '4px',
-      })}
-    >
-      <span class={css({ paddingX: '8px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>글</span>
-
-      <div class={flex({ alignItems: 'center', gap: '2px' })}>
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={async () => {
-            if (!SubscribeModal.gate('sidebar_create_folder')) {
-              return;
-            }
-
-            const ancestorFolderIds = [...app.state.ancestors];
-            const { lowerOrder, upperOrder } = getAdjacentOrders();
-            const resp = await createFolder({
-              input: {
-                siteId: site.id,
-                name: '새 폴더',
-                parentEntityId: app.state.ancestors.at(-1),
-                lowerOrder,
-                upperOrder,
-              },
-            });
-
-            mixpanel.track('create_folder', { via: 'tree' });
-
-            entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, ancestorFolderIds, true));
-          }}
-          type="button"
-          use:tooltip={{ message: '새 폴더 생성' }}
-        >
-          <Icon icon={FolderPlusIcon} />
-        </button>
-
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={async () => {
-            if (!SubscribeModal.gate('sidebar_create_document')) {
-              return;
-            }
-
-            const ancestorFolderIds = [...app.state.ancestors];
-            const { lowerOrder, upperOrder } = getAdjacentOrders();
-
-            const resp = await createDocument({
-              input: {
-                siteId: site.id,
-                parentEntityId: app.state.ancestors.at(-1),
-                lowerOrder,
-                upperOrder,
-                v2: true,
-              },
-            });
-
-            mixpanel.track('create_document', { via: 'tree' });
-            const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, ancestorFolderIds, false);
-            entityTreeRevealState.set(revealRequest);
-            await goto(`/${resp.createDocument.entity.slug}`);
-          }}
-          type="button"
-          use:tooltip={{ message: '새 문서 생성' }}
-        >
-          <Icon icon={SquarePenIcon} />
-        </button>
-      </div>
-    </div>
-
-    <div class={css({ position: 'relative', flexGrow: '1', minHeight: '0' })}>
+    <div class={flex({ flexDirection: 'column', flexGrow: '1', minHeight: '0', overflow: 'hidden' })}>
       <div
-        bind:this={treeScrollEl}
-        id={treeScrollId}
-        class={css({
-          height: 'full',
-          overflowY: 'auto',
-          scrollbar: 'hidden',
-          borderTopWidth: canScrollUp ? '1px' : '0',
-          borderBottomWidth: canScrollDown ? '1px' : '0',
-          borderColor: 'border.subtle',
-          transition: '[border-width 150ms ease]',
-        })}
-        onscroll={updateScrollState}
+        style:height={navigationViewportHeight}
+        class={css({ position: 'relative', flexShrink: '0', minHeight: '0', overflow: 'hidden' })}
       >
-        <EntityTree site$key={site} />
+        <div
+          bind:this={navigationScrollEl}
+          id={navigationScrollId}
+          style:mask-image={navigationMaskImage}
+          class={css({ height: 'full', overflowY: 'auto', overflowX: 'hidden', scrollbar: 'hidden' })}
+          onscroll={(event) => (navigationScrollTop = event.currentTarget.scrollTop)}
+          bind:clientHeight={navigationViewportClientHeight}
+        >
+          <!-- 주요 내비게이션 -->
+          <div
+            class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', paddingBottom: '8px' })}
+            bind:clientHeight={navigationIntrinsicHeight}
+          >
+            <div
+              class={flex({ flexDirection: 'column', gap: '1px', paddingTop: '4px' })}
+              bind:clientHeight={navigationMinimumContentHeight}
+            >
+              <a
+                class={primaryNavigationItemClass}
+                aria-current={paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId)?.kind === 'home'
+                  ? 'page'
+                  : undefined}
+                href="/home"
+              >
+                <Icon style={primaryNavigationIconStyle} icon={HomeIcon} size={16} />
+                <span class={primaryNavigationLabelClass}>홈</span>
+              </a>
+
+              <button class={primaryNavigationItemClass} onclick={() => (app.state.commandPaletteOpen = true)} type="button">
+                <Icon style={primaryNavigationIconStyle} icon={SearchIcon} size={16} />
+                <span class={primaryNavigationLabelClass}>검색</span>
+                <div class={primaryNavigationShortcutClass}>
+                  {#if navigator.platform.includes('Mac')}
+                    <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+                  {:else}
+                    <span>Ctrl+</span>
+                  {/if}
+                  <span>K</span>
+                </div>
+              </button>
+
+              <button
+                class={primaryNavigationItemClass}
+                onclick={() => {
+                  app.state.notesOpen = true;
+                  mixpanel.track('open_notes_modal');
+                }}
+                type="button"
+              >
+                <Icon style={primaryNavigationIconStyle} icon={StickyNoteIcon} size={16} />
+                <span class={primaryNavigationLabelClass}>노트</span>
+                <div class={primaryNavigationShortcutClass}>
+                  {#if navigator.platform.includes('Mac')}
+                    <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+                  {:else}
+                    <span>Ctrl+</span>
+                  {/if}
+                  <span>J</span>
+                </div>
+              </button>
+            </div>
+
+            <button
+              class={primaryNavigationItemClass}
+              onclick={() => {
+                const next = !app.preference.current.prismPanelOpen;
+                app.preference.current.prismPanelOpen = next;
+                mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'sidebar' });
+              }}
+              type="button"
+            >
+              <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+                <Icon style={primaryNavigationIconStyle} icon={PrismIcon} size={16} />
+                {#if app.state.prismBadge}
+                  <PrismBadgeDot />
+                {/if}
+              </span>
+              <span class={primaryNavigationLabelClass}>PRISM</span>
+              <div class={primaryNavigationShortcutClass}>
+                {#if navigator.platform.includes('Mac')}
+                  <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+                {:else}
+                  <span>Ctrl+</span>
+                {/if}
+                <span>E</span>
+              </div>
+            </button>
+
+            <button
+              class={primaryNavigationItemClass}
+              onclick={() => {
+                app.state.userGoalOpen = true;
+                mixpanel.track('open_user_goal_modal', { via: 'sidebar' });
+              }}
+              type="button"
+            >
+              <Icon style={primaryNavigationIconStyle} icon={TargetIcon} size={16} />
+              <span class={primaryNavigationLabelClass}>일일 목표</span>
+              {#if dailyGoal}
+                <div class={flex({ alignItems: 'center', gap: '8px', marginLeft: 'auto' })}>
+                  <ProgressRing
+                    progress={dailyGoal.additions / dailyGoal.target}
+                    size={16}
+                    state={dailyGoal.achieved ? 'achieved' : 'under'}
+                  />
+                  {#if dailyGoal.streak > 0}
+                    <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>{dailyGoal.streak}일 연속</span>
+                  {/if}
+                </div>
+              {/if}
+            </button>
+
+            <button
+              class={primaryNavigationItemClass}
+              onclick={() => {
+                app.state.statsOpen = true;
+                mixpanel.track('open_stats_modal');
+              }}
+              type="button"
+            >
+              <Icon style={primaryNavigationIconStyle} icon={BarChart3Icon} size={16} />
+              <span class={primaryNavigationLabelClass}>통계</span>
+              {#if currentStreak > 0}
+                <span class={css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>
+                  {currentStreak}일 연속
+                </span>
+              {/if}
+            </button>
+          </div>
+        </div>
+
+        <Scrollbar
+          controls={navigationScrollId}
+          label="주요 내비게이션 세로 스크롤"
+          orientation="vertical"
+          scrollContainer={navigationScrollEl}
+          size="md"
+        />
       </div>
 
-      <Scrollbar controls={treeScrollId} label="트리 세로 스크롤" orientation="vertical" scrollContainer={treeScrollEl} size="md" />
+      <div
+        class={css({
+          position: 'relative',
+          flexShrink: '0',
+          height: '9px',
+          marginX: '12px',
+          cursor: 'row-resize',
+          touchAction: 'none',
+          userSelect: 'none',
+          '&:hover > div': { backgroundColor: 'border.default' },
+        })}
+        use:pointerCapture={{
+          start: startNavigationResizer,
+          move: moveNavigationResizer,
+          end: endNavigationResizer,
+          cancel: cancelNavigationResizer,
+        }}
+      >
+        <div
+          class={css({
+            position: 'absolute',
+            top: '4px',
+            left: '8px',
+            right: '8px',
+            height: '1px',
+            borderRadius: 'full',
+            backgroundColor: navigationClipPreview === null ? 'border.subtle' : 'border.strong',
+            pointerEvents: 'none',
+            transition: 'colors',
+          })}
+        ></div>
+      </div>
+
+      <div class={css({ position: 'relative', flexGrow: '1', minHeight: '0' })}>
+        <div
+          bind:this={treeScrollEl}
+          id={treeScrollId}
+          class={css({
+            height: 'full',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbar: 'hidden',
+            borderBottomWidth: canScrollDown ? '1px' : '0',
+            borderColor: 'border.subtle',
+            transition: '[border-width 150ms ease]',
+          })}
+          onscroll={updateScrollState}
+        >
+          <!-- 문서 트리 -->
+          <div
+            class={flex({
+              position: 'sticky',
+              top: '0',
+              zIndex: '1',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingX: '12px',
+              paddingTop: '8px',
+              paddingBottom: '4px',
+              backgroundColor: 'surface.subtle',
+              borderBottomWidth: canScrollUp ? '1px' : '0',
+              borderColor: 'border.subtle',
+              transition: '[border-width 150ms ease]',
+            })}
+          >
+            <span class={css({ paddingX: '8px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>글</span>
+
+            <div class={flex({ alignItems: 'center', gap: '2px' })}>
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: 'text.faint',
+                  transition: 'common',
+                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                })}
+                onclick={async () => {
+                  if (!SubscribeModal.gate('sidebar_create_folder')) {
+                    return;
+                  }
+
+                  const ancestorFolderIds = [...app.state.ancestors];
+                  const { lowerOrder, upperOrder } = getAdjacentOrders();
+                  const resp = await createFolder({
+                    input: {
+                      siteId: site.id,
+                      name: '새 폴더',
+                      parentEntityId: app.state.ancestors.at(-1),
+                      lowerOrder,
+                      upperOrder,
+                    },
+                  });
+
+                  mixpanel.track('create_folder', { via: 'tree' });
+
+                  entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, ancestorFolderIds, true));
+                }}
+                type="button"
+                use:tooltip={{ message: '새 폴더 생성' }}
+              >
+                <Icon icon={FolderPlusIcon} />
+              </button>
+
+              <button
+                class={center({
+                  borderRadius: '4px',
+                  size: '24px',
+                  color: 'text.faint',
+                  transition: 'common',
+                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                })}
+                onclick={async () => {
+                  if (!SubscribeModal.gate('sidebar_create_document')) {
+                    return;
+                  }
+
+                  const ancestorFolderIds = [...app.state.ancestors];
+                  const { lowerOrder, upperOrder } = getAdjacentOrders();
+
+                  const resp = await createDocument({
+                    input: {
+                      siteId: site.id,
+                      parentEntityId: app.state.ancestors.at(-1),
+                      lowerOrder,
+                      upperOrder,
+                      v2: true,
+                    },
+                  });
+
+                  mixpanel.track('create_document', { via: 'tree' });
+                  const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, ancestorFolderIds, false);
+                  entityTreeRevealState.set(revealRequest);
+                  await goto(`/${resp.createDocument.entity.slug}`);
+                }}
+                type="button"
+                use:tooltip={{ message: '새 문서 생성' }}
+              >
+                <Icon icon={SquarePenIcon} />
+              </button>
+            </div>
+          </div>
+
+          <EntityTree site$key={site} />
+        </div>
+
+        <Scrollbar controls={treeScrollId} label="트리 세로 스크롤" orientation="vertical" scrollContainer={treeScrollEl} size="md" />
+      </div>
     </div>
 
     <TrialWidget user$key={user.data} />
