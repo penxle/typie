@@ -1140,22 +1140,10 @@ builder.mutationFields((t) => ({
 
       const errors = await spellcheck.check(text, ctx.c.req.raw.signal);
 
-      const utf16ToCodepoint = (utf16Index: number): number => {
-        let i = 0;
-        let count = 0;
-        while (i < utf16Index) {
-          const cp = text.codePointAt(i);
-          if (cp === undefined) break;
-          i += cp > 0xff_ff ? 2 : 1;
-          count++;
-        }
-        return count;
-      };
-
       return errors.map((error) => ({
         id: nanoid(),
-        start: utf16ToCodepoint(error.start),
-        end: utf16ToCodepoint(error.end),
+        start: error.start,
+        end: error.end,
         context: error.context,
         corrections: error.corrections,
         explanation: error.explanation,

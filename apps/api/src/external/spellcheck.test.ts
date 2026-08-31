@@ -56,6 +56,21 @@ test('successful chunks preserve input order and offsets', async () => {
   );
 });
 
+test('offsets stay UTF-16 indices of the original text across emoji', async () => {
+  const check = createSpellcheck(
+    createDependencies({
+      requestXml: async () => response('<PnuErrorWord><nErrorIdx>0</nErrorIdx><m_nStart>0</m_nStart><m_nEnd>2</m_nEnd></PnuErrorWord>'),
+    }),
+  );
+  const text = '😀😀지하 1층';
+
+  const [error] = await check(text);
+
+  assert.deepEqual([error.start, error.end], [4, 6]);
+  assert.equal(text.slice(error.start, error.end), '지하');
+  assert.equal(error.context, '지하');
+});
+
 test('a later chunk failure rejects the whole check', async () => {
   const check = createSpellcheck(
     createDependencies({
