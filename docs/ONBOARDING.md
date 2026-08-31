@@ -1,6 +1,6 @@
 # Typie 온보딩 문서
 
-작성일: 2026-05-18
+작성일: 2026-05-18 (최종 개정: 2026-09-01)
 대상: 입사 첫 날, 이 저장소를 처음 클론한 엔지니어 또는 그를 보조하는 AI
 에이전트.
 
@@ -30,7 +30,7 @@ AI 에이전트가 이 체크리스트를 진행할 때 따라야 할 규칙이�
 3. 검증이 실패하면 해당 항목을 `- [ ]`로 유지하고, "실패 시" 분기 또는
    [트러블슈팅](#트러블슈팅)을 따른다. 분기 처리도 실패하면 사용자에게 보고하고
    멈춘다.
-4. 사용자 개입이 필요한 항목(예: 단계 6 Doppler 연결, 단계 8 Graphite 인증)은
+4. 사용자 개입이 필요한 항목(예: 단계 6 Doppler 연결, 단계 8 GitHub 인증)은
    자동화하지 않고 사용자에게 실행을 요청한다.
 5. **세션 종료 시 모든 체크박스를 다시 `- [ ]`로 되돌린다.** 체크리스트는 다음
    입사자가 동일한 절차로 사용해야 하므로, 진행 상태가 파일에 남으면 안 된다.
@@ -44,15 +44,15 @@ AI 에이전트가 이 체크리스트를 진행할 때 따라야 할 규칙이�
   - [ ] 단계 3-B. 위가 Command Line Tools 버전 오류로 실패하면 공식 셸
         인스톨러로 우회 (`brew install gnupg` → `curl ... | sudo sh`, 사용자
         직접 실행)
-- [ ] 단계 4 완료: Node 25.8.1, pnpm 10.32.1 준비 후 `pnpm install`, `pnpm run bootstrap` 성공
+- [ ] 단계 4 완료: Node 26.8.1, pnpm 11.24.0 준비 후 `pnpm install`, `pnpm run bootstrap` 성공
 - [ ] 단계 5 완료: Tailscale에서 `penxle.io` tailnet 연결 확인 (`apps/api` 기동에 필수)
 - [ ] 단계 6 완료: `doppler login` → `doppler setup` → `doppler me`로 워크스페이스 접근 확인
 - [ ] 단계 7 완료: `caddy` 설치 및 검증
-- [ ] 단계 8 완료: Graphite CLI(`gt`) 설치 + `gt auth` 인증 + `gt repo init` 완료
+- [ ] 단계 8 완료: GitHub CLI(`gh`) 설치 + `gh auth login` 인증 + `gh-stack` 확장 설치 완료
 - [ ] 단계 9 완료: `pnpm run dev`로 `apps/website`, `apps/api`, `apps/caddy` 기동
 - [ ] 브라우저에서 `http://localhost:4100` 접속 후 로그인 흐름 통과
-- [ ] Graphite CLI(`gt`)로 작은 변경 브랜치를 만들어 PR 등록 후 `ci.yml` 통과
-      (raw `git checkout/commit/push/pull/rebase`는 사용 금지)
+- [ ] `gh stack`으로 작은 변경 브랜치를 만들어 PR 등록 후 `ci.yml` 통과
+      (브랜치 생성·푸시·PR 등록에 raw `git`은 사용 금지)
 - [ ] [요청 흐름](#요청은-어떻게-처리되는가)을 다이어그램 없이 설명 가능
 
 이후에는 실제 티켓을 할당받아 작업한다.
@@ -76,6 +76,8 @@ WASM(브라우저, Node 서버)과 UniFFI(Android, iOS) 양쪽으로 빌드된�
 | 편집 UI, 인증, 대시보드           | `apps/website`                            |
 | 도큐먼트 영속화, 검색, 결제, 협업 | `apps/api`                                |
 | 모바일 패키징 셸                  | `apps/mobile`                             |
+| 데스크톱 셸                       | `apps/desktop`                            |
+| AI 피드백 평가                    | `apps/eval`                               |
 | 운영 보조                         | `apps/bmo`, `apps/literoom`, `apps/caddy` |
 
 루트 디렉터리는 다음과 같이 구성된다.
@@ -85,7 +87,7 @@ typie/
 ├── apps/         배포 단위 (서비스와 클라이언트)
 │   └── desktop/  Electron 데스크톱 앱
 ├── packages/     TypeScript, Svelte 공용 라이브러리
-├── crates/       Rust 에디터 엔진 (editor-* 15개)
+├── crates/       Rust 크레이트 (editor-* 19개, prism-ui-* 2개, workspace-hack)
 ├── assets/       폰트, 아이콘, 테마
 ├── docs/         내부 문서
 └── .github/workflows/
@@ -102,6 +104,7 @@ typie/
 | `apps/api`      | Hono 기반 GraphQL/REST/WS 통합 게이트웨이      |
 | `apps/mobile`   | Kotlin Multiplatform과 Compose, UniFFI 사용    |
 | `apps/desktop`  | Electron 데스크톱 앱 (원격 typie.co를 탭으로)  |
+| `apps/eval`     | AI 피드백 평가 도구 (Cloudflare Workers + D1)  |
 | `apps/bmo`      | Slack 멘션을 Lambda worker로 라우팅하는 운영봇 |
 | `apps/literoom` | S3 Object Lambda 이미지 변환 (Sharp)           |
 | `apps/caddy`    | `:4100`, `:4200`, `:4300`을 `:4000`으로 프록시 |
@@ -111,14 +114,16 @@ typie/
 여러 앱에서 중복으로 사용되는 코드가 모여 있다. 새로 유틸을 작성하기 전에 이
 디렉터리를 먼저 확인한다.
 
-| 패키지                   | 책임                                  |
-| ------------------------ | ------------------------------------- |
-| `packages/ui`            | Svelte 컴포넌트, 액션, 폼, 토스트     |
-| `packages/lib`           | 로거, Hono 미들웨어, dayjs, Vite SVG  |
-| `packages/styled-system` | Panda CSS 토큰, 레시피, 글로벌 스타일 |
-| `packages/adapter-node`  | SvelteKit용 커스텀 Node adapter       |
-| `packages/tsconfig`      | 공용 `tsconfig` 베이스                |
-| `packages/lintconfig`    | ESLint, Prettier 공용 설정            |
+| 패키지                   | 책임                                                       |
+| ------------------------ | ---------------------------------------------------------- |
+| `packages/ui`            | Svelte 컴포넌트, 액션, 폼, 토스트                          |
+| `packages/lib`           | 로거, Hono 미들웨어, dayjs, Vite SVG                       |
+| `packages/styled-system` | Panda CSS 토큰, 레시피, 글로벌 스타일                      |
+| `packages/adapter-node`  | SvelteKit용 커스텀 Node adapter                            |
+| `packages/prism`         | Prism 대화/리뷰/크레딧 공용 로직 (transcript, delta, 앵커) |
+| `packages/prism-ui`      | Prism 런타임 UI (아이콘 모프, 스피너)                      |
+| `packages/tsconfig`      | 공용 `tsconfig` 베이스                                     |
+| `packages/lintconfig`    | ESLint, Prettier 공용 설정                                 |
 
 ### crates — Rust 에디터 엔진
 
@@ -136,12 +141,24 @@ typie/
 | `editor-renderer`      | glyph, theme, render backend/sink                     |
 | `editor-resource`      | 폰트, 브러시, segmentation, zstd, ICU 리소스          |
 | `editor-crdt`          | RGA, OR-Set/Map, LWW register, sync, wire format      |
+| `editor-codec`         | 동기화 wire 인코딩 (envelope, framing, durable)       |
+| `editor-codec-macros`  | `editor-codec`용 derive 매크로                        |
+| `editor-clipboard`     | 클립보드 HTML/텍스트 직렬화와 슬라이스                |
+| `editor-xml`           | XML 렉서, diff, LCS, 주소 지정                        |
 | `editor-ffi`           | 브라우저/서버 WASM, UniFFI native, 플랫폼별 host      |
 | `editor-bindgen`       | Kotlin, Swift, JS, wasm-bindgen 보조 바이너리         |
 | `editor-server`        | 서버용 폰트/리소스 처리                               |
 | `editor-macros`        | 매크로                                                |
 | `editor-common`        | 공통 타입                                             |
 | `editor-introspection` | 검사, 디버깅                                          |
+
+에디터 외 크레이트는 다음과 같다.
+
+| 크레이트            | 책임                                             |
+| ------------------- | ------------------------------------------------ |
+| `prism-ui-renderer` | Prism UI 셰이더와 광학 효과 렌더러               |
+| `prism-ui-web`      | `prism-ui-renderer`의 브라우저 WASM 바인딩       |
+| `workspace-hack`    | cargo-hakari가 생성하는 feature 통합 (수정 금지) |
 
 빌드 진입점은 `crates/editor-ffi/justfile`이다.
 
@@ -186,7 +203,7 @@ just desktop      # apps/mobile KMP의 desktop 타깃용 native (apps/desktop과
 | `tailscale` | 사내 tailnet 연결. `apps/api` 기동과 내부 리소스 접근에 필수 | 필수      |
 | `doppler`   | 환경 변수 주입 통로. `apps/api` 기동에 필수                  | 필수      |
 | `caddy`     | 로컬 개발용 reverse proxy (`4100/4200/4300` → `4000`)        | 필수      |
-| `graphite`  | 브랜치/커밋/푸시 워크플로. raw git 명령 대신 `gt` 사용       | 필수      |
+| `gh`        | GitHub CLI. `gh-stack` 확장으로 브랜치/PR 스택 관리          | 필수      |
 
 ### 단계 1. 버전 매니저와 빌드 도구 설치
 
@@ -247,9 +264,9 @@ just desktop      # apps/mobile KMP의 desktop 타깃용 native (apps/desktop과
 #### 참고: Rust 채널 정책
 
 이 저장소의 기본 Rust toolchain은 `rust-toolchain.toml`에 지정된 stable 단일
-채널이다. 과거 문서나 코드 주석에 nightly 관련 안내가 남아 있더라도 현재는
-유효하지 않으므로 따르지 않는다. 신규 작업과 빌드 검증은 모두 stable을 기준으로
-한다.
+채널이다. 신규 작업과 빌드 검증은 모두 stable을 기준으로 한다. 저장소 안에는
+nightly를 지시하는 설정이나 문서가 남아 있지 않으므로, 외부 자료나 빌드 실패
+메시지가 nightly를 권하더라도 따르지 않는다.
 
 관련 문서:
 
@@ -336,15 +353,15 @@ Doppler가 공식적으로 제공하는 셸 인스톨러 경로다. 패키지 �
 - **검증**:
 
   ```bash
-  node -v # v25.8.1
-  pnpm -v # 10.32.1
+  node -v # v26.8.1
+  pnpm -v # 11.24.0
   ```
 
   `pnpm install`이 종료 코드 0으로 끝났고, `node_modules/`와 `pnpm-lock.yaml`이
   존재해야 한다.
 
 - **실패 시**:
-  - `node -v`가 25.x가 아니면 사용하는 Node 버전 매니저로 `.node-version`의
+  - `node -v`가 26.x가 아니면 사용하는 Node 버전 매니저로 `.node-version`의
     버전을 활성화한다.
   - 네트워크 오류면 사내 프록시 설정을 사용자에게 확인한다.
 
@@ -441,45 +458,52 @@ Doppler가 공식적으로 제공하는 셸 인스톨러 경로다. 패키지 �
     먼저 설치한 뒤 재시도한다. OS 업데이트나 개인 디스크 구성 복구 절차는 이
     문서에 포함하지 않는다.
 
-### 단계 8. Graphite CLI(`gt`) 설치 및 인증 (사용자 개입 필요)
+### 단계 8. GitHub CLI(`gh`)와 `gh-stack` 확장 설치 (사용자 개입 필요)
 
-- **목적**: 브랜치/커밋/푸시/리베이스를 Graphite CLI로 진행할 수 있도록 설치하고
-  계정을 인증한다. 이 저장소는 **raw Git 명령(`git checkout`, `git commit`,
-  `git push`, `git pull`, `git rebase`)을 사용하지 않으므로**, `gt`는 첫 PR을
-  등록하기 위한 필수 도구다.
+- **목적**: 브랜치와 PR을 스택으로 관리하는 `gh stack`을 설치하고 계정을
+  인증한다. 이 저장소는 브랜치 생성, 푸시, PR 등록에 raw Git 대신 `gh stack`을
+  사용하므로, 첫 PR을 등록하기 위한 필수 도구다.
 - **사전 조건**: Homebrew 사용 가능. GitHub 계정이 회사 organization에 속한
   상태.
 - **실행**:
 
   ```bash
-  brew install withgraphite/tap/graphite
+  brew install gh
   ```
 
-- **추가 실행 (사용자 본인이 직접 수행)**: 브라우저 인증과 토큰 입력이 필요하다.
+- **추가 실행 (사용자 본인이 직접 수행)**: 브라우저 인증이 필요하다.
 
   ```bash
-  gt auth      # 브라우저로 Graphite 토큰 발급 후 CLI에 입력
-  gt repo init # 현재 저장소를 Graphite에 등록 (trunk 브랜치 설정 등)
+  gh auth login # 브라우저로 GitHub 계정 인증
   ```
 
-  > `gt auth`는 [app.graphite.dev](https://app.graphite.dev) 로그인 후 발급된
-  > 토큰을 CLI에 붙여넣는 과정이다. AI 에이전트는 이 단계를 자동화하지 않고,
-  > 사용자에게 실행을 요청한 뒤 완료 보고를 받는다.
+  > AI 에이전트는 이 단계를 자동화하지 않고, 사용자에게 실행을 요청한 뒤 완료
+  > 보고를 받는다.
+
+- **이어서 실행**:
+
+  ```bash
+  gh extension install github/gh-stack
+  
+  # 인터랙티브 프롬프트를 막기 위한 사전 설정
+  git config rerere.enabled true       # 충돌 해결 기억 (init 시 확인 프롬프트 방지)
+  git config remote.pushDefault origin # 원격 선택 프롬프트 방지
+  ```
 
 - **검증**:
 
   ```bash
-  gt --version # 1.x 이상
-  gt user      # 인증된 GitHub 계정 표시
+  gh --version      # 2.x 이상
+  gh auth status    # 인증된 계정 표시
+  gh extension list # gh stack github/gh-stack 표시
   ```
 
 - **실패 시**:
-  - `gt: command not found`면 `brew install withgraphite/tap/graphite`가 완료되지
-    않은 상태다.
-  - `gt auth`에서 토큰 오류가 나면 [app.graphite.dev](https://app.graphite.dev)에서
-    토큰을 재발급한다.
-  - `gt user`는 통과하지만 PR 생성이 실패하면 GitHub organization 권한(회사
-    레포 접근)을 관리자에게 확인한다.
+  - `gh: command not found`면 `brew install gh`가 완료되지 않은 상태다.
+  - `gh extension list`에 `gh stack`이 없으면
+    `gh extension install github/gh-stack`을 다시 실행한다.
+  - 인증은 통과하지만 PR 생성이 실패하면 GitHub organization 권한(회사 레포
+    접근)을 관리자에게 확인한다.
 
 ### 단계 9. 개발 서버 기동
 
@@ -638,7 +662,7 @@ SvelteKit 2와 Svelte 5 runes 기반의 메인 웹 애플리케이션이다. Gra
 | `src/routes/usersite/`                              | 공개 사용자 사이트와 커스텀 도메인       |
 | `src/routes/auth/`                                  | 로그인, 회원가입, 비밀번호 재설정, SSO   |
 | `src/routes/graphql/`                               | API GraphQL BFF (쿠키를 헤더로 변환)     |
-| `src/lib/editor/`, `editor-ffi/`, `wasm*.svelte.ts` | 에디터 패키지 연결 계층                  |
+| `src/lib/editor-ffi/`, `src/lib/wasm-ffi.svelte.ts` | 에디터 패키지 연결 계층                  |
 
 ### apps/api
 
@@ -646,14 +670,14 @@ Hono 위에 GraphQL Yoga, REST, WebSocket을 통합한 게이트웨이다. 기�
 `bootstrap.ts`가 maintenance 상태를 점검하고, `context.ts`에서 GraphQL과 REST가
 공유하는 컨텍스트를 구성한다.
 
-| 경로                     | 책임                                                                     |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `src/graphql/resolvers/` | 도메인별 리졸버 (`auth`, `document`, `payment` 등 약 24개)               |
-| `src/rest/`              | `auth`, `bmo`, `entity`, `font`, `iap`, `og` 등                          |
-| `src/db/schemas/`        | Drizzle 스키마. 테이블 59개, 마이그레이션 85개                           |
-| `src/mq/tasks/`          | BullMQ 워커 (`changeset`, `document`, `email`, `search`, `subscription`) |
-| `src/export/`            | PDF, DOCX, EPUB, HWP, 미리보기 이미지 생성                               |
-| `src/external/`          | AWS, Elasticsearch, Firebase, PortOne, IAP, SSO, AI Gateway 어댑터       |
+| 경로                     | 책임                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `src/graphql/resolvers/` | 도메인별 리졸버 (`auth`, `document`, `payment` 등 32개)                       |
+| `src/rest/`              | `auth`, `bmo`, `font`, `healthz`, `iap`, `internal`, `og`                     |
+| `src/db/schemas/`        | Drizzle 스키마. 테이블 75개, 마이그레이션 130개                               |
+| `src/mq/tasks/`          | BullMQ 워커 (`changeset`, `email`, `search`, `subscription`, `prism` 계열 등) |
+| `src/export/`            | PDF, DOCX, EPUB, HWP, 미리보기 이미지 생성                                    |
+| `src/external/`          | AWS, Firebase, PortOne, IAP(App Store/Play), SSO, Slack, Prism 어댑터         |
 
 ### apps/mobile
 
@@ -713,15 +737,28 @@ dependencies {
 Electron 데스크톱 앱이다. 원격 typie.co를 탭당 `WebContentsView`로 로드하는 껍데기이며,
 설계는 `docs/superpowers/specs/2026-08-18-desktop-app-design.md`를 따른다.
 
-| 항목     | 값                                                                                          |
-| -------- | ------------------------------------------------------------------------------------------- |
-| 개발     | `pnpm --filter @typie/desktop dev` (local 환경 기본, `ENVIRONMENT=dev\|prod`로 백엔드 교체) |
-| dev 포트 | `5300` (렌더러 dev 서버)                                                                    |
-| 릴리즈   | `apps/desktop/justfile` `just release` (오너 로컬)                                          |
+| 항목     | 값                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| 개발     | `pnpm --filter @typie/desktop run dev:desktop` (local 환경 기본, `ENVIRONMENT=dev\|prod`로 백엔드 교체) |
+| dev 포트 | `5300` (렌더러 dev 서버)                                                                                |
+| 릴리즈   | `apps/desktop/justfile` `just release` (오너 로컬)                                                      |
 
 > `crates/editor-ffi`의 `just desktop` 레시피는 이 앱이 아니라 `apps/mobile` KMP의
 > desktop 타깃(모바일 앱 개발용 native)을 빌드한다. 이름이 비슷해서 자주
 > 혼동되므로 주의한다.
+
+### apps/eval
+
+AI 피드백 품질을 평가하는 내부 도구다. SvelteKit을 Cloudflare Workers로
+배포하며, 세션과 결과는 D1(`typie-eval-beta`)에 저장한다.
+
+| 항목         | 값                                                    |
+| ------------ | ----------------------------------------------------- |
+| 배포         | `eval.penxle.io` (`apps/eval/wrangler.toml`)          |
+| 개발         | `pnpm --filter @typie/eval run dev`                   |
+| 마이그레이션 | `pnpm --filter @typie/eval run db:migrate`            |
+| 크론         | 매분 (`[triggers] crons`)                             |
+| 연동         | `INTERNAL_API_BASE` (api), `PRISM_API_ORIGIN` (prism) |
 
 ### apps/literoom
 
@@ -775,12 +812,17 @@ codegen을 확인하고, 모바일은 Apollo codegen이 별도이므로 모바�
 개발 타깃에 동시에 영향을 줄 수 있다. 영향받는 타깃에 해당하는 `just` 레시피로
 로컬 빌드를 먼저 확인하는 것을 권장한다.
 
-| 영향 영역                                           | 레시피              |
-| --------------------------------------------------- | ------------------- |
-| 브라우저 UI (`apps/website`)                        | `just wasm-browser` |
-| 서버사이드 렌더링 (`apps/api`)                      | `just wasm-server`  |
-| 모바일 Android/iOS 바인딩 (`apps/mobile`)           | `just mobile`       |
-| 모바일 KMP desktop 개발 타깃 (`apps/mobile` 개발용) | `just desktop`      |
+| 영향 영역                                           | 레시피                                        |
+| --------------------------------------------------- | --------------------------------------------- |
+| 브라우저 UI (`apps/website`)                        | `just wasm-browser`                           |
+| 서버사이드 렌더링 (`apps/api`)                      | `just wasm-server`                            |
+| 모바일 Android/iOS 바인딩 (`apps/mobile`)           | `just mobile`                                 |
+| 모바일 KMP desktop 개발 타깃 (`apps/mobile` 개발용) | `just desktop`                                |
+| Prism UI 렌더러 (`prism-ui-*`)                      | `crates/prism-ui-web`에서 `just wasm-browser` |
+
+Rust와 Kotlin은 CI 게이트가 없다(`ci.yml`은 JS/TS 린터 6종만 돌린다). 변경을
+검증했다고 말하기 전에 로컬에서 `cargo test --workspace`와
+`cargo clippy --workspace --all-targets`를 직접 돌린다.
 
 루트 `rust-toolchain.toml`은 stable 단일 채널을 지정한다. 빌드 실패 시
 [주의 사항](#주의-사항)의 toolchain 항목을 참고한다.
@@ -803,30 +845,37 @@ codegen을 확인하고, 모바일은 Apollo codegen이 별도이므로 모바�
 - 워커:
   `apps/api/src/mq/tasks/{changeset,document,email,search,subscription}.ts`
 
-### Graphite(`gt`) 사용 원칙 (필수)
+### `gh stack` 사용 원칙 (필수)
 
-이 저장소는 Git을 직접 사용하지 않는다. 브랜치 생성, 체크아웃, 커밋, 푸시, 풀,
-리베이스, 스택 동기화는 전부 Graphite CLI(`gt`)를 통해 수행한다. 다음 raw Git
-하위 명령은 일상 워크플로에서 사용하지 않는다.
+이 저장소는 브랜치와 PR을 스택으로 관리한다. 브랜치 생성, 체크아웃, 푸시, 원격
+동기화, 리베이스, PR 등록은 전부 `gh stack`을 통해 수행한다. 다음 raw Git 하위
+명령은 일상 워크플로에서 사용하지 않는다.
 
-- `git checkout`, `git switch`
-- `git commit`
+- `git checkout -b`, `git switch -c` (브랜치 생성)
 - `git push`, `git pull`
 - `git rebase`, `git merge`
 
-대응되는 `gt` 명령은 다음과 같다.
+스테이징과 커밋은 표준 `git add`, `git commit`을 그대로 쓴다. `gh stack`은 커밋을
+대체하지 않으며, 어떤 변경을 어느 층에 담을지 직접 통제하는 편이 스택 PR에
+유리하다.
 
-| 목적           | raw git (사용 금지)     | Graphite                    |
-| -------------- | ----------------------- | --------------------------- |
-| 새 브랜치      | `git checkout -b foo`   | `gt create foo` (변경 포함) |
-| 브랜치 이동    | `git checkout main`     | `gt checkout main`          |
-| 새 커밋        | `git commit -m "..."`   | `gt modify -c -m "..."`     |
-| 현재 커밋 수정 | `git commit --amend`    | `gt modify`                 |
-| 원격 동기화    | `git pull` / `git push` | `gt sync`, `gt submit`      |
-| 스택 리베이스  | `git rebase`            | `gt restack`                |
+| 목적           | raw git (사용 금지)     | gh stack                                        |
+| -------------- | ----------------------- | ----------------------------------------------- |
+| 새 스택 시작   | `git checkout -b foo`   | `gh stack init foo`                             |
+| 스택에 층 추가 | `git checkout -b bar`   | `gh stack add bar`                              |
+| 브랜치 이동    | `git checkout foo`      | `gh stack checkout foo`, `gh stack up`/`down`   |
+| 커밋           | —                       | `git add` + `git commit` (표준 git 사용)        |
+| 원격 동기화    | `git pull` / `git push` | `gh stack sync`, `gh stack push`                |
+| PR 등록        | —                       | `gh stack submit --auto`                        |
+| 스택 리베이스  | `git rebase`            | `gh stack rebase` (하위 층 수정 후 `--upstack`) |
+| 스택 확인      | —                       | `gh stack view --json`                          |
 
-온보딩 문서와 AI 도구 안내에서도 raw Git 하위 명령을 직접 지시하지 않는다. 진단
-목적의 `git status`, `git diff`, `git log` 같은 읽기 전용 명령은 그대로 써도
+> **AI 에이전트 주의**: `gh stack view`를 `--json` 없이, `gh stack submit`을
+> `--auto` 없이 실행하면 인터랙티브 TUI나 프롬프트가 열려 응답 없이 멈춘다.
+> `init`, `add`, `checkout`도 인자를 반드시 함께 준다.
+
+온보딩 문서와 AI 도구 안내에서도 위 raw Git 하위 명령을 직접 지시하지 않는다.
+진단 목적의 `git status`, `git diff`, `git log` 같은 읽기 전용 명령은 그대로 써도
 된다.
 
 ### 커밋과 코드 스타일
@@ -847,12 +896,12 @@ codegen을 확인하고, 모바일은 Apollo codegen이 별도이므로 모바�
 ## 첫 PR 등록
 
 작은 변경으로 한 차례 PR 사이클을 진행해보는 것이 환경 검증에 가장 효과적이다.
-브랜치/커밋/푸시는 [Graphite 사용 원칙](#graphitegt-사용-원칙-필수)을 따른다.
+브랜치/커밋/푸시는 [`gh stack` 사용 원칙](#gh-stack-사용-원칙-필수)을 따른다.
 
 ### 1. 브랜치 생성
 
 ```bash
-gt create onboarding/<your-name>
+gh stack init onboarding/<your-name>
 ```
 
 ### 2. 변경 후보 선택
@@ -873,8 +922,9 @@ pnpm run lint:svelte # Svelte 변경 시
 ### 4. 커밋과 PR 제출
 
 ```bash
-gt modify -c -m "chore(onboarding): ..." # 커밋
-gt submit                                # PR 생성/푸시
+git add -A
+git commit -m "chore(onboarding): ..." # 커밋은 표준 git
+gh stack submit --auto                 # 브랜치 푸시 + PR 생성
 ```
 
 ### 5. CI 통과 확인
@@ -884,14 +934,17 @@ typecheck를 실행한다. 모두 통과하면 첫 날 목표를 달성한 것�
 
 PR 등록 이후 동작하는 워크플로는 다음과 같다.
 
-| 워크플로         | 트리거       | 하는 일                                      |
-| ---------------- | ------------ | -------------------------------------------- |
-| `ci.yml`         | PR, push, MQ | eslint, prettier, spellcheck, svelte-check   |
-| `build-wasm.yml` | 관련 변경    | editor-ffi 브라우저/서버 WASM artifact       |
-| `build.yml`      | 관련 변경    | Turbo prune, API/website Docker, ECR 푸시    |
-| `cd.yml`         | main push    | WASM과 이미지 빌드, dev 배포                 |
-| `production.yml` | 수동         | dev 이미지를 prod 태그로 재태깅 후 prod 배포 |
-| `deployment.yml` | 배포 후      | `penxle/kube2` 매니페스트 갱신               |
+| 워크플로         | 트리거                     | 하는 일                                                    |
+| ---------------- | -------------------------- | ---------------------------------------------------------- |
+| `ci.yml`         | PR, main push, merge queue | eslint, prettier, spellcheck, svelte, syncpack, typecheck  |
+| `build-wasm.yml` | `cd.yml` 등에서 호출       | editor-ffi 브라우저/서버 + prism-ui 브라우저 WASM artifact |
+| `build.yml`      | `cd.yml` 등에서 호출       | Turbo prune, API/website Docker, ECR 푸시                  |
+| `cd.yml`         | main push                  | WASM과 이미지 빌드, dev 배포                               |
+| `production.yml` | 수동 (`workflow_dispatch`) | dev 이미지를 prod 태그로 재태깅 후 prod 배포               |
+| `deployment.yml` | `cd.yml` 등에서 호출       | `penxle/kube2` 매니페스트 갱신                             |
+
+이 외에 `claude.yml`(이슈/PR 코멘트에서 Claude 호출)과
+`claude-code-review.yml`(PR 자동 리뷰)이 있다. CI 게이트는 아니다.
 
 ---
 
@@ -906,13 +959,14 @@ PR 등록 이후 동작하는 워크플로는 다음과 같다.
 빌드에서 덮어써진다. 변경하려면 **원본 정의**(스키마, Panda 설정, Rust 코드,
 UniFFI 인터페이스 등)를 고치고 codegen을 다시 돌린다.
 
-| 디렉터리                 | 생성 명령                                   | 원본 정의 위치                                  |
-| ------------------------ | ------------------------------------------- | ----------------------------------------------- |
-| `.svelte-kit/`           | `sveltekit()` Vite 플러그인                 | `apps/website/src/routes/`, `svelte.config.js`  |
-| `.mearie/`               | `mearie generate` (`pnpm codegen`)          | `apps/website/mearie.config.ts`, GraphQL 스키마 |
-| `styled-system/`         | `panda codegen`                             | `packages/styled-system/` Panda 설정            |
-| `crates/editor-ffi/pkg/` | `just wasm-browser`, `just wasm-server`     | `crates/editor-*` Rust 코드                     |
-| 모바일 generated 바인딩  | `just mobile` (uniffi-bindgen Kotlin/Swift) | `crates/editor-ffi/` UniFFI 인터페이스          |
+| 디렉터리                   | 생성 명령                                   | 원본 정의 위치                                  |
+| -------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| `.svelte-kit/`             | `sveltekit()` Vite 플러그인                 | `apps/website/src/routes/`, `svelte.config.js`  |
+| `.mearie/`                 | `mearie generate` (`pnpm codegen`)          | `apps/website/mearie.config.ts`, GraphQL 스키마 |
+| `styled-system/`           | `panda codegen`                             | `packages/styled-system/` Panda 설정            |
+| `crates/editor-ffi/pkg/`   | `just wasm-browser`, `just wasm-server`     | `crates/editor-*` Rust 코드                     |
+| `crates/prism-ui-web/pkg/` | `just wasm-browser` (해당 크레이트에서)     | `crates/prism-ui-*` Rust 코드                   |
+| 모바일 generated 바인딩    | `just mobile` (uniffi-bindgen Kotlin/Swift) | `crates/editor-ffi/` UniFFI 인터페이스          |
 
 ### `apps/api` 환경 변수와 내부 호스트
 
@@ -945,7 +999,7 @@ tailnet에 붙어 있어야 접근이 된다. tailnet이 끊긴 상태에서는 
 | `apps/website` | mearie | `apps/website/mearie.config.ts` (`schema: 'schema.graphql'`)          |
 | `apps/mobile`  | Apollo | `apps/mobile/compose/src/commonMain/graphql/schema.graphqls` (Gradle) |
 
-리졸버는 `apps/api/src/graphql/resolvers/` 아래 약 23개 도메인 파일로 나뉘어
+리졸버는 `apps/api/src/graphql/resolvers/` 아래 32개 도메인 파일로 나뉘어
 있다. 변경 후 최소한 `pnpm run lint:typecheck`로 웹 측 codegen이 깨지지 않는지
 확인하고, 모바일 영향은 별도로 Gradle 빌드를 돌려야 알 수 있다.
 
@@ -969,17 +1023,17 @@ backfill이 끼는 마이그레이션은 단독 PR로 분리해서 리뷰한다.
 장애 대응과 버그 수정 시 참조하는 절차다. 환경 문제로 작업이 중단되었을 때 가장
 먼저 확인한다.
 
-| 증상                                       | 원인과 해결                                                                            |
-| ------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `pnpm install` 실패                        | `node -v`가 25.x인지 확인. 사용하는 버전 매니저 점검                                   |
-| `apps/api`가 기동되지 않음                 | Tailscale `penxle.io` 연결과 `doppler login` + `doppler setup` 모두 완료되었는지 확인  |
-| `apps/api`가 기동되고도 DB/Redis 호출 실패 | Tailscale tailnet 미연결. `tailscale status`로 확인 후 `tailscale switch penxle.io`    |
-| Doppler 환경 변수가 비어 있음              | `doppler login`만 수행하고 `doppler setup`이 누락된 상태. 단계 6의 두 명령을 모두 실행 |
-| `@typie/caddy#dev`가 `caddy`를 못 찾음     | `brew install caddy` 후 `caddy version` 확인                                           |
-| `gt: command not found` 또는 PR 제출 실패  | 단계 8 (`brew install withgraphite/tap/graphite` → `gt auth` → `gt repo init`) 재확인  |
-| `localhost:4000`에서 500 발생              | 내부 Vite 포트이므로 브라우저에서는 `localhost:4100`을 사용                            |
-| WASM 빌드 실패                             | `just wasm-browser` 등 개별 타깃부터 좁혀 확인                                         |
-| Rust 빌드 실패                             | `rustup show`로 stable 활성화 확인. 메시지가 nightly 설치를 권하더라도 따르지 않는다   |
+| 증상                                       | 원인과 해결                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `pnpm install` 실패                        | `node -v`가 26.x인지 확인. 사용하는 버전 매니저 점검                                         |
+| `apps/api`가 기동되지 않음                 | Tailscale `penxle.io` 연결과 `doppler login` + `doppler setup` 모두 완료되었는지 확인        |
+| `apps/api`가 기동되고도 DB/Redis 호출 실패 | Tailscale tailnet 미연결. `tailscale status`로 확인 후 `tailscale switch penxle.io`          |
+| Doppler 환경 변수가 비어 있음              | `doppler login`만 수행하고 `doppler setup`이 누락된 상태. 단계 6의 두 명령을 모두 실행       |
+| `@typie/caddy#dev`가 `caddy`를 못 찾음     | `brew install caddy` 후 `caddy version` 확인                                                 |
+| `gh: command not found` 또는 PR 제출 실패  | 단계 8 (`brew install gh` → `gh auth login` → `gh extension install github/gh-stack`) 재확인 |
+| `localhost:4000`에서 500 발생              | 내부 Vite 포트이므로 브라우저에서는 `localhost:4100`을 사용                                  |
+| WASM 빌드 실패                             | `just wasm-browser` 등 개별 타깃부터 좁혀 확인                                               |
+| Rust 빌드 실패                             | `rustup show`로 stable 활성화 확인. 메시지가 nightly 설치를 권하더라도 따르지 않는다         |
 
 표에 없는 증상이거나 위 조치로 해결되지 않을 경우, 자신의 변경을 의심하기 전에
 다음을 점검한다.
@@ -999,8 +1053,9 @@ backfill이 끼는 마이그레이션은 단독 PR로 분리해서 리뷰한다.
 
 ### Rust nightly 관련 안내 (모두 레거시)
 
-저장소의 일부 문서, 코드 주석, 과거 CI 흔적에 **nightly toolchain 관련 안내가
-남아 있을 수 있다.** 이 안내는 모두 레거시이며 더 이상 유효하지 않다.
+과거에는 nightly toolchain을 쓰던 시기가 있었다. 저장소 전체를 훑어보면 현재
+nightly를 지시하는 설정, 워크플로, 문서는 남아 있지 않다. 외부 자료나 오래된
+메모에서 nightly 안내를 보더라도 따르지 않는다.
 
 - 현재 빌드는 `rust-toolchain.toml`에 지정된 **stable 단일 채널**만 사용한다.
 - `rustup toolchain install nightly`, nightly 전용 cargo flag, "WASM은 nightly로
