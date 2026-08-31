@@ -14,10 +14,9 @@
     active?: boolean;
     disabled?: boolean;
     onclick?: () => void;
-    onpointerdown?: (e: PointerEvent) => void;
   };
 
-  let { style, icon, label, keys, active = false, disabled = false, onclick, onpointerdown }: Props = $props();
+  let { style, icon, label, keys, active = false, disabled = false, onclick }: Props = $props();
 </script>
 
 <button
@@ -43,7 +42,7 @@
   aria-pressed={active}
   {disabled}
   {onclick}
-  {onpointerdown}
+  onpointerdown={(e) => e.preventDefault()}
   type="button"
   use:tooltip={{
     message: label,

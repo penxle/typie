@@ -61,6 +61,11 @@
     if (disabled) close();
   });
 
+  $effect(() => {
+    if (!opened) return;
+    return ctx.editor?.retainFocus();
+  });
+
   const handleFocus = () => {
     isFocused = true;
     open();

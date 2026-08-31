@@ -107,7 +107,6 @@
       icon={expanded === 'insert' ? PlusIcon : TypeIcon}
       label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
       onclick={toggle}
-      onpointerdown={(e) => e.preventDefault()}
     />
 
     <VerticalDivider style={css.raw({ height: '12px' })} />
@@ -150,13 +149,7 @@
         pointerEvents: editingDisabled ? 'none' : 'auto',
       })}
     >
-      <ToolbarButton
-        icon={SearchIcon}
-        keys={['Mod', 'F']}
-        label="찾기 및 바꾸기"
-        onclick={() => onSearchClick?.()}
-        onpointerdown={(e) => e.preventDefault()}
-      />
+      <ToolbarButton icon={SearchIcon} keys={['Mod', 'F']} label="찾기 및 바꾸기" onclick={() => onSearchClick?.()} />
     </div>
   </div>
 
@@ -172,13 +165,7 @@
 {#if open}
   <div class={css(rowShell, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="presentation">
     <div bind:this={expandedScrollContainer} id={expandedToolbarId} class={css(row)} role="toolbar" tabindex="-1">
-      <ToolbarButton
-        disabled={documentId === null}
-        icon={ArrowUpDownIcon}
-        label="기본 툴바와 맞바꾸기"
-        onclick={swap}
-        onpointerdown={(e) => e.preventDefault()}
-      />
+      <ToolbarButton disabled={documentId === null} icon={ArrowUpDownIcon} label="기본 툴바와 맞바꾸기" onclick={swap} />
 
       <VerticalDivider style={css.raw({ height: '12px' })} />
 

@@ -4,6 +4,7 @@
   import { Icon } from '@typie/ui/components';
   import { fly } from 'svelte/transition';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import type { Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { TooltipParameter } from '@typie/ui/actions';
@@ -38,6 +39,8 @@
     anchor,
     floating,
   }: Props = $props();
+
+  const ctx = getEditorContext();
 
   const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
     placement,
@@ -74,6 +77,11 @@
     if (disabled && opened) close();
   });
 
+  $effect(() => {
+    if (!opened) return;
+    return ctx.editor?.retainFocus();
+  });
+
   const handleEscape = () => {
     close();
     onEscape?.();
@@ -108,6 +116,7 @@
   aria-label={label}
   {disabled}
   onclick={open}
+  onpointerdown={(e) => e.preventDefault()}
   type="button"
   use:anchorAction
   use:tooltip={{ message: label, keys, arrow: false }}

@@ -352,7 +352,6 @@
       icon={MessageSquarePlusIcon}
       label="코멘트"
       onclick={() => ctx.editor?.requestCommentCompose?.()}
-      onpointerdown={(e) => e.preventDefault()}
     />
   </div>
 
