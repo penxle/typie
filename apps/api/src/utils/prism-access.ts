@@ -1,9 +1,8 @@
 import { TypieError } from '@typie/lib/errors';
 import { eq } from 'drizzle-orm';
 import { db, first, UserPreferences } from '#/db/index.ts';
-import { env } from '#/env.ts';
 import { hasActiveSubscription } from './plan.ts';
-import { evaluatePrismAccess, parseAllowlist } from './prism-access-core.ts';
+import { evaluatePrismAccess } from './prism-access-core.ts';
 import { readPrismCreditBalance } from './prism-credit.ts';
 
 export const assertPrismAccess = async ({ userId, credit }: { userId: string; credit?: { required: number } }) => {
@@ -14,7 +13,6 @@ export const assertPrismAccess = async ({ userId, credit }: { userId: string; cr
     .then(first);
 
   const code = evaluatePrismAccess({
-    allowlisted: parseAllowlist(env.PRISM_BETA_USER_IDS).includes(userId),
     entitled: await hasActiveSubscription({ userId }),
     aiOptIn: preference?.value.aiOptIn === true,
     credit: credit ? { balance: await readPrismCreditBalance(db, userId).then(({ total }) => total), required: credit.required } : null,

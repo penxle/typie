@@ -7,15 +7,21 @@ import type { PrismCommand } from '#/external/prism-core.ts';
 
 const log = logger.getChild('prism');
 
-const catalog = createTtlCache({ load: () => prism.getCatalog(), ttlMs: 60_000, failureTtlMs: 30_000 });
+const catalog = createTtlCache({
+  load: () => prism.getCatalog(),
+  ttlMs: 60_000,
+  failureTtlMs: 30_000,
+  onFailure: (err) => {
+    log.warn('prism catalog unavailable: {*}', { error: err });
+    if (!(err instanceof PrismApiError) || err.code === 'malformed-response') Sentry.captureException(err);
+  },
+});
 
 export const prismCommands = async (): Promise<PrismCommand[] | null> => {
   try {
     const { commands } = await catalog();
     return commands;
-  } catch (err) {
-    log.warn('prism catalog unavailable: {*}', { error: err });
-    if (!(err instanceof PrismApiError) || err.code === 'malformed-response') Sentry.captureException(err);
+  } catch {
     return null;
   }
 };

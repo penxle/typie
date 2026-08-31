@@ -38,13 +38,12 @@ import {
   TableCode,
   validateDbId,
 } from '#/db/index.ts';
-import { env, lane } from '#/env.ts';
+import { lane } from '#/env.ts';
 import { activeRun, newAgentId, prism, PrismApiError } from '#/external/prism.ts';
 import { ensureIngest } from '#/mq/prism-queue.ts';
 import { pubsub } from '#/pubsub.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPrismAccess } from '#/utils/prism-access.ts';
-import { parseAllowlist } from '#/utils/prism-access-core.ts';
 import { prismCommands } from '#/utils/prism-catalog.ts';
 import { projectFrame } from '#/utils/prism-events.ts';
 import { createFrameGate, liveFieldKey, liveSnapshotFrames } from '#/utils/prism-ingest-core.ts';
@@ -448,14 +447,14 @@ PrismWorkflow.implement({
 
 builder.objectFields(User, (t) => ({
   prismAccess: t.boolean({
-    resolve: (self, _, ctx) => ctx.session?.userId === self.id && parseAllowlist(env.PRISM_BETA_USER_IDS).includes(self.id),
+    resolve: () => true,
   }),
 
   prismCommands: t.field({
     type: [PrismCommand],
     nullable: true,
     resolve: async (self, _, ctx) => {
-      if (ctx.session?.userId !== self.id || !parseAllowlist(env.PRISM_BETA_USER_IDS).includes(self.id)) return null;
+      if (ctx.session?.userId !== self.id) return null;
       return prismCommands();
     },
   }),

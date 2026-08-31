@@ -30,7 +30,7 @@
   );
 
   const handleKeydown = async (event: KeyboardEvent) => {
-    if (app.state.prismAccess && (IS_MAC ? event.metaKey : event.ctrlKey) && !event.shiftKey && event.code === 'KeyE') {
+    if ((IS_MAC ? event.metaKey : event.ctrlKey) && !event.shiftKey && event.code === 'KeyE') {
       event.preventDefault();
       const next = !app.preference.current.prismPanelOpen;
       app.preference.current.prismPanelOpen = next;

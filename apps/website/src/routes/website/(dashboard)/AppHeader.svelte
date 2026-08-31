@@ -64,36 +64,34 @@
     <Icon icon={PanelLeftIcon} size={14} />
   </button>
 
-  {#if app.state.prismAccess}
-    <button
-      class={css(button, open ? { backgroundColor: 'surface.muted' } : {})}
-      aria-label={app.state.prismBadge ? 'PRISM 열기/닫기, 확인할 항목 있음' : 'PRISM 열기/닫기'}
-      aria-pressed={open}
-      onclick={() => {
-        const next = !open;
-        app.preference.current.prismPanelOpen = next;
-        mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'header' });
-      }}
-      type="button"
-      use:tooltip={{ message: open ? 'PRISM 닫기' : 'PRISM 열기', keys: ['Mod', 'E'] }}
+  <button
+    class={css(button, open ? { backgroundColor: 'surface.muted' } : {})}
+    aria-label={app.state.prismBadge ? 'PRISM 열기/닫기, 확인할 항목 있음' : 'PRISM 열기/닫기'}
+    aria-pressed={open}
+    onclick={() => {
+      const next = !open;
+      app.preference.current.prismPanelOpen = next;
+      mixpanel.track(next ? 'open_prism_panel' : 'close_prism_panel', { via: 'header' });
+    }}
+    type="button"
+    use:tooltip={{ message: open ? 'PRISM 닫기' : 'PRISM 열기', keys: ['Mod', 'E'] }}
+  >
+    <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
+      <Icon style={css.raw({ color: open ? 'text.default' : 'text.faint' })} icon={PrismIcon} size={14} />
+      {#if app.state.prismBadge}
+        <PrismBadgeDot />
+      {/if}
+    </span>
+    <span
+      class={css({
+        fontSize: '12px',
+        fontWeight: 'semibold',
+        letterSpacing: '[0.04em]',
+        lineHeight: '[1]',
+        color: open ? 'text.default' : 'text.muted',
+      })}
     >
-      <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: open ? 'text.default' : 'text.faint' })} icon={PrismIcon} size={14} />
-        {#if app.state.prismBadge}
-          <PrismBadgeDot />
-        {/if}
-      </span>
-      <span
-        class={css({
-          fontSize: '12px',
-          fontWeight: 'semibold',
-          letterSpacing: '[0.04em]',
-          lineHeight: '[1]',
-          color: open ? 'text.default' : 'text.muted',
-        })}
-      >
-        PRISM
-      </span>
-    </button>
-  {/if}
+      PRISM
+    </span>
+  </button>
 </header>

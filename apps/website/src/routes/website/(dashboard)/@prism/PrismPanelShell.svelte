@@ -23,7 +23,6 @@
   const app = getAppContext();
   const PANEL_HIDDEN_SCALE = 0.96;
   const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
-  const panelVisible = $derived(app.state.prismAccess || app.preference.current.prismPanelOpen);
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
@@ -45,7 +44,7 @@
   });
 </script>
 
-{#if panelVisible && !app.preference.current.zenModeEnabled}
+{#if !app.preference.current.zenModeEnabled}
   <div
     style:width={panelOpen ? `${width}px` : '0px'}
     style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
@@ -73,7 +72,6 @@
     zIndex: 'panel',
   })}
   data-prism-panel-shell
-  hidden={!panelVisible}
 >
   <aside
     bind:this={panel}
@@ -140,24 +138,22 @@
   ></div>
 </div>
 
-{#if panelVisible}
-  <div
-    style:width={`${width}px`}
-    style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
-    style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
-    style:transition-duration={`${panelMotionDuration}ms`}
-    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-    class={css({
-      position: 'absolute',
-      top: '0',
-      right: '0',
-      bottom: '0',
-      zIndex: 'panel',
-      pointerEvents: 'none',
-      backgroundColor: 'surface.default',
-      filter: '[brightness(0.9)]',
-      transitionProperty: '[clip-path, opacity]',
-    })}
-    aria-hidden="true"
-  ></div>
-{/if}
+<div
+  style:width={`${width}px`}
+  style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
+  style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
+  style:transition-duration={`${panelMotionDuration}ms`}
+  style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+  class={css({
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    bottom: '0',
+    zIndex: 'panel',
+    pointerEvents: 'none',
+    backgroundColor: 'surface.default',
+    filter: '[brightness(0.9)]',
+    transitionProperty: '[clip-path, opacity]',
+  })}
+  aria-hidden="true"
+></div>

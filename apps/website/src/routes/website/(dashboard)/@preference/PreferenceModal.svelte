@@ -61,7 +61,6 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_user on User {
         id
-        prismAccess
 
         ...DashboardLayout_PreferenceModal_ProfileTab_user
         ...DashboardLayout_PreferenceModal_SecurityTab_user
@@ -168,16 +167,12 @@
           icon: PrismIcon,
           component: PrismGeneralTab,
         },
-        ...(user.data.prismAccess
-          ? [
-              {
-                path: '/preference/prism/credits',
-                label: '크레딧',
-                icon: PrismCreditIcon,
-                component: PrismCreditsTab,
-              },
-            ]
-          : []),
+        {
+          path: '/preference/prism/credits',
+          label: '크레딧',
+          icon: PrismCreditIcon,
+          component: PrismCreditsTab,
+        },
       ],
     },
     {

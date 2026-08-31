@@ -52,3 +52,38 @@ test('createTtlCache: failureTtlMs 안에서는 같은 실패를 다시 던지�
   assert.equal(await get(), 2);
   assert.equal(await get(), 2);
 });
+
+test('createTtlCache: onFailure는 실제 시도 실패에만 불리고 캐시된 실패에는 불리지 않는다', async () => {
+  let now = 0;
+  let calls = 0;
+  let fail = true;
+  const failures: unknown[] = [];
+  const get = createTtlCache({
+    load: async () => {
+      calls += 1;
+      if (fail) throw new Error(`down${calls}`);
+      return calls;
+    },
+    ttlMs: 100,
+    failureTtlMs: 30,
+    onFailure: (err) => {
+      failures.push(err);
+    },
+    now: () => now,
+  });
+
+  await assert.rejects(get(), /down1/);
+  assert.equal(failures.length, 1);
+  now = 10;
+  await assert.rejects(get(), /down1/);
+  assert.equal(calls, 1);
+  assert.equal(failures.length, 1);
+  now = 30;
+  await assert.rejects(get(), /down2/);
+  assert.equal(calls, 2);
+  assert.equal(failures.length, 2);
+  now = 60;
+  fail = false;
+  assert.equal(await get(), 3);
+  assert.equal(failures.length, 2);
+});

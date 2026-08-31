@@ -1,7 +1,6 @@
 <script lang="ts">
   import { createMutation, createQuery, createSubscription } from '@mearie/svelte';
   import { TypieError } from '@typie/lib/errors';
-  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { onDestroy, untrack } from 'svelte';
   import { Tween } from 'svelte/motion';
@@ -48,13 +47,7 @@
       ]
     >;
   };
-  let { documentId: documentIdProp, entityId: entityIdProp, myId, available, bodyWidth, children }: Props = $props();
-
-  const app = getAppContext();
-
-  // 접근이 없으면 id가 없는 상태로 접는다 — 기존 "문서 없음" 경로가 그대로 답이다.
-  const documentId = $derived(app.state.prismAccess ? documentIdProp : null);
-  const entityId = $derived(app.state.prismAccess ? entityIdProp : null);
+  let { documentId, entityId, myId, available, bodyWidth, children }: Props = $props();
 
   type Seat = { id: string; selection: StableSelection; tone: 'issue' | 'strength' };
   type Spec = {

@@ -48,7 +48,6 @@ export const load: LayoutLoad = async (event) => {
           }
 
           entitled
-          prismAccess
 
           subscription {
             id

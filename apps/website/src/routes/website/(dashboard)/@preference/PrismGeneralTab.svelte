@@ -4,13 +4,14 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Switch } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Dialog, Toast } from '@typie/ui/notification';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
   import PlayIcon from '~icons/lucide/play';
   import SquareIcon from '~icons/lucide/square';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
+  import { AI_OPT_IN_FAILURE_MESSAGE, promptAiOptIn } from '../@prism/lib/ai-opt-in.ts';
   import { createPrismAudioPlayer } from '../@prism/prism-audio';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_PrismGeneralTab_user$key } from '$mearie';
@@ -82,10 +83,10 @@
               },
             },
       );
-      mixpanel.track('ai_opt_in', { enabled });
+      mixpanel.track('ai_opt_in', { enabled, via: 'preferences_ai' });
     } catch {
       aiOptInOverride = undefined;
-      Toast.error('AI 설정을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요');
+      Toast.error(AI_OPT_IN_FAILURE_MESSAGE);
     } finally {
       updatingAiOptIn = false;
     }
@@ -98,17 +99,7 @@
       return;
     }
 
-    Dialog.confirm({
-      title: 'AI 기능을 활성화하시겠어요?',
-      message:
-        '사용자의 글은 AI 모델 학습에 절대 사용되지 않으며, 사용자가 요청할 때만 AI가 사용돼요. 언제든지 설정에서 비활성화할 수 있어요.',
-      action: 'primary',
-      actionLabel: '활성화',
-      actionHandler: async () => {
-        if (!SubscribeModal.gate('preferences_ai')) return;
-        await updateAiOptIn(true);
-      },
-    });
+    promptAiOptIn(() => updateAiOptIn(true));
   };
 
   onMount(() => {
