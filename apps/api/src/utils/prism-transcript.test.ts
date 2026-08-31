@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { materialize } from './prism-transcript.ts';
+import { joinRunRows, materialize } from './prism-transcript.ts';
 import type { StoredEvent } from './prism-transcript.ts';
 
 const agent = { id: 'chat-1', name: 'chat' };
@@ -16,6 +16,27 @@ const ev = (seq: number, kind: string, context: StoredEvent['context'], data: Re
 const run = { agent, run: 1 };
 const turn = { ...run, turn: 1, attempt: 1 };
 const inv = { ...turn, toolCallId: 'c1', invocation: 'inv_1' };
+
+test('run metadata는 DB 행을 기준으로 두고 아직 적재되지 않은 run도 보존한다', () => {
+  const rows = [
+    { id: 'PRRN2', runSeq: 2 },
+    { id: 'PRRN1', runSeq: 1 },
+  ];
+  const runs = [
+    {
+      runSeq: 1,
+      items: [{ kind: 'user' as const, key: 'u1', text: '안녕', at: '2026-08-31T00:00:00.000Z' }],
+    },
+  ];
+
+  assert.deepEqual(
+    joinRunRows(rows, runs).map(({ row, items }) => ({ id: row.id, items: items.map((item) => item.key) })),
+    [
+      { id: 'PRRN1', items: ['u1'] },
+      { id: 'PRRN2', items: [] },
+    ],
+  );
+});
 
 test('워크플로 이벤트는 invocation.started 직후에 끼워 넣어 같은 run 안에 묶인다', () => {
   const session = [

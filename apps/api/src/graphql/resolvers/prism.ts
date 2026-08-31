@@ -63,7 +63,7 @@ import { runSite } from '#/utils/prism-serve.ts';
 import { recordToolResolution, withToolLedger } from '#/utils/prism-tool-calls.ts';
 import { ERROR_MESSAGE } from '#/utils/prism-tool-messages.ts';
 import { prismTools } from '#/utils/prism-tools.ts';
-import { materialize } from '#/utils/prism-transcript.ts';
+import { joinRunRows, materialize } from '#/utils/prism-transcript.ts';
 import { cancelActiveRun, cancelSessionWorkflows, closeRun } from '#/utils/prism-workflows.ts';
 import { entityRefFilter } from '#/utils/prism-workspace.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
@@ -338,16 +338,13 @@ const loadTranscript = async ({ id: sessionId, cursor }: { id: string; cursor: n
   }
 
   const wire = toGraphQL(materialize(storedEvents(events), workflowEvents));
-  const rowOf = new Map(runs.map((run) => [run.runSeq, run]));
-  const shaped: PrismRunShape[] = [];
+  const rowSequences = new Set(runs.map((run) => run.runSeq));
   for (const run of wire.runs) {
-    const row = run.runSeq === null ? undefined : rowOf.get(run.runSeq);
-    if (row === undefined) {
+    if (run.runSeq === null || !rowSequences.has(run.runSeq)) {
       log.warn('prism run row missing for transcript: {sessionId} run {runSeq}', { sessionId, runSeq: run.runSeq });
-      continue;
     }
-    shaped.push({ ...run, row });
   }
+  const shaped: PrismRunShape[] = joinRunRows(runs, wire.runs);
   return { ...wire, cursor: Math.max(wire.cursor, cursor), runs: shaped };
 };
 
@@ -608,7 +605,7 @@ builder.queryFields((t) => ({
 }));
 
 const SendPrismMessageResult = builder.simpleObject('SendPrismMessageResult', {
-  fields: (t) => ({ session: t.field({ type: PrismSession }), runSeq: t.int() }),
+  fields: (t) => ({ session: t.field({ type: PrismSession }), runId: t.id(), runSeq: t.int() }),
 });
 
 builder.mutationFields((t) => ({
@@ -626,13 +623,17 @@ builder.mutationFields((t) => ({
       if (message.length === 0) throw new TypieError({ code: 'empty_message', status: 400 });
       const key = nanoid();
 
-      const attachRunSite = async (sessionId: string, runSeq: number) => {
-        if (!input.siteId) return;
-        await assertSitePermission({ userId: ctx.session.userId, siteId: input.siteId });
-        await db
+      const ensureRun = async (sessionId: string, runSeq: number) => {
+        if (input.siteId) await assertSitePermission({ userId: ctx.session.userId, siteId: input.siteId });
+        return await db
           .insert(PrismRuns)
-          .values({ sessionId, runSeq, siteId: input.siteId, startedAt: dayjs() })
-          .onConflictDoUpdate({ target: [PrismRuns.sessionId, PrismRuns.runSeq], set: { siteId: input.siteId } });
+          .values({ sessionId, runSeq, ...(input.siteId && { siteId: input.siteId }), startedAt: dayjs() })
+          .onConflictDoUpdate({
+            target: [PrismRuns.sessionId, PrismRuns.runSeq],
+            set: { runSeq, ...(input.siteId && { siteId: input.siteId }) },
+          })
+          .returning({ id: PrismRuns.id })
+          .then(firstOrThrow);
       };
 
       if (input.sessionId) {
@@ -648,9 +649,9 @@ builder.mutationFields((t) => ({
           .where(eq(PrismSessions.id, session.id))
           .returning()
           .then(firstOrThrow);
-        await attachRunSite(session.id, runSeq);
+        const run = await ensureRun(session.id, runSeq);
         await ensureIngest({ kind: 'agent', sessionId: session.id });
-        return { session: updated, runSeq };
+        return { session: updated, runId: run.id, runSeq };
       }
       const agentId = newAgentId();
       const { runSeq } = await prism.invokeAgent({ agentId, message, key, metadata: { userId: ctx.session.userId } }).catch(prismError);
@@ -665,9 +666,9 @@ builder.mutationFields((t) => ({
         })
         .returning()
         .then(firstOrThrow);
-      await attachRunSite(session.id, runSeq);
+      const run = await ensureRun(session.id, runSeq);
       await ensureIngest({ kind: 'agent', sessionId: session.id });
-      return { session, runSeq };
+      return { session, runId: run.id, runSeq };
     },
   }),
 

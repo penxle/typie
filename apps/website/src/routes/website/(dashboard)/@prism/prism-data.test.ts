@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { toRunItem } from './prism-data.ts';
+import { fetchTranscript, toRunItem } from './prism-data.ts';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
+
+const { query } = vi.hoisted(() => ({ query: vi.fn() }));
+vi.mock('$lib/graphql/client', () => ({ mearieClient: { query } }));
 
 describe('toRunItem', () => {
   it('PrismUserMessage — userText 별칭을 text로 옮긴다', () => {
@@ -117,5 +120,37 @@ describe('toRunItem', () => {
       key: 'f1',
       at: '2026-08-24T00:00:08.000Z',
     });
+  });
+});
+
+describe('fetchTranscript', () => {
+  it('메시지와 함께 run의 저장 ID·상태·반응을 보존한다', async () => {
+    query.mockResolvedValueOnce({
+      prismSession: {
+        transcript: {
+          cursor: 3,
+          title: null,
+          agentId: 'typie-1',
+          turn: 'IDLE',
+          retrying: false,
+          runs: [
+            {
+              id: 'PRRN1',
+              runSeq: 1,
+              state: 'COMPLETED',
+              reaction: 'UP',
+              reactionNote: '좋았어요',
+              items: [],
+            },
+          ],
+        },
+      },
+    });
+
+    const loaded = await fetchTranscript('PRSS1');
+
+    expect((loaded as { runs?: unknown }).runs).toEqual([
+      { id: 'PRRN1', runSeq: 1, state: 'COMPLETED', reaction: 'UP', reactionNote: '좋았어요' },
+    ]);
   });
 });

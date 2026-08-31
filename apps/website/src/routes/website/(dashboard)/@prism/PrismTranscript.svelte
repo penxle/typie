@@ -16,6 +16,7 @@
   import { labelForRequest } from './lib/tool-labels.ts';
   import PrismMarkdown from './PrismMarkdown.svelte';
   import PrismMessage from './PrismMessage.svelte';
+  import PrismMessageActions from './PrismMessageActions.svelte';
   import PrismToolCalls from './PrismToolCalls.svelte';
   import PrismToolRequest from './PrismToolRequest.svelte';
   import PrismWaitRow from './PrismWaitRow.svelte';
@@ -23,11 +24,13 @@
   import { toolCallLabels, toolCards } from './tools/index.ts';
   import type { ToolPolicy, ToolRequestMessage, Transcript, TranscriptMessage } from '@typie/prism';
   import type { BlockNode } from './lib/markdown.ts';
+  import type { PrismAnswer, PrismPendingMessage } from './prism-chat.svelte.ts';
 
   type Props = {
     transcript: Transcript;
+    answers: PrismAnswer[];
     loading: boolean;
-    pending: string | null;
+    pending: PrismPendingMessage | null;
     sessionId: string | null;
     failedIds: ReadonlySet<string>;
     unavailableMessage?: string;
@@ -37,10 +40,12 @@
     waitSpinnerAnchor?: HTMLElement;
     onResolve: (agentId: string, toolCallId: string, input: unknown) => Promise<void>;
     onRetry: (toolCallId: string) => void;
+    onReact: (runId: string, reaction: 'UP' | 'DOWN' | null, note: string | null) => Promise<boolean>;
   };
 
   let {
     transcript,
+    answers,
     loading,
     pending,
     sessionId,
@@ -52,6 +57,7 @@
     waitSpinnerAnchor = $bindable(),
     onResolve,
     onRetry,
+    onReact,
   }: Props = $props();
 
   // 카드는 작가의 승인을 받는 자리다 — 해소된 요청은 실제로 누가 해소했는지(resolvedBy)에 매이고, 아직 열린 요청만 지금 정책을
@@ -285,7 +291,14 @@
 
   type RenderEntry = (typeof entries)[number];
   type RenderItem =
-    | { kind: 'markdown'; key: string; blocks: BlockNode[]; plain: number; settled: boolean }
+    | {
+        kind: 'markdown';
+        key: string;
+        blocks: BlockNode[];
+        plain: number;
+        settled: boolean;
+        message: Extract<TranscriptMessage, { role: 'assistant' }> | null;
+      }
     | { kind: 'entry'; key: string; entry: RenderEntry };
 
   // assistant 마크다운은 라이브·드레인·봉인 세 국면을 같은 키의 같은 항목으로 잇는다 — 위치 이동 재마운트가 카드를 한 프레임 스켈레톤으로 되돌리지 않도록.
@@ -295,21 +308,31 @@
         const drain = drainOf(entry.key);
         const key = aliases.get(entry.key) ?? entry.key;
         return drain
-          ? { kind: 'markdown', key, blocks: drain.paced.blocks, plain: drain.paced.plain, settled: false }
-          : { kind: 'markdown', key, blocks: parsedBlocks(entry.key, entry.text), plain: Number.MAX_SAFE_INTEGER, settled: true };
+          ? { kind: 'markdown', key, blocks: drain.paced.blocks, plain: drain.paced.plain, settled: false, message: entry }
+          : {
+              kind: 'markdown',
+              key,
+              blocks: parsedBlocks(entry.key, entry.text),
+              plain: Number.MAX_SAFE_INTEGER,
+              settled: true,
+              message: entry,
+            };
       }
 
       return { kind: 'entry', key: entry.key, entry };
     });
 
     if (live && !draining && transcript.live && live.boundary > 0) {
-      items.push({ kind: 'markdown', key: liveKey, blocks: live.blocks, plain: live.plain, settled: false });
+      items.push({ kind: 'markdown', key: liveKey, blocks: live.blocks, plain: live.plain, settled: false, message: null });
     }
 
     return items;
   });
 
-  let prevPending: string | null = null;
+  const answerByKey = $derived(new Map(answers.map((answer) => [answer.key, answer])));
+  const latestAnswerKey = $derived(answers.at(-1)?.key ?? null);
+
+  let prevPending: PrismPendingMessage | null = null;
 
   $effect.pre(() => {
     if (pending !== null && prevPending === null) resumeFollow();
@@ -458,7 +481,8 @@
       overflowY: 'auto',
       scrollbarWidth: 'none',
       paddingX: '16px',
-      paddingY: '16px',
+      paddingTop: '16px',
+      paddingBottom: '40px',
     })}
     onscroll={onScroll}
   >
@@ -490,7 +514,20 @@
             }}
           >
             {#if item.kind === 'markdown'}
-              <PrismMarkdown blocks={item.blocks} plain={item.plain} settled={item.settled} />
+              {@const answer = item.message === null ? undefined : answerByKey.get(item.message.key)}
+              <div class="group" data-message-actions-host={answer ? '' : undefined} data-message-role={answer ? 'assistant' : undefined}>
+                <PrismMarkdown blocks={item.blocks} plain={item.plain} settled={item.settled} />
+                {#if item.settled && answer && item.message !== null && item.message.text !== null}
+                  <PrismMessageActions
+                    at={item.message.at}
+                    {onReact}
+                    persistent={answer.key === latestAnswerKey}
+                    role="assistant"
+                    run={answer.run}
+                    text={item.message.text}
+                  />
+                {/if}
+              </div>
             {:else if item.entry.role === 'tool-calls'}
               <PrismToolCalls count={item.entry.count} rows={item.entry.rows} />
             {:else if item.entry.role === 'tool-request'}
@@ -528,22 +565,13 @@
 
         {#if pending !== null}
           <div
-            class={css({
-              alignSelf: 'flex-end',
-              maxWidth: '[86%]',
-              paddingX: '12px',
-              paddingY: '8px',
-              borderRadius: '12px',
-              borderBottomRightRadius: '2px',
-              backgroundColor: 'surface.muted',
-              fontSize: '14px',
-              lineHeight: '[1.6]',
-              whiteSpace: 'pre-wrap',
+            class={flex({
+              flexDirection: 'column',
               animation: '[rise-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both]',
               _motionReduce: { animation: 'none' },
             })}
           >
-            {pending}
+            <PrismMessage message={pending} />
           </div>
         {/if}
 

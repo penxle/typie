@@ -1,7 +1,7 @@
 // 순수 — env·DB·네트워크 import 없음(node:test 직접 로드)
 import { applyFrame, emptyTranscript } from '@typie/prism';
 import { projectFrame } from './prism-events.ts';
-import type { Context, Transcript } from '@typie/prism';
+import type { Context, RunItemsWire, Transcript } from '@typie/prism';
 
 export type StoredEvent = {
   seq: number;
@@ -10,6 +10,11 @@ export type StoredEvent = {
   loggedAt: number;
   context: Context | null;
   data: Record<string, unknown>;
+};
+
+export const joinRunRows = <Row extends { runSeq: number }>(rows: Row[], runs: RunItemsWire[]): (RunItemsWire & { row: Row })[] => {
+  const itemsOf = new Map(runs.flatMap((run) => (run.runSeq === null ? [] : [[run.runSeq, run.items] as const])));
+  return rows.toSorted((a, b) => a.runSeq - b.runSeq).map((row) => ({ runSeq: row.runSeq, items: itemsOf.get(row.runSeq) ?? [], row }));
 };
 
 const workflowIdOf = (event: StoredEvent): string | null => {

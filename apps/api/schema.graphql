@@ -1865,6 +1865,7 @@ input SendPrismMessageInput {
 }
 
 type SendPrismMessageResult {
+  runId: ID!
   runSeq: Int!
   session: PrismSession!
 }

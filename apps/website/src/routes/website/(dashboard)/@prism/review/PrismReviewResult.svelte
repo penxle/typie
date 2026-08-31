@@ -2,11 +2,9 @@
   import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { autosize } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import ArrowUpIcon from '~icons/lucide/arrow-up';
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import RepeatIcon from '~icons/lucide/repeat';
   import SparklesIcon from '~icons/lucide/sparkles';
@@ -16,7 +14,8 @@
   import { goto } from '$app/navigation';
   import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
-  import { expand, swap } from '../lib/motion.ts';
+  import { expand } from '../lib/motion.ts';
+  import PrismReactionNote from '../PrismReactionNote.svelte';
   import PrismReviewDetail from './PrismReviewDetail.svelte';
   import type { Component } from 'svelte';
   import type { ReviewRound } from './round-view.ts';
@@ -58,16 +57,6 @@
   let sending = $state(false);
   let detailOpen = $state(false);
 
-  let noteEl = $state<HTMLElement>();
-  let noteFrom = $state<number>();
-  let prevNoteMode: string | undefined;
-
-  $effect.pre(() => {
-    const mode = !editing && round.reactionNote ? 'saved' : 'draft';
-    if (prevNoteMode !== undefined && mode !== prevNoteMode) noteFrom = noteEl?.offsetHeight;
-    prevNoteMode = mode;
-  });
-
   const send = async (roundId: string, value: 'DOWN' | 'UP' | null, text: string | null) => {
     if (sending) {
       return false;
@@ -92,9 +81,13 @@
     const clearing = (round.reaction ?? null) === value;
     const ok = clearing ? await send(round.id, null, null) : await send(round.id, value, kept);
 
-    if (ok && clearing) {
-      note = '';
-      editing = false;
+    if (ok) {
+      if (clearing) {
+        note = '';
+        editing = false;
+      } else {
+        editing = kept === null;
+      }
     }
   };
 
@@ -242,97 +235,7 @@
 
   {#if reaction !== null}
     <div class={css({ marginTop: '10px' })} transition:expand>
-      <div bind:this={noteEl}>
-        {#if round.reactionNote && !editing}
-          {@const saved = round.reactionNote}
-          <div class={flex({ alignItems: 'center', gap: '8px' })} in:swap={{ box: noteEl, from: noteFrom }}>
-            <p
-              class={css({
-                flexGrow: '1',
-                minWidth: '0',
-                fontSize: '12px',
-                lineHeight: '[1.55]',
-                color: 'text.subtle',
-                whiteSpace: 'pre-wrap',
-              })}
-            >
-              {saved}
-            </p>
-            <button
-              class={css({
-                flexShrink: '0',
-                fontSize: '11px',
-                fontWeight: 'semibold',
-                color: 'text.subtle',
-                _hover: { color: 'text.default' },
-              })}
-              onclick={() => {
-                note = saved;
-                editing = true;
-              }}
-              type="button"
-            >
-              수정
-            </button>
-          </div>
-        {:else}
-          <div
-            class={flex({
-              alignItems: 'flex-end',
-              gap: '6px',
-              paddingLeft: '10px',
-              paddingRight: '4px',
-              paddingY: '4px',
-              borderWidth: '1px',
-              borderColor: 'border.default',
-              borderRadius: '8px',
-              backgroundColor: 'surface.subtle',
-            })}
-            in:swap={{ box: noteEl, from: noteFrom }}
-          >
-            <textarea
-              class={css({
-                flexGrow: '1',
-                minWidth: '0',
-                maxHeight: '120px',
-                paddingY: '3px',
-                fontSize: '12px',
-                lineHeight: '[1.5]',
-                backgroundColor: 'transparent',
-                resize: 'none',
-                outline: 'none',
-                _placeholder: { color: 'text.faint' },
-              })}
-              onkeydown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-                  event.preventDefault();
-                  void saveNote();
-                }
-              }}
-              placeholder="몇 자 덧붙이기"
-              rows={1}
-              bind:value={note}
-              use:autosize={{ value: note }}></textarea>
-            <button
-              class={flex({
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: '0',
-                size: '22px',
-                borderRadius: 'full',
-                backgroundColor: 'surface.dark',
-                color: 'text.bright',
-              })}
-              aria-label="남기기"
-              disabled={sending}
-              onclick={() => void saveNote()}
-              type="button"
-            >
-              <Icon icon={ArrowUpIcon} size={10} />
-            </button>
-          </div>
-        {/if}
-      </div>
+      <PrismReactionNote onSubmit={() => void saveNote()} savedNote={round.reactionNote ?? null} {sending} bind:editing bind:draft={note} />
     </div>
   {/if}
 </div>

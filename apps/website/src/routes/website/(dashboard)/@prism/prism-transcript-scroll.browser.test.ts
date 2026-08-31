@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import PrismTranscript from './PrismTranscript.svelte';
 import { reactiveProps } from './PrismTranscript.test-props.svelte.ts';
 import type { Transcript, TranscriptMessage } from '@typie/prism';
+import type { PrismPendingMessage } from './prism-chat.svelte.ts';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
@@ -38,14 +39,16 @@ describe('PRISM transcript bottom follow', () => {
     const messages = Array.from({ length: 30 }, (_, index) => userMessage(index));
     const props = reactiveProps({
       transcript: transcriptWith(messages),
+      answers: [],
       loading: false,
-      pending: null as string | null,
+      pending: null as PrismPendingMessage | null,
       sessionId: 'session-1' as string | null,
       failedIds: new Set<string>(),
       reconnecting: false,
       policy: 'STANDARD' as const,
       onResolve: vi.fn().mockResolvedValue(undefined),
       onRetry: vi.fn(),
+      onReact: vi.fn().mockResolvedValue(true),
     });
     const target = document.createElement('div');
     Object.assign(target.style, { display: 'flex', flexDirection: 'column', height: '320px', width: '360px' });

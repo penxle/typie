@@ -1,9 +1,28 @@
 import { applyFrame, emptyTranscript } from '@typie/prism';
-import type { ProjectedStreamFrame, Transcript } from '@typie/prism';
+import type { ProjectedStreamFrame, Transcript, TranscriptMessage } from '@typie/prism';
+import type { PrismRunMeta, PrismTranscriptSnapshot } from './prism-data.ts';
+
+export type PrismAnswer = { key: string; run: PrismRunMeta };
+export type PrismPendingMessage = Extract<TranscriptMessage, { role: 'user' }>;
+
+const answerKeys = (transcript: Transcript): Record<number, string> => {
+  const keys: Record<number, string> = {};
+  let runSeq: number | null = null;
+
+  for (const message of transcript.messages) {
+    if (message.role === 'user') {
+      runSeq = message.runSeq;
+    } else if (runSeq !== null && message.role === 'assistant' && message.text !== null) {
+      keys[runSeq] = message.key;
+    }
+  }
+
+  return keys;
+};
 
 export type PrismChatDeps = {
-  load: (sessionId: string) => Promise<Transcript>;
-  send: (sessionId: string | null, message: string) => Promise<{ sessionId: string; runSeq: number }>;
+  load: (sessionId: string) => Promise<PrismTranscriptSnapshot>;
+  send: (sessionId: string | null, message: string) => Promise<{ sessionId: string; runId: string; runSeq: number }>;
   cancel: (sessionId: string) => Promise<void>;
 };
 
@@ -13,8 +32,10 @@ export const createPrismChat = (deps: PrismChatDeps) => {
   let error = $state<string | null>(null);
   let sessionId = $state<string | null>(null);
   let seedCursor = $state(0);
-  let pending = $state<string | null>(null);
+  let pending = $state<PrismPendingMessage | null>(null);
   let loadGen = $state(0);
+  let runs = $state<PrismRunMeta[]>([]);
+  let terminalStates: Partial<Record<number, PrismRunMeta['state']>> = {};
 
   const load = async (id: string | null) => {
     if (id !== null && id === sessionId && error === null) {
@@ -28,6 +49,8 @@ export const createPrismChat = (deps: PrismChatDeps) => {
     seedCursor = 0;
     pending = null;
     transcript = emptyTranscript();
+    runs = [];
+    terminalStates = {};
 
     if (id === null) {
       loading = false;
@@ -42,11 +65,9 @@ export const createPrismChat = (deps: PrismChatDeps) => {
         return;
       }
 
-      transcript = next;
-      seedCursor = next.cursor;
-      if (next.messages.length > 0) {
-        pending = null;
-      }
+      transcript = next.transcript;
+      runs = next.runs;
+      seedCursor = next.transcript.cursor;
     } catch {
       if (gen !== loadGen) {
         return;
@@ -79,6 +100,17 @@ export const createPrismChat = (deps: PrismChatDeps) => {
     get pending() {
       return pending;
     },
+    get runs() {
+      return runs;
+    },
+    get answers(): PrismAnswer[] {
+      const keyOf = answerKeys(transcript);
+      return runs.flatMap((run) => {
+        if (run.state !== 'COMPLETED') return [];
+        const key = keyOf[run.runSeq];
+        return key === undefined ? [] : [{ key, run }];
+      });
+    },
     get generation() {
       return loadGen;
     },
@@ -89,17 +121,40 @@ export const createPrismChat = (deps: PrismChatDeps) => {
       if (frame.type === 'event' && frame.event.kind === 'run.started') {
         pending = null;
       }
+      if (frame.type === 'event') {
+        const state =
+          frame.event.kind === 'run.completed'
+            ? 'COMPLETED'
+            : frame.event.kind === 'run.failed'
+              ? 'FAILED'
+              : frame.event.kind === 'run.canceled'
+                ? 'CANCELED'
+                : null;
+        const runSeq = frame.event.context.run;
+        if (state !== null && runSeq !== undefined) {
+          terminalStates[runSeq] = state;
+          runs = runs.map((run) => (run.runSeq === runSeq ? { ...run, state } : run));
+        }
+      }
     },
     async send(message: string) {
       const gen = loadGen;
       error = null;
-      pending = message;
+      pending = { role: 'user', key: 'pending', text: message, at: Date.now(), runSeq: null };
 
       try {
         const result = await deps.send(sessionId, message);
         if (gen !== loadGen) return result;
 
         sessionId = result.sessionId;
+        const run: PrismRunMeta = {
+          id: result.runId,
+          runSeq: result.runSeq,
+          state: terminalStates[result.runSeq] ?? 'RUNNING',
+          reaction: null,
+          reactionNote: null,
+        };
+        runs = [...runs.filter((item) => item.runSeq !== result.runSeq), run];
         return result;
       } catch (err) {
         if (gen === loadGen) pending = null;
@@ -110,6 +165,9 @@ export const createPrismChat = (deps: PrismChatDeps) => {
       if (sessionId !== null) {
         await deps.cancel(sessionId);
       }
+    },
+    updateRunReaction(runId: string, reaction: PrismRunMeta['reaction'], reactionNote: string | null) {
+      runs = runs.map((run) => (run.id === runId ? { ...run, reaction, reactionNote } : run));
     },
   };
 };
