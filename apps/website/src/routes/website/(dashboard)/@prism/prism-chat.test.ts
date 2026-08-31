@@ -76,6 +76,32 @@ describe('createPrismChat.load', () => {
     expect(chat.sessionId).toBe('PRSS2');
     expect(chat.seedCursor).toBe(9);
   });
+
+  it('새 대화로 전환하면 아직 스트림에 합류하지 않은 사용자 메시지를 비운다', async () => {
+    const chat = createPrismChat(deps({ send: vi.fn().mockResolvedValue({ sessionId: 'PRSS1', runSeq: 1 }) }));
+
+    await chat.send('안녕');
+    expect(chat.pending).toBe('안녕');
+
+    await chat.load(null);
+
+    expect(chat.sessionId).toBeNull();
+    expect(chat.pending).toBeNull();
+  });
+
+  it('새 대화 전환 뒤 끝난 이전 전송은 현재 세션을 되돌리지 않는다', async () => {
+    let resolveSend!: (value: { sessionId: string; runSeq: number }) => void;
+    const send = vi.fn().mockImplementation(() => new Promise((resolve) => (resolveSend = resolve)));
+    const chat = createPrismChat(deps({ send }));
+
+    const sending = chat.send('안녕');
+    await chat.load(null);
+    resolveSend({ sessionId: 'PRSS1', runSeq: 1 });
+    await sending;
+
+    expect(chat.sessionId).toBeNull();
+    expect(chat.pending).toBeNull();
+  });
 });
 
 describe('createPrismChat.receive', () => {

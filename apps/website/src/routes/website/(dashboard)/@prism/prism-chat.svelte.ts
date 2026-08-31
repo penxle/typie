@@ -26,6 +26,7 @@ export const createPrismChat = (deps: PrismChatDeps) => {
     sessionId = id;
     error = null;
     seedCursor = 0;
+    pending = null;
     transcript = emptyTranscript();
 
     if (id === null) {
@@ -90,15 +91,18 @@ export const createPrismChat = (deps: PrismChatDeps) => {
       }
     },
     async send(message: string) {
+      const gen = loadGen;
       error = null;
       pending = message;
 
       try {
         const result = await deps.send(sessionId, message);
+        if (gen !== loadGen) return result;
+
         sessionId = result.sessionId;
         return result;
       } catch (err) {
-        pending = null;
+        if (gen === loadGen) pending = null;
         throw err;
       }
     },
