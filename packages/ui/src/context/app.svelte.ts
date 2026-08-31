@@ -10,6 +10,7 @@ export type AppPreference = {
 
   prismPanelOpen: boolean;
   prismPanelWidth: number;
+  prismNotificationSoundEnabled: boolean;
   prismWelcomeObjectEnabled: boolean;
 
   defaultPrimaryToolbar: 'insert' | 'format';
@@ -65,6 +66,7 @@ type AppState = {
   prismAccess: boolean;
   sidebarPeek: boolean;
   prismBadge: boolean;
+  prismViewingSessionId: string | null;
 
   subscribed: boolean;
 
@@ -118,6 +120,7 @@ export const setupAppContext = (userId: string) => {
     prismAccess: false,
     sidebarPeek: false,
     prismBadge: false,
+    prismViewingSessionId: null,
 
     subscribed: false,
 
@@ -146,6 +149,7 @@ export const setupAppContext = (userId: string) => {
 
       prismPanelOpen: false,
       prismPanelWidth: 420,
+      prismNotificationSoundEnabled: true,
       prismWelcomeObjectEnabled: true,
 
       defaultPrimaryToolbar: 'format',
