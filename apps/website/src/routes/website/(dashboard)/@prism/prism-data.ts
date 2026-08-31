@@ -2,7 +2,17 @@ import { fromGraphQL } from '@typie/prism';
 import { mearieClient } from '$lib/graphql/client';
 import { graphql } from '$mearie';
 import type { DataOf } from '@mearie/svelte';
-import type { ProjectedStreamFrame, RunItemWire, Transcript, TranscriptWire } from '@typie/prism';
+import type { ProjectedStreamFrame, RunItemWire, RunStateWire, Transcript, TranscriptWire } from '@typie/prism';
+
+export type PrismRunMeta = {
+  id: string;
+  runSeq: number;
+  state: RunStateWire;
+  reaction: 'UP' | 'DOWN' | null;
+  reactionNote: string | null;
+};
+
+export type PrismTranscriptSnapshot = { transcript: Transcript; runs: PrismRunMeta[] };
 
 const transcriptQuery = graphql(`
   query DashboardLayout_PrismPanel_Transcript_Query($sessionId: ID!) {
@@ -18,6 +28,8 @@ const transcriptQuery = graphql(`
           id
           runSeq
           state
+          reaction
+          reactionNote
           items {
             __typename
             ... on PrismUserMessage {
@@ -182,7 +194,7 @@ export const toRunItem = (item: TranscriptQueryItem): RunItemWire => {
   }
 };
 
-export const fetchTranscript = async (sessionId: string): Promise<Transcript> => {
+export const fetchTranscript = async (sessionId: string): Promise<PrismTranscriptSnapshot> => {
   const data = await mearieClient.query(transcriptQuery, { sessionId }, { fetchPolicy: 'network-only' });
   const { transcript } = data.prismSession;
 
@@ -199,5 +211,14 @@ export const fetchTranscript = async (sessionId: string): Promise<Transcript> =>
     })),
   };
 
-  return fromGraphQL(wire);
+  return {
+    transcript: fromGraphQL(wire),
+    runs: transcript.runs.map((run) => ({
+      id: run.id,
+      runSeq: run.runSeq,
+      state: run.state,
+      reaction: run.reaction ?? null,
+      reactionNote: run.reactionNote ?? null,
+    })),
+  };
 };

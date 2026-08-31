@@ -183,6 +183,7 @@
     graphql(`
       mutation DashboardLayout_PrismPanel_Send_Mutation($input: SendPrismMessageInput!) {
         sendPrismMessage(input: $input) {
+          runId
           runSeq
 
           session {
@@ -202,6 +203,18 @@
       mutation DashboardLayout_PrismPanel_Cancel_Mutation($input: CancelPrismRunInput!) {
         cancelPrismRun(input: $input) {
           id
+        }
+      }
+    `),
+  );
+
+  const [reactPrismRun] = createMutation(
+    graphql(`
+      mutation DashboardLayout_PrismPanel_ReactRun_Mutation($input: ReactPrismRunInput!) {
+        reactPrismRun(input: $input) {
+          id
+          reaction
+          reactionNote
         }
       }
     `),
@@ -261,7 +274,7 @@
       const resp = await sendPrismMessage({
         input: { sessionId: sessionId ?? undefined, message, siteId: currentSiteId, toolPolicy: sessionId ? undefined : pendingPolicy },
       });
-      return { sessionId: resp.sendPrismMessage.session.id, runSeq: resp.sendPrismMessage.runSeq };
+      return { sessionId: resp.sendPrismMessage.session.id, runId: resp.sendPrismMessage.runId, runSeq: resp.sendPrismMessage.runSeq };
     },
     cancel: async (sessionId) => {
       await cancelPrismRun({ input: { sessionId } });
@@ -333,6 +346,21 @@
 
   const resolveTool = async (agentId: string, toolCallId: string, input: unknown) => {
     await resolveToolForSession(chat.sessionId, chat.transcript.agentId, agentId, toolCallId, input);
+  };
+
+  const reactRun = async (runId: string, reaction: 'UP' | 'DOWN' | null, note: string | null) => {
+    try {
+      const response = await reactPrismRun({ input: { runId, reaction: reaction ?? undefined, note: note ?? undefined } });
+      chat.updateRunReaction(
+        response.reactPrismRun.id,
+        response.reactPrismRun.reaction ?? null,
+        response.reactPrismRun.reactionNote ?? null,
+      );
+      return true;
+    } catch {
+      Toast.error('반응을 남기지 못했어요');
+      return false;
+    }
   };
 
   const autoResolver = new AutoResolver({
@@ -1079,8 +1107,10 @@
 
     {#key chat.generation}
       <PrismTranscript
+        answers={chat.answers}
         failedIds={autoResolver.failedIds}
         loading={chat.loading}
+        onReact={reactRun}
         onResolve={resolveTool}
         onRetry={(toolCallId) => autoResolver.retry(toolCallId)}
         onSpinnerPlaybackChange={(startedAt) => (indicatorSpinnerPlaybackStartedAt = startedAt)}
