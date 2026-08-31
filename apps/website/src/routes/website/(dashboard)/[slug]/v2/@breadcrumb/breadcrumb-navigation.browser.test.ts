@@ -135,4 +135,17 @@ describe('breadcrumb navigation keyboard interaction', () => {
     expect(getComputedStyle(currentTrigger).backgroundColor).not.toBe(closedBackground);
     expect(getComputedStyle(currentTrigger).color).not.toBe(closedColor);
   });
+
+  it('closes when the open segment trigger is clicked again', async () => {
+    await mountFixture();
+    const currentTrigger = trigger('Current document');
+    if (!currentTrigger) throw new Error('Missing current breadcrumb trigger');
+
+    await userEvent.click(currentTrigger);
+    await expect.poll(popup).not.toBeNull();
+
+    await userEvent.click(currentTrigger);
+    await expect.poll(popup).toBeNull();
+    expect(currentTrigger.getAttribute('aria-expanded')).toBe('false');
+  });
 });
