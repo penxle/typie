@@ -51,6 +51,7 @@ export const toolCallLabels: Record<string, string | undefined> = {
   'outline-document': '문서 구조를 살펴봤어요',
   'create-folders': '폴더를 만들었어요',
   'create-documents': '문서를 만들었어요',
+  'create-dividers': '구분선을 만들었어요',
   'update-documents': '문서 제목을 바꿨어요',
   'update-folders': '폴더 이름을 바꿨어요',
   'edit-document': '문서 파일을 고쳤어요',

@@ -41,6 +41,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   'outline-document': { resolver: 'server', tier: 'read' },
   'create-folders': { resolver: 'server', tier: 'safe' },
   'create-documents': { resolver: 'server', tier: 'safe' },
+  'create-dividers': { resolver: 'server', tier: 'safe' },
   'update-documents': { resolver: 'server', tier: 'safe' },
   'update-folders': { resolver: 'server', tier: 'safe' },
   'edit-document': { resolver: 'server', tier: 'safe' },

@@ -9,6 +9,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
   db,
+  Dividers,
   DocumentComments,
   DocumentCommentThreads,
   Documents,
@@ -24,6 +25,7 @@ import {
 import { env } from '#/env.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import {
+  createDividerCore,
   createDocumentCore,
   createFolderCore,
   deleteEntitiesCore,
@@ -43,6 +45,7 @@ import { snapshotManuscript } from './prism-manuscript.ts';
 import { ERROR_MESSAGE } from './prism-tool-messages.ts';
 import {
   COMMENT_PAGE_SIZE,
+  CreateDividersInput,
   CreateDocumentsInput,
   CreateFoldersInput,
   CreateNotesInput,
@@ -172,7 +175,6 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
   const inScope = and(
     eq(Entities.siteId, ctx.siteId),
     eq(Entities.state, EntityState.ACTIVE),
-    ne(Entities.type, EntityType.DIVIDER),
     scope === null ? isNull(Entities.parentId) : eq(Entities.parentId, scope.entityId),
   );
   const total = await db
@@ -193,12 +195,12 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
         WITH RECURSIVE descendants AS (
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
           FROM ${Entities}
-          WHERE ${inArray(Entities.parentId, roots)} AND ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
+          WHERE ${inArray(Entities.parentId, roots)} AND ${eq(Entities.state, EntityState.ACTIVE)}
           UNION ALL
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.order}
           FROM ${Entities}
           JOIN descendants ON ${Entities.parentId} = descendants.id
-          WHERE ${eq(Entities.state, EntityState.ACTIVE)} AND ${ne(Entities.type, EntityType.DIVIDER)}
+          WHERE ${eq(Entities.state, EntityState.ACTIVE)}
         )
         SELECT id, parent_id FROM descendants ORDER BY "order" ASC
       `)
@@ -394,8 +396,9 @@ const readSharing = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = ReadSharingInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  const entityIds = await resolveEntityIds(ctx, parsed.data.ids);
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  const resolved = await resolveEntityIds(ctx, parsed.data.ids, DOCUMENT_OR_FOLDER);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
+  const entityIds = resolved.entityIds;
 
   const rows = await db
     .select({ entityId: Entities.id, visibility: Entities.visibility, permalink: Entities.permalink, password: Documents.password })
@@ -527,8 +530,12 @@ const listIcons = async (_ctx: PrismToolContext, input: unknown) => {
 const NOT_FOUND_FOLDER = '그 폴더를 찾지 못했어요 — list-entities로 다시 확인하세요.';
 export const NOT_FOUND_DOCUMENT = '그 문서를 찾지 못했어요 — search-entities나 list-entities로 문서를 다시 찾아보세요.';
 const NOT_FOUND_TARGETS = '일부 대상을 찾지 못했어요 — list-entities로 id를 다시 확인하세요.';
+const DIVIDER_NOT_ALLOWED = '구분선에는 할 수 없는 일이에요 — 문서나 폴더를 주세요.';
 const NOT_FOUND_NOTE = '그 노트를 찾지 못했어요 — list-notes로 다시 확인하세요.';
 const INVALID_COLOR = '그 색은 없어요 — 목록에 있는 색만 쓸 수 있어요.';
+const DOCUMENT_ONLY = [EntityType.DOCUMENT] as const;
+const DOCUMENT_OR_FOLDER = [EntityType.DOCUMENT, EntityType.FOLDER] as const;
+const ANY_ENTITY = Object.values(EntityType);
 
 const folderEntityId = async (ctx: PrismToolContext, folderId: string): Promise<string | null> =>
   await ctx.executor
@@ -558,10 +565,12 @@ const entityRefsOf = async (
       subtitle: Documents.subtitle,
       folderId: Folders.id,
       name: Folders.name,
+      dividerId: Dividers.id,
     })
     .from(Entities)
     .leftJoin(Documents, eq(Documents.entityId, Entities.id))
     .leftJoin(Folders, eq(Folders.entityId, Entities.id))
+    .leftJoin(Dividers, eq(Dividers.entityId, Entities.id))
     .where(and(inArray(Entities.id, unique), eq(Entities.siteId, siteId), eq(Entities.state, state)));
 
   const refs = new Map<string, EntityRef>();
@@ -571,6 +580,8 @@ const entityRefsOf = async (
       refs.set(row.entityId, { kind: 'document', documentId: row.documentId, title: row.title, subtitle: row.subtitle, ...base });
     } else if (row.folderId !== null && row.name !== null) {
       refs.set(row.entityId, { kind: 'folder', folderId: row.folderId, name: row.name, ...base });
+    } else if (row.dividerId !== null) {
+      refs.set(row.entityId, { kind: 'divider', dividerId: row.dividerId, entityId: row.entityId });
     }
   }
 
@@ -584,12 +595,12 @@ const refsInOrder = (entityIds: string[], refs: Map<string, EntityRef>): EntityR
   });
 
 const resolveDocumentIds = async (ctx: PrismToolContext, ids: string[]): Promise<Map<string, string> | null> => {
-  const entityIds = await resolveEntityIdMap(ctx, ids);
-  if (entityIds === null) return null;
-  const refs = await entityRefsOf(ctx.executor, ctx.siteId, [...entityIds.values()]);
+  const resolved = await resolveEntityIdMap(ctx, ids, DOCUMENT_ONLY);
+  if (!resolved.ok) return null;
+  const refs = await entityRefsOf(ctx.executor, ctx.siteId, [...resolved.map.values()]);
 
   const documentIds = new Map<string, string>();
-  for (const [id, entityId] of entityIds) {
+  for (const [id, entityId] of resolved.map) {
     const ref = refs.get(entityId);
     if (ref?.kind !== 'document') return null;
     documentIds.set(id, ref.documentId);
@@ -599,8 +610,8 @@ const resolveDocumentIds = async (ctx: PrismToolContext, ids: string[]): Promise
 };
 
 export const documentRefOf = async (ctx: PrismToolContext, id: string): Promise<(EntityRef & { kind: 'document' }) | null> => {
-  const entityIds = await resolveEntityIdMap(ctx, [id]);
-  const entityId = entityIds?.get(id);
+  const resolved = await resolveEntityIdMap(ctx, [id], DOCUMENT_ONLY);
+  const entityId = resolved.ok ? resolved.map.get(id) : undefined;
   if (entityId === undefined) return null;
   const refs = await entityRefsOf(ctx.executor, ctx.siteId, [entityId]);
   const ref = refs.get(entityId);
@@ -629,49 +640,75 @@ export const entityRefFilter = (ids: string[]): SQL | undefined =>
     inArray(Entities.id, idsOfKind(ids, 'entity')),
     inArray(Documents.id, idsOfKind(ids, 'document')),
     inArray(Folders.id, idsOfKind(ids, 'folder')),
+    inArray(Dividers.id, idsOfKind(ids, 'divider')),
   );
 
 type ResolvedEntity = { entityId: string; deletedAt: Dayjs | null };
 
-const resolveEntityRefs = async (ctx: PrismToolContext, ids: string[], state: EntityState): Promise<Map<string, ResolvedEntity>> => {
+const resolveEntityRefs = async (
+  ctx: PrismToolContext,
+  ids: string[],
+  state: EntityState,
+  accept: readonly EntityType[],
+): Promise<{ refs: Map<string, ResolvedEntity>; rejected: boolean }> => {
   const wanted = new Map<string, EntityRefKind>();
   for (const id of ids) {
     const kind = entityRefKind(id);
     if (kind !== null) wanted.set(id, kind);
   }
-  if (wanted.size === 0) return new Map();
+  if (wanted.size === 0) return { refs: new Map(), rejected: false };
 
   const rows = await ctx.executor
-    .select({ entityId: Entities.id, deletedAt: Entities.deletedAt, documentId: Documents.id, folderId: Folders.id })
+    .select({
+      entityId: Entities.id,
+      type: Entities.type,
+      deletedAt: Entities.deletedAt,
+      documentId: Documents.id,
+      folderId: Folders.id,
+      dividerId: Dividers.id,
+    })
     .from(Entities)
     .leftJoin(Documents, eq(Documents.entityId, Entities.id))
     .leftJoin(Folders, eq(Folders.entityId, Entities.id))
+    .leftJoin(Dividers, eq(Dividers.entityId, Entities.id))
     .where(and(eq(Entities.siteId, ctx.siteId), eq(Entities.state, state), entityRefFilter([...wanted.keys()])));
 
   const refs = new Map<string, ResolvedEntity>();
+  let rejected = false;
   for (const row of rows) {
+    if (!accept.includes(row.type)) {
+      rejected = true;
+      continue;
+    }
     const ref = { entityId: row.entityId, deletedAt: row.deletedAt };
     if (wanted.get(row.entityId) === 'entity') refs.set(row.entityId, ref);
     if (row.documentId !== null && wanted.get(row.documentId) === 'document') refs.set(row.documentId, ref);
     if (row.folderId !== null && wanted.get(row.folderId) === 'folder') refs.set(row.folderId, ref);
+    if (row.dividerId !== null && wanted.get(row.dividerId) === 'divider') refs.set(row.dividerId, ref);
   }
 
-  return refs;
+  return { refs, rejected };
 };
 
-const resolveEntityIdMap = async (ctx: PrismToolContext, ids: string[]): Promise<Map<string, string> | null> => {
+type Resolution = { ok: true; map: Map<string, string> } | { ok: false; reason: 'not-found' | 'rejected' };
+
+const resolveEntityIdMap = async (ctx: PrismToolContext, ids: string[], accept: readonly EntityType[]): Promise<Resolution> => {
   const unique = [...new Set(ids)];
-  const refs = await resolveEntityRefs(ctx, unique, EntityState.ACTIVE);
-  if (refs.size !== unique.length) return null;
+  const { refs, rejected } = await resolveEntityRefs(ctx, unique, EntityState.ACTIVE, accept);
+  if (refs.size !== unique.length) return { ok: false, reason: rejected ? 'rejected' : 'not-found' };
 
-  return new Map([...refs].map(([id, ref]) => [id, ref.entityId]));
+  return { ok: true, map: new Map([...refs].map(([id, ref]) => [id, ref.entityId])) };
 };
 
-const resolveEntityIds = async (ctx: PrismToolContext, ids: string[]): Promise<string[] | null> => {
-  const map = await resolveEntityIdMap(ctx, ids);
-  if (map === null) return null;
+const resolveEntityIds = async (
+  ctx: PrismToolContext,
+  ids: string[],
+  accept: readonly EntityType[],
+): Promise<{ ok: true; entityIds: string[] } | { ok: false; reason: 'not-found' | 'rejected' }> => {
+  const resolved = await resolveEntityIdMap(ctx, ids, accept);
+  if (!resolved.ok) return resolved;
 
-  return [...new Set(map.values())];
+  return { ok: true, entityIds: [...new Set(resolved.map.values())] };
 };
 
 const scopedNotes = async (ctx: PrismToolContext, noteIds: string[]): Promise<boolean> => {
@@ -684,7 +721,7 @@ const scopedNotes = async (ctx: PrismToolContext, noteIds: string[]): Promise<bo
   return rows.length === unique.length;
 };
 
-const NOT_FOUND_ANCHOR = '기준으로 준 문서나 폴더를 찾지 못했어요 — list-entities로 다시 확인하세요.';
+const NOT_FOUND_ANCHOR = '기준으로 준 항목을 찾지 못했어요 — list-entities로 다시 확인하세요.';
 const PLACEMENT_BOTH = 'after와 before는 하나만 주세요.';
 const PLACEMENT_FOLDER_MISMATCH = '기준 항목이 그 폴더 안에 있지 않아요 — folderId를 빼거나 기준 항목이 든 폴더를 주세요.';
 const PLACEMENT_SELF = '옮길 것 자체를 기준으로 삼을 수 없어요.';
@@ -713,8 +750,8 @@ const placementOf = async (
 
   const anchorId = side === 'after' ? input.after : input.before;
   if (anchorId === undefined) return { message: NOT_FOUND_ANCHOR };
-  const resolved = await resolveEntityIdMap(ctx, [anchorId]);
-  const anchorEntityId = resolved?.get(anchorId);
+  const resolved = await resolveEntityIdMap(ctx, [anchorId], ANY_ENTITY);
+  const anchorEntityId = resolved.ok ? resolved.map.get(anchorId) : undefined;
   if (anchorEntityId === undefined) return { message: NOT_FOUND_ANCHOR };
 
   const anchor = await ctx.executor
@@ -817,12 +854,10 @@ const deleteEntities = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = DeleteEntitiesInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  const entityIds = await resolveEntityIds(ctx, parsed.data.ids);
-  if (entityIds === null)
-    return toolFailure(
-      'error',
-      '그 문서나 폴더를 지금 작업 중인 스페이스에서 찾지 못했어요 — list-entities로 지울 대상을 다시 확인하세요.',
-    );
+  const resolved = await resolveEntityIds(ctx, parsed.data.ids, ANY_ENTITY);
+  if (!resolved.ok)
+    return toolFailure('error', '그 대상을 지금 작업 중인 스페이스에서 찾지 못했어요 — list-entities로 지울 대상을 다시 확인하세요.');
+  const entityIds = resolved.entityIds;
 
   await deleteEntitiesCore(ctx.executor, { userId: ctx.userId, entityIds }, ctx.afterCommit);
 
@@ -868,6 +903,45 @@ const createDocuments = async (ctx: PrismToolContext, input: unknown) => {
   return { ok: true, documents: refsInOrder(entityIds, await entityRefsOf(ctx.executor, ctx.siteId, entityIds)) };
 };
 
+const createDividers = async (ctx: PrismToolContext, input: unknown) => {
+  const parsed = CreateDividersInput.safeParse(input);
+  if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
+
+  const parents = await folderEntityIds(
+    ctx,
+    parsed.data.items.flatMap((item) => (item.folderId === undefined ? [] : [item.folderId])),
+  );
+  if (parents === null) return toolFailure('error', NOT_FOUND_FOLDER);
+
+  const placements = await placementsOf(
+    ctx,
+    parsed.data.items.map((item) => ({
+      input: item,
+      parentEntityId: item.folderId === undefined ? undefined : parents.get(item.folderId),
+    })),
+  );
+  if ('message' in placements) return toolFailure('error', placements.message);
+
+  const entityIds = [];
+  for (const placement of placements) {
+    const divider = await createDividerCore(
+      ctx.executor,
+      {
+        userId: ctx.userId,
+        siteId: ctx.siteId,
+        parentEntityId: placement.parentEntityId,
+        lowerOrder: placement.lowerOrder,
+        upperOrder: placement.upperOrder,
+      },
+      ctx.afterCommit,
+    );
+    entityIds.push(divider.entityId);
+    if (placement.anchorEntityId !== null) placement.lowerOrder = await orderOf(ctx, divider.entityId);
+  }
+
+  return { ok: true, dividers: refsInOrder(entityIds, await entityRefsOf(ctx.executor, ctx.siteId, entityIds)) };
+};
+
 const updateFolders = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = UpdateFoldersInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
@@ -888,14 +962,15 @@ const moveEntities = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = MoveEntitiesInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  const entityIds = await resolveEntityIds(ctx, parsed.data.ids);
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  const resolved = await resolveEntityIds(ctx, parsed.data.ids, ANY_ENTITY);
+  if (!resolved.ok) return toolFailure('error', NOT_FOUND_TARGETS);
+  const entityIds = resolved.entityIds;
 
   let folderEntity: string | undefined;
   if (parsed.data.folderId !== undefined) {
-    const resolved = await folderEntityId(ctx, parsed.data.folderId);
-    if (resolved === null) return toolFailure('error', NOT_FOUND_FOLDER);
-    folderEntity = resolved;
+    const entityId = await folderEntityId(ctx, parsed.data.folderId);
+    if (entityId === null) return toolFailure('error', NOT_FOUND_FOLDER);
+    folderEntity = entityId;
   }
 
   const placement = await placementOf(ctx, parsed.data, folderEntity);
@@ -971,14 +1046,15 @@ const updateIcons = async (ctx: PrismToolContext, input: unknown) => {
   if (parsed.data.items.some((item) => !validIcon(item.icon, item.iconColor))) {
     return toolFailure('error', '그 아이콘이나 색은 없어요 — 목록에 있는 이름만 쓸 수 있어요.');
   }
-  const entityIds = await resolveEntityIdMap(
+  const resolved = await resolveEntityIdMap(
     ctx,
     parsed.data.items.map((item) => item.id),
+    DOCUMENT_OR_FOLDER,
   );
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
 
   for (const item of parsed.data.items) {
-    const entityId = entityIds.get(item.id);
+    const entityId = resolved.map.get(item.id);
     if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
     await updateEntityIconCore(ctx.executor, { userId: ctx.userId, entityId, icon: item.icon, iconColor: item.iconColor }, ctx.afterCommit);
   }
@@ -990,7 +1066,8 @@ const recoverEntities = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = RecoverEntitiesInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
   const unique = [...new Set(parsed.data.ids)];
-  const refs = await resolveEntityRefs(ctx, unique, EntityState.DELETED);
+  const { refs, rejected } = await resolveEntityRefs(ctx, unique, EntityState.DELETED, DOCUMENT_OR_FOLDER);
+  if (rejected) return toolFailure('error', DIVIDER_NOT_ALLOWED);
   const floor = dayjs().subtract(30, 'days');
   const recoverable = [...refs.values()].filter((ref) => ref.deletedAt !== null && ref.deletedAt.isAfter(floor));
   if (recoverable.length !== unique.length) {
@@ -1054,15 +1131,16 @@ const resolveNoteLinks = async (ctx: PrismToolContext, input: unknown) => {
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
   const noteIds = parsed.data.items.map((item) => item.noteId);
   if (!(await scopedNotes(ctx, noteIds))) return toolFailure('error', NOT_FOUND_NOTE);
-  const entityIds = await resolveEntityIdMap(
+  const resolved = await resolveEntityIdMap(
     ctx,
     parsed.data.items.map((item) => item.id),
+    DOCUMENT_OR_FOLDER,
   );
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
 
   const links = [];
   for (const item of parsed.data.items) {
-    const entityId = entityIds.get(item.id);
+    const entityId = resolved.map.get(item.id);
     if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
     links.push({ noteId: item.noteId, entityId });
   }
@@ -1096,11 +1174,12 @@ const setGoals = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = SetGoalsInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  const entityIds = await resolveEntityIdMap(
+  const resolved = await resolveEntityIdMap(
     ctx,
     parsed.data.items.flatMap((item) => (item.id === undefined ? [] : [item.id])),
+    DOCUMENT_OR_FOLDER,
   );
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
 
   const goals = [];
   for (const item of parsed.data.items) {
@@ -1108,7 +1187,7 @@ const setGoals = async (ctx: PrismToolContext, input: unknown) => {
       goals.push({ entityId: null, targetCharacterCount: item.targetCharacterCount, dueAt: null });
       continue;
     }
-    const entityId = entityIds.get(item.id);
+    const entityId = resolved.map.get(item.id);
     if (entityId === undefined) return toolFailure('error', NOT_FOUND_TARGETS);
     const dueAt = item.dueAt === undefined ? null : kstDueDate(item.dueAt);
     if (dueAt === null && item.dueAt !== undefined) {
@@ -1155,10 +1234,10 @@ const deleteGoals = async (ctx: PrismToolContext, input: unknown) => {
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
   const scopedIds = [...new Set(parsed.data.items.flatMap((item) => (item.id === undefined ? [] : [item.id])))];
-  const entityIds = await resolveEntityIdMap(ctx, scopedIds);
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  const resolved = await resolveEntityIdMap(ctx, scopedIds, DOCUMENT_OR_FOLDER);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
 
-  const targets = [...new Set(scopedIds.map((id) => entityIds.get(id)).filter((entityId) => entityId !== undefined))];
+  const targets = [...new Set(scopedIds.map((id) => resolved.map.get(id)).filter((entityId) => entityId !== undefined))];
   const userGoal = parsed.data.items.some((item) => item.id === undefined);
 
   if (userGoal) {
@@ -1175,8 +1254,9 @@ const updateSharing = async (ctx: PrismToolContext, input: unknown) => {
   const parsed = UpdateSharingInput.safeParse(input);
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
-  const entityIds = await resolveEntityIds(ctx, parsed.data.ids);
-  if (entityIds === null) return toolFailure('error', NOT_FOUND_TARGETS);
+  const resolved = await resolveEntityIds(ctx, parsed.data.ids, DOCUMENT_OR_FOLDER);
+  if (!resolved.ok) return toolFailure('error', resolved.reason === 'rejected' ? DIVIDER_NOT_ALLOWED : NOT_FOUND_TARGETS);
+  const entityIds = resolved.entityIds;
 
   const rows = await ctx.executor
     .select({ entityId: Entities.id, visibility: Entities.visibility })
@@ -1229,6 +1309,7 @@ export const workspaceTools: Record<string, PrismToolHandler> = {
   'list-icons': listIcons,
   'create-folders': createFolders,
   'create-documents': createDocuments,
+  'create-dividers': createDividers,
   'update-documents': updateDocuments,
   'update-folders': updateFolders,
   'move-entities': moveEntities,
