@@ -46,7 +46,9 @@
 
 <div class={css(rootStyle.raw({ tone }), style)}>
   <Icon style={css.raw({ flexShrink: '0' })} {icon} size={14} />
-  <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' })}>{message}</span>
+  <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle', wordBreak: 'keep-all' })}>
+    {message}
+  </span>
   {#if action}
     <Button style={css.raw({ flexShrink: '0' })} onclick={action.run} size="sm" variant="secondary">{action.label}</Button>
   {/if}
