@@ -25,6 +25,7 @@ private fun TestScope.harness(): Pair<DocumentWsChannel, MutableList<FakeSyncWsS
       fetchTicket = { "TK-${++ticketSeq}" },
       scope = backgroundScope,
       pingIntervalMs = 120_000,
+      reconnectJitterMs = 0,
     )
   val channel = DocumentWsChannel(connection, DOC_ID, backgroundScope)
   return channel to sockets

@@ -27,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import co.typie.dev.ProvideDesktopDebugKeyboardPresentation
 import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Affinity
@@ -173,18 +174,20 @@ private fun FocusReturnDialogContent(focusRequester: FocusRequester) {
 
 @Composable
 private fun FocusReturnTestTheme(content: @Composable () -> Unit) {
-  CompositionLocalProvider(
-    LocalAppColors provides LightColors,
-    LocalAppShadows provides LightAppShadows,
-    LocalThemeMode provides ResolvedThemeMode.Light,
-    LocalHazeBlurStyle provides
-      HazeBlurStyle {
-        blurRadius(20.dp)
-        noiseFactor(0f)
-        colorEffects(emptyList())
-      },
-    content = content,
-  )
+  ProvideDesktopDebugKeyboardPresentation {
+    CompositionLocalProvider(
+      LocalAppColors provides LightColors,
+      LocalAppShadows provides LightAppShadows,
+      LocalThemeMode provides ResolvedThemeMode.Light,
+      LocalHazeBlurStyle provides
+        HazeBlurStyle {
+          blurRadius(20.dp)
+          noiseFactor(0f)
+          colorEffects(emptyList())
+        },
+      content = content,
+    )
+  }
 }
 
 private fun selection(node: String): Selection {

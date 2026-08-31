@@ -17,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -216,7 +217,13 @@ class EditorHitTestSnapshotTest {
           renderSurfaceProvider = { throw failure },
         )
       val dispatcher = StandardTestDispatcher(testScheduler)
-      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      // 코어 실패는 onError 로 보고된 뒤 EditorFailureSignal 로 감싸 다시 던져진다(34e5732ee) —
+      // 진행 중인 코루틴을 끊기 위한 신호이므로 여기서 받아 둔다.
+      val uncaught = mutableListOf<Throwable>()
+      val scope =
+        CoroutineScope(
+          SupervisorJob() + dispatcher + CoroutineExceptionHandler { _, error -> uncaught += error }
+        )
       val reported = mutableListOf<Throwable>()
       val editor = Editor(fake, scope, dispatcher, onError = { _, error -> reported += error })
       editor.activateVisualHost(Any())
@@ -230,6 +237,7 @@ class EditorHitTestSnapshotTest {
       editor.refreshImeSnapshot()
 
       assertEquals(listOf<Throwable>(failure), reported)
+      assertTrue(uncaught.all { it.unwrapEditorFailureSignal() === failure })
       assertEquals(0, characterCountCalls)
       assertEquals(0, copyCalls)
       assertEquals(0, imeCalls)

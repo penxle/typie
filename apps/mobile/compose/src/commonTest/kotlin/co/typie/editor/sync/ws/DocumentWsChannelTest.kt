@@ -40,6 +40,7 @@ private fun TestScope.harness(
       scope = backgroundScope,
       pingIntervalMs = 120_000,
       reconnectBaseMs = reconnectBaseMs,
+      reconnectJitterMs = 0,
       idleTimeoutMs = idleTimeoutMs,
     )
   val channel = DocumentWsChannel(connection, DOC_ID, backgroundScope)
