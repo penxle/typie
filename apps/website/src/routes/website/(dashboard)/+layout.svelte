@@ -184,6 +184,7 @@
         prismBadgeStream {
           id
           awaitingUser
+          unseenResponseCount
           unseenReviewCount
         }
       }

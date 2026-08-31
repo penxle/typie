@@ -67,7 +67,7 @@
   {#if app.state.prismAccess}
     <button
       class={css(button, open ? { backgroundColor: 'surface.muted' } : {})}
-      aria-label="PRISM 열기/닫기"
+      aria-label={app.state.prismBadge ? 'PRISM 열기/닫기, 확인할 항목 있음' : 'PRISM 열기/닫기'}
       aria-pressed={open}
       onclick={() => {
         const next = !open;

@@ -20,6 +20,7 @@
     archivedAt?: string | null;
     updatedAt: string;
     awaitingUser: boolean;
+    unseenResponseCount: number;
     unseenReviewCount: number;
   };
 
@@ -352,7 +353,7 @@
         <span class={`title ${rowTitle}`}>{labelOf(session)}</span>
         {#if unread(session)}
           <span class={rowDot} aria-hidden="true"></span>
-          <span class={css({ srOnly: true })}>새 상태 변화 있음</span>
+          <span class={css({ srOnly: true })}>확인할 항목 있음</span>
         {/if}
         <TimeAgo
           style={css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' })}

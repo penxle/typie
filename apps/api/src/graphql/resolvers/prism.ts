@@ -16,7 +16,7 @@ import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { prismSchema } from '@typie/lib/validation';
 import { ApproveInputSchema, DECLINED_MESSAGE, effectiveResolver, serveVerdict, toGraphQL, TOOL_META, toolFailure } from '@typie/prism';
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { Repeater } from 'graphql-yoga';
 import { nanoid } from 'nanoid';
 import { redis } from '#/cache.ts';
@@ -375,6 +375,34 @@ PrismSession.implement({
         });
 
         return (await loader.load(self.id)) !== null;
+      },
+    }),
+
+    unseenResponseCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'PrismSession.unseenResponses',
+          nullable: true,
+          load: async (sessionIds: string[]) => {
+            return await db
+              .select({ sessionId: PrismRuns.sessionId, count: count(PrismRuns.id) })
+              .from(PrismRuns)
+              .innerJoin(PrismSessions, eq(PrismSessions.id, PrismRuns.sessionId))
+              .where(
+                and(
+                  inArray(PrismRuns.sessionId, sessionIds),
+                  inArray(PrismRuns.state, [PrismRunState.COMPLETED, PrismRunState.FAILED]),
+                  isNotNull(PrismRuns.finishedAt),
+                  or(isNull(PrismSessions.seenAt), gt(PrismRuns.finishedAt, PrismSessions.seenAt)),
+                ),
+              )
+              .groupBy(PrismRuns.sessionId);
+          },
+          key: (row) => row?.sessionId,
+        });
+
+        const row = await loader.load(self.id);
+        return row?.count ?? 0;
       },
     }),
 
