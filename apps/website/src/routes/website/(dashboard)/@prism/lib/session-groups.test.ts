@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { describe, expect, it } from 'vitest';
-import { groupSessionsByRecency, matchesSessionQuery } from './session-groups.ts';
+import { groupSessionsByRecency, hasUnread, matchesSessionQuery } from './session-groups.ts';
 
 const now = dayjs('2026-08-21T15:00:00+09:00');
 const at = (iso: string) => ({ updatedAt: dayjs(iso).toISOString() });
@@ -54,5 +54,19 @@ describe('matchesSessionQuery', () => {
     expect(matchesSessionQuery('추리 트릭 검증', ' 트릭 ')).toBe(true);
     expect(matchesSessionQuery('Plot Holes', 'plot')).toBe(true);
     expect(matchesSessionQuery(null, 'x')).toBe(false);
+  });
+});
+
+describe('hasUnread', () => {
+  it('확인이 필요한 상태는 표시하고 보관된 세션은 제외한다', () => {
+    const read = { awaitingUser: false, unseenResponseCount: 0, unseenReviewCount: 0 };
+
+    expect(hasUnread(read)).toBe(false);
+    expect(hasUnread({ ...read, awaitingUser: true })).toBe(true);
+    expect(hasUnread({ ...read, unseenResponseCount: 1 })).toBe(true);
+    expect(hasUnread({ ...read, unseenReviewCount: 1 })).toBe(true);
+    expect(hasUnread({ ...read, archivedAt: now.toISOString(), awaitingUser: true, unseenResponseCount: 1, unseenReviewCount: 1 })).toBe(
+      false,
+    );
   });
 });

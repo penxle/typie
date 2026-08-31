@@ -95,6 +95,7 @@
           updatedAt
           toolPolicy
           awaitingUser
+          unseenResponseCount
           unseenReviewCount
         }
       }
@@ -174,6 +175,7 @@
       mutation DashboardLayout_PrismPanel_MarkSeen_Mutation($input: MarkPrismSessionSeenInput!) {
         markPrismSessionSeen(input: $input) {
           id
+          unseenResponseCount
           unseenReviewCount
         }
       }
@@ -595,7 +597,10 @@
   const panelVisible = $derived(app.state.prismAccess || panelOpen);
   const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
   const welcomeAdmission = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null);
-  const viewingSessionId = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null ? selected.current : null);
+  let visibilityState = $state<DocumentVisibilityState>('hidden');
+  const viewingSessionId = $derived(
+    visibilityState === 'visible' && panelInteractive && !listOpen && page.state.shallowRoute == null ? selected.current : null,
+  );
   let prevPanelOpen: boolean | null = null;
 
   $effect(() => {
@@ -624,15 +629,21 @@
     }
 
     const id = selected.current;
+    const viewedId = viewingSessionId;
     untrack(() => {
       void chat.load(id);
-      if (id !== null) markSeen(id);
+      if (id === null || id !== viewedId) return;
+
+      const session = currentSession;
+      if (session === null || session.id !== id || (session.unseenResponseCount === 0 && session.unseenReviewCount === 0)) {
+        markSeen(id);
+      }
     });
   });
 
   $effect(() => {
     const session = currentSession;
-    if (session === null || session.unseenReviewCount === 0 || !app.preference.current.prismPanelOpen) {
+    if (session === null || session.id !== viewingSessionId || (session.unseenResponseCount === 0 && session.unseenReviewCount === 0)) {
       return;
     }
 
@@ -854,6 +865,8 @@
   };
 </script>
 
+<svelte:document bind:visibilityState />
+
 {#snippet currentTitleTooltip()}
   <span class={css({ display: 'block', maxWidth: '280px', overflowWrap: 'break-word', textWrap: 'balance', wordBreak: 'keep-all' })}>
     {currentTitle}
@@ -1002,7 +1015,7 @@
 
       <button
         class={cx(buttonClass, listOpen ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
-        aria-label="대화 목록"
+        aria-label={app.state.prismBadge ? '대화 목록, 확인할 항목 있음' : '대화 목록'}
         aria-pressed={listOpen}
         onclick={() => (listOpen = !listOpen)}
         type="button"

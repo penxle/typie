@@ -13,4 +13,4 @@
   })}
   aria-hidden="true"
 ></span>
-<span class={css({ srOnly: true })}>새 상태 변화 있음</span>
+<span class={css({ srOnly: true })}>확인할 항목 있음</span>

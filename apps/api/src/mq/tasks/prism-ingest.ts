@@ -176,6 +176,9 @@ const applyAgentOp = async (tx: Transaction, session: SessionRef, op: DomainOp):
             finishedAt: run.finishedAt.valueOf(),
           });
           if (notification) pubsub.publish('prism:notification', session.userId, notification);
+          if (run.state === 'COMPLETED' || run.state === 'FAILED') {
+            pubsub.publish('prism:badge', session.userId, { sessionId: session.id });
+          }
         }
         pubsub.publish('prism:credit', session.userId, {});
       };
