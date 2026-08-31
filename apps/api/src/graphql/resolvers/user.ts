@@ -996,6 +996,17 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  unregisterPushNotificationToken: t.withAuth({ session: true }).fieldWithInput({
+    type: 'Boolean',
+    input: { token: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      await db
+        .delete(UserPushNotificationTokens)
+        .where(and(eq(UserPushNotificationTokens.userId, ctx.session.userId), eq(UserPushNotificationTokens.token, input.token)));
+      return true;
+    },
+  }),
+
   revokeUserDevice: t.withAuth({ session: true }).fieldWithInput({
     type: UserDevice,
     input: { deviceId: t.input.id({ validate: validateDbId(TableCode.USER_DEVICES) }) },

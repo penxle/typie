@@ -26,12 +26,13 @@
 </script>
 
 <script lang="ts">
-  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
-  import { acquirePushToken, pushPermission, pushSupported } from '$lib/push';
-  import { graphql } from '$mearie';
+  import { Toast } from '@typie/ui/notification';
+  import { onMount } from 'svelte';
+  import { BROWSER_PUSH_STORAGE_KEY, readCurrentBrowserPushIntent } from '$lib/browser-push';
+  import { getBrowserPushManager, pushPermission, pushSupported } from '$lib/push';
   import { expand } from './lib/motion.ts';
 
   type Props = {
@@ -40,55 +41,49 @@
 
   let { visible }: Props = $props();
 
-  const [registerPushNotificationToken] = createMutation(
-    graphql(`
-      mutation DashboardLayout_PrismPushCard_RegisterToken_Mutation($input: RegisterPushNotificationTokenInput!) {
-        registerPushNotificationToken(input: $input)
-      }
-    `),
-  );
-
   let dismissed = $state(readDismissed());
+  let offerAvailable = $state(visible);
   let supported = $state(false);
   let busy = $state(false);
   let permission = $state<NotificationPermission | null>(null);
+  let pushEnabled = $state(true);
 
-  $effect(() => {
+  const refresh = async () => {
     permission = pushPermission();
-    void pushSupported().then((value) => (supported = value));
+    supported = await pushSupported();
+    pushEnabled = readCurrentBrowserPushIntent()?.enabled !== false;
+  };
+
+  onMount(() => {
+    void refresh();
   });
 
-  const shown = $derived(visible && !dismissed && supported && permission === 'default');
+  $effect(() => {
+    if (visible) offerAvailable = true;
+  });
+
+  const shown = $derived(offerAvailable && !dismissed && supported && pushEnabled && permission === 'default');
 
   const dismiss = () => {
     dismissed = true;
     writeDismissed();
+    Toast.success('설정 > 알림에서 언제든 켤 수 있어요');
   };
 
-  const register = async (requested: Promise<NotificationPermission>) => {
+  const enable = async () => {
+    busy = true;
     try {
-      permission = await requested;
+      const succeeded = await getBrowserPushManager()
+        .enable()
+        .catch(() => false);
+      await refresh();
 
-      if (permission !== 'granted') {
-        return;
-      }
-
-      const token = await acquirePushToken();
-      if (token === null) {
-        return;
-      }
-
-      await registerPushNotificationToken({ input: { token } });
-    } catch {
-      // 실패해도 알리지 않는다 — 다음 대시보드 진입에서 자동으로 다시 시도된다
+      if (succeeded) Toast.success('브라우저 알림을 켰어요');
+      else if (permission === 'denied') Toast.error('브라우저 설정에서 타이피 알림을 허용해 주세요');
+      else Toast.error('브라우저 알림을 켜지 못했어요. 설정에서 다시 시도해 주세요');
     } finally {
       busy = false;
     }
-  };
-
-  const enable = () => {
-    busy = true;
-    void register(Notification.requestPermission());
   };
 
   const cardClass = flex({
@@ -105,13 +100,19 @@
   const buttonStyle = css.raw({ flexShrink: '0' });
 </script>
 
+<svelte:window
+  onstorage={(event) => {
+    if (event.key === BROWSER_PUSH_STORAGE_KEY) void refresh();
+  }}
+/>
+
 {#if shown}
   <div class={css({ paddingX: '12px', paddingBottom: '8px' })} transition:expand>
     <div class={cardClass}>
-      <span class={textClass}>상태가 바뀌면 알림으로 알려드려요</span>
+      <span class={textClass}>확인이 필요하거나 리뷰가 끝나면 브라우저 알림 받기</span>
 
       <Button style={buttonStyle} onclick={dismiss} size="sm" variant="ghost">나중에</Button>
-      <Button style={buttonStyle} loading={busy} onclick={enable} size="sm" variant="secondary">알림 받기</Button>
+      <Button style={buttonStyle} loading={busy} onclick={() => void enable()} size="sm" variant="secondary">알림 받기</Button>
     </div>
   </div>
 {/if}

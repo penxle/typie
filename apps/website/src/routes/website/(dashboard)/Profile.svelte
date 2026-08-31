@@ -38,6 +38,7 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { desktop } from '$lib/desktop';
+  import { cleanupBrowserPushForLogout } from '$lib/push';
   import { graphql } from '$mearie';
   import type { DashboardLayout_Profile_user$key } from '$mearie';
 
@@ -277,15 +278,13 @@
             })}
             onclick={() => {
               mixpanel.track('logout', { via: 'sidebar' });
-
-              location.assign(
-                qs.stringifyUrl({
-                  url: '/logout',
-                  query: {
-                    redirect_uri: env.PUBLIC_WEBSITE_URL,
-                  },
-                }),
-              );
+              const logoutUrl = qs.stringifyUrl({
+                url: '/logout',
+                query: {
+                  redirect_uri: env.PUBLIC_WEBSITE_URL,
+                },
+              });
+              void cleanupBrowserPushForLogout().finally(() => location.assign(logoutUrl));
             }}
             type="button"
           >
