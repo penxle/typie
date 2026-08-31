@@ -602,6 +602,117 @@ impl SeqCheckout {
             .collect()
     }
 
+    fn origin_dot_at<P: Clone>(&self, log: &OpLog<P>, doc_idx: usize) -> Option<Dot> {
+        let (run, off) = self.ctx.tree.get(doc_idx);
+        let ol = run.origin_left_at(off);
+        if ol < 0 {
+            return None;
+        }
+        Some(log.entries[ol as usize].dot)
+    }
+
+    pub fn snapshot_with_origins<P: Clone>(
+        &self,
+        log: &OpLog<P>,
+    ) -> (Vec<(Dot, P)>, Vec<Option<Dot>>) {
+        let visible = self.ctx.tree.end_len();
+        // Same fragmentation guard as `snapshot`: once tombstone runs dwarf the visible
+        // elements, reading by visible position skips them instead of walking every run.
+        if self.ctx.tree.run_count() > visible.saturating_mul(8).max(64) {
+            return self.snapshot_range_with_origins(log, 0..visible);
+        }
+        let mut elements = Vec::with_capacity(visible);
+        let mut origins = Vec::with_capacity(visible);
+        let mut entries = log.entries.focus();
+        for run in self.ctx.tree.iter_runs() {
+            if run.end != 0 {
+                continue;
+            }
+            for off in 0..run.len {
+                let lv = run.start_lv + off;
+                let e = entries.index(lv);
+                let ListOp::Ins { item, .. } = &e.op else {
+                    continue;
+                };
+                let element = (e.dot, item.clone());
+                let ol = run.origin_left_at(off);
+                let origin = if ol < 0 {
+                    None
+                } else {
+                    Some(entries.index(ol as usize).dot)
+                };
+                elements.push(element);
+                origins.push(origin);
+            }
+        }
+        (elements, origins)
+    }
+
+    pub fn snapshot_range_with_origins<P: Clone>(
+        &self,
+        log: &OpLog<P>,
+        range: std::ops::Range<usize>,
+    ) -> (Vec<(Dot, P)>, Vec<Option<Dot>>) {
+        let mut elements = Vec::with_capacity(range.len());
+        let mut origins = Vec::with_capacity(range.len());
+        for pos in range {
+            let Some(lv) = self.ctx.tree.end_pos_to_lv(pos) else {
+                continue;
+            };
+            let e = &log.entries[lv];
+            let ListOp::Ins { item, .. } = &e.op else {
+                continue;
+            };
+            let doc_idx = self.ctx.tree.doc_index_of_lv(lv);
+            elements.push((e.dot, item.clone()));
+            origins.push(self.origin_dot_at(log, doc_idx));
+        }
+        (elements, origins)
+    }
+
+    pub fn origin_left_of<P: Clone>(&self, log: &OpLog<P>, dot: Dot) -> Option<Dot> {
+        let lv = *self.lv_of.get(&dot)?;
+        let doc_idx = self.ctx.tree.doc_index_of_lv_checked(lv)?;
+        self.origin_dot_at(log, doc_idx)
+    }
+
+    /// The nearest element STRICTLY BEFORE `dot` in tombstone-inclusive order whose item
+    /// `is_marker` accepts, with its visibility. The block a leaf sequence-belongs to,
+    /// in other words — including a marker the sequence still carries but the document
+    /// no longer shows. `None` when nothing before it is a marker.
+    pub fn enclosing_marker<P: Clone>(
+        &self,
+        log: &OpLog<P>,
+        dot: Dot,
+        is_marker: &dyn Fn(&P) -> bool,
+    ) -> Option<(Dot, bool)> {
+        let lv = *self.lv_of.get(&dot)?;
+        let mut doc_idx = self.ctx.tree.doc_index_of_lv_checked(lv)?;
+        while doc_idx > 0 {
+            doc_idx -= 1;
+            let (run, off) = self.ctx.tree.get(doc_idx);
+            let prev_lv = run.op_id_at(off);
+            let e = &log.entries[prev_lv];
+            if let ListOp::Ins { item, .. } = &e.op
+                && is_marker(item)
+            {
+                return Some((e.dot, run.end == 0));
+            }
+        }
+        None
+    }
+
+    pub fn prev_in_order<P: Clone>(&self, log: &OpLog<P>, dot: Dot) -> Option<(Dot, bool)> {
+        let lv = *self.lv_of.get(&dot)?;
+        let doc_idx = self.ctx.tree.doc_index_of_lv_checked(lv)?;
+        if doc_idx == 0 {
+            return None;
+        }
+        let (run, off) = self.ctx.tree.get(doc_idx - 1);
+        let prev_lv = run.op_id_at(off);
+        Some((log.entries[prev_lv].dot, run.end == 0))
+    }
+
     pub fn iter_visible<'a, P: Clone>(
         &'a self,
         log: &'a OpLog<P>,
@@ -1924,5 +2035,117 @@ mod tests {
             1,
             "forward typing must stay one run"
         );
+    }
+
+    #[test]
+    fn origins_follow_the_inserter_context_even_after_the_origin_dies() {
+        let mut log: OpLog<char> = OpLog::new();
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let c = Dot::new(2, 0);
+        let del = Dot::new(1, 2);
+        log.push(InputEvent {
+            id: a,
+            parents: vec![],
+            op: ListOp::Ins { pos: 0, item: 'a' },
+        });
+        log.push(InputEvent {
+            id: b,
+            parents: vec![a],
+            op: ListOp::Ins { pos: 1, item: 'b' },
+        });
+        log.push(InputEvent {
+            id: c,
+            parents: vec![a],
+            op: ListOp::Ins { pos: 1, item: 'c' },
+        });
+        log.push(InputEvent {
+            id: del,
+            parents: vec![b, c],
+            op: ListOp::Del { pos: 0, len: 1 },
+        });
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+
+        let (elements, origins) = co.snapshot_with_origins(&log);
+        let dots: Vec<Dot> = elements.iter().map(|(d, _)| *d).collect();
+        assert_eq!(dots.len(), 2);
+        assert!(!dots.contains(&a));
+        assert_eq!(origins.len(), 2);
+        assert!(origins.iter().all(|o| *o == Some(a)));
+
+        assert_eq!(co.origin_left_of(&log, b), Some(a));
+        assert_eq!(co.origin_left_of(&log, c), Some(a));
+        assert_eq!(co.origin_left_of(&log, a), None);
+        assert_eq!(co.origin_left_of(&log, del), None);
+
+        let first_visible = dots[0];
+        assert_eq!(co.prev_in_order(&log, first_visible), Some((a, false)));
+        assert_eq!(co.prev_in_order(&log, a), None);
+
+        let (ranged, ranged_origins) = co.snapshot_range_with_origins(&log, 0..2);
+        assert_eq!(ranged, elements);
+        assert_eq!(ranged_origins, origins);
+    }
+
+    #[test]
+    fn sequential_typing_chains_origins_to_the_previous_element() {
+        let a = Dot::new(1, 0);
+        let b = Dot::new(1, 1);
+        let c = Dot::new(1, 2);
+        let d = Dot::new(1, 3);
+        let ev = vec![
+            ins(1, 0, &[], 0, 'a'),
+            ins(1, 1, &[a], 1, 'b'),
+            ins(1, 2, &[b], 2, 'c'),
+            ins(1, 3, &[c], 3, 'd'),
+        ];
+        let log = build_oplog(&ev);
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+
+        let (elements, origins) = co.snapshot_with_origins(&log);
+        assert_eq!(
+            elements.iter().map(|(dot, _)| *dot).collect::<Vec<_>>(),
+            vec![a, b, c, d]
+        );
+        assert_eq!(origins[0], None);
+        for (i, origin) in origins.iter().enumerate().skip(1) {
+            assert_eq!(*origin, Some(elements[i - 1].0));
+        }
+
+        assert_eq!(co.prev_in_order(&log, b), Some((a, true)));
+        assert_eq!(co.prev_in_order(&log, d), Some((c, true)));
+
+        let (ranged, ranged_origins) = co.snapshot_range_with_origins(&log, 1..3);
+        assert_eq!(ranged, elements[1..3].to_vec());
+        assert_eq!(ranged_origins, origins[1..3].to_vec());
+    }
+
+    #[test]
+    fn heavy_fragmentation_falls_back_to_the_per_position_origin_path() {
+        let mut ev = Vec::new();
+        let mut prev: Vec<Dot> = Vec::new();
+        for i in 0..100u64 {
+            ev.push(ins(i + 1, 0, &prev, i as usize, 'x'));
+            prev = vec![Dot::new(i + 1, 0)];
+        }
+        ev.push(del_range(1000, 0, &prev, 0, 96));
+        let log = build_oplog(&ev);
+        let mut co = SeqCheckout::new();
+        co.apply_tail(&log);
+
+        let visible = co.visible_len();
+        assert_eq!(visible, 4);
+        assert!(
+            co.ctx.tree.run_count() > visible.saturating_mul(8).max(64),
+            "fragmented past the fallback threshold"
+        );
+
+        let (elements, origins) = co.snapshot_with_origins(&log);
+        let (ranged, ranged_origins) = co.snapshot_range_with_origins(&log, 0..visible);
+        assert_eq!(elements, ranged);
+        assert_eq!(origins, ranged_origins);
+        assert_eq!(elements, co.snapshot(&log));
     }
 }

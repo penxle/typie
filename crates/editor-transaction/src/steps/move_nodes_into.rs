@@ -62,14 +62,6 @@ pub(crate) fn capture_items(
         .collect()
 }
 
-fn collect_source_dots(subtree: &Subtree, out: &mut Vec<Dot>) {
-    let mut stack = vec![subtree];
-    while let Some(subtree) = stack.pop() {
-        out.extend(subtree.source_dots.iter().copied());
-        stack.extend(subtree.children.iter().rev());
-    }
-}
-
 /// `Step::MoveNodesInto`'s forward apply, and the fast path of
 /// `Transaction::move_nodes_consecutive`/`insert_subtree_with_moved`: one
 /// global descending delete of every item's pre-move dots, one cursor-threaded
@@ -96,8 +88,9 @@ pub(crate) fn apply_forward(
             }
             let mut all_dots: Vec<Dot> = Vec::new();
             for it in items {
-                collect_source_dots(&it.subtree, &mut all_dots);
+                all_dots.extend(it.subtree.collect_source_dots());
             }
+            let all_dots = support::with_hidden_copies(&batched.projected, all_dots);
             let (raw_pos, parents, host, positions, del_ops) = {
                 let ps = &batched.projected;
                 let probe_type = items[0].subtree.node.as_type();
@@ -148,8 +141,9 @@ pub(crate) fn apply_forward(
         } => {
             let mut all_dots: Vec<Dot> = Vec::new();
             for it in items {
-                collect_source_dots(&it.subtree, &mut all_dots);
+                all_dots.extend(it.subtree.collect_source_dots());
             }
+            let all_dots = support::with_hidden_copies(&batched.projected, all_dots);
             let (raw_pos, parents, host, positions, del_ops) = {
                 let ps = &batched.projected;
                 let raw_pos =
@@ -252,6 +246,7 @@ pub(crate) fn apply_backward(
                             dots.push(d.dot());
                         }
                     }
+                    let dots = support::with_hidden_copies(ps, dots);
                     support::delete_dots_ops(ps, &dots)
                 };
                 for op in del_ops {
@@ -276,6 +271,7 @@ pub(crate) fn apply_backward(
                         None => Vec::new(),
                     }
                 };
+                let dots = support::with_hidden_copies(ps, dots);
                 support::delete_dots_ops(ps, &dots)
             };
             for op in del_ops {

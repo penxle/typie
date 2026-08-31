@@ -1,13 +1,13 @@
 use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList, ContentExpr, DocLogs,
-    DocView, EditOp, FlatWidthDelta, Modifier, ModifierAttrLog, ModifierType, Node, NodeAttrLog,
-    NodeType, ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild, RawNode, RepairStats,
-    SeqItem, SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one, block_init_of,
-    normalize_content_shallow_with_stats, normalize_window_forest_with_stats, project_blocks,
-    project_from, project_from_tree, project_with_overlay, seq_parents, split_block_insert,
-    split_logs,
+    AliasClasses, AliasOp, Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList,
+    ContentExpr, DocLogs, DocView, EditOp, FlatWidthDelta, Modifier, ModifierAttrLog, ModifierType,
+    Node, NodeAttrLog, NodeType, ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild,
+    RawNode, RepairStats, SeqItem, SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one,
+    block_init_of, normalize_content_shallow_with_stats, normalize_window_forest_with_stats,
+    project_blocks, project_from, project_from_tree, project_with_overlay, seq_parents,
+    split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -82,6 +82,11 @@ enum CoveringSource<'a> {
     /// covering is unchanged and re-resolving the log would be wasted work.
     Existing,
 }
+
+/// Each window element's origin — the element that sat immediately to its left when
+/// it was inserted. `None` for the whole window when the document has no aliases and
+/// nothing can be redirected.
+type SeqOrigins = Vec<Option<Dot>>;
 
 enum WindowOutcome {
     Done,
@@ -580,7 +585,14 @@ impl ProjectedState {
         self.repair_stats.accumulate(&projected.repair_stats);
         self.projection_degraded_latch = projected.repair_stats.projection_degraded;
         self.projected = projected;
-        self.indexes = ProjectionIndexes { paths, span_index };
+        let (redirect_values, redirect_blocks) =
+            editor_model::redirect_reverse(&self.projected.redirected, &paths);
+        self.indexes = ProjectionIndexes {
+            paths,
+            span_index,
+            redirect_values,
+            redirect_blocks,
+        };
         self.leaf_cursor = None;
         self.mark_dirty_full();
         #[cfg(any(test, feature = "test-utils"))]
@@ -596,18 +608,22 @@ impl ProjectedState {
         if !ok {
             match &op.payload {
                 EditOp::Seq(_) => match self.affected_scope(op) {
-                    Some((mut scope, mut lo, mut hi)) => {
+                    Some((scope, lo, hi)) => {
+                        let (scope, lo, hi, copy_spots) = self.widen_for_copies(op, scope, lo, hi);
                         // An insert/undelete can introduce a block BEFORE the
                         // affected block's marker (lifting a paragraph to the front,
                         // restoring a leading list), so extend the window's left
-                        // edge down to the earliest affected sequence position. This
-                        // is an absolute sequence position, so it is reused unchanged
-                        // across every retry regardless of which scope is current.
-                        let floor = match &op.payload {
+                        // edge down to the earliest affected sequence position, and
+                        // its mirror `ceiling` up to the last one. These are absolute
+                        // sequence positions, so they are reused unchanged across
+                        // every retry regardless of which scope is current.
+                        let touched: Vec<usize> = match &op.payload {
                             EditOp::Seq(ListOp::Ins { .. }) => self
                                 .seq
                                 .resolve_boundary(op.id, Bias::Before)
-                                .map(|b| b.position),
+                                .map(|b| b.position)
+                                .into_iter()
+                                .collect(),
                             EditOp::Seq(ListOp::Undel { del }) => self
                                 .seq
                                 .del_target_dots(&self.logs.seq, *del)
@@ -617,42 +633,17 @@ impl ProjectedState {
                                         .resolve_boundary(*t, Bias::Before)
                                         .map(|b| b.position)
                                 })
-                                .min(),
-                            _ => None,
+                                .collect(),
+                            _ => Vec::new(),
                         };
-                        loop {
-                            match self.reproject_window(scope, lo, hi, floor)? {
-                                WindowOutcome::Done => break,
-                                WindowOutcome::Escalate(target) => {
-                                    #[cfg(any(test, feature = "test-utils"))]
-                                    {
-                                        self.window_escalations += 1;
-                                    }
-                                    let ascends = target == Dot::ROOT
-                                        || self.is_strict_ancestor(target, scope);
-                                    debug_assert!(
-                                        ascends,
-                                        "escalation target must strictly ascend"
-                                    );
-                                    let slots = if ascends {
-                                        self.scope_slots_covering(target, scope)
-                                    } else {
-                                        None
-                                    };
-                                    match slots {
-                                        Some((nl, nh)) => {
-                                            scope = target;
-                                            lo = nl;
-                                            hi = nh;
-                                        }
-                                        None => {
-                                            self.reproject()?;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        let floor = touched.iter().chain(&copy_spots).copied().min();
+                        let ceiling = touched
+                            .iter()
+                            .chain(&copy_spots)
+                            .copied()
+                            .max()
+                            .map(|p| p + 1);
+                        self.reproject_scope_loop(scope, lo, hi, floor, ceiling)?;
                     }
                     None => self.reproject()?,
                 },
@@ -667,13 +658,293 @@ impl ProjectedState {
         if let EditOp::Seq(ListOp::Ins { .. }) = &op.payload
             && self.indexes.span_index.pending_len() > 0
         {
-            for span_dot in self.indexes.span_index.flush_pending_for(&self.seq, op.id) {
+            let promoted = self.indexes.span_index.flush_pending_for(&self.seq, op.id);
+            let mut refused = false;
+            for span_dot in promoted {
                 if let Some(span_op) = self.logs.spans.get(span_dot).cloned() {
-                    let _ = self.apply_span_segments(span_dot, &span_op);
+                    refused |= !self.apply_span_segments(span_dot, &span_op);
                 }
+            }
+            if refused {
+                // A covered block holds a leaf moved into it, so its segments are not
+                // ordinal-contiguous; re-derive them from the tree instead.
+                self.reproject_from_tree()?;
             }
         }
         Ok(())
+    }
+
+    /// Reproject `scope`'s child slots `[lo, hi]`, retrying at the escalation
+    /// target the window asks for until one settles or the target stops being a
+    /// strict ancestor — then the whole document.
+    fn reproject_scope_loop(
+        &mut self,
+        mut scope: Dot,
+        mut lo: usize,
+        mut hi: usize,
+        floor: Option<usize>,
+        ceiling: Option<usize>,
+    ) -> Result<(), SpineError> {
+        let mut widened: Option<Dot> = None;
+        loop {
+            match self.reproject_window(scope, lo, hi, floor, ceiling)? {
+                WindowOutcome::Done => return Ok(()),
+                WindowOutcome::Escalate(target) => {
+                    #[cfg(any(test, feature = "test-utils"))]
+                    {
+                        self.window_escalations += 1;
+                    }
+                    let ascends = target == Dot::ROOT || self.is_strict_ancestor(target, scope);
+                    debug_assert!(ascends, "escalation target must strictly ascend");
+                    let slots = if ascends {
+                        self.scope_slots_covering(target, scope)
+                    } else {
+                        None
+                    };
+                    match slots {
+                        Some((nl, nh)) => {
+                            scope = target;
+                            lo = nl;
+                            hi = nh;
+                        }
+                        // No wider slot range at an ancestor: either the target does
+                        // not strictly ascend (it is the scope itself, or Root when the
+                        // scope already is Root), or it has no addressable child slots.
+                        // Every child of the CURRENT scope is still cheaper than the
+                        // whole document, so try that once before giving up.
+                        None => {
+                            let n = self.scope_children_len(scope);
+                            if widened != Some(scope) && n > 0 && (lo > 0 || hi + 1 < n) {
+                                widened = Some(scope);
+                                lo = 0;
+                                hi = n - 1;
+                            } else {
+                                return self.reproject();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A Del or Undel of a copy re-decides where every leaf anchored to it belongs,
+    /// and those leaves move onto the surviving copy — which can sit under a different
+    /// container, and reach it from anywhere in the copy's own descendant run. Widen
+    /// to the container holding every copy of the classes the op touches.
+    fn widen_for_copies(
+        &self,
+        op: &Op<EditOp>,
+        scope: Dot,
+        lo: usize,
+        hi: usize,
+    ) -> (Dot, usize, usize, Vec<usize>) {
+        if self.projected.alias_classes.is_empty() {
+            return (scope, lo, hi, Vec::new());
+        }
+        let targets = match &op.payload {
+            EditOp::Seq(ListOp::Del { .. }) => self.seq.del_target_dots(&self.logs.seq, op.id),
+            EditOp::Seq(ListOp::Undel { del }) => self.seq.del_target_dots(&self.logs.seq, *del),
+            _ => return (scope, lo, hi, Vec::new()),
+        };
+        let mut containers: Vec<Dot> = vec![scope];
+        let mut spots: Vec<usize> = Vec::new();
+        let mut touched = false;
+        let mut seen: HashSet<Dot> = HashSet::new();
+        for t in targets {
+            let Some(members) = self.projected.alias_classes.members_of(t) else {
+                continue;
+            };
+            if !seen.insert(members[0]) {
+                continue;
+            }
+            touched = true;
+            for m in members {
+                // A copy with no container is dead or hidden; its content is still in
+                // the sequence and only the whole document is sure to hold it.
+                match self.required_container_of(*m) {
+                    Some(c) => containers.push(c),
+                    None => containers.push(Dot::ROOT),
+                }
+                spots.extend(
+                    self.seq
+                        .resolve_boundary(*m, Bias::Before)
+                        .map(|b| b.position),
+                );
+            }
+        }
+        if !touched {
+            return (scope, lo, hi, Vec::new());
+        }
+        let Some(target) = self.common_scope_of(&containers) else {
+            return (scope, lo, hi, Vec::new());
+        };
+        let n = self.scope_children_len(target);
+        if n == 0 {
+            return (scope, lo, hi, Vec::new());
+        }
+        (target, 0, n - 1, spots)
+    }
+
+    fn scope_children_len(&self, scope: Dot) -> usize {
+        if scope == Dot::ROOT {
+            self.projected
+                .tree
+                .root_node()
+                .map_or(0, |r| r.children.len())
+        } else {
+            self.projected
+                .tree
+                .get(scope)
+                .map_or(0, |n| n.children.len())
+        }
+    }
+
+    fn in_tree(&self, d: Dot) -> bool {
+        self.indexes.paths.block_of(d).is_some() || self.indexes.paths.node_type_of(d).is_some()
+    }
+
+    /// The block marker `leaf` sequence-belongs to, and whether it is still shown —
+    /// a marker the sequence carries as a tombstone still encloses what was typed
+    /// inside it.
+    fn enclosing_marker_of(&self, leaf: Dot) -> Option<(Dot, bool)> {
+        self.seq
+            .enclosing_marker(&self.logs.seq, leaf, &|item: &SeqItem| {
+                matches!(item, SeqItem::Block { .. })
+            })
+    }
+
+    /// Whether `leaf` was typed inside a copy that is gone: its enclosing marker is
+    /// dead or hidden. A leaf whose origin merely moved within a live block is not.
+    fn typed_in_a_gone_block(&self, leaf: Dot) -> bool {
+        match self.enclosing_marker_of(leaf) {
+            Some((m, visible)) => !visible || self.projected.hidden.contains(m),
+            None => false,
+        }
+    }
+
+    /// Re-derive the redirect reverse views after the window rewrote `redirected` or
+    /// moved the leaves it names. `paths` must already be final.
+    fn refresh_redirect_indexes(&mut self) {
+        let (values, blocks) =
+            editor_model::redirect_reverse(&self.projected.redirected, &self.indexes.paths);
+        self.indexes.redirect_values = values;
+        self.indexes.redirect_blocks = blocks;
+    }
+
+    /// Whether `d` is a leaf this projection moved off its sequence slot, or the slot
+    /// target something was moved onto. Both halves matter: deleting either end
+    /// re-decides where the chain behind it belongs.
+    fn redirect_touch(&self, d: Dot) -> bool {
+        self.projected.redirected.contains_key(&d) || self.indexes.redirect_values.contains(&d)
+    }
+
+    /// Whether `block` holds a leaf that was moved into it, which is what breaks the
+    /// "a block keeps its leaves in sequence order" assumption the splice paths make.
+    fn block_holds_a_redirected_leaf(&self, block: Dot) -> bool {
+        self.indexes.redirect_blocks.contains(&block)
+    }
+
+    /// Whether `d` is one of the units `hide_losers` judges — a block or an atom
+    /// leaf — and is currently in the tree. A char is never judged on its own; it
+    /// follows the block it lives in.
+    fn is_alias_unit_in_tree(&self, d: Dot) -> bool {
+        if self.indexes.paths.node_type_of(d).is_some() {
+            return true;
+        }
+        if self.indexes.paths.block_of(d).is_none() {
+            return false;
+        }
+        self.logs.seq.lv_of.get(&d).is_some_and(|&lv| {
+            matches!(
+                &self.logs.seq.entries[lv].op,
+                ListOp::Ins {
+                    item: SeqItem::Atom(_) | SeqItem::BlockAtom { .. },
+                    ..
+                }
+            )
+        })
+    }
+
+    /// The scope a freshly applied alias must reproject, or `None` when the op only
+    /// records identity the projection already agrees with. Three ways it can matter:
+    /// a class it touches now shows two judgment units, so one has to lose; one of its
+    /// dots is an end of an existing redirect, which the op can exempt or re-aim; or
+    /// one of its dots is a dead or hidden copy that a live leaf is anchored to, which
+    /// the op turns into a redirect.
+    fn alias_conflict_scope(&self, op: &AliasOp) -> Option<Dot> {
+        if self.projected.alias_classes.is_empty() {
+            return None;
+        }
+        let mut containers: Vec<Dot> = Vec::new();
+        let mut seen: HashSet<Dot> = HashSet::new();
+        let mut hit = false;
+        for run in &op.pairs {
+            for i in 0..run.len as u64 {
+                for d in [
+                    Dot::new(run.old_start.actor, run.old_start.clock + i),
+                    Dot::new(run.new_start.actor, run.new_start.clock + i),
+                ] {
+                    if self.redirect_touch(d) || self.class_of_a_redirect_target(d) {
+                        hit = true;
+                        containers.extend(self.required_container_of(d));
+                    }
+                    let Some(members) = self.projected.alias_classes.members_of(d) else {
+                        continue;
+                    };
+                    if !seen.insert(members[0]) {
+                        continue;
+                    }
+                    // A copy that is dead or hidden is what a leaf redirects AWAY from,
+                    // and this op decides which class it belongs to. The leaves anchored
+                    // to it sit anywhere in its descendant run, so the window has to be
+                    // the container that holds every copy of the class.
+                    let gone = members.iter().any(|m| {
+                        self.projected.hidden.contains(*m)
+                            || self
+                                .seq
+                                .resolve_boundary(*m, Bias::Before)
+                                .is_none_or(|b| !b.visible)
+                    });
+                    let present: Vec<Dot> = members
+                        .iter()
+                        .copied()
+                        .filter(|m| self.is_alias_unit_in_tree(*m))
+                        .collect();
+                    if gone || present.len() >= 2 {
+                        hit = true;
+                        for m in members {
+                            // A copy with no container is dead or hidden; the leaves
+                            // typed at its head project wherever the sequence puts
+                            // them, which only the whole document is sure to cover.
+                            match self.required_container_of(*m) {
+                                Some(c) => containers.push(c),
+                                None => containers.push(Dot::ROOT),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !hit {
+            return None;
+        }
+        Some(self.common_scope_of(&containers).unwrap_or(Dot::ROOT))
+    }
+
+    /// Whether `d` shares a class with the target of an existing redirect — aliasing
+    /// into that class changes which copy the redirect resolves to.
+    fn class_of_a_redirect_target(&self, d: Dot) -> bool {
+        if self.indexes.redirect_values.is_empty() {
+            return false;
+        }
+        let Some(members) = self.projected.alias_classes.members_of(d) else {
+            return false;
+        };
+        self.indexes
+            .redirect_values
+            .iter()
+            .any(|v| members.contains(v))
     }
 
     /// The container whose child list `d`'s change affects: the parent of `d`'s
@@ -1141,6 +1412,7 @@ impl ProjectedState {
         i: usize,
         j: usize,
         floor: Option<usize>,
+        ceiling: Option<usize>,
     ) -> Result<WindowOutcome, SpineError> {
         let scope_type = if scope == Dot::ROOT {
             NodeType::Root
@@ -1256,6 +1528,14 @@ impl ProjectedState {
                 }
             }
         };
+        let child_start = |d: Dot| {
+            self.seq_flat_pos(d).or_else(|| {
+                self.subtree_real_dots(d)
+                    .iter()
+                    .filter_map(|&x| self.seq_flat_pos(x))
+                    .min()
+            })
+        };
         // Hoisted above the right-extension loop (depends only on the left-extended
         // `i`, which that loop never touches) because absorption needs it: a
         // following sibling can reparent onto a currently-dead ancestor (a container
@@ -1268,12 +1548,7 @@ impl ProjectedState {
             self.reproject()?;
             return Ok(WindowOutcome::Done);
         };
-        let Some(mut window_start) = self.seq_flat_pos(first).or_else(|| {
-            self.subtree_real_dots(first)
-                .iter()
-                .filter_map(|&d| self.seq_flat_pos(d))
-                .min()
-        }) else {
+        let Some(mut window_start) = child_start(first) else {
             self.reproject()?;
             return Ok(WindowOutcome::Done);
         };
@@ -1282,6 +1557,26 @@ impl ProjectedState {
         }
         if scope != Dot::ROOT {
             window_start = window_start.max(scope_floor);
+        }
+        while i > 0 {
+            let Some(prev) = scope_children.get(i - 1).map(&child_id) else {
+                break;
+            };
+            let head = scope_children.get(i).map(&child_id);
+            let settled = head.is_some_and(|d| !d.is_synthetic())
+                && head
+                    .and_then(&child_start)
+                    .is_some_and(|p| p <= window_start)
+                && !referenced.contains(&prev);
+            if settled {
+                break;
+            }
+            window_owned.extend(self.subtree_real_dots(prev));
+            referenced.extend(self.marker_parents(prev));
+            i -= 1;
+            if let Some(p) = child_start(prev) {
+                window_start = window_start.min(p);
+            }
         }
         let mut window_end = scope_ceil;
         let mut k = j + 1;
@@ -1322,7 +1617,10 @@ impl ProjectedState {
                             s += 1;
                         }
                     }
-                    if pull_target.is_some_and(|t| t > k) {
+                    // `ceiling` is `floor`'s mirror: the op's own element can sit past
+                    // the first excluded sibling's marker, and closing the window before
+                    // it would rebuild the run without it.
+                    if pull_target.is_some_and(|t| t > k) || ceiling.is_some_and(|c| p < c) {
                         window_owned.extend(self.subtree_real_dots(id));
                         referenced.extend(parents);
                         j = k;
@@ -1365,10 +1663,68 @@ impl ProjectedState {
                 None => {}
             }
         }
+        // A redirected leaf sits away from its sequence slot, so the two halves of it
+        // can fall on opposite sides of the window edge: a leaf this window rebuilds
+        // whose element it would not read (dropping it), or an element it reads whose
+        // placement target it does not own (stranding it). Widening the range alone
+        // would pull in content whose owning blocks stay outside, so escalate.
+        if !self.projected.redirected.is_empty() {
+            let seq_pos = |d: Dot| {
+                self.seq
+                    .resolve_boundary(d, Bias::Before)
+                    .filter(|b| b.visible)
+                    .map(|b| b.position)
+            };
+            let owned: HashSet<Dot> = old_nodes.iter().copied().collect();
+            let mut need: Vec<Dot> = Vec::new();
+            for (leaf, target) in self.projected.redirected.iter() {
+                let inside = seq_pos(*leaf).is_some_and(|p| p >= window_start && p < window_end);
+                if owned.contains(leaf) && !inside {
+                    need.push(*leaf);
+                }
+                if inside
+                    && !owned.contains(target)
+                    && !seq_pos(*target).is_some_and(|p| p >= window_start && p < window_end)
+                {
+                    need.push(*target);
+                }
+            }
+            if !need.is_empty() {
+                // A window holding every root child owns every element there is, so it
+                // can simply read further; anything narrower would pull in elements
+                // whose blocks stay outside, and has to widen first.
+                let owns_everything = scope == Dot::ROOT && i == 0 && j + 1 == scope_children.len();
+                if owns_everything {
+                    for d in &need {
+                        if let Some(p) = seq_pos(*d) {
+                            window_start = window_start.min(p);
+                            window_end = window_end.max(p + 1);
+                        }
+                    }
+                } else {
+                    let mut containers: Vec<Dot> = vec![scope];
+                    containers.extend(need.iter().filter_map(|d| self.required_container_of(*d)));
+                    let target = self.common_scope_of(&containers).unwrap_or(Dot::ROOT);
+                    return Ok(WindowOutcome::Escalate(
+                        self.escalation_target(scope, Some(target)),
+                    ));
+                }
+            }
+        }
 
-        let elements = self
-            .seq
-            .snapshot_range(&self.logs.seq, window_start..window_end);
+        let (elements, origins): (Vec<(Dot, SeqItem)>, Option<SeqOrigins>) =
+            if self.logs.aliases.is_empty() {
+                (
+                    self.seq
+                        .snapshot_range(&self.logs.seq, window_start..window_end),
+                    None,
+                )
+            } else {
+                let (e, o) = self
+                    .seq
+                    .snapshot_range_with_origins(&self.logs.seq, window_start..window_end);
+                (e, Some(o))
+            };
         for (d, item) in &elements {
             if let SeqItem::Block { node_type, .. } = item {
                 if *node_type == NodeType::Root {
@@ -1414,7 +1770,7 @@ impl ProjectedState {
             }
         }
         let mut window_stats = RepairStats::default();
-        let (raw, seed_escape) = if scope == Dot::ROOT {
+        let (mut raw, seed_escape) = if scope == Dot::ROOT {
             (
                 project_blocks(&elements).map_err(ProjectionError::Project)?,
                 None,
@@ -1431,6 +1787,96 @@ impl ProjectedState {
                 self.escalation_target(scope, Some(hint)),
             ));
         }
+        // The same two alias passes the cold pipeline runs, over this window's forest:
+        // a class showing two copies loses one, and a leaf anchored to a dead or hidden
+        // copy moves onto the surviving one. A member the window cannot see but the
+        // document still shows escalates — only a wider window can decide that class.
+        let alias_pass = !self.projected.alias_classes.is_empty();
+        let window_dots: HashSet<Dot> = if alias_pass {
+            elements.iter().map(|(d, _)| *d).collect()
+        } else {
+            HashSet::new()
+        };
+        let mut window_placed: Vec<(Dot, Dot)> = Vec::new();
+        let window_hidden = if !alias_pass {
+            editor_model::HiddenCopies::default()
+        } else {
+            // A member the window cannot see but the document still shows: only a
+            // wider window can decide that class. A member deleted from the sequence
+            // is not "shown" even while a stale tree still holds it.
+            let outside = |d: Dot| {
+                if !window_dots.contains(&d)
+                    && !self.projected.hidden.contains(d)
+                    && self.in_tree(d)
+                    && self
+                        .seq
+                        .resolve_boundary(d, Bias::Before)
+                        .is_some_and(|b| b.visible)
+                {
+                    editor_model::Outside::Present
+                } else {
+                    editor_model::Outside::Absent
+                }
+            };
+            let hidden = match editor_model::hide_losers(
+                &mut raw,
+                &self.projected.alias_classes,
+                &outside,
+            ) {
+                Ok(h) => h,
+                Err(e) => {
+                    let container = self.required_container_of(e.dot).unwrap_or(Dot::ROOT);
+                    let target = self
+                        .common_scope_of(&[scope, container])
+                        .unwrap_or(Dot::ROOT);
+                    return Ok(WindowOutcome::Escalate(
+                        self.escalation_target(scope, Some(target)),
+                    ));
+                }
+            };
+            if let Some(origins) = &origins {
+                let is_dead = |d: Dot| {
+                    self.seq
+                        .resolve_boundary(d, Bias::Before)
+                        .is_none_or(|b| !b.visible)
+                };
+                let is_hidden = |d: Dot| hidden.contains(d) || self.projected.hidden.contains(d);
+                let in_dead_block = |leaf: Dot| match self.enclosing_marker_of(leaf) {
+                    Some((m, visible)) => {
+                        !visible || hidden.contains(m) || self.projected.hidden.contains(m)
+                    }
+                    None => false,
+                };
+                let redirects = editor_model::redirect_anchors(
+                    &elements,
+                    origins,
+                    &self.projected.alias_classes,
+                    &is_dead,
+                    &is_hidden,
+                    &in_dead_block,
+                );
+                let prev = |d: Dot| self.seq.prev_in_order(&self.logs.seq, d);
+                match editor_model::place_redirects(
+                    &mut raw,
+                    &redirects,
+                    &self.projected.alias_classes,
+                    &prev,
+                    &outside,
+                ) {
+                    Ok(placed) => window_placed = placed,
+                    Err(e) => {
+                        let container = self.required_container_of(e.dot).unwrap_or(Dot::ROOT);
+                        let target = self
+                            .common_scope_of(&[scope, container])
+                            .unwrap_or(Dot::ROOT);
+                        return Ok(WindowOutcome::Escalate(
+                            self.escalation_target(scope, Some(target)),
+                        ));
+                    }
+                }
+            }
+            hidden
+        };
         let raw_children = raw
             .roots
             .into_iter()
@@ -1517,6 +1963,70 @@ impl ProjectedState {
                 self.forget_node(n);
             }
         }
+        // A window spanning the whole sequence re-decided every class there is, so its
+        // verdict IS the document's; a partial window only replaces what it could see.
+        // Either way a root whose copy has since been deleted is retired here — no
+        // per-dot rule can see it, because a deleted dot is in no window's elements.
+        let whole_document =
+            scope == Dot::ROOT && window_start == 0 && window_end == self.seq.visible_len();
+        if whole_document {
+            self.projected.hidden = window_hidden;
+        } else {
+            if alias_pass && !self.projected.hidden.is_empty() {
+                let stale: Vec<Dot> = self
+                    .projected
+                    .hidden
+                    .roots()
+                    .filter(|r| {
+                        window_dots.contains(r)
+                            || self
+                                .projected
+                                .hidden
+                                .dots_of_root(*r)
+                                .is_some_and(|ds| ds.iter().any(|d| window_dots.contains(d)))
+                    })
+                    .collect();
+                for r in stale {
+                    self.projected.hidden.remove_root(r);
+                }
+            }
+            self.projected.hidden.extend(window_hidden);
+        }
+        if !self.projected.hidden.is_empty() {
+            let gone: Vec<Dot> = self
+                .projected
+                .hidden
+                .roots()
+                .filter(|r| {
+                    self.projected.hidden.dots_of_root(*r).is_none_or(|ds| {
+                        !ds.iter().any(|d| {
+                            self.seq
+                                .resolve_boundary(*d, Bias::Before)
+                                .is_some_and(|b| b.visible)
+                        })
+                    })
+                })
+                .collect();
+            for r in gone {
+                self.projected.hidden.remove_root(r);
+            }
+        }
+        // Same shape for the redirect map: this window re-decided every leaf whose
+        // element it read, and a leaf that has left the sequence is nobody's.
+        if whole_document {
+            self.projected.redirected = window_placed.into_iter().collect();
+        } else {
+            if !self.projected.redirected.is_empty() {
+                self.projected.redirected.retain(|leaf, _| {
+                    !window_dots.contains(leaf)
+                        && self
+                            .seq
+                            .resolve_boundary(*leaf, Bias::Before)
+                            .is_some_and(|b| b.visible)
+                });
+            }
+            self.projected.redirected.extend(window_placed);
+        }
 
         for (block, parent, nt) in &plan_blocks {
             self.indexes.paths.add_block(*block, *parent, *nt);
@@ -1599,10 +2109,21 @@ impl ProjectedState {
                 attrs: Vec::new(),
                 children: ChildList::from_sized_iter(window_children_sized),
             });
-            if scope == Dot::ROOT {
-                editor_model::totality_check(&elements, &window_tree, &mut window_stats);
+            // A hidden copy is deliberately absent from the tree, so it is not a
+            // deficit — the check runs over what the window is meant to show.
+            let shown: Vec<(Dot, SeqItem)> = if self.projected.hidden.is_empty() {
+                elements.clone()
             } else {
-                let missing = editor_model::totality_deficit(&elements, &window_tree);
+                elements
+                    .iter()
+                    .filter(|(d, _)| !self.projected.hidden.contains(*d))
+                    .cloned()
+                    .collect()
+            };
+            if scope == Dot::ROOT {
+                editor_model::totality_check(&shown, &window_tree, &mut window_stats);
+            } else {
+                let missing = editor_model::totality_deficit(&shown, &window_tree);
                 if !missing.is_empty() {
                     return Ok(WindowOutcome::Escalate(
                         self.totality_escalation_target(scope, &missing, &elements),
@@ -1639,6 +2160,7 @@ impl ProjectedState {
             self.mark_dirty_block(*block);
         }
         self.mark_dirty_structural(scope);
+        self.refresh_redirect_indexes();
         self.repair_stats.accumulate(&window_stats);
         self.projection_degraded_latch |= window_stats.projection_degraded;
         #[cfg(any(test, feature = "test-utils"))]
@@ -2010,7 +2532,14 @@ impl ProjectedState {
     fn reproject_from_tree(&mut self) -> Result<(), SpineError> {
         let elements = self.seq.snapshot(&self.logs.seq);
         let tree = self.projected.tree.clone();
-        self.projected = project_from_tree(&elements, tree, &self.seq, &self.logs);
+        // The tree is kept as-is, so the copies detached from it stay hidden;
+        // `project_from_tree` re-derives everything else and would drop them.
+        let hidden = std::mem::take(&mut self.projected.hidden);
+        let redirected = std::mem::take(&mut self.projected.redirected);
+        let alias_classes = AliasClasses::from_log(&self.logs.aliases);
+        self.projected = project_from_tree(&elements, tree, &self.seq, &self.logs, alias_classes);
+        self.projected.hidden = hidden;
+        self.projected.redirected = redirected;
         self.indexes =
             ProjectionIndexes::rebuild_from(&self.projected, &self.logs.spans, &self.seq);
         self.mark_dirty_full();
@@ -2043,9 +2572,35 @@ impl ProjectedState {
                 self.try_apply_node_op(op)
             }
             // `warm_dispatch` already folded this op into `logs.aliases` and
-            // `projected.alias_classes` — no seq/tree change follows, so there is
-            // nothing left to project.
-            EditOp::Alias(_) => true,
+            // `projected.alias_classes`. No seq change follows, but the op can still
+            // change which copy the tree shows and which leaves redirect, and both
+            // judgments live in the window pass.
+            EditOp::Alias(alias) => {
+                let Some(scope) = self.alias_conflict_scope(alias) else {
+                    return true;
+                };
+                let n = if scope == Dot::ROOT {
+                    self.projected
+                        .tree
+                        .root_node()
+                        .map_or(0, |r| r.children.len())
+                } else {
+                    self.projected
+                        .tree
+                        .get(scope)
+                        .map_or(0, |n| n.children.len())
+                };
+                // A failed window would fall through to `reproject_from_tree`, which
+                // keeps the tree and so never makes the hide/redirect decision.
+                if n == 0 {
+                    return self.reproject().is_ok();
+                }
+                let floor = (scope == Dot::ROOT).then_some(0);
+                match self.reproject_scope_loop(scope, 0, n - 1, floor, None) {
+                    Ok(()) => true,
+                    Err(_) => self.reproject().is_ok(),
+                }
+            }
             _ => false,
         }
     }
@@ -2131,6 +2686,40 @@ impl ProjectedState {
                 CoveringSource::Sweep(sweep) => Some(sweep.block_cursor()),
                 CoveringSource::Existing => None,
             };
+            // A redirected leaf sits out of sequence order among its block's children
+            // and the sweep cursor only moves forward, so once the document has alias
+            // classes the coverings are swept in ascending position order and mapped
+            // back by leaf ordinal.
+            let precomputed: Option<Vec<Option<editor_model::SegCovering>>> = match source {
+                CoveringSource::Sweep(sweep) if !self.projected.redirected.is_empty() => {
+                    let positions: Vec<Option<usize>> = node
+                        .children
+                        .iter()
+                        .filter_map(|c| match c {
+                            Child::Leaf { id, .. } => Some(
+                                self.seq
+                                    .resolve_boundary(*id, Bias::Before)
+                                    .map(|b| b.position),
+                            ),
+                            Child::Block(_) => None,
+                        })
+                        .collect();
+                    let mut order: Vec<usize> = (0..positions.len()).collect();
+                    order.sort_by_key(|&i| positions[i]);
+                    let mut sorted_cursor = sweep.block_cursor();
+                    let mut out = vec![None; positions.len()];
+                    for i in order {
+                        if let Some(p) = positions[i] {
+                            out[i] = canonical_covering_of(
+                                &sorted_cursor.active_at(p),
+                                &self.logs.spans,
+                            );
+                        }
+                    }
+                    Some(out)
+                }
+                _ => None,
+            };
             let mut segs: Vec<editor_model::Seg> = Vec::new();
             let mut memo: Option<Memo> = None;
             let mut leaf_ord = 0usize;
@@ -2141,6 +2730,10 @@ impl ProjectedState {
                 let dot = *id;
                 let leaf_type = item.as_child_type().unwrap_or(NodeType::Unknown);
                 let covering = match source {
+                    CoveringSource::Sweep(_) if precomputed.is_some() => precomputed
+                        .as_ref()
+                        .and_then(|v| v.get(leaf_ord).cloned())
+                        .flatten(),
                     CoveringSource::Sweep(_) => self
                         .seq
                         .resolve_boundary(dot, Bias::Before)
@@ -2413,6 +3006,14 @@ impl ProjectedState {
                 groups[gi].1.push(leaf);
             }
         }
+        // A block holding a leaf that was moved into it no longer keeps its leaves in
+        // sequence order, which the contiguous-ordinal apply below relies on.
+        if groups
+            .iter()
+            .any(|(block, _)| self.block_holds_a_redirected_leaf(*block))
+        {
+            return false;
+        }
         // Fold `op_dot` into each covered block's segment coverings via a per-block
         // range apply, re-deriving `(eff, own)` from the new covering key. `apply_range`
         // splits `[lo, hi)` onto segment boundaries, so each covered segment already has
@@ -2492,6 +3093,26 @@ impl ProjectedState {
         else {
             return false;
         };
+        // This path reads the parent off the VISIBLE left neighbour and the slot off
+        // a sequence-ordered binary search over the block's children. A redirect
+        // breaks both, in two ways: a leaf typed into a dead or hidden copy belongs
+        // on the surviving copy, and a leaf typed behind an already-redirected leaf
+        // follows it there. Two hash lookups on the origin narrow it to candidates;
+        // only those pay the enclosing-marker walk, which is what separates a leaf
+        // typed inside the copy that went away from one merely typed after it.
+        if !self.projected.alias_classes.is_empty()
+            && let Some(origin) = self.seq.origin_left_of(&self.logs.seq, leaf)
+            && ((self.projected.alias_classes.contains(origin)
+                && (self
+                    .seq
+                    .resolve_boundary(origin, Bias::Before)
+                    .is_none_or(|b| !b.visible)
+                    || self.projected.hidden.contains(origin)))
+                || self.projected.redirected.contains_key(&origin))
+            && self.typed_in_a_gone_block(leaf)
+        {
+            return false;
+        }
         if pos == 0 {
             return false;
         }
@@ -2513,6 +3134,12 @@ impl ProjectedState {
         // an incremental splice can group content differently than a full reprojection
         // would. Reproject the window instead so the grouping stays consistent.
         if block.is_synthetic() {
+            return false;
+        }
+        // Both ways this path picks a slot — the memoized neighbour cursor and the
+        // sequence-ordered binary search — read the block's children as sequence
+        // ordered. A leaf moved into the block is exactly the counterexample.
+        if self.block_holds_a_redirected_leaf(block) {
             return false;
         }
         // Splice incrementally only when no normalization can be triggered: the new
@@ -2719,6 +3346,17 @@ impl ProjectedState {
             None if self.indexes.paths.node_type_of(left).is_some() => (left, None),
             None => return false,
         };
+        // The split cuts the block's leaves at a sequence position, so it needs the
+        // block's children in that order and a neighbour that is where the sequence
+        // says it is.
+        if !self.projected.alias_classes.is_empty()
+            && (self.projected.alias_classes.contains(left)
+                || self.projected.hidden.contains(left)
+                || self.redirect_touch(left)
+                || self.block_holds_a_redirected_leaf(p_block))
+        {
+            return false;
+        }
         // A synthetic block is a repair-scaffold whose shape a cold rebuild can
         // regroup once a real marker lands here — never splice off one.
         if p_block.is_synthetic() {
@@ -2873,6 +3511,15 @@ impl ProjectedState {
         }
         let mut block = None;
         for &t in &targets {
+            // Removing a copy re-decides its whole alias class, and removing either end
+            // of a redirect strands the chain behind it — the followers belong back at
+            // their own sequence slots once their anchor is gone.
+            if self.projected.alias_classes.contains(t)
+                || self.projected.hidden.contains(t)
+                || self.redirect_touch(t)
+            {
+                return false;
+            }
             let Some(b) = self.indexes.paths.block_of(t) else {
                 return false;
             };
@@ -2936,6 +3583,12 @@ impl ProjectedState {
         // neighbour. Restore in ascending order.
         let mut ordered: Vec<(usize, Dot, SeqItem)> = Vec::with_capacity(targets.len());
         for &t in &targets {
+            if self.projected.alias_classes.contains(t)
+                || self.projected.hidden.contains(t)
+                || self.redirect_touch(t)
+            {
+                return false;
+            }
             let Some(b) = self.seq.resolve_boundary(t, Bias::Before) else {
                 return false;
             };
@@ -4878,12 +5531,997 @@ mod tests {
                 }],
             }))
             .unwrap();
-        let warm = state.projected().alias_classes.clone();
-        let cold = {
-            let logs = editor_model::split_logs(state.graph()).unwrap();
-            editor_model::project_document(&logs).unwrap().alias_classes
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
+        // Chars are not judgment units, so a class of two live chars hides nothing.
+        assert!(state.projected().hidden.is_empty());
+        assert_eq!(root_paragraph_texts(&state), vec!["ab".to_string()]);
+    }
+
+    fn raw_move_paragraph(
+        state: &mut ProjectedState,
+        block: Dot,
+        chars: &[Dot],
+        to_pos: usize,
+        text: &str,
+    ) -> Option<(Dot, Vec<Dot>)> {
+        let from = state.seq_visible_pos(block).expect("block visible");
+        state
+            .apply(EditOp::Seq(ListOp::Del {
+                pos: from,
+                len: 1 + chars.len(),
+            }))
+            .ok()?;
+        let shift = if to_pos > from { 1 + chars.len() } else { 0 };
+        let at = to_pos.checked_sub(shift)?;
+        let new_block = state
+            .apply(seq_block(at, NodeType::Paragraph, vec![Dot::ROOT]))
+            .ok()?
+            .id;
+        let mut new_chars = Vec::new();
+        for (i, ch) in text.chars().enumerate() {
+            new_chars.push(state.apply(seq_char(at + 1 + i, ch)).ok()?.id);
+        }
+        let mut pairs = vec![(block, new_block)];
+        pairs.extend(chars.iter().copied().zip(new_chars.iter().copied()));
+        let runs: Vec<AliasRun> = pairs
+            .iter()
+            .map(|(o, n)| AliasRun {
+                old_start: *o,
+                len: 1,
+                new_start: *n,
+            })
+            .collect();
+        state.apply(EditOp::Alias(AliasOp { pairs: runs })).ok()?;
+        Some((new_block, new_chars))
+    }
+
+    fn fork(state: &ProjectedState, actor: u64) -> ProjectedState {
+        let mut g = OpGraph::<EditOp>::with_actor(actor);
+        for cs in state.graph().changesets_as_vec() {
+            g.receive_changeset_mut(cs).unwrap();
+        }
+        ProjectedState::from_graph(g).unwrap()
+    }
+
+    fn sync(dst: &ProjectedState, src: &ProjectedState) -> ProjectedState {
+        let heads: HashSet<Dot> = dst.graph().current_heads().copied().collect();
+        let css = src.graph().missing_changesets_tolerant(&heads);
+        let (next, _) = dst.receive_changesets(css).unwrap();
+        next
+    }
+
+    fn root_paragraph_texts(state: &ProjectedState) -> Vec<String> {
+        let view = state.view();
+        view.root()
+            .unwrap()
+            .child_blocks()
+            .map(|b| b.inline_text())
+            .collect()
+    }
+
+    fn two_paragraph_base() -> (ProjectedState, Dot, Vec<Dot>, Dot) {
+        let mut a = ProjectedState::empty();
+        let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+        let c1 = a.apply(seq_char(1, 'x')).unwrap().id;
+        let c2 = a.apply(seq_char(2, 'y')).unwrap().id;
+        let p2 = a
+            .apply(seq_block(3, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        a.apply(seq_char(4, 'z')).unwrap();
+        a.commit();
+        (a, p1, vec![c1, c2], p2)
+    }
+
+    #[test]
+    fn concurrent_moves_of_one_paragraph_show_a_single_copy_on_both_replicas() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (a_copy, _) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        let (b_copy, _) = raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let a2 = sync(&a, &b);
+        let b2 = sync(&b, &a);
+        assert_eq!(a2.projected(), b2.projected());
+        assert_eq!(
+            root_paragraph_texts(&a2),
+            vec!["z".to_string(), "xy".to_string()]
+        );
+        let winner = a_copy.max(b_copy);
+        let loser = a_copy.min(b_copy);
+        assert!(a2.view().node(winner).is_some());
+        assert!(a2.view().node(loser).is_none());
+        assert!(a2.projected().hidden.contains(loser));
+        assert!(!a2.projected().hidden.contains(winner));
+        let cold = ProjectedState::from_graph(a2.graph().clone()).unwrap();
+        assert_eq!(cold.projected(), a2.projected());
+    }
+
+    #[test]
+    fn a_char_typed_into_a_paragraph_being_moved_joins_the_moved_copy() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (_a_copy, _) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        b.apply(seq_char(2, 'q')).unwrap();
+        b.commit();
+        let merged = sync(&a, &b);
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec!["z".to_string(), "xqy".to_string()]
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(cold.projected(), merged.projected());
+    }
+
+    #[test]
+    fn a_doc_without_moves_projects_exactly_as_before() {
+        let (a, _p1, _chars, _p2) = two_paragraph_base();
+        assert!(a.projected().hidden.is_empty());
+        assert_eq!(
+            root_paragraph_texts(&a),
+            vec!["xy".to_string(), "z".to_string()]
+        );
+    }
+
+    /// `receive_changesets` minus its bulk shortcut: every novel op goes through
+    /// `project_op`, so the merge exercises the incremental window path that a
+    /// bulk-sized batch would otherwise skip.
+    fn sync_op_by_op(dst: &ProjectedState, src: &ProjectedState) -> ProjectedState {
+        let heads: HashSet<Dot> = dst.graph().current_heads().copied().collect();
+        let css = src.graph().missing_changesets_tolerant(&heads);
+        let mut next = dst.clone();
+        let mut novel: Vec<Dot> = Vec::new();
+        for cs in css {
+            let mut fresh: Vec<Dot> = cs
+                .ops
+                .iter()
+                .map(|o| o.id)
+                .filter(|d| !next.graph.contains(d))
+                .collect();
+            next.graph.receive_changeset_mut(cs).unwrap();
+            novel.append(&mut fresh);
+        }
+        for d in &novel {
+            let op = next.graph.get(d).cloned().unwrap();
+            next.ingest_op_warm(&op).unwrap();
+            next.project_op(&op).unwrap();
+        }
+        next
+    }
+
+    #[test]
+    fn warm_merge_of_concurrent_moves_matches_cold_and_hides_the_loser() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (a_copy, _) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        let (b_copy, _) = raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let a2 = sync(&a, &b);
+        let loser = a_copy.min(b_copy);
+        assert!(a2.projected().hidden.contains(loser));
+        assert_eq!(
+            root_paragraph_texts(&a2),
+            vec!["z".to_string(), "xy".to_string()]
+        );
+        let cold = ProjectedState::from_graph(a2.graph().clone()).unwrap();
+        assert_eq!(a2.projected(), cold.projected());
+    }
+
+    #[test]
+    fn warm_merge_of_concurrent_moves_op_by_op_hides_the_loser_without_a_full_reproject() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (a_copy, _) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        let (b_copy, _) = raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let before_full = a.full_reprojects;
+        let a2 = sync_op_by_op(&a, &b);
+        assert_eq!(
+            a2.full_reprojects, before_full,
+            "the merge must stay on the incremental window path"
+        );
+        let loser = a_copy.min(b_copy);
+        assert!(a2.projected().hidden.contains(loser));
+        assert!(!a2.projected().hidden.contains(a_copy.max(b_copy)));
+        assert_eq!(
+            root_paragraph_texts(&a2),
+            vec!["z".to_string(), "xy".to_string()]
+        );
+        let cold = ProjectedState::from_graph(a2.graph().clone()).unwrap();
+        assert_eq!(a2.projected(), cold.projected());
+        // Deleting the hidden copy outright: its dots leave the sequence entirely, so
+        // nothing keyed on window elements can retire its root.
+        let mut a3 = a2;
+        let pos = a3.seq_visible_pos(loser).unwrap();
+        a3.apply(EditOp::Seq(ListOp::Del {
+            pos,
+            len: 1 + chars.len(),
+        }))
+        .unwrap();
+        let cold = ProjectedState::from_graph(a3.graph().clone()).unwrap();
+        assert_eq!(a3.projected(), cold.projected());
+        assert!(a3.projected().hidden.is_empty());
+    }
+
+    #[test]
+    fn typing_into_a_block_that_received_a_redirected_leaf_matches_cold() {
+        let mut a = ProjectedState::empty();
+        let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+        let c1 = a.apply(seq_char(1, 'a')).unwrap().id;
+        let c2 = a.apply(seq_char(2, 'a')).unwrap().id;
+        a.apply(seq_block(3, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        a.apply(seq_char(4, 'z')).unwrap();
+        a.commit();
+        let mut b = fork(&a, 7);
+        let end = a.seq.visible_len();
+        raw_move_paragraph(&mut a, p1, &[c1, c2], end, "aa").unwrap();
+        a.commit();
+        // One char anchored to the copy that is about to die, one far behind it: the
+        // second lands in the block the first was redirected into.
+        b.apply(seq_char(3, 'q')).unwrap();
+        let tail = b.seq.visible_len();
+        b.apply(seq_char(tail, 'q')).unwrap();
+        b.commit();
+        let merged = sync_op_by_op(&a, &b);
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn typing_far_from_any_copy_stays_on_the_leaf_fast_path_in_a_moved_doc() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let mut merged = sync(&a, &b);
+        let tail = merged
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let pos = merged.seq_visible_pos(tail).unwrap() + 1;
+        let before_leaf = merged.incremental_leaf_inserts;
+        let before_full = merged.full_reprojects;
+        merged.apply(seq_char(pos, 'k')).unwrap();
+        assert_eq!(merged.incremental_leaf_inserts, before_leaf + 1);
+        assert_eq!(merged.full_reprojects, before_full);
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn deleting_a_class_member_incrementally_matches_cold() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (a_copy, a_chars) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        let (b_copy, _) = raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let mut merged = sync(&a, &b);
+        let winner = a_copy.max(b_copy);
+        let target_char = if winner == a_copy {
+            a_chars[0]
+        } else {
+            let view = merged.view();
+            let n = view.node(winner).unwrap();
+            n.children()
+                .find_map(|c| match c {
+                    editor_model::ChildView::Leaf(l) => Some(l.dot()),
+                    _ => None,
+                })
+                .unwrap()
         };
-        assert_eq!(warm, cold);
+        let pos = merged.seq_visible_pos(target_char).unwrap();
+        let before_full = merged.full_reprojects;
+        merged
+            .apply(EditOp::Seq(ListOp::Del { pos, len: 1 }))
+            .unwrap();
+        assert_eq!(
+            merged.full_reprojects, before_full,
+            "deleting one class member must stay on the incremental window path"
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec!["z".to_string(), "y".to_string()]
+        );
+    }
+
+    #[test]
+    fn typing_into_an_unmoved_doc_never_leaves_the_leaf_fast_path() {
+        let (mut a, p1, _chars, _p2) = two_paragraph_base();
+        let _ = a.take_layout_dirty();
+        let before_windows = a.window_escalations;
+        let before_full = a.full_reprojects;
+        let before_leaves = a.incremental_leaf_inserts;
+        a.apply(seq_char(2, 'k')).unwrap();
+        assert!(matches!(
+            a.take_layout_dirty(),
+            LayoutDirty::Incremental { .. }
+        ));
+        assert_eq!(a.full_reprojects, before_full);
+        assert_eq!(a.window_escalations, before_windows);
+        // The counters above stay put on a silent window fallback too; only this one
+        // proves the leaf splice itself ran.
+        assert_eq!(a.incremental_leaf_inserts, before_leaves + 1);
+        let _ = p1;
+    }
+
+    #[test]
+    fn a_leaf_whose_origin_is_a_dead_member_takes_the_window_path_and_matches_cold() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        b.apply(seq_char(2, 'q')).unwrap();
+        b.commit();
+        let merged = sync(&a, &b);
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec!["z".to_string(), "xqy".to_string()]
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn a_leaf_whose_origin_is_a_dead_member_rejoins_the_live_copy_op_by_op() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        b.apply(seq_char(2, 'q')).unwrap();
+        b.commit();
+        let before_full = a.full_reprojects;
+        let merged = sync_op_by_op(&a, &b);
+        assert_eq!(
+            merged.full_reprojects, before_full,
+            "one remote char must stay on the incremental window path"
+        );
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec!["z".to_string(), "xqy".to_string()]
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    fn page_break_split_base() -> (ProjectedState, Dot, Vec<Dot>) {
+        use editor_model::AtomLeaf;
+        let mut a = ProjectedState::empty();
+        a.apply(seq_char(1, 'x')).unwrap();
+        for pos in [2, 3] {
+            a.apply(EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Atom(AtomLeaf::PageBreak),
+            }))
+            .unwrap();
+        }
+        a.apply(seq_char(4, 'y')).unwrap();
+        let m = a
+            .apply(seq_block(5, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        let mut chars = Vec::new();
+        for i in 0..3 {
+            chars.push(a.apply(seq_char(6 + i, 'm')).unwrap().id);
+        }
+        a.apply(seq_block(9, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        for i in 0..3 {
+            a.apply(seq_char(10 + i, 'r')).unwrap();
+        }
+        a.commit();
+        (a, m, chars)
+    }
+
+    #[test]
+    fn a_split_scaffold_never_heads_a_window_widened_over_a_redirect() {
+        let (mut a, m, chars) = page_break_split_base();
+        let scaffolds = a
+            .projected()
+            .tree
+            .root_node()
+            .unwrap()
+            .children
+            .iter()
+            .filter(|c| match c {
+                Child::Block(b) => b.is_synthetic(),
+                Child::Leaf { id, .. } => id.is_synthetic(),
+            })
+            .count();
+        assert_eq!(
+            scaffolds, 2,
+            "the fixture needs two split scaffolds at root"
+        );
+        assert_eq!(
+            root_paragraph_texts(&a),
+            vec![
+                "x".to_string(),
+                String::new(),
+                "y".to_string(),
+                "mmm".to_string(),
+                "rrr".to_string(),
+            ]
+        );
+
+        let mut b = fork(&a, 7);
+        raw_move_paragraph(&mut b, m, &chars, 13, "mmm").unwrap();
+        b.commit();
+        a.apply(seq_char(8, 'q')).unwrap();
+        a.apply(seq_char(6, 'q')).unwrap();
+        a.apply(seq_char(7, 'q')).unwrap();
+        a.commit();
+
+        let before_full = b.full_reprojects;
+        let merged = sync_op_by_op(&b, &a);
+        assert_eq!(
+            merged.full_reprojects, before_full,
+            "three remote chars must stay on the incremental window path"
+        );
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec![
+                "x".to_string(),
+                String::new(),
+                "y".to_string(),
+                "rrr".to_string(),
+                "qqmmqm".to_string(),
+            ]
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    /// Root holding `aaa bbb ccc ddd eee`, with `aaa`'s marker and chars returned.
+    fn five_paragraph_base() -> (ProjectedState, Dot, Vec<Dot>) {
+        let mut a = ProjectedState::empty();
+        let p0 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+        let mut chars = Vec::new();
+        for (i, ch) in "aaa".chars().enumerate() {
+            chars.push(a.apply(seq_char(1 + i, ch)).unwrap().id);
+        }
+        let mut pos = 4;
+        for text in ["bbb", "ccc", "ddd", "eee"] {
+            a.apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+                .unwrap();
+            pos += 1;
+            for ch in text.chars() {
+                a.apply(seq_char(pos, ch)).unwrap();
+                pos += 1;
+            }
+        }
+        a.commit();
+        (a, p0, chars)
+    }
+
+    #[test]
+    fn two_leaves_landing_before_the_first_window_child_do_not_duplicate_a_sibling() {
+        let (mut a, p0, chars) = five_paragraph_base();
+        let mut b = fork(&a, 7);
+        a.apply(seq_char(3, 'q')).unwrap();
+        a.apply(seq_char(1, 'q')).unwrap();
+        a.commit();
+        raw_move_paragraph(&mut b, p0, &chars, 12, "aaa").unwrap();
+        b.commit();
+        let before_full = b.full_reprojects;
+        let merged = sync_op_by_op(&b, &a);
+        assert_eq!(
+            merged.full_reprojects, before_full,
+            "two remote chars must stay on the incremental window path"
+        );
+        assert_eq!(
+            root_paragraph_texts(&merged),
+            vec![
+                "bbb".to_string(),
+                "ccc".to_string(),
+                "qaaqa".to_string(),
+                "ddd".to_string(),
+                "eee".to_string(),
+            ]
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    /// `a` aliased to `w`, then deleted: `z` (typed right after `a`) redirects onto
+    /// `w`'s block, and `q` (typed right after `z`) has to follow it there.
+    /// The seed paragraph is moved wholesale — marker and all — leaving `z`, typed
+    /// inside the copy that dies, to rejoin the surviving copy behind `w`.
+    fn one_redirected_leaf(seed: &mut ProjectedState) -> (Dot, Dot) {
+        let p0 = seed
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let a = seed.apply(seq_char(1, 'a')).unwrap().id;
+        let z = seed.apply(seq_char(2, 'z')).unwrap().id;
+        let p2 = seed
+            .apply(seq_block(3, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        let w = seed.apply(seq_char(4, 'w')).unwrap().id;
+        seed.apply(EditOp::Alias(AliasOp {
+            pairs: vec![
+                AliasRun {
+                    old_start: p0,
+                    len: 1,
+                    new_start: p2,
+                },
+                AliasRun {
+                    old_start: a,
+                    len: 1,
+                    new_start: w,
+                },
+            ],
+        }))
+        .unwrap();
+        let pos = seed.seq_visible_pos(p0).unwrap();
+        seed.apply(EditOp::Seq(ListOp::Del { pos, len: 2 }))
+            .unwrap();
+        (z, w)
+    }
+
+    #[test]
+    fn an_overlay_that_sweeps_a_copy_redirects_what_was_typed_inside_it() {
+        let mut s = ProjectedState::empty();
+        let p0 = s.view().root().unwrap().child_blocks().next().unwrap().id();
+        let a = s.apply(seq_char(1, 'a')).unwrap().id;
+        let z = s.apply(seq_char(2, 'z')).unwrap().id;
+        let p2 = s
+            .apply(seq_block(3, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        let w = s.apply(seq_char(4, 'w')).unwrap().id;
+        s.apply(EditOp::Alias(AliasOp {
+            pairs: vec![
+                AliasRun {
+                    old_start: p0,
+                    len: 1,
+                    new_start: p2,
+                },
+                AliasRun {
+                    old_start: a,
+                    len: 1,
+                    new_start: w,
+                },
+            ],
+        }))
+        .unwrap();
+        // Sweeping the old copy's marker and char is the same document as deleting
+        // them, so `z` belongs behind `w` either way.
+        let swept = ProjectedState::from_graph_with_overlay(s.graph().clone(), &[p0, a]).unwrap();
+        assert!(!swept.projected().redirected.is_empty());
+        assert_eq!(swept.indexes.paths.block_of(z), Some(p2));
+        assert_eq!(root_paragraph_texts(&swept), vec!["wz".to_string()]);
+        let mut deleted = s.clone();
+        let at = deleted.seq_visible_pos(p0).unwrap();
+        deleted
+            .apply(EditOp::Seq(ListOp::Del { pos: at, len: 2 }))
+            .unwrap();
+        assert_eq!(root_paragraph_texts(&deleted), root_paragraph_texts(&swept));
+    }
+
+    #[test]
+    fn a_dead_copy_inside_a_fold_widens_the_alias_window_to_the_document() {
+        let mut s = ProjectedState::empty();
+        let p0 = s.view().root().unwrap().child_blocks().next().unwrap().id();
+        // Typed at the head of the copy that is about to die, at Root level.
+        s.apply(seq_char(1, 'x')).unwrap();
+        let mut pos = 2;
+        let fold = s
+            .apply(seq_block(pos, NodeType::Fold, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        pos += 1;
+        s.apply(seq_block(pos, NodeType::FoldTitle, vec![Dot::ROOT, fold]))
+            .unwrap();
+        pos += 1;
+        let content = s
+            .apply(seq_block(pos, NodeType::FoldContent, vec![Dot::ROOT, fold]))
+            .unwrap()
+            .id;
+        pos += 1;
+        // The surviving copy lives inside the Fold, so the live copy's container alone
+        // would put the window there — nowhere near the leaf left at Root.
+        let inner = s
+            .apply(seq_block(
+                pos,
+                NodeType::Paragraph,
+                vec![Dot::ROOT, fold, content],
+            ))
+            .unwrap()
+            .id;
+        s.commit();
+        let at = s.seq_visible_pos(p0).unwrap();
+        s.apply(EditOp::Seq(ListOp::Del { pos: at, len: 1 }))
+            .unwrap();
+        let before_full = s.full_reprojects;
+        s.apply(EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: p0,
+                len: 1,
+                new_start: inner,
+            }],
+        }))
+        .unwrap();
+        assert_eq!(
+            s.full_reprojects, before_full,
+            "the alias must reach the orphaned leaf through a window"
+        );
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn an_alias_reaches_a_leaf_before_every_root_child() {
+        let mut a = ProjectedState::empty();
+        let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+        a.apply(seq_char(1, 'a')).unwrap();
+        a.apply(seq_block(2, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        a.apply(seq_char(3, 'z')).unwrap();
+        a.commit();
+        let mut b = fork(&a, 7);
+        // b types at the head of the paragraph a is about to move away.
+        b.apply(seq_char(1, 'q')).unwrap();
+        b.commit();
+        let mut merged = sync(&a, &b);
+        let end = merged.seq.visible_len();
+        let copy = merged
+            .apply(seq_block(end, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        let at = merged.seq_visible_pos(p1).unwrap();
+        merged
+            .apply(EditOp::Seq(ListOp::Del { pos: at, len: 2 }))
+            .unwrap();
+        // `q` now sits before every live root child's marker, so only a window that
+        // opens at position 0 reads it.
+        let before_full = merged.full_reprojects;
+        let before_escalations = merged.window_escalations;
+        merged
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![AliasRun {
+                    old_start: p1,
+                    len: 1,
+                    new_start: copy,
+                }],
+            }))
+            .unwrap();
+        assert_eq!(merged.full_reprojects, before_full);
+        assert_eq!(
+            merged.window_escalations, before_escalations,
+            "the alias window must open at the start of the sequence, not climb to it"
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn a_char_after_an_atom_moved_inside_its_live_paragraph_stays_put() {
+        let mut s = ProjectedState::empty();
+        let atom = s
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 1,
+                item: SeqItem::Atom(AtomLeaf::HardBreak),
+            }))
+            .unwrap()
+            .id;
+        let c = s.apply(seq_char(2, 'c')).unwrap().id;
+        s.apply(seq_char(3, 'd')).unwrap();
+        // Move the atom to the end of the SAME live paragraph: its class member dies
+        // but the block `c` was typed in is still there, so `c` must not follow it.
+        let at = s.seq_visible_pos(atom).unwrap();
+        s.apply(EditOp::Seq(ListOp::Del { pos: at, len: 1 }))
+            .unwrap();
+        let end = s.seq.visible_len();
+        let moved = s
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: end,
+                item: SeqItem::Atom(AtomLeaf::HardBreak),
+            }))
+            .unwrap()
+            .id;
+        s.apply(EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: atom,
+                len: 1,
+                new_start: moved,
+            }],
+        }))
+        .unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        assert!(s.projected().redirected.is_empty());
+        // And typing behind it stays on the leaf fast path.
+        let pos = s.seq_visible_pos(c).unwrap() + 1;
+        let before_leaf = s.incremental_leaf_inserts;
+        let before_full = s.full_reprojects;
+        s.apply(seq_char(pos, 'e')).unwrap();
+        assert_eq!(s.incremental_leaf_inserts, before_leaf + 1);
+        assert_eq!(s.full_reprojects, before_full);
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn a_leaf_anchored_to_a_redirected_leaf_follows_it() {
+        let mut s = ProjectedState::empty();
+        let (z, _w) = one_redirected_leaf(&mut s);
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        let zp = s.seq_visible_pos(z).unwrap();
+        s.apply(seq_char(zp + 1, 'q')).unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        assert_eq!(root_paragraph_texts(&s), vec!["wzq".to_string()]);
+    }
+
+    /// A redirected leaf sits out of sequence order inside its block; every warm
+    /// path that walks a block by position has to agree with a cold rebuild anyway.
+    #[test]
+    fn spans_and_modifiers_over_a_redirected_block_match_cold() {
+        for (sa, sb) in [(0usize, 1usize), (1, 2), (0, 3), (2, 3), (0, 2)] {
+            let mut s = ProjectedState::empty();
+            let (z, w) = one_redirected_leaf(&mut s);
+            assert!(
+                !s.projected().redirected.is_empty(),
+                "the fixture must leave a redirected leaf for this to test anything"
+            );
+            let end = s.seq.visible_len();
+            let v = s.apply(seq_char(end, 'v')).unwrap().id;
+            let u = s.apply(seq_char(end + 1, 'u')).unwrap().id;
+            // Tree order is `w, z, v, u` while the sequence says `z, w, v, u`, so a
+            // range picked here can cover leaf ordinals with a gap in the middle.
+            let dots = [z, w, v, u];
+            s.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: dots[sa],
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: dots[sb],
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Bold,
+            }))
+            .unwrap();
+            let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+            assert_eq!(
+                s.projected(),
+                cold.projected(),
+                "span ({sa},{sb}) over the redirected block"
+            );
+            let zp = s.seq_visible_pos(z).unwrap();
+            s.apply(seq_char(zp + 1, 'q')).unwrap();
+            let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+            assert_eq!(
+                s.projected(),
+                cold.projected(),
+                "span ({sa},{sb}) after chained insert"
+            );
+            s.apply(EditOp::Span(SpanOp::AddSpan {
+                start: Anchor {
+                    id: z,
+                    bias: Bias::Before,
+                },
+                end: Anchor {
+                    id: v,
+                    bias: Bias::After,
+                },
+                modifier: Modifier::Italic,
+            }))
+            .unwrap();
+            let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+            assert_eq!(
+                s.projected(),
+                cold.projected(),
+                "span ({sa},{sb}) after second span"
+            );
+            let host = s.indexes.paths.block_of(z).unwrap();
+            s.apply(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: host,
+                modifier: Modifier::LineHeight { value: 200 },
+            }))
+            .unwrap();
+            let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+            assert_eq!(
+                s.projected(),
+                cold.projected(),
+                "span ({sa},{sb}) after block modifier"
+            );
+            s.apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+                target: host,
+                modifier: Modifier::FontWeight { value: 700 },
+            }))
+            .unwrap();
+            let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+            assert_eq!(
+                s.projected(),
+                cold.projected(),
+                "span ({sa},{sb}) after node carry"
+            );
+            assert!(
+                !s.projected().redirected.is_empty(),
+                "span ({sa},{sb}) stopped exercising a redirect"
+            );
+        }
+    }
+
+    #[test]
+    fn deleting_a_redirected_leaf_puts_its_chain_back_where_the_sequence_says() {
+        let mut s = ProjectedState::empty();
+        let (z, _w) = one_redirected_leaf(&mut s);
+        let zp = s.seq_visible_pos(z).unwrap();
+        s.apply(seq_char(zp + 1, 'q')).unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        let zp = s.seq_visible_pos(z).unwrap();
+        s.apply(EditOp::Seq(ListOp::Del { pos: zp, len: 1 }))
+            .unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn a_span_promoted_over_a_redirected_block_matches_cold() {
+        let mut s = ProjectedState::empty();
+        let (z, w) = one_redirected_leaf(&mut s);
+        // The redirected block ends up holding `w`, `z`, `q` while the sequence orders
+        // them `z`, `q`, `w` — so a range from `q` to `w` covers the first and last
+        // leaf ordinals and skips the one between them.
+        let future = Dot::new(1, 8);
+        s.apply(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: future,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: w,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Bold,
+        }))
+        .unwrap();
+        assert_eq!(s.indexes.span_index.pending_len(), 1);
+        let zp = s.seq_visible_pos(z).unwrap();
+        let q = s.apply(seq_char(zp + 1, 'q')).unwrap().id;
+        assert_eq!(q, future, "clock prediction drifted — adjust `future`");
+        assert_eq!(
+            s.indexes.span_index.pending_len(),
+            0,
+            "the Ins must promote the span naming it"
+        );
+        for d in [q, w] {
+            assert_eq!(
+                s.view()
+                    .leaf_state_by_dot_slow(d)
+                    .unwrap()
+                    .eff
+                    .get(&ModifierType::Bold),
+                Some(&Modifier::Bold),
+                "the promoted span must actually cover {d:?}"
+            );
+        }
+        assert_eq!(
+            s.view()
+                .leaf_state_by_dot_slow(z)
+                .unwrap()
+                .eff
+                .get(&ModifierType::Bold),
+            None,
+            "the skipped ordinal must stay uncovered"
+        );
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn node_ops_on_a_redirected_block_match_cold() {
+        let mut s = ProjectedState::empty();
+        let (z, _w) = one_redirected_leaf(&mut s);
+        let host = s.indexes.paths.block_of(z).unwrap();
+        s.apply(EditOp::NodeAttr(NodeAttrOp {
+            target: host,
+            attr: NodeAttr::Callout {
+                attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
+            },
+        }))
+        .unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        s.apply(EditOp::NodeCarry(ModifierAttrOp::SetModifier {
+            target: host,
+            modifier: Modifier::FontWeight { value: 700 },
+        }))
+        .unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn deleting_a_class_member_in_a_moved_doc_stays_off_the_full_reproject() {
+        let (mut a, p1, chars, _p2) = two_paragraph_base();
+        let mut b = fork(&a, 7);
+        let (a_copy, _) = raw_move_paragraph(&mut a, p1, &chars, 5, "xy").unwrap();
+        a.commit();
+        let (b_copy, _) = raw_move_paragraph(&mut b, p1, &chars, 5, "xy").unwrap();
+        b.commit();
+        let mut merged = sync(&a, &b);
+        // The shown copy leaves the sequence while the stale tree still holds it: a
+        // window that reads it as still-shown has nowhere to go but a full rebuild.
+        let winner = a_copy.max(b_copy);
+        let pos = merged.seq_visible_pos(winner).unwrap();
+        let before_full = merged.full_reprojects;
+        merged
+            .apply(EditOp::Seq(ListOp::Del {
+                pos,
+                len: 1 + chars.len(),
+            }))
+            .unwrap();
+        assert_eq!(
+            merged.full_reprojects, before_full,
+            "a class member's Del must stay on the window path"
+        );
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn aliasing_a_redirected_leaf_returns_it_to_its_sequence_position() {
+        let mut s = ProjectedState::empty();
+        let (z, _w) = one_redirected_leaf(&mut s);
+        let end = s.seq.visible_len();
+        let u = s.apply(seq_char(end, 'u')).unwrap().id;
+        s.apply(EditOp::Alias(AliasOp {
+            pairs: vec![AliasRun {
+                old_start: z,
+                len: 1,
+                new_start: u,
+            }],
+        }))
+        .unwrap();
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+    }
+
+    #[test]
+    fn a_remote_leaf_before_every_root_child_reprojects_the_whole_document() {
+        let mut a = ProjectedState::empty();
+        let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+        let c1 = a.apply(seq_char(1, 'a')).unwrap().id;
+        a.apply(seq_block(2, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        a.apply(seq_char(3, 'z')).unwrap();
+        a.commit();
+        let mut b = fork(&a, 7);
+        let end = a.seq.visible_len();
+        raw_move_paragraph(&mut a, p1, &[c1], end, "a").unwrap();
+        a.commit();
+        b.apply(seq_char(1, 'q')).unwrap();
+        b.apply(seq_char(2, 'q')).unwrap();
+        b.commit();
+        let before_full = a.full_reprojects;
+        let merged = sync_op_by_op(&a, &b);
+        assert_eq!(merged.full_reprojects, before_full);
+        let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+        assert_eq!(merged.projected(), cold.projected());
     }
 
     #[test]
@@ -4953,6 +6591,10 @@ mod tests {
                 assert!(content.is_empty() && structural.is_empty());
             }
         }
+        // Nothing to reproject only because nothing changed: two live chars are not
+        // judgment units, and no copy is dead or hidden, so no leaf redirects.
+        let cold = ProjectedState::from_graph(state.graph().clone()).unwrap();
+        assert_eq!(state.projected(), cold.projected());
     }
 
     fn arb_chars() -> impl proptest::strategy::Strategy<Value = Vec<char>> {
@@ -7453,6 +9095,104 @@ mod tests {
             proptest::prop_assert_eq!(warm.projected(), cold.projected());
         }
 
+        // Two replicas move the same paragraph, then edit around the merge: the merged
+        // projections agree with each other and with a cold rebuild, and no class ever
+        // shows two copies at once.
+        #[test]
+        fn incremental_apply_equals_cold_under_concurrent_moves(
+            seed_text in "[a-c]{1,4}",
+            b_inserts in proptest::collection::vec(0u8..8, 0..3),
+            delete_after in proptest::option::of(0u8..8),
+        ) {
+            let mut a = ProjectedState::empty();
+            let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+            let mut chars = Vec::new();
+            for (i, ch) in seed_text.chars().enumerate() {
+                chars.push(a.apply(seq_char(1 + i, ch)).unwrap().id);
+            }
+            a.apply(seq_block(1 + chars.len(), NodeType::Paragraph, vec![Dot::ROOT])).unwrap();
+            a.apply(seq_char(2 + chars.len(), 'z')).unwrap();
+            a.commit();
+            let mut b = fork(&a, 7);
+            let end = a.seq.visible_len();
+            if raw_move_paragraph(&mut a, p1, &chars, end, &seed_text).is_none() {
+                return Ok(());
+            }
+            a.commit();
+            for k in &b_inserts {
+                let vis = b.seq.visible_len();
+                let pos = 1 + (*k as usize) % vis.max(1);
+                if b.apply(seq_char(pos.min(vis), 'q')).is_err() {
+                    return Ok(());
+                }
+            }
+            if raw_move_paragraph(&mut b, p1, &chars, 1 + chars.len() + 2, &seed_text).is_none() {
+                return Ok(());
+            }
+            b.commit();
+            let mut merged = sync(&a, &b);
+            let merged_b = sync(&b, &a);
+            proptest::prop_assert_eq!(merged.projected(), merged_b.projected());
+            if let Some(k) = delete_after {
+                let vis = merged.seq.visible_len();
+                if vis > 1 {
+                    let pos = 1 + (k as usize) % (vis - 1);
+                    if merged.apply(EditOp::Seq(ListOp::Del { pos, len: 1 })).is_err() {
+                        return Ok(());
+                    }
+                }
+            }
+            let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+            proptest::prop_assert_eq!(merged.projected(), cold.projected());
+            let classes: Vec<Vec<Dot>> = merged
+                .projected()
+                .alias_classes
+                .classes()
+                .map(|c| c.to_vec())
+                .collect();
+            for m in &classes {
+                let shown = m.iter().filter(|d| merged.view().node(**d).is_some()).count();
+                proptest::prop_assert!(shown <= 1, "class {:?} shows {} copies", m, shown);
+            }
+        }
+
+        // The same merge driven one op at a time, so the incremental window path — not
+        // `receive_changesets`' bulk shortcut — has to reach the cold projection.
+        #[test]
+        fn incremental_merge_op_by_op_equals_cold_under_concurrent_moves(
+            seed_text in "[a-c]{1,4}",
+            b_inserts in proptest::collection::vec(0u8..8, 0..3),
+        ) {
+            let mut a = ProjectedState::empty();
+            let p1 = a.view().root().unwrap().child_blocks().next().unwrap().id();
+            let mut chars = Vec::new();
+            for (i, ch) in seed_text.chars().enumerate() {
+                chars.push(a.apply(seq_char(1 + i, ch)).unwrap().id);
+            }
+            a.apply(seq_block(1 + chars.len(), NodeType::Paragraph, vec![Dot::ROOT])).unwrap();
+            a.apply(seq_char(2 + chars.len(), 'z')).unwrap();
+            a.commit();
+            let mut b = fork(&a, 7);
+            let end = a.seq.visible_len();
+            if raw_move_paragraph(&mut a, p1, &chars, end, &seed_text).is_none() {
+                return Ok(());
+            }
+            a.commit();
+            for k in &b_inserts {
+                let vis = b.seq.visible_len();
+                let pos = 1 + (*k as usize) % vis.max(1);
+                if b.apply(seq_char(pos.min(vis), 'q')).is_err() {
+                    return Ok(());
+                }
+            }
+            b.commit();
+            let before_full = a.full_reprojects;
+            let merged = sync_op_by_op(&a, &b);
+            proptest::prop_assert_eq!(merged.full_reprojects, before_full);
+            let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
+            proptest::prop_assert_eq!(merged.projected(), cold.projected());
+        }
+
         // Repairs fire only on damage: a clean history reports no repair, no drop, no
         // totality deficit, no degradation — read off the instance's ProjectedDoc, not
         // a global counter.
@@ -7919,6 +9659,240 @@ mod tests {
         (warm, deferred)
     }
 
+    /// Shrunk from `defer_safe_sequence_projects_identically_deferred_and_immediate`:
+    /// a leaf lands behind a redirected leaf, which the incremental leaf splice put
+    /// at its sequence slot instead of behind its anchor.
+    #[test]
+    fn defer_safe_sequence_matches_across_a_redirect_chain() {
+        let steps: Vec<DeferSafeStep> = vec![
+            (255, 0, 0, 0),
+            (35, 43, 0, 0),
+            (115, 15, 0, 0),
+            (75, 66, 0, 0),
+            (166, 15, 0, 0),
+            (25, 126, 0, 0),
+            (155, 65, 0, 0),
+            (191, 16, 0, 0),
+            (55, 0, 0, 0),
+            (18, 0, 0, 0),
+            (15, 120, 0, 0),
+            (56, 9, 0, 0),
+            (65, 104, 0, 0),
+            (72, 0, 0, 0),
+            (233, 0, 0, 0),
+            (87, 161, 176, 0),
+            (47, 188, 0, 0),
+            (16, 0, 0, 0),
+            (129, 0, 0, 0),
+            (71, 2, 0, 0),
+            (141, 2, 0, 0),
+            (42, 175, 56, 0),
+            (57, 64, 47, 0),
+            (89, 81, 39, 0),
+            (40, 0, 0, 0),
+            (152, 1, 23, 0),
+            (108, 51, 0, 0),
+            (4, 33, 7, 0),
+            (55, 0, 0, 0),
+            (70, 0, 0, 0),
+            (40, 0, 0, 0),
+            (183, 59, 0, 32),
+            (155, 211, 44, 29),
+            (80, 53, 214, 102),
+            (200, 248, 26, 134),
+            (235, 37, 222, 60),
+            (158, 153, 238, 11),
+        ];
+        let (warm, deferred) = run_defer_safe_sequence(&steps);
+        assert_eq!(warm.projected(), deferred.projected());
+    }
+
+    /// Shrunk from `defer_safe_sequence_projects_identically_deferred_and_immediate`:
+    /// a class shows several copies at once (chars are never judgment units), so the
+    /// copy a redirect resolves to depends on which of them the window can see.
+    /// Since a redirect also requires the leaf's enclosing marker to be gone, this
+    /// seed no longer reaches that shape — it stands as a warm-vs-deferred pin over
+    /// aliased edits. No replacement seed appeared at 8000 cases.
+    #[test]
+    fn defer_safe_sequence_matches_when_a_redirect_image_lives_outside_the_window() {
+        let steps: Vec<DeferSafeStep> = vec![
+            (15, 0, 0, 0),
+            (11, 0, 0, 0),
+            (66, 0, 0, 0),
+            (155, 54, 0, 0),
+            (40, 158, 0, 0),
+            (232, 76, 108, 0),
+            (107, 0, 0, 0),
+            (198, 0, 0, 0),
+            (131, 25, 0, 0),
+            (180, 67, 0, 0),
+            (232, 0, 0, 0),
+            (193, 83, 0, 0),
+            (180, 63, 0, 0),
+            (192, 0, 0, 0),
+            (63, 7, 0, 0),
+            (232, 221, 234, 0),
+            (67, 8, 18, 0),
+            (25, 0, 0, 0),
+            (157, 85, 13, 0),
+            (86, 0, 0, 0),
+            (199, 176, 254, 0),
+            (5, 0, 0, 0),
+            (2, 41, 66, 0),
+            (167, 0, 0, 0),
+            (65, 0, 0, 0),
+            (198, 64, 0, 0),
+            (154, 25, 165, 0),
+            (47, 0, 0, 0),
+            (166, 0, 0, 0),
+            (156, 0, 0, 0),
+            (137, 105, 102, 0),
+            (65, 0, 0, 25),
+            (210, 109, 11, 182),
+            (123, 143, 32, 23),
+            (174, 51, 43, 26),
+            (115, 115, 180, 178),
+            (60, 188, 57, 177),
+            (116, 229, 124, 158),
+            (207, 242, 146, 38),
+            (201, 99, 31, 2),
+            (228, 182, 67, 164),
+            (246, 201, 39, 216),
+            (230, 173, 113, 219),
+            (149, 57, 103, 240),
+            (93, 20, 158, 39),
+        ];
+        let (warm, deferred) = run_defer_safe_sequence(&steps);
+        assert_eq!(warm.projected(), deferred.projected());
+    }
+
+    /// Shrunk from `defer_safe_sequence_projects_identically_deferred_and_immediate`:
+    /// a leaf's anchor is a candidate redirect that stays where the sequence put it,
+    /// so the leaf behind it must not be recorded as moved either.
+    /// Since a redirect also requires the leaf's enclosing marker to be gone, this
+    /// seed no longer reaches that shape — it stands as a warm-vs-deferred pin over
+    /// aliased edits. No replacement seed appeared at 8000 cases.
+    #[test]
+    fn defer_safe_sequence_matches_when_a_chain_anchor_never_moved() {
+        let steps: Vec<DeferSafeStep> = vec![
+            (225, 0, 0, 0),
+            (151, 20, 0, 0),
+            (67, 0, 0, 0),
+            (35, 20, 0, 0),
+            (128, 0, 0, 0),
+            (26, 4, 0, 0),
+            (196, 0, 0, 0),
+            (70, 0, 0, 0),
+            (105, 0, 0, 0),
+            (5, 0, 0, 0),
+            (71, 0, 0, 0),
+            (40, 10, 0, 0),
+            (26, 0, 0, 0),
+            (136, 0, 0, 0),
+            (41, 168, 0, 0),
+            (46, 0, 0, 0),
+            (56, 15, 0, 0),
+            (126, 8, 0, 0),
+            (126, 15, 0, 0),
+            (16, 15, 0, 0),
+            (207, 153, 171, 0),
+            (2, 131, 143, 0),
+            (8, 50, 0, 0),
+            (132, 176, 202, 0),
+            (107, 184, 67, 0),
+            (157, 32, 32, 0),
+            (4, 10, 237, 0),
+            (40, 0, 0, 0),
+            (5, 54, 0, 0),
+            (157, 64, 45, 0),
+            (170, 122, 0, 0),
+        ];
+        let (warm, deferred) = run_defer_safe_sequence(&steps);
+        assert_eq!(warm.projected(), deferred.projected());
+    }
+
+    /// Shrunk from `defer_safe_sequence_projects_identically_deferred_and_immediate`:
+    /// deleting a copy re-aims every leaf anchored to it, and those leaves reach the
+    /// surviving copy from across the copy's whole descendant run.
+    /// Since a redirect also requires the leaf's enclosing marker to be gone, this
+    /// seed no longer reaches that shape — it stands as a warm-vs-deferred pin over
+    /// aliased edits. No replacement seed appeared at 8000 cases.
+    #[test]
+    fn defer_safe_sequence_matches_when_a_deleted_copy_has_distant_anchors() {
+        let steps: Vec<DeferSafeStep> = vec![
+            (25, 0, 0, 0),
+            (71, 0, 0, 0),
+            (131, 0, 0, 0),
+            (111, 0, 0, 0),
+            (236, 0, 0, 0),
+            (40, 0, 0, 0),
+            (5, 0, 0, 0),
+            (5, 0, 0, 0),
+            (227, 179, 156, 0),
+            (86, 0, 0, 0),
+            (200, 0, 0, 0),
+            (117, 43, 127, 0),
+            (197, 16, 109, 0),
+            (75, 160, 0, 0),
+            (15, 231, 0, 0),
+            (128, 92, 0, 0),
+            (180, 1, 0, 0),
+            (198, 30, 0, 0),
+            (145, 1, 0, 0),
+            (69, 0, 0, 0),
+            (55, 1, 0, 0),
+            (216, 183, 0, 0),
+            (144, 6, 215, 0),
+            (167, 173, 114, 0),
+            (10, 2, 0, 0),
+            (40, 74, 0, 0),
+            (28, 0, 0, 0),
+            (153, 0, 0, 0),
+            (65, 2, 0, 0),
+            (130, 2, 0, 0),
+            (20, 2, 0, 0),
+            (66, 133, 0, 0),
+            (5, 23, 0, 0),
+            (172, 55, 42, 0),
+            (47, 110, 111, 0),
+        ];
+        let (warm, deferred) = run_defer_safe_sequence(&steps);
+        assert_eq!(warm.projected(), deferred.projected());
+    }
+
+    /// Shrunk from `defer_safe_sequence_projects_identically_deferred_and_immediate`:
+    /// the op puts a dead copy into a class that has a live one, which turns every leaf
+    /// anchored to the dead copy into a redirect.
+    /// Since a redirect also requires the leaf's enclosing marker to be gone, this
+    /// seed no longer reaches that shape — it stands as a warm-vs-deferred pin over
+    /// aliased edits. No replacement seed appeared at 8000 cases.
+    #[test]
+    fn defer_safe_sequence_matches_when_an_alias_revives_a_dead_copys_anchors() {
+        let steps: Vec<DeferSafeStep> = vec![
+            (35, 0, 0, 0),
+            (26, 1, 0, 0),
+            (200, 127, 0, 0),
+            (225, 32, 0, 0),
+            (36, 0, 0, 0),
+            (55, 18, 0, 0),
+            (25, 35, 0, 0),
+            (95, 8, 0, 0),
+            (131, 24, 0, 0),
+            (195, 90, 0, 0),
+            (40, 33, 0, 0),
+            (86, 0, 0, 0),
+            (5, 28, 0, 0),
+            (46, 2, 0, 0),
+            (14, 187, 110, 0),
+            (25, 17, 0, 0),
+            (167, 167, 165, 0),
+            (235, 0, 0, 0),
+            (74, 2, 11, 0),
+        ];
+        let (warm, deferred) = run_defer_safe_sequence(&steps);
+        assert_eq!(warm.projected(), deferred.projected());
+    }
+
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig {
             cases: std::env::var("PROPTEST_CASES")
@@ -7936,5 +9910,28 @@ mod tests {
             editor_model::assert_flat_index_consistent(&warm.projected().tree);
             editor_model::assert_flat_index_consistent(&deferred.projected().tree);
         }
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_single_char_deletes_without_moves() {
+        use std::time::{Duration, Instant};
+        let mut state = ProjectedState::empty();
+        for i in 0..50_000 {
+            state.apply(seq_char(1 + i, 'a')).unwrap();
+        }
+        state.commit();
+        let passes_before = state.projection_passes();
+        let t = Instant::now();
+        for _ in 0..2_000 {
+            state
+                .apply(EditOp::Seq(ListOp::Del { pos: 1, len: 1 }))
+                .unwrap();
+        }
+        let elapsed = t.elapsed();
+        eprintln!("perf_single_char_deletes_without_moves: 2000 deletes in {elapsed:?}");
+        assert!(state.projected().alias_classes.is_empty());
+        assert_eq!(state.projection_passes(), passes_before);
+        assert!(elapsed < Duration::from_millis(400), "{elapsed:?}");
     }
 }

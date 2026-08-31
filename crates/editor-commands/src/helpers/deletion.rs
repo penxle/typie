@@ -243,12 +243,17 @@ pub(crate) fn capture_atom_leaf_subtree_at(
     } else {
         node.leaf_own_modifiers_at(index)
     };
+    let source_dots = if leaf_dot.is_synthetic() {
+        Vec::new()
+    } else {
+        vec![leaf_dot]
+    };
     Ok(Subtree {
         node: atom.into_node().to_plain(),
         modifiers,
         carry: Vec::new(),
         children: Vec::new(),
-        source_dots: Vec::new(),
+        source_dots,
     })
 }
 

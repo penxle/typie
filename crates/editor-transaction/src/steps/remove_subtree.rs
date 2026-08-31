@@ -35,6 +35,7 @@ pub(crate) fn apply_to(
                 None => return Ok(()),
             }
         };
+        let dots = support::with_hidden_copies(ps, dots);
         support::delete_dots_ops(ps, &dots)
     };
     for op in ops {

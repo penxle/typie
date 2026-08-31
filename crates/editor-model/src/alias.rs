@@ -29,6 +29,10 @@ impl AliasLog {
     pub fn iter(&self) -> impl Iterator<Item = &AliasOp> {
         self.ops.iter()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.ops.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -108,6 +112,16 @@ pub fn alias_op_is_valid(op: &AliasOp) -> bool {
 }
 
 impl AliasClasses {
+    pub fn is_empty(&self) -> bool {
+        self.rep_of.is_empty()
+    }
+
+    pub fn classes(&self) -> impl Iterator<Item = &[Dot]> {
+        let mut reps: Vec<Dot> = self.members.keys().copied().collect();
+        reps.sort();
+        reps.into_iter().map(move |r| self.members[&r].as_slice())
+    }
+
     pub fn contains(&self, d: Dot) -> bool {
         self.rep_of.contains_key(&d)
     }
@@ -172,6 +186,35 @@ mod tests {
             len,
             new_start: Dot::new(new.0, new.1),
         }
+    }
+
+    #[test]
+    fn empty_classes_and_log_report_empty() {
+        assert!(AliasLog::new().is_empty());
+        assert!(AliasClasses::from_log(&AliasLog::new()).is_empty());
+        let mut log = AliasLog::new();
+        log.apply(AliasOp {
+            pairs: vec![run((1, 0), 1, (2, 0))],
+        });
+        assert!(!log.is_empty());
+        assert!(!AliasClasses::from_log(&log).is_empty());
+    }
+
+    #[test]
+    fn classes_iterates_every_class_in_representative_order() {
+        let mut log = AliasLog::new();
+        log.apply(AliasOp {
+            pairs: vec![run((5, 0), 1, (6, 0)), run((1, 0), 1, (2, 0))],
+        });
+        let classes = AliasClasses::from_log(&log);
+        let all: Vec<Vec<Dot>> = classes.classes().map(|m| m.to_vec()).collect();
+        assert_eq!(
+            all,
+            vec![
+                vec![Dot::new(1, 0), Dot::new(2, 0)],
+                vec![Dot::new(5, 0), Dot::new(6, 0)]
+            ]
+        );
     }
 
     #[test]

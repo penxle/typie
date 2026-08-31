@@ -143,6 +143,8 @@ mod tests {
             node_attrs: FastMap::new(),
             node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            hidden: editor_model::HiddenCopies::default(),
+            redirected: FastMap::new(),
             repair_stats: editor_model::RepairStats::default(),
         };
         let view = DocView::new(&doc);
@@ -199,6 +201,8 @@ mod tests {
             node_attrs: FastMap::new(),
             node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            hidden: editor_model::HiddenCopies::default(),
+            redirected: FastMap::new(),
             repair_stats: editor_model::RepairStats::default(),
         };
         let view = DocView::new(&doc);
@@ -255,6 +259,8 @@ mod tests {
             node_attrs: FastMap::new(),
             node_carries: FastMap::new(),
             alias_classes: editor_model::AliasClasses::default(),
+            hidden: editor_model::HiddenCopies::default(),
+            redirected: FastMap::new(),
             repair_stats: editor_model::RepairStats::default(),
         };
         let view = DocView::new(&doc);

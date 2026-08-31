@@ -11,8 +11,9 @@ pub struct Subtree {
     pub children: Vec<Subtree>,
     /// The real op dots this subtree was captured from, in walk order — `Text`:
     /// one per char; `Block`/`Atom`: the node's own dot; a described (not
-    /// captured) subtree: empty. Only `capture_subtree` fills this; every other
-    /// constructor leaves it empty. Consumed by `emit_subtree` to pair each
+    /// captured) subtree: empty. Only the capture helpers (`capture_subtree`,
+    /// `capture_atom_leaf_subtree_at`) fill this; every other constructor
+    /// leaves it empty. Consumed by `emit_subtree` to pair each
     /// freshly-emitted dot back to the dot it replaces.
     pub source_dots: Vec<Dot>,
 }
@@ -36,6 +37,35 @@ impl Subtree {
     pub fn with_modifiers(mut self, modifiers: Vec<Modifier>) -> Self {
         self.modifiers = modifiers;
         self
+    }
+
+    pub fn strip_source_dots(&mut self) {
+        let mut stack: Vec<&mut Subtree> = vec![self];
+        while let Some(s) = stack.pop() {
+            s.source_dots.clear();
+            stack.extend(s.children.iter_mut());
+        }
+    }
+
+    pub fn collect_source_dots(&self) -> Vec<Dot> {
+        let mut out = Vec::new();
+        let mut stack: Vec<&Subtree> = vec![self];
+        while let Some(s) = stack.pop() {
+            out.extend_from_slice(&s.source_dots);
+            stack.extend(s.children.iter());
+        }
+        out
+    }
+
+    pub fn carries_source_dots(&self) -> bool {
+        let mut stack: Vec<&Subtree> = vec![self];
+        while let Some(s) = stack.pop() {
+            if !s.source_dots.is_empty() {
+                return true;
+            }
+            stack.extend(s.children.iter());
+        }
+        false
     }
 
     pub fn into_parts(
@@ -107,5 +137,26 @@ impl Drop for Subtree {
         while let Some(mut subtree) = stack.pop() {
             stack.append(&mut subtree.children);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nodes::PlainTextNode;
+
+    #[test]
+    fn strip_source_dots_clears_the_whole_subtree() {
+        let mut sub =
+            Subtree::leaf(PlainNode::Paragraph(Default::default())).with_children(vec![Subtree {
+                node: PlainNode::Text(PlainTextNode { text: "ab".into() }),
+                modifiers: vec![],
+                carry: vec![],
+                children: vec![],
+                source_dots: vec![Dot::new(1, 1), Dot::new(1, 2)],
+            }]);
+        sub.source_dots = vec![Dot::new(1, 0)];
+        sub.strip_source_dots();
+        assert!(sub.source_dots.is_empty() && sub.children[0].source_dots.is_empty());
     }
 }

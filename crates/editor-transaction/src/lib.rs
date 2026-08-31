@@ -13,6 +13,8 @@ mod steps;
 mod transaction;
 
 #[cfg(test)]
+mod copy_identity_tests;
+#[cfg(test)]
 mod test_utils;
 
 pub use dissolve::dissolve;

@@ -96,11 +96,13 @@ pub(crate) fn assert_projection_integrity(state: &State) {
         "warm/cold projection diverged"
     );
 
+    let hidden = &warm.projected().hidden;
     let visible: hashbrown::HashSet<Dot> = warm
         .seq_checkout()
         .snapshot(warm.seq())
         .into_iter()
         .map(|(dot, _)| dot)
+        .filter(|d| !hidden.contains(*d))
         .collect();
     let reachable: hashbrown::HashSet<Dot> =
         warm.subtree_real_dots(Dot::ROOT).into_iter().collect();
