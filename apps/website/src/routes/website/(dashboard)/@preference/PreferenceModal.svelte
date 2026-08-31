@@ -74,7 +74,6 @@
         ...DashboardLayout_PreferenceModal_ReferralTab_user
         ...DashboardLayout_PreferenceModal_LaboratoryTab_user
         ...DashboardLayout_PreferenceModal_ShortcutsTab_user
-        ...DashboardLayout_PreferenceModal_NotificationsTab_user
         ...DashboardLayout_PreferenceModal_PrismGeneralTab_user
         ...DashboardLayout_PreferenceModal_PrismCreditsTab_user
         ...DashboardLayout_PreferenceModal_TextReplacementTab_user

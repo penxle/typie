@@ -12,6 +12,7 @@
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
+  import HomeIcon from '~icons/lucide/house';
   import EntityIcon from '../../../@context-menu/EntityIcon.svelte';
   import { getPaneGroup } from '../../@pane/context.svelte';
   import { BreadcrumbDocumentDragController } from './breadcrumb-document-drag.svelte';
@@ -26,31 +27,67 @@
     entity$key: EntityIcon_entity$key;
   };
 
+  export type EditorBreadcrumbTarget = { kind: 'home' } | { kind: 'entity'; slug: string };
+
+  export type EditorBreadcrumbCurrent = { kind: 'home' } | ({ kind: 'entity' } & EditorBreadcrumbPathEntity & { slug: string });
+
+  type BreadcrumbPathItem =
+    Extract<EditorBreadcrumbCurrent, { kind: 'home' }> | ({ kind: 'entity' } & EditorBreadcrumbPathEntity & { slug?: string });
+
   type BreadcrumbNavigationSegment = {
     id: string;
+    kind: BreadcrumbPathItem['kind'];
     container: BreadcrumbContainer;
   };
 
   type Props = {
     ancestors: readonly EditorBreadcrumbPathEntity[];
-    current: EditorBreadcrumbPathEntity & { slug: string };
+    current: EditorBreadcrumbCurrent;
     isOwner: boolean;
-    onNavigate: (slug: string) => void;
+    onNavigate: (target: EditorBreadcrumbTarget) => void;
     popupId: string;
     segment?: EditorContextBarSegmentState;
-    siteId: string;
+    siteId: string | null;
   };
 
   let { ancestors, current, isOwner, onNavigate, popupId, segment, siteId }: Props = $props();
 
   const POPUP_HOLD_REASON = 'breadcrumb-popup';
-  const pathEntities = $derived([...ancestors, current]);
-  const segments = $derived(
-    pathEntities.map((pathEntity, index): BreadcrumbNavigationSegment => ({
-      id: pathEntity.id,
-      container: index === 0 ? { kind: 'site', siteId } : { kind: 'entity', entityId: pathEntities[index - 1].id },
-    })),
+  const HOME_SEGMENT_ID = 'home';
+
+  function pathItemId(pathItem: BreadcrumbPathItem) {
+    return pathItem.kind === 'home' ? HOME_SEGMENT_ID : pathItem.id;
+  }
+
+  function pathItemName(pathItem: BreadcrumbPathItem) {
+    return pathItem.kind === 'home' ? '홈' : pathItem.name;
+  }
+
+  const pathItems = $derived<BreadcrumbPathItem[]>(
+    current.kind === 'home' ? [current] : [...ancestors.map((entity) => ({ kind: 'entity' as const, ...entity })), current],
   );
+  const interactive = $derived(isOwner && siteId !== null);
+  const segments = $derived.by<BreadcrumbNavigationSegment[]>(() => {
+    if (siteId === null) return [];
+
+    return pathItems.map((pathItem, index): BreadcrumbNavigationSegment => {
+      const previous = pathItems[index - 1];
+      let container: BreadcrumbContainer;
+
+      if (index === 0) {
+        container = { kind: 'site', siteId };
+      } else {
+        if (previous?.kind !== 'entity') throw new Error('Home cannot be a breadcrumb ancestor');
+        container = { kind: 'entity', entityId: previous.id };
+      }
+
+      return {
+        id: pathItemId(pathItem),
+        kind: pathItem.kind,
+        container,
+      };
+    });
+  });
   let activeSegmentId = $state<string | null>(null);
   const expandedFolderIds = new SvelteSet<string>();
   const activeSegment = $derived(segments.find((candidate) => candidate.id === activeSegmentId));
@@ -105,9 +142,14 @@
   }
 
   function activateDocument(slug: string) {
-    const currentDocument = slug === current.slug;
+    const currentDocument = current.kind === 'entity' && slug === current.slug;
     dismiss(false);
-    if (!currentDocument) onNavigate(slug);
+    if (!currentDocument) onNavigate({ kind: 'entity', slug });
+  }
+
+  function activateHome() {
+    dismiss(false);
+    onNavigate({ kind: 'home' });
   }
 
   function handlePopupFocusOut(event: FocusEvent) {
@@ -118,7 +160,7 @@
   }
 
   $effect(() => {
-    if (!isOwner) dismiss(false);
+    if (!interactive) dismiss(false);
   });
 
   $effect(() => {
@@ -144,7 +186,7 @@
     display: 'flex',
     alignItems: 'center',
     height: '32px',
-    paddingLeft: '8px',
+    paddingLeft: '4px',
     paddingRight: '4px',
     fontSize: '12px',
     fontWeight: 'medium',
@@ -153,12 +195,13 @@
   aria-label="문서 경로"
 >
   <ol class={flex({ alignItems: 'center', gap: '2px', listStyle: 'none', whiteSpace: 'nowrap' })}>
-    {#each pathEntities as pathEntity, index (pathEntity.id)}
-      {@const currentEntity = index === pathEntities.length - 1}
+    {#each pathItems as pathItem, index (pathItemId(pathItem))}
+      {@const currentEntity = index === pathItems.length - 1}
+      {@const itemId = pathItemId(pathItem)}
       <li aria-current={currentEntity ? 'page' : undefined}>
-        {#if isOwner}
+        {#if interactive}
           <button
-            id={triggerId(pathEntity.id)}
+            id={triggerId(itemId)}
             class={flex({
               alignItems: 'center',
               gap: '4px',
@@ -167,17 +210,21 @@
               borderRadius: '5px',
               cursor: 'pointer',
               transition: 'common',
-              _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
-              _expanded: { backgroundColor: 'interactive.hover', color: 'text.default' },
+              _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+              _expanded: { backgroundColor: 'surface.muted', color: 'text.default' },
             })}
             aria-controls={popupId}
-            aria-expanded={activeSegmentId === pathEntity.id}
+            aria-expanded={activeSegmentId === itemId}
             aria-haspopup="tree"
-            onclick={(event) => activate(event, pathEntity.id)}
+            onclick={(event) => activate(event, itemId)}
             type="button"
           >
-            <EntityIcon entity$key={pathEntity.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
-            <span>{pathEntity.name}</span>
+            {#if pathItem.kind === 'home'}
+              <Icon icon={HomeIcon} size={14} />
+            {:else}
+              <EntityIcon entity$key={pathItem.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
+            {/if}
+            <span>{pathItemName(pathItem)}</span>
             {#if !currentEntity}
               <span class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
                 <Icon icon={ChevronRightIcon} size={14} />
@@ -185,9 +232,21 @@
             {/if}
           </button>
         {:else}
-          <span class={flex({ alignItems: 'center', gap: '4px' })}>
-            <EntityIcon entity$key={pathEntity.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
-            <span>{pathEntity.name}</span>
+          <span
+            class={flex({
+              alignItems: 'center',
+              gap: '4px',
+              height: pathItem.kind === 'home' ? '24px' : undefined,
+              paddingX: pathItem.kind === 'home' ? '4px' : undefined,
+              borderRadius: pathItem.kind === 'home' ? '5px' : undefined,
+            })}
+          >
+            {#if pathItem.kind === 'home'}
+              <Icon icon={HomeIcon} size={14} />
+            {:else}
+              <EntityIcon entity$key={pathItem.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
+            {/if}
+            <span>{pathItemName(pathItem)}</span>
           </span>
         {/if}
       </li>
@@ -200,7 +259,7 @@
   </ol>
 </nav>
 
-{#if isOwner && activeSegment}
+{#if interactive && activeSegment}
   <div
     class={css({
       zIndex: 'menu',
@@ -221,13 +280,15 @@
   >
     <BreadcrumbEntityTree
       container={activeSegment.container}
-      currentDocumentEntityId={current.id}
+      currentDocumentEntityId={current.kind === 'entity' ? current.id : null}
       {documentDrag}
       {expandedFolderIds}
-      highlightedEntityId={activeSegment.id}
+      highlightedEntityId={activeSegment.kind === 'entity' ? activeSegment.id : null}
       labelledBy={activeTriggerId}
       onActivateDocument={activateDocument}
+      onActivateHome={activateHome}
       onToggleFolder={toggleFolder}
+      showHomeItem={activeSegment.kind === 'entity' && activeSegment.container.kind === 'site'}
       treeId={popupId}
     />
   </div>

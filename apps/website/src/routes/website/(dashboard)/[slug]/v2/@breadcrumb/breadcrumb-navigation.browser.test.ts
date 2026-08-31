@@ -19,12 +19,19 @@ const popup = () => {
   const tree = treeId ? document.querySelector<HTMLElement>(`[id="${CSS.escape(treeId)}"]`) : null;
   return tree?.getAttribute('role') === 'tree' ? tree.parentElement?.parentElement : null;
 };
+const activeTree = () => popup()?.querySelector<HTMLElement>('[role="tree"]') ?? null;
 const treeItem = (entityId: string) => document.querySelector<HTMLElement>(`[role="treeitem"][data-breadcrumb-entity-id="${entityId}"]`);
+const treeItemByKey = (key: string) => document.querySelector<HTMLElement>(`[role="treeitem"][data-breadcrumb-tree-item-key="${key}"]`);
 const trigger = (name: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('[aria-haspopup="tree"]')].find((button) => button.textContent?.includes(name));
 
-const mountFixture = async () => {
-  component = mount(BreadcrumbDocumentDragTestRoot, { target: document.body, props: { withSegment: false } });
+type FixtureProps = {
+  currentKind?: 'entity' | 'home';
+  rootQueryLoading?: boolean;
+};
+
+const mountFixture = async (props: FixtureProps = {}) => {
+  component = mount(BreadcrumbDocumentDragTestRoot, { target: document.body, props: { ...props, withSegment: false } });
   await tick();
 };
 
@@ -64,6 +71,8 @@ describe('breadcrumb navigation keyboard interaction', () => {
     await userEvent.keyboard('{End}');
     await expect.poll(() => document.activeElement).toBe(treeItem('document-extra-15'));
     await userEvent.keyboard('{Home}');
+    await expect.poll(() => document.activeElement).toBe(treeItemByKey('home'));
+    await userEvent.keyboard('{ArrowDown}');
     await expect.poll(() => document.activeElement).toBe(treeItem('folder-1'));
 
     await userEvent.keyboard('{ArrowRight}');
@@ -147,5 +156,54 @@ describe('breadcrumb navigation keyboard interaction', () => {
     await userEvent.click(currentTrigger);
     await expect.poll(popup).toBeNull();
     expect(currentTrigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('puts Home first in the root entity popup and activates it as a navigation target', async () => {
+    await mountFixture();
+    const folderTrigger = trigger('Folder');
+    if (!folderTrigger) throw new Error('Missing root breadcrumb trigger');
+
+    await userEvent.click(folderTrigger);
+    const tree = activeTree();
+    const homeItem = treeItemByKey('home');
+    if (!tree || !homeItem) throw new Error('Missing root breadcrumb tree or Home item');
+
+    expect(tree.querySelector('[role="treeitem"]')).toBe(homeItem);
+    await userEvent.click(homeItem);
+    await expect.poll(popup).toBeNull();
+    await expect.poll(() => document.querySelector('[data-navigation-target]')?.textContent).toBe('{"kind":"home"}');
+  });
+
+  it('does not repeat Home inside the Home segment popup', async () => {
+    await mountFixture({ currentKind: 'home' });
+    const homeTrigger = trigger('홈');
+    if (!homeTrigger) throw new Error('Missing Home breadcrumb trigger');
+
+    await userEvent.click(homeTrigger);
+    await expect.poll(activeTree).not.toBeNull();
+    expect(activeTree()?.querySelector('[data-breadcrumb-tree-item-key="home"]')).toBeNull();
+  });
+
+  it('does not add Home to a nested entity popup', async () => {
+    await mountFixture();
+    const currentTrigger = trigger('Current document');
+    if (!currentTrigger) throw new Error('Missing nested breadcrumb trigger');
+
+    await userEvent.click(currentTrigger);
+    await expect.poll(activeTree).not.toBeNull();
+    expect(activeTree()?.querySelector('[data-breadcrumb-tree-item-key="home"]')).toBeNull();
+  });
+
+  it('keeps Home available while the root entity query is loading', async () => {
+    await mountFixture({ rootQueryLoading: true });
+    const folderTrigger = trigger('Folder');
+    if (!folderTrigger) throw new Error('Missing root breadcrumb trigger');
+
+    await userEvent.click(folderTrigger);
+    const homeItem = treeItemByKey('home');
+    if (!homeItem) throw new Error('Missing Home item while the root query is loading');
+
+    await userEvent.click(homeItem);
+    await expect.poll(() => document.querySelector('[data-navigation-target]')?.textContent).toBe('{"kind":"home"}');
   });
 });

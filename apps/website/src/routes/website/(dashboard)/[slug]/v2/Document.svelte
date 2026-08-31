@@ -5,16 +5,18 @@
   import { graphql } from '$mearie';
   import DocumentEditor from './DocumentEditor.svelte';
   import type { DocumentV2_query$key } from '$mearie';
+  import type { PaneHeaderPlacement } from '../@pane/types';
 
   type Props = {
     query$key: DocumentV2_query$key;
     focused: boolean;
+    headerPlacement: PaneHeaderPlacement;
     onReady?: () => void;
     onEditorFailed?: (error: unknown) => void;
     onEditorRetry?: () => void;
   };
 
-  let { query$key, focused, onReady, onEditorFailed, onEditorRetry }: Props = $props();
+  let { query$key, focused, headerPlacement, onReady, onEditorFailed, onEditorRetry }: Props = $props();
 
   const query = createFragment(
     graphql(`
@@ -107,6 +109,6 @@
 
 {#if entity?.node.__typename === 'Document'}
   {#if mounted}
-    <DocumentEditor {focused} {onEditorFailed} onEditorRetry={remountEditor} {onReady} query$key={query.data} />
+    <DocumentEditor {focused} {headerPlacement} {onEditorFailed} onEditorRetry={remountEditor} {onReady} query$key={query.data} />
   {/if}
 {/if}

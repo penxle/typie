@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Scrollbar } from '@typie/ui/components';
   import { setupAppContext } from '@typie/ui/context';
-  import { setupPaneGroup } from '../routes/website/(dashboard)/[slug]/@pane/context.svelte';
+  import { setupPane, setupPaneGroup } from '../routes/website/(dashboard)/[slug]/@pane/context.svelte';
   import PaneSkeleton from '../routes/website/(dashboard)/[slug]/@pane/PaneSkeleton.svelte';
   import EditorScrollbar from './editor-ffi/components/Scrollbar.svelte';
   import { setupEditorContext } from './editor-ffi/editor.svelte';
@@ -19,7 +19,9 @@
   });
   const entityPane: Pane = { id: 'entity-pane', type: 'pane', kind: 'entity', slug: 'document' };
   const homePane: Pane = { id: 'home-pane', type: 'pane', kind: 'home' };
+  const headerPlacement = { topLeft: false, topRight: false };
   paneGroup.state.current.toolbarExpandedByPaneId[entityPane.id] = false;
+  setupPane(entityPane);
 
   const editorContext = setupEditorContext();
   let sharedScrollContainer = $state<HTMLDivElement>();
@@ -68,9 +70,9 @@
 </div>
 
 <div style="width: 800px; height: 800px" data-testid="entity-skeleton">
-  <PaneSkeleton pane={entityPane} />
+  <PaneSkeleton {headerPlacement} pane={entityPane} />
 </div>
 
 <div style="width: 800px; height: 800px" data-testid="home-skeleton">
-  <PaneSkeleton pane={homePane} />
+  <PaneSkeleton {headerPlacement} pane={homePane} />
 </div>

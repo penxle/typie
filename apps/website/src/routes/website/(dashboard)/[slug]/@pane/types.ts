@@ -48,8 +48,14 @@ export type PanePlacement = {
 
 export type Rect = { left: number; top: number; width: number; height: number };
 
+export type PaneHeaderPlacement = {
+  topLeft: boolean;
+  topRight: boolean;
+};
+
 export type PaneGroup = {
   state: LocalStore<PaneGroupState>;
+  readonly currentSiteId: string;
   readonly panes: Pane[];
   readonly enabled: boolean;
   addPane: (pane: PaneInit, placement: PanePlacement) => boolean;

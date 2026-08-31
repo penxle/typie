@@ -6,7 +6,7 @@
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { getPaneGroup } from './context.svelte';
   import EntityPane from './EntityPane.svelte';
-  import { computeLayout } from './geometry';
+  import { computeLayout, resolveTopCornerPaneIds } from './geometry';
   import HomePane from './HomePane.svelte';
   import Resizer from './Resizer.svelte';
   import type { DropZone, Member } from './types';
@@ -56,6 +56,7 @@
       height: rootHeight,
     });
   });
+  const topCornerPaneIds = $derived(layout ? resolveTopCornerPaneIds(layout.panes) : null);
 
   $effect(() => {
     context.rootElement = rootRef ?? null;
@@ -128,6 +129,10 @@
   {#each context.panes as pane (pane.id)}
     {@const rect = layout?.panes.get(pane.id)}
     {#if rect}
+      {@const headerPlacement = {
+        topLeft: topCornerPaneIds?.topLeftPaneId === pane.id,
+        topRight: topCornerPaneIds?.topRightPaneId === pane.id,
+      }}
       <div
         style:left="{rect.left}px"
         style:top="{rect.top}px"
@@ -146,9 +151,9 @@
       >
         <div class={css({ gridArea: '[1/1]', minWidth: '0', minHeight: '0' })}>
           {#if pane.kind === 'entity'}
-            <EntityPane {pane} />
+            <EntityPane {headerPlacement} {pane} />
           {:else if pane.kind === 'home'}
-            <HomePane {pane} />
+            <HomePane {headerPlacement} {pane} />
           {/if}
         </div>
       </div>

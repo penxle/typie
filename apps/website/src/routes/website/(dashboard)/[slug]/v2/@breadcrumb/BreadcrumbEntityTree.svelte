@@ -1,9 +1,11 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { RingSpinner, Scrollbar } from '@typie/ui/components';
+  import { Icon, RingSpinner, Scrollbar } from '@typie/ui/components';
   import { tick } from 'svelte';
+  import HomeIcon from '~icons/lucide/house';
   import { graphql } from '$mearie';
+  import EntityName from '../../../@tree/EntityName.svelte';
   import BreadcrumbEntityNode from './BreadcrumbEntityNode.svelte';
   import type { BreadcrumbDocumentDragController } from './breadcrumb-document-drag.svelte';
 
@@ -11,13 +13,15 @@
 
   type Props = {
     container: BreadcrumbContainer;
-    currentDocumentEntityId: string;
+    currentDocumentEntityId: string | null;
     expandedFolderIds: ReadonlySet<string>;
-    highlightedEntityId: string;
+    highlightedEntityId: string | null;
     labelledBy: string;
     onActivateDocument: (slug: string) => void;
+    onActivateHome: () => void;
     documentDrag: BreadcrumbDocumentDragController;
     onToggleFolder: (entityId: string) => void;
+    showHomeItem: boolean;
     treeId: string;
   };
 
@@ -29,7 +33,9 @@
     highlightedEntityId,
     labelledBy,
     onActivateDocument,
+    onActivateHome,
     onToggleFolder,
+    showHomeItem,
     treeId,
   }: Props = $props();
 
@@ -98,8 +104,8 @@
     const items = visibleItems();
     const index = items.indexOf(current);
     const kind = current.dataset.breadcrumbEntityKind;
-    const entityId = current.dataset.breadcrumbEntityId;
-    if (!entityId) return;
+    const itemKey = current.dataset.breadcrumbTreeItemKey;
+    if (!itemKey) return;
 
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
@@ -113,7 +119,9 @@
       return;
     }
 
-    if (kind === 'folder' && event.key === 'ArrowRight') {
+    const entityId = current.dataset.breadcrumbEntityId;
+
+    if (entityId && kind === 'folder' && event.key === 'ArrowRight') {
       event.preventDefault();
       if (current.getAttribute('aria-expanded') === 'false') {
         onToggleFolder(entityId);
@@ -124,7 +132,7 @@
     }
 
     if (event.key === 'ArrowLeft') {
-      if (kind === 'folder' && current.getAttribute('aria-expanded') === 'true') {
+      if (entityId && kind === 'folder' && current.getAttribute('aria-expanded') === 'true') {
         event.preventDefault();
         onToggleFolder(entityId);
       } else if (current.dataset.parentEntityId) {
@@ -170,6 +178,48 @@
     role="tree"
     tabindex="-1"
   >
+    {#if showHomeItem}
+      <div
+        class={css({
+          '&:focus > [data-breadcrumb-tree-row]': { backgroundColor: 'surface.muted' },
+        })}
+        aria-level="1"
+        aria-selected="false"
+        data-breadcrumb-entity-kind="home"
+        data-breadcrumb-tree-item-key="home"
+        onclick={onActivateHome}
+        onkeydown={(event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          event.stopPropagation();
+          onActivateHome();
+        }}
+        role="treeitem"
+        tabindex="-1"
+      >
+        <div
+          class={css({
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            width: 'full',
+            minWidth: '0',
+            paddingX: '8px',
+            paddingY: '6px',
+            borderRadius: '6px',
+            color: 'text.muted',
+            cursor: 'pointer',
+            transition: 'common',
+            _supportHover: { backgroundColor: 'surface.muted' },
+          })}
+          data-breadcrumb-tree-row
+        >
+          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={HomeIcon} size={14} />
+          <EntityName name="홈" />
+        </div>
+      </div>
+    {/if}
+
     {#if activeQuery.error}
       <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
         폴더 내용을 불러오지 못했어요

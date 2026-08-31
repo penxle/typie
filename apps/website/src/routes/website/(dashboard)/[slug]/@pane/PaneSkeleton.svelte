@@ -1,14 +1,18 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { prefersReducedMotion } from '@typie/ui/state';
+  import XIcon from '~icons/lucide/x';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING } from '$lib/editor-ffi/constants';
   import { otherToolbarKind, readPrimaryToolbar } from '../v2/toolbar-kind';
+  import CloseButton from './CloseButton.svelte';
   import { getPaneGroup } from './context.svelte';
+  import PaneHeader from './PaneHeader.svelte';
   import type { DocumentLayoutMode } from '$lib/editor-ffi/page-layout';
   import type { ToolbarKind } from '../v2/toolbar-kind';
-  import type { Pane } from './types';
+  import type { Pane, PaneHeaderPlacement } from './types';
 
   const DEFAULT_CONTENT_WIDTH = 600;
   const DEFAULT_PARAGRAPH_TOP_PADDING = 16;
@@ -16,11 +20,13 @@
 
   type Props = {
     pane: Pane;
+    headerPlacement: PaneHeaderPlacement;
     documentLayoutMode?: DocumentLayoutMode | null;
     documentId?: string | null;
+    showHeader?: boolean;
   };
 
-  let { pane, documentLayoutMode = null, documentId = null }: Props = $props();
+  let { pane, headerPlacement, documentLayoutMode = null, documentId = null, showHeader = true }: Props = $props();
 
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -123,39 +129,36 @@
     style:--pane-skeleton-motion={prefersReducedMotion.current ? 'none' : undefined}
     class="skeleton-motion {flex({ flexDirection: 'column', size: 'full' })}"
   >
-    <!-- Header (36px): document title ... controls close -->
-    <div
-      class={flex({
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: '36px',
-        paddingLeft: '24px',
-        paddingRight: '8px',
-        flexShrink: '0',
-      })}
-    >
-      <!-- Document icon and title (left) -->
-      <div class={flex({ alignItems: 'center', gap: '4px', overflow: 'hidden' })}>
-        <div style:width="14px" style:height="14px" style:border-radius="3px" class={bar}></div>
-        <div style:width="60px" style:height="12px" class={bar}></div>
-      </div>
-      <!-- Controls (right) -->
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <!-- Panel tabs -->
-        {#each { length: 7 }}
-          <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
-        {/each}
-        <div style:width="1px" style:height="12px" class={verticalDivider}></div>
-        <!-- Menu button -->
-        <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
-        <!-- Focus mode button -->
-        <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar} data-pane-skeleton-focus-mode-control></div>
-        <!-- Close button spacer -->
-        <div style:width="24px" style:height="24px" style:flex-shrink="0" data-pane-skeleton-close-button></div>
-      </div>
-    </div>
+    {#if showHeader}
+      <PaneHeader placement={headerPlacement}>
+        <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', overflow: 'hidden' })}>
+          <div style:width="14px" style:height="14px" style:border-radius="3px" class={bar}></div>
+          <div style:width="60px" style:height="12px" class={bar}></div>
+        </div>
 
-    <div class={divider}></div>
+        {#snippet scrollableActions()}
+          <!-- Panel tabs -->
+          {#each { length: 7 }}
+            <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
+          {/each}
+        {/snippet}
+
+        {#snippet fixedActions()}
+          <div style:width="1px" style:height="12px" class={verticalDivider}></div>
+          <!-- Menu button -->
+          <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar}></div>
+          <!-- Focus mode button -->
+          <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar} data-pane-skeleton-focus-mode-control></div>
+          <div style:width="24px" style:height="24px" style:flex-shrink="0" data-pane-skeleton-close-button>
+            {#if !app.preference.current.zenModeEnabled}
+              <CloseButton>
+                <Icon icon={XIcon} size={16} />
+              </CloseButton>
+            {/if}
+          </div>
+        {/snippet}
+      </PaneHeader>
+    {/if}
 
     {#snippet toolbarItemsSkeleton(kind: ToolbarKind)}
       {#if kind === 'insert'}

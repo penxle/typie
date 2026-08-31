@@ -51,7 +51,6 @@
   import SubscribeModal from './@subscription/SubscribeModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
   import WidgetGroup from './@widgets/WidgetGroup.svelte';
-  import AppHeader from './AppHeader.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import { setupNoteContext } from './note-context.svelte';
@@ -659,8 +658,6 @@
           overflow: 'hidden',
         })}
       >
-        <AppHeader />
-
         <div
           class={cx(
             'main-container',
