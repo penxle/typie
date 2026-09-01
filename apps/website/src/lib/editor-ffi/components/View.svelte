@@ -63,6 +63,7 @@
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
+    placeholderAction?: Snippet;
     children?: Snippet;
   };
 
@@ -79,6 +80,7 @@
     onReady,
     header,
     footer,
+    placeholderAction,
     children,
   }: Props = $props();
 
@@ -524,7 +526,7 @@
 
           <LineHighlight />
 
-          <PlaceholderOverlay />
+          <PlaceholderOverlay {placeholderAction} />
         </div>
 
         <ViewportOverlay>
