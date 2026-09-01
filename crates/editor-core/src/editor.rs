@@ -375,6 +375,15 @@ pub struct Editor {
     // later message fails unexpectedly, retain its bookkeeping alongside
     // `pending_ops` until a successful tick can finish publication.
     pending_tick_changes: TickChanges,
+    // Ops the recent-edit tracker must not classify this tick: an undo's inverse
+    // ops, which take an edit back rather than making one. Redo deliberately
+    // exempts nothing — its re-applied ops are the edit coming back, and recording
+    // them as ordinary edits is what re-earns the mark the undo retracted.
+    pending_recent_edit_exempt: HashSet<Dot>,
+    // Ops whose recorded contributions this tick must take back, already in unwind
+    // order (newest first) as `apply_inverse` reports them, so several undos landing
+    // in one tick stay in order across entries as well as within one.
+    pending_recent_edit_retract: Vec<Dot>,
     pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<Dot, HashSet<u32>>>,
     pub(crate) pending_font_index: Option<crate::font::PendingFontIndex>,
@@ -429,6 +438,8 @@ impl Editor {
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_tick_changes: TickChanges::default(),
+            pending_recent_edit_exempt: HashSet::new(),
+            pending_recent_edit_retract: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             pending_font_index: None,
@@ -972,7 +983,7 @@ impl Editor {
                 continue;
             }
             let effects = classify_op_with(&self.state, op, Some(&markers));
-            self.recent_edits.record(&effects, at);
+            self.recent_edits.record_baseline(&effects, at);
         }
         true
     }
@@ -1011,7 +1022,7 @@ impl Editor {
                 continue;
             };
             let effects = classify_op_with(&self.state, &op, Some(&markers));
-            self.recent_edits.record(&effects, at);
+            self.recent_edits.record_baseline(&effects, at);
         }
     }
 
@@ -1337,13 +1348,24 @@ impl Editor {
         crate::font::emit_prefetch_if_quiescent(self);
 
         let ops = std::mem::take(&mut self.pending_ops);
-        if self.recent_edits.enabled() && !ops.is_empty() {
+        let recent_edit_exempt = std::mem::take(&mut self.pending_recent_edit_exempt);
+        let recent_edit_retract = std::mem::take(&mut self.pending_recent_edit_retract);
+        if self.recent_edits.enabled() && !(ops.is_empty() && recent_edit_retract.is_empty()) {
             let now = self.recent_edits.current_ms();
-            let mut effects = Vec::new();
+            // Recording runs first. A tick carries every message of one frame, so an
+            // edit and the undo of that same edit can arrive together; retracting
+            // first would look for a contribution this tick has not written yet, miss
+            // it, and then record the edit that was just taken back — a mark for an
+            // edit the document no longer has, and one no later undo can match.
             for op in &ops {
-                effects.extend(classify_op(&self.state, op));
+                if recent_edit_exempt.contains(&op.id) {
+                    continue;
+                }
+                let effects = classify_op(&self.state, op);
+                self.recent_edits.record_tracked(op.id, &effects, now);
             }
-            self.recent_edits.record(&effects, now);
+            self.recent_edits.retract(&self.state, &recent_edit_retract);
+            self.recent_edits.prune_if_bucket_advanced(now);
         }
 
         let TickChanges {
@@ -2322,9 +2344,13 @@ impl Editor {
         self.undo_history.last_tag().cloned()
     }
 
-    fn apply_undo_result(&mut self, result: Option<(Vec<Op<EditOp>>, TransientState)>) -> bool {
+    fn apply_undo_result(
+        &mut self,
+        result: Option<(Vec<Op<EditOp>>, TransientState, Vec<Dot>)>,
+        exempt_inverses: bool,
+    ) -> bool {
         match result {
-            Some((ops, transient)) => {
+            Some((ops, transient, undone)) => {
                 // Seal the inverse ops like `Transaction::commit` seals edits:
                 // unsealed ops are invisible to `missing_changesets_tolerant`
                 // (the sync capture/push source) while still advancing
@@ -2352,6 +2378,11 @@ impl Editor {
                 self.composition_paint = None;
                 self.ime_delete_paint = None;
                 self.state.pending_modifiers.clear();
+                if exempt_inverses {
+                    self.pending_recent_edit_exempt
+                        .extend(ops.iter().map(|op| op.id));
+                }
+                self.pending_recent_edit_retract.extend(undone);
                 self.pending_ops.extend(ops);
                 true
             }
@@ -2362,13 +2393,13 @@ impl Editor {
     pub(crate) fn try_undo(&mut self) -> bool {
         let current = capture_transient(&self.state);
         let result = self.undo_history.undo(self.state.projected_mut(), current);
-        self.apply_undo_result(result)
+        self.apply_undo_result(result, true)
     }
 
     pub(crate) fn try_redo(&mut self) -> bool {
         let current = capture_transient(&self.state);
         let result = self.undo_history.redo(self.state.projected_mut(), current);
-        self.apply_undo_result(result)
+        self.apply_undo_result(result, false)
     }
 
     pub(crate) fn try_undo_auto_replacement(&mut self) -> bool {
@@ -2732,6 +2763,8 @@ impl Editor {
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_tick_changes: TickChanges::default(),
+            pending_recent_edit_exempt: HashSet::new(),
+            pending_recent_edit_retract: Vec::new(),
             pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
             pending_font_index: None,

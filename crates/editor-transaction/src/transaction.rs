@@ -209,7 +209,7 @@ impl Transaction {
     pub fn apply_undo_entry_inverse(&mut self, entry: &UndoEntry) -> Result<(), StepError> {
         let savepoint = self.savepoint();
         let result = (|| {
-            let (recorded, failure) = apply_inverse(self.state.projected_mut(), &entry.ops);
+            let (recorded, _, failure) = apply_inverse(self.state.projected_mut(), &entry.ops);
             if let Some(error) = failure {
                 return Err(error.into());
             }
@@ -961,7 +961,7 @@ mod tests {
         let mut expected = after.clone();
         let mut history = UndoHistory::new(Duration::from_secs(0));
         history.record(entry.clone(), Instant::now());
-        let (normal_ops, _) = history
+        let (normal_ops, _, _) = history
             .undo(expected.projected_mut(), TransientState::default())
             .expect("normal undo applies");
 

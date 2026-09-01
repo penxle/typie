@@ -219,18 +219,25 @@ impl UndoHistory {
     }
 
     /// Undo the most recent entry: apply each op's inverse to `state`, returning
-    /// the applied inverse ops (so the editor can broadcast them) and the
-    /// selection to restore. `current_selection` is stored on the pushed redo
-    /// entry so a subsequent redo restores the selection current at undo time.
+    /// the applied inverse ops (so the editor can broadcast them), the selection
+    /// to restore, and the ids of the entry's own ops — the edits this call took
+    /// back, which a caller tracking per-op side effects has to unwind.
+    /// `current_selection` is stored on the pushed redo entry so a subsequent
+    /// redo restores the selection current at undo time.
+    ///
+    /// The undone ids are the ops [`apply_inverse`] actually reached, in the order
+    /// it reached them — newest first, which is the order a caller unwinding
+    /// stacked per-op effects has to replay them in. An entry the inverse pass
+    /// bailed out before is absent: its edit is still in the document.
     pub fn undo(
         &mut self,
         state: &mut ProjectedState,
         current_transient: TransientState,
-    ) -> Option<(Vec<Op<EditOp>>, TransientState)> {
+    ) -> Option<(Vec<Op<EditOp>>, TransientState, Vec<Dot>)> {
         let entry = self.undos.pop()?;
         let tag = entry.tag.clone();
         let restore_transient = entry.transient.clone();
-        let (redo_ops, _) = apply_inverse(state, &entry.ops);
+        let (redo_ops, undone, _) = apply_inverse(state, &entry.ops);
         let applied = redo_ops
             .iter()
             .map(|recorded| recorded.op.clone())
@@ -243,18 +250,18 @@ impl UndoHistory {
         });
         self.last_push = None;
         self.sync_last_tag_from_top();
-        Some((applied, restore_transient))
+        Some((applied, restore_transient, undone))
     }
 
     pub fn redo(
         &mut self,
         state: &mut ProjectedState,
         current_transient: TransientState,
-    ) -> Option<(Vec<Op<EditOp>>, TransientState)> {
+    ) -> Option<(Vec<Op<EditOp>>, TransientState, Vec<Dot>)> {
         let entry = self.redos.pop()?;
         let tag = entry.tag.clone();
         let restore_transient = entry.transient.clone();
-        let (undo_ops, _) = apply_inverse(state, &entry.ops);
+        let (undo_ops, undone, _) = apply_inverse(state, &entry.ops);
         let applied = undo_ops
             .iter()
             .map(|recorded| recorded.op.clone())
@@ -267,7 +274,7 @@ impl UndoHistory {
         });
         self.last_push = None;
         self.sync_last_tag_from_top();
-        Some((applied, restore_transient))
+        Some((applied, restore_transient, undone))
     }
 }
 
@@ -275,11 +282,18 @@ impl UndoHistory {
 /// values for a later inverse. Normal undo keeps its historical best-effort
 /// behavior when `failure` is present; transactional callers can reject the
 /// isolated transaction instead.
+///
+/// The second return is the ids of the input ops this pass got through, in the
+/// order it got through them. An op whose inverse is empty counts as got through
+/// — there was nothing of it left in the document to take back — while the ops a
+/// `failure` cut the pass short of do not, so a caller undoing per-op side effects
+/// only ever unwinds effects whose edits really did go away.
 pub fn apply_inverse(
     state: &mut ProjectedState,
     ops: &[RecordedOp],
-) -> (Vec<RecordedOp>, Option<crate::StateError>) {
+) -> (Vec<RecordedOp>, Vec<Dot>, Option<crate::StateError>) {
     let mut recorded = Vec::new();
+    let mut inverted = Vec::new();
     let mut failure = None;
     // Sequence inverses read only the checkout, so a run of them can be applied
     // without projecting each — deferred into one `reproject_all` — collapsing the
@@ -314,11 +328,12 @@ pub fn apply_inverse(
             warm_pending |= is_seq;
             recorded.push(RecordedOp { op, prior });
         }
+        inverted.push(ro.op.id);
     }
     if warm_pending && let Err(error) = state.reproject_all() {
         failure.get_or_insert_with(|| error.into());
     }
-    (recorded, failure)
+    (recorded, inverted, failure)
 }
 
 fn mergeable(last_merge: Option<&RecordMerge>, entry: &UndoEntry) -> bool {
@@ -1402,7 +1417,7 @@ mod tests {
             "undoing a prior-less clear leaves the (already-absent) carry absent"
         );
 
-        let (applied, _) = history
+        let (applied, _, _) = history
             .redo(&mut state, TransientState::default())
             .expect("redo applies");
         assert!(
@@ -1912,20 +1927,20 @@ mod tests {
         let mut history = UndoHistory::new(Duration::from_secs(1));
         history.record(single_entry(ro), Instant::now());
 
-        let (first_undo, _) = history.undo(&mut state, TransientState::default()).unwrap();
+        let (first_undo, _, _) = history.undo(&mut state, TransientState::default()).unwrap();
         let undo_len = first_undo.len();
         assert_eq!(own_font_size(&state, x), Some(1400));
 
-        let (first_redo, _) = history.redo(&mut state, TransientState::default()).unwrap();
+        let (first_redo, _, _) = history.redo(&mut state, TransientState::default()).unwrap();
         let redo_len = first_redo.len();
         assert_eq!(own_font_size(&state, x), Some(2000));
 
         for _ in 0..3 {
-            let (applied_u, _) = history.undo(&mut state, TransientState::default()).unwrap();
+            let (applied_u, _, _) = history.undo(&mut state, TransientState::default()).unwrap();
             assert_eq!(applied_u.len(), undo_len);
             assert_eq!(own_font_size(&state, x), Some(1400));
 
-            let (applied_r, _) = history.redo(&mut state, TransientState::default()).unwrap();
+            let (applied_r, _, _) = history.redo(&mut state, TransientState::default()).unwrap();
             assert_eq!(applied_r.len(), redo_len);
             assert_eq!(own_font_size(&state, x), Some(2000));
         }
