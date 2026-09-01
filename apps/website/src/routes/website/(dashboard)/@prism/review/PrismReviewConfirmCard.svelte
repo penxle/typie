@@ -5,7 +5,7 @@
   import { ConfirmDecisionSchema, ConfirmHintSchema, quoteReviewCredits } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
+  import { Button, Icon, Marquee, Menu, MenuItem, TimeAgo } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -43,6 +43,8 @@
   let pickedTier = $state<PrismReviewTierName | null>(null);
   let pickedLineage = $state<string | 'fresh' | null>(null);
   let busy = $state(false);
+  const getTitleControl = (element: HTMLElement) => element.parentElement;
+  const getMenuItem = (element: HTMLElement) => element.closest<HTMLElement>('[role="menuitem"]');
 
   const selected = $derived(
     documents.find((doc) => doc.documentId === picked) ??
@@ -512,7 +514,13 @@
       )}
       aria-current={decided ? 'true' : undefined}
     >
-      <span class={ellipsisClass}>{chosenTitle || (decided ? '제목 없음' : '—')}</span>
+      <Marquee
+        class={css({ flexGrow: '1' })}
+        bleed={10}
+        fogSize={20}
+        getTrigger={getTitleControl}
+        text={chosenTitle || (decided ? '제목 없음' : '—')}
+      />
     </div>
   {:else if documents.length === 0}
     <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
@@ -527,7 +535,7 @@
       setFullWidth
     >
       {#snippet button({ open: expanded })}
-        <span class={shrinkTitleClass}>{selected?.title || '제목 없음'}</span>
+        <Marquee bleed={{ start: 10, end: 8 }} fogSize={16} getTrigger={getTitleControl} text={selected?.title || '제목 없음'} />
         {#if current !== null}
           <span class={countClass}>원고 {current.characterCount.toLocaleString()}자</span>
         {:else if loading}
@@ -543,9 +551,13 @@
       {#each documents as doc (doc.documentId)}
         <MenuItem onclick={() => (picked = doc.documentId)}>
           <div class={flex({ alignItems: 'center', gap: '8px', flexGrow: '1', minWidth: '0' })}>
-            <span class={css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
-              {doc.title || '제목 없음'}
-            </span>
+            <Marquee
+              class={css({ flexGrow: '1', minWidth: '0' })}
+              bleed={8}
+              fogSize={16}
+              getTrigger={getMenuItem}
+              text={doc.title || '제목 없음'}
+            />
             {#if doc.active}
               <span class={activeTagClass}>활성</span>
             {/if}

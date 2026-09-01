@@ -3,7 +3,7 @@
   import { ConfirmDecisionSchema, PRISM_REVIEW_TIERS } from '@typie/prism';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Tooltip } from '@typie/ui/components';
+  import { Button, Icon, Marquee, Tooltip } from '@typie/ui/components';
   import { tick, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import CheckIcon from '~icons/lucide/check';
@@ -481,9 +481,6 @@
     minWidth: '0',
     fontSize: '13px',
     fontWeight: 'semibold',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
   });
   const metaClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
   const rightClass = flex({ alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: '0' });
@@ -497,9 +494,6 @@
     minWidth: '0',
     fontSize: '12px',
     color: 'text.faint',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
   });
   const timeClass = css({ flexShrink: '0', marginLeft: 'auto', fontSize: '11px', color: 'text.disabled' });
   const chevronStyle = css.raw({
@@ -568,6 +562,12 @@
     animation: 'pulse 1.6s ease-in-out infinite',
   });
   const systemClass = css({ marginTop: '10px', fontSize: '[12.5px]', color: 'text.faint' });
+  const getParent = (element: HTMLElement) => element.parentElement;
+  const stageSummaryText = (stage: StageView) => {
+    if (stage.status === 'canceled') return '여기서 중단했어요';
+    if (stage.status === 'failed') return '문제가 생겨 멈췄어요';
+    return `${stage.summary ?? ''}${stage.rounds > 0 ? ` · 점검 ${stage.rounds}회` : ''}`;
+  };
 </script>
 
 {#snippet stageGlyph(status: StageView['status'])}
@@ -696,11 +696,7 @@
     {#if stage.status === 'running'}
       <span class={timeClass}>{stage.elapsedMs === null ? '' : runningLabel(stage.elapsedMs)}</span>
     {:else if stage.status !== 'pending'}
-      <span class={summaryClass}>
-        {#if stage.status === 'canceled'}여기서 중단했어요{:else if stage.status === 'failed'}문제가 생겨 멈췄어요{:else}{stage.summary ??
-            ''}{#if stage.rounds > 0}
-            · 점검 {stage.rounds}회{/if}{/if}
-      </span>
+      <Marquee class={summaryClass} bleed={8} fogSize={16} getTrigger={getParent} text={stageSummaryText(stage)} />
       <span class={timeClass}>{stage.elapsedMs === null ? '' : spentLabel(stage.elapsedMs)}</span>
       {#if toggleable}
         <Icon style={css.raw(chevronStyle, open ? chevronOpenStyle : {})} icon={ChevronDownIcon} size={10} />
@@ -716,7 +712,7 @@
 
 <div>
   <div class={headClass}>
-    <span class={titleClass}>{title}</span>
+    <Marquee class={titleClass} bleed={8} fogSize={16} getTrigger={getParent} text={title} />
     <span class={metaClass}>
       {#if tierLabel !== null}· {tierLabel}{/if}{#if round !== null && round.ordinal > 1}
         · {round.ordinal}회차{/if}

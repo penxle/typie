@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button, Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { Button, Icon, Marquee, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { prefersReducedMotion } from '@typie/ui/state';
@@ -442,25 +442,7 @@
   let listOpen = $state(false);
   const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
   const currentTitle = $derived(currentSession ? sessionLabel(currentSession) : '새 대화');
-  let currentTitleButton = $state<HTMLButtonElement>();
-  let currentTitleClientWidth = $state(0);
-  let currentTitleTruncated = $state(false);
-
-  $effect(() => {
-    const element = currentTitleButton;
-    void currentTitle;
-    void currentTitleClientWidth;
-    if (!element) return;
-
-    let cancelled = false;
-    void tick().then(() => {
-      if (!cancelled) currentTitleTruncated = element.scrollWidth > element.clientWidth;
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  });
+  const getTitleButton = (element: HTMLElement) => element.parentElement;
 
   export const startNewChat = async (via: 'command_palette' | 'header', nextDraft?: string) => {
     if (selected.current === null) {
@@ -910,12 +892,6 @@
 
 <svelte:document bind:visibilityState />
 
-{#snippet currentTitleTooltip()}
-  <span class={css({ display: 'block', maxWidth: '280px', overflowWrap: 'break-word', textWrap: 'balance', wordBreak: 'keep-all' })}>
-    {currentTitle}
-  </span>
-{/snippet}
-
 <PrismPanelHeader>
   {#snippet children(buttonClass)}
     {#if titleEditing}
@@ -954,29 +930,23 @@
       />
     {:else}
       <button
-        bind:this={currentTitleButton}
         class={css({
           marginLeft: 'auto',
           minWidth: '0',
           maxWidth: '220px',
-          paddingX: '8px',
-          paddingY: '4px',
           borderRadius: '6px',
           fontSize: '12px',
           color: 'text.subtle',
           overflow: 'hidden',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
           backgroundColor: listOpen ? 'surface.muted' : 'transparent',
           _hover: { backgroundColor: 'surface.muted' },
         })}
         aria-label={`${listToggleLabel}: ${currentTitle}`}
         onclick={() => (listOpen = !listOpen)}
         type="button"
-        bind:clientWidth={currentTitleClientWidth}
-        use:tooltip={{ message: currentTitleTruncated ? currentTitleTooltip : listToggleLabel, arrow: !currentTitleTruncated }}
+        use:tooltip={{ message: '대화 목록 열기' }}
       >
-        {currentTitle}
+        <Marquee class={css({ paddingX: '8px', paddingY: '4px' })} fogSize={16} getTrigger={getTitleButton} text={currentTitle} />
       </button>
     {/if}
 

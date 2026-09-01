@@ -3,24 +3,24 @@ const RAMP_DURATION_MS = 200;
 const MAX_FRAME_DURATION_MS = 64;
 const INTEGRATION_STEP_MS = 1;
 
-type AdvanceEntityNameMotionOptions = {
+type AdvanceMarqueeMotionOptions = {
   position: number;
   velocity: number;
   maximum: number;
   elapsed: number;
 };
 
-type EntityNameMotionState = {
+type MarqueeMotionState = {
   position: number;
   velocity: number;
 };
 
-export const advanceEntityNameMotion = ({
+export const advanceMarqueeMotion = ({
   position: currentPosition,
   velocity: currentVelocity,
   maximum: rawMaximum,
   elapsed: rawElapsed,
-}: AdvanceEntityNameMotionOptions): EntityNameMotionState => {
+}: AdvanceMarqueeMotionOptions): MarqueeMotionState => {
   const maximum = Math.max(0, rawMaximum);
   let position = Math.max(0, Math.min(currentPosition, maximum));
   let velocity = Math.max(0, Math.min(currentVelocity, PIXELS_PER_SECOND / 1000));
