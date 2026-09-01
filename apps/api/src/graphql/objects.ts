@@ -1,7 +1,7 @@
 import { FontFamilySource, FontFamilyState, FontState } from '@typie/lib/enums';
 import { asc, inArray } from 'drizzle-orm';
 import stringify from 'fast-json-stable-stringify';
-import { db, decodeDbId } from '#/db/index.ts';
+import { db, decodeDbId, TableCode } from '#/db/index.ts';
 import * as T from '#/db/schemas/tables.ts';
 import { builder } from './builder.ts';
 import type { DataLoaderOptions } from '@pothos/plugin-dataloader';
@@ -106,8 +106,25 @@ export const UserView = createObjectRef('UserView', T.Users);
 type BlobShape = { id: string; size: number; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
 
-export const EntityContainer = builder.unionType('EntityContainer', {
+export const EntityContainer = builder.loadableUnion('EntityContainer', {
   types: [Site, Entity],
+  load: async (ids: string[]) => {
+    const siteIds = ids.filter((id) => decodeDbId(id) === TableCode.SITES);
+    const entityIds = ids.filter((id) => decodeDbId(id) === TableCode.ENTITIES);
+
+    const [sites, entities] = await Promise.all([
+      siteIds.length > 0 ? db.select().from(T.Sites).where(inArray(T.Sites.id, siteIds)) : [],
+      entityIds.length > 0 ? db.select().from(T.Entities).where(inArray(T.Entities.id, entityIds)) : [],
+    ]);
+
+    return [...sites, ...entities];
+  },
+  toKey: (parent) => parent.id,
+  sort: true,
+  cacheResolved: true,
+  loaderOptions: {
+    cacheKeyFn: (key) => stringify(key),
+  },
 });
 
 export const EntityNode = builder.unionType('EntityNode', {

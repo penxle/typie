@@ -83,7 +83,7 @@ Entity.implement({
     parent: t.expose('parentId', { type: Entity, nullable: true }),
     container: t.field({
       type: EntityContainer,
-      resolve: (self) => ({ id: self.parentId ?? self.siteId }) as never,
+      resolve: (self) => self.parentId ?? self.siteId,
     }),
     user: t.expose('userId', { type: User }),
 
