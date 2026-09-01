@@ -214,6 +214,7 @@
     class={css(style)}
     aria-disabled={disabled}
     aria-expanded={open}
+    aria-haspopup="menu"
     aria-label={buttonAriaLabel}
     {disabled}
     onclick={(e) => {
