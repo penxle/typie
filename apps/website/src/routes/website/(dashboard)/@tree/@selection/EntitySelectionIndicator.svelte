@@ -2,7 +2,7 @@
   import { EntityVisibility } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { Checkbox } from '@typie/ui/components';
-  import { getTreeContext } from '../state.svelte';
+  import { getTreeContext, getTreeStateEntity } from '../state.svelte';
   import { resetShiftMultiSelectTip, showShiftMultiSelectTipIfNeeded } from './shift-multi-select-tip';
   import type { TreeEntity } from './types';
 
@@ -10,15 +10,16 @@
     entityId: string;
     visibility?: EntityVisibility;
     dot?: boolean;
+    selectionOrder?: readonly string[];
   };
 
-  let { entityId, visibility, dot = true }: Props = $props();
+  let { entityId, visibility, dot = true, selectionOrder }: Props = $props();
 
   const treeState = getTreeContext();
   const selected = $derived(treeState.selectedEntityIds.has(entityId));
 
   const someDescendants = (entityId: string, someFn: (entity: TreeEntity) => boolean) => {
-    for (const child of treeState.entityMap.get(entityId)?.children ?? []) {
+    for (const child of getTreeStateEntity(treeState, entityId)?.children ?? []) {
       if (someFn(child)) {
         return true;
       }
@@ -32,7 +33,7 @@
   };
 
   const descendants = (entityId: string, fn: (entity: TreeEntity) => void) => {
-    for (const child of treeState.entityMap.get(entityId)?.children ?? []) {
+    for (const child of getTreeStateEntity(treeState, entityId)?.children ?? []) {
       fn(child);
       descendants(child.id, fn);
     }
@@ -65,10 +66,10 @@
     }
 
     // NOTE: 모든 부모를 선택 해제
-    let parentId = treeState.entityMap.get(entityId)?.parentId;
+    let parentId = getTreeStateEntity(treeState, entityId)?.parentId;
     while (parentId) {
       treeState.selectedEntityIds.delete(parentId);
-      parentId = treeState.entityMap.get(parentId)?.parentId;
+      parentId = getTreeStateEntity(treeState, parentId)?.parentId;
     }
   };
 
@@ -94,9 +95,10 @@
   };
 
   const selectEntityRange = () => {
-    const fromId = treeState.lastSelectedEntityId ?? entityId;
+    const allIds = selectionOrder ?? getAllEntityIds();
+    const fromId =
+      treeState.lastSelectedEntityId && allIds.includes(treeState.lastSelectedEntityId) ? treeState.lastSelectedEntityId : entityId;
     const toId = entityId;
-    const allIds = getAllEntityIds();
 
     const fromIndex = allIds.indexOf(fromId);
     const toIndex = allIds.indexOf(toId);

@@ -27,6 +27,7 @@ declare global {
 
     interface PageState {
       shallowRoute?: string;
+      entityTreeReveal?: 'preserve';
     }
   }
 

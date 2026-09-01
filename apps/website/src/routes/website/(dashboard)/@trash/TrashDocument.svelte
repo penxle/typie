@@ -11,6 +11,7 @@
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import EntityName from '../@tree/EntityName.svelte';
   import type { DashboardLayout_TrashTree_TrashDocument_document$key } from '$mearie';
 
   type Props = {
@@ -143,19 +144,7 @@
   <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
     <EntityIcon style={css.raw({ flexShrink: '0' })} entity$key={document.data.entity} size={14} />
 
-    <span
-      class={css({
-        fontSize: '14px',
-        fontWeight: 'medium',
-        color: 'text.muted',
-        wordBreak: 'break-all',
-        lineClamp: '1',
-        flexShrink: '0',
-        maxWidth: '[60%]',
-      })}
-    >
-      {document.data.title}
-    </span>
+    <EntityName name={document.data.title} />
   </div>
 
   <div

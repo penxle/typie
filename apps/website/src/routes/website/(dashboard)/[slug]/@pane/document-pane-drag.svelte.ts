@@ -2,12 +2,12 @@ import { pointerCapture } from '@typie/ui/actions';
 import { pushEscapeHandler } from '@typie/ui/utils';
 import type { PointerCaptureCancelReason } from '@typie/ui/actions';
 import type { Action } from 'svelte/action';
-import type { PaneGroup } from '../../@pane/context.svelte';
+import type { PaneGroup } from './context.svelte';
 
 const TOUCH_DRAG_HOLD_MS = 350;
 const DRAG_MOVE_THRESHOLD_PX = 10;
 
-type DocumentDragItem = {
+export type DocumentPaneDragItem = {
   slug: string;
   name: string;
   icon?: string;
@@ -21,7 +21,7 @@ type PointerSession = {
   lastY: number;
   element: HTMLElement;
   scrollSurface: HTMLElement;
-  item: DocumentDragItem;
+  item: DocumentPaneDragItem;
   active: boolean;
   touchHoldCanceled: boolean;
   holdTimeout?: ReturnType<typeof setTimeout>;
@@ -42,29 +42,29 @@ type CancelOptions = {
   suppressClick?: boolean;
 };
 
-export type BreadcrumbDocumentDragGhost = DocumentDragItem & {
+export type DocumentPaneDragGhost = DocumentPaneDragItem & {
   x: number;
   y: number;
   width: number;
 };
 
-type BreadcrumbDocumentDragOptions = {
+type DocumentPaneDragOptions = {
   paneGroup: PaneGroup;
-  onDropSuccess: () => void;
+  onDropSuccess?: () => void;
 };
 
-export class BreadcrumbDocumentDragController {
+export class DocumentPaneDragController {
   #paneGroup: PaneGroup;
-  #onDropSuccess: () => void;
+  #onDropSuccess?: () => void;
   #session = $state.raw<PointerSession | null>(null);
   #clickSuppression: ClickSuppression | null = null;
   #cancelCapture: (() => void) | null = null;
   #removeEscapeHandler: (() => void) | null = null;
   #suppressProgrammaticCancelClick = false;
 
-  ghost = $state<BreadcrumbDocumentDragGhost | null>(null);
+  ghost = $state<DocumentPaneDragGhost | null>(null);
 
-  drag: Action<HTMLElement, DocumentDragItem | null> = (element, initialItem) => {
+  drag: Action<HTMLElement, DocumentPaneDragItem | null> = (element, initialItem) => {
     let item = initialItem;
     const capture = pointerCapture<PointerSession>(element, {
       start: (event) => {
@@ -86,7 +86,7 @@ export class BreadcrumbDocumentDragController {
     };
   };
 
-  constructor({ paneGroup, onDropSuccess }: BreadcrumbDocumentDragOptions) {
+  constructor({ paneGroup, onDropSuccess }: DocumentPaneDragOptions) {
     this.#paneGroup = paneGroup;
     this.#onDropSuccess = onDropSuccess;
   }
@@ -134,11 +134,17 @@ export class BreadcrumbDocumentDragController {
     if (suppressClick) this.#armClickSuppression(session);
   }
 
-  #start(event: PointerEvent, element: HTMLElement, item: DocumentDragItem): PointerSession | null {
+  #start(event: PointerEvent, element: HTMLElement, item: DocumentPaneDragItem): PointerSession | null {
     if (this.#session || !event.isPrimary || event.button !== 0) return null;
     if (event.pointerType !== 'mouse' && event.pointerType !== 'pen' && event.pointerType !== 'touch') return null;
 
-    const scrollSurface = element.closest<HTMLElement>('[role="tree"]');
+    const interactiveTarget =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>('button, [role="button"], [role="menu"], a[href], input, textarea, select')
+        : null;
+    if (interactiveTarget && interactiveTarget !== element) return null;
+
+    const scrollSurface = element.closest<HTMLElement>('[data-document-pane-drag-scroll-surface], [role="tree"]');
     if (!scrollSurface) return null;
     this.#clearClickSuppression();
 
@@ -215,7 +221,7 @@ export class BreadcrumbDocumentDragController {
     const succeeded = hasDropZone && this.#paneGroup.executeDrop({ slug: session.item.slug, type: 'document' });
     this.#finish(session, { cancelPane: !succeeded, suppressClick: true });
     this.#expireClickSuppressionAfterPointerUp(event.pointerId);
-    if (succeeded) this.#onDropSuccess();
+    if (succeeded) this.#onDropSuccess?.();
   }
 
   #cancelSession(session: PointerSession, reason: PointerCaptureCancelReason): void {

@@ -17,7 +17,7 @@ import {
   Notes,
   UserPreferences,
 } from '#/db/index.ts';
-import { pubsub } from '#/pubsub.ts';
+import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { isPrivateVisibilityOnlyInput } from './documents-option-policy.ts';
 import {
   buildFreshV2Content,
@@ -236,17 +236,17 @@ export const deleteEntitiesCore = async (
   args: DeleteEntitiesCoreArgs,
   afterCommit?: PostCommitRegistrar,
 ) => {
-  const entities = await executor.execute<{ id: string; site_id: string; parent_id: string | null }>(sql`
+  const entities = await executor.execute<{ id: string; site_id: string; parent_id: string | null; type: EntityType }>(sql`
     WITH RECURSIVE sq AS (
-      SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
+      SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}, ${Entities.type}
       FROM ${Entities}
       WHERE ${inArray(Entities.id, args.entityIds)}
       UNION ALL
-      SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
+      SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}, ${Entities.type}
       FROM ${Entities}
       JOIN sq ON ${Entities.parentId} = sq.id
     )
-    SELECT id, site_id, parent_id
+    SELECT id, site_id, parent_id, type
     FROM sq
   `);
 
@@ -318,6 +318,9 @@ export const deleteEntitiesCore = async (
 
     for (const entity of deletedEntities) {
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
+    }
+    if (entities.some((entity) => entity.type === EntityType.DOCUMENT)) {
+      publishRecentDocumentUpdates(siteId, 'VIEWED_AT', 'UPDATED_AT');
     }
 
     await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
@@ -445,6 +448,7 @@ export const createDocumentCore = async (
     } else {
       pubsub.publish('site:update', args.siteId, { scope: 'site' });
     }
+    publishRecentDocumentUpdates(args.siteId, 'UPDATED_AT');
 
     pubsub.publish('user:usage:update', args.userId, null);
 
@@ -598,6 +602,7 @@ export const duplicateDocumentCore = async (
     } else {
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
     }
+    publishRecentDocumentUpdates(entity.siteId, 'UPDATED_AT');
     pubsub.publish('user:usage:update', args.userId, null);
 
     const { enqueueJob } = await import('#/mq/index.ts');
@@ -687,6 +692,7 @@ export const updateDocumentCore = async (
 
   await runAfterCommit(afterCommit, async () => {
     pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
+    publishRecentDocumentUpdates(document.siteId, 'UPDATED_AT');
 
     const { enqueueJob } = await import('#/mq/index.ts');
     await enqueueJob('search:index:document', args.documentId);
@@ -882,6 +888,10 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
     for (const entity of entities) {
       pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: entity.id });
     }
+    if (isCrossSite) {
+      publishRecentDocumentUpdates(siteId, 'VIEWED_AT', 'UPDATED_AT');
+      publishRecentDocumentUpdates(targetSiteId, 'VIEWED_AT', 'UPDATED_AT');
+    }
   });
 
   return movedEntities;
@@ -991,7 +1001,7 @@ export const recoverEntityCore = async (
       ? -entity.depth
       : 0;
 
-  const { recoveredEntity, recoveredEntityIds } = await executor.transaction(async (tx) => {
+  const { recoveredEntity, recoveredEntityIds, hasRecoveredDocuments } = await executor.transaction(async (tx) => {
     if (shouldReattachToRoot) {
       await tx
         .update(Entities)
@@ -1040,7 +1050,11 @@ export const recoverEntityCore = async (
 
     const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
 
-    return { recoveredEntity, recoveredEntityIds };
+    return {
+      recoveredEntity,
+      recoveredEntityIds,
+      hasRecoveredDocuments: recoveredEntities.some(({ type }) => type === EntityType.DOCUMENT),
+    };
   });
 
   await runAfterCommit(afterCommit, async () => {
@@ -1048,6 +1062,9 @@ export const recoverEntityCore = async (
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntity.id });
     } else {
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+    }
+    if (hasRecoveredDocuments) {
+      publishRecentDocumentUpdates(entity.siteId, 'VIEWED_AT', 'UPDATED_AT');
     }
     pubsub.publish('user:usage:update', args.userId, null);
 

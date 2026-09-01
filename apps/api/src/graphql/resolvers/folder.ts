@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import { db, Documents, DocumentStates, Entities, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
-import { pubsub } from '#/pubsub.ts';
+import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { createFolderCore, renameFolderCore, updateFolderOptionCore } from '#/utils/entity-actions.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -315,6 +315,9 @@ builder.mutationFields((t) => ({
 
       for (const document of deletedDocuments) {
         await enqueueJob('search:index:document', document.id);
+      }
+      if (deletedDocuments.length > 0) {
+        publishRecentDocumentUpdates(folder.siteId, 'VIEWED_AT', 'UPDATED_AT');
       }
 
       const deletedFolderIds = [

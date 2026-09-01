@@ -20,7 +20,7 @@ import {
   UserPreferences,
 } from '#/db/index.ts';
 import { Lock } from '#/lock.ts';
-import { pubsub } from '#/pubsub.ts';
+import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import {
   collectedKey,
   expireIdleStream,
@@ -437,6 +437,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
         .then(firstOrThrow);
 
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
+      publishRecentDocumentUpdates(siteId, 'UPDATED_AT');
       usageUpdateUserIds.add(ownerUserId);
       for (const userId of usageUpdateUserIds) {
         pubsub.publish('user:usage:update', userId, null);

@@ -43,7 +43,7 @@ import { env } from '#/env.ts';
 import * as slack from '#/external/slack.ts';
 import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
-import { pubsub } from '#/pubsub.ts';
+import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { readMergedGraph } from '#/utils/changeset.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { publishBundle } from '#/utils/document-bundle.ts';
@@ -793,6 +793,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', entity.siteId, { scope: 'site' });
       }
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
+      publishRecentDocumentUpdates(entity.siteId, 'VIEWED_AT', 'UPDATED_AT');
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('search:index:document', input.documentId);

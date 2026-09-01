@@ -16,6 +16,22 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
+import {
+  buildRecentDocumentsBatchQuery,
+  clampRecentDocumentLimit,
+  RECENT_DOCUMENT_DEFAULT_LIMIT,
+  RECENT_DOCUMENT_SORTS,
+  toRecentDocumentsPage,
+} from './recent-documents.ts';
+
+const RecentDocumentSort = builder.enumType('RecentDocumentSort', { values: RECENT_DOCUMENT_SORTS });
+
+const RecentDocumentsResult = builder.simpleObject('RecentDocumentsResult', {
+  fields: (t) => ({
+    documents: t.field({ type: [Document] }),
+    hasMore: t.boolean(),
+  }),
+});
 
 /**
  * * Types
@@ -131,6 +147,35 @@ Site.implement({
           .innerJoin(Entities, eq(Documents.entityId, Entities.id))
           .where(and(eq(Entities.siteId, self.id), eq(Documents.type, DocumentType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
           .orderBy(asc(Documents.createdAt));
+      },
+    }),
+
+    recentDocuments: t.field({
+      type: RecentDocumentsResult,
+      args: {
+        sort: t.arg({ type: RecentDocumentSort }),
+        limit: t.arg.int({ defaultValue: RECENT_DOCUMENT_DEFAULT_LIMIT }),
+      },
+      resolve: async (self, args, ctx) => {
+        if (ctx.session?.userId !== self.userId) {
+          await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+        }
+
+        const limit = clampRecentDocumentLimit(args.limit);
+        const loader = ctx.loader({
+          name: `Site.recentDocuments:${self.userId}:${args.sort}:${limit}`,
+          many: true,
+          load: async (siteIds) =>
+            await buildRecentDocumentsBatchQuery(db, {
+              userId: self.userId,
+              siteIds,
+              sort: args.sort,
+              limit,
+            }),
+          key: ({ siteId }) => siteId,
+        });
+
+        return toRecentDocumentsPage(await loader.load(self.id), limit);
       },
     }),
 
@@ -395,6 +440,19 @@ builder.mutationFields((t) => ({
  */
 
 builder.subscriptionFields((t) => ({
+  siteRecentDocumentsUpdateStream: t.withAuth({ session: true }).field({
+    type: RecentDocumentSort,
+    args: { siteId: t.arg.id({ validate: validateDbId(TableCode.SITES) }) },
+    subscribe: async (_, args, ctx) => {
+      await assertSitePermission({ userId: ctx.session.userId, siteId: args.siteId });
+
+      const repeater = pubsub.subscribe('site:recent-documents:update', args.siteId);
+      ctx.c.req.raw.signal.addEventListener('abort', () => repeater.return());
+      return repeater;
+    },
+    resolve: (sort) => sort,
+  }),
+
   siteUpdateStream: t.withAuth({ session: true }).field({
     type: t.builder.unionType('SiteUpdateStreamPayload', {
       types: [Site, Entity],

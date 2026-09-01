@@ -10,6 +10,7 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FolderIcon from '~icons/lucide/folder';
+  import { page } from '$app/state';
   import { graphql } from '$mearie';
   import EmptyFolderMenu from '../@context-menu/EmptyFolderMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
@@ -139,9 +140,9 @@
     const icon = folder.data.entity.icon;
     const iconColor = folder.data.entity.iconColor;
     untrack(() => {
-      const entry = treeState.entityMap.get(entityId);
+      const entry = treeState.treeEntityMap.get(entityId);
       if (entry) {
-        treeState.entityMap.set(entityId, { ...entry, icon, iconColor });
+        treeState.treeEntityMap.set(entityId, { ...entry, icon, iconColor });
       }
     });
   });
@@ -179,18 +180,18 @@
       parentId: folder.data.entity.id,
     }));
 
-    const parentEntity = treeState.entityMap.get(folder.data.entity.id);
+    const parentEntity = treeState.treeEntityMap.get(folder.data.entity.id);
     if (parentEntity) {
       parentEntity.children = childEntities;
     }
 
     for (const child of childEntities) {
-      treeState.entityMap.set(child.id, child);
+      treeState.treeEntityMap.set(child.id, child);
     }
   });
 
   $effect.pre(() => {
-    if (active) {
+    if (active && page.state.entityTreeReveal !== 'preserve') {
       open = true;
     }
   });
