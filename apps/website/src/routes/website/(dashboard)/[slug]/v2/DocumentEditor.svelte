@@ -1017,11 +1017,13 @@
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
+    const primaryModifierOnly = IS_MAC
+      ? e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+      : e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
     const targetPaneId = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-pane-id]')?.dataset.paneId : undefined;
+    const ownsShortcut = e.target === ctx.editor?.inputEl || targetPaneId === pane.id;
 
-    if (!(focused && (IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF' && targetPaneId === pane.id)) {
-      return;
-    }
+    if (showFindReplace || !focused || !primaryModifierOnly || !ownsShortcut || e.code !== 'KeyF') return;
 
     e.preventDefault();
     showFindReplace = true;
