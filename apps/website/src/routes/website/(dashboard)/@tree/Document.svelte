@@ -6,7 +6,8 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import FileIcon from '~icons/lucide/file';
-  import { navigating } from '$app/state';
+  import { goto } from '$app/navigation';
+  import { navigating, page } from '$app/state';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
@@ -18,13 +19,21 @@
   import EntityMenu from './EntityMenu.svelte';
   import EntityName from './EntityName.svelte';
   import { getTreeContext } from './state.svelte';
+  import type { Action } from 'svelte/action';
   import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
+  import type { DocumentPaneDragController, DocumentPaneDragItem } from '../[slug]/@pane/document-pane-drag.svelte';
 
   type Props = {
     document$key: DashboardLayout_EntityTree_Document_document$key;
+    source?: 'tree' | 'recent';
+    selectionOrder?: readonly string[];
+    documentPaneDrag?: DocumentPaneDragController;
   };
 
-  let { document$key }: Props = $props();
+  let { document$key, source = 'tree', selectionOrder, documentPaneDrag }: Props = $props();
+
+  const noopPaneDrag: Action<HTMLElement, DocumentPaneDragItem | null> = () => ({});
+  const paneDrag = documentPaneDrag?.drag ?? noopPaneDrag;
 
   const document = createFragment(
     graphql(`
@@ -70,28 +79,55 @@
   const active = $derived(app.state.current === document.data.entity.slug);
   const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
   const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(document.data.entity.id));
+  const paneDragItem = $derived<DocumentPaneDragItem | null>(
+    source === 'recent'
+      ? { slug: document.data.entity.slug, name: document.data.title, icon: document.data.entity.icon ?? undefined }
+      : null,
+  );
 
   $effect(() => {
     const entityId = document.data.entity.id;
     const icon = document.data.entity.icon;
     const iconColor = document.data.entity.iconColor;
     untrack(() => {
-      const entry = treeState.entityMap.get(entityId);
+      const entityMap = source === 'tree' ? treeState.treeEntityMap : treeState.recentEntityMap;
+      const entry = entityMap.get(entityId);
       if (entry) {
-        treeState.entityMap.set(entityId, { ...entry, icon, iconColor });
+        entityMap.set(entityId, { ...entry, icon, iconColor });
       }
     });
   });
 
   let element = $state<HTMLAnchorElement>();
 
+  const handleClick = (event: MouseEvent) => {
+    if (documentPaneDrag?.consumeClick(event)) return;
+
+    if (
+      source !== 'recent' ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    void goto(`/${document.data.entity.slug}`, { state: { entityTreeReveal: 'preserve' } });
+  };
+
   $effect(() => {
-    if (active) {
+    if (source === 'tree' && active && page.state.entityTreeReveal !== 'preserve') {
       element?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
     }
   });
 
   $effect(() => {
+    if (source !== 'tree') return;
+
     const request = entityTreeRevealState.current;
     if (!request || !shouldConsumeDocumentRevealRequest(request, document.data.entity.id, active, navigating.to === null)) {
       return;
@@ -119,13 +155,15 @@
         '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
         '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
       },
-      document.data.entity.depth > 0 && {
-        borderLeftWidth: '1px',
-        borderLeftRadius: '0',
-        marginLeft: '-1px',
-        paddingLeft: '14px',
-        _supportHover: { borderColor: 'border.strong' },
-      },
+      source === 'tree' &&
+        document.data.entity.depth > 0 && {
+          borderLeftWidth: '1px',
+          borderLeftRadius: '0',
+          marginLeft: '-1px',
+          paddingLeft: '14px',
+          _supportHover: { borderColor: 'border.strong' },
+        },
+      source === 'recent' && { touchAction: 'none' },
       active && {
         backgroundColor: 'surface.muted',
       },
@@ -139,7 +177,7 @@
       },
     ),
   )}
-  aria-selected="false"
+  aria-selected={source === 'tree' ? 'false' : undefined}
   data-document-type={document.data.documentType}
   data-icon={document.data.entity.icon}
   data-icon-color={document.data.entity.iconColor}
@@ -151,11 +189,13 @@
   data-type="document"
   draggable="false"
   href="/{document.data.entity.slug}"
-  role="treeitem"
+  onclick={handleClick}
+  role={source === 'tree' ? 'treeitem' : undefined}
   use:contextMenu={{ content: contextMenuContent }}
+  use:paneDrag={paneDragItem}
   use:tooltip={{ message: tooltipContent, placement: 'right', delay: 1000 }}
 >
-  <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
+  <EntitySelectionIndicator entityId={document.data.entity.id} {selectionOrder} visibility={document.data.entity.visibility} />
 
   <EntityIcon entity$key={document.data.entity} fallback={FileIcon} size={14} />
 
@@ -183,7 +223,7 @@
   {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(document.data.entity.id)}
     <MultiEntitiesMenu />
   {:else}
-    <DocumentMenu document={document.data} entity={document.data.entity} via="tree" />
+    <DocumentMenu document={document.data} entity={document.data.entity} structuralSource={source} via="tree" />
   {/if}
 {/snippet}
 

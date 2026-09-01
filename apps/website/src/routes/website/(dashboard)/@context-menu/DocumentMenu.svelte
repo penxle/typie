@@ -59,10 +59,11 @@
       parent?: { id: string } | null;
     };
     via: 'tree' | 'editor';
+    structuralSource?: 'tree' | 'recent';
     children?: Snippet;
   };
 
-  let { document, entity, via, children }: Props = $props();
+  let { document, entity, via, structuralSource = 'tree', children }: Props = $props();
 
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -76,6 +77,7 @@
 
           entity {
             id
+            state
 
             site {
               id
@@ -389,19 +391,6 @@
     }
   };
 
-  const findSiblingSlug = (slug: string): string | undefined => {
-    const el = globalThis.document.querySelector<HTMLElement>(`[data-slug="${slug}"]`);
-    if (!el) return;
-
-    let next = el.nextElementSibling as HTMLElement | null;
-    while (next && !next.dataset.slug) next = next.nextElementSibling as HTMLElement | null;
-    if (next?.dataset.slug) return next.dataset.slug;
-
-    let prev = el.previousElementSibling as HTMLElement | null;
-    while (prev && !prev.dataset.slug) prev = prev.previousElementSibling as HTMLElement | null;
-    return prev?.dataset.slug;
-  };
-
   const handleDelete = () => {
     Dialog.confirm({
       title: '문서 삭제',
@@ -410,21 +399,8 @@
       action: 'danger',
       actionLabel: '삭제',
       actionHandler: async () => {
-        const siblingSlug = findSiblingSlug(entity.slug);
-
         await deleteDocument({ input: { documentId: document.id } });
         mixpanel.track('delete_document', { via });
-
-        const focusedPane = paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId);
-        if (focusedPane?.kind !== 'entity' || focusedPane.slug !== entity.slug) return;
-
-        if (paneGroup.panes.length > 1) {
-          paneGroup.removePane(focusedPane.id);
-        } else if (siblingSlug) {
-          paneGroup.replacePane(focusedPane.id, { kind: 'entity', slug: siblingSlug });
-        } else {
-          paneGroup.replacePane(focusedPane.id, { kind: 'home' });
-        }
       },
     });
   };
@@ -578,59 +554,59 @@
     잘라내기
   </MenuItem>
 
-  {#if app.state.clipboard && entity.order}
-    <MenuItem
-      icon={ClipboardPasteIcon}
-      onclick={() => {
-        const clipboard = app.state.clipboard;
-        if (!clipboard) return;
-        const currentSiteId = app.preference.current.currentSiteId;
-        if (!currentSiteId) return;
+  {#if structuralSource === 'tree' && entity.order}
+    {#if app.state.clipboard}
+      <MenuItem
+        icon={ClipboardPasteIcon}
+        onclick={() => {
+          const clipboard = app.state.clipboard;
+          if (!clipboard) return;
+          const currentSiteId = app.preference.current.currentSiteId;
+          if (!currentSiteId) return;
 
-        if (!SubscribeModal.gate('entity_paste')) {
-          return;
-        }
-
-        const upperOrder = getNextSiblingOrder(entity.id) ?? null;
-        const count = clipboard.entityIds.length;
-
-        const promise = (async () => {
-          if (clipboard.mode === 'cut') {
-            const isCrossSite = clipboard.sourceSiteId !== currentSiteId;
-            await moveEntities({
-              input: {
-                entityIds: clipboard.entityIds,
-                parentEntityId: entity.parent?.id ?? null,
-                lowerOrder: entity.order,
-                upperOrder,
-                ...(isCrossSite && { targetSiteId: currentSiteId }),
-              },
-            });
-            if (isCrossSite) {
-              cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
-            }
-            app.state.clipboard = undefined;
-          } else {
-            await copyEntities({
-              input: {
-                entityIds: clipboard.entityIds,
-                targetSiteId: currentSiteId,
-                parentEntityId: entity.parent?.id ?? null,
-                lowerOrder: entity.order,
-                upperOrder,
-              },
-            });
+          if (!SubscribeModal.gate('entity_paste')) {
+            return;
           }
-        })();
 
-        showPasteToast(promise, count);
-      }}
-    >
-      아래에 붙여넣기
-    </MenuItem>
-  {/if}
+          const upperOrder = getNextSiblingOrder(entity.id) ?? null;
+          const count = clipboard.entityIds.length;
 
-  {#if entity.order}
+          const promise = (async () => {
+            if (clipboard.mode === 'cut') {
+              const isCrossSite = clipboard.sourceSiteId !== currentSiteId;
+              await moveEntities({
+                input: {
+                  entityIds: clipboard.entityIds,
+                  parentEntityId: entity.parent?.id ?? null,
+                  lowerOrder: entity.order,
+                  upperOrder,
+                  ...(isCrossSite && { targetSiteId: currentSiteId }),
+                },
+              });
+              if (isCrossSite) {
+                cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
+              }
+              app.state.clipboard = undefined;
+            } else {
+              await copyEntities({
+                input: {
+                  entityIds: clipboard.entityIds,
+                  targetSiteId: currentSiteId,
+                  parentEntityId: entity.parent?.id ?? null,
+                  lowerOrder: entity.order,
+                  upperOrder,
+                },
+              });
+            }
+          })();
+
+          showPasteToast(promise, count);
+        }}
+      >
+        아래에 붙여넣기
+      </MenuItem>
+    {/if}
+
     <MenuItem
       icon={MinusIcon}
       onclick={async () => {

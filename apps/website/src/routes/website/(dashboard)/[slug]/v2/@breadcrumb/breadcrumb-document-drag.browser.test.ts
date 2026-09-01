@@ -2,7 +2,9 @@ import '../../../../../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
 import BreadcrumbDocumentDragTestRoot from './breadcrumb-document-drag-test-root.svelte';
+import type { PaneGroup } from '../../@pane/context.svelte';
 
 let component: Record<string, unknown> | undefined;
 
@@ -83,6 +85,26 @@ const beginActiveDrag = async () => {
 };
 
 describe('breadcrumb document drag', () => {
+  it('leaves nested interactive controls outside the drag gesture', () => {
+    const scrollSurface = document.createElement('div');
+    scrollSurface.dataset.documentPaneDragScrollSurface = '';
+    const row = document.createElement('a');
+    const button = document.createElement('button');
+    row.append(button);
+    scrollSurface.append(row);
+    document.body.append(scrollSurface);
+    installPointerCapture(row);
+
+    const controller = new DocumentPaneDragController({ paneGroup: {} as PaneGroup });
+    const action = controller.drag(row, { slug: 'document-first', name: 'First document' });
+
+    pointer(button, 'pointerdown');
+
+    expect(controller.hasPointerSession).toBe(false);
+    action?.destroy?.();
+    controller.destroy();
+  });
+
   it('keeps a below-threshold mouse gesture as document activation', async () => {
     await mountFixture();
     const item = treeItem('document-first');

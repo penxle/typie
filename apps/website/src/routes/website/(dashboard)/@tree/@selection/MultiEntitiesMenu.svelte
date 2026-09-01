@@ -20,8 +20,7 @@
   import { graphql } from '$mearie';
   import EntityIconPicker from '../../@context-menu/EntityIconPicker.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
-  import { getTreeContext } from '../state.svelte';
-  import type { TreeEntity } from './types';
+  import { getTreeContext, getTreeStateEntity } from '../state.svelte';
 
   const app = getAppContext();
   const tree = getTreeContext();
@@ -31,6 +30,7 @@
       mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
         deleteEntities(input: $input) {
           id
+          state
 
           site {
             id
@@ -89,27 +89,16 @@
     const documentIds: string[] = [];
     const dividerIds: string[] = [];
 
-    const entityIds = tree.selectedEntityIds;
-
-    const collect = (entities: TreeEntity[]) => {
-      for (const entity of entities) {
-        if (entityIds.has(entity.id)) {
-          if (entity.type === 'Folder') {
-            folderIds.push(entity.id);
-          } else if (entity.type === 'Document') {
-            documentIds.push(entity.id);
-          } else if (entity.type === 'Divider') {
-            dividerIds.push(entity.id);
-          }
-        }
-
-        if (entity.children) {
-          collect(entity.children);
-        }
+    for (const entityId of tree.selectedEntityIds) {
+      const entity = getTreeStateEntity(tree, entityId);
+      if (entity?.type === 'Folder') {
+        folderIds.push(entityId);
+      } else if (entity?.type === 'Document') {
+        documentIds.push(entityId);
+      } else if (entity?.type === 'Divider') {
+        dividerIds.push(entityId);
       }
-    };
-
-    collect(tree.entities);
+    }
 
     return { folderIds, documentIds, dividerIds };
   });
@@ -124,7 +113,7 @@
     let first = true;
 
     for (const entityId of iconTargetIds) {
-      const entity = tree.entityMap.get(entityId);
+      const entity = getTreeStateEntity(tree, entityId);
       if (!entity) continue;
 
       if (first) {
@@ -190,7 +179,7 @@
               optimisticResponse: {
                 updateEntitiesIcon: entityIds.map((id) => ({
                   id,
-                  icon: allSameIcon ?? tree.entityMap.get(id)?.icon ?? 'file',
+                  icon: allSameIcon ?? getTreeStateEntity(tree, id)?.icon ?? 'file',
                   iconColor: color,
                 })),
               },
@@ -214,7 +203,7 @@
                 updateEntitiesIcon: entityIds.map((id) => ({
                   id,
                   icon: name,
-                  iconColor: allSameIconColor ?? tree.entityMap.get(id)?.iconColor ?? 'gray',
+                  iconColor: allSameIconColor ?? getTreeStateEntity(tree, id)?.iconColor ?? 'gray',
                 })),
               },
             },

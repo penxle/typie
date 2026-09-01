@@ -12,7 +12,7 @@
   import EntityName from '../../../@tree/EntityName.svelte';
   import BreadcrumbEntityNode from './BreadcrumbEntityNode.svelte';
   import type { EditorBreadcrumbNavigation_Entity_entity$key } from '$mearie';
-  import type { BreadcrumbDocumentDragController } from './breadcrumb-document-drag.svelte';
+  import type { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
 
   const entityTreeRowStyle = css.raw({
     display: 'flex',
@@ -41,7 +41,7 @@
     nested?: boolean;
     parentEntityId?: string;
     onActivateDocument: (slug: string) => void;
-    documentDrag: BreadcrumbDocumentDragController;
+    documentDrag: DocumentPaneDragController;
     onToggleFolder: (entityId: string) => void;
   };
 

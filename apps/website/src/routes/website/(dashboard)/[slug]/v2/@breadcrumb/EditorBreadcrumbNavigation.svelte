@@ -1,21 +1,20 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions, portal } from '@typie/ui/actions';
+  import { createFloatingActions } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
-  import { entityIconMap } from '@typie/ui/constants';
   import { prefersReducedMotion } from '@typie/ui/state';
   import { pushEscapeHandler } from '@typie/ui/utils';
   import { onDestroy, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { scale } from 'svelte/transition';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import HomeIcon from '~icons/lucide/house';
   import EntityIcon from '../../../@context-menu/EntityIcon.svelte';
   import { getPaneGroup } from '../../@pane/context.svelte';
-  import { BreadcrumbDocumentDragController } from './breadcrumb-document-drag.svelte';
+  import { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
+  import DocumentPaneDragGhost from '../../@pane/DocumentPaneDragGhost.svelte';
   import BreadcrumbEntityTree from './BreadcrumbEntityTree.svelte';
   import type { EditorContextBarSegmentState } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
@@ -95,7 +94,7 @@
   let navigationElement = $state<HTMLElement>();
   let activeTrigger = $state<HTMLButtonElement>();
   const paneGroup = getPaneGroup();
-  const documentDrag = new BreadcrumbDocumentDragController({ paneGroup, onDropSuccess: () => dismiss(false) });
+  const documentDrag = new DocumentPaneDragController({ paneGroup, onDropSuccess: () => dismiss(false) });
 
   const { floating, setReference } = createFloatingActions({
     placement: 'bottom-start',
@@ -295,37 +294,5 @@
 {/if}
 
 {#if documentDrag.ghost}
-  <div
-    style:left={`${documentDrag.ghost.x + 8}px`}
-    style:top={`${documentDrag.ghost.y}px`}
-    style:max-width={`${documentDrag.ghost.width}px`}
-    class={flex({
-      position: 'fixed',
-      alignItems: 'center',
-      gap: '2px',
-      minWidth: '0',
-      paddingX: '8px',
-      paddingY: '4px',
-      borderRadius: 'full',
-      backgroundColor: 'accent.info.default',
-      color: 'text.bright',
-      fontSize: '14px',
-      fontWeight: 'bold',
-      pointerEvents: 'none',
-      userSelect: 'none',
-      zIndex: 'ghost',
-    })}
-    aria-hidden="true"
-    role="presentation"
-    use:portal
-  >
-    <Icon
-      style={css.raw({ flexShrink: '0', color: 'text.bright' })}
-      icon={entityIconMap.get(documentDrag.ghost.icon ?? '') ?? FileIcon}
-      size={14}
-    />
-    <span class={css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
-      {documentDrag.ghost.name}
-    </span>
-  </div>
+  <DocumentPaneDragGhost ghost={documentDrag.ghost} />
 {/if}

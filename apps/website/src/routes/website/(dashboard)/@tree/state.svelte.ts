@@ -4,7 +4,9 @@ import type { TreeEntity } from './@selection/types';
 
 export type TreeState = {
   entities: TreeEntity[];
-  entityMap: SvelteMap<string, TreeEntity>;
+  treeEntityMap: SvelteMap<string, TreeEntity>;
+  recentEntityMap: SvelteMap<string, TreeEntity>;
+  dragging: boolean;
   lastSelectedEntityId?: string;
   selectedEntityIds: SvelteSet<string>;
   element?: HTMLElement;
@@ -17,7 +19,9 @@ export { getTreeContext };
 export const setupTreeContext = () => {
   const treeState = $state<TreeState>({
     entities: [],
-    entityMap: new SvelteMap<string, TreeEntity>(),
+    treeEntityMap: new SvelteMap<string, TreeEntity>(),
+    recentEntityMap: new SvelteMap<string, TreeEntity>(),
+    dragging: false,
     lastSelectedEntityId: undefined,
     selectedEntityIds: new SvelteSet<string>(),
     element: undefined,
@@ -27,3 +31,6 @@ export const setupTreeContext = () => {
 
   return treeState;
 };
+
+export const getTreeStateEntity = (treeState: TreeState, entityId: string) =>
+  treeState.treeEntityMap.get(entityId) ?? treeState.recentEntityMap.get(entityId);

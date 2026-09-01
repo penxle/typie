@@ -22,6 +22,7 @@
   import { desktop } from '$lib/desktop';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
+  import { invalidateRecentDocumentsForSort } from '$lib/graphql/recent-documents';
   import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { cleanupBrowserPushForLogout, getBrowserPushManager } from '$lib/push';
@@ -155,6 +156,20 @@
       }
     `),
     () => ({ siteId }),
+  );
+
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_SiteRecentDocumentsUpdateStream($siteId: ID!) {
+        siteRecentDocumentsUpdateStream(siteId: $siteId)
+      }
+    `),
+    () => ({ siteId }),
+    () => ({
+      onData: ({ siteRecentDocumentsUpdateStream }) => {
+        invalidateRecentDocumentsForSort(siteRecentDocumentsUpdateStream, siteId);
+      },
+    }),
   );
 
   createSubscription(

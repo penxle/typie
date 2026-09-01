@@ -153,7 +153,7 @@
     }
 
     trackedEntityId = entity.id;
-    viewEntity({ input: { entityId: entity.id } });
+    void viewEntity({ input: { entityId: entity.id } });
     fb.track('ViewContent');
   });
 

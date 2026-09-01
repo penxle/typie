@@ -14,6 +14,7 @@
   import { graphql } from '$mearie';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import EntityName from '../@tree/EntityName.svelte';
   import TrashEntity from './TrashEntity.svelte';
   import type { DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
 
@@ -193,19 +194,7 @@
       <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
       <EntityIcon style={css.raw({ flexShrink: '0' })} entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
-      <span
-        class={css({
-          fontSize: '14px',
-          fontWeight: 'medium',
-          color: 'text.muted',
-          wordBreak: 'break-all',
-          lineClamp: '1',
-          flexShrink: '0',
-          maxWidth: '[60%]',
-        })}
-      >
-        {folder.data.name}
-      </span>
+      <EntityName name={folder.data.name} />
     </div>
 
     <div

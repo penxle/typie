@@ -6,6 +6,7 @@ import type { ProjectedStreamFrame } from '@typie/prism';
 import type { PrismNotificationPayload } from '#/utils/prism-notification.ts';
 
 export const NOTE_UPDATE_KINDS = ['CREATED', 'UPDATED', 'DELETED'] as const;
+export type RecentDocumentUpdateSort = 'VIEWED_AT' | 'UPDATED_AT';
 
 export const pubsub = createPubSub<{
   'document:changesets': [
@@ -21,6 +22,7 @@ export const pubsub = createPubSub<{
   'prism:notification': [userId: string, payload: PrismNotificationPayload];
   'prism:review': [documentId: string, payload: { roundId: string }];
   'prism:session': [sessionId: string, payload: ProjectedStreamFrame];
+  'site:recent-documents:update': [siteId: string, sort: RecentDocumentUpdateSort];
   'site:update': [siteId: string, payload: { scope: 'site' } | { scope: 'entity'; entityId: string }];
   'site:usage:update': [siteId: string, payload: null];
   'user:goal:update': [userId: string, payload: null];
@@ -31,3 +33,9 @@ export const pubsub = createPubSub<{
     subscribeClient: new Redis({ host: env.REDIS_URL, tls: {} }),
   }),
 });
+
+export const publishRecentDocumentUpdates = (siteId: string, ...sorts: RecentDocumentUpdateSort[]) => {
+  for (const sort of sorts) {
+    pubsub.publish('site:recent-documents:update', siteId, sort);
+  }
+};

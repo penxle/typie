@@ -190,7 +190,7 @@
       transitionProperty: '[border-color, box-shadow, background-color]',
       transitionDuration: '200ms',
       transitionTimingFunction: 'ease-out',
-      zIndex: '1',
+      zIndex: 'menu',
     })}
   >
     <!-- 트리거 -->

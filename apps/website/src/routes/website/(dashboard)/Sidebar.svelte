@@ -25,8 +25,13 @@
   import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
+  import SelectedEntitiesBar from './@tree/@selection/SelectedEntitiesBar.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from './@tree/entity-reveal.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
+  import RecentDocuments from './@tree/RecentDocuments.svelte';
+  import SidebarSectionHeader from './@tree/SidebarSectionHeader.svelte';
+  import { setupTreeContext } from './@tree/state.svelte';
+  import { getEntityTreeElement } from './@tree/utils';
   import { getDayClock } from './day-clock.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
@@ -44,6 +49,7 @@
 
   const app = getAppContext();
   const dayClock = getDayClock();
+  const treeState = setupTreeContext();
 
   const user = createFragment(
     graphql(`
@@ -68,6 +74,7 @@
           }
 
           ...DashboardLayout_EntityTree_site
+          ...DashboardLayout_RecentDocuments_site
         }
 
         characterCountChanges {
@@ -231,7 +238,7 @@
   const getAdjacentOrders = () => {
     if (!app.state.current) return {};
 
-    const currentEl = document.querySelector<HTMLElement>(`[data-slug="${app.state.current}"]`);
+    const currentEl = getEntityTreeElement()?.querySelector<HTMLElement>(`[data-slug="${app.state.current}"]`);
     if (!currentEl) return {};
 
     const lowerOrder = currentEl.dataset.order;
@@ -296,6 +303,7 @@
   let treeScrollEl = $state<HTMLDivElement>();
   const treeScrollId = 'sidebar-entity-tree-scroll';
   let treeSectionHeaderHeight = $state(0);
+  let allDocumentsOpen = $derived(app.preference.current.sidebarAllDocumentsOpen);
   let canScrollUp = $state(false);
   let canScrollDown = $state(false);
 
@@ -686,105 +694,128 @@
             borderColor: 'border.subtle',
             transition: '[border-width 150ms ease]',
           })}
+          data-document-pane-drag-scroll-surface
           onscroll={updateScrollState}
         >
+          <RecentDocuments {canScrollUp} site$key={site} bind:headerHeight={treeSectionHeaderHeight} />
+
           <!-- 문서 트리 -->
-          <div
-            class={flex({
-              position: 'sticky',
-              top: '0',
-              zIndex: '1',
-              flexShrink: '0',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingX: '12px',
-              paddingTop: '8px',
-              paddingBottom: '4px',
-              backgroundColor: 'surface.subtle',
-              borderBottomWidth: canScrollUp ? '1px' : '0',
-              borderColor: 'border.subtle',
-              transition: '[border-width 150ms ease]',
-            })}
-            bind:offsetHeight={treeSectionHeaderHeight}
+          <SidebarSectionHeader
+            dividerVisible={canScrollUp}
+            label="모두"
+            onToggle={() => (app.preference.current.sidebarAllDocumentsOpen = !allDocumentsOpen)}
+            open={allDocumentsOpen}
+            bind:height={treeSectionHeaderHeight}
           >
-            <span class={css({ paddingX: '8px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>글</span>
+            {#snippet actions()}
+              <div class={flex({ alignItems: 'center', gap: '2px' })}>
+                <button
+                  class={center({
+                    borderRadius: '4px',
+                    size: '24px',
+                    color: 'text.faint',
+                    opacity: '50',
+                    transition: 'common',
+                    _hover: { color: 'text.subtle', opacity: '100' },
+                    _focusVisible: { opacity: '100' },
+                  })}
+                  onclick={async () => {
+                    if (!SubscribeModal.gate('sidebar_create_folder')) {
+                      return;
+                    }
 
-            <div class={flex({ alignItems: 'center', gap: '2px' })}>
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: 'text.faint',
-                  transition: 'common',
-                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-                })}
-                onclick={async () => {
-                  if (!SubscribeModal.gate('sidebar_create_folder')) {
-                    return;
-                  }
+                    const ancestorFolderIds = [...app.state.ancestors];
+                    const { lowerOrder, upperOrder } = getAdjacentOrders();
+                    const resp = await createFolder({
+                      input: {
+                        siteId: site.id,
+                        name: '새 폴더',
+                        parentEntityId: app.state.ancestors.at(-1),
+                        lowerOrder,
+                        upperOrder,
+                      },
+                    });
 
-                  const ancestorFolderIds = [...app.state.ancestors];
-                  const { lowerOrder, upperOrder } = getAdjacentOrders();
-                  const resp = await createFolder({
-                    input: {
-                      siteId: site.id,
-                      name: '새 폴더',
-                      parentEntityId: app.state.ancestors.at(-1),
-                      lowerOrder,
-                      upperOrder,
-                    },
-                  });
+                    mixpanel.track('create_folder', { via: 'tree' });
 
-                  mixpanel.track('create_folder', { via: 'tree' });
+                    entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, ancestorFolderIds, true));
+                  }}
+                  type="button"
+                  use:tooltip={{ message: '새 폴더 생성' }}
+                >
+                  <Icon icon={FolderPlusIcon} />
+                </button>
 
-                  entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, ancestorFolderIds, true));
-                }}
-                type="button"
-                use:tooltip={{ message: '새 폴더 생성' }}
-              >
-                <Icon icon={FolderPlusIcon} />
-              </button>
+                <button
+                  class={center({
+                    borderRadius: '4px',
+                    size: '24px',
+                    color: 'text.faint',
+                    opacity: '50',
+                    transition: 'common',
+                    _hover: { color: 'text.subtle', opacity: '100' },
+                    _focusVisible: { opacity: '100' },
+                  })}
+                  onclick={async () => {
+                    if (!SubscribeModal.gate('sidebar_create_document')) {
+                      return;
+                    }
 
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: 'text.faint',
-                  transition: 'common',
-                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-                })}
-                onclick={async () => {
-                  if (!SubscribeModal.gate('sidebar_create_document')) {
-                    return;
-                  }
+                    const ancestorFolderIds = [...app.state.ancestors];
+                    const { lowerOrder, upperOrder } = getAdjacentOrders();
 
-                  const ancestorFolderIds = [...app.state.ancestors];
-                  const { lowerOrder, upperOrder } = getAdjacentOrders();
+                    const resp = await createDocument({
+                      input: {
+                        siteId: site.id,
+                        parentEntityId: app.state.ancestors.at(-1),
+                        lowerOrder,
+                        upperOrder,
+                        v2: true,
+                      },
+                    });
 
-                  const resp = await createDocument({
-                    input: {
-                      siteId: site.id,
-                      parentEntityId: app.state.ancestors.at(-1),
-                      lowerOrder,
-                      upperOrder,
-                      v2: true,
-                    },
-                  });
+                    mixpanel.track('create_document', { via: 'tree' });
+                    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, ancestorFolderIds, false);
+                    entityTreeRevealState.set(revealRequest);
+                    await goto(`/${resp.createDocument.entity.slug}`);
+                  }}
+                  type="button"
+                  use:tooltip={{ message: '새 문서 생성' }}
+                >
+                  <Icon icon={SquarePenIcon} />
+                </button>
+              </div>
+            {/snippet}
+          </SidebarSectionHeader>
 
-                  mixpanel.track('create_document', { via: 'tree' });
-                  const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, ancestorFolderIds, false);
-                  entityTreeRevealState.set(revealRequest);
-                  await goto(`/${resp.createDocument.entity.slug}`);
-                }}
-                type="button"
-                use:tooltip={{ message: '새 문서 생성' }}
-              >
-                <Icon icon={SquarePenIcon} />
-              </button>
+          <div
+            class={css({
+              display: 'grid',
+              gridTemplateRows: allDocumentsOpen ? '1fr' : '0fr',
+              flexShrink: '0',
+              transition: '[grid-template-rows 160ms ease-out]',
+              _motionReduce: { transition: '[none]' },
+            })}
+            aria-hidden={!allDocumentsOpen}
+            inert={!allDocumentsOpen}
+          >
+            <div
+              style:opacity={allDocumentsOpen ? '1' : '0'}
+              class={flex({
+                flexDirection: 'column',
+                minHeight: '0',
+                overflow: 'hidden',
+                transition: '[opacity 120ms ease-out]',
+                _motionReduce: { transition: '[none]' },
+              })}
+            >
+              <EntityTree scrollContainer={treeScrollEl} site$key={site} />
             </div>
           </div>
 
-          <EntityTree site$key={site} />
+          {#if treeState.selectedEntityIds.size > 0 && !treeState.dragging}
+            <SelectedEntitiesBar />
+          {/if}
         </div>
 
         <Scrollbar

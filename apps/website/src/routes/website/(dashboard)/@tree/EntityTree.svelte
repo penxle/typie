@@ -20,10 +20,9 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
-  import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
-  import { setupTreeContext } from './state.svelte';
-  import { getNextElement, getPreviousElement, maxDepth } from './utils';
+  import { getTreeContext } from './state.svelte';
+  import { getNextElement, getPreviousElement, maxDepth, resolveEntityTreeDropTarget } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
   import type { DashboardLayout_EntityTree_site$key } from '$mearie';
 
@@ -38,9 +37,10 @@
 
   type Props = {
     site$key: DashboardLayout_EntityTree_site$key;
+    scrollContainer: HTMLElement | undefined;
   };
 
-  let { site$key }: Props = $props();
+  let { site$key, scrollContainer }: Props = $props();
 
   const site = createFragment(
     graphql(`
@@ -143,6 +143,7 @@
       mutation DashboardLayout_EntityTree_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
         deleteEntities(input: $input) {
           id
+          state
 
           site {
             id
@@ -248,8 +249,9 @@
   let lastPointerX = $state<number>(0);
   let lastPointerY = $state<number>(0);
 
-  const treeState = setupTreeContext();
+  const treeState = getTreeContext();
   const paneGroup = getPaneGroup();
+  const selectedTreeEntityIds = $derived([...treeState.selectedEntityIds].filter((entityId) => treeState.treeEntityMap.has(entityId)));
 
   const countSelectedEntitiesForDragGhost = (selectedEntityIds: Iterable<string>) => {
     const count = {
@@ -259,7 +261,7 @@
     };
 
     for (const entityId of selectedEntityIds) {
-      const entity = treeState.entityMap.get(entityId);
+      const entity = treeState.treeEntityMap.get(entityId);
 
       if (!entity) {
         continue;
@@ -279,6 +281,10 @@
 
   $effect(() => {
     treeState.element = tree;
+  });
+
+  $effect(() => {
+    treeState.dragging = Boolean(dragging?.eligible);
   });
 
   $effect(() => {
@@ -302,14 +308,12 @@
       };
 
       treeState.entities = collect(site.data.entities as unknown as EntityNode[]);
-      treeState.entityMap = entityMap;
+      treeState.treeEntityMap = entityMap;
     }
   });
 
   $effect(() => {
-    if (!treeState.entityMap) return;
-
-    const validEntityIds = new Set(treeState.entityMap.keys());
+    const validEntityIds = new Set([...treeState.treeEntityMap.keys(), ...treeState.recentEntityMap.keys()]);
 
     const invalidSelectedIds = treeState.selectedEntityIds.difference(validEntityIds);
     for (const entityId of invalidSelectedIds) {
@@ -459,7 +463,8 @@
   const updateDropTarget = (clientX: number, clientY: number) => {
     if (!dragging || !tree) return;
 
-    const trashElement = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-type="trash"]');
+    const hitElement = document.elementFromPoint(clientX, clientY);
+    const trashElement = hitElement?.closest<HTMLElement>('[data-type="trash"]');
 
     if (trashElement) {
       const rect = trashElement.getBoundingClientRect();
@@ -476,9 +481,7 @@
       return;
     }
 
-    const targetElement =
-      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
-      document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector(':scope > [data-id]:last-child');
+    const targetElement = resolveEntityTreeDropTarget(tree, hitElement);
 
     if (!targetElement && dragging.eligible && dragging.element.dataset.type === 'document') {
       const zone = paneGroup.hitTest(clientX, clientY);
@@ -507,11 +510,11 @@
     }
 
     const entityId = dragging.element.dataset.id;
-    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && selectedTreeEntityIds.length > 1;
 
     let isCycle = false;
     if (isMultipleDrag) {
-      for (const selectedId of treeState.selectedEntityIds) {
+      for (const selectedId of selectedTreeEntityIds) {
         const selectedElement = tree?.querySelector(`[data-id="${selectedId}"]`);
         if (selectedElement?.contains(targetElement)) {
           isCycle = true;
@@ -661,10 +664,7 @@
   };
 
   $effect(() => {
-    if (!tree || !dragging?.eligible) return;
-
-    const scrollContainer = tree.parentElement;
-    if (!scrollContainer) return;
+    if (!tree || !scrollContainer || !dragging?.eligible) return;
 
     const initialPointer = untrack(() => ({ clientX: lastPointerX, clientY: lastPointerY }));
     const current = createDragScroll(elementScrollViewport(scrollContainer), {
@@ -692,7 +692,6 @@
             e.preventDefault();
           }
 
-          const scrollContainer = tree?.parentElement;
           if (scrollContainer) {
             scrollContainer.scrollTop -= e.clientY - pendingTouchDrag.lastY;
           }
@@ -781,8 +780,8 @@
     if (dragging.drop) {
       const { target } = dragging.drop;
 
-      const isMultipleDrag = treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(entityId);
-      const selectedIds = isMultipleDrag ? [...treeState.selectedEntityIds] : [entityId];
+      const isMultipleDrag = selectedTreeEntityIds.length > 1 && treeState.selectedEntityIds.has(entityId);
+      const selectedIds = isMultipleDrag ? selectedTreeEntityIds : [entityId];
 
       if (target === 'trash') {
         try {
@@ -884,10 +883,13 @@
     }
   };
 
-  onDestroy(() => endDragging(true));
+  onDestroy(() => {
+    treeState.dragging = false;
+    endDragging(true);
+  });
 
   const draggingEntityCount = $derived.by(() => {
-    return countSelectedEntitiesForDragGhost(treeState.selectedEntityIds);
+    return countSelectedEntitiesForDragGhost(selectedTreeEntityIds);
   });
 
   const ghostEntityCount = $derived.by(() => {
@@ -900,7 +902,7 @@
     }
 
     const entityId = dragging.element.dataset.id;
-    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && selectedTreeEntityIds.length > 1;
     if (isMultipleDrag) {
       return draggingEntityCount;
     }
@@ -918,7 +920,7 @@
     }
 
     const entityId = dragging.element.dataset.id;
-    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && treeState.selectedEntityIds.size > 1;
+    const isMultipleDrag = entityId && treeState.selectedEntityIds.has(entityId) && selectedTreeEntityIds.length > 1;
     if (isMultipleDrag) {
       return;
     }
@@ -960,6 +962,7 @@
     userSelect: 'none',
     touchAction: 'none',
   })}
+  data-entity-tree
   onclick={handleClick}
   oncontextmenucapture={handleContextMenuCapture}
   onlostpointercapture={handleLostPointerCapture}
@@ -977,10 +980,6 @@
       <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
     </div>
   {/each}
-
-  {#if treeState.selectedEntityIds.size > 0 && !dragging?.eligible}
-    <SelectedEntitiesBar />
-  {/if}
 </div>
 
 {#if dragging?.eligible}

@@ -52,8 +52,26 @@ export const getPreviousElement = (root: HTMLElement, current: HTMLElement, sele
   return null;
 };
 
-export const getNextSiblingOrder = (entityId: string): string | undefined => {
-  const el = document.querySelector<HTMLElement>(`[data-id="${entityId}"]`);
+export const resolveEntityTreeDropTarget = (root: HTMLElement, hitElement: Element | null): HTMLElement | null => {
+  if (!hitElement) return null;
+
+  const entity = hitElement.closest<HTMLElement>('[data-id]');
+  if (entity && root.contains(entity)) {
+    return entity;
+  }
+
+  const hitTree = hitElement.closest<HTMLElement>(VISIBLE_TREE);
+  if (!hitTree || !root.contains(hitTree)) {
+    return null;
+  }
+
+  return hitTree.querySelector<HTMLElement>(':scope > [data-id]:last-child');
+};
+
+export const getEntityTreeElement = () => document.querySelector<HTMLElement>('[data-entity-tree]') ?? undefined;
+
+export const getNextSiblingOrder = (entityId: string, root = getEntityTreeElement()): string | undefined => {
+  const el = root?.querySelector<HTMLElement>(`[data-id="${entityId}"]`);
   if (!el) return;
 
   let nextEl = el.nextElementSibling as HTMLElement | null;

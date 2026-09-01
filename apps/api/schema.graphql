@@ -1723,6 +1723,16 @@ input ReactPrismRunInput {
   runId: ID!
 }
 
+enum RecentDocumentSort {
+  UPDATED_AT
+  VIEWED_AT
+}
+
+type RecentDocumentsResult {
+  documents: [Document!]!
+  hasMore: Boolean!
+}
+
 input RecordSurveyInput {
   name: String!
   value: JSON!
@@ -1898,6 +1908,7 @@ type Site implements ISite {
   lastRootEntity: Entity
   logo: Image!
   name: String!
+  recentDocuments(limit: Int! = 5, sort: RecentDocumentSort!): RecentDocumentsResult!
   slug: String!
   url: String!
   user: User!
@@ -1964,6 +1975,7 @@ type Subscription {
   prismNotificationStream: PrismNotification!
   prismReviewStream(documentId: ID!): PrismReviewRound!
   prismSessionEvents(cursor: Int, sessionId: ID!, workflows: [PrismWorkflowCursorInput!]): JSON!
+  siteRecentDocumentsUpdateStream(siteId: ID!): RecentDocumentSort!
   siteUpdateStream(siteId: ID!): SiteUpdateStreamPayload!
   siteUsageUpdateStream(siteId: ID!): Site!
   userGoalUpdateStream: User!

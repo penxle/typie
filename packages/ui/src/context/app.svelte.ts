@@ -5,6 +5,9 @@ export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
   sidebarNavigationClip: number;
+  sidebarRecentDocumentsOpen: boolean;
+  sidebarRecentDocumentsSort: 'VIEWED_AT' | 'UPDATED_AT';
+  sidebarAllDocumentsOpen: boolean;
   hasOpenedPanelOnce: boolean;
 
   panelWidth: number;
@@ -144,6 +147,9 @@ export const setupAppContext = (userId: string) => {
       sidebarWidth: 240,
       sidebarHidden: false,
       sidebarNavigationClip: 0,
+      sidebarRecentDocumentsOpen: true,
+      sidebarRecentDocumentsSort: 'VIEWED_AT',
+      sidebarAllDocumentsOpen: true,
 
       hasOpenedPanelOnce: false,
       panelWidth: 250,

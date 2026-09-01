@@ -25,7 +25,7 @@ import {
 } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { enqueueJob } from '#/mq/index.ts';
-import { pubsub } from '#/pubsub.ts';
+import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { deleteEntitiesCore, moveEntitiesCore, recoverEntityCore, updateEntityIconCore } from '#/utils/entity-actions.ts';
 import { buildDailyHistory } from '#/utils/goal.ts';
 import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
@@ -932,7 +932,7 @@ builder.mutationFields((t) => ({
     input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({ userId: Entities.userId })
+        .select({ userId: Entities.userId, siteId: Entities.siteId, type: Entities.type })
         .from(Entities)
         .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
         .then(firstOrThrowWith(new NotFoundError()));
@@ -942,6 +942,9 @@ builder.mutationFields((t) => ({
       }
 
       await db.update(Entities).set({ viewedAt: dayjs() }).where(eq(Entities.id, input.entityId));
+      if (entity.type === EntityType.DOCUMENT) {
+        publishRecentDocumentUpdates(entity.siteId, 'VIEWED_AT');
+      }
 
       return input.entityId;
     },
@@ -1142,6 +1145,9 @@ builder.mutationFields((t) => ({
 
       for (const doc of newDocuments) {
         await enqueueJob('search:index:document', doc.id);
+      }
+      if (descendantV2Docs.length > 0) {
+        publishRecentDocumentUpdates(input.targetSiteId, 'UPDATED_AT');
       }
 
       // 새 엔티티 반환
