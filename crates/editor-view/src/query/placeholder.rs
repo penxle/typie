@@ -80,7 +80,8 @@ fn placeholder_metrics_for_node(
             ModifierType::LetterSpacing,
             DEFAULT_LETTER_SPACING,
         )),
-        align: Some(resolve_align(modifiers)),
+        // Alignment belongs to the paragraph, not to text inserted at the caret.
+        align: Some(resolve_align(nv.effective())),
     })
 }
 
