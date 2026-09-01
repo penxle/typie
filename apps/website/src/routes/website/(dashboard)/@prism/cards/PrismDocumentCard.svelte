@@ -4,9 +4,9 @@
   import { Icon, Marquee } from '@typie/ui/components';
   import { z } from 'zod';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FileTextIcon from '~icons/lucide/file-text';
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
+  import EntityIcon from '../../@context-menu/EntityIcon.svelte';
   import PrismBrokenCard from './PrismBrokenCard.svelte';
   import type { MarkdownCardProps } from './index.ts';
 
@@ -36,6 +36,8 @@
           entity {
             id
             slug
+            icon
+            iconColor
           }
         }
       }
@@ -46,7 +48,7 @@
 
   const doc = $derived(query.data?.documentById ?? null);
   const title = $derived(doc?.nullableTitle ?? '제목 없음');
-  const getCard = (element: HTMLElement) => element.parentElement;
+  const getCard = (element: HTMLElement) => element.closest<HTMLElement>('button');
 
   const frameStyle = css.raw({
     display: 'flex',
@@ -62,6 +64,7 @@
     _dark: { backgroundColor: 'surface.subtle' },
     boxShadow: 'small',
   });
+  const titleClass = css({ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '0' });
 </script>
 
 {#snippet skeleton()}
@@ -100,8 +103,10 @@
     onclick={() => void goto(`/${doc.entity.slug}`)}
     type="button"
   >
-    <Icon style={css.raw({ flexShrink: '0', color: 'text.subtle' })} icon={FileTextIcon} size={14} />
-    <Marquee class={css({ minWidth: '0', fontWeight: 'semibold' })} bleed={8} fogSize={16} getTrigger={getCard} text={title} />
+    <span class={titleClass}>
+      <EntityIcon style={css.raw({ flexShrink: '0' })} icon={doc.entity.icon} iconColor={doc.entity.iconColor} size={14} />
+      <Marquee class={css({ minWidth: '0', fontWeight: 'semibold' })} bleed={8} fogSize={16} getTrigger={getCard} text={title} />
+    </span>
     <span
       class={css({
         flexShrink: '0',
