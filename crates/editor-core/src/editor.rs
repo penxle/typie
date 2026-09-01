@@ -7145,6 +7145,36 @@ mod tests {
     }
 
     #[test]
+    fn placeholder_metrics_follow_empty_paragraph_alignment() {
+        let (initial, _p1) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+
+        for alignment in [
+            editor_model::Alignment::Center,
+            editor_model::Alignment::Right,
+        ] {
+            let events = editor.apply(Message::Modifier {
+                op: ModifierOp::Set {
+                    modifier: Modifier::Alignment { value: alignment },
+                },
+            });
+
+            assert!(events.iter().any(|e| matches!(
+                e,
+                EditorEvent::StateChanged { fields } if fields.contains(&StateField::Placeholder)
+            )));
+            let metrics = editor
+                .view()
+                .placeholder_metrics(editor.state())
+                .expect("empty document placeholder");
+            assert_eq!(metrics.align, Some(alignment));
+        }
+    }
+
+    #[test]
     fn placeholder_metrics_follow_empty_paragraph_carry() {
         let (mut initial, p1) = state! {
             doc { root { p1: paragraph { text("") } } }
