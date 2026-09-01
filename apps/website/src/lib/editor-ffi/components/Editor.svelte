@@ -17,6 +17,7 @@
     floatingZoomRightInset?: number;
     header?: Snippet;
     footer?: Snippet;
+    placeholderAction?: Snippet;
     children?: Snippet;
     onReady?: () => void;
   };
@@ -33,6 +34,7 @@
     floatingZoomRightInset = 0,
     header,
     footer,
+    placeholderAction,
     children,
     onReady,
   }: Props = $props();
@@ -60,6 +62,7 @@
     {footer}
     {header}
     {onReady}
+    {placeholderAction}
     {useWindowScroll}
     {viewer}
   >

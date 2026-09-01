@@ -8,6 +8,7 @@
   import { tryAppContext } from '../context';
   import { prefersReducedMotion } from '../state/reduced-motion.svelte';
   import { createHoverFocusHandler, pushEscapeHandler } from '../utils';
+  import Scrollbar from './Scrollbar.svelte';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
@@ -22,6 +23,7 @@
     disableAutoUpdate?: boolean;
     disabled?: boolean;
     buttonAriaLabel?: string;
+    scrollbarLabel?: string;
     onopen?: () => void;
     onclose?: () => void;
     ontransitionend?: () => void;
@@ -41,6 +43,7 @@
     disableAutoUpdate = false,
     disabled = false,
     buttonAriaLabel,
+    scrollbarLabel,
     onopen,
     onclose,
     ontransitionend,
@@ -52,6 +55,8 @@
 
   let buttonEl = $state<HTMLButtonElement>();
   let menuEl = $state<HTMLUListElement>();
+  const componentId = $props.id();
+  const menuId = `${componentId}-menu`;
 
   const app = tryAppContext();
 
@@ -257,56 +262,65 @@
     use:portal
   ></div>
 
-  <ul
-    bind:this={menuEl}
-    style:width={setFullWidth ? `${buttonEl?.getBoundingClientRect().width}px` : undefined}
-    class={css(
-      {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-        borderRadius: '8px',
-        paddingY: '2px',
-        minWidth: '160px',
-        maxHeight: '[var(--floating-available-height)]',
-        backgroundColor: 'surface.default',
-        boxShadow: 'menu',
-        overflowY: 'auto',
-        zIndex: 'menu',
-        pointerEvents: open ? 'auto' : 'none',
-      },
-      action && { paddingBottom: '0' },
-      listStyle,
-    )}
+  <div
+    class={css({ position: 'absolute', zIndex: 'menu', pointerEvents: open ? 'auto' : 'none' })}
     onoutroend={ontransitionend}
-    onpointermove={hoverFocus}
-    role="menu"
-    tabindex="-1"
     use:floating
-    use:focusTrap={{
-      initialFocus: () => menuEl ?? false,
-      fallbackFocus: menuEl,
-      escapeDeactivates: false,
-      allowOutsideClick: true,
-      // NOTE: 우클릭으로 연 경우 buttonEl이 없으며 포커스 되돌리지 않음
-      returnFocusOnDeactivate: !!buttonEl,
-    }}
     transition:scale={{ start: 0.95, duration: prefersReducedMotion.current ? 0 : 150 }}
   >
-    {#if action}
-      <li>
-        <ul class={css({ display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' })}>
-          {@render children?.({ close })}
-        </ul>
-      </li>
-    {:else}
-      {@render children?.({ close })}
-    {/if}
+    <ul
+      bind:this={menuEl}
+      id={menuId}
+      style:width={setFullWidth ? `${buttonEl?.getBoundingClientRect().width}px` : undefined}
+      class={css(
+        {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+          borderRadius: '8px',
+          paddingY: '2px',
+          minWidth: '160px',
+          maxHeight: '[var(--floating-available-height)]',
+          backgroundColor: 'surface.default',
+          boxShadow: 'menu',
+          overflowY: 'auto',
+          scrollbarWidth: scrollbarLabel ? 'none' : undefined,
+          pointerEvents: open ? 'auto' : 'none',
+        },
+        action && { paddingBottom: '0' },
+        listStyle,
+      )}
+      onpointermove={hoverFocus}
+      role="menu"
+      tabindex="-1"
+      use:focusTrap={{
+        initialFocus: () => menuEl ?? false,
+        fallbackFocus: menuEl,
+        escapeDeactivates: false,
+        allowOutsideClick: true,
+        // NOTE: 우클릭으로 연 경우 buttonEl이 없으며 포커스 되돌리지 않음
+        returnFocusOnDeactivate: !!buttonEl,
+      }}
+    >
+      {#if action}
+        <li>
+          <ul class={css({ display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' })}>
+            {@render children?.({ close })}
+          </ul>
+        </li>
+      {:else}
+        {@render children?.({ close })}
+      {/if}
 
-    {#if action}
-      <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'surface.default' })}>
-        {@render action?.()}
-      </li>
+      {#if action}
+        <li class={css({ position: 'sticky', bottom: '0', paddingBottom: '12px', backgroundColor: 'surface.default' })}>
+          {@render action?.()}
+        </li>
+      {/if}
+    </ul>
+
+    {#if scrollbarLabel}
+      <Scrollbar controls={menuId} label={scrollbarLabel} orientation="vertical" scrollContainer={menuEl} size="md" />
     {/if}
-  </ul>
+  </div>
 {/if}

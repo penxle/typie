@@ -2,10 +2,15 @@
   import { defaultValues } from '@typie/lib/const';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon } from '@typie/ui/components';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { getEditorContext } from '../editor.svelte';
   import { presentedPageElement } from '../geometry';
+  import type { Snippet } from 'svelte';
+
+  type Props = {
+    placeholderAction?: Snippet;
+  };
+
+  let { placeholderAction }: Props = $props();
 
   const { editor } = getEditorContext();
 
@@ -37,10 +42,6 @@
       container.append(element);
     }
   });
-
-  const loadTemplate = () => {
-    window.dispatchEvent(new CustomEvent('open-document-template-modal'));
-  };
 </script>
 
 <div
@@ -65,24 +66,16 @@
     style:align-items={alignItems}
     class={flex({ width: 'full', flexDirection: 'column', gap: '4px' })}
   >
-    <div class={css({ width: 'full', whiteSpace: 'pre-line' })}>내용을 입력하거나</div>
-    <button
-      style:text-align={textAlign}
-      class={css({
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        transition: 'common',
-        pointerEvents: 'auto',
-        _hover: { color: 'text.faint' },
-      })}
-      data-external-element
-      onclick={loadTemplate}
-      onpointerdown={(e) => e.stopPropagation()}
-      type="button"
-    >
-      <Icon style={css.raw({ flexShrink: '0', size: '[1em]' })} icon={LayoutTemplateIcon} />
-      <span>템플릿 불러오기</span>
-    </button>
+    <div class={css({ width: 'full', whiteSpace: 'pre-line' })}>{placeholderAction ? '내용을 입력하거나' : '내용을 입력하세요'}</div>
+    {#if placeholderAction}
+      <span
+        class={css({ display: 'inline-flex', pointerEvents: 'auto' })}
+        data-external-element
+        onpointerdown={(event) => event.stopPropagation()}
+        role="none"
+      >
+        {@render placeholderAction()}
+      </span>
+    {/if}
   </div>
 </div>

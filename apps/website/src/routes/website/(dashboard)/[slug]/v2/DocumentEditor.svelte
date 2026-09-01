@@ -51,7 +51,7 @@
   import PrismReviewButton from './@prism-review/PrismReviewButton.svelte';
   import PrismReviewMargin from './@prism-review/PrismReviewMargin.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
-  import DocumentTemplateModal from './DocumentTemplateModal.svelte';
+  import DocumentTemplateMenu from './DocumentTemplateMenu.svelte';
   import DocumentToolbars from './DocumentToolbars.svelte';
   import { headerVerticalNavigation } from './header-vertical-navigation';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
@@ -91,7 +91,7 @@
           ...CommentComposerV2_user
           sites {
             id
-            ...DocumentTemplateModalV2_site
+            ...DocumentTemplateMenuV2_site
           }
         }
 
@@ -1346,6 +1346,12 @@
                               floatingZoomRightInset={currentViewZenModeEnabled ? 36 : 0}
                               onReady={handleEditorReady}
                             >
+                              {#snippet placeholderAction()}
+                                {#if currentSite}
+                                  <DocumentTemplateMenu editor={ctx.editor} site$key={currentSite} />
+                                {/if}
+                              {/snippet}
+
                               {#snippet header()}
                                 <div
                                   class={flex({
@@ -1540,8 +1546,4 @@
   </div>
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
-
-  {#if currentSite}
-    <DocumentTemplateModal editor={ctx.editor} {focused} site$key={currentSite} />
-  {/if}
 {/if}
