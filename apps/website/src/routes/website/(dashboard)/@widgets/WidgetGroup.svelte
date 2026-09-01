@@ -137,9 +137,10 @@
   let isHidden = $derived.by(() => app.preference.current.widgetHidden);
   let transitioning = $state(false);
   let altPressed = $state(false);
+  const groupVisible = $derived(!isHidden || editMode);
 
   const transformRight = $derived.by(() => {
-    if (!isHidden || editMode) {
+    if (groupVisible) {
       return 'translateX(0)';
     }
 
@@ -819,7 +820,7 @@
       pointerEvents: altPressed ? 'none!' : 'none',
       opacity: altPressed ? '15' : '100',
       '& *': {
-        pointerEvents: transitioning || altPressed ? 'none!' : 'auto',
+        pointerEvents: transitioning || altPressed || !groupVisible ? 'none!' : 'auto',
       },
     }),
   )}
