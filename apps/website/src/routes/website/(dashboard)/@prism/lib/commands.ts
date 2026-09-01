@@ -1,3 +1,5 @@
+import { disassemble } from 'es-hangul';
+
 export type PrismCommand = { name: string; description: string; argumentHint: string | null };
 export type CommandGate = 'plain' | 'ok' | 'unknown' | 'unverified';
 
@@ -14,5 +16,7 @@ export const commandGate = (text: string, commands: PrismCommand[] | null): Comm
   return commands.some((command) => command.name === name) ? 'ok' : 'unknown';
 };
 
-export const commandsMatching = (commands: PrismCommand[], prefix: string): PrismCommand[] =>
-  commands.filter((command) => command.name.startsWith(prefix));
+export const commandsMatching = (commands: PrismCommand[], prefix: string): PrismCommand[] => {
+  const query = disassemble(prefix);
+  return commands.filter((command) => disassemble(command.name).startsWith(query));
+};

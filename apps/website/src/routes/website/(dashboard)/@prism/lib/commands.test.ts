@@ -56,4 +56,9 @@ describe('commandsMatching', () => {
     expect(commandsMatching(commands, '리').map((c) => c.name)).toEqual(['리뷰']);
     expect(commandsMatching(commands, '없음')).toEqual([]);
   });
+
+  it('한글 조합 중 받침으로 붙은 자모도 이름 접두로 찾는다', () => {
+    expect(commandsMatching(commands, '립').map((c) => c.name)).toEqual(['리뷰']);
+    expect(commandsMatching(commands, '용').map((c) => c.name)).toEqual(['요약']);
+  });
 });
