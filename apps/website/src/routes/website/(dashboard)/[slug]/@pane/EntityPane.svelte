@@ -226,7 +226,7 @@
 
           <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', fontSize: '12px', color: 'text.subtle' })}>
             <Icon icon={FileXIcon} size={14} />
-            <span>{name}</span>
+            <span>삭제된 {name}</span>
           </div>
         </PaneHeader>
 
