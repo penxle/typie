@@ -6,7 +6,7 @@
   import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button, Icon, Marquee, Menu, MenuItem } from '@typie/ui/components';
+  import { Button, HorizontalDivider, Icon, Marquee, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { prefersReducedMotion } from '@typie/ui/state';
@@ -15,6 +15,7 @@
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
+  import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import HistoryIcon from '~icons/lucide/history';
   import PencilIcon from '~icons/lucide/pencil';
@@ -546,6 +547,11 @@
     mixpanel.track('rename_prism_session', { via });
   };
 
+  const copySessionId = async (id: string) => {
+    await navigator.clipboard.writeText(id);
+    Toast.success('대화 ID가 복사되었어요');
+  };
+
   const requestDelete = (session: { id: string; title?: string | null }, via: 'header_menu' | 'session_list') => {
     Dialog.confirm({
       title: '대화를 삭제하시겠어요?',
@@ -1011,6 +1017,44 @@
           >
             삭제
           </MenuItem>
+
+          <HorizontalDivider color="secondary" />
+
+          <div
+            class={flex({
+              flexDirection: 'column',
+              gap: '4px',
+              paddingX: '10px',
+              paddingY: '4px',
+              fontSize: '12px',
+              color: 'text.faint',
+              userSelect: 'none',
+            })}
+          >
+            <button
+              class={flex({
+                alignItems: 'center',
+                gap: '2px',
+                width: 'fit',
+                cursor: 'pointer',
+                fontSize: '11px',
+                color: 'text.disabled',
+                transition: 'common',
+                _hover: { color: 'text.muted' },
+                _focus: { color: 'text.muted' },
+                outlineWidth: '0',
+              })}
+              onclick={async () => {
+                await copySessionId(session.id);
+              }}
+              role="menuitem"
+              tabindex="-1"
+              type="button"
+            >
+              <Icon icon={CopyIcon} size={12} />
+              대화 ID 복사
+            </button>
+          </div>
         {/snippet}
       </Menu>
     {/if}
@@ -1049,6 +1093,7 @@
       currentId={selected.current}
       onArchive={(id) => archiveSession(id, 'session_list')}
       onClose={() => (listOpen = false)}
+      onCopy={copySessionId}
       onDelete={(session) => requestDelete(session, 'session_list')}
       onRename={(id, title) => renameSession(id, title, 'session_list')}
       onSelect={(id) => {

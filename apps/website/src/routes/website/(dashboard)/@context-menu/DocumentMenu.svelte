@@ -696,11 +696,15 @@
       color: 'text.disabled',
       transition: 'common',
       _hover: { color: 'text.muted' },
+      _focus: { color: 'text.muted' },
+      outlineWidth: '0',
     })}
     onclick={async () => {
       await navigator.clipboard.writeText(document.id);
       Toast.success('문서 ID가 복사되었어요');
     }}
+    role="menuitem"
+    tabindex="-1"
     type="button"
   >
     <Icon icon={CopyIcon} size={12} />

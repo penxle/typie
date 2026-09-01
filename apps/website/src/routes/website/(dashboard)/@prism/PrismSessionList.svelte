@@ -1,12 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon, Marquee, Menu, MenuItem, Scrollbar, TimeAgo } from '@typie/ui/components';
+  import { HorizontalDivider, Icon, Marquee, Menu, MenuItem, Scrollbar, TimeAgo } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import { tick } from 'svelte';
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import PencilIcon from '~icons/lucide/pencil';
   import SearchIcon from '~icons/lucide/search';
@@ -29,13 +30,14 @@
     currentId: string | null;
     onClose: () => void;
     onSelect: (id: string) => void;
+    onCopy: (id: string) => Promise<void> | void;
     onArchive: (id: string) => Promise<void> | void;
     onUnarchive: (id: string) => Promise<void> | void;
     onRename: (id: string, title: string) => Promise<void> | void;
     onDelete: (session: Session) => void;
   };
 
-  let { sessions, currentId, onClose, onSelect, onArchive, onUnarchive, onRename, onDelete }: Props = $props();
+  let { sessions, currentId, onClose, onSelect, onCopy, onArchive, onUnarchive, onRename, onDelete }: Props = $props();
 
   let query = $state('');
   let archivedOpen = $state(false);
@@ -417,6 +419,44 @@
           >
             삭제
           </MenuItem>
+
+          <HorizontalDivider color="secondary" />
+
+          <div
+            class={flex({
+              flexDirection: 'column',
+              gap: '4px',
+              paddingX: '10px',
+              paddingY: '4px',
+              fontSize: '12px',
+              color: 'text.faint',
+              userSelect: 'none',
+            })}
+          >
+            <button
+              class={flex({
+                alignItems: 'center',
+                gap: '2px',
+                width: 'fit',
+                cursor: 'pointer',
+                fontSize: '11px',
+                color: 'text.disabled',
+                transition: 'common',
+                _hover: { color: 'text.muted' },
+                _focus: { color: 'text.muted' },
+                outlineWidth: '0',
+              })}
+              onclick={async () => {
+                await onCopy(session.id);
+              }}
+              role="menuitem"
+              tabindex="-1"
+              type="button"
+            >
+              <Icon icon={CopyIcon} size={12} />
+              대화 ID 복사
+            </button>
+          </div>
         {/snippet}
       </Menu>
     {/if}
