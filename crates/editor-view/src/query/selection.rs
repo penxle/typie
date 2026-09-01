@@ -202,6 +202,17 @@ pub(crate) fn block_selection_rects(
         .collect()
 }
 
+pub(crate) fn content_selection_rects(
+    layout_index: &LayoutIndex,
+    ids: &[editor_crdt::Dot],
+) -> Vec<SelectionRect> {
+    layout_index
+        .content_page_rects(ids)
+        .into_iter()
+        .map(|rect| PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::Block))
+        .collect()
+}
+
 pub(crate) fn selection_endpoints(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,

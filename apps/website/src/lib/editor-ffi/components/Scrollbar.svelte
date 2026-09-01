@@ -1,17 +1,44 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cva } from '@typie/styled-system/css';
+  import { token } from '@typie/styled-system/tokens';
   import { pointerCapture } from '@typie/ui/actions';
   import { prefersReducedMotion } from '@typie/ui/state';
   import { scrollElementFromWheel } from '@typie/ui/utils';
-  import { untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { getEditorContext } from '../editor.svelte';
-  import type { Size } from '@typie/editor-ffi/browser';
+  import { computeRulerMarks } from '../recent-edit-marks';
+  import type { RecentEditRegion, Size } from '@typie/editor-ffi/browser';
+  import type { RulerMark } from '../recent-edit-marks';
 
   const HIDE_DELAY = 1000;
   const MIN_THUMB_SIZE = 30;
   const TRACK_PADDING = 2;
   const INDICATOR_HEIGHT = 24;
   const INDICATOR_GAP = 14;
+  const MARKS_SYNC_INTERVAL = 150;
+
+  const THUMB_OPACITY = 75;
+  const THUMB_IDLE = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 18%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
+  const THUMB_ENGAGED = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 30%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
+
+  const recentMarkRecipe = cva({
+    base: {
+      position: 'absolute',
+      left: '4px',
+      width: '4px',
+      borderRadius: '1px',
+      opacity: '30',
+      pointerEvents: 'none',
+    },
+    variants: {
+      kind: {
+        added: { backgroundColor: 'edit.added' },
+        modified: { backgroundColor: 'edit.modified' },
+        deleted: { backgroundColor: 'edit.deleted' },
+      },
+    },
+  });
 
   const ctx = getEditorContext();
   const scrollContainer = $derived(ctx.editor?.scrollContainerEl);
@@ -96,12 +123,17 @@
     clientWidth: 0,
   });
   let containerRect = $state<DOMRect | null>(null);
+  let recentMarks = $state<RulerMark[]>([]);
 
   let dragAxis = $state<'x' | 'y' | null>(null);
+  let thumbHovered = $state(false);
+  let firstMarksRender = $state(true);
   let hoverAxis = $state<'x' | 'y' | null>(null);
 
   let mode = $state<'hidden' | 'user' | 'auto'>('hidden');
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  let recentMarksTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingRecentMarks: { contentSize: number; trackSize: number } | null = null;
 
   const isVisible = $derived(mode !== 'hidden' || dragAxis !== null);
   const isUserMode = $derived(mode === 'user');
@@ -193,6 +225,73 @@
     void editor?.presentationGeometryRevision;
     sync();
   });
+
+  const markContentSize = $derived(metrics.scrollHeight);
+  const markTrackSize = $derived(y.trackSize);
+
+  function syncRecentMarks(contentSize: number, trackSize: number) {
+    if (!editor || !scrollContainer) {
+      recentMarks = [];
+      return;
+    }
+
+    let regions: RecentEditRegion[];
+    try {
+      regions = editor.recentEditRegions();
+    } catch {
+      recentMarks = [];
+      return;
+    }
+
+    if (regions.length === 0) {
+      recentMarks = [];
+      return;
+    }
+
+    const rect = scrollContainer.getBoundingClientRect();
+    const pageTops = editor.pageSizes.map((_, index) => {
+      const el = editor.pageEls[index];
+      return el ? el.getBoundingClientRect().top - rect.top + scrollContainer.scrollTop : NaN;
+    });
+
+    recentMarks = computeRulerMarks(regions, pageTops, editor.safeDisplayZoom(), contentSize, trackSize, TRACK_PADDING);
+    if (firstMarksRender && recentMarks.length > 0) {
+      void tick().then(() => (firstMarksRender = false));
+    }
+  }
+
+  function cancelRecentMarksSync() {
+    clearTimeout(recentMarksTimer);
+    recentMarksTimer = undefined;
+    pendingRecentMarks = null;
+  }
+
+  function scheduleRecentMarks(contentSize: number, trackSize: number) {
+    if (recentMarksTimer === undefined) {
+      syncRecentMarks(contentSize, trackSize);
+      recentMarksTimer = setTimeout(() => {
+        recentMarksTimer = undefined;
+        const pending = pendingRecentMarks;
+        pendingRecentMarks = null;
+        if (pending) scheduleRecentMarks(pending.contentSize, pending.trackSize);
+      }, MARKS_SYNC_INTERVAL);
+      return;
+    }
+    pendingRecentMarks = { contentSize, trackSize };
+  }
+
+  $effect(() => {
+    if (!isVisible) {
+      untrack(cancelRecentMarksSync);
+      return;
+    }
+    void editor?.presentationGeometryRevision;
+    const contentSize = markContentSize;
+    const trackSize = markTrackSize;
+    untrack(() => scheduleRecentMarks(contentSize, trackSize));
+  });
+
+  onDestroy(cancelRecentMarksSync);
 
   function startDrag(axis: 'x' | 'y', e: PointerEvent): ScrollDragSession | null {
     if (!scrollContainer || dragAxis !== null || !e.isPrimary || e.button !== 0) return null;
@@ -294,6 +393,16 @@
     role="scrollbar"
     tabindex="-1"
   >
+    {#if isVertical}
+      {#each recentMarks as mark, index (index)}
+        <div
+          style:top={`${mark.top}px`}
+          style:height={`${mark.height}px`}
+          class={css(recentMarkRecipe.raw({ kind: mark.kind }))}
+          in:fade={{ duration: firstMarksRender && !prefersReducedMotion.current ? 200 : 0 }}
+        ></div>
+      {/each}
+    {/if}
     <div
       style:top={isVertical ? `${geometry.thumbPos}px` : undefined}
       style:right={isVertical ? '2px' : undefined}
@@ -302,25 +411,19 @@
       style:height={isVertical ? `${geometry.thumbSize}px` : '8px'}
       style:width={isVertical ? '8px' : `${geometry.thumbSize}px`}
       style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
+      style:background-color={isDraggingThis || thumbHovered ? THUMB_ENGAGED : THUMB_IDLE}
       class={css({
         position: 'absolute',
         cursor: 'pointer',
         borderRadius: 'full',
         transition: 'colors',
-        backgroundColor: isDraggingThis
-          ? isUserMode
-            ? 'surface.inverse/80'
-            : 'surface.inverse/45'
-          : isUserMode
-            ? 'surface.inverse/50'
-            : 'surface.inverse/22',
-        _hover: { backgroundColor: 'surface.inverse/80' },
-        _active: { backgroundColor: 'surface.inverse/80' },
         _motionReduce: { transition: '[none]' },
       })}
       aria-valuemax={geometry.maxScroll}
       aria-valuemin={0}
       aria-valuenow={isVertical ? metrics.scrollTop : metrics.scrollLeft}
+      onpointerenter={() => (thumbHovered = true)}
+      onpointerleave={() => (thumbHovered = false)}
       role="slider"
       tabindex="-1"
       use:pointerCapture={{
@@ -343,12 +446,11 @@
       position: 'fixed',
       zIndex: '20',
       borderRadius: '4px',
-      backgroundColor: 'surface.dark/65',
       paddingX: '8px',
       paddingY: '4px',
       fontSize: '11px',
       whiteSpace: 'nowrap',
-      color: 'text.bright',
+      color: 'text.faint',
       fontVariantNumeric: 'tabular-nums',
       transition: 'opacity',
       transitionDuration: '300ms',

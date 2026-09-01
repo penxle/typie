@@ -38,7 +38,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_all_plain_text_records_carry_tombstone() {
+    fn deleting_all_plain_text_records_no_carry_op() {
         use editor_model::EditOp;
 
         let (initial, ..) = state! {
@@ -52,8 +52,8 @@ mod tests {
             .filter(|r| matches!(r.op.payload, EditOp::NodeCarry(_)))
             .count();
         assert_eq!(
-            carry_ops, 10,
-            "emptying a text block records a carry tombstone for all 10 carry kinds"
+            carry_ops, 0,
+            "emptying an unpainted block whose carry is already empty must record no carry op"
         );
     }
 

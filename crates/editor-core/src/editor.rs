@@ -27,6 +27,10 @@ use crate::event::{EditorEvent, FontData};
 use crate::handle;
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
+use crate::recent_edits::{
+    BlockMarkerIndex, RecentEditKind, RecentEditRegion, RecentEditTracker, classify_op,
+    classify_op_with, deletion_site_block, site_is_live,
+};
 use crate::state_field::StateField;
 use crate::tick::{
     CommandOutcome, CommandRejection, QueueEntry, RequestId, RequestOutcome, Revision, TickResult,
@@ -347,6 +351,7 @@ pub struct Editor {
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) tracked_ranges: TrackedRangeRegistry,
+    pub(crate) recent_edits: RecentEditTracker,
 
     // drag-and-drop state
     pub(crate) dnd: DndState,
@@ -411,6 +416,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
+            recent_edits: RecentEditTracker::default(),
             dnd: DndState::default(),
             focused: false,
             render_epoch: 0,
@@ -861,6 +867,215 @@ impl Editor {
         scored.into_iter().map(|(_, _, range)| range).collect()
     }
 
+    pub fn enable_recent_edits(&mut self, now_ms: i64, window_ms: i64) {
+        self.recent_edits.enable(now_ms, window_ms);
+    }
+
+    /// Dates the ops this graph gained after each persisted head bucket and replays
+    /// them into the tracker, returning how many buckets were accepted.
+    ///
+    /// A bucket whose frontier is empty, or holds any dot this graph does not have, is
+    /// dropped whole rather than clamped: `ops_after_frontier` subtracts nothing through
+    /// a dot it cannot resolve, so either would date ops older than the bucket as recent
+    /// — the entire history when no dot resolves. An empty frontier is reachable because
+    /// `decode_dots` maps empty bytes to an empty list, so a head row that stored nothing
+    /// arrives here as a decode success rather than the failure it is.
+    ///
+    /// Does nothing until [`Self::enable_recent_edits`] has supplied the recency window:
+    /// dating a history against a window nobody chose is worse than not dating it.
+    ///
+    /// Call once per editor instance: a second call replays on top of what the first
+    /// recorded rather than replacing it.
+    pub fn set_recent_edit_baseline(
+        &mut self,
+        now_ms: i64,
+        buckets: Vec<(i64, Vec<Dot>)>,
+    ) -> usize {
+        if !self.recent_edits.enabled() {
+            return 0;
+        }
+
+        let cutoff = now_ms - self.recent_edits.window_ms();
+        let graph = self.state.projected.graph();
+
+        let mut valid: Vec<(i64, HashSet<Dot>)> = buckets
+            .into_iter()
+            .filter(|(_, dots)| !dots.is_empty() && dots.iter().all(|d| graph.get(d).is_some()))
+            .map(|(at, dots)| (at, dots.into_iter().collect()))
+            .collect();
+        valid.sort_by_key(|(at, _)| *at);
+        let accepted = valid.len();
+        if accepted == 0 {
+            return 0;
+        }
+
+        if !self.replay_baseline_by_watermark(&valid, now_ms, cutoff) {
+            self.replay_baseline_by_frontier_walk(&valid, now_ms, cutoff);
+        }
+        accepted
+    }
+
+    /// Replays post-baseline ops off the graph's storage order, which each bucket's
+    /// frontier closure is a prefix of: the server folds bundle entries in `seq` order
+    /// and records the heads reached after each one, and the snapshot the client loads
+    /// concatenates those bundles verbatim. A bucket therefore collapses to the highest
+    /// storage index it covers, and one forward pass dates every op — no per-bucket
+    /// closure walk, no dated map, no topological sort.
+    ///
+    /// Returns false without touching the tracker when any premise fails, so the caller
+    /// can fall back: storage order unavailable, a frontier head outside the order, or
+    /// watermarks not rising with bucket time.
+    ///
+    /// Residual: ops that attach late because the server was missing their causal
+    /// ancestry land further along the storage order than they were authored, so they
+    /// can be dated more recent than they are. The head-index guard catches the cases
+    /// that break ordering outright; the rest is accepted drift in a decorative signal.
+    fn replay_baseline_by_watermark(
+        &mut self,
+        valid: &[(i64, HashSet<Dot>)],
+        now_ms: i64,
+        cutoff: i64,
+    ) -> bool {
+        let graph = self.state.projected.graph();
+        let Some(ordered) = graph.ordered_ops() else {
+            return false;
+        };
+        let index_of: HashMap<Dot, usize> = ordered
+            .iter()
+            .enumerate()
+            .map(|(i, op)| (op.id, i))
+            .collect();
+
+        let mut marks: Vec<(i64, usize)> = Vec::with_capacity(valid.len());
+        for (at, frontier) in valid {
+            let mut mark = 0usize;
+            for dot in frontier {
+                let Some(i) = index_of.get(dot) else {
+                    return false;
+                };
+                mark = mark.max(*i);
+            }
+            marks.push((*at, mark));
+        }
+        if marks.windows(2).any(|w| w[1].1 < w[0].1) {
+            return false;
+        }
+
+        let markers = BlockMarkerIndex::build(&self.state);
+        let mut bucket = 1usize;
+        for (i, op) in ordered.iter().enumerate().skip(marks[0].1 + 1) {
+            while bucket < marks.len() && i > marks[bucket].1 {
+                bucket += 1;
+            }
+            let at = marks.get(bucket).map_or(now_ms, |(at, _)| *at);
+            if at < cutoff {
+                continue;
+            }
+            let effects = classify_op_with(&self.state, op, Some(&markers));
+            self.recent_edits.record(&effects, at);
+        }
+        true
+    }
+
+    /// Dates post-baseline ops by walking each bucket's frontier closure and taking
+    /// successive differences. Costs one closure walk per bucket; kept as the fallback
+    /// for graphs where [`Self::replay_baseline_by_watermark`]'s premises do not hold.
+    fn replay_baseline_by_frontier_walk(
+        &mut self,
+        valid: &[(i64, HashSet<Dot>)],
+        now_ms: i64,
+        cutoff: i64,
+    ) {
+        let graph = self.state.projected.graph();
+
+        let mut dated: HashMap<Dot, i64> = HashMap::new();
+        let mut prev_after = graph.ops_after_frontier(&valid[0].1);
+        for (at, frontier) in valid.iter().skip(1) {
+            let after = graph.ops_after_frontier(frontier);
+            for dot in prev_after.iter() {
+                if !after.contains(dot) {
+                    dated.insert(*dot, *at);
+                }
+            }
+            prev_after = after;
+        }
+        for dot in prev_after {
+            dated.insert(dot, now_ms);
+        }
+        dated.retain(|_, at| *at >= cutoff);
+
+        let replayed: HashSet<Dot> = dated.keys().copied().collect();
+        let markers = BlockMarkerIndex::build(&self.state);
+        for op in graph.topo_sort(&replayed) {
+            let Some(at) = dated.get(&op.id).copied() else {
+                continue;
+            };
+            let effects = classify_op_with(&self.state, &op, Some(&markers));
+            self.recent_edits.record(&effects, at);
+        }
+    }
+
+    pub fn recent_edit_regions(&mut self, now_ms: i64) -> Vec<RecentEditRegion> {
+        self.recent_edits.prune(now_ms);
+        let live = self.recent_edits.live_blocks(now_ms);
+        let deleted = self.recent_edits.deleted_blocks(now_ms);
+
+        let mut out = Vec::new();
+        for kind in [RecentEditKind::Added, RecentEditKind::Modified] {
+            let ids: Vec<Dot> = live
+                .iter()
+                .filter(|(_, k)| *k == kind)
+                .map(|(d, _)| *d)
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            for rect in self.view.node_content_rects(&ids) {
+                out.push(RecentEditRegion {
+                    page_idx: rect.page_idx as u32,
+                    y: rect.rect.y,
+                    height: rect.rect.height,
+                    kind,
+                });
+            }
+        }
+
+        let mut sites: HashSet<Dot> = HashSet::new();
+        for (block, record) in deleted {
+            // The site was decided when the deletion was recorded, so the common path is a
+            // single map lookup. Only a site that has since been deleted itself sends this
+            // back to the walk, and the repaired answer is written back so it happens once.
+            let site = match record.site {
+                Some(site) if site_is_live(&self.state, site) => Some(site),
+                Some(_) => {
+                    let repaired = deletion_site_block(&self.state, block);
+                    self.recent_edits.repair_deleted_site(block, repaired);
+                    repaired
+                }
+                None => None,
+            };
+            let Some(site) = site else {
+                continue;
+            };
+            if !sites.insert(site) {
+                continue;
+            }
+            let Some(rect) = self.view.node_content_rects(&[site]).into_iter().next() else {
+                continue;
+            };
+            // `deletion_site_block` resolves to the *preceding* surviving block, so the
+            // vanished content sat at its bottom edge, not its top.
+            out.push(RecentEditRegion {
+                page_idx: rect.page_idx as u32,
+                y: rect.rect.y + rect.rect.height,
+                height: 0.0,
+                kind: RecentEditKind::Deleted,
+            });
+        }
+
+        out
+    }
+
     pub fn cursor_hit_test(&self, page_idx: usize, x: f32, y: f32) -> bool {
         let Some(selection) = self.state.selection else {
             return false;
@@ -1122,6 +1337,15 @@ impl Editor {
         crate::font::emit_prefetch_if_quiescent(self);
 
         let ops = std::mem::take(&mut self.pending_ops);
+        if self.recent_edits.enabled() && !ops.is_empty() {
+            let now = self.recent_edits.current_ms();
+            let mut effects = Vec::new();
+            for op in &ops {
+                effects.extend(classify_op(&self.state, op));
+            }
+            self.recent_edits.record(&effects, now);
+        }
+
         let TickChanges {
             reconciled_op_count: _,
             view_changed: dirty,
@@ -2495,6 +2719,7 @@ impl Editor {
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
+            recent_edits: RecentEditTracker::default(),
             dnd: DndState::default(),
             focused: false,
             render_epoch: 0,
@@ -2590,6 +2815,10 @@ mod tests {
 
     use super::*;
     use crate::test_utils::{EditorSnapshot, apply_and_report_change};
+
+    /// The window the website injects; these tests pin it explicitly now that the core
+    /// takes it from the host.
+    const WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 
     fn text_and_page_break_signature(state: &State) -> String {
         state
@@ -3171,6 +3400,131 @@ mod tests {
             selection: (p1, 0)
         };
         (Editor::new_test(state), p1)
+    }
+
+    /// A doc plus ascending-time buckets, in the shape `set_recent_edit_baseline`
+    /// hands to the two replay paths (validated, sorted by time).
+    fn baseline_replay_fixture() -> (State, Vec<(i64, HashSet<Dot>)>) {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: none
+        };
+        let heads =
+            |s: &State| -> HashSet<Dot> { s.projected.graph().current_heads().copied().collect() };
+
+        let mut frontiers = vec![heads(&state)];
+        let mut state = state;
+
+        let block = |parents: Vec<Dot>| SeqItem::Block {
+            node_type: NodeType::Paragraph,
+            parents,
+            attrs: vec![],
+        };
+
+        let (next, _) = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: block(vec![Dot::ROOT]),
+            }))
+            .unwrap();
+        state = next;
+        frontiers.push(heads(&state));
+
+        for (i, ch) in ['x', 'y'].into_iter().enumerate() {
+            let (next, _) = state
+                .apply(EditOp::Seq(ListOp::Ins {
+                    pos: 4 + i,
+                    item: SeqItem::Char(ch),
+                }))
+                .unwrap();
+            state = next;
+        }
+        frontiers.push(heads(&state));
+
+        // delete the original paragraph whole, so `deleted_blocks` is exercised too
+        let (next, _) = state
+            .apply(EditOp::Seq(ListOp::Del { pos: 0, len: 3 }))
+            .unwrap();
+        state = next;
+        frontiers.push(heads(&state));
+
+        let (next, _) = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Char('z'),
+            }))
+            .unwrap();
+        state = next;
+
+        let buckets = frontiers
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| (1000 + i as i64 * 1000, f))
+            .collect();
+        (state, buckets)
+    }
+
+    #[test]
+    fn baseline_watermark_replay_matches_the_frontier_walk() {
+        let (state, buckets) = baseline_replay_fixture();
+        let now = WINDOW_MS;
+        let cutoff = now - WINDOW_MS;
+
+        let mut fast = Editor::new_test(state.clone());
+        fast.recent_edits.enable(now, WINDOW_MS);
+        assert!(
+            fast.replay_baseline_by_watermark(&buckets, now, cutoff),
+            "storage order is intact here, so the watermark path must be the one taken"
+        );
+
+        let mut slow = Editor::new_test(state);
+        slow.recent_edits.enable(now, WINDOW_MS);
+        slow.replay_baseline_by_frontier_walk(&buckets, now, cutoff);
+
+        let live = fast.recent_edits.live_blocks(now);
+        assert!(!live.is_empty(), "fixture must produce marks to compare");
+        assert_eq!(live, slow.recent_edits.live_blocks(now));
+
+        let deleted_of = |e: &Editor| -> Vec<(Dot, i64)> {
+            e.recent_edits
+                .deleted_blocks(now)
+                .into_iter()
+                .map(|(d, r)| (d, r.at))
+                .collect()
+        };
+        assert!(
+            !deleted_of(&fast).is_empty(),
+            "fixture must produce a deletion to compare"
+        );
+        assert_eq!(deleted_of(&fast), deleted_of(&slow));
+    }
+
+    #[test]
+    fn baseline_falls_back_when_watermarks_do_not_rise_with_bucket_time() {
+        let (state, buckets) = baseline_replay_fixture();
+        let now = WINDOW_MS;
+        let cutoff = now - WINDOW_MS;
+
+        // Same frontiers, times reversed: bucket order no longer tracks storage order.
+        let n = buckets.len() as i64;
+        let scrambled: Vec<(i64, HashSet<Dot>)> = buckets
+            .iter()
+            .enumerate()
+            .map(|(i, (_, f))| (1000 + (n - i as i64) * 1000, f.clone()))
+            .collect();
+        let mut sorted = scrambled;
+        sorted.sort_by_key(|(at, _)| *at);
+
+        let mut editor = Editor::new_test(state);
+        editor.recent_edits.enable(now, WINDOW_MS);
+        assert!(
+            !editor.replay_baseline_by_watermark(&sorted, now, cutoff),
+            "a non-monotonic watermark sequence must reject the fast path"
+        );
+        assert!(
+            editor.recent_edits.live_blocks(now).is_empty(),
+            "a rejected fast path must leave the tracker untouched for the fallback"
+        );
     }
 
     #[test]

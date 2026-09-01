@@ -248,6 +248,16 @@ pub struct MissingChangesets {
     pub withheld: u32,
 }
 
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RecentHeadBucket {
+    pub at_ms: i64,
+    #[serde(with = "serde_bytes")]
+    #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
+    pub heads: Vec<u8>,
+}
+
 fn public_tracked_range(
     editor: &editor_core::Editor,
     range: &editor_core::TrackedRange,
@@ -969,6 +979,51 @@ impl Editor {
                 .collect();
             Ok(public.into_ffi()?)
         })
+    }
+
+    /// `window_ms` is how far back an edit still counts as recent. The host owns that
+    /// number — it also decides how far back the query that seeds the baseline reaches —
+    /// so the core takes it rather than keeping a second copy that could drift.
+    /// A value that is not a finite positive duration falls back to one bucket, which
+    /// shows almost nothing rather than dating the whole history as recent.
+    pub fn enable_recent_edits(&self, now_ms: f64, window_ms: f64) -> EditorResult<()> {
+        let window_ms = if window_ms.is_finite() && window_ms > 0.0 {
+            window_ms as i64
+        } else {
+            editor_core::RECENT_EDIT_BUCKET_MS
+        };
+        self.with_inner(|inner| {
+            inner.editor.enable_recent_edits(now_ms as i64, window_ms);
+            Ok(())
+        })
+    }
+
+    pub fn set_recent_edit_baseline(
+        &self,
+        now_ms: f64,
+        buckets: Vec<Complex<RecentHeadBucket>>,
+    ) -> EditorResult<u32> {
+        let buckets: Vec<RecentHeadBucket> = buckets.from_ffi()?;
+        self.with_inner(|inner| {
+            let decoded: Vec<(i64, Vec<editor_crdt::Dot>)> = buckets
+                .iter()
+                .filter_map(|bucket| {
+                    editor_codec::decode_dots(&bucket.heads)
+                        .ok()
+                        .map(|dots| (bucket.at_ms, dots))
+                })
+                .collect();
+            Ok(inner
+                .editor
+                .set_recent_edit_baseline(now_ms as i64, decoded) as u32)
+        })
+    }
+
+    pub fn recent_edit_regions(
+        &self,
+        now_ms: f64,
+    ) -> EditorResult<Vec<Complex<editor_core::RecentEditRegion>>> {
+        self.with_inner(|inner| Ok(inner.editor.recent_edit_regions(now_ms as i64).into_ffi()?))
     }
 
     pub fn prose_text(&self) -> EditorResult<String> {

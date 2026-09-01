@@ -500,6 +500,18 @@ export interface RawTextReplacementRule {
     regex: boolean;
 }
 
+export interface RecentEditRegion {
+    page_idx: number;
+    y: number;
+    height: number;
+    kind: RecentEditKind;
+}
+
+export interface RecentHeadBucket {
+    at_ms: number;
+    heads: Uint8Array;
+}
+
 export interface Rect {
     x: number;
     y: number;
@@ -853,6 +865,8 @@ export type PointerStyle = "default" | "text" | "pointer";
 
 export type ProseRangeInstallOutcome = { type: "applied" } | { type: "text_mismatch" } | { type: "invalid_ranges"; indices: number[] } | { type: "invalid_request" };
 
+export type RecentEditKind = "added" | "modified" | "deleted";
+
 export type RootNodeAttr = { type: "layout_mode"; value: LayoutMode };
 
 export type SelectionExpansionUnit = "word" | "sentence" | "paragraph" | "all";
@@ -920,6 +934,14 @@ declare class Editor {
     cursor(): CursorMetrics | undefined;
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
+    /**
+     * `window_ms` is how far back an edit still counts as recent. The host owns that
+     * number — it also decides how far back the query that seeds the baseline reaches —
+     * so the core takes it rather than keeping a second copy that could drift.
+     * A value that is not a finite positive duration falls back to one bucket, which
+     * shows almost nothing rather than dating the whole history as recent.
+     */
+    enable_recent_edits(now_ms: number, window_ms: number): void;
     enqueue_request(messages: Message[]): RequestId;
     export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
@@ -959,6 +981,7 @@ declare class Editor {
     prose_to_selection_annotated(start: number, end: number): Selection | undefined;
     receive_remote_changeset(payload: Uint8Array): void;
     receive_resource_update(update: ResourceUpdate): void;
+    recent_edit_regions(now_ms: number): RecentEditRegion[];
     replace_viewport_anchor_presentation(revision: Revision): boolean;
     resolve_viewport_anchor(revision: Revision, anchor: ViewportAnchor): ViewportAnchorResolution;
     root_attrs(): PlainRootNode;
@@ -969,6 +992,7 @@ declare class Editor {
     selection_hit_test(page: number, x: number, y: number): boolean;
     selection_kind(): SelectionKind | undefined;
     set_doc(plain: PlainDoc): void;
+    set_recent_edit_baseline(now_ms: number, buckets: RecentHeadBucket[]): number;
     split_changesets(payload: Uint8Array): ChangesetEntry[];
     table_overlays(): TableOverlay[];
     tick(): TickResult | undefined;

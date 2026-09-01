@@ -560,6 +560,10 @@ export const semanticColors = defineSemanticTokens.colors({
     value: { base: 'color-mix(in oklch, {colors.jade.500} 35%, transparent)', _dark: '{colors.dark.jade.100}' },
   },
 
+  'edit.added': { value: { base: '{colors.green.500}', _dark: '{colors.dark.green.100}' } },
+  'edit.modified': { value: { base: '{colors.amber.500}', _dark: '{colors.dark.amber.100}' } },
+  'edit.deleted': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.100}' } },
+
   'border.default': {
     value: {
       base: '{colors.gray.200}',

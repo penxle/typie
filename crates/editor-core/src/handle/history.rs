@@ -53,9 +53,11 @@ mod tests {
     }
 
     #[test]
-    fn deleting_plain_paragraph_carry_tombstones_survive_undo_redo() {
+    fn deleting_carried_paragraph_carry_tombstone_survives_undo_redo() {
+        let expected: hashbrown::HashSet<ModifierType> = [ModifierType::Bold].into_iter().collect();
+
         let (state, p1) = state! {
-            doc { root { p1: paragraph { text("X") } } }
+            doc { root { p1: paragraph carry([bold]) { text("X") } } }
             selection: (p1, 0) -> (p1, 1)
         };
         let mut editor = Editor::new_test(state);
@@ -64,19 +66,19 @@ mod tests {
             op: DeletionOp::Selection,
         });
         assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "");
-        assert_eq!(carry_tombstone_kinds(&editor, p1).len(), 10);
+        assert_eq!(carry_tombstone_kinds(&editor, p1), expected);
 
         editor.apply(Message::History {
             op: HistoryOp::Undo,
         });
         assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "X");
-        assert_eq!(carry_tombstone_kinds(&editor, p1).len(), 10);
+        assert_eq!(carry_tombstone_kinds(&editor, p1), expected);
 
         editor.apply(Message::History {
             op: HistoryOp::Redo,
         });
         assert_eq!(editor.state().view().node(p1).unwrap().inline_text(), "");
-        assert_eq!(carry_tombstone_kinds(&editor, p1).len(), 10);
+        assert_eq!(carry_tombstone_kinds(&editor, p1), expected);
     }
 
     #[test]
