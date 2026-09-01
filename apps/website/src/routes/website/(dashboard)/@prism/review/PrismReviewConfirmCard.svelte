@@ -110,6 +110,11 @@
 
   // 계보 목록이 닿기 전에 시작하면 이어서여야 할 리뷰가 새 계보로 나가고 크레딧이 그대로 빠진다
   const lineagesLoading = $derived(open && selected !== null && lineagesQuery.data === undefined);
+  // 변수 전환 중 행이 빠졌다 다시 생겨 transcript extent가 두 번 바뀌지 않도록 이전 행의 자리만 보존한다
+  const preserveLineageRow = $derived(
+    lineagesLoading &&
+      (lineagesQuery.previousData?.documentById.prismReviewLineages.some((lineage) => lineage.latestRound !== null) ?? false),
+  );
 
   const shownRoundId = $derived(selected === null ? null : readReviewRoundSelection(selected.documentId));
   const shownLineageId = $derived(
@@ -628,6 +633,11 @@
     <div class={css(readonlyOptionStyle, { marginBottom: '12px', borderColor: 'border.strong' })} aria-current="true">
       <span class={shrinkTitleClass}>{lineageRowLabel(chosenBase)}</span>
       <TimeAgo style={timeStyle} timestamp={new Date(chosenBase.createdAt).getTime()} />
+    </div>
+  {:else if preserveLineageRow}
+    <div class={labelClass}>지난 리뷰</div>
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
+      <span>불러오는 중</span>
     </div>
   {:else if lineages.length > 0 && !readonly}
     {@const chosenLineage = lineages.find((lineage) => lineage.id === lineageChoice) ?? null}
