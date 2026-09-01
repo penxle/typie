@@ -892,7 +892,7 @@
 
 <svelte:document bind:visibilityState />
 
-<PrismPanelHeader>
+<PrismPanelHeader creditBalance={user.data.prismCredit.balance}>
   {#snippet children(buttonClass)}
     {#if titleEditing}
       <input
