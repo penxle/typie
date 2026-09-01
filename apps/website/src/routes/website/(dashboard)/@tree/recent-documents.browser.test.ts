@@ -31,4 +31,19 @@ describe('recent document tree boundaries', () => {
     expect(resolveEntityTreeDropTarget(tree, recent.querySelector('span'))).toBeNull();
     expect(resolveEntityTreeDropTarget(tree, tree.querySelector('span'))?.dataset.id).toBe('TREE');
   });
+
+  it('resolves blank space in the entity tree surface to the last root entity', () => {
+    const tree = document.createElement('div');
+    tree.dataset.entityTree = 'true';
+    tree.setAttribute('role', 'tree');
+    tree.innerHTML = `
+      <div>
+        <a data-id="FIRST"></a>
+        <a data-id="LAST"></a>
+      </div>
+    `;
+    document.body.append(tree);
+
+    expect(resolveEntityTreeDropTarget(tree, tree)?.dataset.id).toBe('LAST');
+  });
 });
