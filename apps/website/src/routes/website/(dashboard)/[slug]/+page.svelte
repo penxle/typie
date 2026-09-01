@@ -36,6 +36,7 @@
       app.state.current = undefined;
       app.state.ancestors = [];
     } else if (slug) {
+      app.state.ancestors = [];
       app.state.current = slug;
     }
   });
