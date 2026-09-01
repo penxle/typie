@@ -2,6 +2,7 @@
   import { css, cva } from '@typie/styled-system/css';
   import { token } from '@typie/styled-system/tokens';
   import { pointerCapture } from '@typie/ui/actions';
+  import { tryAppContext } from '@typie/ui/context';
   import { prefersReducedMotion } from '@typie/ui/state';
   import { scrollElementFromWheel } from '@typie/ui/utils';
   import { onDestroy, tick, untrack } from 'svelte';
@@ -42,6 +43,9 @@
 
   const ctx = getEditorContext();
   const scrollContainer = $derived(ctx.editor?.scrollContainerEl);
+
+  const app = tryAppContext();
+  const recentMarksEnabled = $derived(app?.preference.current.recentEditMarksEnabled ?? false);
 
   type AxisMetric = { scrollPos: number; contentSize: number; viewportSize: number };
   type AxisGeometry = {
@@ -281,6 +285,13 @@
   }
 
   $effect(() => {
+    if (!recentMarksEnabled) {
+      untrack(() => {
+        cancelRecentMarksSync();
+        recentMarks = [];
+      });
+      return;
+    }
     if (!isVisible) {
       untrack(cancelRecentMarksSync);
       return;

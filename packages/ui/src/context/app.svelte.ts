@@ -30,6 +30,8 @@ export type AppPreference = {
 
   lineHighlightEnabled: boolean;
 
+  recentEditMarksEnabled: boolean;
+
   autoSurroundEnabled: boolean;
 
   zenModeEnabled: boolean;
@@ -171,6 +173,8 @@ export const setupAppContext = (userId: string) => {
       typewriterPosition: 0.5,
 
       lineHighlightEnabled: true,
+
+      recentEditMarksEnabled: true,
 
       autoSurroundEnabled: true,
 
