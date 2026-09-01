@@ -128,8 +128,10 @@
   );
 
   const initialPage = $derived(sort === 'VIEWED_AT' ? site.data.recentlyViewedDocuments : site.data.recentlyUpdatedDocuments);
-  // query.data is undefined whenever the current site/sort/limit key differs from its emission, so an older page cannot leak across controls.
-  const page = $derived(query.data?.site.id === siteId ? query.data.site.recentDocuments : initialPage);
+  type RecentDocumentsPage = (typeof site.data)['recentlyViewedDocuments'];
+  let pendingPage = $state<{ queryKey: string; page: RecentDocumentsPage }>();
+  const queryPage = $derived(query.data?.site.id === siteId ? query.data.site.recentDocuments : undefined);
+  const page = $derived(queryPage ?? (pendingPage?.queryKey === queryKey ? pendingPage.page : initialPage));
   const documents = $derived(page.documents);
   const visibleDocumentIds = $derived(documents.map((document) => document.entity.id));
 
@@ -184,6 +186,7 @@
 
     const nextCount = Math.min(visibleCount + 5, 50);
     const nextKey = `${listKey}:${nextCount}`;
+    pendingPage = { queryKey: nextKey, page };
     handledInvalidations.set(nextKey, invalidationVersion);
     enabledQueries.add(nextKey);
     expansion = { key: listKey, count: nextCount };
