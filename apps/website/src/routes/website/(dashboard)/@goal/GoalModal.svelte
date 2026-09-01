@@ -11,10 +11,12 @@
   import { dDayLabel, goalColorState, requiredToday, timeFraction } from '$lib/goal';
   import { formatCommaInput, parseCommaInput } from '$lib/number-input';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../day-clock.svelte';
   import GoalHistoryTable from './GoalHistoryTable.svelte';
   import GoalTrendChart from './GoalTrendChart.svelte';
 
   const app = getAppContext();
+  const dayClock = getDayClock();
 
   const query = createQuery(
     graphql(`
@@ -316,7 +318,7 @@
         {#if goal && !editing}
           {@const state = goalColorState(currentCount, goal.targetCharacterCount)}
           {@const percent = Math.floor((currentCount / goal.targetCharacterCount) * 100)}
-          {@const today = dayjs.kst()}
+          {@const today = dayClock.now}
           {@const due = goal.dueAt ? dayjs(goal.dueAt).kst() : null}
           {@const overdue = !!due && due.isBefore(today, 'day')}
           {@const overdueUnder = overdue && state === 'under'}

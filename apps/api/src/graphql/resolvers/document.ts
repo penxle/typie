@@ -985,6 +985,7 @@ builder.mutationFields((t) => ({
       }
 
       await db.update(DocumentHeadContributors).set({ excluded: input.excluded }).where(eq(DocumentHeadContributors.id, row.id));
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       return input.headId;
     },

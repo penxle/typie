@@ -6,16 +6,17 @@
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
-  import dayjs from 'dayjs';
   import { untrack } from 'svelte';
-  import { streaks, todayProgress } from '$lib/goal';
   import { formatCommaInput, parseCommaInput } from '$lib/number-input';
+  import { dailyGoalStatus } from '$lib/user-stats';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../day-clock.svelte';
   import UserGoalDots from './UserGoalDots.svelte';
   import UserGoalHistoryTable from './UserGoalHistoryTable.svelte';
   import UserGoalTrendChart from './UserGoalTrendChart.svelte';
 
   const app = getAppContext();
+  const dayClock = getDayClock();
 
   const query = createQuery(
     graphql(`
@@ -33,6 +34,11 @@
             targetCharacterCount
             additions
             achieved
+          }
+
+          todayCharacterCountChange {
+            date
+            additions
           }
 
           ...DashboardLayout_UserGoalDots_user
@@ -215,8 +221,7 @@
         })}
       >
         {#if goal && !editing}
-          {@const progress = todayProgress(me.goalHistory, dayjs.kst())}
-          {@const streak = streaks(me.goalHistory, dayjs.kst())}
+          {@const progress = dailyGoalStatus(me.goalHistory, goal.targetCharacterCount, me.todayCharacterCountChange, dayClock.now)}
 
           <ProgressRing
             progress={progress.additions / goal.targetCharacterCount}
@@ -253,8 +258,8 @@
               backgroundColor: 'surface.muted',
             })}
           >
-            <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>달성 연속 {streak.current}일</span>
-            <span class={css({ fontSize: '12px', color: 'text.faint' })}>최고 기록 {streak.best}일</span>
+            <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>달성 연속 {progress.streak}일</span>
+            <span class={css({ fontSize: '12px', color: 'text.faint' })}>최고 기록 {progress.bestStreak}일</span>
           </div>
 
           <div class={flex({ gap: '6px', width: 'full' })}>

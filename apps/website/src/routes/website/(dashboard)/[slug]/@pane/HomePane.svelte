@@ -19,11 +19,12 @@
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
-  import { todayProgress } from '$lib/goal';
+  import { dailyGoalStatus } from '$lib/user-stats';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import TrialBanner from '../../@subscription/TrialBanner.svelte';
+  import { getDayClock } from '../../day-clock.svelte';
   import EditorBreadcrumbNavigation from '../v2/@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
@@ -42,6 +43,7 @@
   let { headerPlacement, pane }: Props = $props();
 
   const app = getAppContext();
+  const dayClock = getDayClock();
 
   const query = createQuery(
     graphql(`
@@ -50,8 +52,12 @@
           id
           name
 
-          ...DashboardLayout_Stats_ActivityGrid_user
           ...HomePane_TrialBanner_user
+
+          characterCountChanges {
+            date
+            additions
+          }
 
           goal {
             id
@@ -63,6 +69,11 @@
             targetCharacterCount
             additions
             achieved
+          }
+
+          todayCharacterCountChange {
+            date
+            additions
           }
 
           sites {
@@ -382,7 +393,12 @@
           <div class={flex({ alignItems: 'center', gap: '12px', width: 'full' })}>
             {#if query.data.me.goal}
               {@const goal = query.data.me.goal}
-              {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
+              {@const progress = dailyGoalStatus(
+                query.data.me.goalHistory,
+                goal.targetCharacterCount,
+                query.data.me.todayCharacterCountChange,
+                dayClock.now,
+              )}
               <button
                 class={flex({ alignItems: 'center', gap: '8px', cursor: 'pointer' })}
                 onclick={() => {
@@ -416,7 +432,11 @@
 
           <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
             <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 활동</h2>
-            <ActivityGrid user$key={query.data.me} />
+            <ActivityGrid
+              characterCountChanges={query.data.me.characterCountChanges}
+              today={dayClock.now}
+              todayCharacterCountChange={query.data.me.todayCharacterCountChange}
+            />
           </div>
         </div>
       </div>

@@ -5,32 +5,50 @@
   import { Tooltip } from '@typie/ui/components';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
+  import { mergeTodayGoalHistory } from '$lib/user-stats';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../day-clock.svelte';
   import type { DashboardLayout_UserGoalDots_user$key } from '$mearie';
 
   type Props = { user$key: DashboardLayout_UserGoalDots_user$key };
 
   let { user$key }: Props = $props();
+  const dayClock = getDayClock();
 
   const user = createFragment(
     graphql(`
       fragment DashboardLayout_UserGoalDots_user on User {
         id
 
+        goal {
+          id
+          targetCharacterCount
+        }
+
         goalHistory {
           date
           additions
           achieved
+        }
+
+        todayCharacterCountChange {
+          date
+          additions
         }
       }
     `),
     () => user$key,
   );
 
-  const byDate = $derived(new Map(user.data.goalHistory.map((h) => [dayjs(h.date).kst().format('YYYY-MM-DD'), h])));
+  const goalHistory = $derived(
+    user.data.goal
+      ? mergeTodayGoalHistory(user.data.goalHistory, user.data.goal.targetCharacterCount, user.data.todayCharacterCountChange, dayClock.now)
+      : user.data.goalHistory,
+  );
+  const byDate = $derived(new Map(goalHistory.map((h) => [dayjs(h.date).kst().format('YYYY-MM-DD'), h])));
 
   const days = $derived.by(() => {
-    const today = dayjs.kst().startOf('day');
+    const today = dayClock.now;
 
     return Array.from({ length: 112 }, (_, i) => {
       const date = today.subtract(111 - i, 'day');

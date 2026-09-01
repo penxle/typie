@@ -61,16 +61,14 @@ export const dailyGoalHistory = async (
   return result;
 };
 
-export const dailyCharacterChanges = async (userId: string): Promise<{ date: Dayjs; additions: number; deletions: number }[]> => {
-  const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
-
+const characterChangesInRange = async (
+  userId: string,
+  from: Dayjs,
+  to: Dayjs,
+): Promise<{ date: Dayjs; additions: number; deletions: number }[]> => {
   const documentDate = sql<string>`DATE(${DocumentCharacterCountChanges.bucket} AT TIME ZONE 'Asia/Seoul')`.mapWith(dayjs.kst);
 
-  const excludedByDate = await getExcludedDeltasByDate({
-    userId,
-    from: startOfTomorrow.subtract(365, 'days'),
-    to: startOfTomorrow,
-  });
+  const excludedByDate = await getExcludedDeltasByDate({ userId, from, to });
 
   const rows = await db
     .select({
@@ -82,8 +80,8 @@ export const dailyCharacterChanges = async (userId: string): Promise<{ date: Day
     .where(
       and(
         eq(DocumentCharacterCountChanges.userId, userId),
-        gte(DocumentCharacterCountChanges.bucket, startOfTomorrow.subtract(365, 'days')),
-        lt(DocumentCharacterCountChanges.bucket, startOfTomorrow),
+        gte(DocumentCharacterCountChanges.bucket, from),
+        lt(DocumentCharacterCountChanges.bucket, to),
       ),
     )
     .groupBy(documentDate)
@@ -98,4 +96,15 @@ export const dailyCharacterChanges = async (userId: string): Promise<{ date: Day
       deletions: row.deletions - (excluded?.deletions ?? 0),
     };
   });
+};
+
+export const dailyCharacterChanges = async (userId: string): Promise<{ date: Dayjs; additions: number; deletions: number }[]> => {
+  const startOfTomorrow = dayjs.kst().startOf('day').add(1, 'day');
+  return await characterChangesInRange(userId, startOfTomorrow.subtract(365, 'days'), startOfTomorrow);
+};
+
+export const todayCharacterCountChange = async (userId: string): Promise<{ date: Dayjs; additions: number; deletions: number }> => {
+  const startOfToday = dayjs.kst().startOf('day');
+  const rows = await characterChangesInRange(userId, startOfToday, startOfToday.add(1, 'day'));
+  return rows[0] ?? { date: startOfToday, additions: 0, deletions: 0 };
 };

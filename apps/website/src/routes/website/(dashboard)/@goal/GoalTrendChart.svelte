@@ -4,6 +4,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../day-clock.svelte';
   import type { DashboardLayout_GoalTrendChart_entity$key } from '$mearie';
 
   type Props = {
@@ -12,6 +13,7 @@
   };
 
   let { entity$key, current }: Props = $props();
+  const dayClock = getDayClock();
 
   const entity = createFragment(
     graphql(`
@@ -43,7 +45,7 @@
   const height = 200;
   const padding = { top: 8, right: 8, bottom: 20, left: 8 };
 
-  const today = $derived(dayjs.kst().startOf('day'));
+  const today = $derived(dayClock.now.startOf('day'));
   const first = $derived(history.length > 0 ? dayjs(history[0].date).kst() : today);
   const last = $derived(dueAt ? dayjs.max(today, dayjs(dueAt).kst().startOf('day')) : today);
   const spanDays = $derived(Math.max(1, last.diff(first, 'day')));

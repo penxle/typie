@@ -10,8 +10,10 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import TargetIcon from '~icons/lucide/target';
-  import { dueStatus, goalColorState, pickGoalSource, todayProgress } from '$lib/goal';
+  import { dueStatus, goalColorState, pickGoalSource } from '$lib/goal';
+  import { dailyGoalStatus } from '$lib/user-stats';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../../day-clock.svelte';
   import Widget from '../Widget.svelte';
   import { getWidgetContext } from '../widget-context.svelte';
 
@@ -23,6 +25,7 @@
   let { widgetId, data = {} }: Props = $props();
 
   const app = getAppContext();
+  const dayClock = getDayClock();
   const widgetContext = getWidgetContext();
   const { document$key, editor } = $derived(widgetContext.env);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
@@ -89,6 +92,11 @@
             additions
             achieved
           }
+
+          todayCharacterCountChange {
+            date
+            additions
+          }
         }
       }
     `),
@@ -112,7 +120,10 @@
   const userGoal = $derived.by(() => {
     const me = meQuery.data?.me;
     if (!me?.goal) return null;
-    return { target: me.goal.targetCharacterCount, ...todayProgress(me.goalHistory, dayjs.kst()) };
+    return {
+      target: me.goal.targetCharacterCount,
+      ...dailyGoalStatus(me.goalHistory, me.goal.targetCharacterCount, me.todayCharacterCountChange, dayClock.now),
+    };
   });
 
   const collapsedSummary = $derived.by(() => {
@@ -154,7 +165,7 @@
     {#if entityGoal}
       {@const target = entityGoal.goal.targetCharacterCount}
       {@const state = goalColorState(entityGoal.current, target)}
-      {@const today = dayjs.kst()}
+      {@const today = dayClock.now}
       {@const due = entityGoal.goal.dueAt ? dayjs(entityGoal.goal.dueAt).kst() : null}
       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
         <div class={flex({ justifyContent: 'space-between', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px', fontSize: '13px' })}>

@@ -4,6 +4,7 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { dueStatus, goalColorState, timeFraction } from '$lib/goal';
+  import { getDayClock } from '../day-clock.svelte';
 
   type Props = {
     current: number;
@@ -14,12 +15,13 @@
   };
 
   let { current, targetCharacterCount, dueAt, goalCreatedAt, onclick }: Props = $props();
+  const dayClock = getDayClock();
 
-  const today = $derived(dayjs.kst().startOf('day'));
+  const today = $derived(dayClock.now.startOf('day'));
   const state = $derived(goalColorState(current, targetCharacterCount));
   const duePassed = $derived(!!dueAt && dayjs(dueAt).kst().startOf('day').isBefore(today));
   const overdue = $derived(duePassed && state === 'under');
-  const pie = $derived(state === 'under' && dueAt ? timeFraction(dayjs(goalCreatedAt).kst(), dayjs(dueAt).kst(), dayjs.kst()) : null);
+  const pie = $derived(state === 'under' && dueAt ? timeFraction(dayjs(goalCreatedAt).kst(), dayjs(dueAt).kst(), dayClock.now) : null);
 
   const percent = $derived(Math.floor((current / targetCharacterCount) * 100));
   const tooltip = $derived.by(() => {

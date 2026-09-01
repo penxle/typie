@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createMutation, createQuery } from '@mearie/svelte';
+  import { createMutation, getClient } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal, ProgressRing } from '@typie/ui/components';
@@ -10,120 +10,131 @@
   import mixpanel from 'mixpanel-browser';
   import CopyIcon from '~icons/lucide/copy';
   import DownloadIcon from '~icons/lucide/download';
-  import { todayProgress } from '$lib/goal';
+  import { dailyGoalStatus, mergeTodayCharacterCountChanges, writingStreaks } from '$lib/user-stats';
   import { graphql } from '$mearie';
   import ActivityChart from './ActivityChart.svelte';
   import ActivityGrid from './ActivityGrid.svelte';
+  import type { DataOf } from '@mearie/core';
 
   const app = getAppContext();
+  const client = getClient();
 
-  const query = createQuery(
-    graphql(`
-      query DashboardLayout_StatsModal_Query {
-        me @required {
+  const statsQuery = graphql(`
+    query DashboardLayout_StatsModal_Query {
+      me @required {
+        id
+        name
+        documentCount
+
+        characterCountChanges {
+          date
+          additions
+          deletions
+        }
+
+        todayCharacterCountChange {
+          date
+          additions
+          deletions
+        }
+
+        usage {
+          totalCharacterCount
+        }
+
+        goal {
           id
-          name
-          documentCount
+          targetCharacterCount
+        }
 
-          characterCountChanges {
-            date
-            additions
-          }
-
-          usage {
-            totalCharacterCount
-          }
-
-          goal {
-            id
-            targetCharacterCount
-          }
-
-          goalHistory {
-            date
-            targetCharacterCount
-            additions
-            achieved
-          }
-
-          ...DashboardLayout_Stats_ActivityChart_user
-          ...DashboardLayout_Stats_ActivityGrid_user
+        goalHistory {
+          date
+          targetCharacterCount
+          additions
+          achieved
         }
       }
-    `),
-    undefined,
-    () => ({ skip: !app.state.statsOpen }),
-  );
+    }
+  `);
+
+  const createSnapshot = (data: DataOf<typeof statsQuery>, today: dayjs.Dayjs) => ({
+    today,
+    name: data.me.name,
+    documentCount: data.me.documentCount,
+    characterCountChanges: data.me.characterCountChanges.map((change) => ({ ...change })),
+    todayCharacterCountChange: { ...data.me.todayCharacterCountChange },
+    totalCharacterCount: data.me.usage.totalCharacterCount,
+    goal: data.me.goal ? { ...data.me.goal } : null,
+    goalHistory: data.me.goalHistory.map((entry) => ({ ...entry })),
+  });
+
+  let snapshot = $state.raw<ReturnType<typeof createSnapshot>>();
+  let requestId = 0;
+
+  const loadSnapshot = async () => {
+    const id = ++requestId;
+    snapshot = undefined;
+
+    try {
+      const data = await client.query(statsQuery, {}, { fetchPolicy: 'network-only' });
+      if (id !== requestId || !app.state.statsOpen) return;
+
+      snapshot = createSnapshot(data, dayjs.kst());
+    } catch {
+      if (id !== requestId || !app.state.statsOpen) return;
+      app.state.statsOpen = false;
+      Toast.error('통계를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  $effect(() => {
+    if (app.state.statsOpen) {
+      void loadSnapshot();
+    } else {
+      requestId++;
+      snapshot = undefined;
+    }
+  });
 
   type StreakData = {
     currentStreak: number;
     longestStreak: number;
     thisMonthDays: number;
     totalDays: number;
-    avgCharactersPerDay: number;
   };
 
-  const calculateStreakData = (characterCountChanges: { date: unknown; additions: number }[], totalCharacterCount: number): StreakData => {
-    const today = dayjs.kst().startOf('day');
-    const activeDates = new Set(
-      characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date as string).format('YYYY-MM-DD')),
-    );
+  const calculateStreakData = (characterCountChanges: { date: string; additions: number }[], today: dayjs.Dayjs): StreakData => {
+    const startOfToday = today.startOf('day');
+    const activeDates = new Set(characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date).kst().format('YYYY-MM-DD')));
+    const streak = writingStreaks(characterCountChanges, startOfToday);
 
-    let currentStreak = 0;
-    let checkDate = today;
-
-    if (!activeDates.has(today.format('YYYY-MM-DD'))) {
-      checkDate = today.subtract(1, 'day');
-    }
-
-    while (activeDates.has(checkDate.format('YYYY-MM-DD'))) {
-      currentStreak++;
-      checkDate = checkDate.subtract(1, 'day');
-    }
-
-    let longestStreak = 0;
-    let tempStreak = 0;
-    const sortedDates = [...activeDates].toSorted((a, b) => a.localeCompare(b));
-
-    for (let i = 0; i < sortedDates.length; i++) {
-      if (i === 0) {
-        tempStreak = 1;
-      } else {
-        const prevDate = dayjs(sortedDates[i - 1]);
-        const currDate = dayjs(sortedDates[i]);
-        if (currDate.diff(prevDate, 'day') === 1) {
-          tempStreak++;
-        } else {
-          tempStreak = 1;
-        }
-      }
-      longestStreak = Math.max(longestStreak, tempStreak);
-    }
-
-    const monthStart = today.startOf('month');
+    const monthStart = startOfToday.startOf('month');
     let thisMonthDays = 0;
     for (const dateStr of activeDates) {
-      const date = dayjs(dateStr);
+      const date = dayjs.kst(dateStr);
       if (date.isSame(monthStart, 'month')) {
         thisMonthDays++;
       }
     }
 
     const totalDays = activeDates.size;
-    const avgCharactersPerDay = totalDays > 0 ? Math.round(totalCharacterCount / totalDays) : 0;
 
     return {
-      currentStreak,
-      longestStreak,
+      currentStreak: streak.current,
+      longestStreak: streak.best,
       thisMonthDays,
       totalDays,
-      avgCharactersPerDay,
     };
   };
 
+  const characterCountChanges = $derived.by(() => {
+    if (!snapshot) return [];
+    return mergeTodayCharacterCountChanges(snapshot.characterCountChanges, snapshot.todayCharacterCountChange, snapshot.today);
+  });
+
   const streakData = $derived.by(() => {
-    if (!query.data) return null;
-    return calculateStreakData([...query.data.me.characterCountChanges], query.data.me.usage.totalCharacterCount);
+    if (!snapshot) return null;
+    return calculateStreakData(characterCountChanges, snapshot.today);
   });
 
   type WeekdayData = {
@@ -136,7 +147,7 @@
 
   const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
 
-  const calculateWeekdayPattern = (characterCountChanges: { date: unknown; additions: number }[]): WeekdayData[] => {
+  const calculateWeekdayPattern = (characterCountChanges: { date: string; additions: number }[]): WeekdayData[] => {
     const weekdayStats = Array.from({ length: 7 }, (_, i) => ({
       dayIndex: i,
       label: weekdayLabels[i],
@@ -149,7 +160,7 @@
         continue;
       }
 
-      const dayOfWeek = dayjs(change.date as string).day();
+      const dayOfWeek = dayjs(change.date).kst().day();
       weekdayStats[dayOfWeek].totalAdditions += change.additions;
       weekdayStats[dayOfWeek].count++;
     }
@@ -161,8 +172,8 @@
   };
 
   const weekdayData = $derived.by(() => {
-    if (!query.data) return null;
-    return calculateWeekdayPattern([...query.data.me.characterCountChanges]);
+    if (!snapshot) return null;
+    return calculateWeekdayPattern(characterCountChanges);
   });
 
   const maxWeekdayAvg = $derived(weekdayData ? Math.max(...weekdayData.map((d) => d.avgAdditions)) : 0);
@@ -188,7 +199,7 @@
   const downloadActivityImage = async () => {
     const resp = await generateActivityImage();
     const b64 = resp.generateActivityImage;
-    downloadFromBase64(b64, `${query.data?.me.name ?? '타이피'} - 나의 글쓰기 발자취.png`, 'image/png');
+    downloadFromBase64(b64, `${snapshot?.name ?? '타이피'} - 나의 글쓰기 발자취.png`, 'image/png');
 
     Toast.success('이미지가 다운로드되었어요.');
   };
@@ -209,13 +220,13 @@
     padding: '24px',
     backgroundColor: 'surface.subtle',
   })}
-  loading={!query.data}
+  loading={!snapshot}
   onclose={() => {
     app.state.statsOpen = false;
   }}
   open={app.state.statsOpen}
 >
-  {#if query.data && streakData}
+  {#if snapshot && streakData}
     <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>나의 글쓰기 통계</div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
@@ -223,14 +234,14 @@
         <div class={css(cardStyle, { flex: '1' })}>
           <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 글자</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {comma(query.data.me.usage.totalCharacterCount)}
+            {comma(snapshot.totalCharacterCount)}
           </div>
         </div>
 
         <div class={css(cardStyle, { flex: '1' })}>
           <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 문서</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
-            {query.data.me.documentCount}
+            {snapshot.documentCount}
           </div>
         </div>
 
@@ -296,9 +307,14 @@
       </div>
 
       <div class={css(cardStyle)}>
-        {#if query.data.me.goal}
-          {@const goal = query.data.me.goal}
-          {@const progress = todayProgress(query.data.me.goalHistory, dayjs.kst())}
+        {#if snapshot.goal}
+          {@const goal = snapshot.goal}
+          {@const progress = dailyGoalStatus(
+            snapshot.goalHistory,
+            goal.targetCharacterCount,
+            snapshot.todayCharacterCountChange,
+            snapshot.today,
+          )}
 
           <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' })}>
             <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>일일 목표</div>
@@ -356,11 +372,19 @@
             </Button>
           </div>
         </div>
-        <ActivityGrid user$key={query.data.me} />
+        <ActivityGrid
+          characterCountChanges={snapshot.characterCountChanges}
+          today={snapshot.today}
+          todayCharacterCountChange={snapshot.todayCharacterCountChange}
+        />
       </div>
 
       <div class={css(cardStyle)}>
-        <ActivityChart user$key={query.data.me} />
+        <ActivityChart
+          characterCountChanges={snapshot.characterCountChanges}
+          today={snapshot.today}
+          todayCharacterCountChange={snapshot.todayCharacterCountChange}
+        />
       </div>
     </div>
   {/if}
