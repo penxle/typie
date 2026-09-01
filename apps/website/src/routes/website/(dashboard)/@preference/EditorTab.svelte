@@ -130,6 +130,27 @@
           />
         {/snippet}
       </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          최근 변경 위치 시각화
+        {/snippet}
+        {#snippet description()}
+          최근 24시간 내 수정된 부분을 알기 쉽게 우측 스크롤바에 색상으로 표시해요.
+        {/snippet}
+        {#snippet value()}
+          <Switch
+            onchange={() => {
+              mixpanel.track('toggle_recent_edit_marks', {
+                enabled: app.preference.current.recentEditMarksEnabled,
+              });
+            }}
+            bind:checked={app.preference.current.recentEditMarksEnabled}
+          />
+        {/snippet}
+      </SettingsRow>
     </SettingsCard>
   </div>
 
