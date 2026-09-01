@@ -675,6 +675,7 @@
         <div
           bind:this={treeScrollEl}
           id={treeScrollId}
+          style:scroll-padding-block-start={`${treeSectionHeaderHeight}px`}
           class={flex({
             flexDirection: 'column',
             height: 'full',
