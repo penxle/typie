@@ -7,6 +7,7 @@ export * from './escape-stack';
 export * from './flip-animation';
 export * from './hover-focus';
 export * from './json';
+export * from './marquee-motion';
 export * from './number';
 export * from './ref';
 export * from './remeda';

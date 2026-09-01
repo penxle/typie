@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon, Menu, MenuItem, Scrollbar, TimeAgo } from '@typie/ui/components';
+  import { Icon, Marquee, Menu, MenuItem, Scrollbar, TimeAgo } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import { tick } from 'svelte';
   import ArchiveIcon from '~icons/lucide/archive';
@@ -50,6 +50,7 @@
 
   const labelOf = sessionLabel;
   const unread = hasUnread;
+  const getSessionRow = (element: HTMLElement) => element.closest<HTMLElement>('[role="option"]');
 
   const searching = $derived(query.trim().length > 0);
   const matched = $derived(sessions.filter((session) => matchesSessionQuery(session.title, query)));
@@ -155,7 +156,7 @@
     textAlign: 'left',
   });
 
-  const rowTitle = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
+  const rowTitle = css({ flexGrow: '1', minWidth: '0' });
 
   const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.info.default' });
 
@@ -350,7 +351,7 @@
       />
     {:else}
       <button class={rowButton} onclick={() => onSelect(session.id)} type="button">
-        <span class={`title ${rowTitle}`}>{labelOf(session)}</span>
+        <Marquee class={`title ${rowTitle}`} bleed={8} fogSize={16} getTrigger={getSessionRow} text={labelOf(session)} />
         {#if unread(session)}
           <span class={rowDot} aria-hidden="true"></span>
           <span class={css({ srOnly: true })}>확인할 항목 있음</span>

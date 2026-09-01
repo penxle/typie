@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, Marquee } from '@typie/ui/components';
   import { z } from 'zod';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FileTextIcon from '~icons/lucide/file-text';
@@ -46,6 +46,7 @@
 
   const doc = $derived(query.data?.documentById ?? null);
   const title = $derived(doc?.nullableTitle ?? '제목 없음');
+  const getCard = (element: HTMLElement) => element.parentElement;
 
   const frameStyle = css.raw({
     display: 'flex',
@@ -100,9 +101,7 @@
     type="button"
   >
     <Icon style={css.raw({ flexShrink: '0', color: 'text.subtle' })} icon={FileTextIcon} size={14} />
-    <span class={css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 'semibold' })}>
-      {title}
-    </span>
+    <Marquee class={css({ minWidth: '0', fontWeight: 'semibold' })} bleed={8} fogSize={16} getTrigger={getCard} text={title} />
     <span
       class={css({
         flexShrink: '0',
