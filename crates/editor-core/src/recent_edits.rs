@@ -53,11 +53,57 @@ pub enum RecentEditEffect {
 struct BlockRecord {
     created_at: Option<i64>,
     last_edit_at: i64,
+    /// The newest edit dated by a contribution no undo can take back — a baseline
+    /// replay's. Retraction floors `last_edit_at` here rather than dropping the
+    /// record, so undoing this session's typing over an already-old block leaves
+    /// the old block's own mark standing.
+    base_edit_at: Option<i64>,
+    /// Live edit-family contributions from tracked ops. The record survives a
+    /// retraction while any remain, which is what keeps a mark and its causes in
+    /// step under interleaved local and remote edits — a snapshot-and-restore
+    /// scheme would let one op's retraction erase another op's mark.
+    tracked_edits: u32,
+}
+
+/// One tracked op's imprint on the tracker, enough to take that op back exactly.
+/// Edit-family effects are counted rather than snapshotted; the two that displace
+/// a whole record keep what they displaced, and put it back only where the op's own
+/// write is still the one standing — a concurrent deletion of the same block owns
+/// its own marker, and taking this op back must not take that one with it.
+#[derive(Clone, Copy, Debug)]
+enum Contrib {
+    Created(Dot),
+    Edited(Dot),
+    Deleted {
+        block: Dot,
+        /// The live record this deletion displaced, restorable only while the
+        /// document still shows the block — a block a concurrent delete keeps gone
+        /// must not come back into the live channel.
+        prior_live: Option<BlockRecord>,
+        /// The deletion marker this deletion displaced, if it wrote one at all.
+        /// A block created inside the window leaves no marker, and then displaces
+        /// nothing either.
+        prior_deleted: Option<DeletedRecord>,
+    },
+    Undeleted {
+        block: Dot,
+        prior: Option<DeletedRecord>,
+    },
+}
+
+#[derive(Debug)]
+struct OpContribs {
+    at: i64,
+    contribs: Vec<Contrib>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct DeletedRecord {
     pub at: i64,
+    /// The deletion that wrote this record. Identity, not decoration: retracting a
+    /// deletion may only drop the marker its own op put here, never one a
+    /// concurrent deletion of the same block wrote over it.
+    pub del_op: Dot,
     /// The still-shown block the marker hangs off, decided when the deletion was recorded.
     /// `None` means there was nothing to hang it off — the neighbour was gone too — and the
     /// record then costs a query nothing at all.
@@ -84,6 +130,8 @@ pub struct RecentEditTracker {
     base_instant: Option<Instant>,
     blocks: HashMap<Dot, BlockRecord>,
     deleted: HashMap<Dot, DeletedRecord>,
+    op_contribs: HashMap<Dot, OpContribs>,
+    last_prune_bucket: Option<i64>,
 }
 
 /// The block an op should be attributed to, or `None` when the op targets the document
@@ -346,6 +394,22 @@ fn bucket_of(ms: i64) -> i64 {
     ms.div_euclid(RECENT_EDIT_BUCKET_MS) * RECENT_EDIT_BUCKET_MS
 }
 
+/// Put back the record a deletion displaced, folding it into whatever has been
+/// recorded for the block since instead of overwriting it. An edit landing between
+/// the deletion and its undo — or in the very same tick — is a contribution of its
+/// own, and a plain `insert` of the snapshot would take that contribution's mark
+/// away with the deletion's.
+fn merge_restored(blocks: &mut HashMap<Dot, BlockRecord>, block: Dot, prior: BlockRecord) {
+    let Some(current) = blocks.get_mut(&block) else {
+        blocks.insert(block, prior);
+        return;
+    };
+    current.created_at = current.created_at.or(prior.created_at);
+    current.last_edit_at = current.last_edit_at.max(prior.last_edit_at);
+    current.base_edit_at = current.base_edit_at.max(prior.base_edit_at);
+    current.tracked_edits += prior.tracked_edits;
+}
+
 impl RecentEditTracker {
     /// Starts tracking, taking the recency window from the host so the mark colours and
     /// the query that seeds the baseline can never disagree about how far back "recent"
@@ -356,6 +420,9 @@ impl RecentEditTracker {
         self.base_ms = now_ms;
         self.window_ms = window_ms.max(RECENT_EDIT_BUCKET_MS);
         self.base_instant = Some(Instant::now());
+        // A re-injected base can move the clock backwards, and a bucket remembered
+        // against the old one would then park the self-prune forever.
+        self.last_prune_bucket = None;
     }
 
     pub fn window_ms(&self) -> i64 {
@@ -373,63 +440,231 @@ impl RecentEditTracker {
         }
     }
 
-    pub fn record(&mut self, effects: &[RecentEditEffect], at_ms: i64) {
+    /// Record effects that no undo can ever take back — a baseline replay's. Their
+    /// dating survives every retraction, as [`BlockRecord::base_edit_at`]. Named for
+    /// what it means rather than left as the general `record`, so a live-edit path
+    /// cannot opt out of retraction by reaching for the shorter name.
+    pub(crate) fn record_baseline(&mut self, effects: &[RecentEditEffect], at_ms: i64) {
+        self.record_with(None, effects, at_ms);
+    }
+
+    /// Record effects attributed to `op`, so that undoing `op` can take exactly
+    /// these effects back through [`Self::retract`].
+    pub(crate) fn record_tracked(&mut self, op: Dot, effects: &[RecentEditEffect], at_ms: i64) {
+        self.record_with(Some(op), effects, at_ms);
+    }
+
+    fn record_with(&mut self, op: Option<Dot>, effects: &[RecentEditEffect], at_ms: i64) {
         let at = bucket_of(at_ms);
+        // `Vec::new` does not allocate until it is pushed into, so the untracked
+        // baseline replay — one call per op of a cold load — pays nothing for a list
+        // only the tracked path reads.
+        let tracked = op.is_some();
+        let mut contribs = Vec::new();
         for effect in effects {
             match *effect {
                 RecentEditEffect::BlockCreated(b) => {
+                    // The displaced deletion record is not kept: `b` is the insertion
+                    // op's own id, so a block cannot be created into an id the
+                    // deleted channel already holds.
                     self.deleted.remove(&b);
                     self.blocks.insert(
                         b,
                         BlockRecord {
                             created_at: Some(at),
                             last_edit_at: at,
+                            base_edit_at: op.is_none().then_some(at),
+                            tracked_edits: 0,
                         },
                     );
+                    if tracked {
+                        contribs.push(Contrib::Created(b));
+                    }
                 }
                 RecentEditEffect::BlockEdited(b) => {
-                    let entry = self.blocks.entry(b).or_insert(BlockRecord {
-                        created_at: None,
-                        last_edit_at: at,
-                    });
-                    entry.last_edit_at = entry.last_edit_at.max(at);
+                    self.record_edit(op, b, at);
+                    if tracked {
+                        contribs.push(Contrib::Edited(b));
+                    }
                 }
-                RecentEditEffect::BlockDeleted { block, site, .. } => {
-                    let created_in_window = self
-                        .blocks
-                        .remove(&block)
+                RecentEditEffect::BlockDeleted {
+                    block,
+                    del_op,
+                    site,
+                } => {
+                    let prior_live = self.blocks.remove(&block);
+                    let created_in_window = prior_live
                         .is_some_and(|r| r.created_at.is_some_and(|c| at - c < self.window_ms));
-                    if !created_in_window {
-                        self.deleted.insert(block, DeletedRecord { at, site });
+                    let prior_deleted = (!created_in_window)
+                        .then(|| {
+                            self.deleted
+                                .insert(block, DeletedRecord { at, del_op, site })
+                        })
+                        .flatten();
+                    if tracked {
+                        contribs.push(Contrib::Deleted {
+                            block,
+                            prior_live,
+                            prior_deleted,
+                        });
                     }
                 }
                 RecentEditEffect::BlockRestored(b) => {
-                    self.deleted.remove(&b);
-                    let entry = self.blocks.entry(b).or_insert(BlockRecord {
-                        created_at: None,
-                        last_edit_at: at,
-                    });
-                    entry.last_edit_at = entry.last_edit_at.max(at);
+                    let prior = self.deleted.remove(&b);
+                    self.record_edit(op, b, at);
+                    if tracked {
+                        contribs.push(Contrib::Undeleted { block: b, prior });
+                        contribs.push(Contrib::Edited(b));
+                    }
                 }
                 RecentEditEffect::MoveArrival(b) => {
-                    let entry = self.blocks.entry(b).or_insert(BlockRecord {
-                        created_at: None,
-                        last_edit_at: at,
-                    });
-                    entry.created_at = None;
-                    entry.last_edit_at = entry.last_edit_at.max(at);
+                    self.record_edit(op, b, at).created_at = None;
+                    if tracked {
+                        contribs.push(Contrib::Edited(b));
+                    }
                 }
                 RecentEditEffect::MoveErase { old } => {
-                    self.deleted.remove(&old);
+                    let prior = self.deleted.remove(&old);
+                    if tracked {
+                        contribs.push(Contrib::Undeleted { block: old, prior });
+                    }
                 }
             }
         }
+        if let Some(op) = op
+            && !contribs.is_empty()
+        {
+            self.op_contribs.insert(op, OpContribs { at, contribs });
+        }
+    }
+
+    fn record_edit(&mut self, op: Option<Dot>, block: Dot, at: i64) -> &mut BlockRecord {
+        let entry = self.blocks.entry(block).or_insert(BlockRecord {
+            created_at: None,
+            last_edit_at: at,
+            base_edit_at: None,
+            tracked_edits: 0,
+        });
+        entry.last_edit_at = entry.last_edit_at.max(at);
+        match op {
+            Some(_) => entry.tracked_edits += 1,
+            None => entry.base_edit_at = Some(entry.base_edit_at.unwrap_or(at).max(at)),
+        }
+        entry
+    }
+
+    /// Take back what the given ops contributed, so that what is left is what the
+    /// contributions still standing justify. Not a full rewind: a surviving
+    /// contribution's `last_edit_at` is left where it is (see [`Self::retract_edit`]),
+    /// and a move arrival's downgrade of `created_at` is not undone.
+    ///
+    /// `ops` are unwound in the order given, which is the order they must come apart
+    /// in — newest first. A deletion has to be taken back before the edits it
+    /// swallowed, or the record it restores carries counts for contributions that
+    /// are already gone.
+    pub(crate) fn retract(&mut self, state: &State, ops: &[Dot]) {
+        for op in ops {
+            let Some(entry) = self.op_contribs.remove(op) else {
+                continue;
+            };
+            for contrib in entry.contribs.iter().rev() {
+                match *contrib {
+                    Contrib::Created(b) => {
+                        self.blocks.remove(&b);
+                    }
+                    Contrib::Edited(b) => self.retract_edit(b),
+                    Contrib::Deleted {
+                        block,
+                        prior_live,
+                        prior_deleted,
+                    } => {
+                        if self.deleted.get(&block).is_some_and(|r| r.del_op == *op) {
+                            match prior_deleted {
+                                Some(displaced) => self.deleted.insert(block, displaced),
+                                None => self.deleted.remove(&block),
+                            };
+                        }
+                        if let Some(prior) = prior_live
+                            && state.view().node(block).is_some()
+                        {
+                            merge_restored(&mut self.blocks, block, prior);
+                        }
+                    }
+                    Contrib::Undeleted { block, prior } => {
+                        if let Some(record) = prior
+                            && !self.deleted.contains_key(&block)
+                        {
+                            self.deleted.insert(block, record);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Drop one edit-family contribution. `last_edit_at` only ever falls back to a
+    /// floor the surviving contributions justify, never below one — a block whose
+    /// other edits are still standing keeps their (newer) dating, which delays its
+    /// expiry rather than risking an early one.
+    fn retract_edit(&mut self, block: Dot) {
+        let Some(record) = self.blocks.get_mut(&block) else {
+            return;
+        };
+        record.tracked_edits = record.tracked_edits.saturating_sub(1);
+        if record.tracked_edits > 0 {
+            return;
+        }
+        match record
+            .base_edit_at
+            .into_iter()
+            .chain(record.created_at)
+            .max()
+        {
+            Some(floor) => record.last_edit_at = floor,
+            None => {
+                self.blocks.remove(&block);
+            }
+        }
+    }
+
+    /// Prune on the tracker's own clock rather than the query path's, once per
+    /// bucket. [`Self::prune`] otherwise runs only when the host asks for regions,
+    /// which it stops doing when the marks are switched off — and `op_contribs`,
+    /// keyed by op rather than by block, then grows for the life of the session.
+    pub(crate) fn prune_if_bucket_advanced(&mut self, now_ms: i64) {
+        let bucket = bucket_of(now_ms);
+        if self.last_prune_bucket.is_some_and(|last| last >= bucket) {
+            return;
+        }
+        self.last_prune_bucket = Some(bucket);
+        self.prune(now_ms);
     }
 
     pub fn prune(&mut self, now_ms: i64) {
         let cutoff = bucket_of(now_ms) - self.window_ms;
         self.blocks.retain(|_, r| r.last_edit_at >= cutoff);
         self.deleted.retain(|_, r| r.at >= cutoff);
+
+        let mut expired = Vec::new();
+        self.op_contribs.retain(|_, e| {
+            if e.at >= cutoff {
+                return true;
+            }
+            expired.extend(e.contribs.iter().copied());
+            false
+        });
+        // An expired op can no longer be retracted, so its claim on the blocks it
+        // dated has to go with it. A count left standing for it would outlive the
+        // retraction of every contribution that still can be taken back, and the
+        // record would then survive with nothing justifying it — the presence
+        // judgement itself, which the spec does not let drift, unlike the dating.
+        for contrib in expired {
+            if let Contrib::Edited(block) = contrib
+                && let Some(record) = self.blocks.get_mut(&block)
+            {
+                record.tracked_edits = record.tracked_edits.saturating_sub(1);
+            }
+        }
     }
 
     /// Blocks the document still holds. Never yields [`RecentEditKind::Deleted`] —
@@ -477,7 +712,9 @@ impl RecentEditTracker {
 mod tests {
     use super::*;
     use crate::editor::Editor;
-    use crate::message::{InsertionOp, Message};
+    use crate::message::{
+        Break, HistoryOp, InputModifiers, InsertionOp, Key, KeyEvent, Message, ModifierOp,
+    };
     use editor_macros::state;
     use editor_model::{
         AliasOp, AliasRun, Anchor, AtomLeaf, Bias, CalloutNodeAttr, CalloutVariant, ChildView,
@@ -906,8 +1143,8 @@ mod tests {
         t.enable(1_000_000, WINDOW_MS);
         let b = Dot::new(1, 10);
         let del = Dot::new(1, 20);
-        t.record(&[RecentEditEffect::BlockCreated(b)], 1_000_000);
-        t.record(
+        t.record_baseline(&[RecentEditEffect::BlockCreated(b)], 1_000_000);
+        t.record_baseline(
             &[RecentEditEffect::BlockDeleted {
                 block: b,
                 del_op: del,
@@ -925,7 +1162,7 @@ mod tests {
         t.enable(1_000_000, WINDOW_MS);
         let b = Dot::new(1, 10);
         let del = Dot::new(1, 20);
-        t.record(
+        t.record_baseline(
             &[RecentEditEffect::BlockDeleted {
                 block: b,
                 del_op: del,
@@ -941,7 +1178,7 @@ mod tests {
         let mut t = RecentEditTracker::default();
         t.enable(1_000_000, WINDOW_MS);
         let b = Dot::new(1, 10);
-        t.record(&[RecentEditEffect::BlockCreated(b)], 1_000_000);
+        t.record_baseline(&[RecentEditEffect::BlockCreated(b)], 1_000_000);
         assert_eq!(t.live_blocks(1_001_000), vec![(b, RecentEditKind::Added)]);
     }
 
@@ -950,10 +1187,10 @@ mod tests {
         let mut t = RecentEditTracker::default();
         t.enable(0, WINDOW_MS);
         let b = Dot::new(1, 10);
-        t.record(&[RecentEditEffect::BlockCreated(b)], 0);
-        t.record(&[RecentEditEffect::BlockEdited(b)], RECENT_EDIT_BUCKET_MS);
+        t.record_baseline(&[RecentEditEffect::BlockCreated(b)], 0);
+        t.record_baseline(&[RecentEditEffect::BlockEdited(b)], RECENT_EDIT_BUCKET_MS);
         let now = WINDOW_MS - RECENT_EDIT_BUCKET_MS;
-        t.record(&[RecentEditEffect::BlockEdited(b)], now);
+        t.record_baseline(&[RecentEditEffect::BlockEdited(b)], now);
         assert_eq!(t.live_blocks(now), vec![(b, RecentEditKind::Added)]);
     }
 
@@ -962,8 +1199,8 @@ mod tests {
         let mut t = RecentEditTracker::default();
         t.enable(0, WINDOW_MS);
         let b = Dot::new(1, 10);
-        t.record(&[RecentEditEffect::BlockCreated(b)], 0);
-        t.record(&[RecentEditEffect::BlockEdited(b)], WINDOW_MS - 1000);
+        t.record_baseline(&[RecentEditEffect::BlockCreated(b)], 0);
+        t.record_baseline(&[RecentEditEffect::BlockEdited(b)], WINDOW_MS - 1000);
         let now = WINDOW_MS + 1000;
         let live = t.live_blocks(now);
         assert_eq!(live, vec![(b, RecentEditKind::Modified)]);
@@ -974,7 +1211,7 @@ mod tests {
         let mut t = RecentEditTracker::default();
         t.enable(0, WINDOW_MS);
         let b = Dot::new(1, 10);
-        t.record(&[RecentEditEffect::BlockEdited(b)], 0);
+        t.record_baseline(&[RecentEditEffect::BlockEdited(b)], 0);
         assert!(t.live_blocks(WINDOW_MS + RECENT_EDIT_BUCKET_MS).is_empty());
     }
 
@@ -988,8 +1225,8 @@ mod tests {
         let stale_gone = Dot::new(1, 2);
         let fresh_live = Dot::new(1, 3);
         let fresh_gone = Dot::new(1, 4);
-        t.record(&[RecentEditEffect::BlockEdited(stale_live)], 0);
-        t.record(
+        t.record_baseline(&[RecentEditEffect::BlockEdited(stale_live)], 0);
+        t.record_baseline(
             &[RecentEditEffect::BlockDeleted {
                 block: stale_gone,
                 del_op: Dot::new(9, 1),
@@ -998,8 +1235,8 @@ mod tests {
             0,
         );
         let now = 4 * RECENT_EDIT_BUCKET_MS;
-        t.record(&[RecentEditEffect::BlockEdited(fresh_live)], now);
-        t.record(
+        t.record_baseline(&[RecentEditEffect::BlockEdited(fresh_live)], now);
+        t.record_baseline(
             &[RecentEditEffect::BlockDeleted {
                 block: fresh_gone,
                 del_op: Dot::new(9, 2),
@@ -1033,7 +1270,7 @@ mod tests {
         let old = Dot::new(1, 10);
         let new = Dot::new(1, 30);
         let del = Dot::new(1, 20);
-        t.record(
+        t.record_baseline(
             &[
                 RecentEditEffect::BlockDeleted {
                     block: old,
@@ -1058,8 +1295,8 @@ mod tests {
         let mut t = RecentEditTracker::default();
         t.enable(1_000_000, WINDOW_MS);
         let old = Dot::new(1, 10);
-        t.record(&[RecentEditEffect::BlockEdited(old)], 1_000_000);
-        t.record(
+        t.record_baseline(&[RecentEditEffect::BlockEdited(old)], 1_000_000);
+        t.record_baseline(
             &[RecentEditEffect::BlockDeleted {
                 block: old,
                 del_op: Dot::new(1, 20),
@@ -1067,14 +1304,14 @@ mod tests {
             }],
             1_000_500,
         );
-        t.record(&[RecentEditEffect::MoveErase { old }], 1_000_500);
+        t.record_baseline(&[RecentEditEffect::MoveErase { old }], 1_000_500);
         assert!(
             t.deleted_blocks(1_001_000).is_empty(),
             "the departure is not a deletion, so the deleted channel drops it"
         );
 
-        t.record(&[RecentEditEffect::BlockEdited(old)], 1_000_500);
-        t.record(&[RecentEditEffect::MoveErase { old }], 1_000_500);
+        t.record_baseline(&[RecentEditEffect::BlockEdited(old)], 1_000_500);
+        t.record_baseline(&[RecentEditEffect::MoveErase { old }], 1_000_500);
         assert_eq!(
             t.live_blocks(1_001_000),
             vec![(old, RecentEditKind::Modified)],
@@ -1504,8 +1741,8 @@ mod tests {
         let mut editor = editor_for_state(after2);
         let now = WINDOW_MS;
         editor.recent_edits.enable(now, WINDOW_MS);
-        editor.recent_edits.record(&effects3, now);
-        editor.recent_edits.record(&effects2, now);
+        editor.recent_edits.record_baseline(&effects3, now);
+        editor.recent_edits.record_baseline(&effects2, now);
 
         let stale = editor
             .recent_edits
@@ -1749,11 +1986,11 @@ mod tests {
 
         let mut narrow = RecentEditTracker::default();
         narrow.enable(0, short);
-        narrow.record(&[RecentEditEffect::BlockCreated(b)], 0);
+        narrow.record_baseline(&[RecentEditEffect::BlockCreated(b)], 0);
 
         let mut wide = RecentEditTracker::default();
         wide.enable(0, WINDOW_MS);
-        wide.record(&[RecentEditEffect::BlockCreated(b)], 0);
+        wide.record_baseline(&[RecentEditEffect::BlockCreated(b)], 0);
 
         // Inside both windows: a fresh creation, either way.
         assert_eq!(
@@ -1912,6 +2149,648 @@ mod tests {
         );
     }
 
+    fn undo(editor: &mut Editor) {
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+    }
+
+    fn redo(editor: &mut Editor) {
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+    }
+
+    fn type_text(editor: &mut Editor, text: &str) {
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Text { text: text.into() },
+        });
+    }
+
+    #[test]
+    fn undoing_typing_clears_the_mark_and_redoing_earns_it_back() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = editor_for_state(state);
+
+        type_text(&mut editor, "x");
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)]
+        );
+
+        undo(&mut editor);
+        assert!(
+            editor.recent_edits.live_blocks(0).is_empty(),
+            "the only edit dating the block was taken back, so its mark goes with it"
+        );
+        assert!(editor.recent_edits.deleted_blocks(0).is_empty());
+
+        redo(&mut editor);
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)],
+            "the re-applied op is an ordinary edit, which re-earns the mark"
+        );
+    }
+
+    #[test]
+    fn undoing_a_formatting_change_clears_the_mark() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Bold,
+            },
+        });
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)]
+        );
+
+        undo(&mut editor);
+        assert!(
+            editor.recent_edits.live_blocks(0).is_empty(),
+            "a span op's mark is retracted like any other edit's"
+        );
+    }
+
+    #[test]
+    fn undoing_the_deletion_of_a_block_created_in_the_window_brings_added_back() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+        type_text(&mut editor, "z");
+        let created: Vec<Dot> = editor
+            .recent_edits
+            .live_blocks(0)
+            .into_iter()
+            .filter(|(_, k)| *k == RecentEditKind::Added)
+            .map(|(d, _)| d)
+            .collect();
+        assert_eq!(created.len(), 1, "the break must add exactly one block");
+
+        editor.apply(Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        editor.apply(Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        assert!(
+            !editor
+                .recent_edits
+                .live_blocks(0)
+                .iter()
+                .any(|(d, _)| *d == created[0]),
+            "the new block is gone, so its Added mark is too"
+        );
+
+        undo(&mut editor);
+        assert_eq!(
+            editor
+                .recent_edits
+                .live_blocks(0)
+                .into_iter()
+                .filter(|(d, _)| *d == created[0])
+                .collect::<Vec<_>>(),
+            vec![(created[0], RecentEditKind::Added)],
+            "undoing the deletion restores the record the deletion displaced, so a block \
+             created inside the window comes back green rather than merely edited"
+        );
+        assert!(
+            editor.recent_edits.deleted_blocks(0).is_empty(),
+            "and nothing is left in the deleted channel"
+        );
+    }
+
+    #[test]
+    fn undoing_the_deletion_of_a_pre_existing_block_clears_the_deletion_marker() {
+        let (state, _p1, p2) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: (p2, 0)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        });
+        assert_eq!(
+            editor
+                .recent_edits
+                .deleted_blocks(0)
+                .into_iter()
+                .map(|(d, _)| d)
+                .collect::<Vec<_>>(),
+            vec![p2],
+            "merging p2 away deletes a block that predates the window, so it is recorded red"
+        );
+
+        undo(&mut editor);
+        assert!(
+            editor.recent_edits.deleted_blocks(0).is_empty(),
+            "undo takes the deletion back, so the red marker goes"
+        );
+        assert!(
+            !editor
+                .recent_edits
+                .live_blocks(0)
+                .iter()
+                .any(|(d, _)| *d == p2),
+            "and the restored block is not marked as edited either — it was never edited"
+        );
+    }
+
+    #[test]
+    fn a_baseline_contribution_survives_the_undo_of_live_typing() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 2)
+        };
+        let before_seed = heads_of(&state);
+        let (state, _seed) = apply(
+            &state,
+            EditOp::Seq(ListOp::Ins {
+                pos: 3,
+                item: SeqItem::Char('c'),
+            }),
+        );
+        let after_seed = heads_of(&state);
+
+        let mut editor = editor_for_state(state);
+        let base_at = -3 * RECENT_EDIT_BUCKET_MS;
+        // Two buckets, so the seeded op is dated by the later one instead of falling
+        // through to `now_ms` as everything past the last frontier does.
+        assert_eq!(
+            editor.set_recent_edit_baseline(
+                0,
+                vec![
+                    (base_at - RECENT_EDIT_BUCKET_MS, before_seed),
+                    (base_at, after_seed),
+                ]
+            ),
+            2
+        );
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)]
+        );
+
+        type_text(&mut editor, "x");
+        undo(&mut editor);
+
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)],
+            "the replayed baseline edit is not this session's to take back, so the mark stays"
+        );
+        // A `now` whose cutoff sits between the baseline's date and the retracted
+        // typing's: the record only drops out here if its dating rolled back.
+        let past_the_baseline = WINDOW_MS - 2 * RECENT_EDIT_BUCKET_MS;
+        assert!(
+            editor
+                .recent_edits
+                .live_blocks(past_the_baseline)
+                .is_empty(),
+            "and it is dated by the baseline again, not by the typing that was undone"
+        );
+    }
+
+    #[test]
+    fn undoing_one_of_two_unmerged_edits_leaves_the_other_standing() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Bold,
+            },
+        });
+        let undos_after_first = editor.history_undos_len();
+        type_text(&mut editor, "z");
+        assert_eq!(
+            editor.history_undos_len(),
+            undos_after_first + 1,
+            "the two edits must land in separate undo units, or the test proves nothing"
+        );
+
+        undo(&mut editor);
+        assert_eq!(
+            editor.recent_edits.live_blocks(0),
+            vec![(p1, RecentEditKind::Modified)],
+            "the formatting edit still dates the block, so the mark survives"
+        );
+    }
+
+    #[test]
+    fn prune_drops_op_entries_whose_contributions_expired() {
+        let window = 3 * RECENT_EDIT_BUCKET_MS;
+        let mut t = RecentEditTracker::default();
+        t.enable(0, window);
+
+        let stale_op = Dot::new(1, 1);
+        let fresh_op = Dot::new(1, 2);
+        t.record_tracked(
+            stale_op,
+            &[RecentEditEffect::BlockEdited(Dot::new(2, 1))],
+            0,
+        );
+        let now = 4 * RECENT_EDIT_BUCKET_MS;
+        t.record_tracked(
+            fresh_op,
+            &[RecentEditEffect::BlockEdited(Dot::new(2, 2))],
+            now,
+        );
+
+        t.prune(now);
+
+        assert_eq!(
+            t.op_contribs.keys().copied().collect::<Vec<_>>(),
+            vec![fresh_op],
+            "the retraction index is pruned on the same cutoff as the record it serves, or it \
+             grows for the life of the session"
+        );
+    }
+
+    #[test]
+    fn undoing_a_block_creation_leaves_no_record_in_either_channel() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("ab") } } }
+            selection: (p1, 2)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(Message::Insertion {
+            op: InsertionOp::Break {
+                kind: Break::Paragraph,
+            },
+        });
+        assert_eq!(
+            editor
+                .recent_edits
+                .live_blocks(0)
+                .into_iter()
+                .filter(|(_, k)| *k == RecentEditKind::Added)
+                .count(),
+            1
+        );
+
+        undo(&mut editor);
+        assert!(
+            editor.recent_edits.live_blocks(0).is_empty(),
+            "the created block is gone from the document, so it is gone from the tracker"
+        );
+        assert!(
+            editor.recent_edits.deleted_blocks(0).is_empty(),
+            "and undoing a creation is not a deletion — the inverse op must not be classified"
+        );
+    }
+
+    /// A tick carries every message of one frame, so an edit and the undo of that
+    /// same edit reach the tracker together. `Editor::apply` cannot express this —
+    /// it enqueues one message and ticks.
+    fn apply_together(editor: &mut Editor, messages: Vec<Message>) {
+        editor.enqueue_request(messages).unwrap();
+        editor.tick().unwrap();
+    }
+
+    fn bold_at(editor: &Editor, block: Dot, slot: usize) -> bool {
+        let view = editor.state().view();
+        let dot = match view.node(block).unwrap().child_at(slot) {
+            Some(ChildView::Leaf(leaf)) => leaf.dot(),
+            _ => panic!("no leaf at slot {slot}"),
+        };
+        view.leaf_state_by_dot_slow(dot)
+            .unwrap()
+            .eff
+            .contains_key(&ModifierType::Bold)
+    }
+
+    fn toggle_bold() -> Message {
+        Message::Modifier {
+            op: ModifierOp::Toggle {
+                modifier_type: ModifierType::Bold,
+            },
+        }
+    }
+
+    // A formatting op, not typing: an insertion's classification reads the
+    // post-undo document and finds the character already gone, so it hides this
+    // ordering bug behind an empty effect list. A span op's anchors still resolve
+    // after its undo, so a mis-ordered tick records the mark for real.
+    #[test]
+    fn an_edit_and_its_undo_in_the_same_tick_leave_no_mark() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = editor_for_state(state);
+
+        apply_together(
+            &mut editor,
+            vec![
+                toggle_bold(),
+                Message::History {
+                    op: HistoryOp::Undo,
+                },
+            ],
+        );
+
+        assert!(
+            !bold_at(&editor, p1, 0),
+            "전제: 한 tick 안에서 서식과 그 undo가 모두 적용된다"
+        );
+        assert!(
+            editor.recent_edits.live_blocks(0).is_empty(),
+            "the edit was taken back inside the tick that recorded it, so the mark must go \
+             with it — retracting before recording would look for a contribution this tick \
+             had not written yet, miss it, and leave a mark no later undo could match"
+        );
+        assert!(editor.recent_edits.deleted_blocks(0).is_empty());
+    }
+
+    #[test]
+    fn a_redo_and_the_undo_that_follows_it_in_the_same_tick_leave_no_mark() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("hello") } } }
+            selection: (p1, 0) -> (p1, 3)
+        };
+        let mut editor = editor_for_state(state);
+
+        editor.apply(toggle_bold());
+        undo(&mut editor);
+        assert!(editor.recent_edits.live_blocks(0).is_empty());
+
+        apply_together(
+            &mut editor,
+            vec![
+                Message::History {
+                    op: HistoryOp::Redo,
+                },
+                Message::History {
+                    op: HistoryOp::Undo,
+                },
+            ],
+        );
+
+        assert!(
+            !bold_at(&editor, p1, 0),
+            "전제: 한 tick 안의 redo와 undo가 문서를 원위치시킨다"
+        );
+        assert!(
+            editor.recent_edits.live_blocks(0).is_empty(),
+            "the redo's re-applied op is recorded and retracted inside one tick"
+        );
+    }
+
+    /// The two-peer fixture a real concurrent deletion needs is heavier than the
+    /// guard it would exercise, so the ownership check is pinned directly: two
+    /// deletions of one block, only one of them retracted.
+    #[test]
+    fn retracting_a_deletion_leaves_a_concurrent_deletions_marker_standing() {
+        let (state, p1, p2) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: none
+        };
+        let mut t = RecentEditTracker::default();
+        t.enable(0, WINDOW_MS);
+
+        let mine = Dot::new(1, 1);
+        let theirs = Dot::new(2, 1);
+        for del_op in [mine, theirs] {
+            t.record_tracked(
+                del_op,
+                &[RecentEditEffect::BlockDeleted {
+                    block: p2,
+                    del_op,
+                    site: Some(p1),
+                }],
+                0,
+            );
+        }
+
+        t.retract(&state, &[mine]);
+
+        assert_eq!(
+            t.deleted_blocks(0)
+                .into_iter()
+                .map(|(b, r)| (b, r.del_op))
+                .collect::<Vec<_>>(),
+            vec![(p2, theirs)],
+            "the marker standing was written by the other deletion, which this undo did not \
+             take back — an unconditional remove would erase a mark this op never made"
+        );
+    }
+
+    #[test]
+    fn retracting_a_deletion_does_not_revive_a_block_the_document_still_hides() {
+        let (state, p1, p2) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: none
+        };
+        // `p2` really is gone here, so a retraction that restores its live record
+        // would mark a block the document does not show.
+        let (without_p2, _del) = apply(&state, EditOp::Seq(ListOp::Del { pos: 2, len: 2 }));
+        assert!(
+            without_p2.view().node(p2).is_none(),
+            "전제: p2가 실제로 사라진다"
+        );
+
+        let mut t = RecentEditTracker::default();
+        t.enable(0, WINDOW_MS);
+        let edit = Dot::new(1, 1);
+        let del_op = Dot::new(1, 2);
+        t.record_tracked(edit, &[RecentEditEffect::BlockEdited(p2)], 0);
+        t.record_tracked(
+            del_op,
+            &[RecentEditEffect::BlockDeleted {
+                block: p2,
+                del_op,
+                site: Some(p1),
+            }],
+            0,
+        );
+
+        t.retract(&without_p2, &[del_op]);
+
+        assert!(
+            t.live_blocks(0).is_empty(),
+            "the displaced record is only put back while the document still shows the block"
+        );
+        assert!(t.deleted_blocks(0).is_empty(), "this op's own marker goes");
+    }
+
+    #[test]
+    fn a_deletion_is_retracted_before_the_edits_it_swallowed() {
+        let (state, p1, p2) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: none
+        };
+        let mut t = RecentEditTracker::default();
+        t.enable(0, WINDOW_MS);
+
+        let edit = Dot::new(1, 1);
+        let del_op = Dot::new(1, 2);
+        t.record_tracked(edit, &[RecentEditEffect::BlockEdited(p2)], 0);
+        t.record_tracked(
+            del_op,
+            &[RecentEditEffect::BlockDeleted {
+                block: p2,
+                del_op,
+                site: Some(p1),
+            }],
+            0,
+        );
+
+        // Newest first, as the ops come apart.
+        t.retract(&state, &[del_op, edit]);
+
+        assert!(
+            t.live_blocks(0).is_empty(),
+            "unwinding the edit first would find its record already swallowed by the \
+             deletion, and the deletion would then restore a snapshot still counting it"
+        );
+        assert!(t.deleted_blocks(0).is_empty());
+    }
+
+    #[test]
+    fn retracting_a_move_puts_back_the_deletion_record_the_departure_dropped() {
+        let (state, p1, p2) = state! {
+            doc { root { p1: paragraph { text("a") } p2: paragraph { text("b") } } }
+            selection: none
+        };
+        let mut t = RecentEditTracker::default();
+        t.enable(0, WINDOW_MS);
+
+        let del_op = Dot::new(1, 1);
+        let alias = Dot::new(1, 2);
+        t.record_tracked(
+            del_op,
+            &[RecentEditEffect::BlockDeleted {
+                block: p2,
+                del_op,
+                site: Some(p1),
+            }],
+            0,
+        );
+        t.record_tracked(alias, &[RecentEditEffect::MoveErase { old: p2 }], 0);
+        assert!(
+            t.deleted_blocks(0).is_empty(),
+            "전제: 이동 출발은 삭제로 계상되지 않는다"
+        );
+
+        t.retract(&state, &[alias]);
+
+        assert_eq!(
+            t.deleted_blocks(0)
+                .into_iter()
+                .map(|(b, r)| (b, r.del_op))
+                .collect::<Vec<_>>(),
+            vec![(p2, del_op)],
+            "the departure dropped a deletion record, so taking the departure back has to \
+             hand it to the deletion's own retraction to remove"
+        );
+    }
+
+    #[test]
+    fn the_recording_path_prunes_on_its_own_clock_without_a_query() {
+        let mut t = RecentEditTracker::default();
+        t.enable(0, 3 * RECENT_EDIT_BUCKET_MS);
+
+        let stale = Dot::new(1, 1);
+        t.record_tracked(stale, &[RecentEditEffect::BlockEdited(Dot::new(2, 1))], 0);
+        t.prune_if_bucket_advanced(0);
+        assert_eq!(t.op_contribs.len(), 1, "nothing has expired yet");
+
+        let later = 5 * RECENT_EDIT_BUCKET_MS;
+        let fresh = Dot::new(1, 2);
+        t.record_tracked(
+            fresh,
+            &[RecentEditEffect::BlockEdited(Dot::new(2, 2))],
+            later,
+        );
+        t.prune_if_bucket_advanced(later);
+        assert_eq!(
+            t.op_contribs.keys().copied().collect::<Vec<_>>(),
+            vec![fresh],
+            "the op index is bounded by the engine's own clock — a host that never asks for \
+             regions (the marks are switched off) must not leave it growing for the session"
+        );
+
+        let same_bucket = Dot::new(1, 3);
+        t.record_tracked(
+            same_bucket,
+            &[RecentEditEffect::BlockEdited(Dot::new(2, 3))],
+            0,
+        );
+        t.prune_if_bucket_advanced(later + 1);
+        assert_eq!(
+            t.op_contribs.len(),
+            2,
+            "and it runs once per bucket, not once per recorded op"
+        );
+    }
+
+    #[test]
+    fn pruning_an_expired_op_drops_its_claim_on_the_blocks_it_dated() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("a") } } }
+            selection: none
+        };
+        let window = 3 * RECENT_EDIT_BUCKET_MS;
+        let mut t = RecentEditTracker::default();
+        t.enable(0, window);
+
+        let block = Dot::new(2, 1);
+        let expired = Dot::new(1, 1);
+        let recent = Dot::new(1, 2);
+        t.record_tracked(expired, &[RecentEditEffect::BlockEdited(block)], 0);
+        let now = 4 * RECENT_EDIT_BUCKET_MS;
+        t.record_tracked(recent, &[RecentEditEffect::BlockEdited(block)], now);
+
+        t.prune(now);
+        assert_eq!(
+            t.live_blocks(now),
+            vec![(block, RecentEditKind::Modified)],
+            "전제: 최신 기여가 레코드를 살려둔다"
+        );
+
+        t.retract(&state, &[recent]);
+
+        assert!(
+            t.live_blocks(now).is_empty(),
+            "the expired op can never be retracted, so pruning it had to drop its count too \
+             — a count outliving every contribution that can still be taken back would keep \
+             the record standing with nothing justifying it, and presence is not a judgement \
+             the spec lets drift"
+        );
+    }
+
     proptest! {
         #[test]
         fn tracked_blocks_stay_live_and_untouched_ones_stay_unmarked(
@@ -2019,7 +2898,7 @@ mod tests {
                 let effects = classify_op(&state, &op);
                 editor
                     .recent_edits
-                    .record(&effects, WINDOW_MS);
+                    .record_baseline(&effects, WINDOW_MS);
             }
 
             let current_blocks = live_block_set(&state);
