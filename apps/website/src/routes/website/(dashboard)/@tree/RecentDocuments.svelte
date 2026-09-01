@@ -124,7 +124,7 @@
       }
     `),
     () => ({ siteId, sort, limit: visibleCount }),
-    () => ({ fetchPolicy: 'cache-and-network', skip: !enabledQueries.has(queryKey) }),
+    () => ({ fetchPolicy: 'network-only', skip: !enabledQueries.has(queryKey) }),
   );
 
   const initialPage = $derived(sort === 'VIEWED_AT' ? site.data.recentlyViewedDocuments : site.data.recentlyUpdatedDocuments);
