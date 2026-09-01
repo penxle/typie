@@ -15,6 +15,7 @@
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { FocusReturnSession } from '$lib/focus-return-session';
+  import { getPane } from '../@pane/context.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
   type Props = {
@@ -24,6 +25,7 @@
   let { onclose }: Props = $props();
 
   const ctx = getEditorContext();
+  const pane = getPane();
   const app = getAppContext();
   const editor = $derived(ctx.editor?.terminal ? undefined : ctx.editor);
 
@@ -84,7 +86,13 @@
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.isComposing || e.defaultPrevented) return;
 
-    if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.code === 'KeyF') {
+    const primaryModifierOnly = IS_MAC
+      ? e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
+      : e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+    const targetPaneId = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-pane-id]')?.dataset.paneId : undefined;
+    const ownsShortcut = e.target === editor?.inputEl || targetPaneId === pane.id;
+
+    if (primaryModifierOnly && ownsShortcut && ctx.paneFocused && e.code === 'KeyF') {
       e.preventDefault();
       tick().then(() => {
         findInputEl?.select();
@@ -153,7 +161,6 @@
   })}
   aria-label="찾기 및 바꾸기"
   onfocusin={handleFocusIn}
-  onkeydown={handleKeydown}
   role="dialog"
   tabindex="-1"
 >

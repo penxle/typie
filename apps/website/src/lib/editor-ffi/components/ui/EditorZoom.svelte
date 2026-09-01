@@ -126,14 +126,14 @@
   };
 
   const handleBrowserZoomShortcut = (event: KeyboardEvent): void => {
-    if (!active || !zoomEnabled) {
-      return;
-    }
+    if (!active || !zoomEnabled) return;
+
+    const editorPane = editor.inputEl?.closest<HTMLElement>('[data-pane-id]');
+    const targetPane = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-pane-id]') : null;
+    if (event.target !== editor.inputEl && (!editorPane || targetPane !== editorPane)) return;
 
     const hasZoomModifier = IS_MAC ? event.metaKey : event.ctrlKey;
-    if (!hasZoomModifier || event.altKey) {
-      return;
-    }
+    if (!hasZoomModifier || event.altKey) return;
 
     if (isZoomInShortcut(event)) {
       event.preventDefault();

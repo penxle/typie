@@ -60,7 +60,6 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
   let resizing = $state(false);
   let activeZone = $state<{ paneId: string; dropZone: DropZone } | null>(null);
   let draggingPaneId = $state<string | null>(null);
-  const findReplaceOpenByPaneId = $state<Record<string, boolean>>({});
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- imperatively read, not reactive state
   const paneRects = new Map<string, Rect>();
 
@@ -165,9 +164,6 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
       delete context.state.current.panelTabByPaneId[paneId];
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete context.state.current.toolbarExpandedByPaneId[paneId];
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-      delete findReplaceOpenByPaneId[paneId];
-
       syncUrl();
       return true;
     },
@@ -202,10 +198,6 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
 
       syncUrl();
       return true;
-    },
-
-    get findReplaceOpenByPaneId() {
-      return findReplaceOpenByPaneId;
     },
 
     handleNavigation(slug: string, siteId?: string) {

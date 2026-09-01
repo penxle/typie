@@ -64,8 +64,6 @@ export type PaneGroup = {
   removePane: (paneId: string) => boolean;
   replacePane: (paneId: string, pane: PaneInit) => boolean;
 
-  findReplaceOpenByPaneId: Record<string, boolean>;
-
   handleNavigation: (slug: string, siteId?: string) => void;
   switchToSite: (siteId: string, slug?: string) => void;
   focusPane: (paneId: string) => void;

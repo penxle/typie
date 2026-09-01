@@ -229,7 +229,6 @@ export class EditorContext {
   serverGeneration = $state<number>(0);
   resetKey = $state<number>(0);
   attachmentDropTargetNodeId = $state<string | null>(null);
-  findReplaceOpen = $state(false);
   linkEditorOpen = $state(false);
 }
 
