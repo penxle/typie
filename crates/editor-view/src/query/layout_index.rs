@@ -281,26 +281,50 @@ impl LayoutIndex {
             let Some(entry) = self.box_entry(id) else {
                 continue;
             };
-            let node_top = entry.rect.y;
-            let node_bottom = entry.rect.bottom();
-            for (page_idx, page) in self.pages.iter().enumerate() {
-                if node_bottom <= page.y_start || node_top >= page.y_end {
-                    continue;
-                }
-                let top = node_top.max(page.y_start);
-                let bottom = node_bottom.min(page.y_end);
-                rects.push(PageRect::new(
-                    page_idx,
-                    Rect::from_xywh(
-                        entry.rect.x,
-                        top - page.y_start,
-                        entry.rect.width,
-                        bottom - top,
-                    ),
-                ));
-            }
+            self.push_page_rects(entry, &mut rects);
         }
         rects
+    }
+
+    /// Like [`Self::box_page_rects`], but also resolves nodes laid out as atoms rather than
+    /// boxes — a top-level rule or image, which has a rect of its own but no box entry.
+    pub(crate) fn content_page_rects(&self, ids: &[Dot]) -> Vec<PageRect> {
+        let mut rects = Vec::new();
+        for id in ids {
+            let Some(entry) = self.entry_for_content_node(id) else {
+                continue;
+            };
+            self.push_page_rects(entry, &mut rects);
+        }
+        rects
+    }
+
+    fn push_page_rects(&self, entry: &LayoutEntry, rects: &mut Vec<PageRect>) {
+        let node_top = entry.rect.y;
+        let node_bottom = entry.rect.bottom();
+        // Pages tile the document top to bottom, so the pages a box spans are one
+        // contiguous stretch: seek its first page and stop past its last, rather than
+        // testing every page against every id.
+        let first = self.pages.partition_point(|page| page.y_end <= node_top);
+        for (page_idx, page) in self.pages.iter().enumerate().skip(first) {
+            if node_bottom <= page.y_start {
+                break;
+            }
+            if node_top >= page.y_end {
+                continue;
+            }
+            let top = node_top.max(page.y_start);
+            let bottom = node_bottom.min(page.y_end);
+            rects.push(PageRect::new(
+                page_idx,
+                Rect::from_xywh(
+                    entry.rect.x,
+                    top - page.y_start,
+                    entry.rect.width,
+                    bottom - top,
+                ),
+            ));
+        }
     }
 
     pub(crate) fn nearest_box(&self, point: LayoutPoint, ids: &[Dot]) -> Option<Dot> {

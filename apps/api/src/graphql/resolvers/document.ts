@@ -361,12 +361,33 @@ Document.implement({
 
     heads: t.field({
       type: [DocumentHead],
-      resolve: async (self) =>
-        db
+      args: {
+        since: t.arg({ type: 'DateTime', required: false }),
+      },
+      resolve: async (self, args) => {
+        if (!args.since) {
+          return await db
+            .select()
+            .from(DocumentHeads)
+            .where(eq(DocumentHeads.documentId, self.id))
+            .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`);
+        }
+
+        const rows = await db
           .select()
           .from(DocumentHeads)
-          .where(eq(DocumentHeads.documentId, self.id))
-          .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`),
+          .where(and(eq(DocumentHeads.documentId, self.id), gte(DocumentHeads.updatedAt, args.since)))
+          .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`);
+
+        const baseline = await db
+          .select()
+          .from(DocumentHeads)
+          .where(and(eq(DocumentHeads.documentId, self.id), lt(DocumentHeads.updatedAt, args.since)))
+          .orderBy(desc(DocumentHeads.updatedAt), sql`${DocumentHeads.seq} DESC NULLS LAST`)
+          .limit(1);
+
+        return [...rows, ...baseline];
+      },
     }),
 
     sweepTombstones: t.stringList({

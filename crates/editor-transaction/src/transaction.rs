@@ -560,37 +560,48 @@ impl Transaction {
         })
     }
 
-    pub fn set_carry_modifier(&mut self, block: Dot, modifier: Modifier) -> Result<(), StepError> {
-        let ty = modifier.as_type();
-        let old = self
-            .state
-            .projected
-            .node_carries()
-            .modifiers_of(block)
-            .get(&ty)
-            .cloned();
+    /// The single emission point for [`Step::SetNodeCarry`]. A step whose `new` already
+    /// equals `old` writes a `NodeCarry` op that changes nothing, and every such op marks
+    /// its block as recently edited; the whole `Step::SetNodeCarry` surface routes through
+    /// here so the skip holds for all of it. `EditOp::NodeCarry` has one other producer —
+    /// `support::emit_subtree` paints a block it has just inserted, which no `old` can
+    /// match — so it stays outside this path.
+    fn set_node_carry(
+        &mut self,
+        block: Dot,
+        ty: ModifierType,
+        old: Option<Modifier>,
+        new: Option<Modifier>,
+    ) -> Result<(), StepError> {
+        if old == new {
+            return Ok(());
+        }
         self.apply_step(Step::SetNodeCarry {
             block,
             ty,
             old,
-            new: Some(modifier),
+            new,
         })
     }
 
-    pub fn remove_carry_modifier(&mut self, block: Dot, ty: ModifierType) -> Result<(), StepError> {
-        let old = self
-            .state
+    fn carry_modifier_of(&self, block: Dot, ty: ModifierType) -> Option<Modifier> {
+        self.state
             .projected
             .node_carries()
             .modifiers_of(block)
             .get(&ty)
-            .cloned();
-        self.apply_step(Step::SetNodeCarry {
-            block,
-            ty,
-            old,
-            new: None,
-        })
+            .cloned()
+    }
+
+    pub fn set_carry_modifier(&mut self, block: Dot, modifier: Modifier) -> Result<(), StepError> {
+        let ty = modifier.as_type();
+        let old = self.carry_modifier_of(block, ty);
+        self.set_node_carry(block, ty, old, Some(modifier))
+    }
+
+    pub fn remove_carry_modifier(&mut self, block: Dot, ty: ModifierType) -> Result<(), StepError> {
+        let old = self.carry_modifier_of(block, ty);
+        self.set_node_carry(block, ty, old, None)
     }
 
     pub fn replace_carry(&mut self, block: Dot, modifiers: Vec<Modifier>) -> Result<(), StepError> {
@@ -604,12 +615,7 @@ impl Transaction {
         for ty in ModifierType::iter().filter(|t| t.is_carry_kind()) {
             let old = current.get(&ty).cloned();
             let new = wanted.get(&ty).cloned();
-            self.apply_step(Step::SetNodeCarry {
-                block,
-                ty,
-                old,
-                new,
-            })?;
+            self.set_node_carry(block, ty, old, new)?;
         }
         Ok(())
     }
@@ -886,6 +892,37 @@ mod tests {
             Some(Selection::collapsed(Position::new(p1, 0)))
         );
         assert!(tr.view().node(p1).is_some());
+    }
+
+    #[test]
+    fn carry_setters_skip_a_write_that_changes_nothing() {
+        fn carry_ops(tr: &Transaction) -> Vec<(Dot, ModifierType)> {
+            tr.ops_for_test()
+                .iter()
+                .filter_map(|op| match &op.payload {
+                    EditOp::NodeCarry(o) => Some(o.target_key()),
+                    _ => None,
+                })
+                .collect()
+        }
+
+        let family = |name: &str| Modifier::FontFamily {
+            value: name.to_string(),
+        };
+        let (state, p1) = state! {
+            doc { root { p1: paragraph carry([font_family("KoPubBatang".to_string())]) { text("Hi") } } }
+            selection: none
+        };
+
+        let mut tr = Transaction::new(&state);
+        tr.set_carry_modifier(p1, family("KoPubBatang")).unwrap();
+        assert_eq!(carry_ops(&tr), Vec::new());
+
+        tr.remove_carry_modifier(p1, ModifierType::Bold).unwrap();
+        assert_eq!(carry_ops(&tr), Vec::new());
+
+        tr.set_carry_modifier(p1, family("Pretendard")).unwrap();
+        assert_eq!(carry_ops(&tr), vec![(p1, ModifierType::FontFamily)]);
     }
 
     #[test]

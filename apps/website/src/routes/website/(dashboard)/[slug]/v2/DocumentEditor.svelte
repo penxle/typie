@@ -30,6 +30,7 @@
   import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { RECENT_EDIT_WINDOW_MS } from '$lib/editor-ffi/recent-edit-marks';
   import { cache, mearieClient } from '$lib/graphql';
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
@@ -261,6 +262,20 @@
             id
             content
           }
+        }
+      }
+    }
+  `);
+
+  const recentHeadsQuery = graphql(`
+    query DocumentEditorV2_RecentHeads_Query($slug: String!, $since: DateTime!) {
+      document(slug: $slug) {
+        id
+
+        heads(since: $since) {
+          id
+          updatedAt
+          heads
         }
       }
     }
@@ -515,6 +530,29 @@
               pusher?.setConfirmedHeads(event.heads);
               pusher?.setDurableHeads(event.durableHeads);
             });
+
+            liveEditor.enableRecentEdits();
+
+            const recentHeadsSlug = entity?.slug;
+            if (recentHeadsSlug) {
+              const since = new Date(Date.now() - RECENT_EDIT_WINDOW_MS).toISOString();
+              void (async () => {
+                try {
+                  const result = await mearieClient.query(recentHeadsQuery, { slug: recentHeadsSlug, since });
+                  if (destroyed || ctx.liveEditor !== liveEditor) return;
+                  const buckets = result.document.heads
+                    .map((head) => ({ atMs: dayjs(head.updatedAt).valueOf(), heads: Uint8Array.fromBase64(head.heads) }))
+                    .filter((bucket) => Number.isFinite(bucket.atMs))
+                    .toSorted((a, b) => a.atMs - b.atMs);
+                  if (buckets.length > 0) {
+                    liveEditor.setRecentEditBaseline(buckets);
+                  }
+                } catch {
+                  return;
+                }
+              })();
+            }
+
             ctx.editor = liveEditor;
             ctx.liveEditor = liveEditor;
           } catch (err) {

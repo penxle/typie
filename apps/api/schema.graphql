@@ -343,7 +343,7 @@ type Document implements IDocument {
   entity: Entity!
   excerpt: String!
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
-  heads: [DocumentHead!]!
+  heads(since: DateTime): [DocumentHead!]!
   id: ID!
   layoutMode: JSON!
   locked: Boolean!

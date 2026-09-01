@@ -874,6 +874,15 @@ impl View {
         crate::query::selection::block_selection_rects(&result.layout_index, ids)
     }
 
+    /// Like [`Self::node_box_rects`], but also resolves ids laid out as atoms rather than
+    /// boxes — a top-level rule or image, which has a rect but no box of its own.
+    pub fn node_content_rects(&self, ids: &[Dot]) -> Vec<crate::query::selection::SelectionRect> {
+        let Some(result) = self.layout.as_ref() else {
+            return Vec::new();
+        };
+        crate::query::selection::content_selection_rects(&result.layout_index, ids)
+    }
+
     pub fn nearest_node_box(&self, page_idx: usize, x: f32, y: f32, ids: &[Dot]) -> Option<Dot> {
         let result = self.layout.as_ref()?;
         let point = result.layout_index.point(page_idx, x, y)?;

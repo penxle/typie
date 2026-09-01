@@ -688,18 +688,50 @@ impl SeqCheckout {
     ) -> Option<(Dot, bool)> {
         let lv = *self.lv_of.get(&dot)?;
         let mut doc_idx = self.ctx.tree.doc_index_of_lv_checked(lv)?;
+        // Strides a run at a time: a run is contiguous in both document and log order, so
+        // one descent covers every item in it. Stepping one document index at a time costs
+        // a descent per item instead, which a long tombstone stretch turns into the walk's
+        // dominant term.
         while doc_idx > 0 {
-            doc_idx -= 1;
-            let (run, off) = self.ctx.tree.get(doc_idx);
-            let prev_lv = run.op_id_at(off);
-            let e = &log.entries[prev_lv];
-            if let ListOp::Ins { item, .. } = &e.op
-                && is_marker(item)
-            {
-                return Some((e.dot, run.end == 0));
+            let (run, off) = self.ctx.tree.get(doc_idx - 1);
+            let visible = run.end == 0;
+            for offset in (0..=off).rev() {
+                let e = &log.entries[run.op_id_at(offset)];
+                if let ListOp::Ins { item, .. } = &e.op
+                    && is_marker(item)
+                {
+                    return Some((e.dot, visible));
+                }
             }
+            doc_idx -= off + 1;
         }
         None
+    }
+
+    /// Every marker item in tombstone-inclusive order as `(doc_idx, dot, visible)`,
+    /// ascending by `doc_idx`. One pass over the sequence, so a caller with many
+    /// [`Self::enclosing_marker`] queries against one fixed checkout can answer them by
+    /// binary search instead of walking back from each dot.
+    pub fn marker_positions<P: Clone>(
+        &self,
+        log: &OpLog<P>,
+        is_marker: &dyn Fn(&P) -> bool,
+    ) -> Vec<(usize, Dot, bool)> {
+        let mut out = Vec::new();
+        let mut doc_idx = 0usize;
+        for run in self.ctx.tree.iter_runs() {
+            let visible = run.end == 0;
+            for off in 0..run.len {
+                let e = &log.entries[run.op_id_at(off)];
+                if let ListOp::Ins { item, .. } = &e.op
+                    && is_marker(item)
+                {
+                    out.push((doc_idx + off, e.dot, visible));
+                }
+            }
+            doc_idx += run.len;
+        }
+        out
     }
 
     pub fn prev_in_order<P: Clone>(&self, log: &OpLog<P>, dot: Dot) -> Option<(Dot, bool)> {

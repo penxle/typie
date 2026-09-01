@@ -1057,6 +1057,31 @@ impl<P: Clone> OpGraph<P> {
         }
     }
 
+    /// Our ops outside the causal closure of `frontier`. Dots in `frontier` that this
+    /// graph does not have are silently ignored, so nothing is subtracted through them:
+    /// an unknown dot degrades the answer to a superset, widening to "everything" only
+    /// once no frontier dot is known — callers must validate frontier dots with
+    /// [`OpGraph::get`] beforehand.
+    ///
+    /// The `LocalUnknown` walk reaches dots through parent links, and its classifier
+    /// `is_ancestor_of_frontier` answers from `children` alone; the walk's own
+    /// `ops` probe only guards the descent, after the dot is already in the unknown set.
+    /// So on a graph with dangling parents (`has_dangling`) it can name an op we no
+    /// longer hold; filtering keeps both races answering with our ops only.
+    pub fn ops_after_frontier(&self, frontier: &HashSet<Dot>) -> HashSet<Dot> {
+        match self.remote_frontier_delta(frontier) {
+            FrontierDelta::LocalUnknown(unknown) => unknown
+                .into_iter()
+                .filter(|d| self.ops.contains_key(d))
+                .collect(),
+            FrontierDelta::RemoteKnown(known) => self
+                .iter_all()
+                .map(|op| op.id)
+                .filter(|d| !known.contains(d))
+                .collect(),
+        }
+    }
+
     /// Whether `start` is an ancestor-or-self of some remote head — i.e. the remote
     /// already has it. Memoized on `memo`. Propagates known-ness *downward* through the
     /// reverse-parent (`children`) index: `start` is known iff it is a remote head or
@@ -2410,6 +2435,168 @@ mod tests {
 
         let all = g.missing_changesets_tolerant(&HashSet::new());
         assert_eq!(all.len(), 1);
+    }
+
+    #[test]
+    fn ops_after_frontier_returns_exactly_later_ops() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        let a = g.add_mut(1u32).unwrap().id;
+        let b = g.add_mut(2u32).unwrap().id;
+        let frontier: HashSet<Dot> = g.current_heads().copied().collect();
+        let c = g.add_mut(3u32).unwrap().id;
+        let d = g.add_mut(4u32).unwrap().id;
+
+        let after = g.ops_after_frontier(&frontier);
+        assert!(!after.contains(&a));
+        assert!(!after.contains(&b));
+        assert!(after.contains(&c));
+        assert!(after.contains(&d));
+        assert_eq!(after.len(), 2);
+    }
+
+    #[test]
+    fn ops_after_frontier_empty_frontier_returns_all() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        g.add_mut(1u32).unwrap();
+        g.add_mut(2u32).unwrap();
+        assert_eq!(g.ops_after_frontier(&HashSet::new()).len(), 2);
+    }
+
+    #[test]
+    fn ops_after_frontier_at_heads_returns_empty() {
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        g.add_mut(1u32).unwrap();
+        let frontier: HashSet<Dot> = g.current_heads().copied().collect();
+        assert!(g.ops_after_frontier(&frontier).is_empty());
+    }
+
+    fn two_actor_branches() -> OpGraph<u32> {
+        let root = Op {
+            id: Dot::new(99, 0),
+            parents: vec![],
+            payload: 0,
+        };
+        let mut ops = vec![root.clone()];
+        for actor in [1u64, 2] {
+            for clock in 0..4u64 {
+                let parents = if clock == 0 {
+                    vec![root.id]
+                } else {
+                    vec![Dot::new(actor, clock - 1)]
+                };
+                ops.push(Op {
+                    id: Dot::new(actor, clock),
+                    parents,
+                    payload: (actor * 10 + clock) as u32,
+                });
+            }
+        }
+        ops.push(Op {
+            id: Dot::new(1, 4),
+            parents: vec![Dot::new(1, 3)],
+            payload: 14,
+        });
+        ops.push(Op {
+            id: Dot::new(2, 4),
+            parents: vec![Dot::new(2, 3)],
+            payload: 24,
+        });
+        ops.push(Op {
+            id: Dot::new(3, 0),
+            parents: vec![Dot::new(1, 4), Dot::new(2, 4)],
+            payload: 30,
+        });
+        ops.push(Op {
+            id: Dot::new(4, 0),
+            parents: vec![root.id],
+            payload: 40,
+        });
+
+        let mut g: OpGraph<u32> = OpGraph::with_actor(0);
+        for op in ops {
+            g = g
+                .receive_changeset(crate::Changeset { ops: vec![op] })
+                .unwrap();
+        }
+        g
+    }
+
+    #[test]
+    fn ops_after_frontier_subtracts_every_head_of_a_concurrent_frontier() {
+        let g = two_actor_branches();
+        let heads: HashSet<Dot> = g.current_heads().copied().collect();
+        assert_eq!(
+            heads,
+            [Dot::new(3, 0), Dot::new(4, 0)].into_iter().collect(),
+            "premise: the merge and the third branch are the graph's own heads"
+        );
+
+        // Both actors' chain ends, taken as one frontier while a third branch off the
+        // shared root stays outside it.
+        let frontier: HashSet<Dot> = [Dot::new(1, 3), Dot::new(2, 3)].into_iter().collect();
+        let after = g.ops_after_frontier(&frontier);
+        assert_eq!(
+            after,
+            [
+                Dot::new(1, 4),
+                Dot::new(2, 4),
+                Dot::new(3, 0),
+                Dot::new(4, 0)
+            ]
+            .into_iter()
+            .collect(),
+            "both branches' ancestry is subtracted, and only the ops outside both remain"
+        );
+    }
+
+    #[test]
+    fn ops_after_frontier_naming_one_of_two_concurrent_heads_keeps_the_other_branch() {
+        let g = two_actor_branches();
+        let frontier: HashSet<Dot> = [Dot::new(1, 3)].into_iter().collect();
+        let after = g.ops_after_frontier(&frontier);
+        assert_eq!(
+            after,
+            [
+                Dot::new(2, 0),
+                Dot::new(2, 1),
+                Dot::new(2, 2),
+                Dot::new(2, 3),
+                Dot::new(1, 4),
+                Dot::new(2, 4),
+                Dot::new(3, 0),
+                Dot::new(4, 0)
+            ]
+            .into_iter()
+            .collect(),
+            "a frontier that names one head subtracts that head's ancestry only, so the \
+             whole concurrent branch reads as later"
+        );
+    }
+
+    #[test]
+    fn ops_after_frontier_excludes_dots_lost_to_data_loss() {
+        // Long pre-frontier chain so the backward walk wins the race in
+        // `remote_frontier_delta`, then lose `x` to model server-side data
+        // loss: `y` keeps a dangling parent, so the walk reaches `x` through
+        // `y`'s parents and takes it into the unknown set before `self.ops`
+        // is ever probed.
+        let mut g: OpGraph<u32> = OpGraph::with_actor(1);
+        for payload in 0..8u32 {
+            g.add_mut(payload).unwrap();
+        }
+        let frontier: HashSet<Dot> = g.current_heads().copied().collect();
+        let x = g.add_mut(100u32).unwrap().id;
+        let y = g.add_mut(101u32).unwrap().id;
+        let g = g.debug_remove(&x);
+        assert!(g.has_dangling(), "losing x must leave y dangling");
+
+        let after = g.ops_after_frontier(&frontier);
+        for d in &after {
+            assert!(g.get(d).is_some(), "every returned dot must be one we hold");
+        }
+        assert!(!after.contains(&x));
+        assert!(after.contains(&y));
+        assert_eq!(after.len(), 1);
     }
 }
 

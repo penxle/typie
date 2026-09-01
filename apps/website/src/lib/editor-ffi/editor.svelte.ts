@@ -15,6 +15,7 @@ import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
 import { proofSatisfies, satisfiesWaiter } from './publication';
+import { RECENT_EDIT_WINDOW_MS } from './recent-edit-marks';
 import { fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import { probeEvent, probeRendered } from './surface-probe';
 import { selectTrackedRangeMember, semanticMembershipForStateChange, trackedRangeMembershipIds } from './tracked-range-membership';
@@ -40,6 +41,7 @@ import type {
   PlainRootNode,
   PointerStyle,
   Position,
+  RecentEditRegion,
   ResourceUpdate,
   Selection,
   SelectionEndpoints,
@@ -1183,6 +1185,23 @@ export class Editor {
 
   materializeAt(heads: Uint8Array, sweepTombstones: string[]): PlainDoc {
     return this.#invokeCore((core) => core.materialize_at(heads, sweepTombstones));
+  }
+
+  enableRecentEdits(): void {
+    this.#invokeCore((core) => core.enable_recent_edits(Date.now(), RECENT_EDIT_WINDOW_MS));
+  }
+
+  setRecentEditBaseline(buckets: { atMs: number; heads: Uint8Array }[]): number {
+    return this.#invokeCore((core) =>
+      core.set_recent_edit_baseline(
+        Date.now(),
+        buckets.map((bucket) => ({ at_ms: bucket.atMs, heads: bucket.heads })),
+      ),
+    );
+  }
+
+  recentEditRegions(): RecentEditRegion[] {
+    return this.#invokeCore((core) => core.recent_edit_regions(Date.now()));
   }
 
   get cursor() {
