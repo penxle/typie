@@ -119,8 +119,10 @@
     void goto(`/${document.data.entity.slug}`, { state: { entityTreeReveal: 'preserve' } });
   };
 
+  const navigationTargetSlug = $derived(navigating.to?.params?.slug ?? page.params.slug);
+
   $effect(() => {
-    if (source === 'tree' && active && page.state.entityTreeReveal !== 'preserve') {
+    if (source === 'tree' && active && document.data.entity.slug === navigationTargetSlug && page.state.entityTreeReveal !== 'preserve') {
       element?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
     }
   });
