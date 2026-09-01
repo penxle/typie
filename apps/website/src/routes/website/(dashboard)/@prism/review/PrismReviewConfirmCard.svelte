@@ -19,6 +19,7 @@
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { readReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
+  import EntityIcon from '../../@context-menu/EntityIcon.svelte';
   import { expand, swap } from '../lib/motion.ts';
   import PrismCallout from '../PrismCallout.svelte';
   import { lineageRowLabel, pickDefaultLineage } from './lineage-view.ts';
@@ -43,7 +44,7 @@
   let pickedTier = $state<PrismReviewTierName | null>(null);
   let pickedLineage = $state<string | 'fresh' | null>(null);
   let busy = $state(false);
-  const getTitleControl = (element: HTMLElement) => element.parentElement;
+  const getTitleControl = (element: HTMLElement) => element.closest<HTMLElement>('button, [aria-current]') ?? element.parentElement;
   const getMenuItem = (element: HTMLElement) => element.closest<HTMLElement>('[role="menuitem"]');
 
   const selected = $derived(
@@ -259,13 +260,42 @@
         }
       : null,
   );
-  const chosenTitle = $derived(
-    parsedDecision.success && parsedDecision.data.decision === 'confirmed'
-      ? parsedDecision.data.document.title
-      : readonly
-        ? null
-        : (selected?.title ?? null),
+  const chosenDecisionDocument = $derived(
+    parsedDecision.success && parsedDecision.data.decision === 'confirmed' ? parsedDecision.data.document : null,
   );
+  const chosenDocumentId = $derived(chosenDecisionDocument?.id ?? null);
+  const chosenOpenDocument = $derived(documents.find((doc) => doc.documentId === chosenDocumentId) ?? null);
+  const chosenDocumentQuery = createQuery(
+    graphql(`
+      query DashboardLayout_PrismReviewConfirmCard_ChosenDocument_Query($documentId: ID!) {
+        documentById(documentId: $documentId) {
+          id
+          nullableTitle
+
+          entity {
+            id
+            icon
+            iconColor
+          }
+        }
+      }
+    `),
+    () => ({ documentId: chosenDocumentId ?? '' }),
+    () => ({ skip: chosenDocumentId === null || chosenOpenDocument !== null }),
+  );
+  const chosenDocument = $derived.by(() => {
+    if (chosenOpenDocument !== null) return chosenOpenDocument;
+
+    const document = chosenDocumentQuery.data?.documentById;
+    return document === undefined
+      ? null
+      : { title: document.nullableTitle, icon: document.entity.icon, iconColor: document.entity.iconColor };
+  });
+  const chosenTitle = $derived.by(() => {
+    if (chosenDecisionDocument === null) return readonly ? null : (selected?.title ?? null);
+    if (chosenDocument === null) return chosenDecisionDocument.title;
+    return chosenDocument.title;
+  });
 
   // 거절한 카드에만 설 자리가 없다 — 깊이를 고르기 전이야말로 설명이 가장 필요한 자리라, 티어가 없어도 편다.
   const panelShown = $derived(!readonly || decided);
@@ -438,6 +468,8 @@
     fontSize: '10px',
     color: 'text.faint',
   });
+  const documentTitleClass = flex({ alignItems: 'center', gap: '6px', minWidth: '0' });
+  const documentTitleFillClass = flex({ alignItems: 'center', gap: '6px', flexGrow: '1', minWidth: '0' });
   const ellipsisClass = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const shrinkTitleClass = css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const spacerClass = css({ flexGrow: '1' });
@@ -514,13 +546,18 @@
       )}
       aria-current={decided ? 'true' : undefined}
     >
-      <Marquee
-        class={css({ flexGrow: '1' })}
-        bleed={10}
-        fogSize={20}
-        getTrigger={getTitleControl}
-        text={chosenTitle || (decided ? '제목 없음' : '—')}
-      />
+      <div class={documentTitleFillClass}>
+        {#if chosenDocument !== null}
+          <EntityIcon icon={chosenDocument.icon} iconColor={chosenDocument.iconColor} size={14} />
+        {/if}
+        <Marquee
+          class={css({ flexGrow: '1', minWidth: '0' })}
+          bleed={10}
+          fogSize={20}
+          getTrigger={getTitleControl}
+          text={chosenTitle || (decided ? '제목 없음' : '—')}
+        />
+      </div>
     </div>
   {:else if documents.length === 0}
     <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
@@ -535,7 +572,18 @@
       setFullWidth
     >
       {#snippet button({ open: expanded })}
-        <Marquee bleed={{ start: 10, end: 8 }} fogSize={16} getTrigger={getTitleControl} text={selected?.title || '제목 없음'} />
+        <div class={documentTitleClass}>
+          {#if selected}
+            <EntityIcon icon={selected.icon} iconColor={selected.iconColor} size={14} />
+          {/if}
+          <Marquee
+            class={css({ minWidth: '0' })}
+            bleed={{ start: 10, end: 8 }}
+            fogSize={16}
+            getTrigger={getTitleControl}
+            text={selected?.title || '제목 없음'}
+          />
+        </div>
         {#if current !== null}
           <span class={countClass}>원고 {current.characterCount.toLocaleString()}자</span>
         {:else if loading}
@@ -551,13 +599,16 @@
       {#each documents as doc (doc.documentId)}
         <MenuItem onclick={() => (picked = doc.documentId)}>
           <div class={flex({ alignItems: 'center', gap: '8px', flexGrow: '1', minWidth: '0' })}>
-            <Marquee
-              class={css({ flexGrow: '1', minWidth: '0' })}
-              bleed={8}
-              fogSize={16}
-              getTrigger={getMenuItem}
-              text={doc.title || '제목 없음'}
-            />
+            <div class={documentTitleFillClass}>
+              <EntityIcon icon={doc.icon} iconColor={doc.iconColor} size={14} />
+              <Marquee
+                class={css({ flexGrow: '1', minWidth: '0' })}
+                bleed={8}
+                fogSize={16}
+                getTrigger={getMenuItem}
+                text={doc.title || '제목 없음'}
+              />
+            </div>
             {#if doc.active}
               <span class={activeTagClass}>활성</span>
             {/if}

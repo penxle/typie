@@ -8,14 +8,16 @@
   import type { Component, ComponentProps } from 'svelte';
   import type { EntityIcon_entity$key } from '$mearie';
 
-  type Props = {
-    entity$key: EntityIcon_entity$key;
+  type SharedProps = {
     fallback?: Component;
     size?: ComponentProps<typeof Icon>['size'];
     style?: SystemStyleObject;
   };
 
-  let { entity$key, fallback = FileIcon, size = 14, style }: Props = $props();
+  type Props = SharedProps &
+    ({ entity$key: EntityIcon_entity$key; icon?: never; iconColor?: never } | { entity$key?: never; icon: string; iconColor: string });
+
+  let { entity$key, icon, iconColor, fallback = FileIcon, size = 14, style }: Props = $props();
 
   const entity = createFragment(
     graphql(`
@@ -27,8 +29,11 @@
     `),
     () => entity$key,
   );
+
+  const resolvedIcon = $derived(entity.data?.icon ?? icon ?? '');
+  const resolvedIconColor = $derived(entity.data?.iconColor ?? iconColor ?? '');
 </script>
 
-<span style:color={getEntityIconColor(entity.data.iconColor)}>
-  <Icon {style} icon={entityIconMap.get(entity.data.icon) ?? fallback} {size} />
+<span style:color={getEntityIconColor(resolvedIconColor)}>
+  <Icon {style} icon={entityIconMap.get(resolvedIcon) ?? fallback} {size} />
 </span>
