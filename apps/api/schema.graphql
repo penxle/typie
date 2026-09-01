@@ -2240,6 +2240,7 @@ type User implements IUser {
   subscription: Subscription_
   surveys: [String!]!
   textReplacements: [TextReplacementNode!]!
+  todayCharacterCountChange: CharacterCountChange!
   trial: UserTrial
   usableBillingKeyTypes: [BillingKeyType!]!
   usage: UserUsage!

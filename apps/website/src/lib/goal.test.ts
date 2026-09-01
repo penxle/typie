@@ -10,9 +10,7 @@ import {
   goalColorState,
   pickGoalSource,
   requiredToday,
-  streaks,
   timeFraction,
-  todayProgress,
 } from './goal';
 
 const day = (s: string) => dayjs(s).startOf('day');
@@ -85,41 +83,6 @@ describe('dDayLabel', () => {
   });
 });
 
-describe('todayProgress', () => {
-  const kstToday = dayjs.kst('2026-08-05');
-
-  test('마지막 기록이 KST 오늘이면 그 값을 그대로', () => {
-    const history = [
-      { date: '2026-08-03T15:00:00.000Z', additions: 100, achieved: false },
-      { date: '2026-08-05T05:00:00.000Z', additions: 1200, achieved: true },
-    ];
-
-    expect(todayProgress(history, kstToday)).toEqual({ additions: 1200, achieved: true });
-  });
-
-  test('마지막 기록이 오늘이 아니면 0 · 미달성', () => {
-    const history = [{ date: '2026-08-04T05:00:00.000Z', additions: 1200, achieved: true }];
-
-    expect(todayProgress(history, kstToday)).toEqual({ additions: 0, achieved: false });
-  });
-
-  test('빈 이력이면 0 · 미달성', () => {
-    expect(todayProgress([], kstToday)).toEqual({ additions: 0, achieved: false });
-  });
-
-  test('달성 판정은 서버 achieved를 따르고 클라에서 재계산하지 않는다', () => {
-    const history = [{ date: '2026-08-05T05:00:00.000Z', additions: 1200, achieved: false }];
-
-    expect(todayProgress(history, kstToday)).toEqual({ additions: 1200, achieved: false });
-  });
-
-  test('KST 경계: UTC로는 어제인 시각도 KST 오늘로 취급', () => {
-    const history = [{ date: '2026-08-04T15:30:00.000Z', additions: 300, achieved: false }];
-
-    expect(todayProgress(history, kstToday)).toEqual({ additions: 300, achieved: false });
-  });
-});
-
 describe('dueStatus', () => {
   const today = day('2026-08-05');
 
@@ -180,71 +143,5 @@ describe('pickGoalSource', () => {
     const entity = { id: 'e1', goal: null, ancestors: [{ id: 'a1', goal: null, node: { __typename: 'Folder', characterCount: 500 } }] };
 
     expect(pickGoalSource(entity, 300)).toBeNull();
-  });
-});
-
-describe('streaks', () => {
-  const today = dayjs.kst('2026-08-05');
-  const d = (s: string) => dayjs.kst(s).toISOString();
-
-  test('오늘 달성 포함 연속', () => {
-    const history = [
-      { date: d('2026-08-03'), achieved: true },
-      { date: d('2026-08-04'), achieved: true },
-      { date: d('2026-08-05'), achieved: true },
-    ];
-
-    expect(streaks(history, today)).toEqual({ current: 3, best: 3 });
-  });
-
-  test('오늘 미달성은 어제까지의 연속으로', () => {
-    const history = [
-      { date: d('2026-08-03'), achieved: true },
-      { date: d('2026-08-04'), achieved: true },
-      { date: d('2026-08-05'), achieved: false },
-    ];
-
-    expect(streaks(history, today)).toEqual({ current: 2, best: 2 });
-  });
-
-  test('미달성 하루가 연속을 끊음', () => {
-    const history = [
-      { date: d('2026-08-01'), achieved: true },
-      { date: d('2026-08-02'), achieved: false },
-      { date: d('2026-08-03'), achieved: true },
-      { date: d('2026-08-04'), achieved: true },
-      { date: d('2026-08-05'), achieved: true },
-    ];
-
-    expect(streaks(history, today)).toEqual({ current: 3, best: 3 });
-  });
-
-  test('목표 없던 날(행 없음)도 연속을 끊음', () => {
-    const history = [
-      { date: d('2026-08-01'), achieved: true },
-      { date: d('2026-08-02'), achieved: true },
-      { date: d('2026-08-04'), achieved: true },
-      { date: d('2026-08-05'), achieved: true },
-    ];
-
-    expect(streaks(history, today)).toEqual({ current: 2, best: 2 });
-  });
-
-  test('최고 기록은 과거 구간에서', () => {
-    const history = [
-      { date: d('2026-07-28'), achieved: true },
-      { date: d('2026-07-29'), achieved: true },
-      { date: d('2026-07-30'), achieved: true },
-      { date: d('2026-07-31'), achieved: true },
-      { date: d('2026-08-01'), achieved: false },
-      { date: d('2026-08-04'), achieved: true },
-      { date: d('2026-08-05'), achieved: true },
-    ];
-
-    expect(streaks(history, today)).toEqual({ current: 2, best: 4 });
-  });
-
-  test('빈 이력은 0', () => {
-    expect(streaks([], today)).toEqual({ current: 0, best: 0 });
   });
 });

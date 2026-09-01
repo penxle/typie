@@ -1,5 +1,4 @@
 import { comma } from '@typie/ui/utils';
-import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 
 export const GOAL_OVER_RATIO = 1.1;
@@ -53,49 +52,6 @@ export const dDayLabel = (dueAt: Dayjs, today: Dayjs): string => {
   }
 
   return diff > 0 ? `D-${diff}` : `D+${-diff}`;
-};
-
-export const todayProgress = (
-  history: readonly { date: string; additions: number; achieved: boolean }[],
-  today: Dayjs,
-): { additions: number; achieved: boolean } => {
-  const last = history.at(-1);
-
-  if (!last || !dayjs(last.date).kst().isSame(today, 'day')) {
-    return { additions: 0, achieved: false };
-  }
-
-  return { additions: last.additions, achieved: last.achieved };
-};
-
-export const streaks = (history: readonly { date: string; achieved: boolean }[], today: Dayjs): { current: number; best: number } => {
-  const days = history.map((h) => ({ day: dayjs(h.date).kst().startOf('day'), achieved: h.achieved }));
-
-  let best = 0;
-  let run = 0;
-  let prevAchievedDay: Dayjs | null = null;
-  for (const { day, achieved } of days) {
-    if (!achieved) {
-      run = 0;
-      prevAchievedDay = null;
-      continue;
-    }
-
-    run = prevAchievedDay && day.diff(prevAchievedDay, 'day') === 1 ? run + 1 : 1;
-    best = Math.max(best, run);
-    prevAchievedDay = day;
-  }
-
-  const achievedByDay = new Map(days.map((d) => [d.day.valueOf(), d.achieved]));
-  const startOfToday = today.startOf('day');
-  let cursor = achievedByDay.get(startOfToday.valueOf()) ? startOfToday : startOfToday.subtract(1, 'day');
-  let current = 0;
-  while (achievedByDay.get(cursor.valueOf())) {
-    current += 1;
-    cursor = cursor.subtract(1, 'day');
-  }
-
-  return { current, best };
 };
 
 export const dueStatus = (

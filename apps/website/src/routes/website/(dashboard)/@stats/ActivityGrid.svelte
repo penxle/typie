@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex, grid } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
-  import { graphql } from '$mearie';
-  import type { DashboardLayout_Stats_ActivityGrid_user$key } from '$mearie';
+  import { mergeTodayCharacterCountChanges } from '$lib/user-stats';
 
   type Level = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -18,34 +16,24 @@
   };
 
   type Props = {
-    user$key: DashboardLayout_Stats_ActivityGrid_user$key;
+    characterCountChanges: readonly { date: string; additions: number }[];
+    todayCharacterCountChange: { date: string; additions: number };
+    today: dayjs.Dayjs;
   };
 
-  const { user$key }: Props = $props();
-
-  const user = createFragment(
-    graphql(`
-      fragment DashboardLayout_Stats_ActivityGrid_user on User {
-        id
-
-        characterCountChanges {
-          date
-          additions
-        }
-      }
-    `),
-    () => user$key,
-  );
+  const { characterCountChanges: history, todayCharacterCountChange, today }: Props = $props();
 
   let hoverActivity = $state<Activity & { element: HTMLElement }>();
 
-  const endDate = dayjs.kst().startOf('day');
-  const startDate = endDate.subtract(364, 'days');
+  const endDate = $derived(today.startOf('day'));
+  const startDate = $derived(endDate.subtract(364, 'days'));
+
+  const characterCountChanges = $derived(mergeTodayCharacterCountChanges(history, todayCharacterCountChange, endDate));
 
   const activities = $derived.by<Activity[]>(() => {
     const activities: Activity[] = [];
 
-    const numbers = user.data.characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
+    const numbers = characterCountChanges.map(({ additions }) => additions).filter((n) => n > 0);
 
     let p95 = 0;
     if (numbers.length > 0) {
@@ -54,7 +42,7 @@
       p95 = sorted[Math.min(index, sorted.length - 1)];
     }
 
-    const changes = Object.fromEntries(user.data.characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
+    const changes = Object.fromEntries(characterCountChanges.map((change) => [dayjs(change.date).unix(), change]));
 
     let currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {

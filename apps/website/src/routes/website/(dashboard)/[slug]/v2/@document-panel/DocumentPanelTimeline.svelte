@@ -449,6 +449,7 @@
     cache.invalidate(
       { __typename: 'User', id: app.userId, $field: 'characterCountChanges' },
       { __typename: 'User', id: app.userId, $field: 'goalHistory' },
+      { __typename: 'User', id: app.userId, $field: 'todayCharacterCountChange' },
       { __typename: 'Document', id: document.data.id, $field: 'characterCountChange' },
     );
   };

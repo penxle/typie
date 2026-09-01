@@ -52,6 +52,7 @@
   import TrashModal from './@trash/TrashModal.svelte';
   import WidgetGroup from './@widgets/WidgetGroup.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import { setupDayClock } from './day-clock.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import { setupNoteContext } from './note-context.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -66,6 +67,7 @@
   const query = $derived(hydrateQuery(() => data.query));
 
   const app = setupAppContext(query.data.me.id);
+  setupDayClock();
   let prismPanel = $state<PrismPanel>();
 
   let prismNotifications: ReturnType<typeof createPrismNotifications> | undefined;
@@ -175,6 +177,23 @@
         }
       }
     `),
+  );
+
+  createSubscription(
+    graphql(`
+      subscription DashboardLayout_UserUsageUpdateStream($userId: ID!) {
+        userUsageUpdateStream(userId: $userId) {
+          id
+
+          todayCharacterCountChange {
+            date
+            additions
+            deletions
+          }
+        }
+      }
+    `),
+    () => ({ userId }),
   );
 
   createSubscription(

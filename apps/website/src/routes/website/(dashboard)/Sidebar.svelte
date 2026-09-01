@@ -6,7 +6,6 @@
   import { Icon, ProgressRing, Scrollbar } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
-  import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
@@ -19,7 +18,7 @@
   import TargetIcon from '~icons/lucide/target';
   import PrismIcon from '~icons/typie/prism';
   import { goto } from '$app/navigation';
-  import { streaks, todayProgress } from '$lib/goal';
+  import { dailyGoalStatus, mergeTodayCharacterCountChanges, writingStreaks } from '$lib/user-stats';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import ChangelogPopover from './@changelog/ChangelogPopover.svelte';
@@ -28,6 +27,7 @@
   import TrialWidget from './@subscription/TrialWidget.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from './@tree/entity-reveal.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
+  import { getDayClock } from './day-clock.svelte';
   import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
   import { resolveSidebarNavigationDrag, resolveSidebarNavigationGeometry } from './sidebar-navigation-resize';
@@ -43,6 +43,7 @@
   let { user$key, changelogSuppressed }: Props = $props();
 
   const app = getAppContext();
+  const dayClock = getDayClock();
 
   const user = createFragment(
     graphql(`
@@ -74,6 +75,11 @@
           additions
         }
 
+        todayCharacterCountChange {
+          date
+          additions
+        }
+
         goal {
           targetCharacterCount
         }
@@ -93,33 +99,20 @@
   );
 
   const currentStreak = $derived.by(() => {
-    const today = dayjs.kst().startOf('day');
-    const activeDates = new Set(
-      user.data.characterCountChanges.filter((c) => c.additions > 0).map((c) => dayjs(c.date as string).format('YYYY-MM-DD')),
+    const today = dayClock.now;
+    const characterCountChanges = mergeTodayCharacterCountChanges(
+      user.data.characterCountChanges,
+      user.data.todayCharacterCountChange,
+      today,
     );
-
-    let streak = 0;
-    let checkDate = today;
-
-    if (!activeDates.has(today.format('YYYY-MM-DD'))) {
-      checkDate = today.subtract(1, 'day');
-    }
-
-    while (activeDates.has(checkDate.format('YYYY-MM-DD'))) {
-      streak++;
-      checkDate = checkDate.subtract(1, 'day');
-    }
-
-    return streak;
+    return writingStreaks(characterCountChanges, today).current;
   });
 
   const dailyGoal = $derived.by(() => {
     if (!user.data.goal) return null;
-    const today = dayjs.kst();
     return {
-      ...todayProgress(user.data.goalHistory, today),
+      ...dailyGoalStatus(user.data.goalHistory, user.data.goal.targetCharacterCount, user.data.todayCharacterCountChange, dayClock.now),
       target: user.data.goal.targetCharacterCount,
-      streak: streaks(user.data.goalHistory, today).current,
     };
   });
 

@@ -4,12 +4,15 @@
   import { flex } from '@typie/styled-system/patterns';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
+  import { mergeTodayCharacterCountChanges } from '$lib/user-stats';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../day-clock.svelte';
   import type { DashboardLayout_UserGoalTrendChart_user$key } from '$mearie';
 
   type Props = { user$key: DashboardLayout_UserGoalTrendChart_user$key };
 
   let { user$key }: Props = $props();
+  const dayClock = getDayClock();
 
   const user = createFragment(
     graphql(`
@@ -25,16 +28,24 @@
           date
           additions
         }
+
+        todayCharacterCountChange {
+          date
+          additions
+        }
       }
     `),
     () => user$key,
   );
 
   const target = $derived(user.data.goal?.targetCharacterCount ?? null);
-  const byDate = $derived(new Map(user.data.characterCountChanges.map((h) => [dayjs(h.date).kst().format('YYYY-MM-DD'), h.additions])));
+  const characterCountChanges = $derived(
+    mergeTodayCharacterCountChanges(user.data.characterCountChanges, user.data.todayCharacterCountChange, dayClock.now),
+  );
+  const byDate = $derived(new Map(characterCountChanges.map((h) => [dayjs(h.date).kst().format('YYYY-MM-DD'), h.additions])));
 
   const days = $derived.by(() => {
-    const today = dayjs.kst().startOf('day');
+    const today = dayClock.now;
 
     return Array.from({ length: 28 }, (_, i) => {
       const date = today.subtract(27 - i, 'day');
@@ -88,7 +99,7 @@
   </div>
 
   <div class={flex({ justifyContent: 'space-between', fontSize: '10px', color: 'text.faint' })}>
-    <span>{dayjs.kst().subtract(27, 'day').format('M월 D일')}</span>
-    <span>{dayjs.kst().format('M월 D일')}{target === null ? '' : ' · ┄ 목표선'}</span>
+    <span>{dayClock.now.subtract(27, 'day').format('M월 D일')}</span>
+    <span>{dayClock.now.format('M월 D일')}{target === null ? '' : ' · ┄ 목표선'}</span>
   </div>
 </div>

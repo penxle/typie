@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import { fade } from 'svelte/transition';
-  import { graphql } from '$mearie';
-  import type { DashboardLayout_Stats_ActivityChart_user$key } from '$mearie';
+  import { mergeTodayCharacterCountChanges } from '$lib/user-stats';
 
   type DayData = {
     date: dayjs.Dayjs;
@@ -17,42 +15,31 @@
   };
 
   type Props = {
-    user$key: DashboardLayout_Stats_ActivityChart_user$key;
+    characterCountChanges: readonly { date: string; additions: number; deletions: number }[];
+    todayCharacterCountChange: { date: string; additions: number; deletions: number };
+    today: dayjs.Dayjs;
   };
 
   const chartHeight = 100;
 
-  const { user$key }: Props = $props();
-
-  const user = createFragment(
-    graphql(`
-      fragment DashboardLayout_Stats_ActivityChart_user on User {
-        id
-
-        characterCountChanges {
-          date
-          additions
-          deletions
-        }
-      }
-    `),
-    () => user$key,
-  );
+  const { characterCountChanges: history, todayCharacterCountChange, today }: Props = $props();
 
   let hoverData = $state<DayData & { element: HTMLElement }>();
   let isHoveringCompressedBar = $state(false);
   let showAdditions = $state(true);
   let showDeletions = $state(true);
 
+  const characterCountChanges = $derived(mergeTodayCharacterCountChanges(history, todayCharacterCountChange, today));
+
   const daysData = $derived.by<DayData[]>(() => {
     const data: DayData[] = [];
-    const endDate = dayjs.kst().startOf('day');
+    const endDate = today.startOf('day');
     const startDate = endDate.subtract(89, 'days');
 
     const changesByDate: Record<string, { additions: number; deletions: number }> = {};
 
-    for (const change of user.data.characterCountChanges) {
-      const date = dayjs(change.date).format('YYYY-MM-DD');
+    for (const change of characterCountChanges) {
+      const date = dayjs(change.date).kst().format('YYYY-MM-DD');
       changesByDate[date] = {
         additions: change.additions,
         deletions: change.deletions,

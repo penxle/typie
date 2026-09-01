@@ -9,6 +9,7 @@
   import mixpanel from 'mixpanel-browser';
   import { dueStatus, goalColorState, pickGoalSource } from '$lib/goal';
   import { graphql } from '$mearie';
+  import { getDayClock } from '../../../day-clock.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { DocumentPanelV2_Goal_document$key } from '$mearie';
 
@@ -20,6 +21,7 @@
   let { document$key, editor }: Props = $props();
 
   const app = getAppContext();
+  const dayClock = getDayClock();
 
   const document = createFragment(
     graphql(`
@@ -66,7 +68,7 @@
 
 {#if active}
   {@const state = goalColorState(active.current, active.goal.targetCharacterCount)}
-  {@const today = dayjs.kst()}
+  {@const today = dayClock.now}
   {@const due = active.goal.dueAt ? dayjs(active.goal.dueAt).kst() : null}
 
   <div class={flex({ flexDirection: 'column', gap: '6px' })}>

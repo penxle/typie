@@ -75,6 +75,7 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
   let shouldConsolidate = false;
   let totalityViolations = 0;
   const isolatedEvents: { headId: string; userId: string; excluded: boolean }[] = [];
+  const usageUpdateUserIds = new Set<string>();
 
   try {
     const collected = await redis.get(collectedKey(documentId));
@@ -323,6 +324,8 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
                     deletions: deletions > 0 ? sql`${DocumentCharacterCountChanges.deletions} + ${deletions}` : undefined,
                   },
                 });
+
+              usageUpdateUserIds.add(userId);
             }
 
             if (write.isolatedAuthorId) {
@@ -426,15 +429,18 @@ export const DocumentChangesetsCollectJob = defineJob('document:changesets:colle
     // re-index / preview / recency / usage notifications would be no-ops that a
     // large backfill turns into a job storm.
     if (userVisibleChanged) {
-      const { siteId, entityId, userId } = await db
-        .select({ siteId: Entities.siteId, entityId: Entities.id, userId: Entities.userId })
+      const { siteId, entityId, ownerUserId } = await db
+        .select({ siteId: Entities.siteId, entityId: Entities.id, ownerUserId: Entities.userId })
         .from(Documents)
         .innerJoin(Entities, eq(Documents.entityId, Entities.id))
         .where(eq(Documents.id, documentId))
         .then(firstOrThrow);
 
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
-      pubsub.publish('user:usage:update', userId, null);
+      usageUpdateUserIds.add(ownerUserId);
+      for (const userId of usageUpdateUserIds) {
+        pubsub.publish('user:usage:update', userId, null);
+      }
 
       await enqueueJob('search:index:document', documentId, {
         deduplication: { id: `search:index:document:${documentId}`, ttl: 60 * 1000 },
