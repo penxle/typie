@@ -2,12 +2,16 @@ import { getAllContexts, mount, unmount } from 'svelte';
 import { Menu } from '../components';
 import type { Snippet } from 'svelte';
 
-export function contextMenu(node: HTMLElement, params: { content: Snippet }) {
+export function contextMenu(node: HTMLElement, params: { content: Snippet; shouldOpen?: (event: MouseEvent) => boolean }) {
   $effect(() => {
     let mountedComponent: ReturnType<typeof mount> | null = null;
     const context = getAllContexts();
 
     const handleContextMenu = (e: MouseEvent) => {
+      if (params.shouldOpen?.(e) === false) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
 

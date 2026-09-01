@@ -25,7 +25,6 @@
   import PrismBadgeDot from './@prism/PrismBadgeDot.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import TrialWidget from './@subscription/TrialWidget.svelte';
-  import SelectedEntitiesBar from './@tree/@selection/SelectedEntitiesBar.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from './@tree/entity-reveal.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import RecentDocuments from './@tree/RecentDocuments.svelte';
@@ -49,7 +48,7 @@
 
   const app = getAppContext();
   const dayClock = getDayClock();
-  const treeState = setupTreeContext();
+  setupTreeContext();
 
   const user = createFragment(
     graphql(`
@@ -788,34 +787,7 @@
             {/snippet}
           </SidebarSectionHeader>
 
-          <div
-            class={css({
-              display: 'grid',
-              gridTemplateRows: allDocumentsOpen ? '1fr' : '0fr',
-              flexShrink: '0',
-              transition: '[grid-template-rows 160ms ease-out]',
-              _motionReduce: { transition: '[none]' },
-            })}
-            aria-hidden={!allDocumentsOpen}
-            inert={!allDocumentsOpen}
-          >
-            <div
-              style:opacity={allDocumentsOpen ? '1' : '0'}
-              class={flex({
-                flexDirection: 'column',
-                minHeight: '0',
-                overflow: 'hidden',
-                transition: '[opacity 120ms ease-out]',
-                _motionReduce: { transition: '[none]' },
-              })}
-            >
-              <EntityTree scrollContainer={treeScrollEl} site$key={site} />
-            </div>
-          </div>
-
-          {#if treeState.selectedEntityIds.size > 0 && !treeState.dragging}
-            <SelectedEntitiesBar />
-          {/if}
+          <EntityTree open={allDocumentsOpen} scrollContainer={treeScrollEl} site$key={site} />
         </div>
 
         <Scrollbar

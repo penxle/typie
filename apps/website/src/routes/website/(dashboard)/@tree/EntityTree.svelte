@@ -20,6 +20,7 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { getTreeContext } from './state.svelte';
   import { getNextElement, getPreviousElement, maxDepth, resolveEntityTreeDropTarget } from './utils';
@@ -38,9 +39,10 @@
   type Props = {
     site$key: DashboardLayout_EntityTree_site$key;
     scrollContainer: HTMLElement | undefined;
+    open: boolean;
   };
 
-  let { site$key, scrollContainer }: Props = $props();
+  let { site$key, scrollContainer, open }: Props = $props();
 
   const site = createFragment(
     graphql(`
@@ -932,6 +934,9 @@
   const ghostEntityType = $derived.by(() => {
     return ghostEntityName ? dragging?.element.dataset.type : undefined;
   });
+
+  const selectionBarVisible = $derived(treeState.selectedEntityIds.size > 0 && !dragging?.eligible);
+  const shouldOpenTreeRootMenu = () => open;
 </script>
 
 {#snippet treeRootMenuContent()}
@@ -949,18 +954,15 @@
   }}
 />
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_interactive_supports_focus -->
 <div
   bind:this={tree}
   class={flex({
     flexDirection: 'column',
     flexGrow: '1',
     flexShrink: '0',
-    paddingX: '12px',
-    paddingY: '4px',
+    minHeight: '0',
     userSelect: 'none',
-    touchAction: 'none',
+    touchAction: open ? 'none' : 'auto',
   })}
   data-entity-tree
   onclick={handleClick}
@@ -970,16 +972,49 @@
   onpointerdowncapture={handlePointerDown}
   onpointermovecapture={handlePointerMove}
   onpointerupcapture={handlePointerUp}
-  role="tree"
-  use:contextMenu={{ content: treeRootMenuContent }}
+  role={open ? 'tree' : undefined}
+  use:contextMenu={{ content: treeRootMenuContent, shouldOpen: shouldOpenTreeRootMenu }}
 >
-  {#each site.data.entities as entity (entity.id)}
-    <Entity entity$key={entity} />
-  {:else}
-    <div class={center({ flexGrow: '1' })}>
-      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
+  <div
+    class={css({
+      display: 'grid',
+      gridTemplateRows: open ? '1fr' : '0fr',
+      flexShrink: '0',
+      transition: '[grid-template-rows 160ms ease-out]',
+      _motionReduce: { transition: '[none]' },
+    })}
+    aria-hidden={!open}
+    inert={!open}
+  >
+    <div
+      style:opacity={open ? '1' : '0'}
+      class={flex({
+        flexDirection: 'column',
+        minHeight: '0',
+        overflow: 'hidden',
+        transition: '[opacity 120ms ease-out]',
+        _motionReduce: { transition: '[none]' },
+      })}
+    >
+      <div class={flex({ flexDirection: 'column', paddingX: '12px', paddingY: '4px' })}>
+        {#each site.data.entities as entity (entity.id)}
+          <Entity entity$key={entity} />
+        {:else}
+          <div class={center({ flexGrow: '1' })}>
+            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
+          </div>
+        {/each}
+      </div>
     </div>
-  {/each}
+  </div>
+
+  {#if open || selectionBarVisible}
+    <div class={css({ height: '32px', flexShrink: '0' })}></div>
+
+    {#if selectionBarVisible}
+      <SelectedEntitiesBar />
+    {/if}
+  {/if}
 </div>
 
 {#if dragging?.eligible}

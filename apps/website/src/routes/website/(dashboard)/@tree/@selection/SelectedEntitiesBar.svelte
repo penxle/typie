@@ -21,7 +21,6 @@
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    marginTop: '32px',
     paddingLeft: '16px',
     paddingY: '6px',
     paddingRight: '8px',

@@ -65,7 +65,7 @@ export const resolveEntityTreeDropTarget = (root: HTMLElement, hitElement: Eleme
     return null;
   }
 
-  return hitTree.querySelector<HTMLElement>(':scope > [data-id]:last-child');
+  return flatLevel(hitTree, '[data-id]').at(-1) ?? null;
 };
 
 export const getEntityTreeElement = () => document.querySelector<HTMLElement>('[data-entity-tree]') ?? undefined;
