@@ -41,13 +41,18 @@ export const opsAlert = async (id: OpsAlertId, context: Record<string, unknown>)
 
 const OPS_ALERT_DEDUPE_TTL_SECONDS = 86_400;
 
-// 재시도·일일 재조정이 같은 사실을 반복 보고하면 실제 신규 발생이 그 안에 묻힌다 — id·키 당 하루 1회로 접는다.
+// 재시도·일일 재조정이 같은 사실을 반복 보고하면 실제 신규 발생이 그 안에 묻힌다 — id·키 당 기본 하루 1회로 접는다.
 // 레디스 실패는 알람 발화 쪽으로 폴백한다(디듀프 저장소 장애가 관측을 없애서는 안 된다).
-export const opsAlertOnce = async (id: OpsAlertId, dedupeKey: string, context: Record<string, unknown>) => {
+export const opsAlertOnce = async (
+  id: OpsAlertId,
+  dedupeKey: string,
+  context: Record<string, unknown>,
+  ttlSeconds = OPS_ALERT_DEDUPE_TTL_SECONDS,
+) => {
   let acquired: boolean;
 
   try {
-    acquired = (await redis.set(`ops-alert-dedupe:${id}:${dedupeKey}`, '1', 'EX', OPS_ALERT_DEDUPE_TTL_SECONDS, 'NX')) === 'OK';
+    acquired = (await redis.set(`ops-alert-dedupe:${id}:${dedupeKey}`, '1', 'EX', ttlSeconds, 'NX')) === 'OK';
   } catch {
     acquired = true;
   }

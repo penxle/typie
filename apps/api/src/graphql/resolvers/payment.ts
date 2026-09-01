@@ -75,6 +75,9 @@ import {
 import type { Database, Transaction } from '#/db/index.ts';
 import type { IapEnrollOwnership, IapEnrollRejection } from '#/utils/iap-enroll.ts';
 
+// 막는 계약의 결제 주기(최장 1년)를 덮어야 주기 종료 키와 합쳐 주기당 1회가 된다.
+const LIVE_CONTRACT_ALERT_DEDUPE_TTL_SECONDS = 400 * 86_400;
+
 /**
  * * Types
  */
@@ -1008,12 +1011,25 @@ builder.mutationFields((t) => ({
             }
 
             if (contract.kind === 'live') {
-              await opsAlert('iap-live-contract-enroll-rejected', {
-                ...alertContext,
-                liveBindingId: stale.id,
-                liveStore: stale.store,
-                liveIdentifier: stale.identifier,
-              });
+              const liveCanonical = canonicalOf(stale);
+              if (!liveCanonical) {
+                throw new Error(`in-app purchase live binding canonical vanished: ${bindingId}`);
+              }
+
+              const livePeriodEndsAt = liveCanonical.currentPeriodEndsAt.toISOString();
+
+              await opsAlertOnce(
+                'iap-live-contract-enroll-rejected',
+                `${input.store}:${input.data}:${stale.id}:${livePeriodEndsAt}`,
+                {
+                  ...alertContext,
+                  liveBindingId: stale.id,
+                  liveStore: stale.store,
+                  liveIdentifier: stale.identifier,
+                  livePeriodEndsAt,
+                },
+                LIVE_CONTRACT_ALERT_DEDUPE_TTL_SECONDS,
+              );
 
               throw new TypieError({ code: 'subscription_already_exists' });
             }
