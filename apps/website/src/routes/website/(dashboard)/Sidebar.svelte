@@ -40,10 +40,9 @@
 
   type Props = {
     user$key: DashboardLayout_Sidebar_user$key;
-    changelogSuppressed: boolean;
   };
 
-  let { user$key, changelogSuppressed }: Props = $props();
+  let { user$key }: Props = $props();
 
   const app = getAppContext();
   const dayClock = getDayClock();
@@ -806,7 +805,7 @@
     <Profile user$key={user.data} bind:open={profileOpen} />
   </div>
 
-  <ChangelogPopover suppressed={changelogSuppressed} />
+  <ChangelogPopover />
 
   <div
     class={css({

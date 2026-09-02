@@ -26,7 +26,6 @@
   import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { cleanupBrowserPushForLogout, getBrowserPushManager } from '$lib/push';
-  import { isLegacyTrial, shouldShowOnboarding } from '$lib/subscription-logic';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
@@ -47,7 +46,6 @@
   import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
   import StatsModal from './@stats/StatsModal.svelte';
   import OnboardingModal from './@subscription/OnboardingModal.svelte';
-  import PlanChangeNoticeModal from './@subscription/PlanChangeNoticeModal.svelte';
   import { SubscribeModal as SubscribeModalState } from './@subscription/subscribe-modal.svelte';
   import SubscribeModal from './@subscription/SubscribeModal.svelte';
   import TrashModal from './@trash/TrashModal.svelte';
@@ -55,15 +53,16 @@
   import CommandPalette from './CommandPalette.svelte';
   import { setupDayClock } from './day-clock.svelte';
   import FeedbackModal from './FeedbackModal.svelte';
+  import { selectIntro } from './intro';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import { setupNoteContext } from './note-context.svelte';
-  import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import ShortcutsModal from './ShortcutsModal.svelte';
   import Sidebar from './Sidebar.svelte';
   import TrialExpiredModal from './TrialExpiredModal.svelte';
-  import { USER_SURVEY_NAME, USER_SURVEY_SNOOZE_KEY } from './user-survey';
+  import { USER_SURVEY_SNOOZE_KEY } from './user-survey';
   import UserSurveyModal from './UserSurveyModal.svelte';
+  import type { IntroKind } from './intro';
 
   let { data, children } = $props();
 
@@ -75,15 +74,6 @@
 
   let prismNotifications: ReturnType<typeof createPrismNotifications> | undefined;
   const startPrismNewChat = (draft: string) => void prismPanel?.startNewChat('command_palette', draft);
-
-  const legacyTrial = $derived(
-    query.data.me.subscription
-      ? isLegacyTrial({
-          availability: query.data.me.subscription.plan.availability,
-          startsAt: query.data.me.subscription.startsAt,
-        })
-      : false,
-  );
 
   let currentSite = $derived(query.data.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data.me.sites[0]);
   let siteId = $derived(currentSite.id);
@@ -401,21 +391,7 @@
     return desktop?.on('preference', () => pushState('', { shallowRoute: '/preference/profile' }));
   });
 
-  let onboardingModalOpen = $state(false);
-  let referralWelcomeModalOpen = $state(false);
-  let marketingConsentModalOpen = $state(false);
-  let userSurveyModalOpen = $state(false);
-  let trialExpiredModalOpen = $state(false);
-  let planChangeNoticeModalOpen = $state(false);
-
-  const introModalOpen = $derived(
-    onboardingModalOpen ||
-      referralWelcomeModalOpen ||
-      marketingConsentModalOpen ||
-      trialExpiredModalOpen ||
-      planChangeNoticeModalOpen ||
-      userSurveyModalOpen,
-  );
+  let intro = $state<IntroKind | null>(null);
 
   const textReplacementRulesJson = $derived.by(() =>
     stringify(
@@ -484,66 +460,40 @@
 
   onMount(() => {
     const open = page.url.searchParams.get('open');
+    const prism = page.url.searchParams.get('prism');
 
-    if (!open) {
-      return;
+    if (open !== null || prism !== null) {
+      const url = new URL(page.url);
+      url.searchParams.delete('open');
+      url.searchParams.delete('prism');
+      replaceState(url, page.state);
     }
 
-    const url = new URL(page.url);
-    url.searchParams.delete('open');
-    replaceState(url, {});
+    let deepLink = false;
 
     if (open === 'subscribe') {
       SubscribeModalState.show('desktop_open_param');
-    } else if (open.startsWith('preference/')) {
+      deepLink = true;
+    } else if (open?.startsWith('preference/')) {
       pushState('', { shallowRoute: `/${open}` });
-    }
-  });
-
-  $effect(() => {
-    const sessionId = page.url.searchParams.get('prism');
-
-    if (!sessionId) {
-      return;
+      deepLink = true;
     }
 
-    untrack(() => {
-      requestSessionJump(sessionId);
+    if (prism) {
+      requestSessionJump(prism);
+      deepLink = true;
+    }
 
-      const url = new URL(page.url);
-      url.searchParams.delete('prism');
-      replaceState(url, page.state);
+    intro = selectIntro({
+      now: dayjs(),
+      deepLink,
+      createdAt: query.data.me.createdAt,
+      preferences: query.data.me.preferences,
+      surveys: query.data.me.surveys,
+      marketingConsentAskedAt: query.data.me.marketingConsentAskedAt ?? null,
+      totalCharacterCount: query.data.me.usage.totalCharacterCount,
+      userSurveySnoozedUntil: localStorage.getItem(USER_SURVEY_SNOOZE_KEY),
     });
-  });
-
-  onMount(() => {
-    if (shouldShowOnboarding({ createdAt: query.data.me.createdAt, preferences: query.data.me.preferences, now: dayjs() })) {
-      onboardingModalOpen = true;
-    } else if (legacyTrial && !app.preference.current.planChangeNoticeShown) {
-      app.preference.current.planChangeNoticeShown = true;
-      planChangeNoticeModalOpen = true;
-    } else if (query.data.me.referral && !app.preference.current.referralWelcomeModalShown) {
-      referralWelcomeModalOpen = true;
-      app.preference.current.referralWelcomeModalShown = true;
-    } else if (query.data.me.surveys.includes('trial_expired_modal')) {
-      trialExpiredModalOpen = true;
-    } else if (query.data.me.marketingConsentAskedAt === null && query.data.me.usage.totalCharacterCount >= 100) {
-      marketingConsentModalOpen = true;
-    }
-
-    const skipUntil = localStorage.getItem(USER_SURVEY_SNOOZE_KEY);
-    const shouldShowSurvey = query.data.me.surveys.includes(USER_SURVEY_NAME) && (!skipUntil || new Date(skipUntil) < new Date());
-
-    if (
-      shouldShowSurvey &&
-      !onboardingModalOpen &&
-      !referralWelcomeModalOpen &&
-      !marketingConsentModalOpen &&
-      !trialExpiredModalOpen &&
-      !planChangeNoticeModalOpen
-    ) {
-      userSurveyModalOpen = true;
-    }
 
     if (query.data.me.preferences.initialPage) {
       app.preference.current.initialPage = query.data.me.preferences.initialPage;
@@ -683,7 +633,7 @@
         overflow: 'hidden',
       })}
     >
-      <Sidebar changelogSuppressed={introModalOpen} user$key={query.data.me} />
+      <Sidebar user$key={query.data.me} />
 
       <div
         class={flex({
@@ -738,12 +688,15 @@
 
 <SubscribeModal user$key={query.data.me} />
 
-<OnboardingModal bind:open={onboardingModalOpen} />
-<ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
-<MarketingConsentModal bind:open={marketingConsentModalOpen} />
-<TrialExpiredModal user$key={query.data.me} bind:open={trialExpiredModalOpen} />
-<UserSurveyModal bind:open={userSurveyModalOpen} />
-<PlanChangeNoticeModal bind:open={planChangeNoticeModalOpen} />
+{#if intro === 'onboarding'}
+  <OnboardingModal onclose={() => (intro = null)} referral={Boolean(query.data.me.referral)} />
+{:else if intro === 'trial_expired'}
+  <TrialExpiredModal onclose={() => (intro = null)} user$key={query.data.me} />
+{:else if intro === 'user_survey'}
+  <UserSurveyModal onclose={() => (intro = null)} />
+{:else if intro === 'marketing_consent'}
+  <MarketingConsentModal onclose={() => (intro = null)} />
+{/if}
 
 <div
   class={cx(

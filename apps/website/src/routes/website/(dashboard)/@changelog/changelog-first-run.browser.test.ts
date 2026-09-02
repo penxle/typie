@@ -49,7 +49,7 @@ describe('changelog popover first run', () => {
 
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(ChangelogPopover, { target, props: { suppressed: false }, intro: false });
+    component = mount(ChangelogPopover, { target, intro: false });
 
     await vi.waitFor(() => expect(app.preference.current.changelogSeenId).toBe('c9'));
 
@@ -66,7 +66,7 @@ describe('changelog popover first run', () => {
 
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(ChangelogPopover, { target, props: { suppressed: false }, intro: false });
+    component = mount(ChangelogPopover, { target, intro: false });
 
     await vi.waitFor(() => expect(target.querySelectorAll('button').length).toBeGreaterThan(0));
 

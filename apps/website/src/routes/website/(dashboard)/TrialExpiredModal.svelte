@@ -5,6 +5,7 @@
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
   import mixpanel from 'mixpanel-browser';
+  import { onMount } from 'svelte';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
   import CrownIcon from '~icons/lucide/crown';
   import GiftIcon from '~icons/lucide/gift';
@@ -17,11 +18,11 @@
   import type { DashboardLayout_TrialExpiredModal_user$key } from '$mearie';
 
   type Props = {
-    open: boolean;
     user$key: DashboardLayout_TrialExpiredModal_user$key;
+    onclose: () => void;
   };
 
-  let { open = $bindable(false), user$key }: Props = $props();
+  let { user$key, onclose }: Props = $props();
 
   const user = createFragment(
     graphql(`
@@ -55,19 +56,17 @@
   async function handleClose() {
     await markAsShown();
     mixpanel.track('dismiss_trial_expired_modal');
-    open = false;
+    onclose();
   }
 
   async function handleUpgrade() {
     await markAsShown();
-    open = false;
+    onclose();
     SubscribeModal.show('trial_expired_modal');
   }
 
-  $effect(() => {
-    if (open) {
-      mixpanel.track('view_trial_expired_modal');
-    }
+  onMount(() => {
+    mixpanel.track('view_trial_expired_modal');
   });
 </script>
 
@@ -78,7 +77,7 @@
     maxWidth: '400px',
   })}
   closable={false}
-  bind:open
+  open={true}
 >
   <div
     class={flex({

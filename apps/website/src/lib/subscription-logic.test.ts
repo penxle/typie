@@ -1,13 +1,6 @@
 import dayjs from 'dayjs';
 import { describe, expect, it } from 'vitest';
-import {
-  isLegacyTrial,
-  shouldShowOnboarding,
-  shouldShowTrialReminder,
-  trialDaysLeft,
-  trialReminderLabel,
-  trialStatusLabel,
-} from './subscription-logic';
+import { shouldShowOnboarding, shouldShowTrialReminder, trialDaysLeft, trialReminderLabel, trialStatusLabel } from './subscription-logic';
 
 describe('shouldShowOnboarding', () => {
   const createdAt = '2026-07-23T00:00:00+09:00';
@@ -45,16 +38,12 @@ describe('trialDaysLeft', () => {
 });
 
 describe('trialStatusLabel', () => {
-  it('일반 트라이얼은 무료 체험 문구를 쓴다', () => {
-    expect(trialStatusLabel(3, false)).toBe('무료 체험 중 · 3일 남음');
+  it('남은 일수를 무료 체험 문구로 만든다', () => {
+    expect(trialStatusLabel(3)).toBe('무료 체험 중 · 3일 남음');
   });
 
   it('종료 당일은 오늘 종료로 표기한다', () => {
-    expect(trialStatusLabel(0, false)).toBe('무료 체험 중 · 오늘 종료');
-  });
-
-  it('레거시 트라이얼은 무료 이용 기간 문구를 쓴다', () => {
-    expect(trialStatusLabel(2, true)).toBe('무료 이용 기간 · 2일 남음');
+    expect(trialStatusLabel(0)).toBe('무료 체험 중 · 오늘 종료');
   });
 });
 
@@ -77,33 +66,11 @@ describe('shouldShowTrialReminder', () => {
 });
 
 describe('trialReminderLabel', () => {
-  it('일반 트라이얼 문구', () => {
-    expect(trialReminderLabel(3, false)).toBe('무료 체험이 3일 뒤 끝나요.');
+  it('남은 일수 문구', () => {
+    expect(trialReminderLabel(3)).toBe('무료 체험이 3일 뒤 끝나요.');
   });
 
   it('종료 당일 문구', () => {
-    expect(trialReminderLabel(0, false)).toBe('무료 체험이 오늘 끝나요.');
-  });
-
-  it('레거시 문구', () => {
-    expect(trialReminderLabel(1, true)).toBe('무료 이용 기간이 1일 뒤 끝나요.');
-  });
-});
-
-describe('isLegacyTrial', () => {
-  it('컷오프 이전 시작 트라이얼은 레거시다', () => {
-    expect(isLegacyTrial({ availability: 'TRIAL', startsAt: '2026-07-12T00:00:00+09:00' })).toBe(true);
-  });
-
-  it('컷오프 시각 정각도 레거시다', () => {
-    expect(isLegacyTrial({ availability: 'TRIAL', startsAt: '2026-07-13T00:00:00+09:00' })).toBe(true);
-  });
-
-  it('컷오프 이후 시작은 레거시가 아니다', () => {
-    expect(isLegacyTrial({ availability: 'TRIAL', startsAt: '2026-07-13T00:00:01+09:00' })).toBe(false);
-  });
-
-  it('트라이얼이 아니면 레거시가 아니다', () => {
-    expect(isLegacyTrial({ availability: 'BILLING_KEY', startsAt: '2026-07-01T00:00:00+09:00' })).toBe(false);
+    expect(trialReminderLabel(0)).toBe('무료 체험이 오늘 끝나요.');
   });
 });

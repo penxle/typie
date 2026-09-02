@@ -11,10 +11,11 @@
   import { graphql } from '$mearie';
 
   type Props = {
-    open: boolean;
+    referral: boolean;
+    onclose: () => void;
   };
 
-  let { open = $bindable(false) }: Props = $props();
+  let { referral, onclose }: Props = $props();
 
   const theme = getThemeContext();
 
@@ -40,12 +41,14 @@
     features_dark: () => import('$assets/lottie/onboarding_features_dark.json'),
   };
 
-  const pages: { asset: LottieAsset; loop: boolean; heroFraction: number; title: string; subtitle: string }[] = [
+  type Page = { asset: LottieAsset; loop: boolean; heroFraction: number; title: string; subtitle: string };
+
+  const pages: Page[] = $derived([
     {
       asset: 'logo',
       loop: false,
       heroFraction: 0.55,
-      title: '타이피에 오신 걸 환영해요',
+      title: referral ? '친구 초대로 가입하셨네요!' : '타이피에 오신 걸 환영해요',
       subtitle: '떠오른 순간을 놓치지 않도록,\n언제 어디서나 편안하게 글을 이어 써보세요.',
     },
     {
@@ -60,11 +63,13 @@
       loop: true,
       heroFraction: 1,
       title: '14일 무료 체험이 시작됐어요',
-      subtitle: '타이피의 모든 기능을 이용할 수 있어요.\n지금 바로 첫 글을 시작해보세요.',
+      subtitle: referral
+        ? '2,900원 구독 캐시 혜택도 받았어요.\n플랜을 업그레이드하면 나를 초대한 친구도 1달 무료 혜택을 받아요.'
+        : '타이피의 모든 기능을 이용할 수 있어요.\n지금 바로 첫 글을 시작해보세요.',
     },
-  ];
+  ]);
 
-  const dotIndices = pages.map((_, i) => i);
+  const dotIndices = $derived(pages.map((_, i) => i));
 
   let index = $state(0);
   let direction = $state(1);
@@ -84,7 +89,7 @@
 
   $effect(() => {
     const container = lottieContainer;
-    if (!container || !open) {
+    if (!container) {
       return;
     }
 
@@ -115,17 +120,17 @@
   });
 
   const complete = () => {
-    open = false;
-    mixpanel.track('complete_onboarding');
+    mixpanel.track('complete_onboarding', { referral });
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     updatePreferences({ input: { value: { webOnboardingCompletedAt: dayjs().toISOString() } } }).catch(() => {});
+    onclose();
   };
 </script>
 
 <Modal
   style={css.raw({ alignItems: 'center', paddingTop: '26px', paddingX: '28px', paddingBottom: '22px', maxWidth: '400px' })}
   closable={false}
-  bind:open
+  open={true}
 >
   <button
     class={css({
@@ -158,7 +163,7 @@
       _hover: { color: 'text.muted' },
     })}
     onclick={() => {
-      mixpanel.track('skip_onboarding');
+      mixpanel.track('skip_onboarding', { referral });
       goTo(pages.length - 1);
     }}
     type="button"
