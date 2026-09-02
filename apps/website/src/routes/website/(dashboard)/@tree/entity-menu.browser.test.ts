@@ -114,16 +114,23 @@ describe('entity tree menu trigger', () => {
       document.body.tabIndex = -1;
       document.body.focus();
       await userEvent.unhover(target);
+
+      const outro: Animation[] = [];
+      const animate = floating.animate.bind(floating);
+      vi.spyOn(floating, 'animate').mockImplementation((keyframes, options) => {
+        const animation = animate(keyframes, options);
+        if ((typeof options === 'number' ? options : options?.duration) !== 0) {
+          animation.pause();
+          outro.push(animation);
+        }
+        return animation;
+      });
+
       await userEvent.keyboard('{Escape}');
       document.body.focus();
-
-      const outro = floating.getAnimations();
-      expect(outro.length).toBeGreaterThan(0);
-      for (const animation of outro) animation.pause();
-
+      await vi.waitFor(() => expect(outro.length).toBeGreaterThan(0), { timeout: 1000 });
       await tick();
       await frame();
-
       expect(button.getAttribute('aria-expanded')).toBe('false');
       expect(menu.isConnected).toBe(true);
       expect(floating.isConnected).toBe(true);
