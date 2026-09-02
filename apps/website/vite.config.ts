@@ -67,6 +67,7 @@ export const createConfig = ({ mode }: Pick<ConfigEnv, 'mode'>) => ({
     wasmReloadPlugin(),
   ],
   optimizeDeps: {
+    include: ['@mearie/core'],
     exclude: ['@typie/editor-ffi', '@typie/prism-ui', '@typie/prism-ui-web'],
   },
   ...(mode === 'test' && { resolve: { conditions: [...defaultClientConditions] } }),
