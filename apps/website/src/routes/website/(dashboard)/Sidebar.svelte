@@ -32,7 +32,6 @@
   import { setupTreeContext } from './@tree/state.svelte';
   import { getEntityTreeElement } from './@tree/utils';
   import { getDayClock } from './day-clock.svelte';
-  import FeedbackPopover from './FeedbackPopover.svelte';
   import Profile from './Profile.svelte';
   import { resolveSidebarNavigationDrag, resolveSidebarNavigationGeometry } from './sidebar-navigation-resize';
   import SpaceMenu from './SpaceMenu.svelte';
@@ -802,10 +801,6 @@
     </div>
 
     <TrialWidget user$key={user.data} />
-
-    <div class={css({ paddingX: '12px', paddingTop: '4px' })}>
-      <FeedbackPopover />
-    </div>
 
     <!-- 프로필 -->
     <Profile user$key={user.data} bind:open={profileOpen} />
