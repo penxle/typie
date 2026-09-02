@@ -231,7 +231,7 @@ fn generate_method(
     match &method.return_type {
         FfiReturnType::Unit => {
             emit_pre_call_conversions(w, &method.params);
-            w.line(&format!("{}", native_call));
+            w.line(&native_call);
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
         }
         FfiReturnType::Complex(_) => {
@@ -534,7 +534,7 @@ mod tests {
                 FfiReturnType::Unit,
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             output.contains(
                 "NSData.create(bytes = allocArrayOf(data), length = data.size.toULong())"
@@ -563,7 +563,7 @@ mod tests {
                 ),
             ],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("memScoped {"));
         assert!(output.contains("alloc<ObjCObjectVar<NSError?>>()"));
         assert!(
@@ -600,7 +600,7 @@ mod tests {
             name: "EditorHost".into(),
             methods: vec![],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("package co.typie.editor.ffi"));
         assert!(output.contains("import kotlinx.cinterop.memScoped"));
         assert!(output.contains("import platform.Foundation.NSError"));
@@ -635,7 +635,7 @@ mod tests {
                 make_method("tick", vec![], FfiReturnType::Unit),
             ],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             !output.contains("override fun create("),
             "Constructor should not be an override method:\n{}",
@@ -659,7 +659,7 @@ mod tests {
                 return_type: FfiReturnType::Owned("EditorHost".into()),
             }],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             output.contains("companion object"),
             "Expected companion object:\n{}",
@@ -728,7 +728,7 @@ mod tests {
                 return_type: FfiReturnType::Owned("EditorHost".into()),
             }],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             output.contains("memScoped {"),
             "Expected memScoped block for ByteArray conversion:\n{}",
@@ -756,7 +756,7 @@ mod tests {
                 FfiReturnType::Vec(FfiScalarReturn::Complex("EditorEvent".into())),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("@Suppress(\"UNCHECKED_CAST\")"));
         assert!(output.contains("result!! as List<String>"));
         assert!(output.contains(".map { decodeEditorPayload(it) }"));
@@ -772,7 +772,7 @@ mod tests {
                 FfiReturnType::Vec(FfiScalarReturn::Primitive("String".into())),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             output.contains("override fun changesetIds(): List<String>"),
             "Expected List<String> return signature:\n{}",
@@ -800,7 +800,7 @@ mod tests {
                 FfiReturnType::Vec(FfiScalarReturn::Primitive("u8".into())),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             output.contains("result!!.toByteArray()"),
             "Expected NSData→ByteArray conversion call:\n{}",
@@ -829,7 +829,7 @@ mod tests {
             name: "EditorHost".into(),
             methods: vec![make_method("tick", vec![], FfiReturnType::Unit)],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(
             !output.contains("private fun NSData.toByteArray"),
             "Helper should be omitted when no Vec<u8> return:\n{}",
@@ -852,7 +852,7 @@ mod tests {
                 FfiReturnType::Option(FfiScalarReturn::Complex("CursorMetrics".into())),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("result?.let { decodeEditorPayload(it) }"));
     }
 
@@ -866,7 +866,7 @@ mod tests {
                 FfiReturnType::Primitive("bool".into()),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("val result = native.cursorHitTestWithError(error = error.ptr)"));
         assert!(output.contains("error.value?.let { throw EditorException(it.localizedDescription) }\n            result"));
         assert!(!output.contains("boolValue"));
@@ -883,7 +883,7 @@ mod tests {
                 FfiReturnType::Option(FfiScalarReturn::Primitive("bool".into())),
             )],
         };
-        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("result?.boolValue"));
     }
 }

@@ -198,10 +198,11 @@ fn map_type_path(
     let last = segments.last().expect("empty path");
     let ident = last.ident.to_string();
 
-    if segments.len() == 1 && last.arguments.is_none() {
-        if let Some(target) = custom_types.get(&ident) {
-            return map_type(target, custom_types, known_types);
-        }
+    if segments.len() == 1
+        && last.arguments.is_none()
+        && let Some(target) = custom_types.get(&ident)
+    {
+        return map_type(target, custom_types, known_types);
     }
 
     if segments.len() == 1 && last.arguments.is_none() {
@@ -498,43 +499,38 @@ fn generate_sealed_class(
                 w.line("");
                 w.line(&format!("@Serializable @SerialName(\"{}\")", serial_name));
 
-                if tys.len() == 1 {
-                    if let Some(inner_meta) = ctx.meta_map.get(tys[0].as_str()) {
-                        if let FfiKind::Struct { fields } = &inner_meta.kind {
-                            let rename_all = inner_meta.serde_rename_all.as_deref();
-                            if fields.is_empty() {
-                                w.line(&format!(
-                                    "data object {} : {}()",
-                                    name, parent_with_nothing
-                                ));
-                            } else {
-                                let params = fields
-                                    .iter()
-                                    .map(|f| {
-                                        let kt_name = f.name.to_lower_camel_case();
-                                        let kt_type =
-                                            map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
-                                        let sn = apply_field_rename(f, rename_all);
-                                        let default_part = if f.has_serde_default {
-                                            format!(" = {}", resolve_default(f, &kt_type, ctx))
-                                        } else {
-                                            String::new()
-                                        };
-                                        format!(
-                                            "@SerialName(\"{}\") val {}: {}{}",
-                                            sn, kt_name, kt_type, default_part
-                                        )
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                w.line(&format!(
-                                    "data class {}{}({}) : {}()",
-                                    name, variant_decl, params, parent_with_self
-                                ));
-                            }
-                            continue;
-                        }
+                if tys.len() == 1
+                    && let Some(inner_meta) = ctx.meta_map.get(tys[0].as_str())
+                    && let FfiKind::Struct { fields } = &inner_meta.kind
+                {
+                    let rename_all = inner_meta.serde_rename_all.as_deref();
+                    if fields.is_empty() {
+                        w.line(&format!("data object {} : {}()", name, parent_with_nothing));
+                    } else {
+                        let params = fields
+                            .iter()
+                            .map(|f| {
+                                let kt_name = f.name.to_lower_camel_case();
+                                let kt_type = map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
+                                let sn = apply_field_rename(f, rename_all);
+                                let default_part = if f.has_serde_default {
+                                    format!(" = {}", resolve_default(f, &kt_type, ctx))
+                                } else {
+                                    String::new()
+                                };
+                                format!(
+                                    "@SerialName(\"{}\") val {}: {}{}",
+                                    sn, kt_name, kt_type, default_part
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        w.line(&format!(
+                            "data class {}{}({}) : {}()",
+                            name, variant_decl, params, parent_with_self
+                        ));
                     }
+                    continue;
                 }
 
                 if tys.len() == 1 {
@@ -778,7 +774,7 @@ mod tests {
     #[test]
     fn default_collections_use_empty_factories() {
         let ctx = test_context(&[]);
-        let fields = vec![
+        let fields = [
             FfiField {
                 name: "attrs".into(),
                 serde_rename: None,
@@ -1139,7 +1135,7 @@ mod tests {
             },
             &ctx,
         );
-        assert!(output.contains("sealed interface Affinity {") == false);
+        assert!(!output.contains("sealed interface Affinity {"));
         assert!(output.contains("enum class Affinity {"));
         assert!(output.contains("@SerialName(\"Downstream\") Downstream,"));
         assert!(output.contains("@SerialName(\"Upstream\") Upstream,"));

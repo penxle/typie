@@ -359,11 +359,15 @@ mod tests {
             full_sink.read_back_rect(&mut expect, rw * 4, r);
 
             assert!(
-                expect.chunks_exact(4).any(|px| px[3] != 0),
+                expect.as_chunks::<4>().0.iter().any(|px| px[3] != 0),
                 "expected non-zero pixels near boundary rect {r:?}, oracle would vacuously pass"
             );
             assert!(
-                expect.chunks_exact(4).any(|px| px[3] != 0 && px[3] != 255),
+                expect
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|px| px[3] != 0 && px[3] != 255),
                 "expected AA (0<alpha<255) pixels near boundary rect {r:?}, oracle would vacuously pass"
             );
 

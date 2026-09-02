@@ -33,7 +33,7 @@ impl FontManifest {
         let mut per_chunk: Vec<Vec<u32>> = vec![Vec::new(); chunk_count as usize];
         for (idx, ranges) in coverages.iter().enumerate() {
             let bucket = &mut per_chunk[idx];
-            for pair in ranges.chunks_exact(2) {
+            for pair in ranges.as_chunks::<2>().0 {
                 for cp in pair[0]..=pair[1] {
                     bucket.push(cp);
                 }
@@ -312,8 +312,10 @@ impl FontManifest {
             return Err(err("sup length mismatch"));
         }
         let chunk_map_sup: Vec<u32> = data[sup_start..sup_end]
-            .chunks_exact(4)
-            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| u32::from_le_bytes(*b))
             .collect();
 
         if !chunk_map.is_empty() {
@@ -339,7 +341,7 @@ impl FontManifest {
             return Err(err("sup not pairs"));
         }
         let mut prev: Option<u32> = None;
-        for pair in chunk_map_sup.chunks_exact(2) {
+        for pair in chunk_map_sup.as_chunks::<2>().0 {
             if !(0x10000..=0x10FFFF).contains(&pair[0]) {
                 return Err(err("sup key out of supplementary range"));
             }
@@ -367,8 +369,10 @@ impl FontManifest {
             }
             let num_glyphs = u16::from_le_bytes(data[sup_end..num_glyphs_end].try_into().unwrap());
             let offsets: Vec<usize> = data[num_glyphs_end..offsets_end]
-                .chunks_exact(4)
-                .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|bytes| u32::from_le_bytes(*bytes) as usize)
                 .collect();
             let entry_count = *offsets.last().expect("glyph offsets include the end");
             let glyphs_end = offsets_end
@@ -381,8 +385,10 @@ impl FontManifest {
                 return Err(err("invalid glyph offsets"));
             }
             let glyphs: Vec<u16> = data[offsets_end..glyphs_end]
-                .chunks_exact(2)
-                .map(|bytes| u16::from_le_bytes(bytes.try_into().unwrap()))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|bytes| u16::from_le_bytes(*bytes))
                 .collect();
             let glyph_chunks: Vec<Vec<u16>> = offsets
                 .windows(2)

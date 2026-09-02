@@ -425,7 +425,7 @@ fn validate_coverages(coverages: &[Vec<u32>]) -> Result<(), ServerError> {
         if ranges.len() % 2 != 0 {
             return Err(ServerError::InvalidFont("coverage odd tail".into()));
         }
-        for pair in ranges.chunks_exact(2) {
+        for pair in ranges.as_chunks::<2>().0 {
             if pair[0] > pair[1] || pair[1] > 0x10FFFF {
                 return Err(ServerError::InvalidFont(format!(
                     "invalid coverage range: {}..={}",
