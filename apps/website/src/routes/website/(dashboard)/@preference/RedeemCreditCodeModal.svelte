@@ -68,6 +68,7 @@
       <TextInput
         id="code"
         style={css.raw({ width: 'full', textTransform: 'uppercase' })}
+        autofocus
         oninput={(e) => {
           e.currentTarget.value = e.currentTarget.value.toUpperCase();
         }}

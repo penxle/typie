@@ -301,7 +301,7 @@
     ></div>
   </div>
 
-  <Tooltip style={css.raw({ position: 'absolute', top: '14px', right: '14px' })} message="30일 뒤에 다시 물어요" placement="bottom">
+  <Tooltip style={css.raw({ position: 'absolute', top: '14px', right: '14px' })} message="30일 뒤에 다시 물어요" placement="top">
     <button
       class={css({
         display: 'flex',

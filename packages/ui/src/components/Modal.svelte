@@ -42,8 +42,17 @@
   };
 
   let trapEl = $state<HTMLElement>();
+  let dialogEl = $state<HTMLElement>();
   let previouslyFocused: HTMLElement | null = null;
-  let initialFocusVisible = $state(false);
+
+  const initialFocus = () => {
+    const active = document.activeElement;
+    if (trapEl && active instanceof HTMLElement && trapEl.contains(active)) {
+      return active;
+    }
+
+    return dialogEl;
+  };
 
   // 자식 컴포넌트가 focus-trap 활성화 전에 포커스를 가져가면(예: Notes의 textarea autofocus),
   // focus-trap이 잘못된 엘리먼트를 캡처한다. $effect.pre는 DOM 렌더 전에 실행되므로
@@ -52,7 +61,6 @@
     if (open) {
       if (!previouslyFocused) {
         previouslyFocused = document.activeElement as HTMLElement | null;
-        initialFocusVisible = previouslyFocused?.matches(':focus-visible') ?? false;
       }
     } else {
       if (trapEl) {
@@ -60,7 +68,6 @@
         previouslyFocused?.focus();
       }
       previouslyFocused = null;
-      initialFocusVisible = false;
     }
   });
 
@@ -83,12 +90,12 @@
     style:padding={`${overlayPadding}px`}
     class={center({ position: 'fixed', inset: '0', zIndex: 'modal', userSelect: 'none' })}
     use:focusTrap={{
+      initialFocus,
       fallbackFocus: '[role="none"]',
       escapeDeactivates: false,
       returnFocusOnDeactivate: true,
       allowOutsideClick: true, // NOTE: downloadFromBase64 등 외부 클릭 허용
       ...focusTrapOptions,
-      initialFocusOptions: { focusVisible: initialFocusVisible },
     }}
     use:portal
   >
@@ -115,6 +122,7 @@
       <RingSpinner style={css.raw({ position: 'absolute', size: '40px', color: 'text.faint' })} />
     {:else}
       <div
+        bind:this={dialogEl}
         class={css(
           {
             position: 'relative',
@@ -128,6 +136,7 @@
             backgroundColor: 'surface.default',
             boxShadow: 'modal',
             overflowY: 'auto',
+            outlineWidth: '0',
             userSelect: 'text',
           },
           style,

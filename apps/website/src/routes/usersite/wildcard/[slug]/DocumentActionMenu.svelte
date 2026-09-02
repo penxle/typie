@@ -93,7 +93,11 @@
     {/if}
   </Menu>
 
-  <Modal style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })} bind:open={reportDocumentOpen}>
+  <Modal
+    style={css.raw({ gap: '24px', padding: '20px', maxWidth: '500px' })}
+    focusTrapOptions={{ initialFocus: '#reason' }}
+    bind:open={reportDocumentOpen}
+  >
     <p class={css({ fontWeight: 'medium', textAlign: 'center' })}>문서 신고</p>
 
     <form class={css({ display: 'flex', flexDirection: 'column', gap: '8px' })} onsubmit={form.handleSubmit}>
