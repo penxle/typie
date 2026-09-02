@@ -19,6 +19,7 @@
   import KeyboardIcon from '~icons/lucide/keyboard';
   import LogOutIcon from '~icons/lucide/log-out';
   import MessageCircleQuestionIcon from '~icons/lucide/message-circle-question';
+  import MessageSquareIcon from '~icons/lucide/message-square';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import NewspaperIcon from '~icons/lucide/newspaper';
@@ -339,6 +340,31 @@
             <span>고객센터</span>
             <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
           </a>
+
+          <button
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.default',
+              transition: 'common',
+              cursor: 'pointer',
+              _hover: { backgroundColor: 'surface.muted' },
+            })}
+            onclick={() => {
+              close();
+              app.state.feedbackOpen = true;
+              mixpanel.track('open_feedback_modal', { via: 'profile_menu' });
+            }}
+            type="button"
+          >
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={MessageSquareIcon} size={14} />
+            <span>의견 보내기</span>
+          </button>
 
           <!-- 더보기 서브메뉴 트리거 -->
           <div

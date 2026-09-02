@@ -54,6 +54,7 @@
   import WidgetGroup from './@widgets/WidgetGroup.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import { setupDayClock } from './day-clock.svelte';
+  import FeedbackModal from './FeedbackModal.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import { setupNoteContext } from './note-context.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
@@ -733,6 +734,7 @@
 <TrashModal siteId={currentSite.id} />
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />
+<FeedbackModal />
 
 <SubscribeModal user$key={query.data.me} />
 
