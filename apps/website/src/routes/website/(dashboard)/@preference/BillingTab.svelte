@@ -17,10 +17,12 @@
   import { isIndefinitePeriod } from '$lib/subscription-logic';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import { CANCELLATION_SURVEY_NAME } from './cancellation-survey';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
   import SubscriptionCancellationSurveyModal from './SubscriptionCancellationSurveyModal.svelte';
   import UpdatePaymentMethodModal from './UpdatePaymentMethodModal.svelte';
   import type { DashboardLayout_PreferenceModal_BillingTab_user$key } from '$mearie';
+  import type { CancellationReason, CancellationSurveyValue } from './cancellation-survey';
 
   type Props = {
     user$key: DashboardLayout_PreferenceModal_BillingTab_user$key;
@@ -189,11 +191,11 @@
   let redeemCreditCodeOpen = $state(false);
   let cancellationSurveyOpen = $state(false);
 
-  async function handleCancellationSurveySubmit(surveyData: unknown) {
+  async function handleCancellationSurveySubmit(value: CancellationSurveyValue) {
     await recordSurvey({
       input: {
-        name: 'subscription_cancellation_202510',
-        value: surveyData,
+        name: CANCELLATION_SURVEY_NAME,
+        value,
       },
     });
 
@@ -204,8 +206,12 @@
     cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'entitledUntil' });
     cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
 
-    mixpanel.track('cancel_plan', surveyData as Record<string, unknown>);
+    mixpanel.track('cancel_plan', { reason: value.reason, survey: CANCELLATION_SURVEY_NAME });
     Toast.success('구독이 해지되었어요');
+  }
+
+  function handleCancellationSurveyKeep(reason: CancellationReason) {
+    mixpanel.track('keep_plan', { reason, survey: CANCELLATION_SURVEY_NAME });
   }
 </script>
 
@@ -617,4 +623,10 @@
 
 <UpdatePaymentMethodModal user$key={user.data} bind:open={updatePaymentMethodOpen} />
 <RedeemCreditCodeModal bind:open={redeemCreditCodeOpen} />
-<SubscriptionCancellationSurveyModal onSubmit={handleCancellationSurveySubmit} user$key={user.data} bind:open={cancellationSurveyOpen} />
+<SubscriptionCancellationSurveyModal
+  onKeep={handleCancellationSurveyKeep}
+  onSubmit={handleCancellationSurveySubmit}
+  onUpdatePaymentMethod={() => (updatePaymentMethodOpen = true)}
+  user$key={user.data}
+  bind:open={cancellationSurveyOpen}
+/>

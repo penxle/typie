@@ -3,22 +3,36 @@
   import { SubscriptionState } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Modal } from '@typie/ui/components';
-  import { PLAN_FEATURES } from '@typie/ui/constants';
+  import { Button, HorizontalDivider, Icon, Menu, MenuItem, Modal } from '@typie/ui/components';
   import dayjs from 'dayjs';
+  import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import CheckIcon from '~icons/lucide/check';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import XIcon from '~icons/lucide/x';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import CircleQuestionMarkIcon from '~icons/lucide/circle-question-mark';
+  import CreditCardIcon from '~icons/lucide/credit-card';
+  import LightbulbIcon from '~icons/lucide/lightbulb';
+  import MoonIcon from '~icons/lucide/moon';
   import { graphql } from '$mearie';
+  import {
+    buildCancellationSurveyValue,
+    CANCELLATION_TEXT_PLACEHOLDER,
+    CANCELLATION_TEXT_PROMPT,
+    cancellationTextInput,
+    canSubmitCancellationSurvey,
+    orderCancellationReasons,
+  } from './cancellation-survey';
   import type { DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user$key } from '$mearie';
+  import type { CancellationReason, CancellationSurveyValue } from './cancellation-survey';
 
   type Props = {
     open: boolean;
     user$key: DashboardLayout_PreferenceModal_BillingTab_SubscriptionCancellationSurveyModal_user$key;
-    onSubmit: (data: unknown) => void;
+    onSubmit: (value: CancellationSurveyValue) => void;
+    onKeep: (reason: CancellationReason) => void;
+    onUpdatePaymentMethod: () => void;
   };
 
-  let { open = $bindable(false), user$key, onSubmit }: Props = $props();
+  let { open = $bindable(false), user$key, onSubmit, onKeep, onUpdatePaymentMethod }: Props = $props();
 
   const user = createFragment(
     graphql(`
@@ -28,59 +42,88 @@
           id
           state
           currentPeriodEndsAt
+          hasBillableUsage
         }
       }
     `),
     () => user$key,
   );
 
-  let currentStep = $state(0);
+  let reasons = $state(orderCancellationReasons());
+  let reason = $state<CancellationReason | null>(null);
+  let text = $state('');
 
-  let surveyData = $state<{ reasons: string[]; comment: string }>({
-    reasons: [],
-    comment: '',
+  const selected = $derived(reasons.find((option) => option.value === reason));
+  const submittable = $derived(canSubmitCancellationSurvey({ reason, text }));
+  const textInput = $derived(cancellationTextInput(reason));
+
+  const active = $derived(user.data.subscription?.state === SubscriptionState.ACTIVE);
+  const periodEndsAt = $derived(user.data.subscription ? dayjs(user.data.subscription.currentPeriodEndsAt).formatAsDate() : null);
+  const waivedNext = $derived(active && user.data.subscription?.hasBillableUsage === false);
+
+  const fieldStyle = css.raw({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    width: 'full',
+    height: '38px',
+    paddingX: '12px',
+    borderWidth: '1px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    textAlign: 'left',
+    backgroundColor: 'surface.default',
+    transition: 'common',
   });
 
-  const reasonOptions = [
-    { value: 'expensive', label: '가격이 부담스러워요' },
-    { value: 'lack_features', label: '필요한 기능이 부족해요' },
-    { value: 'low_usage', label: '사용 빈도가 낮아요' },
-    { value: 'switched', label: '다른 서비스를 사용하게 됐어요' },
-    { value: 'temporary', label: '일시적으로 사용하지 않아요' },
-    { value: 'quality', label: '서비스 품질/안정성에 불만이 있어요' },
-  ].toSorted(() => Math.random() - 0.5);
+  const labelStyle = css.raw({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' });
+  const calloutTitleStyle = css.raw({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' });
+  const calloutBodyStyle = css.raw({ marginTop: '2px', fontSize: '12px', color: 'text.faint', lineHeight: '[1.55]' });
+  const calloutIconStyle = css.raw({ flexShrink: '0', marginTop: '1px', color: 'text.subtle' });
+  const strongStyle = css.raw({ fontWeight: 'semibold', color: 'text.subtle' });
+  const linkStyle = css.raw({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    fontWeight: 'semibold',
+    color: 'text.subtle',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
+  });
 
-  function handleReasonToggle(value: string) {
-    if (surveyData.reasons.includes(value)) {
-      surveyData.reasons = surveyData.reasons.filter((r) => r !== value);
-    } else {
-      surveyData.reasons = [...surveyData.reasons, value];
-    }
-  }
-
-  function handleNext() {
-    if (currentStep === 0) {
-      currentStep = 1;
-    } else {
-      handleSubmit();
-    }
-  }
-
-  function handleSubmit() {
-    if (surveyData.reasons.length === 0) {
-      return;
-    }
-    onSubmit(surveyData);
-    handleClose();
+  function reset() {
+    reasons = orderCancellationReasons();
+    reason = null;
+    text = '';
   }
 
   function handleClose() {
     open = false;
-    currentStep = 0;
-    surveyData = {
-      reasons: [],
-      comment: '',
-    };
+    reset();
+  }
+
+  function handleSubmit() {
+    if (!reason || !submittable) {
+      return;
+    }
+
+    onSubmit(buildCancellationSurveyValue({ reason, text }));
+    handleClose();
+  }
+
+  function handleKeep() {
+    if (!reason) {
+      return;
+    }
+
+    onKeep(reason);
+    handleClose();
+  }
+
+  function handleUpdatePaymentMethod() {
+    handleClose();
+    onUpdatePaymentMethod();
   }
 
   $effect(() => {
@@ -88,211 +131,169 @@
       return;
     }
 
-    currentStep = 0;
-    surveyData = {
-      reasons: [],
-      comment: '',
-    };
+    reset();
   });
 </script>
 
-<Modal
-  style={css.raw({
-    padding: '0',
-    maxWidth: '520px',
-    width: '[90vw]',
-    maxHeight: '[85vh]',
-    display: 'flex',
-    flexDirection: 'column',
-  })}
-  bind:open
->
-  <div
-    class={flex({
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingX: '24px',
-      paddingY: '20px',
-      borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
-    })}
-  >
-    <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
-        {currentStep === 0 ? '정말 해지하시겠어요?' : '구독을 해지하려는 이유를 알려주세요'}
-      </h2>
-      <p class={css({ fontSize: '13px', color: 'text.subtle' })}>
-        {currentStep === 0 ? '해지 시 다음 혜택을 더 이상 받을 수 없어요' : '더 나은 서비스를 만드는 데 소중한 의견이 됩니다'}
-      </p>
+{#snippet supportLink()}
+  <a class={css(linkStyle)} href="https://penxle.channel.io" rel="noopener noreferrer" target="_blank">
+    고객센터
+    <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+  </a>
+{/snippet}
+
+<Modal style={css.raw({ padding: '24px', maxWidth: '440px' })} bind:open>
+  <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>구독 해지</h2>
+  <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>
+    {#if user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
+      해지하면 바로 유료 기능을 사용할 수 없어요.
+    {:else if periodEndsAt}
+      해지해도 {periodEndsAt}까지는 유료 기능을 계속 사용할 수 있어요.
+    {/if}
+  </p>
+
+  <div class={flex({ direction: 'column', gap: '20px', marginTop: '24px' })}>
+    <div class={flex({ direction: 'column', gap: '8px' })}>
+      <div class={css(labelStyle)}>해지 이유</div>
+      <Menu
+        style={css.raw(fieldStyle, {
+          borderColor: 'border.subtle',
+          color: selected ? 'text.default' : 'text.faint',
+          _hover: { borderColor: 'border.default' },
+          _expanded: { borderColor: 'border.brand', _hover: { borderColor: 'border.brand' } },
+        })}
+        listStyle={css.raw({ paddingX: '4px' })}
+        offset={4}
+        placement="bottom-start"
+        setFullWidth
+      >
+        {#snippet button({ open }: { open: boolean })}
+          <span>{selected?.label ?? '이유를 골라 주세요'}</span>
+          <Icon
+            style={css.raw({
+              flexShrink: '0',
+              color: 'text.faint',
+              transition: 'common',
+              transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            })}
+            icon={ChevronDownIcon}
+            size={16}
+          />
+        {/snippet}
+
+        {#each reasons as option, index (option.value)}
+          {#if option.pinned && !reasons[index - 1]?.pinned}
+            <HorizontalDivider color="secondary" />
+          {/if}
+          <MenuItem onclick={() => (reason = option.value)}>
+            {#snippet suffix()}
+              {#if reason === option.value}
+                <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+              {/if}
+            {/snippet}
+            <span class={css({ color: option.pinned ? 'text.faint' : undefined })}>{option.label}</span>
+          </MenuItem>
+        {/each}
+      </Menu>
     </div>
-    <button
-      class={css({
-        padding: '8px',
-        borderRadius: '6px',
-        color: 'text.subtle',
-        cursor: 'pointer',
-        transition: 'colors',
-        _hover: { backgroundColor: 'surface.subtle' },
-      })}
-      onclick={handleClose}
-      type="button"
-    >
-      <Icon icon={XIcon} size={20} />
-    </button>
-  </div>
 
-  <div
-    class={css({
-      flex: '1',
-      overflowY: 'auto',
-      paddingX: '24px',
-      paddingY: '20px',
-    })}
-  >
-    {#if currentStep === 0}
-      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-        <div
-          class={css({
-            borderRadius: '8px',
-            padding: '16px',
-            borderWidth: '1px',
-            borderColor: 'border.default',
-            backgroundColor: 'surface.subtle',
-          })}
-        >
-          <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint', marginBottom: '12px' })}>이용중인 혜택</p>
-          <div class={flex({ flexDirection: 'column', gap: '10px' })}>
-            {#each PLAN_FEATURES.full as feature, index (index)}
-              <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ color: 'text.disabled' })} icon={feature.icon} size={16} />
-                <span class={css({ fontSize: '14px', color: 'text.default' })}>{feature.label}</span>
-              </div>
-            {/each}
+    {#if selected?.guidance}
+      <div
+        class={flex({
+          alignItems: 'flex-start',
+          gap: '12px',
+          borderWidth: '1px',
+          borderColor: 'border.subtle',
+          borderRadius: '10px',
+          paddingX: '16px',
+          paddingY: '12px',
+          backgroundColor: 'surface.subtle',
+        })}
+      >
+        {#if selected.guidance === 'waiver'}
+          <Icon style={calloutIconStyle} icon={MoonIcon} size={18} />
+          <div>
+            <p class={css(calloutTitleStyle)}>쉬는 달엔 결제도 쉬어요</p>
+            <p class={css(calloutBodyStyle)}>
+              {#if waivedNext}
+                이번 결제 기간에는 아직 사용 기록이 없어요. 이대로라면
+                <span class={css(strongStyle)}>{periodEndsAt} 결제는 0원이에요.</span>
+              {:else}
+                한 번도 사용하지 않은 달이나 해에는 구독료가 발생하지 않아요.
+              {/if}
+              결제를 건너뛴 동안에도 작성한 글은 그대로 남아 있어요.
+            </p>
+            <div class={css({ marginTop: '10px' })}>
+              <Button onclick={handleKeep} size="sm" variant="secondary">구독 유지하기</Button>
+            </div>
           </div>
-        </div>
-
-        {#if user.data.subscription?.state === SubscriptionState.ACTIVE}
-          <p class={css({ fontSize: '14px', color: 'text.faint', lineHeight: '[1.6]' })}>
-            지금 해지하더라도 {dayjs(user.data.subscription.currentPeriodEndsAt).formatAsDate()}까지는 계속해서 타이피 FULL ACCESS 혜택을
-            이용할 수 있어요.
-          </p>
-        {:else if user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
-          <p class={css({ fontSize: '14px', color: 'text.faint', lineHeight: '[1.6]' })}>해지 즉시 유료 서비스가 중단됩니다.</p>
+        {:else if selected.guidance === 'payment_method'}
+          <Icon style={calloutIconStyle} icon={CreditCardIcon} size={18} />
+          <div>
+            <p class={css(calloutTitleStyle)}>결제 수단은 해지하지 않아도 바꿀 수 있어요</p>
+            <p class={css(calloutBodyStyle)}>지금 바꾸면 다음 결제부터 새 결제 수단으로 결제돼요.</p>
+            <div class={css({ marginTop: '10px' })}>
+              <Button onclick={handleUpdatePaymentMethod} size="sm" variant="secondary">결제 수단 변경</Button>
+            </div>
+          </div>
+        {:else if selected.guidance === 'support'}
+          <Icon style={calloutIconStyle} icon={CircleQuestionMarkIcon} size={18} />
+          <div>
+            <p class={css(calloutTitleStyle)}>겪으신 문제를 알려 주시면 빠르게 확인해 드려요</p>
+            <!-- prettier-ignore -->
+            <p class={css(calloutBodyStyle)}>
+              아래에 남겨 주셔도 되고, {@render supportLink()}에 문의해 주셔도 돼요.
+            </p>
+          </div>
+        {:else if selected.guidance === 'feature_request'}
+          <Icon style={calloutIconStyle} icon={LightbulbIcon} size={18} />
+          <div>
+            <p class={css(calloutTitleStyle)}>기능 건의는 언제든 환영이에요</p>
+            <!-- prettier-ignore -->
+            <p class={css(calloutBodyStyle)}>
+              아래에 남겨 주셔도 되고, {@render supportLink()}에 건의해 주셔도 돼요.
+            </p>
+          </div>
         {/if}
       </div>
-    {:else}
-      <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-        <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-          <div>
-            <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>어떤 이유로 구독을 해지하시나요?</div>
-            <p class={css({ fontSize: '13px', color: 'text.faint', marginTop: '4px' })}>복수 선택 가능합니다</p>
-          </div>
+    {/if}
 
-          <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            {#each reasonOptions as option (option.value)}
-              {@const isChecked = surveyData.reasons.includes(option.value)}
-              <label
-                class={flex({
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  padding: '12px',
-                  borderWidth: '1px',
-                  borderColor: isChecked ? 'accent.brand.default' : 'border.subtle',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all',
-                  backgroundColor: isChecked ? 'accent.brand.subtle' : 'transparent',
-                  _hover: isChecked
-                    ? {
-                        borderColor: 'accent.brand.hover',
-                        backgroundColor: 'accent.brand.subtle',
-                      }
-                    : {
-                        borderColor: 'border.default',
-                        backgroundColor: 'surface.subtle',
-                      },
-                })}
-              >
-                <input
-                  class={css({ display: 'none' })}
-                  checked={isChecked}
-                  onchange={() => handleReasonToggle(option.value)}
-                  type="checkbox"
-                />
-                <div
-                  class={css({
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '4px',
-                    borderWidth: '2px',
-                    borderColor: isChecked ? 'accent.brand.default' : 'border.default',
-                    backgroundColor: isChecked ? 'accent.brand.default' : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    marginTop: '1px',
-                  })}
-                >
-                  {#if isChecked}
-                    <Icon style={css.raw({ color: 'white' })} icon={CheckIcon} size={14} />
-                  {/if}
-                </div>
-                <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>
-                  {option.label}
-                </span>
-              </label>
-            {/each}
-          </div>
-        </div>
-
-        <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>추가로 전하고 싶은 의견이 있으신가요?</div>
-          <textarea
-            class={css({
-              padding: '12px',
-              borderWidth: '1px',
-              borderColor: 'border.subtle',
-              borderRadius: '8px',
-              fontSize: '14px',
-              width: 'full',
-              minHeight: '100px',
-              backgroundColor: 'surface.default',
-              color: 'text.default',
-              resize: 'vertical',
-              _focus: {
-                outline: 'none',
-                borderColor: 'accent.brand.default',
-              },
-              _placeholder: {
-                color: 'text.faint',
-              },
-            })}
-            placeholder="더 자세한 의견을 남겨주시면 개선에 큰 도움이 됩니다 (선택사항)"
-            bind:value={surveyData.comment}></textarea>
-        </div>
+    {#if textInput}
+      <div class={flex({ direction: 'column', gap: '8px' })}>
+        <label class={css(labelStyle)} for="cancellation-text">
+          {selected?.prompt ?? CANCELLATION_TEXT_PROMPT}
+          {#if textInput === 'optional'}
+            <span class={css({ marginLeft: '2px', fontWeight: 'normal', color: 'text.faint' })}>(선택)</span>
+          {/if}
+        </label>
+        <textarea
+          id="cancellation-text"
+          class={css({
+            width: 'full',
+            minHeight: '84px',
+            paddingX: '12px',
+            paddingY: '10px',
+            borderWidth: '1px',
+            borderColor: 'border.subtle',
+            borderRadius: '6px',
+            fontSize: '14px',
+            lineHeight: '[1.5]',
+            color: 'text.default',
+            backgroundColor: 'surface.default',
+            resize: 'none',
+            transition: 'common',
+            _hover: { borderColor: 'border.default' },
+            _focus: { outline: 'none', borderColor: 'border.brand' },
+            _placeholder: { color: 'text.faint' },
+          })}
+          placeholder={CANCELLATION_TEXT_PLACEHOLDER}
+          bind:value={text}></textarea>
       </div>
     {/if}
-  </div>
 
-  <div
-    class={flex({
-      justifyContent: currentStep === 0 ? 'flex-end' : 'space-between',
-      paddingX: '24px',
-      paddingY: '16px',
-      borderTopWidth: '1px',
-      borderColor: 'border.subtle',
-      gap: '8px',
-    })}
-  >
-    {#if currentStep === 0}
-      <Button onclick={handleNext} size="md" variant="primary">
-        계속하기
-        <Icon icon={ChevronRightIcon} size={16} />
-      </Button>
-    {:else}
-      <Button onclick={handleClose} size="md" variant="secondary">취소</Button>
-      <Button disabled={surveyData.reasons.length === 0} onclick={handleSubmit} size="md" variant="primary">제출하고 해지하기</Button>
-    {/if}
+    <div class={flex({ gap: '8px' })}>
+      <Button style={css.raw({ flex: '1' })} onclick={handleClose} type="button" variant="secondary">취소</Button>
+      <Button style={css.raw({ flex: '1' })} disabled={!submittable} onclick={handleSubmit} type="button" variant="danger">해지하기</Button>
+    </div>
   </div>
 </Modal>
