@@ -94,7 +94,12 @@ fn generate_jna_class(
             )
         };
 
-        let return_stmt = build_return_stmt(&method.return_type, &native_call, all_interfaces);
+        let return_stmt = build_return_stmt(
+            &method.return_type,
+            &native_call,
+            all_interfaces,
+            custom_types,
+        );
         out.push_str(&format!("            {}\n", return_stmt));
 
         out.push_str("        } catch (e: NativeEditorException) {\n");
@@ -218,6 +223,7 @@ fn jna_primitive_conversion(
 ) -> String {
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {
+        "u8" => format!("{}.toUByte()", kt_name),
         "u32" | "usize" => format!("{}.toUInt()", kt_name),
         "u16" => format!("{}.toUShort()", kt_name),
         "u64" => format!("{}.toULong()", kt_name),
@@ -225,14 +231,31 @@ fn jna_primitive_conversion(
     }
 }
 
+fn jna_primitive_return_conversion(
+    name: &str,
+    expr: &str,
+    custom_types: &HashMap<String, String>,
+) -> String {
+    let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
+    match resolved {
+        "u8" | "u16" | "u32" | "usize" => format!("{}.toInt()", expr),
+        "u64" => format!("{}.toLong()", expr),
+        _ => expr.into(),
+    }
+}
+
 fn build_return_stmt(
     return_type: &FfiReturnType,
     native_call: &str,
     all_interfaces: &[FfiInterface],
+    custom_types: &HashMap<String, String>,
 ) -> String {
     match return_type {
         FfiReturnType::Unit => native_call.into(),
-        FfiReturnType::Primitive(_) => format!("return {}", native_call),
+        FfiReturnType::Primitive(p) => format!(
+            "return {}",
+            jna_primitive_return_conversion(p, native_call, custom_types)
+        ),
         FfiReturnType::Complex(_) => {
             format!("return json.decodeFromString({})", native_call)
         }
@@ -247,7 +270,14 @@ fn build_return_stmt(
             FfiScalarReturn::Primitive(p) if p == "u8" => {
                 format!("return {}", native_call)
             }
-            FfiScalarReturn::Primitive(_) => format!("return {}", native_call),
+            FfiScalarReturn::Primitive(p) => {
+                let conv = jna_primitive_return_conversion(p, "it", custom_types);
+                if conv == "it" {
+                    format!("return {}", native_call)
+                } else {
+                    format!("return {}.map {{ {} }}", native_call, conv)
+                }
+            }
             FfiScalarReturn::Complex(_) => {
                 format!("return {}.map {{ json.decodeFromString(it) }}", native_call)
             }
@@ -256,7 +286,14 @@ fn build_return_stmt(
             }
         },
         FfiReturnType::Option(inner) => match inner {
-            FfiScalarReturn::Primitive(_) => format!("return {}", native_call),
+            FfiScalarReturn::Primitive(p) => {
+                let conv = jna_primitive_return_conversion(p, "it", custom_types);
+                if conv == "it" {
+                    format!("return {}", native_call)
+                } else {
+                    format!("return {}?.let {{ {} }}", native_call, conv)
+                }
+            }
             FfiScalarReturn::Complex(_) => {
                 format!(
                     "return {}?.let {{ json.decodeFromString(it) }}",
@@ -457,6 +494,220 @@ mod tests {
         assert!(
             output.contains("json.encodeToString(it)"),
             "Expected JSON serialization for Complex param:\n{}",
+            output
+        );
+    }
+
+    fn return_iface(return_type: FfiReturnType) -> FfiInterface {
+        FfiInterface {
+            name: "Editor".into(),
+            methods: vec![FfiMethod {
+                name: "probe".into(),
+                is_async: false,
+                is_constructor: false,
+                params: vec![],
+                return_type,
+            }],
+        }
+    }
+
+    fn generate_return(return_type: FfiReturnType, ct: &HashMap<String, String>) -> String {
+        let iface = return_iface(return_type);
+        generate_jna_class(&iface, std::slice::from_ref(&iface), ct)
+    }
+
+    #[test]
+    fn u8_scalar_param_converts_to_ubyte() {
+        assert_eq!(
+            jna_primitive_conversion("u8", "level", &empty_ct()),
+            "level.toUByte()"
+        );
+    }
+
+    #[test]
+    fn option_u8_param_converts_to_ubyte() {
+        let conv = convert_param(
+            &FfiParamType::Option(FfiScalarParam::Primitive("u8".into())),
+            "level",
+            &empty_ct(),
+        );
+        assert_eq!(conv, "level?.let { it.toUByte() }");
+    }
+
+    #[test]
+    fn vec_u8_param_stays_bytearray() {
+        let conv = convert_param(
+            &FfiParamType::Vec(FfiScalarParam::Primitive("u8".into())),
+            "data",
+            &empty_ct(),
+        );
+        assert_eq!(conv, "data");
+    }
+
+    #[test]
+    fn u8_primitive_return_converts_to_int() {
+        let output = generate_return(FfiReturnType::Primitive("u8".into()), &empty_ct());
+        assert!(
+            output.contains("override fun probe(): Int {"),
+            "Expected Int signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe().toInt()"),
+            "Expected .toInt() on UByte native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn option_u8_return_converts_to_int() {
+        let output = generate_return(
+            FfiReturnType::Option(FfiScalarReturn::Primitive("u8".into())),
+            &empty_ct(),
+        );
+        assert!(
+            output.contains("return native.probe()?.let { it.toInt() }"),
+            "Expected nullable .toInt() on UByte? native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn u32_primitive_return_converts_to_int() {
+        let output = generate_return(FfiReturnType::Primitive("u32".into()), &empty_ct());
+        assert!(
+            output.contains("override fun probe(): Int {"),
+            "Expected Int signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe().toInt()"),
+            "Expected .toInt() on UInt native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn usize_primitive_return_converts_to_int() {
+        let output = generate_return(FfiReturnType::Primitive("usize".into()), &empty_ct());
+        assert!(
+            output.contains("return native.probe().toInt()"),
+            "Expected .toInt() on ULong native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn u16_primitive_return_converts_to_int() {
+        let output = generate_return(FfiReturnType::Primitive("u16".into()), &empty_ct());
+        assert!(
+            output.contains("override fun probe(): Int {"),
+            "Expected Int signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe().toInt()"),
+            "Expected .toInt() on UShort native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn u64_primitive_return_converts_to_long() {
+        let output = generate_return(FfiReturnType::Primitive("u64".into()), &empty_ct());
+        assert!(
+            output.contains("override fun probe(): Long {"),
+            "Expected Long signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe().toLong()"),
+            "Expected .toLong() on ULong native return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn custom_type_return_resolves_to_long() {
+        let output = generate_return(
+            FfiReturnType::Primitive("PlatformHandle".into()),
+            &with_platform_handle(),
+        );
+        assert!(
+            output.contains("return native.probe().toLong()"),
+            "Expected .toLong() on custom u64 return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn i32_primitive_return_passed_directly() {
+        let output = generate_return(FfiReturnType::Primitive("i32".into()), &empty_ct());
+        assert!(
+            output.contains("return native.probe()\n"),
+            "Signed return should not be converted:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn vec_u32_return_maps_to_int() {
+        let output = generate_return(
+            FfiReturnType::Vec(FfiScalarReturn::Primitive("u32".into())),
+            &empty_ct(),
+        );
+        assert!(
+            output.contains("override fun probe(): List<Int> {"),
+            "Expected List<Int> signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe().map { it.toInt() }"),
+            "Expected element-wise .toInt():\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn vec_u8_return_passed_directly() {
+        let output = generate_return(
+            FfiReturnType::Vec(FfiScalarReturn::Primitive("u8".into())),
+            &empty_ct(),
+        );
+        assert!(
+            output.contains("return native.probe()\n"),
+            "ByteArray return should not be mapped:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn option_u32_return_converts_to_int() {
+        let output = generate_return(
+            FfiReturnType::Option(FfiScalarReturn::Primitive("u32".into())),
+            &empty_ct(),
+        );
+        assert!(
+            output.contains("override fun probe(): Int? {"),
+            "Expected Int? signature:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return native.probe()?.let { it.toInt() }"),
+            "Expected nullable .toInt():\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn option_bool_return_passed_directly() {
+        let output = generate_return(
+            FfiReturnType::Option(FfiScalarReturn::Primitive("bool".into())),
+            &empty_ct(),
+        );
+        assert!(
+            output.contains("return native.probe()\n"),
+            "Boolean? return should not be converted:\n{}",
             output
         );
     }
