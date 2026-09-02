@@ -3,6 +3,7 @@ mod dnd_judgment_parity;
 mod layout_state_input;
 mod list_affordance_parity;
 mod perf_batch_lift;
+mod perf_dnd_over;
 mod perf_flat_decomposition;
 mod perf_fold;
 mod perf_list_affordance;
