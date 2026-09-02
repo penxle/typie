@@ -61,6 +61,7 @@
   import ShortcutsModal from './ShortcutsModal.svelte';
   import Sidebar from './Sidebar.svelte';
   import TrialExpiredModal from './TrialExpiredModal.svelte';
+  import { USER_SURVEY_NAME, USER_SURVEY_SNOOZE_KEY } from './user-survey';
   import UserSurveyModal from './UserSurveyModal.svelte';
 
   let { data, children } = $props();
@@ -529,8 +530,8 @@
       marketingConsentModalOpen = true;
     }
 
-    const skipUntil = localStorage.getItem('surveySkipUntil');
-    const shouldShowSurvey = query.data.me.surveys.includes('202509_ir') && (!skipUntil || new Date(skipUntil) < new Date());
+    const skipUntil = localStorage.getItem(USER_SURVEY_SNOOZE_KEY);
+    const shouldShowSurvey = query.data.me.surveys.includes(USER_SURVEY_NAME) && (!skipUntil || new Date(skipUntil) < new Date());
 
     if (
       shouldShowSurvey &&

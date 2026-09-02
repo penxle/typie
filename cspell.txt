@@ -66,6 +66,7 @@ edgi
 epub
 expirable
 eulyoo
+fanfic
 ffconcat
 ffffl
 ffigen

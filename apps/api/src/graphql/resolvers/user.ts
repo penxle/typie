@@ -520,7 +520,7 @@ User.implement({
           .where(
             and(
               eq(UserSurveys.userId, self.id),
-              inArray(UserSurveys.name, ['202509_ir', 'trial_expired_modal_shown', 'trial_popup_content_entry_202605']),
+              inArray(UserSurveys.name, ['user_research_202609', 'trial_expired_modal_shown', 'trial_popup_content_entry_202605']),
             ),
           );
 
@@ -558,8 +558,8 @@ User.implement({
           results.push('trial_popup_content_entry_202605');
         }
 
-        if (entitled && !shownSurveys.has('202509_ir') && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
-          results.push('202509_ir');
+        if (entitled && !shownSurveys.has('user_research_202609') && self.createdAt.isBefore(dayjs().subtract(1, 'weeks'))) {
+          results.push('user_research_202609');
         }
 
         return results;
