@@ -23,7 +23,7 @@ fun App() {
       .crossfade(true)
       .components {
         add(KtorNetworkFetcherFactory(Http))
-        add(ResvgDecoder.Factory())
+        add(ResvgDecoder.Factory(diskCacheEnabled = false))
       }
       .build()
   }
