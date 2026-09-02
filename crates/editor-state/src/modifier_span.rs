@@ -41,10 +41,9 @@ pub fn resolve_modifier_span_selection(
     // the char to the right; fall back to the char on the left.
     let (anchor, value) = if let Some(v) = at(pos.offset) {
         (pos.offset, v)
-    } else if let Some(v) = pos.offset.checked_sub(1).and_then(at) {
-        (pos.offset - 1, v)
     } else {
-        return None;
+        let prev = pos.offset.checked_sub(1)?;
+        (prev, at(prev)?)
     };
 
     let mut start = anchor;

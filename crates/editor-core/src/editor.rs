@@ -7912,7 +7912,13 @@ mod tests {
 
     fn changes_within_damage(old: &[u8], new: &[u8], w: u16, damage: &[IRect]) -> bool {
         let pitch = w as usize * 4;
-        for (idx, (a, b)) in old.chunks_exact(4).zip(new.chunks_exact(4)).enumerate() {
+        for (idx, (a, b)) in old
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(new.as_chunks::<4>().0)
+            .enumerate()
+        {
             if a != b {
                 let px = (idx * 4 % pitch / 4) as i32;
                 let py = (idx * 4 / pitch) as i32;

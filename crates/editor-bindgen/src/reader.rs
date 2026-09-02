@@ -21,32 +21,31 @@ pub fn read_ffi_meta(path: &Path) -> Vec<FfiMeta> {
 
             let address = symbol.address();
 
-            if let Some(section_index) = symbol.section_index() {
-                if let Ok(section) = file.section_by_index(section_index) {
-                    if let Ok(section_data) = section.data() {
-                        let section_addr = section.address();
-                        let offset = (address - section_addr) as usize;
+            if let Some(section_index) = symbol.section_index()
+                && let Ok(section) = file.section_by_index(section_index)
+                && let Ok(section_data) = section.data()
+            {
+                let section_addr = section.address();
+                let offset = (address - section_addr) as usize;
 
-                        if offset + 4 > section_data.len() {
-                            continue;
-                        }
+                if offset + 4 > section_data.len() {
+                    continue;
+                }
 
-                        let payload_len = u32::from_le_bytes(
-                            section_data[offset..offset + 4].try_into().unwrap(),
-                        ) as usize;
+                let payload_len =
+                    u32::from_le_bytes(section_data[offset..offset + 4].try_into().unwrap())
+                        as usize;
 
-                        let payload_start = offset + 4;
-                        if payload_start + payload_len > section_data.len() {
-                            continue;
-                        }
+                let payload_start = offset + 4;
+                if payload_start + payload_len > section_data.len() {
+                    continue;
+                }
 
-                        let bytes = &section_data[payload_start..payload_start + payload_len];
+                let bytes = &section_data[payload_start..payload_start + payload_len];
 
-                        match bitcode::decode::<FfiMeta>(bytes) {
-                            Ok(meta) => result.push(meta),
-                            Err(e) => eprintln!("warning: failed to decode {}: {}", name, e),
-                        }
-                    }
+                match bitcode::decode::<FfiMeta>(bytes) {
+                    Ok(meta) => result.push(meta),
+                    Err(e) => eprintln!("warning: failed to decode {}: {}", name, e),
                 }
             }
         }
@@ -74,39 +73,38 @@ pub fn read_ffi_interfaces(path: &Path) -> Vec<FfiInterface> {
 
             let address = symbol.address();
 
-            if let Some(section_index) = symbol.section_index() {
-                if let Ok(section) = file.section_by_index(section_index) {
-                    if let Ok(section_data) = section.data() {
-                        let section_addr = section.address();
-                        let offset = (address - section_addr) as usize;
+            if let Some(section_index) = symbol.section_index()
+                && let Ok(section) = file.section_by_index(section_index)
+                && let Ok(section_data) = section.data()
+            {
+                let section_addr = section.address();
+                let offset = (address - section_addr) as usize;
 
-                        if offset + 4 > section_data.len() {
-                            continue;
-                        }
+                if offset + 4 > section_data.len() {
+                    continue;
+                }
 
-                        let payload_len = u32::from_le_bytes(
-                            section_data[offset..offset + 4].try_into().unwrap(),
-                        ) as usize;
+                let payload_len =
+                    u32::from_le_bytes(section_data[offset..offset + 4].try_into().unwrap())
+                        as usize;
 
-                        let payload_start = offset + 4;
-                        if payload_start + payload_len > section_data.len() {
-                            continue;
-                        }
+                let payload_start = offset + 4;
+                if payload_start + payload_len > section_data.len() {
+                    continue;
+                }
 
-                        let bytes = &section_data[payload_start..payload_start + payload_len];
+                let bytes = &section_data[payload_start..payload_start + payload_len];
 
-                        match bitcode::decode::<FfiInterface>(bytes) {
-                            Ok(iface) => {
-                                by_name
-                                    .entry(iface.name.clone())
-                                    .and_modify(|existing| {
-                                        existing.methods.extend(iface.methods.clone());
-                                    })
-                                    .or_insert(iface);
-                            }
-                            Err(e) => eprintln!("warning: failed to decode {}: {}", name, e),
-                        }
+                match bitcode::decode::<FfiInterface>(bytes) {
+                    Ok(iface) => {
+                        by_name
+                            .entry(iface.name.clone())
+                            .and_modify(|existing| {
+                                existing.methods.extend(iface.methods.clone());
+                            })
+                            .or_insert(iface);
                     }
+                    Err(e) => eprintln!("warning: failed to decode {}: {}", name, e),
                 }
             }
         }

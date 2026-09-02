@@ -16,7 +16,7 @@ const UNPREMUL_RECIP: [u32; 256] = {
 };
 
 pub fn unpremultiply(pixels: &mut [u8]) {
-    for px in pixels.chunks_exact_mut(4) {
+    for px in pixels.as_chunks_mut::<4>().0 {
         let a = px[3];
         if a == 0 || a == 255 {
             continue;
@@ -678,7 +678,7 @@ mod tests {
                 y1: 8,
             },
         );
-        for px in dst.chunks_exact(4) {
+        for px in dst.as_chunks::<4>().0 {
             assert!(
                 px[0] <= px[3] && px[1] <= px[3] && px[2] <= px[3],
                 "straight-alpha leak: {px:?}"

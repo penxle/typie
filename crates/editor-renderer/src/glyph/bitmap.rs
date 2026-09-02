@@ -167,7 +167,7 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
         ColorSpace::RGBA => Some(pixels),
         ColorSpace::RGB => {
             let mut rgba = Vec::with_capacity(w * h * 4);
-            for chunk in pixels.chunks_exact(3) {
+            for chunk in pixels.as_chunks::<3>().0 {
                 rgba.extend_from_slice(chunk);
                 rgba.push(255);
             }
@@ -175,7 +175,7 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
         }
         ColorSpace::LumaA => {
             let mut rgba = Vec::with_capacity(w * h * 4);
-            for chunk in pixels.chunks_exact(2) {
+            for chunk in pixels.as_chunks::<2>().0 {
                 let (l, a) = (chunk[0], chunk[1]);
                 rgba.extend_from_slice(&[l, l, l, a]);
             }
@@ -198,7 +198,7 @@ fn decode_bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Option<Vec<u8>> 
         return None;
     }
     let mut rgba = vec![0u8; expected];
-    for (i, chunk) in data[..expected].chunks_exact(4).enumerate() {
+    for (i, chunk) in data[..expected].as_chunks::<4>().0.iter().enumerate() {
         let off = i * 4;
         rgba[off] = chunk[2];
         rgba[off + 1] = chunk[1];
@@ -209,7 +209,7 @@ fn decode_bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Option<Vec<u8>> 
 }
 
 fn premultiply_rgba_inplace(pixels: &mut [u8]) {
-    for px in pixels.chunks_exact_mut(4) {
+    for px in pixels.as_chunks_mut::<4>().0 {
         let a = px[3] as u32;
         if a == 0 {
             px[0] = 0;
@@ -540,12 +540,14 @@ mod tests {
 
         let soft = raster
             .data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|px| px[3] > 0 && px[3] < 255)
             .count();
         assert!(soft > 0, "downscale must keep intermediate-alpha AA pixels");
 
-        for px in raster.data.chunks_exact(4) {
+        for px in raster.data.as_chunks::<4>().0 {
             assert!(
                 px[0] <= px[3] && px[1] <= px[3] && px[2] <= px[3],
                 "straight-alpha leak: {px:?}"
@@ -553,7 +555,13 @@ mod tests {
         }
 
         // 순수 빨강 입력이므로 모든 픽셀에서 premul R == A, G/B == 0 이어야 한다.
-        let densest = raster.data.chunks_exact(4).max_by_key(|px| px[3]).unwrap();
+        let densest = raster
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .max_by_key(|px| px[3])
+            .unwrap();
         assert!(
             densest[3] > 150,
             "center must stay mostly opaque: {densest:?}"
