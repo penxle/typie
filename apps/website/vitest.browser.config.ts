@@ -1,10 +1,8 @@
 /// <reference types="vitest/config" />
 
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { playwright } from '@vitest/browser-playwright';
 import { defaultClientConditions, defineConfig } from 'vite';
-import { createConfig } from './vite.config';
+import { createConfig } from './vite.config.ts';
 import type { UserConfig } from 'vite';
 
 const base = createConfig({ mode: 'test' }) as UserConfig;
@@ -17,7 +15,7 @@ export default defineConfig({
       enabled: true,
       headless: true,
       provider: playwright({ contextOptions: { hasTouch: true } }),
-      screenshotDirectory: path.join(tmpdir(), 'typie-vitest-screenshots'),
+      screenshotDirectory: '.vitest-screenshots',
       instances: [{ browser: 'chromium' }],
     },
     include: ['src/**/*.browser.test.ts'],

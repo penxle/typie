@@ -23,6 +23,8 @@ styled-system/
 !packages/styled-system/
 
 vite.config.ts.timestamp-*
+.vitest-attachments/
+.vitest-screenshots/
 
 *.img
 *.iso

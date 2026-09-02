@@ -105,8 +105,11 @@ describe('entity tree menu trigger', () => {
       const menu = document.querySelector('[role="menu"]');
       expect(menu).toBeInstanceOf(HTMLUListElement);
       if (!(menu instanceof HTMLUListElement)) throw new Error('EntityMenu did not render its menu');
-      expect(Number.parseFloat(menu.style.left)).toBeGreaterThan(100);
-      expect(Number.parseFloat(menu.style.top)).toBeGreaterThan(100);
+      const floating = menu.parentElement;
+      expect(floating).toBeInstanceOf(HTMLDivElement);
+      if (!(floating instanceof HTMLDivElement)) throw new Error('EntityMenu did not render its floating wrapper');
+      expect(Number.parseFloat(floating.style.left)).toBeGreaterThan(100);
+      expect(Number.parseFloat(floating.style.top)).toBeGreaterThan(100);
 
       document.body.tabIndex = -1;
       document.body.focus();
@@ -118,10 +121,11 @@ describe('entity tree menu trigger', () => {
 
       expect(button.getAttribute('aria-expanded')).toBe('false');
       expect(menu.isConnected).toBe(true);
+      expect(floating.isConnected).toBe(true);
       expect(getComputedStyle(button).display).toBe('flex');
       expect(button.getBoundingClientRect().width).toBe(16);
-      expect(Number.parseFloat(menu.style.left)).toBeGreaterThan(100);
-      expect(Number.parseFloat(menu.style.top)).toBeGreaterThan(100);
+      expect(Number.parseFloat(floating.style.left)).toBeGreaterThan(100);
+      expect(Number.parseFloat(floating.style.top)).toBeGreaterThan(100);
 
       await vi.waitFor(() => expect(menu.isConnected).toBe(false), { timeout: 1000 });
       await tick();

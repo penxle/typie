@@ -48,6 +48,9 @@ const runtime = vi.hoisted(() => {
   };
 });
 
+const app = vi.hoisted(() => ({ preference: { current: { prismHdrEnabled: true } } }));
+
+vi.mock('@typie/ui/context', () => ({ getAppContext: () => app }));
 vi.mock('$lib/prism-ui/runtime.ts', () => ({ prismRuntime: runtime }));
 
 const rect = (centerX: number, centerY: number, size = 0): DOMRect => ({
