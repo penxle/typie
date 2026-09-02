@@ -457,6 +457,7 @@
 
 <Modal
   style={css.raw({ maxWidth: '600px', height: '600px', backgroundColor: 'surface.subtle' })}
+  focusTrapOptions={{ initialFocus: () => inputEl }}
   onclose={close}
   open={app.state.commandPaletteOpen}
 >

@@ -279,6 +279,7 @@
     maxHeight: 'full',
     padding: '0',
   })}
+  focusTrapOptions={{ initialFocus: '[data-note-entity-search-input]' }}
   {onclose}
   {open}
 >
@@ -300,6 +301,7 @@
           fontSize: '15px',
           color: 'text.default',
         })}
+        data-note-entity-search-input
         oninput={handleQueryInput}
         onkeydown={handleKeyDown}
         placeholder="항목 검색..."

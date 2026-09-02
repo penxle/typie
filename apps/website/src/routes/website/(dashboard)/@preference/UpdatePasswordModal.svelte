@@ -81,7 +81,13 @@
     {#if hasPassword}
       <div class={flex({ direction: 'column', gap: '8px' })}>
         <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="currentPassword">현재 비밀번호</label>
-        <TextInput id="currentPassword" placeholder="현재 비밀번호를 입력하세요" type="password" bind:value={form.fields.currentPassword} />
+        <TextInput
+          id="currentPassword"
+          autofocus
+          placeholder="현재 비밀번호를 입력하세요"
+          type="password"
+          bind:value={form.fields.currentPassword}
+        />
         {#if form.errors.currentPassword}
           <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.currentPassword}</div>
         {/if}

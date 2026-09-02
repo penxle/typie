@@ -37,4 +37,3 @@ minimumReleaseAgeExclude:
   - mearie@0.1.8
 patchedDependencies:
   '@mearie/core@0.8.1': patches/@mearie__core@0.8.1.patch
-  focus-trap@8.2.2: patches/focus-trap@8.2.2.patch
