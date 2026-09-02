@@ -1,1 +1,0 @@
-ALTER TABLE `reviews` ADD `tier` text DEFAULT 'high' NOT NULL;
