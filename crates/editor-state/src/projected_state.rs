@@ -365,6 +365,8 @@ pub struct ProjectedState {
     pub(crate) incremental_block_inserts: usize,
     #[cfg(any(test, feature = "test-utils"))]
     pub(crate) window_escalations: usize,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) window_slots: usize,
     /// Count of successful projection passes (`reproject`, a `reproject_window`
     /// that resolves without falling back to `reproject`, `reproject_from_tree`,
     /// `reproject_after_delete`). A `reproject_window` escalation that falls back
@@ -515,6 +517,8 @@ impl ProjectedState {
             incremental_block_inserts: 0,
             #[cfg(any(test, feature = "test-utils"))]
             window_escalations: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            window_slots: 0,
             #[cfg(any(test, feature = "test-utils"))]
             projection_passes: 0,
         })
@@ -731,7 +735,10 @@ impl ProjectedState {
     /// A Del or Undel of a copy re-decides where every leaf anchored to it belongs,
     /// and those leaves move onto the surviving copy — which can sit under a different
     /// container, and reach it from anywhere in the copy's own descendant run. Widen
-    /// to the container holding every copy of the classes the op touches.
+    /// to the container holding every copy of the classes the op touches, but only
+    /// to the slots holding the op's own targets and the live copies: each copy's
+    /// sequence position rides along as floor/ceiling, which pulls the window out to
+    /// the slot that currently owns a dead or hidden copy's leaves.
     fn widen_for_copies(
         &self,
         op: &Op<EditOp>,
@@ -748,8 +755,10 @@ impl ProjectedState {
             _ => return (scope, lo, hi, Vec::new()),
         };
         let mut containers: Vec<Dot> = vec![scope];
+        let mut slot_dots: Vec<Dot> = Vec::new();
         let mut spots: Vec<usize> = Vec::new();
         let mut touched = false;
+        let mut unplaced = false;
         let mut seen: HashSet<Dot> = HashSet::new();
         for t in targets {
             let Some(members) = self.projected.alias_classes.members_of(t) else {
@@ -760,17 +769,7 @@ impl ProjectedState {
             }
             touched = true;
             for m in members {
-                // A copy with no container is dead or hidden; its content is still in
-                // the sequence and only the whole document is sure to hold it.
-                match self.required_container_of(*m) {
-                    Some(c) => containers.push(c),
-                    None => containers.push(Dot::ROOT),
-                }
-                spots.extend(
-                    self.seq
-                        .resolve_boundary(*m, Bias::Before)
-                        .map(|b| b.position),
-                );
+                unplaced |= !self.collect_copy(*m, &mut containers, &mut slot_dots, &mut spots);
             }
         }
         if !touched {
@@ -783,7 +782,63 @@ impl ProjectedState {
         if n == 0 {
             return (scope, lo, hi, Vec::new());
         }
-        (target, 0, n - 1, spots)
+        slot_dots.extend(self.scope_child_ids(scope, lo, hi));
+        let range = if unplaced {
+            None
+        } else {
+            self.scope_slots(target, &slot_dots, &containers)
+        };
+        match range {
+            Some((lo, hi)) => (target, lo, hi, spots),
+            None => (target, 0, n - 1, spots),
+        }
+    }
+
+    /// Record where copy `m` is for a copy window: its required container (Root
+    /// for a dead or hidden copy, whose content is still in the sequence), its own
+    /// dot as a slot representative when it is in the tree, and its sequence
+    /// position as a floor/ceiling spot. `false` when the copy has neither a
+    /// container nor a position — nothing can place it, so the caller must fall
+    /// back to the scope's full range.
+    fn collect_copy(
+        &self,
+        m: Dot,
+        containers: &mut Vec<Dot>,
+        slot_dots: &mut Vec<Dot>,
+        spots: &mut Vec<usize>,
+    ) -> bool {
+        let container = self.required_container_of(m);
+        match container {
+            Some(c) => {
+                containers.push(c);
+                slot_dots.push(m);
+            }
+            None => containers.push(Dot::ROOT),
+        }
+        let spot = self
+            .seq
+            .resolve_boundary(m, Bias::Before)
+            .map(|b| b.position);
+        spots.extend(spot);
+        container.is_some() || spot.is_some()
+    }
+
+    fn scope_child_ids(&self, scope: Dot, lo: usize, hi: usize) -> Vec<Dot> {
+        let node = if scope == Dot::ROOT {
+            self.projected.tree.root_node()
+        } else {
+            self.projected.tree.get(scope)
+        };
+        let Some(node) = node else {
+            return Vec::new();
+        };
+        (lo..=hi)
+            .filter_map(|slot| node.children.get(slot))
+            .map(|c| match c {
+                Child::Block(b) => *b,
+                Child::Leaf { id, .. } => *id,
+            })
+            .collect()
     }
 
     fn scope_children_len(&self, scope: Dot) -> usize {
@@ -872,13 +927,16 @@ impl ProjectedState {
     /// dots is an end of an existing redirect, which the op can exempt or re-aim; or
     /// one of its dots is a dead or hidden copy that a live leaf is anchored to, which
     /// the op turns into a redirect.
-    fn alias_conflict_scope(&self, op: &AliasOp) -> Option<Dot> {
+    fn alias_conflict_scope(&self, op: &AliasOp) -> Option<(Dot, usize, usize, Vec<usize>)> {
         if self.projected.alias_classes.is_empty() {
             return None;
         }
         let mut containers: Vec<Dot> = Vec::new();
+        let mut slot_dots: Vec<Dot> = Vec::new();
+        let mut spots: Vec<usize> = Vec::new();
         let mut seen: HashSet<Dot> = HashSet::new();
         let mut hit = false;
+        let mut unplaced = false;
         for run in &op.pairs {
             for i in 0..run.len as u64 {
                 for d in [
@@ -887,7 +945,8 @@ impl ProjectedState {
                 ] {
                     if self.redirect_touch(d) || self.class_of_a_redirect_target(d) {
                         hit = true;
-                        containers.extend(self.required_container_of(d));
+                        unplaced |=
+                            !self.collect_copy(d, &mut containers, &mut slot_dots, &mut spots);
                     }
                     let Some(members) = self.projected.alias_classes.members_of(d) else {
                         continue;
@@ -897,8 +956,9 @@ impl ProjectedState {
                     }
                     // A copy that is dead or hidden is what a leaf redirects AWAY from,
                     // and this op decides which class it belongs to. The leaves anchored
-                    // to it sit anywhere in its descendant run, so the window has to be
-                    // the container that holds every copy of the class.
+                    // to it sit in its descendant run, so the window has to reach the
+                    // slot holding that run as well as every copy of the class: each
+                    // copy's sequence position rides along as floor/ceiling.
                     let gone = members.iter().any(|m| {
                         self.projected.hidden.contains(*m)
                             || self
@@ -914,13 +974,8 @@ impl ProjectedState {
                     if gone || present.len() >= 2 {
                         hit = true;
                         for m in members {
-                            // A copy with no container is dead or hidden; the leaves
-                            // typed at its head project wherever the sequence puts
-                            // them, which only the whole document is sure to cover.
-                            match self.required_container_of(*m) {
-                                Some(c) => containers.push(c),
-                                None => containers.push(Dot::ROOT),
-                            }
+                            unplaced |=
+                                !self.collect_copy(*m, &mut containers, &mut slot_dots, &mut spots);
                         }
                     }
                 }
@@ -929,7 +984,20 @@ impl ProjectedState {
         if !hit {
             return None;
         }
-        Some(self.common_scope_of(&containers).unwrap_or(Dot::ROOT))
+        let scope = self.common_scope_of(&containers).unwrap_or(Dot::ROOT);
+        let n = self.scope_children_len(scope);
+        if n == 0 {
+            return Some((scope, 0, 0, spots));
+        }
+        let range = if unplaced || spots.is_empty() {
+            None
+        } else {
+            self.scope_slots(scope, &slot_dots, &containers)
+        };
+        match range {
+            Some((lo, hi)) => Some((scope, lo, hi, spots)),
+            None => Some((scope, 0, n - 1, Vec::new())),
+        }
     }
 
     /// Whether `d` shares a class with the target of an existing redirect — aliasing
@@ -1650,6 +1718,10 @@ impl ProjectedState {
             if head_synthetic_at_zero || outside_lineage {
                 return Ok(WindowOutcome::Escalate(self.escalation_target(scope, None)));
             }
+        }
+        #[cfg(any(test, feature = "test-utils"))]
+        {
+            self.window_slots += j - i + 1;
         }
         let mut old_nodes: Vec<Dot> = Vec::new();
         for slot in i..=j {
@@ -2576,27 +2648,23 @@ impl ProjectedState {
             // change which copy the tree shows and which leaves redirect, and both
             // judgments live in the window pass.
             EditOp::Alias(alias) => {
-                let Some(scope) = self.alias_conflict_scope(alias) else {
+                let Some((scope, lo, hi, spots)) = self.alias_conflict_scope(alias) else {
                     return true;
-                };
-                let n = if scope == Dot::ROOT {
-                    self.projected
-                        .tree
-                        .root_node()
-                        .map_or(0, |r| r.children.len())
-                } else {
-                    self.projected
-                        .tree
-                        .get(scope)
-                        .map_or(0, |n| n.children.len())
                 };
                 // A failed window would fall through to `reproject_from_tree`, which
                 // keeps the tree and so never makes the hide/redirect decision.
-                if n == 0 {
+                if self.scope_children_len(scope) == 0 {
                     return self.reproject().is_ok();
                 }
-                let floor = (scope == Dot::ROOT).then_some(0);
-                match self.reproject_scope_loop(scope, 0, n - 1, floor, None) {
+                // Without a copy position to anchor on, a Root window opens at the
+                // start of the sequence so a leaf left before every root child is read.
+                let floor = spots
+                    .iter()
+                    .copied()
+                    .min()
+                    .or((scope == Dot::ROOT).then_some(0));
+                let ceiling = spots.iter().copied().max().map(|p| p + 1);
+                match self.reproject_scope_loop(scope, lo, hi, floor, ceiling) {
                     Ok(()) => true,
                     Err(_) => self.reproject().is_ok(),
                 }
@@ -6211,6 +6279,57 @@ mod tests {
         );
         let cold = ProjectedState::from_graph(merged.graph().clone()).unwrap();
         assert_eq!(merged.projected(), cold.projected());
+    }
+
+    #[test]
+    fn joining_adjacent_root_paragraphs_in_a_long_doc_reprojects_only_their_neighbourhood() {
+        let mut s = ProjectedState::empty();
+        let p0 = s.view().root().unwrap().child_blocks().next().unwrap().id();
+        let mut blocks = vec![p0];
+        let mut chars: Vec<Vec<Dot>> = vec![Vec::new()];
+        let mut pos = 1;
+        for ch in ['a', 'b'] {
+            chars[0].push(s.apply(seq_char(pos, ch)).unwrap().id);
+            pos += 1;
+        }
+        for _ in 1..20 {
+            let block = s
+                .apply(seq_block(pos, NodeType::Paragraph, vec![Dot::ROOT]))
+                .unwrap()
+                .id;
+            pos += 1;
+            let mut own = Vec::new();
+            for ch in ['a', 'b'] {
+                own.push(s.apply(seq_char(pos, ch)).unwrap().id);
+                pos += 1;
+            }
+            blocks.push(block);
+            chars.push(own);
+        }
+        s.commit();
+        // The join shape a cross-paragraph delete emits: p5 is re-issued right after
+        // p6 (Del + Ins + Alias), then the copy's marker is deleted so its chars fold
+        // into p6. Both windows must stay in that neighbourhood, not span the document.
+        let to = s.seq_visible_pos(blocks[7]).unwrap();
+        let before_alias = s.window_slots;
+        let (copy, _) = raw_move_paragraph(&mut s, blocks[5], &chars[5], to, "ab").unwrap();
+        let alias_slots = s.window_slots - before_alias;
+        let before_del = s.window_slots;
+        let at = s.seq_visible_pos(copy).unwrap();
+        s.apply(EditOp::Seq(ListOp::Del { pos: at, len: 1 }))
+            .unwrap();
+        let del_slots = s.window_slots - before_del;
+        assert!(
+            alias_slots <= 8,
+            "re-issue windows covered {alias_slots} root slots of 20"
+        );
+        assert!(
+            del_slots <= 8,
+            "marker-delete window covered {del_slots} root slots of 20"
+        );
+        let cold = ProjectedState::from_graph(s.graph().clone()).unwrap();
+        assert_eq!(s.projected(), cold.projected());
+        assert_eq!(root_paragraph_texts(&s)[5], "abab");
     }
 
     #[test]

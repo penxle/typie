@@ -130,6 +130,11 @@ inherits = "release-wasm"
 [profile.release-wasm-server]
 inherits = "release-wasm"
 
+[profile.profiling]
+inherits = "release"
+debug = "limited"
+strip = false
+
 [patch.crates-io]
 bytecount = { git = "https://github.com/devunt/bytecount.git", branch = "master" }
 tsify = { git = "https://github.com/madonoharu/tsify.git", branch = "main" }
