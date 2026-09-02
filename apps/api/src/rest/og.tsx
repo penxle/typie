@@ -211,7 +211,7 @@ const renderFolder = async (entityId: string) => {
             color: colors.gray[400],
           }}
         >
-          <span>TYPIE &mdash; 작가를 위한 글쓰기 도구</span>
+          <span>TYPIE &mdash; 언제든 이어 쓰는 글쓰기 앱</span>
           <span style={{ fontFamily: 'DeepMindSans' }}>typie.co</span>
         </div>
       </div>
@@ -309,7 +309,7 @@ const renderDocument = async (entityId: string) => {
             color: colors.gray[400],
           }}
         >
-          <span>TYPIE &mdash; 작가를 위한 글쓰기 도구</span>
+          <span>TYPIE &mdash; 언제든 이어 쓰는 글쓰기 앱</span>
           <span style={{ fontFamily: 'DeepMindSans' }}>typie.co</span>
         </div>
       </div>
