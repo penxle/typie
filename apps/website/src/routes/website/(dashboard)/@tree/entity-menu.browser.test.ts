@@ -116,6 +116,11 @@ describe('entity tree menu trigger', () => {
       await userEvent.unhover(target);
       await userEvent.keyboard('{Escape}');
       document.body.focus();
+
+      const outro = floating.getAnimations();
+      expect(outro.length).toBeGreaterThan(0);
+      for (const animation of outro) animation.pause();
+
       await tick();
       await frame();
 
@@ -126,6 +131,8 @@ describe('entity tree menu trigger', () => {
       expect(button.getBoundingClientRect().width).toBe(16);
       expect(Number.parseFloat(floating.style.left)).toBeGreaterThan(100);
       expect(Number.parseFloat(floating.style.top)).toBeGreaterThan(100);
+
+      for (const animation of outro) animation.finish();
 
       await vi.waitFor(() => expect(menu.isConnected).toBe(false), { timeout: 1000 });
       await tick();
