@@ -5,7 +5,7 @@
   import { Button, Icon, Modal, TextInput, Tooltip } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { cubicOut } from 'svelte/easing';
   import { slide } from 'svelte/transition';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
@@ -26,10 +26,10 @@
   } from './user-survey';
 
   type Props = {
-    open: boolean;
+    onclose: () => void;
   };
 
-  let { open = $bindable(false) }: Props = $props();
+  let { onclose }: Props = $props();
 
   const [recordSurvey] = createMutation(
     graphql(`
@@ -50,6 +50,7 @@
   let orders = $state(orderUserSurvey());
   let stepContainerEl = $state<HTMLDivElement>();
   let stepHeightFrom: number | undefined;
+  let closed = false;
 
   const question = $derived(USER_SURVEY_QUESTIONS[step]);
   const options = $derived(orders[question.id]);
@@ -100,23 +101,23 @@
     };
   };
 
-  function reset() {
-    step = 0;
-    direction = 1;
-    submitting = false;
-    stepHeightFrom = undefined;
-    draft = createUserSurveyDraft();
-    orders = orderUserSurvey();
-  }
-
   function snooze() {
     localStorage.setItem(USER_SURVEY_SNOOZE_KEY, userSurveySnoozeUntil(new Date()).toISOString());
     mixpanel.track('dismiss_user_survey_modal', { survey: USER_SURVEY_NAME, step: step + 1 });
   }
 
+  function close() {
+    closed = true;
+    onclose();
+  }
+
   function handleClose() {
+    if (closed) {
+      return;
+    }
+
     snooze();
-    open = false;
+    close();
   }
 
   function handleSelect(value: string) {
@@ -132,7 +133,7 @@
   }
 
   function handleNext() {
-    if (!advanceable || submitting) {
+    if (closed || !advanceable || submitting) {
       return;
     }
 
@@ -168,12 +169,12 @@
       dependence: value.dependence,
     });
 
-    open = false;
     Toast.success('답변을 보냈어요. 감사해요!');
+    close();
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (!open || event.isComposing) {
+    if (closed || event.isComposing) {
       return;
     }
 
@@ -215,15 +216,8 @@
     handleSelect(options[index].value);
   }
 
-  $effect(() => {
-    if (open) {
-      untrack(() => {
-        mixpanel.track('open_user_survey_modal', { survey: USER_SURVEY_NAME });
-      });
-      return;
-    }
-
-    untrack(reset);
+  onMount(() => {
+    mixpanel.track('open_user_survey_modal', { survey: USER_SURVEY_NAME });
   });
 
   const optionStyle = css.raw({
@@ -292,7 +286,7 @@
     maxHeight: '[85vh]',
   })}
   closable={false}
-  bind:open
+  open={true}
 >
   <div class={css({ flexShrink: '0', height: '2px', backgroundColor: 'surface.muted' })}>
     <div

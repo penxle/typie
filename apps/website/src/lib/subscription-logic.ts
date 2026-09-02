@@ -3,7 +3,6 @@ import type { Dayjs } from 'dayjs';
 
 export const NEW_USER_WINDOW_HOURS = 24;
 export const TRIAL_REMINDER_THRESHOLD_DAYS = 3;
-export const LEGACY_TRIAL_CUTOFF = '2026-07-13T00:00:00+09:00';
 
 type OnboardingParams = {
   createdAt: string;
@@ -30,9 +29,8 @@ export const isIndefinitePeriod = (endsAt: string): boolean => {
   return dayjs(endsAt).year() >= INDEFINITE_PERIOD_YEAR;
 };
 
-export const trialStatusLabel = (daysLeft: number, legacy: boolean): string => {
-  const prefix = legacy ? '무료 이용 기간' : '무료 체험 중';
-  return daysLeft <= 0 ? `${prefix} · 오늘 종료` : `${prefix} · ${daysLeft}일 남음`;
+export const trialStatusLabel = (daysLeft: number): string => {
+  return daysLeft <= 0 ? '무료 체험 중 · 오늘 종료' : `무료 체험 중 · ${daysLeft}일 남음`;
 };
 
 type ReminderParams = {
@@ -45,17 +43,7 @@ export const shouldShowTrialReminder = ({ daysLeft, today, lastShownDate }: Remi
   return daysLeft <= TRIAL_REMINDER_THRESHOLD_DAYS && lastShownDate !== today;
 };
 
-export const trialReminderLabel = (daysLeft: number, legacy: boolean): string => {
-  const subject = legacy ? '무료 이용 기간이' : '무료 체험이';
+export const trialReminderLabel = (daysLeft: number): string => {
   const when = daysLeft <= 0 ? '오늘' : `${daysLeft}일 뒤`;
-  return `${subject} ${when} 끝나요.`;
-};
-
-type LegacyTrialParams = {
-  availability: string;
-  startsAt: string;
-};
-
-export const isLegacyTrial = ({ availability, startsAt }: LegacyTrialParams): boolean => {
-  return availability === 'TRIAL' && !dayjs(startsAt).isAfter(dayjs(LEGACY_TRIAL_CUTOFF));
+  return `무료 체험이 ${when} 끝나요.`;
 };

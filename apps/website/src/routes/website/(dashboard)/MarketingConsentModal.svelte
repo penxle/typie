@@ -13,10 +13,10 @@
   import { graphql } from '$mearie';
 
   type Props = {
-    open: boolean;
+    onclose: () => void;
   };
 
-  let { open = $bindable(false) }: Props = $props();
+  let { onclose }: Props = $props();
 
   const [updateMarketingConsent] = createMutation(
     graphql(`
@@ -32,8 +32,8 @@
 
   const handleConsent = async (consented: boolean) => {
     await updateMarketingConsent({ input: { marketingConsent: consented } });
-    open = false;
     Toast.success(`${dayjs().formatAsDate()}에 마케팅 수신 ${consented ? '동의' : '거부'}처리됐어요.`);
+    onclose();
   };
 </script>
 
@@ -44,7 +44,7 @@
     maxWidth: '400px',
   })}
   closable={false}
-  bind:open
+  open={true}
 >
   <div
     class={flex({

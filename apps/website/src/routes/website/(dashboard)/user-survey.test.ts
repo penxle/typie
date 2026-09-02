@@ -3,6 +3,7 @@ import {
   buildUserSurveyValue,
   canAdvanceUserSurvey,
   createUserSurveyDraft,
+  isUserSurveySnoozed,
   orderUserSurveyOptions,
   selectUserSurveyOption,
   USER_SURVEY_QUESTIONS,
@@ -125,5 +126,29 @@ describe('user-survey', () => {
   it('스누즈는 30일 뒤로 잡힌다', () => {
     const now = new Date('2026-09-02T00:00:00Z');
     expect(userSurveySnoozeUntil(now).toISOString()).toBe('2026-10-02T00:00:00.000Z');
+  });
+});
+
+describe('isUserSurveySnoozed', () => {
+  const now = new Date('2026-09-02T00:00:00Z');
+
+  it('스누즈 기록이 없으면 스누즈 상태가 아니다', () => {
+    expect(isUserSurveySnoozed(null, now)).toBe(false);
+  });
+
+  it('스누즈 만료 전이면 스누즈 상태다', () => {
+    expect(isUserSurveySnoozed('2026-09-03T00:00:00Z', now)).toBe(true);
+  });
+
+  it('스누즈 시각과 같으면 아직 스누즈 상태다', () => {
+    expect(isUserSurveySnoozed('2026-09-02T00:00:00Z', now)).toBe(true);
+  });
+
+  it('스누즈가 지났으면 스누즈 상태가 아니다', () => {
+    expect(isUserSurveySnoozed('2026-09-01T23:59:59Z', now)).toBe(false);
+  });
+
+  it('해석할 수 없는 값은 스누즈로 치지 않는다', () => {
+    expect(isUserSurveySnoozed('garbage', now)).toBe(false);
   });
 });

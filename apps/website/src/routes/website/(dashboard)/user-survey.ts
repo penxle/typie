@@ -258,3 +258,11 @@ export function buildUserSurveyValue(draft: UserSurveyDraft): UserSurveyValue {
 export function userSurveySnoozeUntil(now: Date): Date {
   return new Date(now.getTime() + USER_SURVEY_SNOOZE_DAYS * 24 * 60 * 60 * 1000);
 }
+
+export function isUserSurveySnoozed(until: string | null, now: Date): boolean {
+  if (!until) {
+    return false;
+  }
+
+  return new Date(until).getTime() >= now.getTime();
+}

@@ -10,12 +10,6 @@
   import { fetchHighlight, seenIdFor, shouldShowPopover } from './changelog-state.svelte';
   import type { ChangelogHighlight } from './changelog-state.svelte';
 
-  type Props = {
-    suppressed: boolean;
-  };
-
-  let { suppressed }: Props = $props();
-
   const app = getAppContext();
 
   let highlight = $state<ChangelogHighlight | null>(null);
@@ -49,7 +43,7 @@
     })();
   });
 
-  const visible = $derived(!suppressed && !dismissed && shouldShowPopover(highlight, app.preference.current.changelogSeenId));
+  const visible = $derived(!dismissed && shouldShowPopover(highlight, app.preference.current.changelogSeenId));
 
   $effect(() => {
     if (!visible || !highlight) return;

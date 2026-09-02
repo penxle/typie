@@ -8,9 +8,8 @@
   import dayjs from 'dayjs';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { isLegacyTrial, shouldShowTrialReminder, trialDaysLeft, trialReminderLabel, trialStatusLabel } from '$lib/subscription-logic';
+  import { shouldShowTrialReminder, trialDaysLeft, trialReminderLabel, trialStatusLabel } from '$lib/subscription-logic';
   import { graphql } from '$mearie';
-  import PlanChangeNoticeModal from './PlanChangeNoticeModal.svelte';
   import { SubscribeModal } from './subscribe-modal.svelte';
   import type { DashboardLayout_TrialWidget_user$key } from '$mearie';
 
@@ -56,15 +55,11 @@
   const expired = $derived(!subscription);
   const hasScheduled = $derived(Boolean(user.data.nextSubscription));
 
-  const legacy = $derived(
-    subscription ? isLegacyTrial({ availability: subscription.plan.availability, startsAt: subscription.startsAt }) : false,
-  );
   const daysLeft = $derived(subscription ? trialDaysLeft(subscription.currentPeriodEndsAt, dayjs()) : 0);
 
   const visible = $derived((isTrial || expired) && !hasScheduled);
 
   let reminderOpen = $state(false);
-  let planChangeNoticeOpen = $state(false);
 
   onMount(() => {
     if (!isTrial || hasScheduled) {
@@ -88,11 +83,6 @@
   });
 
   const handleClick = () => {
-    if (legacy) {
-      planChangeNoticeOpen = true;
-      return;
-    }
-
     SubscribeModal.show(isTrial ? 'trial_widget' : 'expired_widget');
   };
 </script>
@@ -143,7 +133,7 @@
           type="button"
           transition:fade={{ duration: 150 }}
         >
-          {trialReminderLabel(daysLeft, legacy)}
+          {trialReminderLabel(daysLeft)}
         </button>
       {/if}
 
@@ -189,7 +179,7 @@
             textAlign: 'center',
           })}
         >
-          <p class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.default' })}>{trialStatusLabel(daysLeft, legacy)}</p>
+          <p class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.default' })}>{trialStatusLabel(daysLeft)}</p>
 
           <p class={css({ fontSize: '12px', color: 'text.muted', lineHeight: '[1.6]' })}>
             기간이 끝나도 이어 쓸 수 있도록,
@@ -205,9 +195,3 @@
     </div>
   </div>
 {/if}
-
-<PlanChangeNoticeModal
-  onsubscribe={() => SubscribeModal.show('plan_change_notice')}
-  showSubscribe={true}
-  bind:open={planChangeNoticeOpen}
-/>

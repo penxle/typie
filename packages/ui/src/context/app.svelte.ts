@@ -42,9 +42,6 @@ export type AppPreference = {
 
   exportFormat: 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
 
-  referralWelcomeModalShown: boolean;
-
-  planChangeNoticeShown: boolean;
   changelogSeenId: string;
 
   initialPage: 'blank' | 'last';
@@ -188,9 +185,6 @@ export const setupAppContext = (userId: string) => {
 
       exportFormat: 'PDF',
 
-      referralWelcomeModalShown: false,
-
-      planChangeNoticeShown: false,
       changelogSeenId: '',
 
       initialPage: 'last',
