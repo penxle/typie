@@ -47,7 +47,7 @@
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    paddingLeft: '20px',
+    paddingLeft: '12px',
     paddingRight: '12px',
     paddingY: '8px',
     overflowX: 'auto',
