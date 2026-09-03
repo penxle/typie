@@ -22,6 +22,8 @@
   const THUMB_OPACITY = 75;
   const THUMB_IDLE = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 18%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
   const THUMB_ENGAGED = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 30%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
+  const INDICATOR_BASE = `color-mix(in srgb, ${token('colors.surface.default')} 50%, ${token('colors.surface.subtle')} 50%)`;
+  const INDICATOR_SURFACE = `color-mix(in srgb, ${INDICATOR_BASE} 75%, transparent)`;
 
   const recentMarkRecipe = cva({
     base: {
@@ -451,6 +453,8 @@
   <div
     style:top="{indicatorTop}px"
     style:right="{indicatorRight}px"
+    style:backdrop-filter="blur(2px)"
+    style:background-color={INDICATOR_SURFACE}
     style:transition-duration={prefersReducedMotion.current ? '0ms' : undefined}
     class={css({
       pointerEvents: 'none',
