@@ -29,6 +29,7 @@
   import BodyUnavailable from './BodyUnavailable.svelte';
   import ContentNavigation from './ContentNavigation.svelte';
   import DocumentActionMenu from './DocumentActionMenu.svelte';
+  import DocumentDomMirror from './DocumentDomMirror.svelte';
   import DocumentEmojiReaction from './DocumentEmojiReaction.svelte';
   import DocumentViewSkeleton from './DocumentViewSkeleton.svelte';
   import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
@@ -634,6 +635,11 @@
               </EditorComponent>
             {/if}
           </div>
+
+          <DocumentDomMirror
+            editor={editorReady && editorForDocumentId === document.id ? ctx.editor : undefined}
+            excerpt={document.excerpt}
+          />
         {/key}
 
         {#if activeEditorFailure && failureSurface}

@@ -25,6 +25,7 @@ import type {
   CapturedViewportAnchor,
   ClipboardPayload,
   CursorMetrics,
+  DocumentDomProjection,
   Editor as WasmEditor,
   EditorEvent,
   ExternalElement,
@@ -1185,6 +1186,10 @@ export class Editor {
 
   materializeAt(heads: Uint8Array, sweepTombstones: string[]): PlainDoc {
     return this.#invokeCore((core) => core.materialize_at(heads, sweepTombstones));
+  }
+
+  documentDomProjection(): DocumentDomProjection {
+    return this.#invokeCore((core) => core.document_dom_projection());
   }
 
   enableRecentEdits(): void {

@@ -105,7 +105,7 @@ impl Slice {
     }
 
     pub fn to_html(&self, resource: &Resource) -> String {
-        html_serialize::to_html(self, resource)
+        html_serialize::serialize_clipboard_slice(self, resource)
     }
 
     pub fn from_html(html: &str, resource: &Resource) -> Slice {

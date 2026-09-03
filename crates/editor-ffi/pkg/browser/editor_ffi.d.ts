@@ -160,6 +160,11 @@ export interface DecorationStyle {
     underline: Underline | undefined;
 }
 
+export interface DocumentDomProjection {
+    html: string;
+    source: PlainDoc;
+}
+
 export interface ExpansionAffordances {
     word: boolean;
     sentence: boolean;
@@ -781,6 +786,7 @@ declare class Editor {
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
     detach_surface(page: number): void;
+    document_dom_projection(): DocumentDomProjection;
     /**
      * `window_ms` is how far back an edit still counts as recent. The host owns that
      * number — it also decides how far back the query that seeds the baseline reaches —
