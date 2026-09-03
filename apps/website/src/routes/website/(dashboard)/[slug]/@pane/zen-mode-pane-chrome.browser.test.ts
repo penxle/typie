@@ -277,6 +277,183 @@ describe('pane focus-mode chrome', () => {
     expect(document.querySelector<HTMLOutputElement>('[data-chrome-occlusion]')?.value).toBe('0');
   });
 
+  it('extends the exit grace after interacting with revealed chrome', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const toolbar = document.querySelector<HTMLElement>('[data-chrome-toolbar]');
+    if (!root || !toolbar) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    toolbar.click();
+    move(root, rect.left + 300, rect.top + 140);
+
+    vi.advanceTimersByTime(2999);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('held');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('fading');
+  });
+
+  it('refreshes warm state when an open menu closes', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+
+    (component as typeof component & { openActionsMenu(): void }).openActionsMenu();
+    await tick();
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(20_000);
+
+    (component as typeof component & { closeActionsMenu(): void }).closeActionsMenu();
+    await tick();
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(2999);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('held');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('fading');
+  });
+
+  it('uses the accelerated reveal pace when recently used chrome is revealed again', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const toolbar = document.querySelector<HTMLElement>('[data-chrome-toolbar]');
+    if (!root || !toolbar) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    toolbar.click();
+    move(root, rect.left + 300, rect.top + 140);
+    vi.advanceTimersByTime(3400);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('idle');
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(149);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('pending');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('spot');
+
+    vi.advanceTimersByTime(16);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('expanding');
+  });
+
+  it('keeps the warm reveal pace when the wall clock changes', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const toolbar = document.querySelector<HTMLElement>('[data-chrome-toolbar]');
+    if (!root || !toolbar) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    toolbar.click();
+    move(root, rect.left + 300, rect.top + 140);
+    vi.advanceTimersByTime(3400);
+    vi.setSystemTime(new Date(Date.now() + 60_000));
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(149);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('pending');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('spot');
+  });
+
+  it('refreshes warm state when a focused chrome action is activated', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const action = document.querySelector<HTMLButtonElement>('[data-chrome-toolbar-action]');
+    if (!root || !action) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    await tick();
+    action.focus();
+    await tick();
+    expect(document.activeElement).toBe(action);
+    move(root, rect.left + 300, rect.top + 140);
+    vi.advanceTimersByTime(20_000);
+
+    action.click();
+    action.blur();
+    vi.advanceTimersByTime(2999);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('held');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('fading');
+  });
+
+  it('restores the cold reveal pace when the warm window expires', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const toolbar = document.querySelector<HTMLElement>('[data-chrome-toolbar]');
+    if (!root || !toolbar) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    toolbar.click();
+    move(root, rect.left + 300, rect.top + 140);
+    vi.advanceTimersByTime(20_000);
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(399);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('pending');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('spot');
+  });
+
+  it('restores the cold reveal pace after focus mode is re-entered', async () => {
+    component = mount(ZenModePaneChromeTestRoot, { target: document.body });
+    await tick();
+    const root = document.querySelector<HTMLElement>('[data-chrome-root]');
+    const toolbar = document.querySelector<HTMLElement>('[data-chrome-toolbar]');
+    if (!root || !toolbar) throw new Error('Missing pane chrome fixture');
+    const rect = root.getBoundingClientRect();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(1000);
+    toolbar.click();
+    move(root, rect.left + 300, rect.top + 140);
+    (component as typeof component & { setActive(next: boolean): void }).setActive(false);
+    await tick();
+    (component as typeof component & { setActive(next: boolean): void }).setActive(true);
+    await tick();
+
+    move(root, rect.left + 300, rect.top + 56);
+    vi.advanceTimersByTime(399);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('pending');
+
+    vi.advanceTimersByTime(1);
+    await tick();
+    expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('spot');
+  });
+
   it('makes the zoom hover target available as toolbar expansion starts', async () => {
     component = mount(ZenModePaneChromeTestRoot, { target: document.body });
     await tick();
@@ -784,7 +961,7 @@ describe('pane focus-mode chrome', () => {
     (component as typeof component & { removeActions(): void }).removeActions();
     await tick();
     root.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true, pointerType: 'mouse' }));
-    vi.advanceTimersByTime(1900);
+    vi.advanceTimersByTime(3400);
     await tick();
 
     expect(document.querySelector<HTMLOutputElement>('[data-chrome-phase]')?.value).toBe('idle');

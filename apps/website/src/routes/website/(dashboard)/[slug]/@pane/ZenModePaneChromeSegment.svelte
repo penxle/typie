@@ -37,6 +37,7 @@
       event.currentTarget.contains(event.relatedTarget)
     )
       return;
+    chrome.recordInteraction();
     if (!focusHeld) chrome.hold(segment, 'focus');
     focusHeld = true;
   }
@@ -84,6 +85,7 @@
   class={`${css({ position: 'relative', _motionReduce: { transitionDuration: '0ms' } })} ${className ?? ''}`}
   data-pane-chrome-segment={segment}
   inert={!interactive}
+  onclickcapture={() => chrome.recordInteraction()}
   onfocusin={handleFocusIn}
   onfocusout={handleFocusOut}
   onpointerenter={handlePointerEnter}
