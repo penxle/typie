@@ -7,12 +7,12 @@
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import PencilIcon from '~icons/lucide/pencil';
   import SearchIcon from '~icons/lucide/search';
   import TrashIcon from '~icons/lucide/trash-2';
   import XIcon from '~icons/lucide/x';
+  import IdCopyMenuItem from '../IdCopyMenuItem.svelte';
   import { groupSessionsByRecency, hasUnread, matchesSessionQuery, sessionLabel } from './lib/session-groups.ts';
 
   type Session = {
@@ -30,14 +30,13 @@
     currentId: string | null;
     onClose: () => void;
     onSelect: (id: string) => void;
-    onCopy: (id: string) => Promise<void> | void;
     onArchive: (id: string) => Promise<void> | void;
     onUnarchive: (id: string) => Promise<void> | void;
     onRename: (id: string, title: string) => Promise<void> | void;
     onDelete: (session: Session) => void;
   };
 
-  let { sessions, currentId, onClose, onSelect, onCopy, onArchive, onUnarchive, onRename, onDelete }: Props = $props();
+  let { sessions, currentId, onClose, onSelect, onArchive, onUnarchive, onRename, onDelete }: Props = $props();
 
   let query = $state('');
   let archivedOpen = $state(false);
@@ -433,29 +432,7 @@
               userSelect: 'none',
             })}
           >
-            <button
-              class={flex({
-                alignItems: 'center',
-                gap: '2px',
-                width: 'fit',
-                cursor: 'pointer',
-                fontSize: '11px',
-                color: 'text.disabled',
-                transition: 'common',
-                _hover: { color: 'text.muted' },
-                _focus: { color: 'text.muted' },
-                outlineWidth: '0',
-              })}
-              onclick={async () => {
-                await onCopy(session.id);
-              }}
-              role="menuitem"
-              tabindex="-1"
-              type="button"
-            >
-              <Icon icon={CopyIcon} size={12} />
-              대화 ID 복사
-            </button>
+            <IdCopyMenuItem id={session.id} label="대화 ID 복사" />
           </div>
         {/snippet}
       </Menu>

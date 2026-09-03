@@ -1,14 +1,13 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
   import { flex } from '@typie/styled-system/patterns';
-  import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
+  import { HorizontalDivider, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
-  import CopyIcon from '~icons/lucide/copy';
   import MinusIcon from '~icons/lucide/minus';
   import ScissorsIcon from '~icons/lucide/scissors';
   import TrashIcon from '~icons/lucide/trash';
@@ -17,6 +16,7 @@
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
   import { getNextSiblingOrder } from '../@tree/utils';
+  import IdCopyMenuItem from '../IdCopyMenuItem.svelte';
   import { showPasteToast } from './paste-toast';
 
   type Props = {
@@ -386,28 +386,5 @@
 >
   <div>생성: {dayjs(divider.createdAt).formatAsDateTime()}</div>
 
-  <button
-    class={flex({
-      alignItems: 'center',
-      gap: '2px',
-      width: 'fit',
-      cursor: 'pointer',
-      fontSize: '11px',
-      color: 'text.disabled',
-      transition: 'common',
-      _hover: { color: 'text.muted' },
-      _focus: { color: 'text.muted' },
-      outlineWidth: '0',
-    })}
-    onclick={async () => {
-      await navigator.clipboard.writeText(divider.id);
-      Toast.success('구분선 ID가 복사되었어요');
-    }}
-    role="menuitem"
-    tabindex="-1"
-    type="button"
-  >
-    <Icon icon={CopyIcon} size={12} />
-    구분선 ID 복사
-  </button>
+  <IdCopyMenuItem id={divider.id} label="구분선 ID 복사" />
 </div>

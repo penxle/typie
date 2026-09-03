@@ -5,7 +5,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Dialog, Toast } from '@typie/ui/notification';
+  import { Dialog } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -14,7 +14,6 @@
   import CheckIcon from '~icons/lucide/check';
   import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
-  import CopyIcon from '~icons/lucide/copy';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
@@ -35,6 +34,7 @@
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
   import { getNextSiblingOrder, maxDepth } from '../@tree/utils';
+  import IdCopyMenuItem from '../IdCopyMenuItem.svelte';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
 
@@ -726,30 +726,7 @@
 
   <div>생성: {dayjs(folder.createdAt).formatAsDateTime()}</div>
 
-  <button
-    class={flex({
-      alignItems: 'center',
-      gap: '2px',
-      width: 'fit',
-      cursor: 'pointer',
-      fontSize: '11px',
-      color: 'text.disabled',
-      transition: 'common',
-      _hover: { color: 'text.muted' },
-      _focus: { color: 'text.muted' },
-      outlineWidth: '0',
-    })}
-    onclick={async () => {
-      await navigator.clipboard.writeText(folder.id);
-      Toast.success('폴더 ID가 복사되었어요');
-    }}
-    role="menuitem"
-    tabindex="-1"
-    type="button"
-  >
-    <Icon icon={CopyIcon} size={12} />
-    폴더 ID 복사
-  </button>
+  <IdCopyMenuItem id={folder.id} label="폴더 ID 복사" />
 </div>
 
 {#snippet descendantsView()}

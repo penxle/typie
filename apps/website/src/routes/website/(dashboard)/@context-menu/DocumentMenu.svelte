@@ -34,6 +34,7 @@
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';
   import { getNextSiblingOrder } from '../@tree/utils';
+  import IdCopyMenuItem from '../IdCopyMenuItem.svelte';
   import EntityIconPicker from './EntityIconPicker.svelte';
   import { showPasteToast } from './paste-toast';
   import type { Snippet } from 'svelte';
@@ -686,28 +687,5 @@
     <div>수정: {dayjs(document.updatedAt).formatAsDateTime()}</div>
   </div>
 
-  <button
-    class={flex({
-      alignItems: 'center',
-      gap: '2px',
-      width: 'fit',
-      cursor: 'pointer',
-      fontSize: '11px',
-      color: 'text.disabled',
-      transition: 'common',
-      _hover: { color: 'text.muted' },
-      _focus: { color: 'text.muted' },
-      outlineWidth: '0',
-    })}
-    onclick={async () => {
-      await navigator.clipboard.writeText(document.id);
-      Toast.success('문서 ID가 복사되었어요');
-    }}
-    role="menuitem"
-    tabindex="-1"
-    type="button"
-  >
-    <Icon icon={CopyIcon} size={12} />
-    문서 ID 복사
-  </button>
+  <IdCopyMenuItem id={document.id} label="문서 ID 복사" />
 </div>

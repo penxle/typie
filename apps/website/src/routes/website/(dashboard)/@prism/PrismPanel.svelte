@@ -15,7 +15,6 @@
   import ArchiveIcon from '~icons/lucide/archive';
   import ArchiveRestoreIcon from '~icons/lucide/archive-restore';
   import CircleAlertIcon from '~icons/lucide/circle-alert';
-  import CopyIcon from '~icons/lucide/copy';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import HistoryIcon from '~icons/lucide/history';
   import PencilIcon from '~icons/lucide/pencil';
@@ -28,6 +27,7 @@
   import { takeSessionJump } from '$lib/prism/session-jump.svelte';
   import PrismSpinner from '$lib/prism-ui/PrismSpinner.svelte';
   import { graphql } from '$mearie';
+  import IdCopyMenuItem from '../IdCopyMenuItem.svelte';
   import { AI_OPT_IN_FAILURE_MESSAGE } from './lib/ai-opt-in.ts';
   import { AutoResolver } from './lib/auto-resolve.svelte.ts';
   import { backoffDelay } from './lib/backoff.ts';
@@ -547,11 +547,6 @@
     mixpanel.track('rename_prism_session', { via });
   };
 
-  const copySessionId = async (id: string) => {
-    await navigator.clipboard.writeText(id);
-    Toast.success('대화 ID가 복사되었어요');
-  };
-
   const requestDelete = (session: { id: string; title?: string | null }, via: 'header_menu' | 'session_list') => {
     Dialog.confirm({
       title: '대화를 삭제하시겠어요?',
@@ -1031,29 +1026,7 @@
               userSelect: 'none',
             })}
           >
-            <button
-              class={flex({
-                alignItems: 'center',
-                gap: '2px',
-                width: 'fit',
-                cursor: 'pointer',
-                fontSize: '11px',
-                color: 'text.disabled',
-                transition: 'common',
-                _hover: { color: 'text.muted' },
-                _focus: { color: 'text.muted' },
-                outlineWidth: '0',
-              })}
-              onclick={async () => {
-                await copySessionId(session.id);
-              }}
-              role="menuitem"
-              tabindex="-1"
-              type="button"
-            >
-              <Icon icon={CopyIcon} size={12} />
-              대화 ID 복사
-            </button>
+            <IdCopyMenuItem id={session.id} label="대화 ID 복사" />
           </div>
         {/snippet}
       </Menu>
@@ -1093,7 +1066,6 @@
       currentId={selected.current}
       onArchive={(id) => archiveSession(id, 'session_list')}
       onClose={() => (listOpen = false)}
-      onCopy={copySessionId}
       onDelete={(session) => requestDelete(session, 'session_list')}
       onRename={(id, title) => renameSession(id, title, 'session_list')}
       onSelect={(id) => {
