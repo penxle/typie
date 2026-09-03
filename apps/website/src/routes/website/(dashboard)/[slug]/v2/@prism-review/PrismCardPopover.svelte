@@ -8,6 +8,7 @@
   import { fade } from 'svelte/transition';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { pageRectsToVirtualElement } from '$lib/editor-ffi/geometry';
+  import { fadeIn, fadeOut, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { getMarginContext } from './context.svelte.ts';
   import { COLUMN_GAP, COLUMN_WIDTH } from './margin-view.ts';
   import PrismCard from './PrismCard.svelte';
@@ -44,6 +45,10 @@
   // 카드는 큰 블록이다 — 짧으면 전환이 있었는지조차 보이지 않는다. quintOut ≈ cubic-bezier(0.22, 1, 0.36, 1)
   const FADE_MS = 300;
   const cardFade = { duration: FADE_MS, easing: quintOut };
+  const reduceMotion = reducedMotion();
+  const roundFadeIn = { ...fadeIn, duration: reduceMotion ? 0 : fadeIn.duration };
+  const roundFadeOut = { ...fadeOut, duration: reduceMotion ? 0 : fadeOut.duration };
+  const roundTransitioning = $derived(margin.selectedRoundId !== margin.presentationRoundId || margin.roundVisibilityProgress < 1);
 
   const scroller = $derived(ctx.editor?.scrollContainerEl);
 
@@ -179,8 +184,18 @@
   >
     <!-- 전환은 안쪽에서 받는다 — 바깥 요소의 opacity는 앵커 이탈 숨김이 쓰고 있어,
          켜짐/꺼짐 페이드까지 같은 요소에 얹으면 두 기제가 같은 속성을 다툰다 -->
-    <div class={css({ display: 'flex', flexDirection: 'column', minHeight: '0' })} in:fade={cardFade} out:fade={cardFade}>
-      <PrismCard expanded={true} item={active} onClose={() => margin.activate(null)} onToggle={() => margin.activate(null)} scrollable />
+    <div
+      style:pointer-events={margin.roundInteractive ? undefined : 'none'}
+      class={css({ display: 'flex', flexDirection: 'column', minHeight: '0' })}
+      inert={!margin.roundInteractive}
+    >
+      <div
+        class={css({ display: 'flex', flexDirection: 'column', minHeight: '0' })}
+        in:fade={roundTransitioning ? roundFadeIn : cardFade}
+        out:fade={roundTransitioning ? roundFadeOut : cardFade}
+      >
+        <PrismCard expanded={true} item={active} onClose={() => margin.activate(null)} onToggle={() => margin.activate(null)} scrollable />
+      </div>
     </div>
   </div>
 {/if}

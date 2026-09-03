@@ -134,8 +134,11 @@ export const latestSeat = async (threadId: string): Promise<Seat | null> =>
 
 // 뷰 회차의 좌석이 있으면 그것, 없으면(정리된 스레드) 마지막 좌석.
 // 폴백은 한 스레드의 issueIndex·anchors·quote가 저마다 다시 치므로 요청 안에서 한 번만 읽는다.
-export const viewSeat = async (scope: object, threadId: string): Promise<Seat | null> => {
-  const roundId = viewedRoundOf(scope, threadId);
+export const viewSeat = async (
+  scope: object,
+  threadId: string,
+  roundId: string | null = viewedRoundOf(scope, threadId),
+): Promise<Seat | null> => {
   if (roundId !== null) {
     const seats = await roundSeats(scope, roundId);
     const seat = seats.get(threadId);

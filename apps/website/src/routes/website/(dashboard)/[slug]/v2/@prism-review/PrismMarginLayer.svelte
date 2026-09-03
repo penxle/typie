@@ -1,14 +1,17 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { Button, SegmentButtons } from '@typie/ui/components';
+  import { portal } from '@typie/ui/actions';
+  import { Button, RingSpinner, SegmentButtons } from '@typie/ui/components';
   import { untrack } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { PAGE_GAP } from '$lib/editor-ffi/constants';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { resolveCachedPageSpans } from '$lib/editor-ffi/geometry';
   import { resolveContinuousViewPadding } from '$lib/editor-ffi/zoom';
+  import { fadeIn, fadeOut, reducedMotion } from '../../../@prism/lib/motion.ts';
   import PrismReviewDetail from '../../../@prism/review/PrismReviewDetail.svelte';
   import { getMarginContext } from './context.svelte.ts';
-  import { lanePresentation, targetColumnLeft } from './margin-motion.ts';
+  import { lanePresentation, targetColumnLeft, visibleAreaCenterY } from './margin-motion.ts';
   import { COLUMN_GAP, COLUMN_WIDTH, GUTTER } from './margin-view.ts';
   import PrismCardColumn from './PrismCardColumn.svelte';
   import PrismCardPopover from './PrismCardPopover.svelte';
@@ -34,6 +37,8 @@
   let marks = $state.raw<Mark[]>([]);
   let bodyLeft = $state(0);
   let columnLeft = $state(0);
+  let spinnerLeft = $state<number | null>(null);
+  let spinnerTop = $state<number | null>(null);
   const railAnimation = $derived.by(() => {
     if (!contentMotion || contentMotion.fromX === 0) return;
     const name = contentMotion.fromX > 0 ? 'editor-content-from-right' : 'editor-content-from-left';
@@ -64,7 +69,11 @@
     const editor = ctx.editor;
     const area = editor?.extensionAreaEl;
     const snapshot = editor?.published?.snapshot;
-    if (!editor || !area || !snapshot) return;
+    if (!editor || !area || !snapshot) {
+      spinnerLeft = null;
+      spinnerTop = null;
+      return;
+    }
 
     const areaRect = area.getBoundingClientRect();
     const zoom = editor.safeDisplayZoom();
@@ -156,6 +165,16 @@
         columnLeft = targetColumnLeft(pageLayoutLeft + pageRect.width, layoutProgress);
       }
     }
+
+    if (scroller) {
+      const viewport = scroller.getBoundingClientRect();
+      const visibleArea = ctx.scroll?.visibleArea ?? { topInset: 0, bottomInset: 0 };
+      spinnerLeft = areaRect.left + columnLeft + COLUMN_WIDTH / 2;
+      spinnerTop = visibleAreaCenterY(viewport.top, viewport.height, visibleArea);
+    } else {
+      spinnerLeft = null;
+      spinnerTop = null;
+    }
   };
 
   // 의미 좌표는 판이 바뀔 때만 갱신한다. presentation 측정은 아래 effect 한 곳에서 수행한다.
@@ -173,6 +192,8 @@
     const editor = ctx.editor;
     void itemsKey;
     void editor?.presentationGeometryRevision;
+    void ctx.scroll?.visibleArea.topInset;
+    void ctx.scroll?.visibleArea.bottomInset;
     untrack(measure);
   });
 
@@ -231,6 +252,7 @@
        tabindex는 포커스 탐색을 여기서 멈추기 위한 것이다 — 없으면 클릭이 레이어를 지나쳐
        에디터 쪽 조상에 포커스를 앉히고, 그 focusin이 원고 입력을 도로 잡아채 카드 선택이 지워진다. -->
   <div
+    style:opacity={margin.roundVisibilityProgress}
     class={css({
       position: 'absolute',
       inset: '0',
@@ -241,6 +263,7 @@
     })}
     data-zen-mode-closing-surface
     draggable={false}
+    inert={!margin.roundInteractive}
     onclick={(event) => event.stopPropagation()}
     oncontextmenu={(event) => event.stopPropagation()}
     ondragenter={(event) => event.stopPropagation()}
@@ -336,11 +359,26 @@
          잡힌 포인터 캡처가 click을 가로채 활성화 자체가 불발된다.
          변형 조상이 없으므로 position:fixed는 여기서도 뷰포트 기준 그대로다. -->
     {#if margin.selectedRoundId !== null}
-      <PrismOverviewRuler {marks} />
+      <PrismOverviewRuler interactive={margin.roundInteractive} {marks} opacity={margin.roundVisibilityProgress} />
     {/if}
   </div>
 
   {#if margin.detailRound !== null}
     <PrismReviewDetail round={margin.detailRound} bind:open={detailOpen} />
   {/if}
+{/if}
+
+{#if margin.roundLoading && margin.mode === 'column' && spinnerLeft !== null && spinnerTop !== null}
+  <div
+    style:left={`${spinnerLeft}px`}
+    style:top={`${spinnerTop}px`}
+    class={css({ position: 'fixed', zIndex: '10', pointerEvents: 'none', transform: 'translate(-50%, -50%)' })}
+    aria-label="리뷰 불러오는 중"
+    role="status"
+    use:portal
+    in:fade={{ ...fadeIn, duration: reducedMotion() ? 0 : fadeIn.duration }}
+    out:fade={{ ...fadeOut, duration: reducedMotion() ? 0 : fadeOut.duration }}
+  >
+    <RingSpinner style={css.raw({ size: '20px', color: 'text.faint' })} />
+  </div>
 {/if}

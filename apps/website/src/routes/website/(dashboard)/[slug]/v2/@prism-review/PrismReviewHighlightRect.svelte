@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import { presentedPageElement } from '$lib/editor-ffi/geometry';
+  import { fadeIn, fadeOut, reducedMotion } from '../../../@prism/lib/motion.ts';
   import type { PageRect } from '@typie/editor-ffi/browser';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
@@ -34,6 +36,8 @@
   style:height={`${rect.rect.height}px`}
   class="prism-review-highlight"
   data-prism-review-highlight={kind}
+  in:fade={{ ...fadeIn, duration: reducedMotion() ? 0 : fadeIn.duration }}
+  out:fade={{ ...fadeOut, duration: reducedMotion() ? 0 : fadeOut.duration }}
 ></div>
 
 <style>
