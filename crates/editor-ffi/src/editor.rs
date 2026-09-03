@@ -184,6 +184,14 @@ pub struct CharacterCounts {
     pub selection_without_whitespace_and_punctuation: u32,
 }
 
+#[cfg(feature = "wasm-browser")]
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DocumentDomProjection {
+    pub html: String,
+    pub source: editor_model::PlainDoc,
+}
+
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1212,14 +1220,22 @@ impl Editor {
     }
 }
 
-// Separate from the block above: `surface_backend`/`refresh_surface` are browser
-// present-path specific (the `cpu-oversized` report, the visibility-return recovery),
-// so they stay in a wasm-browser-only block rather than the shared uniffi/wasm block
-// above — a `#[cfg]` on an individual method inside a shared uniffi/wasm block isn't
-// honored by uniffi's own codegen.
+// Browser-only APIs stay outside the shared UniFFI/WASM block above: UniFFI codegen
+// does not honor `#[cfg]` on individual methods inside that shared export block.
 #[cfg(feature = "wasm-browser")]
 #[editor_macros::ffi_export(wasm)]
 impl Editor {
+    pub fn document_dom_projection(&self) -> EditorResult<Complex<DocumentDomProjection>> {
+        self.with_inner(|inner| {
+            let source = inner.editor.state().to_plain();
+            let html = {
+                let resource = inner.editor.resource().lock().unwrap();
+                editor_clipboard::html::dom_projection::serialize(&source, &resource)
+            };
+            Ok(DocumentDomProjection { html, source }.into_ffi()?)
+        })
+    }
+
     pub fn surface_backend(&self, page: u32) -> EditorResult<String> {
         self.with_guarded_render(|render| {
             Ok(match render.surfaces.get(&page) {

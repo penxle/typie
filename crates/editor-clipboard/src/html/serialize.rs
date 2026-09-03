@@ -1,11 +1,14 @@
+use super::markup::{
+    HtmlTarget, NodeMarkup, markup_for_node, write_clipboard_text, write_close_tag, write_open_tag,
+};
 use crate::slice::Slice;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use editor_model::{Fragment, Modifier, PlainNode};
+use editor_model::{Fragment, PlainNode};
 use editor_resource::Resource;
 use serde::Serialize;
 
-pub fn to_html(slice: &Slice, resource: &Resource) -> String {
+pub(crate) fn serialize_clipboard_slice(slice: &Slice, resource: &Resource) -> String {
     let mut out = String::new();
     out.push_str(r#"<meta charset="utf-8">"#);
     let mut meta_json = Vec::new();
@@ -35,221 +38,33 @@ fn serialize_forest(fragments: &[Fragment], resource: &Resource, out: &mut Strin
         let fragment = match task {
             SerializeTask::Node(fragment) => fragment,
             SerializeTask::Close(tag) => {
-                out.push_str(tag);
+                write_close_tag(out, tag);
                 continue;
             }
         };
-        match &fragment.node {
-            PlainNode::Text(t) => serialize_text(&t.text, &fragment.modifiers, resource, out),
-            PlainNode::HardBreak(_) => out.push_str("<br>"),
-            PlainNode::Tab(_) => out.push('\t'),
-            PlainNode::Paragraph(_) => open_container("<p>", "</p>", fragment, &mut tasks, out),
-            PlainNode::BulletList(_) => open_container("<ul>", "</ul>", fragment, &mut tasks, out),
-            PlainNode::OrderedList(_) => open_container("<ol>", "</ol>", fragment, &mut tasks, out),
-            PlainNode::ListItem(_) => open_container("<li>", "</li>", fragment, &mut tasks, out),
-            PlainNode::Blockquote(b) => open_container(
-                &format!(r#"<blockquote data-variant="{}">"#, variant_str(&b.variant)),
-                "</blockquote>",
-                fragment,
-                &mut tasks,
-                out,
-            ),
-            PlainNode::Callout(c) => open_container(
-                &format!(
-                    r#"<aside data-callout data-variant="{}">"#,
-                    variant_str(&c.variant)
-                ),
-                "</aside>",
-                fragment,
-                &mut tasks,
-                out,
-            ),
-            PlainNode::Fold(_) => {
-                open_container("<details>", "</details>", fragment, &mut tasks, out)
-            }
-            PlainNode::FoldTitle(_) => {
-                open_container("<summary>", "</summary>", fragment, &mut tasks, out)
-            }
-            PlainNode::FoldContent(_) => push_children(&mut tasks, &fragment.children),
-            PlainNode::Table(t) => open_container(
-                &format!(
-                    r#"<table data-border-style="{}" data-proportion="{}">"#,
-                    variant_str(&t.border_style),
-                    t.proportion,
-                ),
-                "</table>",
-                fragment,
-                &mut tasks,
-                out,
-            ),
-            PlainNode::TableRow(_) => open_container("<tr>", "</tr>", fragment, &mut tasks, out),
-            PlainNode::TableCell(c) => {
-                let open = match c.col_width {
-                    Some(width) => format!(r#"<td data-col-width="{width}">"#),
-                    None => "<td>".to_string(),
+        match markup_for_node(&fragment.node, HtmlTarget::Clipboard) {
+            NodeMarkup::Text => {
+                let PlainNode::Text(text) = &fragment.node else {
+                    unreachable!()
                 };
-                open_container(&open, "</td>", fragment, &mut tasks, out);
+                write_clipboard_text(&text.text, &fragment.modifiers, resource, out);
             }
-            PlainNode::Image(i) => {
-                out.push_str(&format!(
-                    r#"<img data-id="{}" data-proportion="{}">"#,
-                    html_escape(i.id.as_deref().unwrap_or("")),
-                    i.proportion,
-                ));
+            NodeMarkup::Tab => out.push('\t'),
+            NodeMarkup::Children => push_children(&mut tasks, &fragment.children),
+            NodeMarkup::Skip => {}
+            NodeMarkup::Element { tag, attrs, void } => {
+                write_open_tag(out, tag, &attrs, &[]);
+                if !void {
+                    tasks.push(SerializeTask::Close(tag));
+                    push_children(&mut tasks, &fragment.children);
+                }
             }
-            PlainNode::Embed(e) => {
-                out.push_str(&format!(
-                    r#"<a data-embed data-id="{}"></a>"#,
-                    html_escape(e.id.as_deref().unwrap_or("")),
-                ));
-            }
-            PlainNode::File(f) => {
-                out.push_str(&format!(
-                    r#"<a data-file data-id="{}"></a>"#,
-                    html_escape(f.id.as_deref().unwrap_or("")),
-                ));
-            }
-            PlainNode::Archived(_) => {}
-            PlainNode::PageBreak(_) => {
-                out.push_str(r#"<div style="page-break-after:always"></div>"#)
-            }
-            PlainNode::HorizontalRule(_) => out.push_str("<hr>"),
-            PlainNode::Root(_) => push_children(&mut tasks, &fragment.children),
-            PlainNode::Unknown => {}
         }
     }
-}
-
-fn open_container<'a>(
-    open: &str,
-    close: &'static str,
-    fragment: &'a Fragment,
-    tasks: &mut Vec<SerializeTask<'a>>,
-    out: &mut String,
-) {
-    out.push_str(open);
-    tasks.push(SerializeTask::Close(close));
-    push_children(tasks, &fragment.children);
 }
 
 fn push_children<'a>(tasks: &mut Vec<SerializeTask<'a>>, children: &'a [Fragment]) {
     tasks.extend(children.iter().rev().map(SerializeTask::Node));
-}
-
-// 변형 enum 들은 #[serde(rename_all = "snake_case")] 의 plain string 직렬화를 가정
-fn variant_str<T: serde::Serialize>(v: &T) -> String {
-    serde_json::to_value(v)
-        .ok()
-        .and_then(|val| val.as_str().map(String::from))
-        .unwrap_or_default()
-}
-
-fn serialize_text(text: &str, modifiers: &[Modifier], resource: &Resource, out: &mut String) {
-    let escaped = html_escape(text);
-
-    let (structural, style_pairs) = split_modifiers(modifiers, resource);
-    let mut open_tags: Vec<String> = Vec::new();
-    let mut close_tags: Vec<String> = Vec::new();
-
-    for m in &structural {
-        let (open, close) = open_close_for(m);
-        open_tags.push(open);
-        close_tags.push(close);
-    }
-
-    for t in &open_tags {
-        out.push_str(t);
-    }
-    if !style_pairs.is_empty() {
-        out.push_str(&format!(r#"<span style="{}">"#, style_pairs.join(";")));
-    }
-    out.push_str(&escaped);
-    if !style_pairs.is_empty() {
-        out.push_str("</span>");
-    }
-    for t in close_tags.iter().rev() {
-        out.push_str(t);
-    }
-}
-
-fn structural_order(m: &Modifier) -> u8 {
-    match m {
-        Modifier::Bold => 0,
-        Modifier::Italic => 1,
-        Modifier::Underline => 2,
-        Modifier::Strikethrough => 3,
-        Modifier::Link { .. } => 4,
-        _ => u8::MAX,
-    }
-}
-
-fn css_color(value: &str, token_prefix: &str, resource: &Resource) -> String {
-    if value == "none" {
-        return "transparent".to_string();
-    }
-    match resource
-        .theme()
-        .try_color(&format!("{token_prefix}.{value}"))
-    {
-        Some(c) => format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b),
-        None => value.to_string(),
-    }
-}
-
-fn split_modifiers<'m>(
-    mods: &'m [Modifier],
-    resource: &Resource,
-) -> (Vec<&'m Modifier>, Vec<String>) {
-    let mut structural: Vec<&Modifier> = vec![];
-    let mut style: Vec<String> = vec![];
-    for m in mods {
-        match m {
-            Modifier::Bold
-            | Modifier::Italic
-            | Modifier::Underline
-            | Modifier::Strikethrough
-            | Modifier::Link { .. } => structural.push(m),
-            Modifier::FontSize { value } => {
-                style.push(format!("font-size:{}pt", *value as f32 / 100.0))
-            }
-            Modifier::FontFamily { value } => style.push(format!("font-family:{value}")),
-            Modifier::FontWeight { value } => style.push(format!("font-weight:{value}")),
-            Modifier::TextColor { value } => {
-                style.push(format!("color:{}", css_color(value, "text", resource)))
-            }
-            Modifier::BackgroundColor { value } => style.push(format!(
-                "background-color:{}",
-                css_color(value, "bg", resource)
-            )),
-            Modifier::LetterSpacing { value } => {
-                style.push(format!("letter-spacing:{}em", *value as f32 / 100.0))
-            }
-            _ => {}
-        }
-    }
-    structural.sort_by_key(|m| structural_order(m));
-    (structural, style)
-}
-
-fn open_close_for(m: &Modifier) -> (String, String) {
-    match m {
-        Modifier::Bold => ("<strong>".into(), "</strong>".into()),
-        Modifier::Italic => ("<em>".into(), "</em>".into()),
-        Modifier::Underline => ("<u>".into(), "</u>".into()),
-        Modifier::Strikethrough => ("<s>".into(), "</s>".into()),
-        Modifier::Link { href } => (
-            format!(r#"<a href="{}">"#, html_escape(href)),
-            "</a>".into(),
-        ),
-        _ => (String::new(), String::new()),
-    }
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]
@@ -267,7 +82,7 @@ mod tests {
     #[test]
     fn serialize_empty_slice_with_meta() {
         let slice = Slice::new(vec![], 0, 0);
-        let html = to_html(&slice, &Resource::new_test());
+        let html = serialize_clipboard_slice(&slice, &Resource::new_test());
         assert!(html.contains("data-slice-v2="));
         assert!(html.contains("data-version=\"1\""));
         assert!(html.contains("<div data-root>"));
@@ -277,7 +92,7 @@ mod tests {
     #[test]
     fn serialize_prepends_charset_meta() {
         let slice = Slice::new(vec![], 0, 0);
-        let html = to_html(&slice, &Resource::new_test());
+        let html = serialize_clipboard_slice(&slice, &Resource::new_test());
         assert!(html.starts_with(r#"<meta charset="utf-8">"#));
     }
 
