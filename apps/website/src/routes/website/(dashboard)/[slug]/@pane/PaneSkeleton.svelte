@@ -206,7 +206,7 @@
 
     {#snippet toolbarRowSkeleton(kind: ToolbarKind, isPrimary: boolean)}
       <div
-        style:padding-left="20px"
+        style:padding-left="12px"
         style:padding-right="12px"
         style:padding-top="8px"
         style:padding-bottom="8px"
