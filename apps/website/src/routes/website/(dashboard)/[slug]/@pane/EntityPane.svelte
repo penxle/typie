@@ -5,7 +5,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import FileXIcon from '~icons/lucide/file-x';
   import { fb } from '$lib/analytics';
@@ -103,6 +103,7 @@
   const documentLayoutMode = $derived(entity?.node.__typename === 'Document' ? entity.node.layoutMode : null);
   const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
   const documentHeaderVisible = $derived(entity?.state === EntityState.ACTIVE && entity.node.__typename === 'Document');
+  let previousEntityState: EntityState | undefined;
 
   $effect(() => {
     if (query.loading) {
@@ -127,6 +128,18 @@
       });
     } else {
       openDocuments.resolvePane(pane.id);
+    }
+  });
+
+  $effect(() => {
+    const currentEntityState = entity?.state;
+    if (!currentEntityState) return;
+
+    const shouldClosePane = previousEntityState === EntityState.ACTIVE && currentEntityState !== EntityState.ACTIVE;
+    previousEntityState = currentEntityState;
+
+    if (shouldClosePane) {
+      untrack(() => paneGroup.removePane(pane.id));
     }
   });
 
