@@ -370,7 +370,7 @@
 >
   {#if ctx.editor}
     <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
-      {#snippet zoomControls({ controls })}
+      {#snippet zoomControls(controls)}
         <FloatingEditorZoomControls
           chromeAttachment={floatingZoomChromeAttachment}
           {controls}

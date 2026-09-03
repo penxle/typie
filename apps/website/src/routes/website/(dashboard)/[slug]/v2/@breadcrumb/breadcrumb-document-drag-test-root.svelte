@@ -6,10 +6,14 @@
   import { schema } from '$mearie';
   import EditorBreadcrumbNavigation from './EditorBreadcrumbNavigation.svelte';
   import type { Exchange, OperationResult } from '@mearie/core';
-  import type { EditorContextBarSegmentState } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
   import type { DragItem, DragPane, DropZone, PaneGroup } from '../../@pane/context.svelte';
-  import type { EditorBreadcrumbCurrent, EditorBreadcrumbPathEntity, EditorBreadcrumbTarget } from './EditorBreadcrumbNavigation.svelte';
+  import type {
+    EditorBreadcrumbCurrent,
+    EditorBreadcrumbHoldHandle,
+    EditorBreadcrumbPathEntity,
+    EditorBreadcrumbTarget,
+  } from './EditorBreadcrumbNavigation.svelte';
 
   type Props = {
     currentKind?: 'entity' | 'home';
@@ -163,7 +167,7 @@
     release(reason: string) {
       holds = holds.filter((hold) => hold !== reason);
     },
-  } as EditorContextBarSegmentState;
+  } satisfies EditorBreadcrumbHoldHandle;
 </script>
 
 <label>

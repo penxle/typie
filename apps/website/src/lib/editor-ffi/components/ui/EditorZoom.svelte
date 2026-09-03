@@ -8,11 +8,6 @@
   import type { DocumentZoomLandmark, DocumentZoomLayout } from '$lib/editor-ffi/zoom';
   import type { EditorZoomControlsRenderProps } from './EditorZoomControls.svelte';
 
-  export type EditorZoomRenderProps = {
-    controls: EditorZoomControlsRenderProps;
-    showViewControlsOnPaneEntry: boolean;
-  };
-
   type Props = {
     editor: Editor;
     active?: boolean;
@@ -20,7 +15,7 @@
     viewportWidth: number;
     editorViewSurface: HTMLElement | undefined;
     scroll: EditorScrollScope | undefined;
-    zoomControls?: Snippet<[EditorZoomRenderProps]>;
+    zoomControls?: Snippet<[EditorZoomControlsRenderProps]>;
   };
 
   type PinchSession = {
@@ -355,19 +350,16 @@
 <svelte:window onkeydowncapture={handleBrowserZoomShortcut} />
 
 {@render zoomControls?.({
-  controls: {
-    atMaximum,
-    atMinimum,
-    boundaryAttemptLandmark,
-    boundaryAttemptRequest,
-    displayZoom,
-    enabled: zoomEnabled,
-    indicatorZoom,
-    landmark,
-    onToggleZoom: toggleZoom,
-    onZoomIn: zoomIn,
-    onZoomOut: zoomOut,
-    toggleTargetLandmark,
-  },
-  showViewControlsOnPaneEntry: zoomEnabled && landmark !== 'unit',
+  atMaximum,
+  atMinimum,
+  boundaryAttemptLandmark,
+  boundaryAttemptRequest,
+  displayZoom,
+  enabled: zoomEnabled,
+  indicatorZoom,
+  landmark,
+  onToggleZoom: toggleZoom,
+  onZoomIn: zoomIn,
+  onZoomOut: zoomOut,
+  toggleTargetLandmark,
 })}
