@@ -2,4 +2,4 @@
   import { Toaster } from 'svelte-sonner';
 </script>
 
-<Toaster />
+<Toaster position="bottom-center" />
