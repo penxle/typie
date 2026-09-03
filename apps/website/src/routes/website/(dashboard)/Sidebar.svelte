@@ -2,7 +2,7 @@
   import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { pointerCapture, scrollFog, tooltip } from '@typie/ui/actions';
+  import { hoverIntent, pointerCapture, scrollFog, tooltip } from '@typie/ui/actions';
   import { Icon, ProgressRing, Scrollbar } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
@@ -37,6 +37,9 @@
   import SpaceMenu from './SpaceMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
   import type { SidebarNavigationResizeSession } from './sidebar-navigation-resize';
+
+  const IMMEDIATE_EDGE_WIDTH = 6;
+  const INTENT_EDGE_WIDTH = 12;
 
   type Props = {
     user$key: DashboardLayout_Sidebar_user$key;
@@ -357,10 +360,18 @@
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let hovered = $state(false);
+  let edgeRevealHeld = $state(false);
+  let edgeIntentEnabled = $state(false);
 
   type SidebarState = 'hidden' | 'visible';
+  let sidebarEl = $state<HTMLDivElement>();
   let sidebarState = $state<SidebarState>('hidden');
   let animateTransform = $state(false);
+
+  const revealSidebar = () => {
+    animateTransform = true;
+    sidebarState = 'visible';
+  };
 
   const transform = $derived.by(() => {
     if (!app.preference.current.sidebarHidden) return 'translateX(0)';
@@ -385,6 +396,7 @@
   const shouldHide = () =>
     app.preference.current.sidebarHidden &&
     !hovered &&
+    !edgeRevealHeld &&
     !app.state.sidebarPeek &&
     app.state.openMenuCount === 0 &&
     sidebarState !== 'hidden';
@@ -417,27 +429,106 @@
   $effect(() => {
     if (!app.state.sidebarPeek || !app.preference.current.sidebarHidden) return;
 
-    untrack(() => {
-      animateTransform = true;
-      sidebarState = 'visible';
-    });
+    untrack(revealSidebar);
   });
 
   const handleMouseEnter = () => {
     hovered = true;
 
-    if (app.preference.current.sidebarHidden) {
-      animateTransform = true;
-      sidebarState = 'visible';
-    }
+    if (app.preference.current.sidebarHidden) revealSidebar();
   };
 
   const handleMouseLeave = () => {
     hovered = false;
   };
+
+  type EdgeZone = 'immediate' | 'intent' | null;
+
+  const sidebarFootprint = (event: PointerEvent) => {
+    const rect = sidebarEl?.getBoundingClientRect();
+    if (!rect || event.clientX < 0 || event.clientY < rect.top || event.clientY >= rect.bottom) return null;
+    return rect;
+  };
+
+  const isEdgeRevealSurface = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+
+    const surface = target.closest('.main-container, [role="tabpanel"], [role="textbox"]');
+    if (!surface || !surface.closest('.main-container')) return false;
+
+    for (let element: Element | null = target; element && element !== surface; element = element.parentElement) {
+      if (!(element instanceof HTMLElement)) continue;
+      if (element.tabIndex >= 0 || element.hasAttribute('tabindex') || element.hasAttribute('role') || element.isContentEditable) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const edgeZone = (event: PointerEvent): EdgeZone => {
+    if (
+      sidebarState !== 'hidden' ||
+      event.pointerType === 'touch' ||
+      !app.preference.current.sidebarHidden ||
+      event.clientX < 0 ||
+      event.clientX >= INTENT_EDGE_WIDTH
+    ) {
+      return null;
+    }
+
+    const rect = sidebarFootprint(event);
+    if (!rect || !isEdgeRevealSurface(event.target)) return null;
+
+    return event.clientX < IMMEDIATE_EDGE_WIDTH ? 'immediate' : 'intent';
+  };
+
+  const revealFromEdge = () => {
+    edgeRevealHeld = true;
+    revealSidebar();
+  };
+
+  const handleEdgeIntent = (event: PointerEvent) => {
+    if (edgeZone(event) === 'intent') revealFromEdge();
+  };
+
+  const handleEdgePointerMove = (event: PointerEvent) => {
+    if (edgeRevealHeld) {
+      const rect = sidebarFootprint(event);
+      if (!rect || event.clientX >= rect.width) edgeRevealHeld = false;
+    }
+
+    const zone = edgeZone(event);
+    edgeIntentEnabled = zone === 'intent';
+    if (zone === 'immediate') revealFromEdge();
+  };
+
+  const handleEdgePointerDown = (event: PointerEvent) => {
+    if (edgeZone(event) !== 'immediate') return;
+    event.preventDefault();
+    event.stopPropagation();
+    revealFromEdge();
+  };
+
+  const releaseEdgeReveal = () => {
+    edgeIntentEnabled = false;
+    edgeRevealHeld = false;
+  };
 </script>
 
+<svelte:body use:hoverIntent={{ delay: 400, intentEnabled: edgeIntentEnabled, samples: 1, onIntent: handleEdgeIntent }} />
+
+<svelte:window
+  onblur={releaseEdgeReveal}
+  onpointercancel={releaseEdgeReveal}
+  onpointerdowncapture={handleEdgePointerDown}
+  onpointermove={handleEdgePointerMove}
+  onpointerout={(event) => {
+    if (event.relatedTarget === null) releaseEdgeReveal();
+  }}
+/>
+
 <div
+  bind:this={sidebarEl}
   style:--min-width="240px"
   style:--width={`${newWidth}px`}
   style:--max-width="480px"
@@ -812,10 +903,11 @@
     class={css({
       position: 'absolute',
       top: '0',
-      right: '-6px',
+      right: '-4px',
       zIndex: 'sidebar',
-      width: '12px',
+      width: '8px',
       height: 'full',
+      pointerEvents: sidebarState === 'hidden' && app.preference.current.sidebarHidden ? 'none' : undefined,
       cursor: 'col-resize',
       _hoverAfter: {
         content: '""',
