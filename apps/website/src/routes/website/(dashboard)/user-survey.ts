@@ -113,14 +113,14 @@ export const USER_SURVEY_QUESTIONS: UserSurveyQuestion[] = [
   {
     id: 'dependence',
     kind: 'single',
-    title: '타이피가 사라진다면 어떨 것 같나요?',
+    title: '타이피는 지금 어떤 도구인가요?',
     hint: '하나만 골라 주세요',
     columns: 1,
     shuffle: false,
     options: [
-      { value: 'very', label: '매우 아쉬울 것 같아요' },
-      { value: 'somewhat', label: '조금 아쉬울 것 같아요' },
-      { value: 'not', label: '별로 아쉽지 않을 것 같아요' },
+      { value: 'very', label: '없으면 안 되는 도구예요' },
+      { value: 'somewhat', label: '있으면 좋은 도구예요' },
+      { value: 'not', label: '없어도 괜찮아요' },
       { value: 'inactive', label: '요즘은 잘 쓰지 않아요' },
     ],
   },
