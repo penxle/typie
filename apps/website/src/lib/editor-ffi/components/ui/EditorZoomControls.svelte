@@ -416,8 +416,8 @@
   }
 
   .zoom-snap-feedback[data-reduced-motion='true'] {
-    border-width: 1px;
-    animation: zoom-snap-border-reduced 280ms steps(1) both;
+    border-width: 2px;
+    animation: zoom-snap-border-reduced 380ms steps(1) both;
   }
 
   @keyframes zoom-snap-border-flash {
