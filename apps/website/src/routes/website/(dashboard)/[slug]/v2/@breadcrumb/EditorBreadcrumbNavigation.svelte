@@ -16,7 +16,6 @@
   import { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
   import DocumentPaneDragGhost from '../../@pane/DocumentPaneDragGhost.svelte';
   import BreadcrumbEntityTree from './BreadcrumbEntityTree.svelte';
-  import type { EditorContextBarSegmentState } from '$lib/editor-ffi/components/ui/editor-context-bar.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
   import type { BreadcrumbContainer } from './BreadcrumbEntityTree.svelte';
 
@@ -27,6 +26,11 @@
   };
 
   export type EditorBreadcrumbTarget = { kind: 'home' } | { kind: 'entity'; slug: string };
+
+  export type EditorBreadcrumbHoldHandle = {
+    hold(reason: string): void;
+    release(reason: string): void;
+  };
 
   export type EditorBreadcrumbCurrent = { kind: 'home' } | ({ kind: 'entity' } & EditorBreadcrumbPathEntity & { slug: string });
 
@@ -45,7 +49,7 @@
     isOwner: boolean;
     onNavigate: (target: EditorBreadcrumbTarget) => void;
     popupId: string;
-    segment?: EditorContextBarSegmentState;
+    segment?: EditorBreadcrumbHoldHandle;
     siteId: string | null;
   };
 

@@ -460,6 +460,7 @@
     transitionProperty: '[transform]',
   })}
   aria-label="사이드바"
+  data-zen-mode-closing-surface
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
   role="navigation"
@@ -812,7 +813,7 @@
       position: 'absolute',
       top: '0',
       right: '-6px',
-      zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'sidebar',
+      zIndex: 'sidebar',
       width: '12px',
       height: 'full',
       cursor: 'col-resize',

@@ -30,7 +30,9 @@
     useAppPinned?: boolean;
     floatingFixed?: boolean;
     floatingRevealOnHover?: boolean;
+    floatingRequiresChrome?: boolean;
     floatingRightInset?: number;
+    floatingTopInset?: number;
   };
 
   let {
@@ -53,7 +55,9 @@
     useAppPinned = false,
     floatingFixed = true,
     floatingRevealOnHover = false,
+    floatingRequiresChrome = false,
     floatingRightInset = 0,
+    floatingTopInset = 0,
   }: Props = $props();
   const app = setupAppContext(preferenceUserId);
   const contextBarPinned = $derived(
@@ -75,6 +79,21 @@
   let currentBreadcrumbWidth = $state(breadcrumbWidth);
   let breadcrumbPathIdentity = $state('folder/document');
   let contextBarTopOcclusion = $state(0);
+  let floatingChromeReady = $state(!floatingRequiresChrome);
+  let floatingChromeAttached = $state(!floatingRequiresChrome);
+  let floatingChromeRequestCount = $state(0);
+  let floatingPointer: { x: number; y: number } | null = null;
+  let currentFloatingTopInset = $state(floatingTopInset);
+  let floatingSurfaceTop = $state(0);
+  let floatingLayoutOriginOffset = $state(0);
+  const noop = () => null;
+  const floatingChromeAttachment = {
+    hold: () => (floatingChromeRequestCount += 1),
+    release: noop,
+    discoverable: () => floatingChromeReady,
+    attached: () => floatingChromeAttached,
+    pointer: () => floatingPointer,
+  };
 
   const toggleTargetLandmark = $derived<DocumentZoomLandmark | null>(
     initialToggleTargetLandmark === undefined ? (landmark === 'unit' ? 'fit-width' : 'unit') : initialToggleTargetLandmark,
@@ -108,10 +127,32 @@
     currentSurfaceWidth = nextWidth;
   }
 
+  export function setFloatingChromeReady(nextReady: boolean) {
+    floatingChromeReady = nextReady;
+    floatingChromeAttached = nextReady;
+  }
+
+  export function setFloatingChromeState(next: { ready: boolean; attached: boolean }) {
+    floatingChromeReady = next.ready;
+    floatingChromeAttached = next.attached;
+  }
+
+  export function setFloatingLayout(next: { surfaceTop: number; topInset: number }) {
+    floatingSurfaceTop = next.surfaceTop;
+    floatingLayoutOriginOffset = next.surfaceTop;
+    currentFloatingTopInset = next.topInset;
+  }
+
   export function setPinned(nextPinned: boolean) {
     (app.preference.current as typeof app.preference.current & { contextBarPinned?: boolean }).contextBarPinned = nextPinned;
   }
 </script>
+
+<svelte:window
+  onpointermove={(event) => {
+    floatingPointer = { x: event.clientX, y: event.clientY };
+  }}
+/>
 
 <svelte:element
   this={withinPane ? 'div' : 'section'}
@@ -119,9 +160,16 @@
   data-pane-id={withinPane ? 'zoom-overlay-test-pane' : undefined}
 >
   <div data-testid="editor-toolbar"></div>
-  <div bind:this={editorViewSurface} style:width={`${currentSurfaceWidth}px`} style="position: relative; height: 120px">
+  <div
+    bind:this={editorViewSurface}
+    style:--editor-floating-zoom-top-inset={`${currentFloatingTopInset}px`}
+    style:top={`${floatingSurfaceTop}px`}
+    style:width={`${currentSurfaceWidth}px`}
+    style="position: relative; height: 120px"
+  >
     {#if mode === 'floating-zoom'}
       <FloatingEditorZoomControls
+        chromeAttachment={floatingRequiresChrome ? floatingChromeAttachment : undefined}
         controls={{
           atMaximum: landmark === 'maximum',
           atMinimum: landmark === 'minimum',
@@ -137,8 +185,10 @@
           toggleTargetLandmark,
         }}
         fixed={floatingFixed}
+        layoutOriginOffset={floatingLayoutOriginOffset}
         revealOnHover={floatingRevealOnHover}
         rightInset={floatingRightInset}
+        topInset={currentFloatingTopInset}
       />
     {/if}
     <button data-testid="context-bar-underlay" type="button">본문</button>
@@ -213,6 +263,8 @@
     {/if}
   </div>
 </svelte:element>
+
+<output data-floating-chrome-request-count>{floatingChromeRequestCount}</output>
 
 {#if mode === 'context-bar' && twoPanes}
   <div bind:this={secondEditorViewSurface} style:width={`${currentSurfaceWidth}px`} style="position: relative; height: 120px">

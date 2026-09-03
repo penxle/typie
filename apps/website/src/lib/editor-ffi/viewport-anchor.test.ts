@@ -73,6 +73,19 @@ describe('EditorViewportAnchorState', () => {
     });
   });
 
+  it('translates the attachment when the scroll content origin moves inside the viewport', () => {
+    const state = new EditorViewportAnchorState();
+    state.attach(viewportIdentity, { pointX: 0, pointY: 200 }, { left: 0, top: 100 });
+
+    state.translateAttachmentY(78);
+
+    expect(state.pointAttachmentY).toBe(178);
+    expect(state.publicationScroll({ pointX: 0, pointY: 278 }, { left: 0, top: 100 }, { left: 0, top: 500 })).toEqual({
+      scroll: { left: 0, top: 100 },
+      attachmentAchieved: true,
+    });
+  });
+
   it('retains a directly scrolled anchor inside the cursor guard and rejects it outside', () => {
     const state = new EditorViewportAnchorState();
     const geometry = { pointX: 0, pointY: 200, rect: { top: 190, bottom: 210 } };

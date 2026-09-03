@@ -4,6 +4,7 @@
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
+  import type { EditorViewSurfaceLayout } from './editor-view-surface-layout';
 
   type Props = {
     document$key: Editor_document$key;
@@ -11,10 +12,7 @@
     viewer?: boolean;
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
-    contentInsetLeft?: number;
-    contentInsetRight?: number;
-    contentMotion?: { fromX: number; duration: number; easing: string };
-    floatingZoomRightInset?: number;
+    viewSurfaceLayout?: EditorViewSurfaceLayout;
     header?: Snippet;
     footer?: Snippet;
     placeholderAction?: Snippet;
@@ -28,10 +26,7 @@
     viewer = false,
     useWindowScroll = false,
     style,
-    contentInsetLeft = 0,
-    contentInsetRight = 0,
-    contentMotion,
-    floatingZoomRightInset = 0,
+    viewSurfaceLayout,
     header,
     footer,
     placeholderAction,
@@ -54,16 +49,13 @@
   <View
     style={css.raw({ flex: '1' }, style)}
     {active}
-    {contentInsetLeft}
-    {contentInsetRight}
-    {contentMotion}
     {document$key}
-    {floatingZoomRightInset}
     {footer}
     {header}
     {onReady}
     {placeholderAction}
     {useWindowScroll}
+    {viewSurfaceLayout}
     {viewer}
   >
     {#if children}

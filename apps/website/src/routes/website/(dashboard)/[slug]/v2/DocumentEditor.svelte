@@ -3,7 +3,7 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem, VerticalDivider } from '@typie/ui/components';
+  import { Helmet, HorizontalDivider, Icon, Menu, MenuItem } from '@typie/ui/components';
   import { getAppContext, getThemeContext } from '@typie/ui/context';
   import { Tip, Toast } from '@typie/ui/notification';
   import { LocalStore } from '@typie/ui/state';
@@ -17,12 +17,10 @@
   import InfoIcon from '~icons/lucide/info';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
-  import Maximize2Icon from '~icons/lucide/maximize-2';
   import MessageSquareTextIcon from '~icons/lucide/message-square-text';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
-  import XIcon from '~icons/lucide/x';
   import { desktop } from '$lib/desktop';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
@@ -37,11 +35,14 @@
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
-  import CloseButton from '../@pane/CloseButton.svelte';
+  import { getZenMode } from '../../zen-mode.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { getEditorRegistry } from '../@pane/editor-registry.svelte';
+  import { paneChromeAttachment } from '../@pane/pane-chrome-attachment';
   import PaneHeader from '../@pane/PaneHeader.svelte';
+  import PaneHeaderControls from '../@pane/PaneHeaderControls.svelte';
   import TabIcon from '../@pane/TabIcon.svelte';
+  import { getZenModePaneChrome } from '../@pane/zen-mode-pane-chrome.svelte';
   import EditorBreadcrumbNavigation from './@breadcrumb/EditorBreadcrumbNavigation.svelte';
   import CommentPopover from './@document-comments/CommentPopover.svelte';
   import DocumentComments from './@document-comments/DocumentComments.svelte';
@@ -292,6 +293,11 @@
   const paneGroup = getPaneGroup();
   const pane = getPane();
   const editorRegistry = getEditorRegistry();
+  const paneChrome = getZenModePaneChrome();
+  const zenMode = getZenMode();
+  const floatingZoomChromeAttachment = paneChrome.attachmentHandle();
+  const lockedToastChromeAttachment = paneChrome.attachmentHandle();
+  const breadcrumbHoldHandle = paneChrome.segmentHandle('identity');
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -858,28 +864,14 @@
     });
   }
 
-  const currentViewZenModeEnabled = $derived(app.preference.current.zenModeEnabled && pane.id === paneGroup.state.current.focusedPaneId);
-
-  function toggleZenMode() {
-    const enabled = !app.preference.current.zenModeEnabled;
-    app.preference.current.zenModeEnabled = enabled;
-    mixpanel.track(enabled ? 'zen_mode_enabled' : 'zen_mode_disabled', { via: 'document' });
-  }
-
-  function exitZenModeFromCloseButton() {
-    app.preference.current.zenModeEnabled = false;
-    mixpanel.track('zen_mode_disabled', { via: 'close_button' });
-  }
-
   $effect(() => {
     const editor = ctx.liveEditor;
     if (!editor) return;
 
     const handler = () => {
-      if (!currentViewZenModeEnabled || editor.appliedSnapshot.selectionKind === 'range') return false;
+      if (!focused || !zenMode.active || editor.appliedSnapshot.selectionKind === 'range') return false;
 
-      app.preference.current.zenModeEnabled = false;
-      mixpanel.track('zen_mode_disabled', { via: 'esc' });
+      void zenMode.exit('esc');
       return true;
     };
 
@@ -957,7 +949,7 @@
   }
 
   $effect(() => {
-    if (currentViewZenModeEnabled) {
+    if (focused && zenMode.active) {
       Tip.show('editor.zen-mode.enabled', '집중 모드가 활성화되었어요. Esc 키를 눌러 빠져나올 수 있어요.');
     }
   });
@@ -1105,6 +1097,35 @@
         myId={query.data.me.id}
       >
         {#snippet children(insets)}
+          {#snippet documentPaneMenu()}
+            <Menu placement="bottom-end">
+              {#snippet button({ open })}
+                <button
+                  class={center({
+                    borderRadius: '4px',
+                    size: '24px',
+                    color: 'text.faint',
+                    transition: 'common',
+                    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                    _pressed: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                  })}
+                  aria-pressed={open}
+                  type="button"
+                >
+                  <Icon icon={EllipsisIcon} size={16} />
+                </button>
+              {/snippet}
+
+              <DocumentMenu {document} {entity} via="editor">
+                {#if query.data.me.entitled}
+                  <MenuItem icon={document.locked ? LockOpenIcon : LockIcon} onclick={() => toggleEditLock()}>
+                    {document.locked ? '편집 잠금 해제' : '편집 잠금'}
+                  </MenuItem>
+                {/if}
+              </DocumentMenu>
+            </Menu>
+          {/snippet}
+
           <PaneHeader placement={headerPlacement}>
             <EditorBreadcrumb pathIdentity={breadcrumbPathIdentity} viewportId={breadcrumbViewportId}>
               {#key breadcrumbPathIdentity}
@@ -1116,6 +1137,7 @@
                     paneGroup.replacePane(pane.id, target.kind === 'home' ? { kind: 'home' } : { kind: 'entity', slug: target.slug });
                   }}
                   popupId={`${breadcrumbViewportId}-tree`}
+                  segment={breadcrumbHoldHandle}
                   siteId={entity.site.id}
                 />
               {/key}
@@ -1174,64 +1196,7 @@
             {/snippet}
 
             {#snippet fixedActions()}
-              <VerticalDivider style={css.raw({ height: '12px' })} />
-
-              {#if query.data.me.id === entity.user.id}
-                <Menu placement="bottom-end">
-                  {#snippet button({ open })}
-                    <button
-                      class={center({
-                        borderRadius: '4px',
-                        size: '24px',
-                        color: 'text.faint',
-                        transition: 'common',
-                        _hover: {
-                          color: 'text.subtle',
-                          backgroundColor: 'surface.muted',
-                        },
-                        _pressed: {
-                          color: 'text.subtle',
-                          backgroundColor: 'surface.muted',
-                        },
-                      })}
-                      aria-pressed={open}
-                      type="button"
-                    >
-                      <Icon icon={EllipsisIcon} size={16} />
-                    </button>
-                  {/snippet}
-
-                  <DocumentMenu {document} {entity} via="editor">
-                    {#if query.data.me.entitled}
-                      <MenuItem icon={document.locked ? LockOpenIcon : LockIcon} onclick={() => toggleEditLock()}>
-                        {document.locked ? '편집 잠금 해제' : '편집 잠금'}
-                      </MenuItem>
-                    {/if}
-                  </DocumentMenu>
-                </Menu>
-              {/if}
-
-              <button
-                class={center({
-                  borderRadius: '4px',
-                  size: '24px',
-                  color: 'text.faint',
-                  transition: 'common',
-                  _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-                })}
-                aria-label="집중 모드 켜기"
-                data-editor-focus-mode-control
-                onclick={toggleZenMode}
-                onpointerdown={(event) => event.preventDefault()}
-                type="button"
-                use:tooltip={{ message: '집중 모드 켜기', keys: ['Mod', 'Shift', 'M'] }}
-              >
-                <Icon icon={Maximize2Icon} size={16} />
-              </button>
-
-              <CloseButton>
-                <Icon icon={XIcon} size={16} />
-              </CloseButton>
+              <PaneHeaderControls menu={query.data.me.id === entity.user.id ? documentPaneMenu : undefined} />
             {/snippet}
           </PaneHeader>
 
@@ -1255,56 +1220,26 @@
 
                     <div
                       bind:this={ctx.editorAreaEl}
-                      style:position={currentViewZenModeEnabled ? 'fixed' : 'relative'}
-                      style:top={currentViewZenModeEnabled ? '0' : 'auto'}
-                      style:left={currentViewZenModeEnabled ? '0' : 'auto'}
-                      style:right={currentViewZenModeEnabled ? '0' : 'auto'}
-                      style:bottom={currentViewZenModeEnabled ? '0' : 'auto'}
                       class={flex({
                         position: 'relative',
                         flexDirection: 'column',
                         flexGrow: '1',
                         overflowX: 'auto',
                         overflowY: 'hidden',
-                        zIndex: !currentViewZenModeEnabled && app.preference.current.zenModeEnabled ? 'underEditor' : 'editor',
+                        zIndex: 'editor',
                         backgroundColor: 'surface.default',
                       })}
                       bind:clientWidth={editorAreaWidth}
                     >
-                      {#if currentViewZenModeEnabled}
-                        <button
-                          class={center({
-                            position: 'absolute',
-                            top: '0',
-                            right: '0',
-                            zIndex: 'overEditor',
-                            size: '32px',
-                            borderRadius: '8px',
-                            color: 'text.subtle',
-                            backgroundColor: { base: 'surface.default', _hover: 'surface.subtle' },
-                          })}
-                          aria-label="집중 모드 끄기"
-                          data-editor-focus-mode-close
-                          onclick={exitZenModeFromCloseButton}
-                          onpointerdown={(event) => event.preventDefault()}
-                          type="button"
-                          use:tooltip={{ message: '집중 모드 끄기', keys: ['Esc'] }}
-                        >
-                          <Icon icon={XIcon} />
-                        </button>
-                      {/if}
-
                       {#if showEditLockedToast}
                         <div
+                          style:top={zenMode.active ? 'calc(var(--editor-pane-overlay-top-inset, 0px) + 12px)' : undefined}
+                          style:transition="var(--editor-pane-overlay-position-transition, none)"
                           class={flex({
                             position: 'absolute',
-                            top: currentViewZenModeEnabled
-                              ? '60px'
-                              : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
-                                ? '36px'
-                                : '12px',
+                            top: zenMode.active ? undefined : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' ? '36px' : '12px',
                             right: '12px',
-                            zIndex: 'sidebar',
+                            zIndex: 'editorOverlay',
                             alignItems: 'center',
                             gap: '10px',
                             paddingX: '14px',
@@ -1317,6 +1252,7 @@
                             fontSize: '13px',
                             color: 'text.subtle',
                           })}
+                          data-pane-chrome-reveal-exclusion
                           onpointerenter={() => {
                             if (!lockedToastTimer) {
                               return;
@@ -1331,6 +1267,7 @@
                             }, 5000);
                           }}
                           role="alert"
+                          use:paneChromeAttachment={lockedToastChromeAttachment}
                           transition:fly={{ y: -8, duration: 150 }}
                         >
                           <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
@@ -1377,12 +1314,22 @@
                           <svelte:boundary onerror={(error) => handleEditorBoundaryError(editor, error)}>
                             <EditorComponent
                               active={focused}
-                              contentInsetLeft={insets.left}
-                              contentInsetRight={insets.right}
-                              contentMotion={insets.contentMotion}
                               document$key={document}
-                              floatingZoomRightInset={currentViewZenModeEnabled ? 36 : 0}
                               onReady={handleEditorReady}
+                              viewSurfaceLayout={{
+                                contentInset: {
+                                  left: insets.left,
+                                  right: insets.right,
+                                  top: zenMode.active ? paneChrome.floatingZoomTopInset : 0,
+                                },
+                                contentMotion: insets.contentMotion,
+                                visibleAreaTopInset: zenMode.active ? paneChrome.topOcclusion : 0,
+                                floatingZoom: {
+                                  chromeAttachment: zenMode.active ? floatingZoomChromeAttachment : undefined,
+                                  layoutOriginOffset: zenMode.active ? 0 : paneChrome.floatingZoomTopInset,
+                                  topInset: zenMode.active ? paneChrome.floatingZoomInset : 0,
+                                },
+                              }}
                             >
                               {#snippet placeholderAction()}
                                 {#if currentSite}
@@ -1504,6 +1451,7 @@
                           </svelte:boundary>
                         {/key}
                       </div>
+
                       {#if showFindReplace}
                         <DocumentFindReplace bind:this={findReplaceComponent} onclose={() => (showFindReplace = false)} />
                       {/if}
@@ -1543,43 +1491,6 @@
           {/if}
         {/snippet}
       </PrismReviewMargin>
-
-      {#if currentViewZenModeEnabled && !entity.user.subscription}
-        <div
-          class={flex({
-            position: 'fixed',
-            top: '44px',
-            right: '18px',
-            zIndex: 'editor',
-            alignItems: 'center',
-            gap: '8px',
-          })}
-        >
-          <button
-            class={flex({
-              alignItems: 'center',
-              gap: '4px',
-              height: '[31.5px]',
-              paddingX: '8px',
-              borderWidth: '1px',
-              borderColor: 'border.brand',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: 'semibold',
-              color: 'text.brand',
-              backgroundColor: 'surface.default',
-              cursor: 'pointer',
-              transition: 'common',
-              _hover: { backgroundColor: 'accent.brand.subtle' },
-            })}
-            onclick={() => SubscribeModal.show('document_zen_mode')}
-            type="button"
-          >
-            <Icon icon={CrownIcon} size={12} />
-            <span>업그레이드</span>
-          </button>
-        </div>
-      {/if}
     </div>
   </div>
 

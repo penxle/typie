@@ -1,5 +1,6 @@
 import { createStableContext } from '@typie/ui/context/stable';
 import { LocalStore } from '@typie/ui/state';
+import { safeJsonParse } from '@typie/ui/utils';
 import { nanoid } from 'nanoid';
 import { getContext, setContext } from 'svelte';
 import { browser } from '$app/environment';
@@ -33,6 +34,20 @@ const defaultPaneGroupState: PaneGroupState = {
   panelExpandedByPaneId: {},
   panelTabByPaneId: {},
   toolbarExpandedByPaneId: {},
+};
+
+const paneGroupStorageKey = (siteId: string) => `typie:panegroup:${siteId}`;
+
+const readStoredPaneGroupState = (siteId: string): PaneGroupState => {
+  if (!browser) return defaultPaneGroupState;
+  const saved = safeJsonParse<Partial<PaneGroupState>>(localStorage.getItem(paneGroupStorageKey(siteId)), {});
+  return {
+    ...defaultPaneGroupState,
+    ...saved,
+    panelExpandedByPaneId: { ...defaultPaneGroupState.panelExpandedByPaneId, ...saved.panelExpandedByPaneId },
+    panelTabByPaneId: { ...defaultPaneGroupState.panelTabByPaneId, ...saved.panelTabByPaneId },
+    toolbarExpandedByPaneId: { ...defaultPaneGroupState.toolbarExpandedByPaneId, ...saved.toolbarExpandedByPaneId },
+  };
 };
 
 type PaneGroupOptions = {
@@ -198,6 +213,27 @@ export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions)
 
       syncUrl();
       return true;
+    },
+    readPanelExpandedByPaneId: (siteId) => {
+      if (siteId === currentSiteId) return { ...state.current.panelExpandedByPaneId };
+      return { ...readStoredPaneGroupState(siteId).panelExpandedByPaneId };
+    },
+    restorePanelExpandedByPaneId: (siteId, entry) => {
+      const stored = siteId === currentSiteId ? state.current : readStoredPaneGroupState(siteId);
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local membership index for one restore transaction
+      const paneIds = new Set(collectPanes(stored.root).map((pane) => pane.id));
+      const next = { ...stored.panelExpandedByPaneId };
+
+      for (const [paneId, entryVisible] of Object.entries(entry)) {
+        if (!paneIds.has(paneId)) continue;
+        next[paneId] = entryVisible || (next[paneId] ?? false);
+      }
+
+      if (siteId === currentSiteId) {
+        state.current.panelExpandedByPaneId = next;
+      } else if (browser) {
+        localStorage.setItem(paneGroupStorageKey(siteId), JSON.stringify({ ...stored, panelExpandedByPaneId: next }));
+      }
     },
 
     handleNavigation(slug: string, siteId?: string) {

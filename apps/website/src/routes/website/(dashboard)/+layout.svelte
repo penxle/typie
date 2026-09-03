@@ -62,6 +62,7 @@
   import TrialExpiredModal from './TrialExpiredModal.svelte';
   import { USER_SURVEY_SNOOZE_KEY } from './user-survey';
   import UserSurveyModal from './UserSurveyModal.svelte';
+  import { setupZenMode } from './zen-mode.svelte';
   import type { IntroKind } from './intro';
 
   let { data, children } = $props();
@@ -290,8 +291,26 @@
     },
   });
 
-  setupEditorRegistry();
+  const editorRegistry = setupEditorRegistry();
+  let workbenchFocusTarget = $state<HTMLElement>();
+  const zenMode = setupZenMode({
+    app,
+    paneGroup,
+    editorRegistry,
+    focusWorkbench: () => workbenchFocusTarget?.focus({ preventScroll: true }),
+  });
   setupOpenDocuments();
+
+  onMount(() => {
+    void zenMode.restoreAfterReload();
+  });
+
+  $effect(() => {
+    void paneGroup.currentSiteId;
+    void paneGroup.state.current.panelExpandedByPaneId;
+    void paneGroup.panes.map((pane) => pane.id).join(':');
+    untrack(() => zenMode.syncPanePanels());
+  });
 
   $effect(() => {
     if (!app.preference.current.currentSiteId) {
@@ -645,6 +664,7 @@
         })}
       >
         <div
+          bind:this={workbenchFocusTarget}
           class={cx(
             'main-container',
             flex({
@@ -653,6 +673,7 @@
               overflow: 'auto',
             }),
           )}
+          tabindex="-1"
         >
           {@render children()}
         </div>

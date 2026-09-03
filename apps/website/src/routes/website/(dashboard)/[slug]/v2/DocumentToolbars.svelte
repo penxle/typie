@@ -13,6 +13,9 @@
   import { FormatToolbarItems, InsertToolbarItems, ToolbarButton } from '$lib/editor-ffi/components';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
+  import { getZenModePaneChrome } from '../@pane/zen-mode-pane-chrome.svelte';
+  import ZenModePaneChromeEffects from '../@pane/ZenModePaneChromeEffects.svelte';
+  import ZenModePaneChromeSegment from '../@pane/ZenModePaneChromeSegment.svelte';
   import { otherToolbarKind, readPrimaryToolbar, writePrimaryToolbar } from './toolbar-kind';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ComponentProps } from 'svelte';
@@ -31,12 +34,14 @@
   const ctx = getEditorContext();
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
+  const paneChrome = getZenModePaneChrome();
   const primaryToolbarId = `document-toolbar-primary-${paneId}`;
   const expandedToolbarId = `document-toolbar-expanded-${paneId}`;
 
   let stored = $state<ToolbarKind | null>(null);
   let primaryScrollContainer = $state<HTMLElement>();
   let expandedScrollContainer = $state<HTMLElement>();
+  let primaryRowHeight = $state(0);
 
   const row = css.raw({
     display: 'flex',
@@ -67,6 +72,8 @@
   const expanded = $derived(otherToolbarKind(primary));
   const open = $derived(paneGroup.state.current.toolbarExpandedByPaneId[paneId] ?? false);
   const editingDisabled = $derived(ctx.editor?.terminal === true || (ctx.editor !== undefined && ctx.editor !== ctx.liveEditor));
+  const zenModeEnabled = $derived(app.preference.current.zenModeEnabled);
+  const registerToolbarLane = paneChrome.registerToolbarLane;
 
   const enqueue = (message: Message) => {
     if (editingDisabled) return;
@@ -100,84 +107,117 @@
   {/if}
 {/snippet}
 
-<div class={css(rowShell, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="presentation">
-  <div bind:this={primaryScrollContainer} id={primaryToolbarId} class={css(row)} role="toolbar" tabindex="-1">
-    <ToolbarButton
-      active={open}
-      icon={expanded === 'insert' ? PlusIcon : TypeIcon}
-      label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
-      onclick={toggle}
-    />
+<div
+  class={css({
+    position: zenModeEnabled ? 'absolute' : 'relative',
+    top: zenModeEnabled ? '37px' : undefined,
+    left: zenModeEnabled ? '0' : undefined,
+    right: zenModeEnabled ? '0' : undefined,
+    zIndex: 'overEditor',
+    flexShrink: '0',
+    pointerEvents: 'none',
+  })}
+  data-zen-mode-pane-chrome
+  use:registerToolbarLane
+>
+  {#if zenModeEnabled}
+    <ZenModePaneChromeEffects lane="toolbar" toolbarSeparatorOffsets={open && primaryRowHeight > 0 ? [primaryRowHeight - 1] : []} />
+  {/if}
 
-    <VerticalDivider style={css.raw({ height: '12px' })} />
-
+  <ZenModePaneChromeSegment class={css({ position: 'relative' })} active={zenModeEnabled} aria-label="문서 도구" segment="toolbar">
     <div
-      class={flex({
-        alignItems: 'center',
-        gap: '4px',
-        opacity: editingDisabled ? '50' : '100',
-        pointerEvents: editingDisabled ? 'none' : 'auto',
-      })}
+      class={css(
+        rowShell,
+        zenModeEnabled ? { borderColor: 'transparent', backgroundColor: 'transparent' } : { backgroundColor: 'surface.default' },
+      )}
+      role="presentation"
+      bind:clientHeight={primaryRowHeight}
     >
-      <ToolbarButton
-        style={css.raw({ borderRightRadius: '0' })}
-        icon={UndoIcon}
-        keys={['Mod', 'Z']}
-        label="실행 취소"
-        onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
-      />
+      <div bind:this={primaryScrollContainer} id={primaryToolbarId} class={css(row)} role="toolbar" tabindex="-1">
+        <ToolbarButton
+          active={open}
+          icon={expanded === 'insert' ? PlusIcon : TypeIcon}
+          label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
+          onclick={toggle}
+        />
 
-      <ToolbarButton
-        style={css.raw({ borderLeftRadius: '0' })}
-        icon={RedoIcon}
-        keys={['Mod', 'Shift', 'Z']}
-        label="다시 실행"
-        onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
+        <VerticalDivider style={css.raw({ height: '12px' })} />
+
+        <div
+          class={flex({
+            alignItems: 'center',
+            gap: '4px',
+            opacity: editingDisabled ? '50' : '100',
+            pointerEvents: editingDisabled ? 'none' : 'auto',
+          })}
+        >
+          <ToolbarButton
+            style={css.raw({ borderRightRadius: '0' })}
+            icon={UndoIcon}
+            keys={['Mod', 'Z']}
+            label="실행 취소"
+            onclick={() => enqueue({ type: 'history', op: { type: 'undo' } })}
+          />
+
+          <ToolbarButton
+            style={css.raw({ borderLeftRadius: '0' })}
+            icon={RedoIcon}
+            keys={['Mod', 'Shift', 'Z']}
+            label="다시 실행"
+            onclick={() => enqueue({ type: 'history', op: { type: 'redo' } })}
+          />
+        </div>
+
+        <VerticalDivider style={css.raw({ height: '12px' })} />
+
+        {@render items(primary)}
+
+        <div class={css({ flexGrow: '1' })}></div>
+
+        <div
+          class={flex({
+            alignItems: 'center',
+            opacity: editingDisabled ? '50' : '100',
+            pointerEvents: editingDisabled ? 'none' : 'auto',
+          })}
+        >
+          <ToolbarButton icon={SearchIcon} keys={['Mod', 'F']} label="찾기 및 바꾸기" onclick={() => onSearchClick?.()} />
+        </div>
+      </div>
+
+      <Scrollbar
+        controls={primaryToolbarId}
+        label="툴바 가로 스크롤"
+        orientation="horizontal"
+        scrollContainer={primaryScrollContainer}
+        size="sm"
       />
     </div>
 
-    <VerticalDivider style={css.raw({ height: '12px' })} />
+    {#if open}
+      <div
+        class={css(
+          rowShell,
+          zenModeEnabled ? { borderColor: 'transparent', backgroundColor: 'transparent' } : { backgroundColor: 'surface.default' },
+        )}
+        role="presentation"
+      >
+        <div bind:this={expandedScrollContainer} id={expandedToolbarId} class={css(row)} role="toolbar" tabindex="-1">
+          <ToolbarButton disabled={documentId === null} icon={ArrowUpDownIcon} label="기본 툴바와 맞바꾸기" onclick={swap} />
 
-    {@render items(primary)}
+          <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <div class={css({ flexGrow: '1' })}></div>
+          {@render items(expanded)}
+        </div>
 
-    <div
-      class={flex({
-        alignItems: 'center',
-        opacity: editingDisabled ? '50' : '100',
-        pointerEvents: editingDisabled ? 'none' : 'auto',
-      })}
-    >
-      <ToolbarButton icon={SearchIcon} keys={['Mod', 'F']} label="찾기 및 바꾸기" onclick={() => onSearchClick?.()} />
-    </div>
-  </div>
-
-  <Scrollbar
-    controls={primaryToolbarId}
-    label="툴바 가로 스크롤"
-    orientation="horizontal"
-    scrollContainer={primaryScrollContainer}
-    size="sm"
-  />
+        <Scrollbar
+          controls={expandedToolbarId}
+          label="툴바 가로 스크롤"
+          orientation="horizontal"
+          scrollContainer={expandedScrollContainer}
+          size="sm"
+        />
+      </div>
+    {/if}
+  </ZenModePaneChromeSegment>
 </div>
-
-{#if open}
-  <div class={css(rowShell, { zIndex: app.preference.current.zenModeEnabled ? 'underEditor' : 'overEditor' })} role="presentation">
-    <div bind:this={expandedScrollContainer} id={expandedToolbarId} class={css(row)} role="toolbar" tabindex="-1">
-      <ToolbarButton disabled={documentId === null} icon={ArrowUpDownIcon} label="기본 툴바와 맞바꾸기" onclick={swap} />
-
-      <VerticalDivider style={css.raw({ height: '12px' })} />
-
-      {@render items(expanded)}
-    </div>
-
-    <Scrollbar
-      controls={expandedToolbarId}
-      label="툴바 가로 스크롤"
-      orientation="horizontal"
-      scrollContainer={expandedScrollContainer}
-      size="sm"
-    />
-  </div>
-{/if}

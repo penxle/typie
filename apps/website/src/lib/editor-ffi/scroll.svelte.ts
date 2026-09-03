@@ -497,6 +497,10 @@ export class EditorScrollScope {
     this.#viewportAnchor.acceptGeometry(geometry, { left: metrics.scrollLeft, top: target });
   }
 
+  translateViewportAnchorAttachment(deltaY: number): void {
+    this.#viewportAnchor.translateAttachmentY(deltaY);
+  }
+
   resolveScrollTop(
     request: Pick<EditorBringIntoViewRequest, 'target' | 'policy'>,
     metrics: ScrollContainerMetrics & RevealTargetSpan,

@@ -26,6 +26,7 @@
   import { graphql } from '$mearie';
   import EntityIcon from './@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
+  import { getZenMode } from './zen-mode.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_CommandPalette_user$key } from '$mearie';
 
@@ -59,6 +60,7 @@
   );
 
   const app = getAppContext();
+  const zenMode = getZenMode();
   const currentSiteId = $derived((user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]).id);
 
   let debouncedQuery = $state('');
@@ -216,14 +218,7 @@
       name: app.preference.current.zenModeEnabled ? '집중 모드 끄기' : '집중 모드 켜기',
       aliases: ['zen mode'],
       icon: Maximize2Icon,
-      action: () => {
-        app.preference.current.zenModeEnabled = !app.preference.current.zenModeEnabled;
-        if (app.preference.current.zenModeEnabled) {
-          mixpanel.track('zen_mode_enabled', { via: 'command_palette' });
-        } else {
-          mixpanel.track('zen_mode_disabled', { via: 'command_palette' });
-        }
-      },
+      action: () => zenMode.toggle('command_palette'),
     },
     {
       name: prismDraft ? 'PRISM과 새 대화' : app.preference.current.prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기',

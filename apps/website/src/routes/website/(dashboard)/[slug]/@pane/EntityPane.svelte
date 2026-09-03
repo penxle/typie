@@ -8,17 +8,20 @@
   import { onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
   import FileXIcon from '~icons/lucide/file-x';
-  import XIcon from '~icons/lucide/x';
   import { fb } from '$lib/analytics';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { graphql } from '$mearie';
   import { resolveActiveTreeAncestorIds } from '../../@tree/entity-reveal.svelte';
+  import { getZenMode } from '../../zen-mode.svelte';
   import DocumentV2 from '../v2/Document.svelte';
-  import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
+  import { setupPaneOverlayLayout } from './pane-overlay-layout.svelte';
   import PaneHeader from './PaneHeader.svelte';
+  import PaneHeaderControls from './PaneHeaderControls.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
+  import PaneSplitMenu from './PaneSplitMenu.svelte';
   import TabIcon from './TabIcon.svelte';
+  import { setupZenModePaneChrome } from './zen-mode-pane-chrome.svelte';
   import type { Pane, PaneHeaderPlacement } from './types';
 
   type EntityPane = Extract<Pane, { kind: 'entity' }>;
@@ -166,15 +169,29 @@
   );
 
   setupPane(pane);
+  const zenMode = getZenMode();
+  const paneChrome = setupZenModePaneChrome({
+    active: () => zenMode.active,
+    focused: () => focused,
+  });
+  const overlayLayout = setupPaneOverlayLayout({ active: () => zenMode.active, chrome: paneChrome });
+  const registerPaneChromeRoot = paneChrome.registerRoot;
 </script>
 
 <div
+  style:--editor-pane-header-inset={`${overlayLayout.headerInset}px`}
+  style:--editor-pane-overlay-motion-duration={`${overlayLayout.motionDuration}ms`}
+  style:--editor-pane-overlay-motion-easing="cubic-bezier(0.22, 1, 0.36, 1)"
+  style:--editor-pane-overlay-position-transition={overlayLayout.positionTransition}
+  style:--editor-pane-overlay-top-inset={`${overlayLayout.topInset}px`}
+  style:--editor-floating-zoom-top-inset={`${overlayLayout.topInset}px`}
   class={flex({
     position: 'relative',
     size: 'full',
     backgroundColor: 'surface.default',
     overflow: 'hidden',
   })}
+  data-pane-chrome-phase={zenMode.active ? paneChrome.phase : undefined}
   data-pane-id={pane.id}
   onclick={() => {
     paneGroup.focusPane(pane.id);
@@ -187,8 +204,11 @@
       paneGroup.focusPane(pane.id);
     }
   }}
+  onpointerleave={() => paneChrome.handlePointerLeave()}
+  onpointermove={(event) => paneChrome.handlePointerMove(event)}
   role="tabpanel"
   tabindex={0}
+  use:registerPaneChromeRoot
 >
   {#if query.data && entity}
     {#if entity?.state === EntityState.ACTIVE}
@@ -217,11 +237,9 @@
 
         <PaneHeader placement={headerPlacement}>
           {#snippet fixedActions()}
-            {#if !app.preference.current.zenModeEnabled}
-              <CloseButton>
-                <Icon icon={XIcon} size={16} />
-              </CloseButton>
-            {/if}
+            <PaneHeaderControls>
+              {#snippet menu()}<PaneSplitMenu />{/snippet}
+            </PaneHeaderControls>
           {/snippet}
 
           <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', fontSize: '12px', color: 'text.subtle' })}>
@@ -250,16 +268,23 @@
     <div
       class={css({
         position: 'absolute',
-        top: documentHeaderVisible ? '37px' : '0',
+        top: documentHeaderVisible && !app.preference.current.zenModeEnabled ? '37px' : '0',
         right: '0',
         bottom: '0',
         left: '0',
-        zIndex: 'overEditor',
+        zIndex: 'editorOverlay',
         backgroundColor: 'surface.default',
       })}
       out:fade={{ duration: 150 }}
     >
-      <PaneSkeleton {documentId} {documentLayoutMode} {headerPlacement} {pane} showHeader={!documentHeaderVisible} />
+      <PaneSkeleton
+        contentInsetTop={overlayLayout.contentTopInset}
+        {documentId}
+        {documentLayoutMode}
+        {headerPlacement}
+        {pane}
+        showHeader={!documentHeaderVisible}
+      />
     </div>
   {/if}
 </div>

@@ -14,7 +14,7 @@
   let { onRetry }: Props = $props();
 
   const app = getAppContext();
-  const panelInteractive = $derived(app.preference.current.prismPanelOpen && !app.preference.current.zenModeEnabled);
+  const panelInteractive = $derived(app.preference.current.prismPanelOpen);
   const titleId = 'prism-panel-failure-title';
   const messageId = 'prism-panel-failure-message';
   let retryButton = $state<HTMLElement>();

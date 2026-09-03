@@ -24,7 +24,7 @@
   const PANEL_HIDDEN_SCALE = 0.96;
   const PANEL_HIDDEN_SCRIM_OPACITY = 0.9;
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
-  const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
+  const panelInteractive = $derived(panelOpen);
   const panelMotionDuration = reducedMotion() ? 0 : PRISM_VISIBILITY_MOTION.duration;
   let panel = $state<HTMLElement>();
   let previewWidth = $state<number | null>(null);
@@ -44,16 +44,14 @@
   });
 </script>
 
-{#if !app.preference.current.zenModeEnabled}
-  <div
-    style:width={panelOpen ? `${width}px` : '0px'}
-    style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
-    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-    class={css({ flexShrink: '0', height: 'full', transitionProperty: '[width]' })}
-    aria-hidden="true"
-    data-prism-panel-spacer
-  ></div>
-{/if}
+<div
+  style:width={panelOpen ? `${width}px` : '0px'}
+  style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
+  style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+  class={css({ flexShrink: '0', height: 'full', transitionProperty: '[width]' })}
+  aria-hidden="true"
+  data-prism-panel-spacer
+></div>
 
 <div
   style:width={`${width}px`}
@@ -72,6 +70,7 @@
     zIndex: 'panel',
   })}
   data-prism-panel-shell
+  data-zen-mode-closing-surface
 >
   <aside
     bind:this={panel}

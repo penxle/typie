@@ -16,6 +16,8 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { FocusReturnSession } from '$lib/focus-return-session';
   import { getPane } from '../@pane/context.svelte';
+  import { paneChromeAttachment } from '../@pane/pane-chrome-attachment';
+  import { getZenModePaneChrome } from '../@pane/zen-mode-pane-chrome.svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
 
   type Props = {
@@ -26,6 +28,7 @@
 
   const ctx = getEditorContext();
   const pane = getPane();
+  const chromeAttachment = getZenModePaneChrome().attachmentHandle();
   const app = getAppContext();
   const editor = $derived(ctx.editor?.terminal ? undefined : ctx.editor);
 
@@ -148,11 +151,12 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
+  style:top="var(--editor-pane-overlay-top-inset, 0px)"
+  style:transition="var(--editor-pane-overlay-position-transition, none)"
   class={flex({
     gap: '4px',
     padding: '8px',
     position: 'absolute',
-    top: '0',
     right: '52px',
     zIndex: 'overEditor',
     backgroundColor: 'surface.default',
@@ -160,9 +164,11 @@
     boxShadow: 'small',
   })}
   aria-label="찾기 및 바꾸기"
+  data-pane-chrome-reveal-exclusion
   onfocusin={handleFocusIn}
   role="dialog"
   tabindex="-1"
+  use:paneChromeAttachment={chromeAttachment}
 >
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <div class={css({ position: 'relative', display: 'flex', alignItems: 'center' })}>
