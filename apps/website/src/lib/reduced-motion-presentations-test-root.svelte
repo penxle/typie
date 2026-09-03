@@ -3,6 +3,7 @@
   import { setupAppContext } from '@typie/ui/context';
   import { setupPane, setupPaneGroup } from '../routes/website/(dashboard)/[slug]/@pane/context.svelte';
   import PaneSkeleton from '../routes/website/(dashboard)/[slug]/@pane/PaneSkeleton.svelte';
+  import { setupZenModePaneChrome } from '../routes/website/(dashboard)/[slug]/@pane/zen-mode-pane-chrome.svelte';
   import EditorScrollbar from './editor-ffi/components/Scrollbar.svelte';
   import { setupEditorContext } from './editor-ffi/editor.svelte';
   import type { Pane } from '../routes/website/(dashboard)/[slug]/@pane/types';
@@ -22,6 +23,7 @@
   const headerPlacement = { topLeft: false, topRight: false };
   paneGroup.state.current.toolbarExpandedByPaneId[entityPane.id] = false;
   setupPane(entityPane);
+  setupZenModePaneChrome({ active: () => app.preference.current.zenModeEnabled, focused: () => true });
 
   const editorContext = setupEditorContext();
   let sharedScrollContainer = $state<HTMLDivElement>();
