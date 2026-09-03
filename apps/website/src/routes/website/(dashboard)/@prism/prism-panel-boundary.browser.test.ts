@@ -56,9 +56,8 @@ describe('PRISM panel error boundary', () => {
     const shell = target.querySelector<HTMLElement>('[data-prism-panel-shell]');
     const spacer = target.querySelector<HTMLElement>('[data-prism-panel-spacer]');
     const retry = target.querySelector<HTMLButtonElement>('button:not([aria-label])');
+    expect(shell).toBe(spacer);
     expect(shell?.style.width).toBe('432px');
-    expect(shell?.style.transform).toBe('scale(1)');
-    expect(spacer?.style.width).toBe('432px');
     expect(target.textContent).toContain('앗! 문제가 생겼어요');
     expect(target.textContent).toContain('잠시 후 다시 시도해 주세요.');
     expect(retry?.textContent).toContain('다시 시도');

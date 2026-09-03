@@ -46,53 +46,87 @@
 
 <div
   style:width={panelOpen ? `${width}px` : '0px'}
+  style:pointer-events={panelInteractive ? 'auto' : 'none'}
   style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
   style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-  class={css({ flexShrink: '0', height: 'full', transitionProperty: '[width]' })}
-  aria-hidden="true"
-  data-prism-panel-spacer
-></div>
-
-<div
-  style:width={`${width}px`}
-  style:pointer-events={panelInteractive ? 'auto' : 'none'}
-  style:transform={panelOpen ? 'scale(1)' : `scale(${PANEL_HIDDEN_SCALE})`}
-  style:transition-duration={`${panelMotionDuration}ms`}
-  style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
   class={css({
-    position: 'absolute',
-    top: '0',
-    right: '0',
-    bottom: '0',
+    position: 'relative',
+    flexShrink: '0',
     height: 'full',
-    transformOrigin: 'center',
-    transitionProperty: '[transform]',
     zIndex: 'panel',
+    transitionProperty: '[width]',
   })}
   data-prism-panel-shell
+  data-prism-panel-spacer
   data-zen-mode-closing-surface
 >
-  <aside
-    bind:this={panel}
-    style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
-    style:transition-duration={`${panelMotionDuration}ms`}
-    style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-    class={flex({
-      position: 'absolute',
-      inset: '0',
-      flexDirection: 'column',
-      width: 'full',
-      height: 'full',
-      overflow: 'hidden',
-      borderLeftWidth: '1px',
-      borderColor: 'border.subtle',
-      backgroundColor: 'surface.default',
-      transitionProperty: '[clip-path]',
-    })}
-    inert={!panelInteractive}
-  >
-    {@render children()}
-  </aside>
+  <div class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}>
+    <div
+      style:width={`${width}px`}
+      style:transform={panelOpen ? 'scale(1)' : `scale(${PANEL_HIDDEN_SCALE})`}
+      style:transition-duration={`${panelMotionDuration}ms`}
+      style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+      class={css({
+        position: 'absolute',
+        top: '0',
+        right: '0',
+        bottom: '0',
+        height: 'full',
+        transformOrigin: 'center',
+        transitionProperty: '[transform]',
+      })}
+    >
+      <aside
+        bind:this={panel}
+        class={flex({
+          position: 'absolute',
+          inset: '0',
+          flexDirection: 'column',
+          width: 'full',
+          height: 'full',
+          overflow: 'hidden',
+          backgroundColor: 'surface.default',
+        })}
+        inert={!panelInteractive}
+      >
+        {@render children()}
+      </aside>
+    </div>
+
+    <div
+      style:width={`${width}px`}
+      style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
+      style:transition-duration={`${panelMotionDuration}ms`}
+      style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+      class={css({
+        position: 'absolute',
+        top: '0',
+        right: '0',
+        bottom: '0',
+        zIndex: 'panel',
+        pointerEvents: 'none',
+        backgroundColor: 'surface.default',
+        filter: '[brightness(0.9)]',
+        transitionProperty: '[opacity]',
+      })}
+      aria-hidden="true"
+    ></div>
+
+    <!-- Clipping and the visible boundary share the shell's moving edge. -->
+    <div
+      class={css({
+        position: 'absolute',
+        top: '0',
+        bottom: '0',
+        left: '0',
+        width: '1px',
+        zIndex: 'panel',
+        pointerEvents: 'none',
+        backgroundColor: 'border.subtle',
+      })}
+      aria-hidden="true"
+    ></div>
+  </div>
 
   <div
     style:transform="translateX(-50%)"
@@ -136,23 +170,3 @@
     }}
   ></div>
 </div>
-
-<div
-  style:width={`${width}px`}
-  style:clip-path={panelOpen ? 'inset(0)' : 'inset(0 0 0 100%)'}
-  style:opacity={panelOpen ? 0 : PANEL_HIDDEN_SCRIM_OPACITY}
-  style:transition-duration={`${panelMotionDuration}ms`}
-  style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-  class={css({
-    position: 'absolute',
-    top: '0',
-    right: '0',
-    bottom: '0',
-    zIndex: 'panel',
-    pointerEvents: 'none',
-    backgroundColor: 'surface.default',
-    filter: '[brightness(0.9)]',
-    transitionProperty: '[clip-path, opacity]',
-  })}
-  aria-hidden="true"
-></div>
