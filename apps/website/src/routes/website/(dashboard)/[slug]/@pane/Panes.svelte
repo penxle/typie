@@ -1,6 +1,5 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { getAppContext } from '@typie/ui/context';
   import { onDestroy } from 'svelte';
   import { fade } from 'svelte/transition';
   import { getOpenDocuments } from '$lib/prism/open-documents.svelte';
@@ -17,7 +16,6 @@
 
   let { root }: Props = $props();
 
-  const app = getAppContext();
   const context = getPaneGroup();
   const openDocuments = getOpenDocuments();
 
@@ -140,7 +138,6 @@
         style:height="{rect.height}px"
         style:opacity={context.draggingPaneId === pane.id ? '0.4' : undefined}
         style:scale={context.draggingPaneId === pane.id ? '0.99' : undefined}
-        style:z-index={app.preference.current.zenModeEnabled && context.state.current.focusedPaneId === pane.id ? '70' : undefined}
         class={css({
           position: 'absolute',
           overflow: 'hidden',
@@ -166,7 +163,7 @@
     {/each}
   {/if}
 
-  {#if context.enabled && !context.draggingPaneId && !app.preference.current.zenModeEnabled && layout}
+  {#if context.enabled && !context.draggingPaneId && layout}
     {@const focusedRect = layout.panes.get(context.state.current.focusedPaneId ?? '')}
     {#if focusedRect}
       <div

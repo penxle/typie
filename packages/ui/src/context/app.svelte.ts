@@ -1,6 +1,14 @@
 import { LocalStore, SessionStore } from '../state';
 import { createStableContext } from './stable-context';
 
+export type ZenModeRestoreState = {
+  version: 1;
+  sidebarHidden: boolean;
+  prismPanelOpen: boolean;
+  panelExpandedBySiteAndPaneId: Record<string, Record<string, boolean>>;
+  reviewRoundByPaneAndDocumentId: Record<string, Record<string, string | null>>;
+};
+
 export type AppPreference = {
   sidebarWidth: number;
   sidebarHidden: boolean;
@@ -35,6 +43,7 @@ export type AppPreference = {
   autoSurroundEnabled: boolean;
 
   zenModeEnabled: boolean;
+  zenModeRestoreState: ZenModeRestoreState | null;
 
   contextBarPinned: boolean;
 
@@ -178,6 +187,7 @@ export const setupAppContext = (userId: string) => {
       autoSurroundEnabled: true,
 
       zenModeEnabled: false,
+      zenModeRestoreState: null,
 
       contextBarPinned: true,
 

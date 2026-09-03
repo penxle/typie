@@ -24,9 +24,10 @@
     documentLayoutMode?: DocumentLayoutMode | null;
     documentId?: string | null;
     showHeader?: boolean;
+    contentInsetTop?: number;
   };
 
-  let { pane, headerPlacement, documentLayoutMode = null, documentId = null, showHeader = true }: Props = $props();
+  let { pane, headerPlacement, documentLayoutMode = null, documentId = null, showHeader = true, contentInsetTop = 0 }: Props = $props();
 
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -150,11 +151,9 @@
           <!-- Focus mode button -->
           <div style:width="24px" style:height="24px" style:border-radius="4px" class={bar} data-pane-skeleton-focus-mode-control></div>
           <div style:width="24px" style:height="24px" style:flex-shrink="0" data-pane-skeleton-close-button>
-            {#if !app.preference.current.zenModeEnabled}
-              <CloseButton>
-                <Icon icon={XIcon} size={16} />
-              </CloseButton>
-            {/if}
+            <CloseButton>
+              <Icon icon={XIcon} size={16} />
+            </CloseButton>
           </div>
         {/snippet}
       </PaneHeader>
@@ -234,14 +233,16 @@
       </div>
     {/snippet}
 
-    {@render toolbarRowSkeleton(primary, true)}
+    {#if !app.preference.current.zenModeEnabled}
+      {@render toolbarRowSkeleton(primary, true)}
 
-    {#if toolbarExpanded}
-      {@render toolbarRowSkeleton(otherToolbarKind(primary), false)}
+      {#if toolbarExpanded}
+        {@render toolbarRowSkeleton(otherToolbarKind(primary), false)}
+      {/if}
     {/if}
 
     <!-- Body: centered content with constrained width -->
-    <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>
+    <div style:padding-top={`${contentInsetTop}px`} class={flex({ flexGrow: '1', overflow: 'hidden' })} data-pane-skeleton-body>
       <div
         style:min-width={bodyMinWidth}
         style:max-width={bodyMaxWidth}

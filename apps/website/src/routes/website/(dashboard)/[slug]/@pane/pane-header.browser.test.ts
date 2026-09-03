@@ -69,7 +69,46 @@ describe('PaneHeader priority lanes', () => {
     await expect.poll(() => scrollViewport.scrollWidth).toBeGreaterThan(scrollViewport.clientWidth);
     const scrollbar = document.querySelector<HTMLElement>('[role="scrollbar"][aria-label="문서 헤더 도구 가로 스크롤"]');
     expect(scrollbar?.getAttribute('aria-controls')).toBe(scrollViewport.id);
-    expect(scrollbar?.getBoundingClientRect().bottom).toBeCloseTo(bounds.bottom, 1);
+    expect(scrollbar?.getBoundingClientRect().bottom).toBeCloseTo(bounds.bottom - 1, 1);
+  });
+
+  it('keeps fixed actions visible after the breadcrumb compresses in focus mode', async () => {
+    component = mount(PaneHeaderTestRoot, {
+      target: document.body,
+      props: { headerWidth: 220, zenModeEnabled: true },
+    });
+    await tick();
+
+    const host = document.querySelector<HTMLElement>('[data-pane-header-test-host]');
+    const region = host?.querySelector<HTMLElement>('[role="region"]');
+    const identity = region?.querySelector<HTMLElement>('[data-pane-chrome-segment="identity"]');
+    const actions = region?.querySelector<HTMLElement>('[data-pane-chrome-segment="actions"]');
+    const sidebar = region?.querySelector<HTMLButtonElement>('button');
+    const prism = region?.querySelector<HTMLButtonElement>('[aria-label^="PRISM"]');
+    const fixedActions = [...(region?.querySelectorAll<HTMLElement>('[data-pane-header-fixed-action]') ?? [])];
+    const breadcrumbViewport = document.querySelector<HTMLElement>('#pane-header-breadcrumb-test');
+    const scrollViewport = document.querySelector<HTMLElement>('#pane-header-actions-pane-header-test');
+
+    if (!region || !identity || !actions || !sidebar || !prism || !breadcrumbViewport || !scrollViewport) {
+      throw new Error('Missing focus-mode PaneHeader test fixture');
+    }
+
+    const bounds = region.getBoundingClientRect();
+    const identityBounds = identity.getBoundingClientRect();
+    const actionsBounds = actions.getBoundingClientRect();
+    for (const control of [sidebar, ...fixedActions, prism]) {
+      const rect = control.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+      expect(rect.right).toBeLessThanOrEqual(bounds.right);
+    }
+    for (const control of [...fixedActions, prism]) {
+      const rect = control.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(actionsBounds.left);
+      expect(rect.right).toBeLessThanOrEqual(actionsBounds.right);
+    }
+    expect(identityBounds.right).toBeLessThanOrEqual(actionsBounds.left);
+    await expect.poll(() => breadcrumbViewport.scrollWidth).toBeGreaterThan(breadcrumbViewport.clientWidth);
+    await expect.poll(() => scrollViewport.scrollWidth).toBeGreaterThan(scrollViewport.clientWidth);
   });
 
   it('places the breadcrumb fog at the pane edge and its scrollbar at the header bottom', async () => {
@@ -79,13 +118,13 @@ describe('PaneHeader priority lanes', () => {
     const host = document.querySelector<HTMLElement>('[data-pane-header-breadcrumb-test-host]');
     const region = host?.querySelector<HTMLElement>('[role="region"]');
     const viewport = document.querySelector<HTMLElement>('#pane-header-breadcrumb-only-test');
-    const scrollbar = document.querySelector<HTMLElement>('[role="scrollbar"][aria-label="문서 경로 가로 스크롤"]');
+    const scrollbar = host?.querySelector<HTMLElement>('[role="scrollbar"][aria-label="문서 경로 가로 스크롤"]');
     if (!region || !viewport || !scrollbar) throw new Error('Missing breadcrumb PaneHeader test fixture');
 
     await expect.poll(() => viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
     const bounds = region.getBoundingClientRect();
     expect(viewport.getBoundingClientRect().left).toBeCloseTo(bounds.left + 4, 1);
-    expect(scrollbar.getBoundingClientRect().bottom).toBeCloseTo(bounds.bottom, 1);
+    expect(scrollbar.getBoundingClientRect().bottom).toBeCloseTo(bounds.bottom - 1, 1);
   });
 
   it('leaves header ownership to the loaded document while its body skeleton remains', async () => {
@@ -94,5 +133,13 @@ describe('PaneHeader priority lanes', () => {
 
     const host = document.querySelector<HTMLElement>('[data-pane-header-skeleton-handoff-test-host]');
     expect(host?.querySelectorAll('[role="region"]')).toHaveLength(1);
+  });
+
+  it('applies the focus-mode editor top inset to the document skeleton body', async () => {
+    component = mount(PaneHeaderTestRoot, { target: document.body });
+    await tick();
+
+    const body = document.querySelector<HTMLElement>('[data-pane-skeleton-body]');
+    expect(body?.style.paddingTop).toBe('78px');
   });
 });

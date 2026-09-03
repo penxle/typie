@@ -631,7 +631,7 @@
   const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
 
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
-  const panelInteractive = $derived(panelOpen && !app.preference.current.zenModeEnabled);
+  const panelInteractive = $derived(panelOpen);
   const welcomeAdmission = $derived(panelInteractive && !listOpen && page.state.shallowRoute == null);
   let visibilityState = $state<DocumentVisibilityState>('hidden');
   const viewingSessionId = $derived(

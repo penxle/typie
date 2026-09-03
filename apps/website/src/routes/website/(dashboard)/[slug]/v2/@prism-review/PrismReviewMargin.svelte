@@ -11,6 +11,8 @@
   import { graphql } from '$mearie';
   import { PRISM_VISIBILITY_MOTION, prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
+  import { getZenMode } from '../../../zen-mode.svelte';
+  import { getPane } from '../../@pane/context.svelte';
   import { setupMarginContext } from './context.svelte.ts';
   import {
     contentMotionOffset,
@@ -26,6 +28,7 @@
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
   import type { DetailRound } from '../../../@prism/review/round-view.ts';
+  import type { ZenModeReviewParticipant } from '../../../zen-mode.svelte';
   import type { MarginActivation, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
   import type { MarginMode, RoundOption } from './margin-view.ts';
 
@@ -58,6 +61,8 @@
   };
 
   const ctx = getEditorContext();
+  const pane = getPane();
+  const zenMode = getZenMode();
   const editor = $derived(ctx.editor);
   const idle = $derived(documentId === null || entityId === null);
 
@@ -138,6 +143,39 @@
   });
 
   const selectedRoundId = $derived(selection === undefined ? null : rounds.some((r) => r.id === selection) ? selection : null);
+
+  let zenParticipant = $state.raw<ZenModeReviewParticipant | null>(null);
+  $effect(() => {
+    const id = documentId;
+    if (id === null) {
+      zenParticipant = null;
+      return;
+    }
+
+    const participant: ZenModeReviewParticipant = {
+      paneId: pane.id,
+      documentId: id,
+      ready: () => selectedFor === id && selection !== undefined,
+      selectedRoundId: () => selectedRoundId,
+      roundIds: () => rounds.map((round) => round.id),
+      applySelection: (roundId) => {
+        if (documentId === id) selection = roundId;
+      },
+    };
+    zenParticipant = participant;
+    const unregister = zenMode.registerReview(participant);
+    return () => {
+      unregister();
+      if (zenParticipant === participant) zenParticipant = null;
+    };
+  });
+
+  $effect(() => {
+    void selection;
+    void rounds;
+    const participant = zenParticipant;
+    if (participant) untrack(() => zenMode.syncReview(participant));
+  });
 
   // 리뷰가 없는 문서에까지 여백을 잡아 두면 본문이 통째로 밀린다 — 회차가 걸린 뒤에만 자리를 낸다.
   // 짚은 곳이 하나도 없는 회차도 컬럼은 선다: 자리가 아예 없으면 "짚은 곳이 없어요"를 말할 자리도 없다.

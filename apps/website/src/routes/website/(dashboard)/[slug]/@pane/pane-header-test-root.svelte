@@ -4,11 +4,16 @@
   import { setupPane, setupPaneGroup } from './context.svelte';
   import PaneHeader from './PaneHeader.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
+  import { setupZenModePaneChrome } from './zen-mode-pane-chrome.svelte';
   import type { Pane } from './types';
+
+  type Props = { headerWidth?: number; zenModeEnabled?: boolean };
+
+  let { headerWidth = 420, zenModeEnabled = false }: Props = $props();
 
   const app = setupAppContext('pane-header-priority-test');
   app.preference.current.sidebarHidden = false;
-  app.preference.current.zenModeEnabled = false;
+  app.preference.current.zenModeEnabled = zenModeEnabled;
   app.preference.current.prismPanelOpen = false;
 
   const pane: Pane = { id: 'pane-header-test', type: 'pane', kind: 'entity', slug: 'pane-header-test' };
@@ -24,9 +29,10 @@
   paneGroup.state.current.root = pane;
   paneGroup.state.current.focusedPaneId = pane.id;
   setupPane(pane);
+  setupZenModePaneChrome({ active: () => zenModeEnabled, focused: () => true });
 </script>
 
-<div style="width: 420px" data-pane-header-test-host>
+<div style:width={`${headerWidth}px`} style="position: relative; height: 37px" data-pane-header-test-host>
   <PaneHeader placement={{ topLeft: true, topRight: true }}>
     <EditorBreadcrumb pathIdentity="folder/document" viewportId="pane-header-breadcrumb-test">
       <div style="width: 260px">Folder / Document with a long title</div>
@@ -62,7 +68,7 @@
   <PaneHeader placement={{ topLeft: true, topRight: true }}>
     <span>Loaded document</span>
   </PaneHeader>
-  <PaneSkeleton headerPlacement={{ topLeft: true, topRight: true }} {pane} showHeader={false} />
+  <PaneSkeleton contentInsetTop={78} headerPlacement={{ topLeft: true, topRight: true }} {pane} showHeader={false} />
 </div>
 
 <output data-sidebar-peek>{String(app.state.sidebarPeek)}</output>

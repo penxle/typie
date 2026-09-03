@@ -140,11 +140,15 @@ async function mountFloatingOverlay({
   landmark = null,
   fixed = true,
   revealOnHover = false,
+  requiresChrome = false,
   rightInset = 0,
+  topInset = 0,
 }: Partial<Pick<TestProps, 'displayZoom' | 'indicatorZoom' | 'landmark'>> & {
   fixed?: boolean;
   revealOnHover?: boolean;
+  requiresChrome?: boolean;
   rightInset?: number;
+  topInset?: number;
 } = {}) {
   mounted = mount(EditorContextBarTestRoot, {
     target: document.body,
@@ -156,7 +160,9 @@ async function mountFloatingOverlay({
       initialLandmark: landmark,
       floatingFixed: fixed,
       floatingRevealOnHover: revealOnHover,
+      floatingRequiresChrome: requiresChrome,
       floatingRightInset: rightInset,
+      floatingTopInset: topInset,
     },
   });
   await tick();
@@ -804,13 +810,13 @@ describe('public viewer floating zoom controls', () => {
     expect(overlay?.style.opacity).toBe('0');
   });
 
-  it('anchors to the pane surface, shifts for focus-mode exit, and uses a rounded transient surface without an edge fade', async () => {
-    const { anchor, overlay } = await mountFloatingOverlay({ fixed: false, rightInset: 36 });
+  it('anchors below pane chrome, shifts for focus-mode exit, and uses a rounded transient surface without an edge fade', async () => {
+    const { anchor, overlay } = await mountFloatingOverlay({ fixed: false, rightInset: 36, topInset: 78 });
     const blur = document.querySelector<HTMLElement>('[data-floating-editor-zoom-blur]');
     const surface = document.querySelector<HTMLElement>('[data-floating-editor-zoom-surface]');
 
     expect(getComputedStyle(anchor as HTMLElement).position).toBe('absolute');
-    expect(getComputedStyle(anchor as HTMLElement).top).toBe('0px');
+    expect(getComputedStyle(anchor as HTMLElement).top).toBe('78px');
     expect(getComputedStyle(anchor as HTMLElement).right).toBe('36px');
     expect(anchor?.dataset.floatingEditorZoomRightInset).toBe('36');
     expect(getComputedStyle(overlay as HTMLElement).borderRadius).toBe('8px');
@@ -834,6 +840,120 @@ describe('public viewer floating zoom controls', () => {
     enter(overlay as HTMLElement);
     await tick();
     expect(overlay?.style.opacity).toBe('1');
+  });
+
+  it('does not reveal a standalone hidden zoom footprint from unrelated window pointer movement', async () => {
+    const { overlay, pane } = await mountFloatingOverlay({ fixed: false, revealOnHover: true });
+    if (!overlay || !pane) throw new Error('Missing floating zoom fixture');
+    const rect = overlay.getBoundingClientRect();
+
+    move(pane, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await tick();
+
+    expect(overlay.style.opacity).toBe('0');
+  });
+
+  it('moves a hidden zoom footprint to the new chrome edge immediately', async () => {
+    const { anchor, overlay, host } = await mountFloatingOverlay({ fixed: false, revealOnHover: true });
+    if (!anchor || !overlay) throw new Error('Missing floating zoom fixture');
+    const initialTop = anchor.getBoundingClientRect().top;
+
+    (host as typeof mounted & { setFloatingLayout(next: { surfaceTop: number; topInset: number }): void }).setFloatingLayout({
+      surfaceTop: 0,
+      topInset: 78,
+    });
+    await tick();
+
+    const rect = anchor.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    expect(rect.top).toBeCloseTo(initialTop + 78, 1);
+    expect(overlay.contains(hit)).toBe(true);
+  });
+
+  it('keeps a visible zoom control at its viewport position while the pane layout origin changes', async () => {
+    const { anchor, overlay, host } = await mountFloatingOverlay({ fixed: false, revealOnHover: true });
+    if (!anchor || !overlay) throw new Error('Missing floating zoom fixture');
+    const fixture = host as typeof mounted & {
+      setFloatingLayout(next: { surfaceTop: number; topInset: number }): void;
+      setZoom(displayZoom: number, indicatorZoom: number, landmark: DocumentZoomLandmark | null): void;
+    };
+    fixture.setFloatingLayout({ surfaceTop: 78, topInset: 0 });
+    fixture.setZoom(1.1, 1.1, null);
+    await tick();
+    const initialTop = anchor.getBoundingClientRect().top;
+
+    fixture.setFloatingLayout({ surfaceTop: 0, topInset: 36 });
+    await tick();
+
+    expect(overlay.style.opacity).toBe('1');
+    expect(anchor.getBoundingClientRect().top).toBeCloseTo(initialTop, 1);
+  });
+
+  it('keeps focus-mode zoom unavailable until pane toolbar reveal has finished', async () => {
+    const { overlay, host } = await mountFloatingOverlay({ fixed: false, revealOnHover: true, requiresChrome: true, topInset: 78 });
+
+    expect(overlay?.style.opacity).toBe('0');
+    expect(overlay?.style.pointerEvents).toBe('none');
+    enter(overlay as HTMLElement);
+    await tick();
+    expect(overlay?.style.opacity).toBe('0');
+
+    (host as typeof mounted & { setFloatingChromeReady: (ready: boolean) => void }).setFloatingChromeReady(true);
+    await tick();
+    expect(overlay?.style.pointerEvents).toBe('auto');
+
+    enter(overlay as HTMLElement);
+    await tick();
+    expect(overlay?.style.opacity).toBe('1');
+  });
+
+  it('reveals when the toolbar makes a hidden zoom footprint available under a stationary pointer', async () => {
+    const { overlay, pane, host } = await mountFloatingOverlay({
+      fixed: false,
+      revealOnHover: true,
+      requiresChrome: true,
+      topInset: 78,
+    });
+    if (!overlay || !pane) throw new Error('Missing floating zoom fixture');
+    const rect = overlay.getBoundingClientRect();
+
+    move(pane, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    (host as typeof mounted & { setFloatingChromeReady(ready: boolean): void }).setFloatingChromeReady(true);
+    await tick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await tick();
+
+    expect(overlay.style.opacity).toBe('1');
+  });
+
+  it('still presents zoom activity independently while focus-mode toolbar is hidden', async () => {
+    const { anchor, overlay, host } = await mountFloatingOverlay({ fixed: false, revealOnHover: true, requiresChrome: true });
+
+    (
+      host as typeof mounted & { setZoom: (displayZoom: number, indicatorZoom: number, landmark: DocumentZoomLandmark | null) => void }
+    ).setZoom(1.1, 1.1, null);
+    await tick();
+
+    expect(overlay?.style.opacity).toBe('1');
+    expect(overlay?.dataset.floatingEditorZoomAttached).toBe('false');
+    expect(getComputedStyle(anchor as HTMLElement).top).toBe('0px');
+  });
+
+  it('hands hover ownership to pane chrome when zoom is attached to header only', async () => {
+    const { overlay, host } = await mountFloatingOverlay({ fixed: false, revealOnHover: true, requiresChrome: true });
+    const fixture = host as typeof mounted & {
+      setFloatingChromeState(next: { ready: boolean; attached: boolean }): void;
+      setZoom(displayZoom: number, indicatorZoom: number, landmark: DocumentZoomLandmark | null): void;
+    };
+    fixture.setFloatingChromeState({ ready: false, attached: true });
+    fixture.setZoom(1.1, 1.1, null);
+    await tick();
+
+    enter(overlay as HTMLElement);
+    await tick();
+
+    expect(document.querySelector<HTMLOutputElement>('[data-floating-chrome-request-count]')?.value).toBe('1');
   });
 
   it('remains keyboard discoverable and reveals before a hidden control receives interaction', async () => {

@@ -15,7 +15,6 @@
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import XIcon from '~icons/lucide/x';
   import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
@@ -25,12 +24,15 @@
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import TrialBanner from '../../@subscription/TrialBanner.svelte';
   import { getDayClock } from '../../day-clock.svelte';
+  import { getZenMode } from '../../zen-mode.svelte';
   import EditorBreadcrumbNavigation from '../v2/@breadcrumb/EditorBreadcrumbNavigation.svelte';
-  import CloseButton from './CloseButton.svelte';
   import { getPaneGroup, setupPane } from './context.svelte';
   import PaneHeader from './PaneHeader.svelte';
+  import PaneHeaderControls from './PaneHeaderControls.svelte';
   import PaneSkeleton from './PaneSkeleton.svelte';
+  import PaneSplitMenu from './PaneSplitMenu.svelte';
   import TabIcon from './TabIcon.svelte';
+  import { setupZenModePaneChrome } from './zen-mode-pane-chrome.svelte';
   import type { Pane, PaneHeaderPlacement } from './types';
 
   type HomePane = Extract<Pane, { kind: 'home' }>;
@@ -214,6 +216,13 @@
   };
 
   setupPane(pane);
+  const zenMode = getZenMode();
+  const paneChrome = setupZenModePaneChrome({
+    active: () => zenMode.active,
+    focused: () => focused,
+  });
+  const registerPaneChromeRoot = paneChrome.registerRoot;
+  const breadcrumbHoldHandle = paneChrome.segmentHandle('identity');
 </script>
 
 <div
@@ -236,16 +245,17 @@
       paneGroup.focusPane(pane.id);
     }
   }}
+  onpointerleave={() => paneChrome.handlePointerLeave()}
+  onpointermove={(event) => paneChrome.handlePointerMove(event)}
   role="tabpanel"
   tabindex={0}
+  use:registerPaneChromeRoot
 >
   <PaneHeader placement={headerPlacement}>
     {#snippet fixedActions()}
-      {#if paneGroup.enabled && !app.preference.current.zenModeEnabled}
-        <CloseButton>
-          <Icon icon={XIcon} size={16} />
-        </CloseButton>
-      {/if}
+      <PaneHeaderControls close={paneGroup.enabled}>
+        {#snippet menu()}<PaneSplitMenu />{/snippet}
+      </PaneHeaderControls>
     {/snippet}
 
     <EditorBreadcrumb pathIdentity="home" viewportId={breadcrumbViewportId}>
@@ -257,6 +267,7 @@
           if (target.kind === 'entity') paneGroup.replacePane(pane.id, { kind: 'entity', slug: target.slug });
         }}
         popupId={`${breadcrumbViewportId}-tree`}
+        segment={breadcrumbHoldHandle}
         siteId={paneGroup.currentSiteId}
       />
     </EditorBreadcrumb>

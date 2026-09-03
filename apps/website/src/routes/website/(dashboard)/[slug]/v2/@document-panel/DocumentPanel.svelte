@@ -5,6 +5,7 @@
   import { pointerCapture } from '@typie/ui/actions';
   import { Button, FullAccessBadge, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { clamp } from '@typie/ui/utils';
   import { onDestroy } from 'svelte';
   import ConstructionIcon from '~icons/lucide/construction';
@@ -12,6 +13,7 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
+  import { getZenMode } from '../../../zen-mode.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import DocumentPanelComment from './DocumentPanelComment.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
@@ -75,6 +77,7 @@
 
   const paneId = getPane().id;
   const paneGroup = getPaneGroup();
+  const zenMode = getZenMode();
   const focusReturn = getDocumentPanelFocusReturn();
 
   const isExpanded = $derived(
@@ -165,10 +168,14 @@
 >
   {#if isExpanded}
     <aside
+      style:padding-top="var(--editor-pane-header-inset, 0px)"
+      style:transition-duration={prefersReducedMotion.current || !zenMode.active
+        ? '0ms'
+        : 'var(--editor-pane-overlay-motion-duration, 280ms)'}
       class={flex({
         position: 'absolute',
         inset: '0',
-        zIndex: 'panel',
+        zIndex: 'editorOverlay',
         backgroundColor: 'surface.default',
         flexDirection: 'column',
         width: 'full',
@@ -176,7 +183,12 @@
         overflow: 'hidden',
         borderLeftWidth: '1px',
         borderColor: 'border.subtle',
+        transitionProperty: '[padding-top]',
+        transitionTimingFunction: '[var(--editor-pane-overlay-motion-easing, cubic-bezier(0.22, 1, 0.36, 1))]',
       })}
+      data-document-panel
+      data-pane-chrome-reveal-exclusion
+      data-zen-mode-closing-surface
       onfocusin={(event) => {
         if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
         focusReturn.capture(event.relatedTarget);
@@ -222,7 +234,7 @@
       style:transform="translateX(-50%)"
       class={css({
         position: 'absolute',
-        zIndex: 'overEditor',
+        zIndex: 'editorOverlay',
         top: '0',
         left: '0',
         display: 'flex',
@@ -240,6 +252,7 @@
           opacity: '50',
         },
       })}
+      data-pane-chrome-reveal-exclusion
       use:pointerCapture={{
         start: (event): ResizeSession | null => {
           if (!event.isPrimary || event.button !== 0) return null;

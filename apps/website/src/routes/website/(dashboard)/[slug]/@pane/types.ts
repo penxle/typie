@@ -63,6 +63,8 @@ export type PaneGroup = {
   swapPane: (firstPaneId: string, secondPaneId: string) => boolean;
   removePane: (paneId: string) => boolean;
   replacePane: (paneId: string, pane: PaneInit) => boolean;
+  readPanelExpandedByPaneId: (siteId: string) => Record<string, boolean>;
+  restorePanelExpandedByPaneId: (siteId: string, entry: Record<string, boolean>) => void;
 
   handleNavigation: (slug: string, siteId?: string) => void;
   switchToSite: (siteId: string, slug?: string) => void;

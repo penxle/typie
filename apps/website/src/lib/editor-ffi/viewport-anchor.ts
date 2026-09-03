@@ -90,6 +90,11 @@ export class EditorViewportAnchorState {
     return this.#preferredSelection;
   }
 
+  translateAttachmentY(deltaY: number): void {
+    if (deltaY === 0 || !Number.isFinite(deltaY) || !this.#active) return;
+    this.#active = { ...this.#active, pointAttachmentY: this.#active.pointAttachmentY + deltaY };
+  }
+
   get pendingViewportAttachment(): { identity: ViewportAnchor; focalX: number; focalY: number } | null {
     const attachment = this.viewportAttachment;
     return this.#active?.attachmentPending ? attachment : null;

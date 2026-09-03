@@ -46,6 +46,7 @@
   import type { Snippet } from 'svelte';
   import type { Editor_document$key } from '$mearie';
   import type { DocumentZoomLayout } from '../zoom';
+  import type { EditorViewSurfaceLayout } from './editor-view-surface-layout';
 
   type Props = {
     document$key: Editor_document$key;
@@ -55,11 +56,8 @@
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
     /** 본문 좌우에 비워 둘 폭. 여백 레이어(프리즘 리뷰)가 레일·카드 컬럼을 놓는 자리다. */
-    contentInsetLeft?: number;
-    contentInsetRight?: number;
-    /** 최종 레이아웃으로 바뀐 본문을 이전 화면 위치에서 합성하는 일회성 모션. */
-    contentMotion?: { fromX: number; duration: number; easing: string };
-    floatingZoomRightInset?: number;
+    /** 에디터 view surface의 좌표계와 그 위에 붙는 UI 배치를 함께 정의한다. */
+    viewSurfaceLayout?: EditorViewSurfaceLayout;
     onReady?: () => void;
     header?: Snippet;
     footer?: Snippet;
@@ -73,16 +71,23 @@
     viewer = false,
     useWindowScroll = false,
     style,
-    contentInsetLeft = 0,
-    contentInsetRight = 0,
-    contentMotion,
-    floatingZoomRightInset = 0,
+    viewSurfaceLayout,
     onReady,
     header,
     footer,
     placeholderAction,
     children,
   }: Props = $props();
+
+  const contentInsetLeft = $derived(viewSurfaceLayout?.contentInset?.left ?? 0);
+  const contentInsetRight = $derived(viewSurfaceLayout?.contentInset?.right ?? 0);
+  const contentInsetTop = $derived(viewSurfaceLayout?.contentInset?.top ?? 0);
+  const visibleAreaTopInset = $derived(viewSurfaceLayout?.visibleAreaTopInset ?? 0);
+  const contentMotion = $derived(viewSurfaceLayout?.contentMotion);
+  const floatingZoomRightInset = $derived(viewSurfaceLayout?.floatingZoom?.rightInset ?? 0);
+  const floatingZoomTopInset = $derived(viewSurfaceLayout?.floatingZoom?.topInset);
+  const floatingZoomLayoutOriginOffset = $derived(viewSurfaceLayout?.floatingZoom?.layoutOriginOffset ?? 0);
+  const floatingZoomChromeAttachment = $derived(viewSurfaceLayout?.floatingZoom?.chromeAttachment);
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
@@ -109,6 +114,10 @@
       surfaceHost = undefined;
       host.destroy();
     };
+  });
+
+  $effect(() => {
+    ctx.scroll?.setTopInset(visibleAreaTopInset);
   });
 
   $effect(() => {
@@ -237,6 +246,7 @@
   let viewportLayoutType: 'continuous' | 'paginated' | undefined;
   let viewportClientWidth: number | undefined;
   let viewportClientHeight: number | undefined;
+  let viewportContentInsetTop: number | undefined;
   let lastViewportScaleFactor: number | undefined;
 
   $effect(() => {
@@ -257,9 +267,12 @@
       const committedLayoutChanged = sameEditor && viewportLayoutType !== layoutMode?.type;
       const physicalViewportChanged =
         sameEditor && (viewportClientWidth !== width || viewportClientHeight !== height || lastViewportScaleFactor !== viewportScaleFactor);
+      const contentOriginShift = sameEditor && viewportContentInsetTop !== undefined ? contentInsetTop - viewportContentInsetTop : 0;
+      if (contentOriginShift !== 0) ctx.scroll?.translateViewportAnchorAttachment(contentOriginShift);
       viewportLayoutType = layoutMode?.type;
       viewportClientWidth = width;
       viewportClientHeight = height;
+      viewportContentInsetTop = contentInsetTop;
       lastViewportScaleFactor = viewportScaleFactor;
       if (sameEditor && !committedLayoutChanged) {
         editor.resizeViewport(effectiveWidth, height, viewportScaleFactor);
@@ -307,6 +320,7 @@
     void windowViewportHeight;
     void contentInsetLeft;
     void contentInsetRight;
+    void contentInsetTop;
     for (const pageEl of Object.values(editor.pageEls)) void pageEl;
     untrack(() => editor.requestPresentationGeometryUpdate());
   });
@@ -358,10 +372,13 @@
     <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
       {#snippet zoomControls({ controls })}
         <FloatingEditorZoomControls
+          chromeAttachment={floatingZoomChromeAttachment}
           {controls}
           fixed={useWindowScroll}
+          layoutOriginOffset={floatingZoomLayoutOriginOffset}
           revealOnHover={!useWindowScroll}
           rightInset={floatingZoomRightInset}
+          topInset={floatingZoomTopInset}
         />
       {/snippet}
     </EditorZoom>
@@ -416,6 +433,15 @@
     bind:clientWidth
     bind:clientHeight
   >
+    {#if contentInsetTop > 0}
+      <div
+        style:height={`${contentInsetTop}px`}
+        class={css({ flexShrink: '0', pointerEvents: 'none' })}
+        aria-hidden="true"
+        data-editor-content-top-inset
+      ></div>
+    {/if}
+
     {#if ctx.editor && header}
       <div
         style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}

@@ -239,6 +239,7 @@
       userSelect: 'text',
       WebkitUserSelect: 'text',
     })}
+    data-zen-mode-closing-surface
     draggable={false}
     onclick={(event) => event.stopPropagation()}
     oncontextmenu={(event) => event.stopPropagation()}
