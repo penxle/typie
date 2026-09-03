@@ -222,7 +222,7 @@
 
   {#if withZoom}
     <EditorZoom active {editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
-      {#snippet zoomControls({ controls })}
+      {#snippet zoomControls(controls)}
         <FloatingEditorZoomControls {controls} fixed={useWindowScroll} revealOnHover={!useWindowScroll} />
       {/snippet}
     </EditorZoom>

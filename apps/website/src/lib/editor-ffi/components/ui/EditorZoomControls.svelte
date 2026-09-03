@@ -13,11 +13,9 @@
   import ZoomInIcon from '~icons/lucide/zoom-in';
   import ZoomOutIcon from '~icons/lucide/zoom-out';
   import { zoomDiffers } from '$lib/editor-ffi/zoom';
-  import { CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import type { DocumentZoomLandmark } from '$lib/editor-ffi/zoom';
-  import type { TransientVisibilityState } from './transient-visibility.svelte';
 
-  export type EditorZoomControlsProps = {
+  export type EditorZoomControlsRenderProps = {
     enabled: boolean;
     displayZoom: number;
     indicatorZoom: number;
@@ -27,20 +25,21 @@
     toggleTargetLandmark: DocumentZoomLandmark | null;
     boundaryAttemptRequest?: number;
     boundaryAttemptLandmark?: DocumentZoomLandmark | null;
-    visibility: TransientVisibilityState;
-    visible: boolean;
-    keyboardDiscoverableWhenHidden?: boolean;
     onZoomOut: () => unknown | Promise<unknown>;
     onZoomIn: () => unknown | Promise<unknown>;
     onToggleZoom: () => unknown | Promise<unknown>;
   };
 
-  export type EditorZoomControlsRenderProps = Omit<EditorZoomControlsProps, 'visibility' | 'visible' | 'keyboardDiscoverableWhenHidden'>;
+  type Props = EditorZoomControlsRenderProps & {
+    visible: boolean;
+    keyboardDiscoverableWhenHidden?: boolean;
+    onTemporaryVisibilityRequest: (additionalDurationMs?: number) => void;
+    onFeedbackVisibilityHoldChange: (held: boolean) => void;
+  };
 
   type ZoomRangeState = 'in-range' | 'below-minimum' | 'above-maximum';
 
   const ZOOM_LANDMARK_VISIBLE_MS = 1000;
-  const ZOOM_OVERLAY_LANDMARK_VISIBLE_MS = CONTEXT_BAR_TRANSIENT_VISIBLE_MS + ZOOM_LANDMARK_VISIBLE_MS;
   const ZOOM_VALUE_TRANSITION_MS = 120;
   const DEFAULT_BORDER = token('colors.border.default');
   const LANDMARK_LABELS: Record<DocumentZoomLandmark, string> = {
@@ -66,13 +65,14 @@
     toggleTargetLandmark,
     boundaryAttemptRequest = 0,
     boundaryAttemptLandmark = null,
-    visibility,
     visible,
     keyboardDiscoverableWhenHidden = false,
+    onTemporaryVisibilityRequest,
+    onFeedbackVisibilityHoldChange,
     onZoomOut,
     onZoomIn,
     onToggleZoom,
-  }: EditorZoomControlsProps = $props();
+  }: Props = $props();
 
   let valueHovered = $state(false);
   let valueFocused = $state(false);
@@ -137,7 +137,7 @@
   }
 
   function showTemporarily() {
-    visibility.showTemporarily(announcedLandmark ? ZOOM_OVERLAY_LANDMARK_VISIBLE_MS : CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
+    onTemporaryVisibilityRequest(announcedLandmark ? ZOOM_LANDMARK_VISIBLE_MS : undefined);
   }
 
   function handleIndicatorPointerDown(event: PointerEvent) {
@@ -180,8 +180,7 @@
   function announceLandmark(next: DocumentZoomLandmark | null, held = false) {
     clearLandmarkTimer();
     announcedLandmark = next;
-    if (next !== null && held) visibility.hold('zoom-landmark');
-    else visibility.release('zoom-landmark');
+    onFeedbackVisibilityHoldChange(next !== null && held);
     if (!next || held) return;
     landmarkTimer = setTimeout(() => {
       announcedLandmark = null;
@@ -228,7 +227,7 @@
       lastLandmark = undefined;
       clearLandmarkTimer();
       announcedLandmark = null;
-      visibility.release('zoom-landmark');
+      onFeedbackVisibilityHoldChange(false);
       return;
     }
 
@@ -272,7 +271,7 @@
     return () => {
       clearLandmarkTimer();
       clearTouchClickSuppression();
-      visibility.release('zoom-landmark');
+      onFeedbackVisibilityHoldChange(false);
     };
   });
 </script>

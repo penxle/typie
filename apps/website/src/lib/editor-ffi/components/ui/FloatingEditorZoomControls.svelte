@@ -2,10 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { token } from '@typie/styled-system/tokens';
   import { prefersReducedMotion } from '@typie/ui/state';
-  import { CONTEXT_BAR_FADE_IN_MS, CONTEXT_BAR_FADE_OUT_MS, CONTEXT_BAR_TRANSIENT_VISIBLE_MS } from './editor-context-bar.svelte';
   import EditorZoomControls from './EditorZoomControls.svelte';
   import { setupFloatingOverlayPosition } from './floating-overlay-position.svelte';
-  import { TransientVisibilityState } from './transient-visibility.svelte';
   import type { EditorZoomControlsRenderProps } from './EditorZoomControls.svelte';
 
   export type FloatingEditorZoomChromeAttachment = {
@@ -30,6 +28,9 @@
   const PAGINATED_SURFACE = token('colors.surface.subtle');
   const TRANSIENT_BASE = `color-mix(in srgb, ${CONTINUOUS_SURFACE} 50%, ${PAGINATED_SURFACE} 50%)`;
   const TRANSIENT_SURFACE = `color-mix(in srgb, ${TRANSIENT_BASE} 75%, transparent)`;
+  const TRANSIENT_VISIBLE_MS = 1500;
+  const FADE_IN_MS = 180;
+  const FADE_OUT_MS = 400;
 
   let {
     controls,
@@ -40,11 +41,15 @@
     layoutOriginOffset = 0,
     chromeAttachment,
   }: Props = $props();
-  const visibility = new TransientVisibilityState();
-  const visible = $derived(controls.enabled && visibility.visible);
+  let transient = $state(false);
+  let hovered = $state(false);
+  let focused = $state(false);
+  let feedbackVisibilityHeld = $state(false);
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  const visible = $derived(controls.enabled && (transient || hovered || focused || feedbackVisibilityHeld));
   const chromeDiscoverable = $derived(chromeAttachment?.discoverable() ?? true);
   const presented = $derived(visible);
-  const engaged = $derived(visibility.engaged);
+  const engaged = $derived(hovered || focused);
   const attached = $derived(chromeAttachment?.attached() ?? false);
   const interactive = $derived(presented || (chromeDiscoverable && revealOnHover));
   const top = $derived(
@@ -58,6 +63,24 @@
   let anchor: HTMLDivElement;
   let controlsElement: HTMLDivElement;
   let pointerSyncFrame: number | undefined;
+
+  function showTemporarily(additionalDurationMs = 0): void {
+    transient = true;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      transient = false;
+      hideTimer = undefined;
+    }, TRANSIENT_VISIBLE_MS + additionalDurationMs);
+  }
+
+  function clearVisibility(): void {
+    clearTimeout(hideTimer);
+    hideTimer = undefined;
+    transient = false;
+    hovered = false;
+    focused = false;
+    feedbackVisibilityHeld = false;
+  }
 
   setupFloatingOverlayPosition({
     element: () => anchor,
@@ -73,12 +96,12 @@
     const inside = pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom;
     if (inside && interactive && (revealOnHover || visible)) {
       chromeAttachment?.hold();
-      visibility.setHovered(true);
+      hovered = true;
       return;
     }
-    if (!inside && visibility.hovered) {
-      visibility.setHovered(false);
-      if (!visibility.focused) chromeAttachment?.release();
+    if (!inside && hovered) {
+      hovered = false;
+      if (!focused) chromeAttachment?.release();
     }
   }
 
@@ -101,13 +124,13 @@
     if (!chromeDiscoverable && !attached && !visible) return;
     if (!revealOnHover && !visible) return;
     if (chromeDiscoverable || attached) chromeAttachment?.hold(event);
-    visibility.setHovered(true);
+    hovered = true;
   }
 
   function handlePointerLeave(): void {
-    if (visibility.hovered) visibility.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
-    visibility.setHovered(false);
-    if (!visibility.focused) chromeAttachment?.release();
+    if (hovered) showTemporarily();
+    hovered = false;
+    if (!focused) chromeAttachment?.release();
   }
 
   function handlePointerMove(event: PointerEvent): void {
@@ -119,24 +142,24 @@
 
   function handleFocusIn(): void {
     if (chromeDiscoverable || attached) chromeAttachment?.hold();
-    visibility.setFocused(true);
+    focused = true;
   }
 
   function handleFocusOut(event: FocusEvent & { currentTarget: HTMLDivElement }): void {
     const nextInside = event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget);
-    if (!nextInside && visibility.focused) visibility.showTemporarily(CONTEXT_BAR_TRANSIENT_VISIBLE_MS);
-    visibility.setFocused(nextInside);
-    if (!nextInside && !visibility.hovered) chromeAttachment?.release();
+    if (!nextInside && focused) showTemporarily();
+    focused = nextInside;
+    if (!nextInside && !hovered) chromeAttachment?.release();
   }
 
   $effect(() => {
-    if (!controls.enabled) visibility.destroy();
+    if (!controls.enabled) clearVisibility();
   });
 
   $effect(() => () => {
     if (pointerSyncFrame !== undefined) cancelAnimationFrame(pointerSyncFrame);
     chromeAttachment?.release();
-    visibility.destroy();
+    clearVisibility();
   });
 </script>
 
@@ -164,7 +187,7 @@
     style:border-radius={borderRadius}
     style:transition={prefersReducedMotion.current
       ? 'none'
-      : `opacity ${presented ? CONTEXT_BAR_FADE_IN_MS : CONTEXT_BAR_FADE_OUT_MS}ms ease-out, color ${CONTEXT_BAR_FADE_IN_MS}ms ease-out`}
+      : `opacity ${presented ? FADE_IN_MS : FADE_OUT_MS}ms ease-out, color ${FADE_IN_MS}ms ease-out`}
     class={css({ position: 'relative', isolation: 'isolate', width: '[fit-content]' })}
     data-floating-editor-zoom-attached={attached}
     data-floating-editor-zoom-controls
@@ -195,7 +218,8 @@
     <EditorZoomControls
       {...controls}
       keyboardDiscoverableWhenHidden={!chromeAttachment || chromeDiscoverable || presented}
-      {visibility}
+      onFeedbackVisibilityHoldChange={(held) => (feedbackVisibilityHeld = held)}
+      onTemporaryVisibilityRequest={showTemporarily}
       visible={presented}
     />
   </div>

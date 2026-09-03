@@ -45,8 +45,6 @@ export type AppPreference = {
   zenModeEnabled: boolean;
   zenModeRestoreState: ZenModeRestoreState | null;
 
-  contextBarPinned: boolean;
-
   searchMatchWholeWord: boolean;
 
   exportFormat: 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
@@ -188,8 +186,6 @@ export const setupAppContext = (userId: string) => {
 
       zenModeEnabled: false,
       zenModeRestoreState: null,
-
-      contextBarPinned: true,
 
       searchMatchWholeWord: false,
 
