@@ -34,7 +34,7 @@
 
           threads {
             id
-            issueIndex
+            issueIndex(roundId: $roundId)
           }
 
           detail {

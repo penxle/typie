@@ -166,8 +166,9 @@ PrismReviewThread.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     issueIndex: t.int({
-      resolve: async (self, _, ctx) => {
-        const seat = await viewSeat(ctx, self.id);
+      args: { roundId: t.arg.id({ required: false, validate: validateDbId(TableCode.PRISM_REVIEW_ROUNDS) }) },
+      resolve: async (self, args, ctx) => {
+        const seat = await viewSeat(ctx, self.id, args.roundId ?? undefined);
         return seat?.issueIndex ?? 0;
       },
     }),
@@ -177,15 +178,17 @@ PrismReviewThread.implement({
     body: t.exposeString('body', { nullable: true }),
     anchors: t.field({
       type: [PrismReviewAnchor],
-      resolve: async (self, _, ctx) => {
-        const seat = await viewSeat(ctx, self.id);
+      args: { roundId: t.arg.id({ required: false, validate: validateDbId(TableCode.PRISM_REVIEW_ROUNDS) }) },
+      resolve: async (self, args, ctx) => {
+        const seat = await viewSeat(ctx, self.id, args.roundId ?? undefined);
         return seat?.anchors ?? [];
       },
     }),
     quote: t.string({
+      args: { roundId: t.arg.id({ required: false, validate: validateDbId(TableCode.PRISM_REVIEW_ROUNDS) }) },
       // 카드는 앵커가 살아 있든 자리를 잃었든 이 인용을 보여 준다
-      resolve: async (self, _, ctx) => {
-        const seat = await viewSeat(ctx, self.id);
+      resolve: async (self, args, ctx) => {
+        const seat = await viewSeat(ctx, self.id, args.roundId ?? undefined);
         if (seat === null) {
           return '';
         }
@@ -200,9 +203,10 @@ PrismReviewThread.implement({
     lineage: t.field({ type: PrismReviewLineage, resolve: (self) => self.lineageId }),
     settledRound: t.field({ type: PrismReviewRound, nullable: true, resolve: (self) => self.settledRoundId }),
     isNew: t.boolean({
+      args: { roundId: t.arg.id({ required: false, validate: validateDbId(TableCode.PRISM_REVIEW_ROUNDS) }) },
       // 어느 회차의 눈으로 보는지 기록이 없으면(뮤테이션 반환 등) 표지를 세우지 않는다
-      resolve: async (self, _, ctx) => {
-        const viewRoundId = viewedRoundOf(ctx, self.id);
+      resolve: async (self, args, ctx) => {
+        const viewRoundId = args.roundId ?? viewedRoundOf(ctx, self.id);
         if (viewRoundId === null) {
           return false;
         }

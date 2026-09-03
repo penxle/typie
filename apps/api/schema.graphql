@@ -1437,16 +1437,16 @@ type PrismReviewStrength {
 }
 
 type PrismReviewThread {
-  anchors: [PrismReviewAnchor!]!
+  anchors(roundId: ID): [PrismReviewAnchor!]!
   body: String
   comments: [PrismReviewThreadComment!]!
   id: ID!
-  isNew: Boolean!
+  isNew(roundId: ID): Boolean!
   issueId: String
-  issueIndex: Int!
+  issueIndex(roundId: ID): Int!
   lineage: PrismReviewLineage!
   pass: PrismReviewPass!
-  quote: String!
+  quote(roundId: ID): String!
   reaction: PrismReaction
   settledRound: PrismReviewRound
   state: PrismReviewThreadState!

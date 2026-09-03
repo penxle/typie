@@ -40,7 +40,7 @@
 </script>
 
 {#if editor}
-  {#each highlight.rects as rect (`${rect.rangeId}:${rect.fragmentIndex}`)}
+  {#each highlight.rects as rect (`${margin.presentationRoundId}:${rect.rangeId}:${rect.fragmentIndex}`)}
     <PrismReviewHighlightRect {edge} {editor} {fill} kind={highlight.kind} rect={rect.pageRect} />
   {/each}
 {/if}

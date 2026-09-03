@@ -44,6 +44,9 @@ export type MarginController = {
   readonly ready: boolean;
   readonly presentationRoundId: string | null;
   readonly presentationProgress: number;
+  readonly roundVisibilityProgress: number;
+  readonly roundLoading: boolean;
+  readonly roundInteractive: boolean;
   readonly presentationInteractive: boolean;
   readonly myId: string;
   readonly locked: boolean;

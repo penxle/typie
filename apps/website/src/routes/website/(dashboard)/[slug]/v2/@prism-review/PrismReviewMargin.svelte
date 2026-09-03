@@ -9,7 +9,7 @@
   import { takeMarginJump } from '$lib/prism/margin-jump.svelte';
   import { readReviewRoundSelection, writeReviewRoundSelection } from '$lib/prism/review-round-selection';
   import { graphql } from '$mearie';
-  import { PRISM_VISIBILITY_MOTION, prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
+  import { fadeIn, fadeOut, PRISM_VISIBILITY_MOTION, prismVisibilityEasing, reducedMotion } from '../../../@prism/lib/motion.ts';
   import { TIER_OPTIONS } from '../../../@prism/review/tiers.ts';
   import { getZenMode } from '../../../zen-mode.svelte';
   import { getPane } from '../../@pane/context.svelte';
@@ -20,16 +20,19 @@
     marginMotionDuration,
     marginMotionTarget,
     nextMarginReserved,
-    resolvePresentedRoundId,
+    resolveRoundSwap,
   } from './margin-motion.ts';
   import { describeThread, resolveMode } from './margin-view.ts';
   import PrismReviewHighlightLayer from './PrismReviewHighlightLayer.svelte';
+  import type { DataOf } from '@mearie/svelte';
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';
   import type { MarginJump } from '$lib/prism/margin-jump.svelte';
+  import type { DocumentPrismReviewMargin_Round_Query } from '$mearie';
   import type { DetailRound } from '../../../@prism/review/round-view.ts';
   import type { ZenModeReviewParticipant } from '../../../zen-mode.svelte';
   import type { MarginActivation, MarginItem, MarginPlacement, MarginSegment } from './context.svelte.ts';
+  import type { RoundSwapState } from './margin-motion.ts';
   import type { MarginMode, RoundOption } from './margin-view.ts';
 
   // 인셋은 모드에 따라 정해지므로 자식에게 인자로 넘긴다 — DocumentEditor가 그대로 EditorComponent에 준다
@@ -53,6 +56,7 @@
   let { documentId, entityId, myId, available, bodyWidth, children }: Props = $props();
 
   type Seat = { id: string; selection: StableSelection; tone: 'issue' | 'strength' };
+  type ReviewRound = DataOf<DocumentPrismReviewMargin_Round_Query>['prismReviewRound'];
   type Spec = {
     anchors: readonly { selection?: unknown }[];
     tone: 'issue' | 'strength';
@@ -224,12 +228,12 @@
     if (mode !== 'column') presentationPrepared = false;
   });
 
-  // 선택은 즉시 바뀌되, 닫힘을 그리는 데이터만 진행률이 0이 될 때까지 마지막 회차를 붙잡는다.
-  let lastRoundId = $state<string | null>(null);
-  $effect(() => {
-    if (selectedRoundId !== null) lastRoundId = selectedRoundId;
-  });
-  const presentedRoundId = $derived(resolvePresentedRoundId(selectedRoundId, lastRoundId, presentation.current));
+  // 패널 열림/닫힘과 회차 교체는 서로 다른 수명이다. 회차 교체 중에는 기존 결과를 fade-out 끝까지
+  // 붙잡고, 새 데이터와 카드 배치가 모두 준비된 뒤에만 전체 표면을 다시 드러낸다.
+  let presentedRound = $state.raw<ReviewRound | null>(null);
+  let presentedFor: string | null = null;
+  let roundSwap = $state.raw<RoundSwapState>({ phase: 'idle' });
+  const roundVisibility = new Tween(1);
 
   const select = (roundId: string | null) => {
     selection = roundId;
@@ -240,7 +244,7 @@
   const detailRound = $derived.by((): DetailRound | null => {
     const entity = roundsQuery.data?.entity;
     if (idle || entity === undefined || entity.node.__typename !== 'Document') return null;
-    const selected = entity.node.prismReviewRounds.find((round) => round.id === presentedRoundId);
+    const selected = entity.node.prismReviewRounds.find((round) => round.id === presentedRound?.id);
     if (selected === undefined || !selected.hasDetail) return null;
     return {
       id: selected.id,
@@ -260,14 +264,14 @@
           issueCount
           threads {
             id
-            issueIndex
+            issueIndex(roundId: $roundId)
             trait
             body
-            quote
+            quote(roundId: $roundId)
             state
             reaction
-            isNew
-            anchors {
+            isNew(roundId: $roundId)
+            anchors(roundId: $roundId) {
               selection
             }
             comments {
@@ -289,14 +293,14 @@
           }
           settledThreads {
             id
-            issueIndex
+            issueIndex(roundId: $roundId)
             trait
             body
-            quote
+            quote(roundId: $roundId)
             state
             reaction
-            isNew
-            anchors {
+            isNew(roundId: $roundId)
+            anchors(roundId: $roundId) {
               selection
             }
             comments {
@@ -347,8 +351,8 @@
         }
       }
     `),
-    () => ({ roundId: presentedRoundId ?? '' }),
-    () => ({ skip: presentedRoundId === null }),
+    () => ({ roundId: selectedRoundId ?? '' }),
+    () => ({ skip: selectedRoundId === null }),
   );
 
   createSubscription(
@@ -384,11 +388,40 @@
     }),
   );
 
-  // 지금 표시할 회차의 것이 아닌 응답은 쓰지 않는다 — 회차를 바꾼 직후 한 틱 동안 옛 회차가 그려진다
-  const round = $derived.by(() => {
+  // 쿼리는 목표 회차를 미리 불러오지만, 실제 표시 데이터의 교체는 fade-out 경계가 소유한다.
+  const loadedRound = $derived.by(() => {
     const detail = detailQuery.data?.prismReviewRound;
-    return detail !== undefined && detail.id === presentedRoundId ? detail : null;
+    return detail !== undefined && detail.id === selectedRoundId ? detail : null;
   });
+
+  $effect(() => {
+    const id = documentId;
+    if (presentedFor === id) return;
+    untrack(() => {
+      presentedFor = id;
+      presentedRound = null;
+      roundSwap = { phase: 'idle' };
+      void roundVisibility.set(1, { duration: 0 });
+    });
+  });
+
+  // 첫 표시와 완전 닫힘은 컬럼 presentation이 맡는다. 같은 회차의 갱신은 즉시 받되,
+  // 서로 다른 회차의 교체만 아래 roundSwap 상태가 fade-out 경계에서 수행한다.
+  $effect(() => {
+    const selected = selectedRoundId;
+    const loaded = loadedRound;
+    const current = presentedRound;
+    const progress = presentation.current;
+    untrack(() => {
+      if (selected === null) {
+        if (progress === 0) presentedRound = null;
+      } else if (current !== loaded && loaded?.id === selected && (current === null || current.id === selected)) {
+        presentedRound = loaded;
+      }
+    });
+  });
+
+  const round = $derived(presentedRound);
 
   // 그 계보의 다음 리뷰가 도는 동안에는 답글·닫기가 사영의 입력을 바꾼다 — 회차 경계 밖에서 잠근다
   const locked = $derived(round?.lineage.locked ?? false);
@@ -413,6 +446,8 @@
   let raw = $state.raw<MarginPlacement[]>([]);
   // 지금 선 항목이 어느 회차의 것인지 — 회차를 갈아 끼운 직후엔 고른 회차와 어긋난다
   let builtRoundId = $state<string | null>(null);
+  // clear/add를 요청한 판보다 새 editor 판이 적용되어야 새 앵커의 자리를 준비했다고 볼 수 있다.
+  let rangeInstallation = $state.raw<{ roundId: string; previousRevision: number } | null>(null);
 
   // 앵커는 서버가 리뷰 시점에 캡처한 selection이라 회차당 정적이다 — 회차 전환·데이터 도착 때만 전량 재설치하고,
   // 편집 뒤의 자리는 코어가 매 판 해소한다(자리를 잃은 range는 tracked_ranges()에서 빠지고, 되돌리기로 돌아오면 다시 선다).
@@ -423,6 +458,7 @@
       raw = [];
       ready = false;
       builtRoundId = null;
+      rangeInstallation = null;
       presentationPrepared = false;
       return;
     }
@@ -438,7 +474,7 @@
       ...round.threads.map((thread) => ({
         anchors: thread.anchors,
         tone: 'issue' as const,
-        rangeId: (at: number) => `${thread.id}:${at}`,
+        rangeId: (at: number) => `${round.id}:${thread.id}:${at}`,
         item: {
           id: thread.id,
           kind: 'issue' as const,
@@ -450,7 +486,7 @@
       ...strengths.map((strength, index) => ({
         anchors: strength.anchors,
         tone: 'strength' as const,
-        rangeId: (at: number) => `strength:${index}:${at}`,
+        rangeId: (at: number) => `${round.id}:strength:${index}:${at}`,
         item: {
           id: `strength:${index}`,
           kind: 'strength' as const,
@@ -474,10 +510,12 @@
       nextRaw.push({ ...spec.item, rangeIds });
     }
 
+    const previousRevision = current.appliedRevision;
     current.setPrismReviewRanges(installs);
     raw = nextRaw;
     ready = true;
     builtRoundId = round.id;
+    rangeInstallation = { roundId: round.id, previousRevision };
   };
 
   const markPresentationPrepared = (roundId: string) => {
@@ -520,6 +558,50 @@
     void editor;
     void placementKey;
     untrack(() => buildItems());
+  });
+
+  const rangesApplied = $derived(
+    editor !== undefined &&
+      rangeInstallation !== null &&
+      rangeInstallation.roundId === builtRoundId &&
+      editor.appliedRevision > rangeInstallation.previousRevision,
+  );
+  const selectedRoundPrepared = $derived(
+    selectedRoundId !== null && builtRoundId === selectedRoundId && ready && rangesApplied && (mode !== 'column' || presentationPrepared),
+  );
+  const roundLoading = $derived(roundSwap.phase === 'waiting' || (roundSwap.phase === 'preparing' && roundSwap.spinnerVisible));
+  const roundInteractive = $derived(
+    roundSwap.phase === 'idle' && selectedRoundPrepared && roundVisibility.target === 1 && roundVisibility.current === 1,
+  );
+
+  $effect(() => {
+    const state = roundSwap;
+    const selected = selectedRoundId;
+    const presented = presentedRound;
+    const loaded = loadedRound;
+    const resolution = resolveRoundSwap(state, {
+      selectedRoundId: selected,
+      presentedRoundId: presented?.id ?? null,
+      loadedRoundId: loaded?.id ?? null,
+      visibilityProgress: roundVisibility.current,
+      prepared: selectedRoundPrepared,
+      failed: detailQuery.error !== undefined,
+    });
+
+    untrack(() => {
+      if (resolution.state !== state) roundSwap = resolution.state;
+      if (resolution.replacePresented && loaded?.id === selected) presentedRound = loaded;
+
+      if (presented !== null && resolution.restoreSelection) {
+        select(presented.id);
+        Toast.error('리뷰를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+
+      if (roundVisibility.target !== resolution.visibilityTarget) {
+        const options = resolution.visibilityTarget === 0 ? fadeOut : fadeIn;
+        void roundVisibility.set(resolution.visibilityTarget, { ...options, duration: reduceMotion ? 0 : options.duration });
+      }
+    });
   });
 
   // 닫는다고 목록에서 빠지지 않는다 — 이번 회차의 피드백은 닫혀도 회색으로 제자리에 남는다.
@@ -618,7 +700,7 @@
     }
 
     // 강점 id는 회차마다 되풀이된다 — 아직 옛 회차의 항목이 서 있는 동안 엉뚱한 곳으로 가지 않도록 회차까지 본다
-    if (builtRoundId !== target.roundId || items.every((item) => item.id !== target.itemId)) return;
+    if (!selectedRoundPrepared || builtRoundId !== target.roundId || items.every((item) => item.id !== target.itemId)) return;
 
     untrack(() => {
       activate(target.itemId);
@@ -791,8 +873,17 @@
     get presentationProgress() {
       return presentation.current;
     },
+    get roundVisibilityProgress() {
+      return roundVisibility.current;
+    },
+    get roundLoading() {
+      return roundLoading;
+    },
+    get roundInteractive() {
+      return roundInteractive;
+    },
     get presentationInteractive() {
-      return presentationTarget === 1 && presentation.current === 1;
+      return presentationTarget === 1 && presentation.current === 1 && roundInteractive;
     },
     get myId() {
       return myId;

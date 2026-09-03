@@ -5,8 +5,12 @@
   import { getMarginContext } from './context.svelte.ts';
   import type { RailTone } from './rail-layout.ts';
 
-  type Props = { marks: { itemId: string; ratio: number; tone: RailTone }[] };
-  let { marks }: Props = $props();
+  type Props = {
+    marks: { itemId: string; ratio: number; tone: RailTone }[];
+    opacity?: number;
+    interactive?: boolean;
+  };
+  let { marks, opacity = 1, interactive = true }: Props = $props();
 
   const ctx = getEditorContext();
   const margin = getMarginContext();
@@ -73,7 +77,9 @@
     style:top={`${rect.top}px`}
     style:right={`${window.innerWidth - rect.right + SCROLLBAR_TRACK}px`}
     style:height={`${rect.height - bottomInset}px`}
+    style:opacity
     class={css({ position: 'fixed', zIndex: '10', width: '10px', pointerEvents: 'none' })}
+    inert={!interactive}
     use:portal
   >
     {#each marks as mark (mark.itemId)}
