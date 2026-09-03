@@ -46,6 +46,10 @@
   export function openActionsMenu(): void {
     actionsMenuOpen = true;
   }
+
+  export function closeActionsMenu(): void {
+    actionsMenuOpen = false;
+  }
 </script>
 
 <div
@@ -114,7 +118,9 @@
   <div style="position: absolute; top: 37px; right: 0; left: 0; pointer-events: none" data-chrome-toolbar-lane use:registerToolbar>
     <ZenModePaneChromeEffects lane="toolbar" toolbarSeparatorOffsets={toolbarRows === 2 ? [40] : []} />
     <ZenModePaneChromeSegment {active} data-chrome-toolbar segment="toolbar">
-      <div style:height="41px" data-chrome-toolbar-content>Toolbar</div>
+      <div style:height="41px" data-chrome-toolbar-content>
+        <button data-chrome-toolbar-action type="button">Toolbar</button>
+      </div>
       {#if toolbarRows === 2}
         <div style="height: 41px" data-chrome-toolbar-expanded-content>Expanded toolbar</div>
       {/if}

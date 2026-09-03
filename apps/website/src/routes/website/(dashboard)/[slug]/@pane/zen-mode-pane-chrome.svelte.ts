@@ -10,7 +10,7 @@ import type { PaneChromeLane, PaneChromeSegment, PaneChromeSegmentGeometry } fro
 export type { PaneChromeLane, PaneChromeSegment, PaneChromeSegmentGeometry } from './zen-mode-pane-chrome-geometry';
 export type PaneChromePhase = 'idle' | 'pending' | 'preview' | 'spot' | 'expanding' | 'held' | 'fading';
 export type PaneChromeTone = 'transient' | 'engaged';
-export type PaneChromeExpansionPace = 'standard' | 'adjacent';
+export type PaneChromeExpansionPace = 'standard' | 'accelerated';
 type PaneChromePoint = { x: number; y: number };
 type PaneChromeStablePhase = Exclude<PaneChromePhase, 'spot' | 'expanding' | 'fading'>;
 type PaneChromeTransition =
@@ -58,6 +58,9 @@ type HoverIntentActionReturn = SvelteActionReturn<HoverIntentParameter>;
 
 const INTENT_MS = 400;
 const GAP_DWELL_MS = 500;
+const WARM_INTENT_MS = 150;
+const WARM_EXIT_GRACE_MS = 3000;
+const WARM_WINDOW_MS = 20_000;
 export const PANE_CHROME_FOREGROUND_DELAY_MS = 100;
 export const PANE_CHROME_FOREGROUND_FADE_IN_MS = 180;
 export const PANE_CHROME_FADE_OUT_MS = 400;
@@ -79,7 +82,7 @@ const STANDARD_EXPANSION_TIMING: PaneChromeExpansionTiming = {
   backgroundExpandMs: PANE_CHROME_BACKGROUND_EXPAND_MS,
   totalMs: PANE_CHROME_EXPANSION_MS,
 };
-const ADJACENT_EXPANSION_TIMING: PaneChromeExpansionTiming = {
+const ACCELERATED_EXPANSION_TIMING: PaneChromeExpansionTiming = {
   spotEnterMs: 120,
   spotSurfaceMs: 200,
   foregroundDelayMs: 20,
@@ -88,7 +91,7 @@ const ADJACENT_EXPANSION_TIMING: PaneChromeExpansionTiming = {
 };
 
 export const paneChromeExpansionTiming = (pace: PaneChromeExpansionPace): PaneChromeExpansionTiming =>
-  pace === 'adjacent' ? ADJACENT_EXPANSION_TIMING : STANDARD_EXPANSION_TIMING;
+  pace === 'accelerated' ? ACCELERATED_EXPANSION_TIMING : STANDARD_EXPANSION_TIMING;
 
 const segments: readonly PaneChromeSegment[] = ['identity', 'actions', 'toolbar'];
 
@@ -131,13 +134,14 @@ export class ZenModePaneChrome {
   #attachmentHolds = new Set<symbol>();
   #adjacentHoverIntent: HoverIntentActionReturn | undefined;
   #adjacentZone: PaneChromeSegment | 'gap' | null = null;
-  #adjacentExpansionFrame: number | undefined;
+  #acceleratedExpansionFrame: number | undefined;
   #intentTimer: ReturnType<typeof setTimeout> | undefined;
   #dwellTimer: ReturnType<typeof setTimeout> | undefined;
   #foregroundTimer: ReturnType<typeof setTimeout> | undefined;
   #expansionTimer: ReturnType<typeof setTimeout> | undefined;
   #hideTimer: ReturnType<typeof setTimeout> | undefined;
   #fadeTimer: ReturnType<typeof setTimeout> | undefined;
+  #warmUntil = 0;
   #pendingZone: PaneChromeSegment | 'gap' | null = null;
   #pointerZone: PaneChromeSegment | 'gap' | null = null;
   #lastPointer: { x: number; y: number } | null = null;
@@ -244,6 +248,7 @@ export class ZenModePaneChrome {
       destroy: () => {
         media.removeEventListener('change', syncPointer);
         this.#cancelAdjacentIntent();
+        this.#cancelAcceleratedExpansion();
         adjacentHoverIntent?.destroy?.();
         geometryRegistration.destroy?.();
         if (this.#adjacentHoverIntent === adjacentHoverIntent) this.#adjacentHoverIntent = undefined;
@@ -316,11 +321,10 @@ export class ZenModePaneChrome {
       this.#measureOcclusion();
     }
     const targets = paneChromeRevealTargets(zone);
-    if (this.#adjacentExpansionFrame !== undefined) {
+    if (this.#acceleratedExpansionFrame !== undefined) {
       if (targets.every((segment) => this.shown[segment])) {
         this.#cancelIntent();
       } else {
-        this.#adjacentZone = zone;
         this.#pendingZone = zone;
         this.#showSpot({ x: event.clientX, y: event.clientY }, zone === 'toolbar' ? 'toolbar' : 'header');
         this.#measureOcclusion();
@@ -358,6 +362,11 @@ export class ZenModePaneChrome {
   prepareEntryReveal(segment: PaneChromeSegment, event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     if (this.#options.active()) return;
     this.#preparedEntry = { zone: segment, point: { x: event.clientX, y: event.clientY } };
+  }
+
+  recordInteraction(): void {
+    if (!this.#active) return;
+    this.#warmUntil = performance.now() + WARM_WINDOW_MS;
   }
 
   hold(segment: PaneChromeSegment, reason: string): void {
@@ -582,6 +591,7 @@ export class ZenModePaneChrome {
 
   #startIntent(zone: PaneChromeSegment | 'gap', x: number, y: number): void {
     const origin = this.pointer ?? { x, y };
+    const warm = this.#isWarm();
     if (this.phase === 'pending' && this.#intentTimer) {
       this.#pendingZone = zone;
       return;
@@ -602,29 +612,36 @@ export class ZenModePaneChrome {
     this.#cancelIntent();
     this.#pendingZone = zone;
     this.#showStablePhase('pending');
-    this.#intentTimer = setTimeout(() => {
-      this.#intentTimer = undefined;
-      const currentZone = this.#pendingZone;
-      if (currentZone === null) return;
-      if (currentZone === 'gap' || currentZone === 'toolbar') {
-        const currentOrigin = this.pointer ?? origin;
-        this.#showSpot(currentOrigin, currentZone === 'toolbar' ? 'toolbar' : 'header');
-        this.#measureOcclusion();
-        this.#dwellTimer = setTimeout(() => {
-          this.#dwellTimer = undefined;
-          const dwellZone = this.#pendingZone;
-          if (dwellZone === null) return;
-          this.#startExpansion(paneChromeRevealTargets(dwellZone));
-        }, GAP_DWELL_MS);
-      } else {
-        this.#reveal(paneChromeRevealTargets(currentZone), false);
-      }
-    }, INTENT_MS);
+    this.#intentTimer = setTimeout(
+      () => {
+        this.#intentTimer = undefined;
+        const currentZone = this.#pendingZone;
+        if (currentZone === null) return;
+        if (currentZone === 'gap' || currentZone === 'toolbar') {
+          const currentOrigin = this.pointer ?? origin;
+          if (warm) {
+            this.#startAcceleratedSpot(currentZone, { clientX: currentOrigin.x, clientY: currentOrigin.y });
+            return;
+          }
+          this.#showSpot(currentOrigin, currentZone === 'toolbar' ? 'toolbar' : 'header');
+          this.#measureOcclusion();
+          this.#dwellTimer = setTimeout(() => {
+            this.#dwellTimer = undefined;
+            const dwellZone = this.#pendingZone;
+            if (dwellZone === null) return;
+            this.#startExpansion(paneChromeRevealTargets(dwellZone));
+          }, GAP_DWELL_MS);
+        } else {
+          this.#reveal(paneChromeRevealTargets(currentZone), false);
+        }
+      },
+      warm ? WARM_INTENT_MS : INTENT_MS,
+    );
   }
 
   #adjacentHoverIntentParameter(intentEnabled: boolean): HoverIntentParameter {
     return {
-      delay: INTENT_MS,
+      delay: this.#isWarm() ? WARM_INTENT_MS : INTENT_MS,
       intentEnabled,
       samples: 1,
       onIntent: (event) => this.#startAdjacentSpot(event),
@@ -645,23 +662,23 @@ export class ZenModePaneChrome {
   #startAdjacentSpot(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     const zone = this.#adjacentZone;
     if (zone === null) return;
-    const targets = paneChromeRevealTargets(zone);
-    if (targets.every((segment) => this.shown[segment])) {
-      this.#cancelAdjacentIntent();
-      return;
-    }
+    this.#cancelAdjacentIntent();
+    this.#startAcceleratedSpot(zone, event);
+  }
 
-    this.#adjacentHoverIntent?.update?.(this.#adjacentHoverIntentParameter(false));
+  #startAcceleratedSpot(zone: PaneChromeSegment | 'gap', event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
+    const targets = paneChromeRevealTargets(zone);
+    if (targets.every((segment) => this.shown[segment])) return;
+
     this.#pendingZone = zone;
     this.#showSpot(this.pointer ?? { x: event.clientX, y: event.clientY }, zone === 'toolbar' ? 'toolbar' : 'header');
     this.#measureOcclusion();
-    this.#adjacentExpansionFrame = requestAnimationFrame(() => {
-      this.#adjacentExpansionFrame = undefined;
+    this.#acceleratedExpansionFrame = requestAnimationFrame(() => {
+      this.#acceleratedExpansionFrame = undefined;
       const currentZone = this.#pendingZone;
       this.#pendingZone = null;
-      this.#adjacentZone = null;
       if (currentZone === null) return;
-      this.#startExpansion(paneChromeRevealTargets(currentZone), 'adjacent');
+      this.#startExpansion(paneChromeRevealTargets(currentZone), 'accelerated');
     });
   }
 
@@ -768,11 +785,14 @@ export class ZenModePaneChrome {
     )
       return;
     if (this.#hideTimer) return;
-    this.#hideTimer = setTimeout(() => {
-      this.#hideTimer = undefined;
-      if (this.#holds.size > 0 || this.#hasOpenMenu() || this.#attachmentHolds.size > 0) return;
-      this.#beginFade();
-    }, EXIT_GRACE_MS);
+    this.#hideTimer = setTimeout(
+      () => {
+        this.#hideTimer = undefined;
+        if (this.#holds.size > 0 || this.#hasOpenMenu() || this.#attachmentHolds.size > 0) return;
+        this.#beginFade();
+      },
+      this.#isWarm() ? WARM_EXIT_GRACE_MS : EXIT_GRACE_MS,
+    );
   }
 
   #beginFade(): void {
@@ -800,6 +820,7 @@ export class ZenModePaneChrome {
       const previous = registration?.open ?? false;
       if (expanded === previous) return;
       if (registration) registration.open = expanded;
+      this.recordInteraction();
       if (expanded) {
         this.#clearHide();
         if (segment === 'toolbar') this.#revealAll(true);
@@ -857,6 +878,10 @@ export class ZenModePaneChrome {
     return this.#anythingShown() || this.spot !== null;
   }
 
+  #isWarm(): boolean {
+    return performance.now() < this.#warmUntil;
+  }
+
   #hasOpenMenu(): boolean {
     return [...this.#menuRegistrations.values()].some(({ open }) => open);
   }
@@ -877,6 +902,7 @@ export class ZenModePaneChrome {
 
   #cancelIntent(): void {
     this.#cancelAdjacentIntent();
+    this.#cancelAcceleratedExpansion();
     if (this.#intentTimer) clearTimeout(this.#intentTimer);
     if (this.#dwellTimer) clearTimeout(this.#dwellTimer);
     this.#intentTimer = undefined;
@@ -887,11 +913,14 @@ export class ZenModePaneChrome {
   }
 
   #cancelAdjacentIntent(): void {
-    const hadExpansionFrame = this.#adjacentExpansionFrame !== undefined;
-    if (this.#adjacentExpansionFrame !== undefined) cancelAnimationFrame(this.#adjacentExpansionFrame);
-    this.#adjacentExpansionFrame = undefined;
     this.#adjacentZone = null;
     this.#adjacentHoverIntent?.update?.(this.#adjacentHoverIntentParameter(false));
+  }
+
+  #cancelAcceleratedExpansion(): void {
+    const hadExpansionFrame = this.#acceleratedExpansionFrame !== undefined;
+    if (this.#acceleratedExpansionFrame !== undefined) cancelAnimationFrame(this.#acceleratedExpansionFrame);
+    this.#acceleratedExpansionFrame = undefined;
     if (!hadExpansionFrame) return;
     this.#pendingZone = null;
     if (this.phase === 'spot') this.#showStablePhase(this.#anythingShown() ? 'held' : 'idle');
@@ -918,6 +947,7 @@ export class ZenModePaneChrome {
     this.#foregroundTimer = undefined;
     this.#holds.clear();
     this.#attachmentHolds.clear();
+    this.#warmUntil = 0;
     this.shown = emptyFlags();
     this.tone = transientTones();
     this.#pointerZone = null;
