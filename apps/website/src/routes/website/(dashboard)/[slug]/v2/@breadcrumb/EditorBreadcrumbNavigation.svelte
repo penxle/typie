@@ -12,9 +12,9 @@
   import FolderIcon from '~icons/lucide/folder';
   import HomeIcon from '~icons/lucide/house';
   import EntityIcon from '../../../@context-menu/EntityIcon.svelte';
+  import { EntityRowDragController } from '../../../@tree/entity-row-drag.svelte';
+  import EntityRowDragGhost from '../../../@tree/EntityRowDragGhost.svelte';
   import { getPaneGroup } from '../../@pane/context.svelte';
-  import { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
-  import DocumentPaneDragGhost from '../../@pane/DocumentPaneDragGhost.svelte';
   import BreadcrumbEntityTree from './BreadcrumbEntityTree.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
   import type { BreadcrumbContainer } from './BreadcrumbEntityTree.svelte';
@@ -98,7 +98,7 @@
   let navigationElement = $state<HTMLElement>();
   let activeTrigger = $state<HTMLButtonElement>();
   const paneGroup = getPaneGroup();
-  const documentDrag = new DocumentPaneDragController({ paneGroup, onDropSuccess: () => dismiss(false) });
+  const documentDrag = new EntityRowDragController({ paneGroup, onDropSuccess: () => dismiss(false) });
 
   const { floating, setReference } = createFloatingActions({
     placement: 'bottom-start',
@@ -298,5 +298,5 @@
 {/if}
 
 {#if documentDrag.ghost}
-  <DocumentPaneDragGhost ghost={documentDrag.ghost} />
+  <EntityRowDragGhost ghost={documentDrag.ghost} />
 {/if}

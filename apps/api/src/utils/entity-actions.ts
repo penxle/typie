@@ -821,7 +821,7 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
       const movedEntity = await tx
         .update(Entities)
         .set({
-          ...(isCrossSite && { siteId: targetSiteId }),
+          ...(isCrossSite && { siteId: targetSiteId, pinnedOrder: null }),
           parentId: targetParentId,
           depth: targetDepth,
           order,
@@ -850,7 +850,11 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
                 )
                 UPDATE ${Entities}
                 SET ${sql.raw(
-                  [isCrossSite ? `site_id = '${targetSiteId}'` : null, depthDelta === 0 ? null : `depth = depth + ${depthDelta}`]
+                  [
+                    isCrossSite ? `site_id = '${targetSiteId}'` : null,
+                    isCrossSite ? 'pinned_order = NULL' : null,
+                    depthDelta === 0 ? null : `depth = depth + ${depthDelta}`,
+                  ]
                     .filter(Boolean)
                     .join(', '),
                 )}

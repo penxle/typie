@@ -15,6 +15,7 @@ export type AppPreference = {
   sidebarNavigationClip: number;
   sidebarRecentDocumentsOpen: boolean;
   sidebarRecentDocumentsSort: 'VIEWED_AT' | 'UPDATED_AT';
+  sidebarQuickAccessTab: 'RECENT' | 'PINNED';
   sidebarAllDocumentsOpen: boolean;
   hasOpenedPanelOnce: boolean;
 
@@ -157,6 +158,7 @@ export const setupAppContext = (userId: string) => {
       sidebarNavigationClip: 0,
       sidebarRecentDocumentsOpen: true,
       sidebarRecentDocumentsSort: 'VIEWED_AT',
+      sidebarQuickAccessTab: 'PINNED',
       sidebarAllDocumentsOpen: true,
 
       hasOpenedPanelOnce: false,

@@ -90,6 +90,7 @@
             id
 
             ...DashboardLayout_EntityTree_site
+            ...DashboardLayout_PinnedEntities_site
           }
 
           ... on Entity {

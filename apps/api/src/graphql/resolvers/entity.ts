@@ -1,7 +1,7 @@
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, notInArray, sql } from 'drizzle-orm';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import {
@@ -30,6 +30,7 @@ import { deleteEntitiesCore, moveEntitiesCore, recoverEntityCore, updateEntityIc
 import { buildDailyHistory } from '#/utils/goal.ts';
 import { buildFreshV2Content, copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { generatePinnedOrders, isPinnableEntityType, resolvePinSiteId } from '#/utils/pinned-entities.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { builder } from '../builder.ts';
@@ -78,6 +79,7 @@ Entity.implement({
   fields: (t) => ({
     view: t.expose('id', { type: EntityView }),
     deletedAt: t.expose('deletedAt', { type: 'DateTime', nullable: true }),
+    pinnedOrder: t.exposeString('pinnedOrder', { nullable: true }),
 
     site: t.expose('siteId', { type: Site }),
     parent: t.expose('parentId', { type: Entity, nullable: true }),
@@ -945,6 +947,115 @@ builder.mutationFields((t) => ({
       if (entity.type === EntityType.DOCUMENT) {
         publishRecentDocumentUpdates(entity.siteId, 'VIEWED_AT');
       }
+
+      return input.entityId;
+    },
+  }),
+
+  pinEntities: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: {
+      entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entityIds = [...new Set(input.entityIds)];
+
+      if (entityIds.length === 0) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const entities = await db
+        .select({ id: Entities.id, userId: Entities.userId, siteId: Entities.siteId, type: Entities.type })
+        .from(Entities)
+        .where(and(inArray(Entities.id, entityIds), eq(Entities.state, EntityState.ACTIVE)));
+
+      if (entities.length !== entityIds.length) {
+        throw new NotFoundError();
+      }
+
+      if (entities.some((entity) => entity.userId !== ctx.session.userId)) {
+        throw new TypieError({ code: 'forbidden' });
+      }
+
+      if (entities.some((entity) => !isPinnableEntityType(entity.type))) {
+        throw new TypieError({ code: 'invalid_argument' });
+      }
+
+      const siteId = resolvePinSiteId(entities);
+      if (siteId === null) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx.update(Entities).set({ pinnedOrder: null }).where(inArray(Entities.id, entityIds));
+
+        const lowerOrder = input.lowerOrder ?? null;
+        let upperOrder = input.upperOrder ?? null;
+
+        if (lowerOrder === null && upperOrder === null) {
+          const head = await tx
+            .select({ pinnedOrder: Entities.pinnedOrder })
+            .from(Entities)
+            .where(and(eq(Entities.siteId, siteId), isNotNull(Entities.pinnedOrder), notInArray(Entities.id, entityIds)))
+            .orderBy(asc(Entities.pinnedOrder))
+            .limit(1)
+            .then(first);
+
+          upperOrder = head?.pinnedOrder ?? null;
+        }
+
+        const orders = generatePinnedOrders({ count: entityIds.length, lowerOrder, upperOrder });
+
+        for (const [index, entityId] of entityIds.entries()) {
+          await tx.update(Entities).set({ pinnedOrder: orders[index] }).where(eq(Entities.id, entityId));
+        }
+      });
+
+      pubsub.publish('site:update', siteId, { scope: 'site' });
+
+      return entityIds;
+    },
+  }),
+
+  unpinEntity: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({ userId: Entities.userId, siteId: Entities.siteId })
+        .from(Entities)
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      if (entity.userId !== ctx.session.userId) {
+        throw new TypieError({ code: 'forbidden' });
+      }
+
+      await db.update(Entities).set({ pinnedOrder: null }).where(eq(Entities.id, input.entityId));
+      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+
+      return input.entityId;
+    },
+  }),
+
+  dismissRecentEntity: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({ userId: Entities.userId, siteId: Entities.siteId })
+        .from(Entities)
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrowWith(new NotFoundError()));
+
+      if (entity.userId !== ctx.session.userId) {
+        throw new TypieError({ code: 'forbidden' });
+      }
+
+      await db.update(Entities).set({ recentDismissedAt: dayjs() }).where(eq(Entities.id, input.entityId));
+      publishRecentDocumentUpdates(entity.siteId, 'VIEWED_AT', 'UPDATED_AT');
 
       return input.entityId;
     },

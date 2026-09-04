@@ -2,15 +2,30 @@ import { pointerCapture } from '@typie/ui/actions';
 import { pushEscapeHandler } from '@typie/ui/utils';
 import type { PointerCaptureCancelReason } from '@typie/ui/actions';
 import type { Action } from 'svelte/action';
-import type { PaneGroup } from './context.svelte';
+import type { PaneGroup } from '../[slug]/@pane/context.svelte';
 
 const TOUCH_DRAG_HOLD_MS = 350;
 const DRAG_MOVE_THRESHOLD_PX = 10;
+export const UNPIN_HOLD_MS = 500;
 
-export type DocumentPaneDragItem = {
+export type EntityRowDragItem = {
+  id: string;
+  type: 'document' | 'folder';
   slug: string;
   name: string;
   icon?: string;
+};
+
+export type EntityRowDrop =
+  { kind: 'reorder'; lowerOrder: string | null; upperOrder: string | null } | { kind: 'pin' } | { kind: 'outside' };
+
+export type EntityRowDropResult = Exclude<EntityRowDrop, { kind: 'outside' }> | { kind: 'unpin' };
+
+export type EntityRowDragGhost = EntityRowDragItem & {
+  x: number;
+  y: number;
+  width: number;
+  cue?: string;
 };
 
 type PointerSession = {
@@ -21,10 +36,12 @@ type PointerSession = {
   lastY: number;
   element: HTMLElement;
   scrollSurface: HTMLElement;
-  item: DocumentPaneDragItem;
+  item: EntityRowDragItem;
   active: boolean;
   touchHoldCanceled: boolean;
   holdTimeout?: ReturnType<typeof setTimeout>;
+  outsideHoldTimeout?: ReturnType<typeof setTimeout>;
+  outsideHoldArmed: boolean;
 };
 
 type ClickSuppression = {
@@ -42,29 +59,38 @@ type CancelOptions = {
   suppressClick?: boolean;
 };
 
-export type DocumentPaneDragGhost = DocumentPaneDragItem & {
-  x: number;
-  y: number;
-  width: number;
-};
-
-type DocumentPaneDragOptions = {
+type EntityRowDragOptions = {
   paneGroup: PaneGroup;
   onDropSuccess?: () => void;
+  resolveDrop?: (x: number, y: number, item: EntityRowDragItem) => EntityRowDrop | null;
+  onDrop?: (drop: EntityRowDropResult, item: EntityRowDragItem) => void;
+  holdOutside?: { ms: number; cue: string };
 };
 
-export class DocumentPaneDragController {
+const sameDrop = (a: EntityRowDrop | null, b: EntityRowDrop | null) => {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind) return false;
+  if (a.kind === 'reorder' && b.kind === 'reorder') return a.lowerOrder === b.lowerOrder && a.upperOrder === b.upperOrder;
+  return true;
+};
+
+export class EntityRowDragController {
   #paneGroup: PaneGroup;
   #onDropSuccess?: () => void;
+  #resolveDrop?: EntityRowDragOptions['resolveDrop'];
+  #onDrop?: EntityRowDragOptions['onDrop'];
+  #holdOutside?: EntityRowDragOptions['holdOutside'];
   #session = $state.raw<PointerSession | null>(null);
+  #active = $state(false);
   #clickSuppression: ClickSuppression | null = null;
   #cancelCapture: (() => void) | null = null;
   #removeEscapeHandler: (() => void) | null = null;
   #suppressProgrammaticCancelClick = false;
 
-  ghost = $state<DocumentPaneDragGhost | null>(null);
+  ghost = $state<EntityRowDragGhost | null>(null);
+  drop = $state<EntityRowDrop | null>(null);
 
-  drag: Action<HTMLElement, DocumentPaneDragItem | null> = (element, initialItem) => {
+  drag: Action<HTMLElement, EntityRowDragItem | null> = (element, initialItem) => {
     let item = initialItem;
     const capture = pointerCapture<PointerSession>(element, {
       start: (event) => {
@@ -86,9 +112,12 @@ export class DocumentPaneDragController {
     };
   };
 
-  constructor({ paneGroup, onDropSuccess }: DocumentPaneDragOptions) {
+  constructor({ paneGroup, onDropSuccess, resolveDrop, onDrop, holdOutside }: EntityRowDragOptions) {
     this.#paneGroup = paneGroup;
     this.#onDropSuccess = onDropSuccess;
+    this.#resolveDrop = resolveDrop;
+    this.#onDrop = onDrop;
+    this.#holdOutside = holdOutside;
   }
 
   #clearClickSuppression(pointerId?: number): void {
@@ -111,30 +140,95 @@ export class DocumentPaneDragController {
     }, 0);
   }
 
+  #ghostFor(session: PointerSession, x: number, y: number): EntityRowDragGhost {
+    return {
+      ...session.item,
+      x,
+      y,
+      width: session.element.offsetWidth,
+      cue: session.outsideHoldArmed ? this.#holdOutside?.cue : undefined,
+    };
+  }
+
+  #setDrop(drop: EntityRowDrop | null): void {
+    if (sameDrop(this.drop, drop)) return;
+    this.drop = drop;
+  }
+
+  #clearOutsideHold(session: PointerSession): void {
+    if (session.outsideHoldTimeout) clearTimeout(session.outsideHoldTimeout);
+    session.outsideHoldTimeout = undefined;
+    if (!session.outsideHoldArmed) return;
+    session.outsideHoldArmed = false;
+    if (this.ghost) this.ghost = { ...this.ghost, cue: undefined };
+  }
+
+  #armOutsideHold(session: PointerSession): void {
+    const holdOutside = this.#holdOutside;
+    if (!holdOutside || session.outsideHoldArmed || session.outsideHoldTimeout) return;
+    session.outsideHoldTimeout = setTimeout(() => {
+      session.outsideHoldTimeout = undefined;
+      if (this.#session !== session || !session.active) return;
+      session.outsideHoldArmed = true;
+      if (this.ghost) this.ghost = { ...this.ghost, cue: holdOutside.cue };
+    }, holdOutside.ms);
+  }
+
+  #resolve(session: PointerSession, x: number, y: number): void {
+    const resolved = this.#resolveDrop?.(x, y, session.item) ?? null;
+
+    if (resolved && resolved.kind !== 'outside') {
+      this.#clearOutsideHold(session);
+      if (this.#paneGroup.activeZone) this.#paneGroup.cancelDrag();
+      this.#setDrop(resolved);
+      return;
+    }
+
+    if (session.item.type === 'document') {
+      this.#paneGroup.updateActiveZone(x, y);
+      if (this.#paneGroup.activeZone) {
+        this.#clearOutsideHold(session);
+        this.#setDrop(null);
+        return;
+      }
+    } else if (this.#paneGroup.activeZone) {
+      this.#paneGroup.cancelDrag();
+    }
+
+    if (resolved?.kind === 'outside') {
+      this.#armOutsideHold(session);
+    } else {
+      this.#clearOutsideHold(session);
+    }
+    this.#setDrop(null);
+  }
+
   #activate(session: PointerSession, x: number, y: number): void {
     if (this.#session !== session || session.active || session.touchHoldCanceled) return;
     if (session.holdTimeout) clearTimeout(session.holdTimeout);
     session.holdTimeout = undefined;
     session.active = true;
-
-    this.ghost = { ...session.item, x, y, width: session.element.offsetWidth };
-    this.#paneGroup.updateActiveZone(x, y);
+    this.#active = true;
+    this.updatePointer(x, y);
   }
 
   #finish(session: PointerSession, { cancelPane, suppressClick }: FinishActiveOptions): void {
     if (this.#session !== session) return;
+    this.#clearOutsideHold(session);
     this.#session = null;
+    this.#active = false;
     this.#cancelCapture = null;
     this.#removeEscapeHandler?.();
     this.#removeEscapeHandler = null;
     this.ghost = null;
+    this.drop = null;
 
     if (session.holdTimeout) clearTimeout(session.holdTimeout);
     if (cancelPane) this.#paneGroup.cancelDrag();
     if (suppressClick) this.#armClickSuppression(session);
   }
 
-  #start(event: PointerEvent, element: HTMLElement, item: DocumentPaneDragItem): PointerSession | null {
+  #start(event: PointerEvent, element: HTMLElement, item: EntityRowDragItem): PointerSession | null {
     if (this.#session || !event.isPrimary || event.button !== 0) return null;
     if (event.pointerType !== 'mouse' && event.pointerType !== 'pen' && event.pointerType !== 'touch') return null;
 
@@ -144,7 +238,7 @@ export class DocumentPaneDragController {
         : null;
     if (interactiveTarget && interactiveTarget !== element) return null;
 
-    const scrollSurface = element.closest<HTMLElement>('[data-document-pane-drag-scroll-surface], [role="tree"]');
+    const scrollSurface = element.closest<HTMLElement>('[data-entity-row-drag-scroll-surface], [role="tree"]');
     if (!scrollSurface) return null;
     this.#clearClickSuppression();
 
@@ -159,6 +253,7 @@ export class DocumentPaneDragController {
       item,
       active: false,
       touchHoldCanceled: false,
+      outsideHoldArmed: false,
     };
     this.#session = session;
     this.#removeEscapeHandler = pushEscapeHandler(() => {
@@ -204,8 +299,7 @@ export class DocumentPaneDragController {
     }
 
     if (event.cancelable) event.preventDefault();
-    this.ghost = { ...session.item, x: event.clientX, y: event.clientY, width: session.element.offsetWidth };
-    this.#paneGroup.updateActiveZone(event.clientX, event.clientY);
+    this.updatePointer(event.clientX, event.clientY);
   }
 
   #end(session: PointerSession, event: PointerEvent): void {
@@ -216,12 +310,24 @@ export class DocumentPaneDragController {
       return;
     }
 
-    this.#paneGroup.updateActiveZone(event.clientX, event.clientY);
-    const hasDropZone = this.#paneGroup.activeZone !== null;
-    const succeeded = hasDropZone && this.#paneGroup.executeDrop({ slug: session.item.slug, type: 'document' });
-    this.#finish(session, { cancelPane: !succeeded, suppressClick: true });
+    this.#resolve(session, event.clientX, event.clientY);
+    const item = session.item;
+    const drop = this.drop;
+    let result: EntityRowDropResult | null = null;
+    let paneSucceeded = false;
+
+    if (drop && drop.kind !== 'outside') {
+      result = drop;
+    } else if (this.#paneGroup.activeZone !== null) {
+      paneSucceeded = this.#paneGroup.executeDrop({ slug: item.slug, type: 'document' });
+    } else if (session.outsideHoldArmed) {
+      result = { kind: 'unpin' };
+    }
+
+    this.#finish(session, { cancelPane: !paneSucceeded, suppressClick: true });
     this.#expireClickSuppressionAfterPointerUp(event.pointerId);
-    if (succeeded) this.#onDropSuccess?.();
+    if (paneSucceeded) this.#onDropSuccess?.();
+    if (result) this.#onDrop?.(result, item);
   }
 
   #cancelSession(session: PointerSession, reason: PointerCaptureCancelReason): void {
@@ -234,6 +340,17 @@ export class DocumentPaneDragController {
 
   get hasPointerSession(): boolean {
     return this.#session !== null;
+  }
+
+  get active(): boolean {
+    return this.#active;
+  }
+
+  updatePointer(x: number, y: number): void {
+    const session = this.#session;
+    if (!session?.active) return;
+    this.ghost = this.#ghostFor(session, x, y);
+    this.#resolve(session, x, y);
   }
 
   contextMenu(event: MouseEvent): void {

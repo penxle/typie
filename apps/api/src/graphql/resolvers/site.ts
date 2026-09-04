@@ -13,16 +13,17 @@ import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
 import { generateRandomAvatar, persistBlobAsImage } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { buildPinnedEntitiesBatchQuery } from '#/utils/pinned-entities.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
-import { builder } from '../builder.ts';
-import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
 import {
   buildRecentDocumentsBatchQuery,
   clampRecentDocumentLimit,
   RECENT_DOCUMENT_DEFAULT_LIMIT,
   RECENT_DOCUMENT_SORTS,
   toRecentDocumentsPage,
-} from './recent-documents.ts';
+} from '#/utils/recent-documents.ts';
+import { builder } from '../builder.ts';
+import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
 
 const RecentDocumentSort = builder.enumType('RecentDocumentSort', { values: RECENT_DOCUMENT_SORTS });
 
@@ -176,6 +177,24 @@ Site.implement({
         });
 
         return toRecentDocumentsPage(await loader.load(self.id), limit);
+      },
+    }),
+
+    pinnedEntities: t.field({
+      type: [Entity],
+      resolve: async (self, _, ctx) => {
+        if (ctx.session?.userId !== self.userId) {
+          await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+        }
+
+        const loader = ctx.loader({
+          name: 'Site.pinnedEntities',
+          many: true,
+          load: async (siteIds) => await buildPinnedEntitiesBatchQuery(db, { siteIds }),
+          key: ({ siteId }) => siteId,
+        });
+
+        return await loader.load(self.id);
       },
     }),
 
