@@ -409,12 +409,12 @@
   };
 
   const handleEditorBoundaryError = (editor: Editor | undefined, error: unknown) => {
-    console.error(error);
     if (editor) {
       editor.fail(error);
-    } else {
-      failLiveEditor(error);
+      return;
     }
+    console.error(error);
+    failLiveEditor(error);
   };
 
   const retryLiveEditor = () => {
