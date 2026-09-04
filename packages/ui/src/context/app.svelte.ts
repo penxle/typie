@@ -25,6 +25,7 @@ export type AppPreference = {
   prismPanelWidth: number;
   prismNotificationSoundEnabled: boolean;
   prismWelcomeObjectEnabled: boolean;
+  /** True until this browser has presented its first HDR Prism object. */
   prismHdrEnabled: boolean;
 
   defaultPrimaryToolbar: 'insert' | 'format';

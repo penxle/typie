@@ -30,7 +30,7 @@
     ...rest
   }: Props = $props();
   const app = getAppContext();
-  const hdr: PrismHdrMode = $derived(app.preference.current.prismHdrEnabled ? 'auto' : 'off');
+  const hdr: PrismHdrMode = app.preference.current.prismHdrEnabled ? 'auto' : 'off';
   let host: HTMLDivElement;
   let mounted: ReturnType<typeof prismRuntime.mountObject> | null = null;
 

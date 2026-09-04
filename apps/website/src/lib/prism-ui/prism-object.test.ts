@@ -55,19 +55,22 @@ describe('Typie Prism wrappers', () => {
       });
       expect(runtime.object.setTarget).toHaveBeenCalledWith('prism');
       expect(runtime.object.update).toHaveBeenCalledWith({ edgeColor: 'rgb(120 120 120)', hdr: 'auto', reducedMotion: true });
+      app.preference.current.prismHdrEnabled = false;
+      await tick();
+      expect(runtime.object.update).not.toHaveBeenCalledWith(expect.objectContaining({ hdr: 'off' }));
     } finally {
       await unmount(component);
     }
     expect(runtime.object.destroy).toHaveBeenCalledOnce();
   });
 
-  it('mounts the standalone spinner without initializing an object renderer', async () => {
+  it('mounts the standalone spinner without an HDR option or object renderer', async () => {
     const target = document.createElement('div');
     const component = mount(PrismSpinner, { target, props: { label: '응답을 기다리는 중', reducedMotion: true } });
     try {
       await tick();
       expect(runtime.mountSpinner).toHaveBeenCalledOnce();
-      expect(runtime.mountSpinner).toHaveBeenCalledWith(expect.any(HTMLElement), { hdr: 'auto', reducedMotion: true });
+      expect(runtime.mountSpinner).toHaveBeenCalledWith(expect.any(HTMLElement), { reducedMotion: true });
       expect(runtime.mountObject).not.toHaveBeenCalled();
       expect(target.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('응답을 기다리는 중');
     } finally {
@@ -98,18 +101,14 @@ describe('Typie Prism wrappers', () => {
     }
   });
 
-  it('disables HDR for both wrapper types from the local preference', async () => {
+  it('keeps HDR disabled for an object when the local preference was already off', async () => {
     app.preference.current.prismHdrEnabled = false;
     const objectTarget = document.createElement('div');
-    const spinnerTarget = document.createElement('div');
     const object = mount(PrismObject, { target: objectTarget, props: { target: 'prism' as PrismTarget } });
-    const spinner = mount(PrismSpinner, { target: spinnerTarget, props: { label: '응답을 기다리는 중' } });
     try {
       await tick();
       expect(runtime.mountObject).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ hdr: 'off' }));
-      expect(runtime.mountSpinner).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ hdr: 'off' }));
     } finally {
-      await unmount(spinner);
       await unmount(object);
     }
   });

@@ -9,7 +9,7 @@
   import { onMount } from 'svelte';
   import PlayIcon from '~icons/lucide/play';
   import SquareIcon from '~icons/lucide/square';
-  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
   import { AI_OPT_IN_FAILURE_MESSAGE, promptAiOptIn } from '../@prism/lib/ai-opt-in.ts';
   import { createPrismAudioPlayer } from '../@prism/prism-audio';
@@ -265,14 +265,6 @@
       {#snippet label()}새 대화의 3D 프리즘{/snippet}
       {#snippet description()}새 프리즘 대화에서 3D 프리즘을 표시해요.{/snippet}
       {#snippet value()}<Switch bind:checked={app.preference.current.prismWelcomeObjectEnabled} />{/snippet}
-    </SettingsRow>
-
-    <SettingsDivider />
-
-    <SettingsRow>
-      {#snippet label()}HDR{/snippet}
-      {#snippet description()}지원하는 화면에서 프리즘이나 로딩 스피너를 더 넓은 밝기 범위로 표시해요.{/snippet}
-      {#snippet value()}<Switch bind:checked={app.preference.current.prismHdrEnabled} />{/snippet}
     </SettingsRow>
   </SettingsCard>
 </div>
