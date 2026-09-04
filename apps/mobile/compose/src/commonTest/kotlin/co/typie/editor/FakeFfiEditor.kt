@@ -34,6 +34,8 @@ import co.typie.editor.ffi.PlainNodeEntry
 import co.typie.editor.ffi.PlainRootNode
 import co.typie.editor.ffi.PointerStyle
 import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.RecentEditRegion
+import co.typie.editor.ffi.RecentHeadBucket
 import co.typie.editor.ffi.RequestId
 import co.typie.editor.ffi.RequestOutcome
 import co.typie.editor.ffi.ResourceUpdate
@@ -483,6 +485,12 @@ internal class FakeFfiEditor(
     y: Float,
     group: String?,
   ): List<TrackedRangeHit> = emptyList()
+
+  override fun enableRecentEdits(nowMs: Double, windowMs: Double) = Unit
+
+  override fun setRecentEditBaseline(nowMs: Double, buckets: List<RecentHeadBucket>): Int = 0
+
+  override fun recentEditRegions(nowMs: Double): List<RecentEditRegion> = emptyList()
 
   override fun proseText(): String = ""
 

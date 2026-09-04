@@ -5,6 +5,7 @@ import kotlin.math.abs
 
 internal const val CursorVisibleMargin = 60f
 private const val TypewriterMinBottomPadding = 48f
+private const val ScrollPastEndViewportFraction = 0.5f
 
 internal data class EditorAutoScrollPolicy(
   val typewriterActive: Boolean,
@@ -21,7 +22,7 @@ internal data class EditorAutoScrollPolicy(
 internal data class EditorAutoScrollPolicyConfiguration(
   val bottomScrollReserveArea: EditorVisibleArea,
   val baseBottomSpace: Float,
-  val pageBottomRevealPadding: Float,
+  val layoutMinimumBottomPadding: Float,
   val typewriterEnabled: Boolean,
 )
 
@@ -29,7 +30,7 @@ internal fun resolveEditorAutoScrollPolicy(
   visibleArea: EditorVisibleArea,
   bottomScrollReserveArea: EditorVisibleArea = visibleArea,
   baseBottomSpace: Float = 0f,
-  pageBottomRevealPadding: Float = 0f,
+  layoutMinimumBottomPadding: Float = 0f,
   typewriterEnabled: Boolean = false,
   typewriterActive: Boolean = typewriterEnabled,
   typewriterPosition: Float = 0.5f,
@@ -60,19 +61,22 @@ internal fun resolveEditorAutoScrollPolicy(
     } else {
       keepVisibleBottomPadding
     }
-
   return EditorAutoScrollPolicy(
     typewriterActive = useTypewriter,
     typewriterPosition = resolvedTypewriterPosition,
     targetTop = targetTop,
     targetLineHeight = resolvedTargetLineHeight,
     bottomPadding =
-      maxOf(keepVisibleBottomPadding, modeBottomPadding, pageBottomRevealPadding.coerceAtLeast(0f)),
+      maxOf(
+        keepVisibleBottomPadding,
+        modeBottomPadding,
+        layoutMinimumBottomPadding.coerceAtLeast(0f),
+      ),
     configuration =
       EditorAutoScrollPolicyConfiguration(
         bottomScrollReserveArea = bottomScrollReserveArea,
         baseBottomSpace = baseBottomSpace,
-        pageBottomRevealPadding = pageBottomRevealPadding,
+        layoutMinimumBottomPadding = layoutMinimumBottomPadding,
         typewriterEnabled = typewriterEnabled,
       ),
   )
@@ -87,7 +91,7 @@ internal fun EditorAutoScrollPolicy.resolveForState(
     visibleArea = visibleArea,
     bottomScrollReserveArea = configuration.bottomScrollReserveArea,
     baseBottomSpace = configuration.baseBottomSpace,
-    pageBottomRevealPadding = configuration.pageBottomRevealPadding,
+    layoutMinimumBottomPadding = configuration.layoutMinimumBottomPadding,
     typewriterEnabled = configuration.typewriterEnabled,
     typewriterActive = typewriterActive,
     typewriterPosition = typewriterPosition,
@@ -311,6 +315,18 @@ private fun resolveKeepVisibleBottomPadding(
   baseBottomSpace: Float,
 ): Float {
   return (visibleArea.bottomOcclusion + CursorVisibleMargin - baseBottomSpace).coerceAtLeast(0f)
+}
+
+internal fun resolveScrollPastEndBottomPadding(
+  visibleArea: EditorVisibleArea,
+  baseBottomSpace: Float,
+): Float {
+  val usableViewportHeight =
+    (visibleArea.visibleViewportBottom - visibleArea.visibleViewportTop).coerceAtLeast(0f)
+  val requiredPadding =
+    visibleArea.bottomOcclusion + usableViewportHeight * ScrollPastEndViewportFraction -
+      baseBottomSpace
+  return requiredPadding.coerceAtLeast(0f)
 }
 
 internal fun resolveScrollTargetTop(

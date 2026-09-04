@@ -100,6 +100,7 @@ import co.typie.editor.scroll.rememberEditorBringIntoViewRequests
 import co.typie.editor.scroll.resolveBringIntoViewTargetHeight
 import co.typie.editor.scroll.resolveEditorAutoScrollPolicy
 import co.typie.editor.scroll.resolveForState
+import co.typie.editor.scroll.resolveScrollPastEndBottomPadding
 import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.editor.surface.EditorSurfaceHost
 import co.typie.editor.sync.ActiveDocumentEditingSessions
@@ -1636,10 +1637,15 @@ fun EditorScreen(entityId: String) {
       )
     }
     SideEffect { uiState.updateDisplayZoom(displayZoom) }
-    val pageBottomRevealPadding =
+    val baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom)
+    val layoutMinimumBottomPadding =
       when (layoutSpec) {
         is EditorDocumentLayoutSpec.Paginated -> visibleArea.bottomOcclusion
-        is EditorDocumentLayoutSpec.Continuous -> 0f
+        is EditorDocumentLayoutSpec.Continuous ->
+          resolveScrollPastEndBottomPadding(
+            visibleArea = visibleAreas.bottomScrollReserveArea,
+            baseBottomSpace = baseBottomSpace,
+          )
       }
     val bodyGeometry =
       resolveEditorBodyGeometry(
@@ -1652,8 +1658,8 @@ fun EditorScreen(entityId: String) {
       resolveEditorAutoScrollPolicy(
         visibleArea = visibleArea,
         bottomScrollReserveArea = visibleAreas.bottomScrollReserveArea,
-        baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
-        pageBottomRevealPadding = pageBottomRevealPadding,
+        baseBottomSpace = baseBottomSpace,
+        layoutMinimumBottomPadding = layoutMinimumBottomPadding,
         typewriterEnabled = typewriterEnabled,
         typewriterActive = typewriterTargetLineHeight != null,
         typewriterPosition = typewriterPosition,

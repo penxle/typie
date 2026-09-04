@@ -272,6 +272,21 @@ export function resolveKeepVisibleBottomPadding({
   return Math.max(0, finiteOrZero(minPadding), requiredPadding);
 }
 
+export function resolveScrollPastEndBottomPadding({
+  clientHeight,
+  visibleArea,
+  trailingBottomMargin = 0,
+}: {
+  clientHeight: number;
+  visibleArea?: EditorVisibleArea;
+  trailingBottomMargin?: number;
+}): number {
+  const area = normalizeVisibleArea(visibleArea);
+  const usableHeight = Math.max(0, finiteOrZero(clientHeight) - area.topInset - area.bottomInset);
+  const requiredPadding = area.bottomInset + usableHeight * 0.5 - Math.max(0, finiteOrZero(trailingBottomMargin));
+  return Math.max(0, requiredPadding);
+}
+
 export function resolveTypewriterBottomPadding({
   clientHeight,
   targetHeight,
