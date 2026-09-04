@@ -1,21 +1,17 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
   import { prefersReducedMotion } from '@typie/ui/state';
   import { pushEscapeHandler } from '@typie/ui/utils';
   import { onDestroy, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { scale } from 'svelte/transition';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FolderIcon from '~icons/lucide/folder';
-  import HomeIcon from '~icons/lucide/house';
-  import EntityIcon from '../../../@context-menu/EntityIcon.svelte';
   import { EntityRowDragController } from '../../../@tree/entity-row-drag.svelte';
   import EntityRowDragGhost from '../../../@tree/EntityRowDragGhost.svelte';
   import { getPaneGroup } from '../../@pane/context.svelte';
   import BreadcrumbEntityTree from './BreadcrumbEntityTree.svelte';
+  import EditorBreadcrumbSegment from './EditorBreadcrumbSegment.svelte';
   import type { EntityIcon_entity$key } from '$mearie';
   import type { BreadcrumbContainer } from './BreadcrumbEntityTree.svelte';
 
@@ -57,13 +53,15 @@
 
   const POPUP_HOLD_REASON = 'breadcrumb-popup';
   const HOME_SEGMENT_ID = 'home';
+  const interactiveSegmentClass = css({
+    cursor: 'pointer',
+    transition: 'common',
+    _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+    _expanded: { backgroundColor: 'surface.muted', color: 'text.default' },
+  });
 
   function pathItemId(pathItem: BreadcrumbPathItem) {
     return pathItem.kind === 'home' ? HOME_SEGMENT_ID : pathItem.id;
-  }
-
-  function pathItemName(pathItem: BreadcrumbPathItem) {
-    return pathItem.kind === 'home' ? '홈' : pathItem.name;
   }
 
   const pathItems = $derived<BreadcrumbPathItem[]>(
@@ -197,67 +195,37 @@
   })}
   aria-label="문서 경로"
 >
-  <ol class={flex({ alignItems: 'center', gap: '2px', listStyle: 'none', whiteSpace: 'nowrap' })}>
+  <ol class={flex({ alignItems: 'center', listStyle: 'none', whiteSpace: 'nowrap' })}>
     {#each pathItems as pathItem, index (pathItemId(pathItem))}
-      {@const currentEntity = index === pathItems.length - 1}
+      {@const isCurrent = index === pathItems.length - 1}
       {@const itemId = pathItemId(pathItem)}
-      <li aria-current={currentEntity ? 'page' : undefined}>
+      {@const segmentClass = flex({
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        paddingLeft: '4px',
+        paddingRight: isCurrent ? '4px' : '0',
+        borderRadius: '5px',
+      })}
+      <li aria-current={isCurrent ? 'page' : undefined}>
         {#if interactive}
           <button
             id={triggerId(itemId)}
-            class={flex({
-              alignItems: 'center',
-              gap: '4px',
-              height: '24px',
-              paddingX: '4px',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              transition: 'common',
-              _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
-              _expanded: { backgroundColor: 'surface.muted', color: 'text.default' },
-            })}
+            class={cx(segmentClass, interactiveSegmentClass)}
             aria-controls={popupId}
             aria-expanded={activeSegmentId === itemId}
             aria-haspopup="tree"
             onclick={(event) => activate(event, itemId)}
             type="button"
           >
-            {#if pathItem.kind === 'home'}
-              <Icon icon={HomeIcon} size={14} />
-            {:else}
-              <EntityIcon entity$key={pathItem.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
-            {/if}
-            <span>{pathItemName(pathItem)}</span>
-            {#if !currentEntity}
-              <span class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
-                <Icon icon={ChevronRightIcon} size={14} />
-              </span>
-            {/if}
+            <EditorBreadcrumbSegment {isCurrent} item={pathItem} />
           </button>
         {:else}
-          <span
-            class={flex({
-              alignItems: 'center',
-              gap: '4px',
-              height: pathItem.kind === 'home' ? '24px' : undefined,
-              paddingX: pathItem.kind === 'home' ? '4px' : undefined,
-              borderRadius: pathItem.kind === 'home' ? '5px' : undefined,
-            })}
-          >
-            {#if pathItem.kind === 'home'}
-              <Icon icon={HomeIcon} size={14} />
-            {:else}
-              <EntityIcon entity$key={pathItem.entity$key} fallback={currentEntity ? undefined : FolderIcon} size={14} />
-            {/if}
-            <span>{pathItemName(pathItem)}</span>
+          <span class={segmentClass}>
+            <EditorBreadcrumbSegment {isCurrent} item={pathItem} />
           </span>
         {/if}
       </li>
-      {#if !isOwner && !currentEntity}
-        <li class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
-          <Icon icon={ChevronRightIcon} size={14} />
-        </li>
-      {/if}
     {/each}
   </ol>
 </nav>
