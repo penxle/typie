@@ -9,7 +9,6 @@
   type Props = {
     document$key: Editor_document$key;
     active?: boolean;
-    viewer?: boolean;
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
     viewSurfaceLayout?: EditorViewSurfaceLayout;
@@ -23,7 +22,6 @@
   let {
     document$key,
     active = true,
-    viewer = false,
     useWindowScroll = false,
     style,
     viewSurfaceLayout,
@@ -56,7 +54,6 @@
     {placeholderAction}
     {useWindowScroll}
     {viewSurfaceLayout}
-    {viewer}
   >
     {#if children}
       {@render children()}

@@ -213,6 +213,24 @@ describe('EditorScrollScope', () => {
     expect(scope.bottomPaddingFor(snapshot)).toBe(180);
   });
 
+  it('does not include editor bottom padding in a window scroll viewport', () => {
+    const snapshot = {
+      ...trackedSnapshot('unused', {
+        page_idx: 0,
+        rect: { x: 0, y: 0, width: 1, height: 20 },
+      }),
+      rootAttrs: { layout_mode: { type: 'continuous', max_width: 600 } },
+    } as EditorSnapshot;
+    const { editor, scope } = setup(snapshot);
+
+    editor.scrollRootEl = null;
+
+    scope.setBottomInset(40);
+    scope.setContentBottomOverflow(180);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(0);
+  });
+
   it('does not add scroll-past-end space in paginated layout', () => {
     const snapshot = {
       ...trackedSnapshot('unused', {
