@@ -2,7 +2,7 @@ import '../../../../../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
+import { EntityRowDragController } from '../../../@tree/entity-row-drag.svelte';
 import BreadcrumbDocumentDragTestRoot from './breadcrumb-document-drag-test-root.svelte';
 import type { PaneGroup } from '../../@pane/context.svelte';
 
@@ -87,7 +87,7 @@ const beginActiveDrag = async () => {
 describe('breadcrumb document drag', () => {
   it('leaves nested interactive controls outside the drag gesture', () => {
     const scrollSurface = document.createElement('div');
-    scrollSurface.dataset.documentPaneDragScrollSurface = '';
+    scrollSurface.dataset.entityRowDragScrollSurface = '';
     const row = document.createElement('a');
     const button = document.createElement('button');
     row.append(button);
@@ -95,8 +95,8 @@ describe('breadcrumb document drag', () => {
     document.body.append(scrollSurface);
     installPointerCapture(row);
 
-    const controller = new DocumentPaneDragController({ paneGroup: {} as PaneGroup });
-    const action = controller.drag(row, { slug: 'document-first', name: 'First document' });
+    const controller = new EntityRowDragController({ paneGroup: {} as PaneGroup });
+    const action = controller.drag(row, { id: 'document-first', type: 'document', slug: 'document-first', name: 'First document' });
 
     pointer(button, 'pointerdown');
 

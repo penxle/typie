@@ -27,7 +27,7 @@
   import TrialWidget from './@subscription/TrialWidget.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from './@tree/entity-reveal.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
-  import RecentDocuments from './@tree/RecentDocuments.svelte';
+  import QuickAccess from './@tree/QuickAccess.svelte';
   import SidebarSectionHeader from './@tree/SidebarSectionHeader.svelte';
   import { setupTreeContext } from './@tree/state.svelte';
   import { getEntityTreeElement } from './@tree/utils';
@@ -74,7 +74,7 @@
           }
 
           ...DashboardLayout_EntityTree_site
-          ...DashboardLayout_RecentDocuments_site
+          ...DashboardLayout_QuickAccess_site
         }
 
         characterCountChanges {
@@ -783,10 +783,10 @@
             borderColor: 'border.subtle',
             transition: '[border-width 150ms ease]',
           })}
-          data-document-pane-drag-scroll-surface
+          data-entity-row-drag-scroll-surface
           onscroll={updateScrollState}
         >
-          <RecentDocuments {canScrollUp} site$key={site} bind:headerHeight={treeSectionHeaderHeight} />
+          <QuickAccess {canScrollUp} site$key={site} bind:headerHeight={treeSectionHeaderHeight} />
 
           <!-- 문서 트리 -->
           <SidebarSectionHeader

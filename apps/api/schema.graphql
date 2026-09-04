@@ -325,6 +325,10 @@ input DeleteWidgetInput {
   widgetId: ID!
 }
 
+input DismissRecentEntityInput {
+  entityId: ID!
+}
+
 type Divider implements IDivider {
   createdAt: DateTime!
   entity: Entity!
@@ -627,6 +631,7 @@ type Entity implements IEntity {
   order: String!
   parent: Entity
   permalink: String!
+  pinnedOrder: String
   site: Site!
   slug: String!
   state: EntityState!
@@ -994,6 +999,7 @@ type Mutation {
   deleteUser: Boolean!
   deleteUserGoal: User!
   deleteWidget(input: DeleteWidgetInput!): Widget!
+  dismissRecentEntity(input: DismissRecentEntityInput!): Entity!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
   exportDocument(input: ExportDocumentInput!): ExportDocumentResult!
@@ -1013,6 +1019,7 @@ type Mutation {
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
+  pinEntities(input: PinEntitiesInput!): [Entity!]!
   preparePrismReview(input: PreparePrismReviewInput!): PrismReviewSnapshot!
   purchasePrismCreditPack(input: PurchasePrismCreditPackInput!): PrismCreditPurchase!
   purgeEntities(input: PurgeEntitiesInput!): Site!
@@ -1049,6 +1056,7 @@ type Mutation {
   undoPrismDocumentEdit(input: UndoPrismDocumentEditInput!): PrismDocumentEdit!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
+  unpinEntity(input: UnpinEntityInput!): Entity!
   unregisterPushNotificationToken(input: UnregisterPushNotificationTokenInput!): Boolean!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
@@ -1169,6 +1177,12 @@ input PersistBlobAsFontInput {
 input PersistBlobAsImageInput {
   modification: JSON
   path: String!
+}
+
+input PinEntitiesInput {
+  entityIds: [ID!]!
+  lowerOrder: String
+  upperOrder: String
 }
 
 type Plan {
@@ -1908,6 +1922,7 @@ type Site implements ISite {
   lastRootEntity: Entity
   logo: Image!
   name: String!
+  pinnedEntities: [Entity!]!
   recentDocuments(limit: Int! = 5, sort: RecentDocumentSort!): RecentDocumentsResult!
   slug: String!
   url: String!
@@ -2045,6 +2060,10 @@ input UnfurlEmbedInput {
 input UnlockDocumentViewInput {
   documentId: ID!
   password: String!
+}
+
+input UnpinEntityInput {
+  entityId: ID!
 }
 
 input UnregisterPushNotificationTokenInput {

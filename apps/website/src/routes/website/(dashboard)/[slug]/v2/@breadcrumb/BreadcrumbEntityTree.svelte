@@ -7,7 +7,7 @@
   import { graphql } from '$mearie';
   import EntityName from '../../../@tree/EntityName.svelte';
   import BreadcrumbEntityNode from './BreadcrumbEntityNode.svelte';
-  import type { DocumentPaneDragController } from '../../@pane/document-pane-drag.svelte';
+  import type { EntityRowDragController } from '../../../@tree/entity-row-drag.svelte';
 
   export type BreadcrumbContainer = { kind: 'site'; siteId: string } | { kind: 'entity'; entityId: string };
 
@@ -19,7 +19,7 @@
     labelledBy: string;
     onActivateDocument: (slug: string) => void;
     onActivateHome: () => void;
-    documentDrag: DocumentPaneDragController;
+    documentDrag: EntityRowDragController;
     onToggleFolder: (entityId: string) => void;
     showHomeItem: boolean;
     treeId: string;

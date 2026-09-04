@@ -275,6 +275,8 @@ export const Entities = pgTable(
     icon: text('icon').notNull().default('file'),
     iconColor: text('icon_color').notNull().default('gray'),
     viewedAt: datetime('viewed_at'),
+    recentDismissedAt: datetime('recent_dismissed_at'),
+    pinnedOrder: text('pinned_order'),
     deletedAt: datetime('deleted_at'),
     purgedAt: datetime('purged_at'),
     createdAt: datetime('created_at')
@@ -290,6 +292,9 @@ export const Entities = pgTable(
     index().on(t.siteId, t.parentId, t.state),
     index().on(t.parentId, t.state),
     index().on(t.userId, t.viewedAt),
+    uniqueIndex()
+      .on(t.siteId, t.pinnedOrder)
+      .where(sql`${t.pinnedOrder} is not null`),
   ],
 );
 

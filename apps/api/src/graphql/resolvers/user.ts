@@ -72,6 +72,7 @@ import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { notDismissedFromRecent } from '#/utils/recent-documents.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
@@ -180,6 +181,7 @@ User.implement({
               eq(Entities.userId, self.id),
               eq(Entities.state, EntityState.ACTIVE),
               isNotNull(Entities.viewedAt),
+              notDismissedFromRecent(Entities.viewedAt),
               args.siteId ? eq(Entities.siteId, args.siteId) : undefined,
             ),
           )

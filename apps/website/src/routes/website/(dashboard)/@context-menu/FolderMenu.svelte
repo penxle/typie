@@ -5,7 +5,7 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Dialog } from '@typie/ui/notification';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
@@ -21,6 +21,8 @@
   import InfoIcon from '~icons/lucide/info';
   import MinusIcon from '~icons/lucide/minus';
   import PencilIcon from '~icons/lucide/pencil-line';
+  import PinIcon from '~icons/lucide/pin';
+  import PinOffIcon from '~icons/lucide/pin-off';
   import ScissorsIcon from '~icons/lucide/scissors';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import TargetIcon from '~icons/lucide/target';
@@ -53,6 +55,7 @@
       icon: string;
       iconColor: string;
       parent?: { id: string } | null;
+      pinnedOrder?: string | null;
       lastChild?: {
         id: string;
         order: string;
@@ -61,9 +64,9 @@
         id: string;
       };
     };
-    via: 'tree';
-    open: () => void;
-    onRename: () => void;
+    via: 'tree' | 'pinned';
+    open?: () => void;
+    onRename?: () => void;
   };
 
   let { folder, entity, via, onRename, open }: Props = $props();
@@ -413,24 +416,77 @@
     `),
   );
 
+  const [pinEntities] = createMutation(
+    graphql(`
+      mutation FolderMenu_PinEntities_Mutation($input: PinEntitiesInput!) {
+        pinEntities(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
+  const [unpinEntity] = createMutation(
+    graphql(`
+      mutation FolderMenu_UnpinEntity_Mutation($input: UnpinEntityInput!) {
+        unpinEntity(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
+  const handleTogglePin = async () => {
+    if (entity.pinnedOrder) {
+      try {
+        await unpinEntity({ input: { entityId: entity.id } });
+        mixpanel.track('unpin_entity', { via: 'menu' });
+      } catch {
+        Toast.error('고정 중 오류가 발생했습니다');
+      }
+      return;
+    }
+
+    try {
+      await pinEntities({ input: { entityIds: [entity.id] } });
+      mixpanel.track('pin_entities', { totalCount: 1, via: 'menu' });
+    } catch {
+      Toast.error('고정 중 오류가 발생했습니다');
+    }
+  };
+
   const close = getContext<undefined | (() => void)>('close');
   const app = getAppContext();
   const paneGroup = getPaneGroup();
 </script>
 
-<MenuItem
-  icon={PencilIcon}
-  onclick={() => {
-    mixpanel.track('rename_folder_try', { via });
-    if (onRename) {
-      onRename();
-    }
-  }}
->
-  이름 변경
-</MenuItem>
+{#if via === 'tree'}
+  <MenuItem
+    icon={PencilIcon}
+    onclick={() => {
+      mixpanel.track('rename_folder_try', { via });
+      if (onRename) {
+        onRename();
+      }
+    }}
+  >
+    이름 변경
+  </MenuItem>
 
-<HorizontalDivider color="secondary" />
+  <HorizontalDivider color="secondary" />
+{/if}
 
 <MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
 
@@ -483,199 +539,207 @@
   }}
 />
 
-<MenuItem
-  icon={ClipboardCopyIcon}
-  onclick={() => {
-    app.state.clipboard = {
-      mode: 'copy',
-      entityIds: [entity.id],
-      sourceSiteId: entity.site.id,
-    };
-  }}
->
-  복사
+<MenuItem icon={entity.pinnedOrder ? PinOffIcon : PinIcon} onclick={handleTogglePin}>
+  {entity.pinnedOrder ? '고정 해제' : '고정'}
 </MenuItem>
 
-<MenuItem
-  icon={ScissorsIcon}
-  onclick={() => {
-    app.state.clipboard = {
-      mode: 'cut',
-      entityIds: [entity.id],
-      sourceSiteId: entity.site.id,
-    };
-  }}
->
-  잘라내기
-</MenuItem>
-
-{#if app.state.clipboard}
+{#if via === 'tree'}
   <MenuItem
-    icon={ClipboardPasteIcon}
+    icon={ClipboardCopyIcon}
     onclick={() => {
-      const clipboard = app.state.clipboard;
-      if (!clipboard) return;
-
-      if (!SubscribeModal.gate('entity_paste')) {
-        return;
-      }
-
-      const lowerOrder = entity.lastChild?.order ?? null;
-      const count = clipboard.entityIds.length;
-
-      const promise = (async () => {
-        if (clipboard.mode === 'cut') {
-          const isCrossSite = clipboard.sourceSiteId !== entity.site.id;
-          await moveEntities({
-            input: {
-              entityIds: clipboard.entityIds,
-              parentEntityId: entity.id,
-              lowerOrder,
-              upperOrder: null,
-              ...(isCrossSite && { targetSiteId: entity.site.id }),
-            },
-          });
-          if (isCrossSite) {
-            cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
-          }
-          app.state.clipboard = undefined;
-        } else {
-          await copyEntities({
-            input: {
-              entityIds: clipboard.entityIds,
-              targetSiteId: entity.site.id,
-              parentEntityId: entity.id,
-              lowerOrder,
-              upperOrder: null,
-            },
-          });
-        }
-      })();
-
-      showPasteToast(promise, count);
+      app.state.clipboard = {
+        mode: 'copy',
+        entityIds: [entity.id],
+        sourceSiteId: entity.site.id,
+      };
     }}
   >
-    여기에 붙여넣기
+    복사
   </MenuItem>
-{/if}
 
-<MenuItem
-  icon={MinusIcon}
-  onclick={async () => {
-    if (!SubscribeModal.gate('folder_menu_create_sibling_divider')) {
-      return;
-    }
-
-    const resp = await createDivider({
-      input: {
-        siteId: entity.site.id,
-        parentEntityId: entity.parent?.id ?? null,
-        lowerOrder: entity.order,
-        upperOrder: getNextSiblingOrder(entity.id) ?? null,
-      },
-    });
-
-    mixpanel.track('create_divider', { via });
-    entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createDivider.entity.id, entity.parent ? [entity.parent.id] : [], false));
-  }}
->
-  아래에 구분선 삽입
-</MenuItem>
-
-<HorizontalDivider color="secondary" />
-
-{#if entity.depth < maxDepth - 1}
   <MenuItem
-    icon={FolderPlusIcon}
+    icon={ScissorsIcon}
+    onclick={() => {
+      app.state.clipboard = {
+        mode: 'cut',
+        entityIds: [entity.id],
+        sourceSiteId: entity.site.id,
+      };
+    }}
+  >
+    잘라내기
+  </MenuItem>
+
+  {#if app.state.clipboard}
+    <MenuItem
+      icon={ClipboardPasteIcon}
+      onclick={() => {
+        const clipboard = app.state.clipboard;
+        if (!clipboard) return;
+
+        if (!SubscribeModal.gate('entity_paste')) {
+          return;
+        }
+
+        const lowerOrder = entity.lastChild?.order ?? null;
+        const count = clipboard.entityIds.length;
+
+        const promise = (async () => {
+          if (clipboard.mode === 'cut') {
+            const isCrossSite = clipboard.sourceSiteId !== entity.site.id;
+            await moveEntities({
+              input: {
+                entityIds: clipboard.entityIds,
+                parentEntityId: entity.id,
+                lowerOrder,
+                upperOrder: null,
+                ...(isCrossSite && { targetSiteId: entity.site.id }),
+              },
+            });
+            if (isCrossSite) {
+              cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
+            }
+            app.state.clipboard = undefined;
+          } else {
+            await copyEntities({
+              input: {
+                entityIds: clipboard.entityIds,
+                targetSiteId: entity.site.id,
+                parentEntityId: entity.id,
+                lowerOrder,
+                upperOrder: null,
+              },
+            });
+          }
+        })();
+
+        showPasteToast(promise, count);
+      }}
+    >
+      여기에 붙여넣기
+    </MenuItem>
+  {/if}
+
+  <MenuItem
+    icon={MinusIcon}
     onclick={async () => {
-      if (!SubscribeModal.gate('folder_menu_create_folder')) {
+      if (!SubscribeModal.gate('folder_menu_create_sibling_divider')) {
         return;
       }
 
-      const resp = await createFolder({
+      const resp = await createDivider({
         input: {
           siteId: entity.site.id,
-          parentEntityId: entity.id,
-          name: '새 폴더',
+          parentEntityId: entity.parent?.id ?? null,
+          lowerOrder: entity.order,
+          upperOrder: getNextSiblingOrder(entity.id) ?? null,
         },
       });
 
-      mixpanel.track('create_child_folder', { via });
-      open();
-
-      // NOTE: 메뉴 닫힘/포커스 복귀 사이클 이후 실행되도록 다음 tick으로 미룬다.
-      await tick();
-      entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, [entity.id], true));
+      mixpanel.track('create_divider', { via });
+      entityTreeRevealState.set(
+        createEntityTreeRevealRequest(resp.createDivider.entity.id, entity.parent ? [entity.parent.id] : [], false),
+      );
     }}
   >
-    하위 폴더 생성
+    아래에 구분선 삽입
+  </MenuItem>
+
+  <HorizontalDivider color="secondary" />
+
+  {#if entity.depth < maxDepth - 1}
+    <MenuItem
+      icon={FolderPlusIcon}
+      onclick={async () => {
+        if (!SubscribeModal.gate('folder_menu_create_folder')) {
+          return;
+        }
+
+        const resp = await createFolder({
+          input: {
+            siteId: entity.site.id,
+            parentEntityId: entity.id,
+            name: '새 폴더',
+          },
+        });
+
+        mixpanel.track('create_child_folder', { via });
+        open?.();
+
+        // NOTE: 메뉴 닫힘/포커스 복귀 사이클 이후 실행되도록 다음 tick으로 미룬다.
+        await tick();
+        entityTreeRevealState.set(createEntityTreeRevealRequest(resp.createFolder.entity.id, [entity.id], true));
+      }}
+    >
+      하위 폴더 생성
+    </MenuItem>
+  {/if}
+
+  <MenuItem
+    icon={SquarePenIcon}
+    onclick={async () => {
+      if (!SubscribeModal.gate('folder_menu_create_document')) {
+        return;
+      }
+
+      const resp = await createDocument({
+        input: {
+          siteId: entity.site.id,
+          parentEntityId: entity.id,
+          v2: true,
+        },
+      });
+
+      mixpanel.track('create_child_document', { via });
+      open?.();
+      const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [entity.id], false);
+      entityTreeRevealState.set(revealRequest);
+      await goto(`/${resp.createDocument.entity.slug}`);
+    }}
+  >
+    하위 문서 생성
+  </MenuItem>
+
+  <HorizontalDivider color="secondary" />
+
+  <MenuItem
+    icon={TrashIcon}
+    noCloseOnClick
+    onclick={() => {
+      deleteOpen = true;
+
+      Dialog.confirm({
+        title: '폴더 삭제',
+        message: `정말 "${folder.name}" 폴더를 삭제하시겠어요?`,
+        children: descendantsView,
+        action: 'danger',
+        actionLabel: '삭제',
+        actionHandler: async () => {
+          await deleteFolder({ input: { folderId: folder.id } });
+          mixpanel.track('delete_folder', { via });
+
+          if (!app.state.ancestors.includes(entity.id)) return;
+
+          const focusedPaneId = paneGroup.state.current.focusedPaneId;
+          if (!focusedPaneId) return;
+
+          if (paneGroup.panes.length > 1) {
+            paneGroup.removePane(focusedPaneId);
+          } else {
+            paneGroup.replacePane(focusedPaneId, { kind: 'home' });
+          }
+        },
+        onclose: () => {
+          deleteOpen = false;
+          close?.();
+        },
+      });
+    }}
+    variant="danger"
+  >
+    삭제
   </MenuItem>
 {/if}
-
-<MenuItem
-  icon={SquarePenIcon}
-  onclick={async () => {
-    if (!SubscribeModal.gate('folder_menu_create_document')) {
-      return;
-    }
-
-    const resp = await createDocument({
-      input: {
-        siteId: entity.site.id,
-        parentEntityId: entity.id,
-        v2: true,
-      },
-    });
-
-    mixpanel.track('create_child_document', { via });
-    open();
-    const revealRequest = createEntityTreeRevealRequest(resp.createDocument.entity.id, [entity.id], false);
-    entityTreeRevealState.set(revealRequest);
-    await goto(`/${resp.createDocument.entity.slug}`);
-  }}
->
-  하위 문서 생성
-</MenuItem>
-
-<HorizontalDivider color="secondary" />
-
-<MenuItem
-  icon={TrashIcon}
-  noCloseOnClick
-  onclick={() => {
-    deleteOpen = true;
-
-    Dialog.confirm({
-      title: '폴더 삭제',
-      message: `정말 "${folder.name}" 폴더를 삭제하시겠어요?`,
-      children: descendantsView,
-      action: 'danger',
-      actionLabel: '삭제',
-      actionHandler: async () => {
-        await deleteFolder({ input: { folderId: folder.id } });
-        mixpanel.track('delete_folder', { via });
-
-        if (!app.state.ancestors.includes(entity.id)) return;
-
-        const focusedPaneId = paneGroup.state.current.focusedPaneId;
-        if (!focusedPaneId) return;
-
-        if (paneGroup.panes.length > 1) {
-          paneGroup.removePane(focusedPaneId);
-        } else {
-          paneGroup.replacePane(focusedPaneId, { kind: 'home' });
-        }
-      },
-      onclose: () => {
-        deleteOpen = false;
-        close?.();
-      },
-    });
-  }}
-  variant="danger"
->
-  삭제
-</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

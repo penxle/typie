@@ -16,11 +16,14 @@
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
+  import EyeOffIcon from '~icons/lucide/eye-off';
   import FileDownIcon from '~icons/lucide/file-down';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import MinusIcon from '~icons/lucide/minus';
+  import PinIcon from '~icons/lucide/pin';
+  import PinOffIcon from '~icons/lucide/pin-off';
   import PlusIcon from '~icons/lucide/plus';
   import Rows2Icon from '~icons/lucide/rows-2';
   import ScissorsIcon from '~icons/lucide/scissors';
@@ -58,9 +61,10 @@
       icon: string;
       iconColor: string;
       parent?: { id: string } | null;
+      pinnedOrder?: string | null;
     };
     via: 'tree' | 'editor';
-    structuralSource?: 'tree' | 'recent';
+    structuralSource?: 'tree' | 'recent' | 'pinned';
     children?: Snippet;
   };
 
@@ -368,6 +372,56 @@
     `),
   );
 
+  const [pinEntities] = createMutation(
+    graphql(`
+      mutation DocumentMenu_PinEntities_Mutation($input: PinEntitiesInput!) {
+        pinEntities(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
+  const [unpinEntity] = createMutation(
+    graphql(`
+      mutation DocumentMenu_UnpinEntity_Mutation($input: UnpinEntityInput!) {
+        unpinEntity(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
+  const [dismissRecentEntity] = createMutation(
+    graphql(`
+      mutation DocumentMenu_DismissRecentEntity_Mutation($input: DismissRecentEntityInput!) {
+        dismissRecentEntity(input: $input) {
+          id
+
+          user {
+            id
+
+            recentlyViewedEntities {
+              id
+            }
+          }
+        }
+      }
+    `),
+  );
+
   const handleDuplicate = async () => {
     if (!SubscribeModal.gate('entity_duplicate')) {
       return;
@@ -435,6 +489,34 @@
     );
     mixpanel.track('add_pane', { via, direction });
   };
+
+  const handleTogglePin = async () => {
+    if (entity.pinnedOrder) {
+      try {
+        await unpinEntity({ input: { entityId: entity.id } });
+        mixpanel.track('unpin_entity', { via: 'menu' });
+      } catch {
+        Toast.error('고정 중 오류가 발생했습니다');
+      }
+      return;
+    }
+
+    try {
+      await pinEntities({ input: { entityIds: [entity.id] } });
+      mixpanel.track('pin_entities', { totalCount: 1, via: 'menu' });
+    } catch {
+      Toast.error('고정 중 오류가 발생했습니다');
+    }
+  };
+
+  const handleDismissRecent = async () => {
+    try {
+      await dismissRecentEntity({ input: { entityId: entity.id } });
+      mixpanel.track('dismiss_recent_entity', { via: 'menu' });
+    } catch {
+      Toast.error('최근에서 제거 중 오류가 발생했습니다');
+    }
+  };
 </script>
 
 {#snippet deleteDetailsView()}
@@ -485,7 +567,9 @@
   목표
 </MenuItem>
 
-<MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+{#if structuralSource === 'tree'}
+  <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+{/if}
 
 {#if document.documentType === DocumentType.NORMAL}
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.TEMPLATE)}>템플릿으로 전환</MenuItem>
@@ -522,7 +606,11 @@
   }}
 />
 
-{#if via === 'tree'}
+<MenuItem icon={entity.pinnedOrder ? PinOffIcon : PinIcon} onclick={handleTogglePin}>
+  {entity.pinnedOrder ? '고정 해제' : '고정'}
+</MenuItem>
+
+{#if via === 'tree' && structuralSource === 'tree'}
   <MenuItem
     icon={ClipboardCopyIcon}
     onclick={() => {
@@ -639,9 +727,15 @@
 
 {@render children?.()}
 
-<HorizontalDivider color="secondary" />
+{#if structuralSource !== 'pinned'}
+  <HorizontalDivider color="secondary" />
 
-<MenuItem icon={TrashIcon} onclick={handleDelete} variant="danger">삭제</MenuItem>
+  {#if structuralSource === 'tree'}
+    <MenuItem icon={TrashIcon} onclick={handleDelete} variant="danger">삭제</MenuItem>
+  {:else}
+    <MenuItem icon={EyeOffIcon} onclick={handleDismissRecent}>최근에서 제거</MenuItem>
+  {/if}
+{/if}
 
 <HorizontalDivider color="secondary" />
 

@@ -75,3 +75,14 @@ test('recent document limits are clamped and do not query beyond the maximum pag
   assert.equal(query.params.at(-1), RECENT_DOCUMENT_LIMIT);
   assert.equal(toRecentDocumentsPage(Array.from({ length: RECENT_DOCUMENT_LIMIT + 1 }), RECENT_DOCUMENT_LIMIT + 1).hasMore, false);
 });
+
+test('recent documents hide entries dismissed after their latest activity', () => {
+  const viewed = compile('VIEWED_AT');
+  assert.match(viewed.sql, /\("entities"\."recent_dismissed_at" is null or "entities"\."viewed_at" > "entities"\."recent_dismissed_at"\)/);
+
+  const updated = compile('UPDATED_AT');
+  assert.match(
+    updated.sql,
+    /\("entities"\."recent_dismissed_at" is null or "documents"\."updated_at" > "entities"\."recent_dismissed_at"\)/,
+  );
+});

@@ -21,19 +21,18 @@
   import { getTreeContext } from './state.svelte';
   import type { Action } from 'svelte/action';
   import type { DashboardLayout_EntityTree_Document_document$key } from '$mearie';
-  import type { DocumentPaneDragController, DocumentPaneDragItem } from '../[slug]/@pane/document-pane-drag.svelte';
+  import type { EntityRowDragController, EntityRowDragItem } from './entity-row-drag.svelte';
 
   type Props = {
     document$key: DashboardLayout_EntityTree_Document_document$key;
-    source?: 'tree' | 'recent';
-    selectionOrder?: readonly string[];
-    documentPaneDrag?: DocumentPaneDragController;
+    source?: 'tree' | 'recent' | 'pinned';
+    rowDrag?: EntityRowDragController;
   };
 
-  let { document$key, source = 'tree', selectionOrder, documentPaneDrag }: Props = $props();
+  let { document$key, source = 'tree', rowDrag }: Props = $props();
 
-  const noopPaneDrag: Action<HTMLElement, DocumentPaneDragItem | null> = () => ({});
-  const paneDrag = documentPaneDrag?.drag ?? noopPaneDrag;
+  const noopRowDrag: Action<HTMLElement, EntityRowDragItem | null> = () => ({});
+  const dragRow = rowDrag?.drag ?? noopRowDrag;
 
   const document = createFragment(
     graphql(`
@@ -55,6 +54,7 @@
           url
           icon
           iconColor
+          pinnedOrder
 
           ...EntityIcon_entity
 
@@ -77,23 +77,30 @@
   const app = getAppContext();
   const treeState = getTreeContext();
   const active = $derived(app.state.current === document.data.entity.slug);
-  const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
+  const selected = $derived(source === 'tree' && treeState.selectedEntityIds.has(document.data.entity.id));
   const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(document.data.entity.id));
-  const paneDragItem = $derived<DocumentPaneDragItem | null>(
-    source === 'recent'
-      ? { slug: document.data.entity.slug, name: document.data.title, icon: document.data.entity.icon ?? undefined }
-      : null,
+  const rowDragItem = $derived<EntityRowDragItem | null>(
+    source === 'tree'
+      ? null
+      : {
+          id: document.data.entity.id,
+          type: 'document',
+          slug: document.data.entity.slug,
+          name: document.data.title,
+          icon: document.data.entity.icon ?? undefined,
+        },
   );
 
   $effect(() => {
+    if (source !== 'tree') return;
+
     const entityId = document.data.entity.id;
     const icon = document.data.entity.icon;
     const iconColor = document.data.entity.iconColor;
     untrack(() => {
-      const entityMap = source === 'tree' ? treeState.treeEntityMap : treeState.recentEntityMap;
-      const entry = entityMap.get(entityId);
+      const entry = treeState.treeEntityMap.get(entityId);
       if (entry) {
-        entityMap.set(entityId, { ...entry, icon, iconColor });
+        treeState.treeEntityMap.set(entityId, { ...entry, icon, iconColor });
       }
     });
   });
@@ -101,10 +108,10 @@
   let element = $state<HTMLAnchorElement>();
 
   const handleClick = (event: MouseEvent) => {
-    if (documentPaneDrag?.consumeClick(event)) return;
+    if (rowDrag?.consumeClick(event)) return;
 
     if (
-      source !== 'recent' ||
+      source === 'tree' ||
       event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
@@ -165,7 +172,7 @@
           paddingLeft: '14px',
           _supportHover: { borderColor: 'border.strong' },
         },
-      source === 'recent' && { touchAction: 'none' },
+      source !== 'tree' && { touchAction: 'none' },
       active && {
         backgroundColor: 'surface.muted',
       },
@@ -194,10 +201,12 @@
   onclick={handleClick}
   role={source === 'tree' ? 'treeitem' : undefined}
   use:contextMenu={{ content: contextMenuContent }}
-  use:paneDrag={paneDragItem}
+  use:dragRow={rowDragItem}
   use:tooltip={{ message: tooltipContent, placement: 'right', delay: 1000 }}
 >
-  <EntitySelectionIndicator entityId={document.data.entity.id} {selectionOrder} visibility={document.data.entity.visibility} />
+  {#if source === 'tree'}
+    <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
+  {/if}
 
   <EntityIcon entity$key={document.data.entity} fallback={FileIcon} size={14} />
 
@@ -222,7 +231,7 @@
 </a>
 
 {#snippet contextMenuContent()}
-  {#if treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(document.data.entity.id)}
+  {#if source === 'tree' && treeState.selectedEntityIds.size > 1 && treeState.selectedEntityIds.has(document.data.entity.id)}
     <MultiEntitiesMenu />
   {:else}
     <DocumentMenu document={document.data} entity={document.data.entity} structuralSource={source} via="tree" />

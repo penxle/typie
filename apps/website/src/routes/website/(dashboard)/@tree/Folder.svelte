@@ -51,6 +51,7 @@
           url
           icon
           iconColor
+          pinnedOrder
 
           ...EntityIcon_entity
 

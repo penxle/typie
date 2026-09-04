@@ -1,33 +1,30 @@
 <script lang="ts">
-  import { createFragment, createQuery } from '@mearie/svelte';
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
-  import { Icon, Menu, MenuItem } from '@typie/ui/components';
+  import { flex } from '@typie/styled-system/patterns';
   import { getAppContext } from '@typie/ui/context';
-  import { prefersReducedMotion } from '@typie/ui/state';
+  import { Toast } from '@typie/ui/notification';
+  import mixpanel from 'mixpanel-browser';
   import { onDestroy, untrack } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import ArrowUpDownIcon from '~icons/lucide/arrow-up-down';
-  import CheckIcon from '~icons/lucide/check';
   import { invalidateRecentDocuments, recentDocumentInvalidationVersions } from '$lib/graphql/recent-documents';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
-  import { DocumentPaneDragController } from '../[slug]/@pane/document-pane-drag.svelte';
-  import DocumentPaneDragGhost from '../[slug]/@pane/DocumentPaneDragGhost.svelte';
   import Document from './Document.svelte';
-  import SidebarSectionHeader from './SidebarSectionHeader.svelte';
-  import { getTreeContext } from './state.svelte';
-  import type { RecentDocumentSort } from '$lib/graphql/recent-documents';
+  import DragIndicator from './DragIndicator.svelte';
+  import { EntityRowDragController } from './entity-row-drag.svelte';
+  import EntityRowDragGhost from './EntityRowDragGhost.svelte';
   import type { DashboardLayout_RecentDocuments_site$key } from '$mearie';
-  import type { TreeEntity } from './@selection/types';
+  import type { DragIndicatorState } from './DragIndicator.svelte';
+  import type { EntityRowDragItem, EntityRowDrop, EntityRowDropResult } from './entity-row-drag.svelte';
 
   type Props = {
     site$key: DashboardLayout_RecentDocuments_site$key;
-    canScrollUp: boolean;
-    headerHeight?: number;
+    open: boolean;
+    collapsed: boolean;
   };
 
-  let { site$key, canScrollUp, headerHeight = $bindable(0) }: Props = $props();
+  let { site$key, open, collapsed }: Props = $props();
 
   const site = createFragment(
     graphql(`
@@ -40,16 +37,6 @@
           documents {
             id
 
-            entity {
-              id
-              icon
-              iconColor
-
-              parent {
-                id
-              }
-            }
-
             ...DashboardLayout_EntityTree_Document_document
           }
         }
@@ -60,16 +47,6 @@
           documents {
             id
 
-            entity {
-              id
-              icon
-              iconColor
-
-              parent {
-                id
-              }
-            }
-
             ...DashboardLayout_EntityTree_Document_document
           }
         }
@@ -79,17 +56,47 @@
   );
 
   const app = getAppContext();
-  const treeState = getTreeContext();
-  const documentPaneDrag = new DocumentPaneDragController({ paneGroup: getPaneGroup() });
+
+  let pinIndicator = $state<DragIndicatorState>({});
+
+  const resolveDrop = (x: number, y: number): EntityRowDrop | null => {
+    const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop-target="pin"]');
+    if (!target) {
+      pinIndicator = {};
+      return null;
+    }
+
+    const rect = target.getBoundingClientRect();
+    pinIndicator = { top: rect.top, left: rect.left, width: rect.width, height: rect.height, opacity: 0.5, transform: undefined };
+    return { kind: 'pin' };
+  };
+
+  const handleDrop = async (drop: EntityRowDropResult, item: EntityRowDragItem) => {
+    if (drop.kind !== 'pin') return;
+
+    try {
+      await pinEntities({ input: { entityIds: [item.id] } });
+      mixpanel.track('pin_entities', { totalCount: 1, via: 'drag_and_drop' });
+      app.preference.current.sidebarQuickAccessTab = 'PINNED';
+      app.preference.current.sidebarRecentDocumentsOpen = true;
+    } catch {
+      Toast.error('고정 중 오류가 발생했습니다');
+    }
+  };
+
+  const rowDrag = new EntityRowDragController({
+    paneGroup: getPaneGroup(),
+    resolveDrop,
+    onDrop: (drop, item) => void handleDrop(drop, item),
+  });
+
   let siteId = $derived(site.data.id);
-  let open = $derived(app.preference.current.sidebarRecentDocumentsOpen);
   let sort = $derived(app.preference.current.sidebarRecentDocumentsSort);
   let expansion = $state<{ key: string; count: number }>();
   let listKey = $derived(`${siteId}:${sort}`);
   let visibleCount = $derived(expansion?.key === listKey ? expansion.count : 5);
   let queryKey = $derived(`${listKey}:${visibleCount}`);
   let invalidationVersion = $derived($recentDocumentInvalidationVersions.get(siteId)?.[sort] ?? 0);
-  // 첫 5개는 레이아웃 프래그먼트가 소유하므로 추가 로딩이나 갱신이 필요한 목록만 별도 쿼리를 활성화한다.
   const enabledQueries = new SvelteSet<string>();
   const handledInvalidations = new SvelteMap<string, number>();
   let activeListKey = untrack(() => listKey);
@@ -107,16 +114,6 @@
             documents {
               id
 
-              entity {
-                id
-                icon
-                iconColor
-
-                parent {
-                  id
-                }
-              }
-
               ...DashboardLayout_EntityTree_Document_document
             }
           }
@@ -127,24 +124,32 @@
     () => ({ fetchPolicy: 'network-only', skip: !enabledQueries.has(queryKey) }),
   );
 
+  const [pinEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_RecentDocuments_PinEntities_Mutation($input: PinEntitiesInput!) {
+        pinEntities(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
   const initialPage = $derived(sort === 'VIEWED_AT' ? site.data.recentlyViewedDocuments : site.data.recentlyUpdatedDocuments);
   type RecentDocumentsPage = (typeof site.data)['recentlyViewedDocuments'];
   let pendingPage = $state<{ queryKey: string; page: RecentDocumentsPage }>();
   const queryPage = $derived(query.data?.site.id === siteId ? query.data.site.recentDocuments : undefined);
   const page = $derived(queryPage ?? (pendingPage?.queryKey === queryKey ? pendingPage.page : initialPage));
   const documents = $derived(page.documents);
-  const visibleDocumentIds = $derived(documents.map((document) => document.entity.id));
 
-  const toggleOpen = () => {
-    app.preference.current.sidebarRecentDocumentsOpen = !open;
-    if (open && prefersReducedMotion.current) expansion = undefined;
-  };
-
-  const handleRevealTransitionEnd = (event: TransitionEvent) => {
-    if (!open && event.target === event.currentTarget && event.propertyName === 'grid-template-rows') {
-      expansion = undefined;
-    }
-  };
+  $effect(() => {
+    if (collapsed) expansion = undefined;
+  });
 
   $effect(() => {
     const nextListKey = listKey;
@@ -192,148 +197,59 @@
     expansion = { key: listKey, count: nextCount };
   };
 
-  $effect(() => {
-    treeState.recentEntityMap = new SvelteMap<string, TreeEntity>(
-      documents.map((document) => {
-        const entity = document.entity;
-        return [
-          entity.id,
-          {
-            id: entity.id,
-            type: 'Document' as const,
-            icon: entity.icon,
-            iconColor: entity.iconColor,
-            parentId: entity.parent?.id,
-          },
-        ];
-      }),
-    );
-  });
-
-  const sortOptions: { value: RecentDocumentSort; label: string }[] = [
-    { value: 'VIEWED_AT', label: '최근 본 순서' },
-    { value: 'UPDATED_AT', label: '최근 수정한 순서' },
-  ];
-
-  onDestroy(() => documentPaneDrag.destroy());
+  onDestroy(() => rowDrag.destroy());
 </script>
 
-<svelte:window oncontextmenu={(event) => documentPaneDrag.contextMenu(event)} />
+<svelte:window oncontextmenu={(event) => rowDrag.contextMenu(event)} />
 
-<section class={css({ flexShrink: '0', marginBottom: '4px' })}>
-  <SidebarSectionHeader dividerVisible={canScrollUp} label="최근" onToggle={toggleOpen} {open} bind:height={headerHeight}>
-    {#snippet actions()}
-      <Menu
-        style={css.raw({
-          display: 'flex',
+<ul
+  class={flex({ flexDirection: 'column', flexShrink: '0', paddingX: '12px', paddingY: '4px', userSelect: 'none' })}
+  aria-label="최근 문서"
+>
+  {#if documents.length === 0}
+    <li class={flex({ alignItems: 'center', height: '32px', paddingX: '8px' })}>
+      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.disabled' })}>
+        {sort === 'VIEWED_AT' ? '최근 본 문서가 없어요' : '최근 수정한 문서가 없어요'}
+      </p>
+    </li>
+  {:else}
+    {#each documents as document (document.id)}
+      <li>
+        <Document document$key={document} {rowDrag} source="recent" />
+      </li>
+    {/each}
+  {/if}
+
+  {#if page.hasMore}
+    <li>
+      <button
+        class={flex({
           alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '4px',
-          size: '24px',
-          color: 'text.faint',
-          opacity: '50',
+          width: 'full',
+          paddingLeft: '50px',
+          paddingRight: '8px',
+          paddingY: '6px',
+          fontSize: '14px',
+          fontWeight: 'medium',
+          color: 'text.disabled',
+          textAlign: 'left',
           transition: 'common',
-          _hover: { color: 'text.subtle', opacity: '100' },
-          _focusVisible: { opacity: '100' },
-          _expanded: { color: 'text.subtle', backgroundColor: 'surface.muted', opacity: '100' },
+          _supportHover: { color: 'text.muted' },
         })}
-        buttonAriaLabel="최근 문서 정렬"
-        placement="bottom-start"
+        disabled={query.loading}
+        onclick={showMore}
+        type="button"
       >
-        {#snippet button()}
-          <Icon icon={ArrowUpDownIcon} size={14} />
-        {/snippet}
+        더 보기
+      </button>
+    </li>
+  {/if}
+</ul>
 
-        <div
-          class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.disabled' })}
-          role="presentation"
-        >
-          정렬 기준
-        </div>
+{#if rowDrag.drop?.kind === 'pin'}
+  <DragIndicator indicator={pinIndicator} />
+{/if}
 
-        {#each sortOptions as option (option.value)}
-          <MenuItem
-            aria-checked={sort === option.value}
-            onclick={() => (app.preference.current.sidebarRecentDocumentsSort = option.value)}
-            role="menuitemradio"
-          >
-            {option.label}
-            {#if sort === option.value}
-              <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
-            {/if}
-          </MenuItem>
-        {/each}
-      </Menu>
-    {/snippet}
-  </SidebarSectionHeader>
-
-  <div
-    class={css({
-      display: 'grid',
-      gridTemplateRows: open ? '1fr' : '0fr',
-      transition: '[grid-template-rows 160ms ease-out]',
-      _motionReduce: { transition: '[none]' },
-    })}
-    aria-hidden={!open}
-    inert={!open}
-    ontransitionend={handleRevealTransitionEnd}
-  >
-    <div
-      style:opacity={open ? '1' : '0'}
-      class={css({
-        minHeight: '0',
-        overflow: 'hidden',
-        transition: '[opacity 120ms ease-out]',
-        _motionReduce: { transition: '[none]' },
-      })}
-    >
-      <ul
-        class={flex({ flexDirection: 'column', flexShrink: '0', paddingX: '12px', paddingY: '4px', userSelect: 'none' })}
-        aria-label="최근 문서"
-      >
-        {#if documents.length === 0}
-          <li class={center({ height: '32px' })}>
-            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
-              {sort === 'VIEWED_AT' ? '최근 본 문서가 없어요' : '최근 수정한 문서가 없어요'}
-            </p>
-          </li>
-        {:else}
-          {#each documents as document (document.id)}
-            <li>
-              <Document document$key={document} {documentPaneDrag} selectionOrder={visibleDocumentIds} source="recent" />
-            </li>
-          {/each}
-        {/if}
-
-        {#if page.hasMore}
-          <li>
-            <button
-              class={flex({
-                alignItems: 'center',
-                width: 'full',
-                paddingLeft: '50px',
-                paddingRight: '8px',
-                paddingY: '6px',
-                fontSize: '14px',
-                fontWeight: 'medium',
-                color: 'text.disabled',
-                textAlign: 'left',
-                transition: 'common',
-                _supportHover: { color: 'text.muted' },
-              })}
-              disabled={query.loading}
-              onclick={showMore}
-              type="button"
-            >
-              더 보기
-            </button>
-          </li>
-        {/if}
-      </ul>
-    </div>
-  </div>
-</section>
-
-{#if documentPaneDrag.ghost}
-  <DocumentPaneDragGhost ghost={documentPaneDrag.ghost} />
+{#if rowDrag.ghost}
+  <EntityRowDragGhost ghost={rowDrag.ghost} />
 {/if}

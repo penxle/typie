@@ -111,6 +111,7 @@
           availability
           icon
           iconColor
+          pinnedOrder
           ...EntityIcon_entity
 
           site {

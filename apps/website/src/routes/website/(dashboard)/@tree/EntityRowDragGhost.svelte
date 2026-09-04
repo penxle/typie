@@ -5,10 +5,11 @@
   import { Icon } from '@typie/ui/components';
   import { entityIconMap } from '@typie/ui/constants';
   import FileIcon from '~icons/lucide/file';
-  import type { DocumentPaneDragGhost } from './document-pane-drag.svelte';
+  import FolderIcon from '~icons/lucide/folder';
+  import type { EntityRowDragGhost } from './entity-row-drag.svelte';
 
   type Props = {
-    ghost: DocumentPaneDragGhost;
+    ghost: EntityRowDragGhost;
   };
 
   let { ghost }: Props = $props();
@@ -38,8 +39,17 @@
   role="presentation"
   use:portal
 >
-  <Icon style={css.raw({ flexShrink: '0', color: 'text.bright' })} icon={entityIconMap.get(ghost.icon ?? '') ?? FileIcon} size={14} />
+  <Icon
+    style={css.raw({ flexShrink: '0', color: 'text.bright' })}
+    icon={entityIconMap.get(ghost.icon ?? '') ?? (ghost.type === 'folder' ? FolderIcon : FileIcon)}
+    size={14}
+  />
   <span class={css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
     {ghost.name}
   </span>
+  {#if ghost.cue}
+    <span class={css({ flexShrink: '0', marginLeft: '6px', fontSize: '12px', fontWeight: 'semibold', opacity: '80' })} data-drag-cue>
+      {ghost.cue}
+    </span>
+  {/if}
 </div>

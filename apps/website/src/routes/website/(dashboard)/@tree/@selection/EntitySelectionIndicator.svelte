@@ -10,10 +10,9 @@
     entityId: string;
     visibility?: EntityVisibility;
     dot?: boolean;
-    selectionOrder?: readonly string[];
   };
 
-  let { entityId, visibility, dot = true, selectionOrder }: Props = $props();
+  let { entityId, visibility, dot = true }: Props = $props();
 
   const treeState = getTreeContext();
   const selected = $derived(treeState.selectedEntityIds.has(entityId));
@@ -95,7 +94,7 @@
   };
 
   const selectEntityRange = () => {
-    const allIds = selectionOrder ?? getAllEntityIds();
+    const allIds = getAllEntityIds();
     const fromId =
       treeState.lastSelectedEntityId && allIds.includes(treeState.lastSelectedEntityId) ? treeState.lastSelectedEntityId : entityId;
     const toId = entityId;

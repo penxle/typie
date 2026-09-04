@@ -5,13 +5,13 @@
   import { contextMenu, portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { entityIconMap } from '@typie/ui/constants';
+  import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
   import { createDragScroll, elementScrollViewport, pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { onDestroy, tick, untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
-  import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import MinusIcon from '~icons/lucide/minus';
@@ -21,7 +21,9 @@
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
+  import DragIndicator from './DragIndicator.svelte';
   import Entity from './Entity.svelte';
+  import { pinnedPlacementIndicator, resolvePinnedOrders, resolvePinnedPlacementAt } from './pinned-placement';
   import { getTreeContext } from './state.svelte';
   import { getNextElement, getPreviousElement, maxDepth, resolveEntityTreeDropTarget } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
@@ -52,6 +54,11 @@
         lastRootEntity {
           id
           order
+        }
+
+        pinnedEntities {
+          id
+          pinnedOrder
         }
 
         entities {
@@ -187,6 +194,22 @@
     `),
   );
 
+  const [pinEntities] = createMutation(
+    graphql(`
+      mutation DashboardLayout_EntityTree_PinEntities_Mutation($input: PinEntitiesInput!) {
+        pinEntities(input: $input) {
+          id
+          pinnedOrder
+
+          site {
+            id
+            ...DashboardLayout_PinnedEntities_site
+          }
+        }
+      }
+    `),
+  );
+
   type Indicator = {
     top: number;
     left: number;
@@ -211,7 +234,13 @@
     target: 'view';
   };
 
-  type Drop = TreeDrop | TrashDrop | ViewDrop;
+  type PinDrop = {
+    target: 'pin';
+    lowerOrder?: string | null;
+    upperOrder?: string | null;
+  };
+
+  type Drop = TreeDrop | TrashDrop | ViewDrop | PinDrop;
 
   type Dragging = {
     eligible: boolean;
@@ -251,9 +280,22 @@
   let lastPointerX = $state<number>(0);
   let lastPointerY = $state<number>(0);
 
+  const app = getAppContext();
   const treeState = getTreeContext();
   const paneGroup = getPaneGroup();
   const selectedTreeEntityIds = $derived([...treeState.selectedEntityIds].filter((entityId) => treeState.treeEntityMap.has(entityId)));
+  const pinnedItems = $derived(site.data.pinnedEntities.map((entity) => ({ id: entity.id, pinnedOrder: entity.pinnedOrder ?? '' })));
+
+  const dragEntityIds = (element: HTMLElement) => {
+    const entityId = element.dataset.id;
+    if (!entityId) return [];
+
+    const isMultipleDrag = treeState.selectedEntityIds.has(entityId) && selectedTreeEntityIds.length > 1;
+    return isMultipleDrag ? selectedTreeEntityIds : [entityId];
+  };
+
+  const pinnableDragEntityIds = (element: HTMLElement) =>
+    dragEntityIds(element).filter((entityId) => treeState.treeEntityMap.get(entityId)?.type !== 'Divider');
 
   const countSelectedEntitiesForDragGhost = (selectedEntityIds: Iterable<string>) => {
     const count = {
@@ -315,7 +357,7 @@
   });
 
   $effect(() => {
-    const validEntityIds = new Set([...treeState.treeEntityMap.keys(), ...treeState.recentEntityMap.keys()]);
+    const validEntityIds = new Set(treeState.treeEntityMap.keys());
 
     const invalidSelectedIds = treeState.selectedEntityIds.difference(validEntityIds);
     for (const entityId of invalidSelectedIds) {
@@ -480,6 +522,50 @@
       };
       dragging.drop = { target: 'trash' };
       clearFolderHoverTimeout();
+      return;
+    }
+
+    const pinTarget = hitElement?.closest<HTMLElement>('[data-drop-target="pin"]');
+
+    if (pinTarget) {
+      clearFolderHoverTimeout();
+      if (paneGroup.activeZone) {
+        paneGroup.cancelDrag();
+      }
+
+      const pinEntityIds = pinnableDragEntityIds(dragging.element);
+      if (pinEntityIds.length === 0) {
+        dragging.indicator = {};
+        dragging.drop = undefined;
+        return;
+      }
+
+      const placement = resolvePinnedPlacementAt(pinTarget, hitElement, clientY);
+
+      if (placement) {
+        const orders = resolvePinnedOrders(pinnedItems, pinEntityIds, placement);
+
+        if (orders) {
+          dragging.indicator = pinnedPlacementIndicator(pinTarget, placement);
+          dragging.drop = { target: 'pin', ...orders };
+        } else {
+          dragging.indicator = {};
+          dragging.drop = undefined;
+        }
+
+        return;
+      }
+
+      const rect = pinTarget.getBoundingClientRect();
+      dragging.indicator = {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        opacity: 0.5,
+        transform: undefined,
+      };
+      dragging.drop = { target: 'pin' };
       return;
     }
 
@@ -823,6 +909,22 @@
         mixpanel.track('move_entities', { totalCount: selectedIds.length, parentEntityId: parentId ?? null, lowerOrder, upperOrder });
         return;
       }
+      if (target === 'pin') {
+        const { lowerOrder, upperOrder } = dragging.drop;
+        const pinIds = selectedIds.filter((id) => treeState.treeEntityMap.get(id)?.type !== 'Divider');
+
+        endDragging();
+
+        try {
+          await pinEntities({ input: { entityIds: pinIds, lowerOrder, upperOrder } });
+          mixpanel.track('pin_entities', { totalCount: pinIds.length, via: 'drag_and_drop' });
+          app.preference.current.sidebarQuickAccessTab = 'PINNED';
+          app.preference.current.sidebarRecentDocumentsOpen = true;
+        } catch {
+          Toast.error('고정 중 오류가 발생했습니다');
+        }
+        return;
+      }
       if (target === 'view') {
         const entitySlug = dragging.element.dataset.slug;
         const entityType = dragging.element.dataset.type;
@@ -1000,8 +1102,8 @@
         {#each site.data.entities as entity (entity.id)}
           <Entity entity$key={entity} />
         {:else}
-          <div class={center({ flexGrow: '1' })}>
-            <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
+          <div class={flex({ alignItems: 'center', flexGrow: '1', paddingX: '8px' })}>
+            <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
           </div>
         {/each}
       </div>
@@ -1018,25 +1120,7 @@
 </div>
 
 {#if dragging?.eligible}
-  {#key JSON.stringify(dragging.indicator)}
-    <div
-      style:top={`${dragging.indicator.top ?? -1}px`}
-      style:left={`${dragging.indicator.left ?? -1}px`}
-      style:width={`${dragging.indicator.width ?? 0}px`}
-      style:height={`${dragging.indicator.height ?? 0}px`}
-      style:opacity={dragging.indicator.opacity}
-      style:transform={dragging.indicator.transform}
-      class={css({
-        position: 'fixed',
-        borderRadius: '2px',
-        backgroundColor: { base: 'accent.info.default/30', _dark: 'accent.info.default/40' },
-        pointerEvents: 'none',
-        zIndex: 'sidebar',
-      })}
-      use:portal
-      transition:fade|global={{ duration: 100 }}
-    ></div>
-  {/key}
+  <DragIndicator indicator={dragging.indicator} />
 
   {#if dragging.ghost}
     <div
