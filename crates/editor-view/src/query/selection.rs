@@ -66,6 +66,32 @@ impl SelectionRectSets {
         self.text_rects.push(rect);
     }
 
+    fn push_paragraph_break(&mut self, rect: SelectionRect, paragraph_rects_start: usize) {
+        let extends_text = self.line_box_rects.len() > paragraph_rects_start
+            && self.line_box_rects.last().is_some_and(|previous| {
+                previous.meta == SelectionRectKind::Text
+                    && previous.page_idx == rect.page_idx
+                    && previous.rect.y == rect.rect.y
+                    && previous.rect.height == rect.rect.height
+                    && previous.rect.right() == rect.rect.x
+            });
+
+        if extends_text {
+            let line_box = self.line_box_rects.last_mut().unwrap();
+            let mark = self
+                .mark_rects
+                .last_mut()
+                .expect("a text line box must have an engine-painted mark");
+            debug_assert_eq!(line_box, mark);
+            line_box.rect.width += rect.rect.width;
+            mark.rect.width += rect.rect.width;
+        } else {
+            self.line_box_rects.push(rect.clone());
+            self.mark_rects.push(rect.clone());
+        }
+        self.text_rects.push(rect);
+    }
+
     fn sort_by_position(&mut self) {
         fn sort(rects: &mut [SelectionRect]) {
             rects.sort_by(|a, b| {
@@ -771,7 +797,10 @@ fn visit_box(
         )
         && selection.contains_range(paragraph_break.range)
     {
-        rects.push_same(paragraph_break_rect(paragraph_break.geometry));
+        rects.push_paragraph_break(
+            paragraph_break_rect(paragraph_break.geometry),
+            line_box_rects_before,
+        );
     }
 
     let fully = has_content_child && entry_phase == Phase::Inside && *phase == Phase::Inside;
@@ -1160,6 +1189,36 @@ mod tests {
             "wrapped paragraph must yield ≥2 text rects (phase machine), got {:?}",
             rects
         );
+    }
+
+    #[test]
+    fn paragraph_break_attached_to_selected_text_is_one_rect() {
+        let (doc, _root, first_para, second_para) = two_para_doc("abc", "def");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let selection = Selection::new(Position::new(first_para, 0), Position::new(second_para, 1));
+        let resolved = selection.resolve(&view).expect("must resolve");
+
+        let (first_entry, first_line) =
+            first_line_for_para(&index, &first_para).expect("must find first line");
+        let first_text_right = first_entry.rect.x + line_end_x(first_line);
+
+        for rects in [
+            selection_rects(&index, &resolved),
+            selection_mark_rects(&index, &resolved),
+        ] {
+            assert_eq!(
+                rects.len(),
+                2,
+                "the first text and its attached paragraph break must share a rect: {rects:?}"
+            );
+            assert_eq!(rects[0].meta, SelectionRectKind::Text);
+            assert!(
+                rects[0].rect.right() > first_text_right,
+                "the merged rect must retain the paragraph-break affordance: {rects:?}"
+            );
+            assert_eq!(rects[1].meta, SelectionRectKind::Text);
+        }
     }
 
     #[test]
