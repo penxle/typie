@@ -7,6 +7,7 @@ import {
   resolveGuardedScrollTop,
   resolveInstantRevealPreparationViewports,
   resolveKeepVisibleBottomPadding,
+  resolveScrollPastEndBottomPadding,
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
@@ -195,6 +196,7 @@ export class EditorScrollScope {
     const minimumPadding = Math.max(
       contentExtentPadding,
       needsKeepVisiblePadding ? resolveKeepVisibleBottomPadding({ visibleArea: this.visibleArea }) : 0,
+      this.#scrollPastEndBottomPadding(snapshot),
     );
     if (!rect) {
       return minimumPadding;
@@ -576,6 +578,24 @@ export class EditorScrollScope {
   #hasResolvedKeepVisibleTarget(snapshot: EditorSnapshot | undefined): boolean {
     const target = this.#keepVisibleTarget;
     return target !== null && this.resolveTargetRects(target, snapshot) !== null;
+  }
+
+  #scrollPastEndBottomPadding(snapshot: EditorSnapshot | undefined): number {
+    if (snapshot?.rootAttrs?.layout_mode.type !== 'continuous') {
+      return 0;
+    }
+
+    const viewport = this.#editor.scrollViewport;
+    if (!viewport) {
+      return 0;
+    }
+
+    const viewportRect = viewport.getRect();
+    return resolveScrollPastEndBottomPadding({
+      clientHeight: viewportRect.bottom - viewportRect.top,
+      visibleArea: this.visibleArea,
+      trailingBottomMargin: resolveContinuousViewPadding(this.#editor.safeDisplayZoom()),
+    });
   }
 
   #typewriterBottomPaddingForRect(rect: PageRect, snapshot: EditorSnapshot | undefined): number {

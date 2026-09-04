@@ -190,6 +190,22 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
+  fun `scroll-past-end padding lets the document end reach the visible viewport middle`() {
+    val bottomPadding =
+      resolveScrollPastEndBottomPadding(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 720f, height = 900f),
+            topInset = 120f,
+            imeInset = 100f,
+          ),
+        baseBottomSpace = 20f,
+      )
+
+    assertEquals(420f, bottomPadding, FloatTolerance)
+  }
+
+  @Test
   fun `typewriter policy scrolls target top to the configured viewport position`() {
     val offset =
       resolveTypewriterScrollOffset(
@@ -313,12 +329,12 @@ class EditorAutoScrollPolicyTest {
   }
 
   @Test
-  fun `page edge reveal bottom padding can exceed cursor policy padding`() {
+  fun `layout minimum bottom padding can exceed cursor policy padding`() {
     val policy =
       resolveEditorAutoScrollPolicy(
         visibleArea = testVisibleArea(),
         baseBottomSpace = 180f,
-        pageBottomRevealPadding = 100f,
+        layoutMinimumBottomPadding = 100f,
       )
 
     assertFalse(policy.typewriterActive)

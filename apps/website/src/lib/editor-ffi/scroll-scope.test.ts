@@ -200,6 +200,42 @@ describe('EditorScrollScope', () => {
     expect(scope.bottomPaddingFor(snapshot)).toBe(40);
   });
 
+  it('adds scroll-past-end space in continuous layout without a selection', () => {
+    const snapshot = {
+      ...trackedSnapshot('unused', {
+        page_idx: 0,
+        rect: { x: 0, y: 0, width: 1, height: 20 },
+      }),
+      rootAttrs: { layout_mode: { type: 'continuous', max_width: 600 } },
+    } as EditorSnapshot;
+    const { scope } = setup(snapshot);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(180);
+  });
+
+  it('does not add scroll-past-end space in paginated layout', () => {
+    const snapshot = {
+      ...trackedSnapshot('unused', {
+        page_idx: 0,
+        rect: { x: 0, y: 0, width: 1, height: 20 },
+      }),
+      rootAttrs: {
+        layout_mode: {
+          type: 'paginated',
+          page_width: 600,
+          page_height: 1200,
+          page_margin_top: 40,
+          page_margin_bottom: 40,
+          page_margin_left: 40,
+          page_margin_right: 40,
+        },
+      },
+    } as EditorSnapshot;
+    const { scope } = setup(snapshot);
+
+    expect(scope.bottomPaddingFor(snapshot)).toBe(0);
+  });
+
   it('uses typewriter reveal for a collapsed current selection caret', () => {
     const rect = { page_idx: 0, rect: { x: 0, y: 500, width: 1, height: 20 } };
     const snapshot = selectionSnapshot(true, rect);
@@ -229,9 +265,9 @@ describe('EditorScrollScope', () => {
       ...selectionSnapshot(false, rect),
       rootAttrs: { layout_mode: { type: 'continuous', max_width: 600 } },
     } as EditorSnapshot;
-    const { scope } = setup(snapshot, { enabled: true, position: 0.5 }, 2);
+    const { scope } = setup(snapshot, { enabled: true, position: 0.25 }, 2);
 
-    expect(scope.bottomPaddingFor(snapshot)).toBe(120);
+    expect(scope.bottomPaddingFor(snapshot)).toBe(200);
   });
 
   it('uses typewriter reveal at the endpoint matching a keyboard-extended range head', () => {

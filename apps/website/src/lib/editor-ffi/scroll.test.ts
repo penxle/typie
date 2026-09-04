@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveGuardedScrollTop,
   resolveKeepVisibleBottomPadding,
+  resolveScrollPastEndBottomPadding,
   resolveTypewriterBottomPadding,
   resolveTypewriterScrollTop,
 } from './scroll';
@@ -185,6 +186,18 @@ describe('resolveKeepVisibleBottomPadding', () => {
         visibleArea: { topInset: 0, bottomInset: 40 },
       }),
     ).toBe(100);
+  });
+});
+
+describe('resolveScrollPastEndBottomPadding', () => {
+  it('lets the document end reach the middle of the visible viewport', () => {
+    expect(
+      resolveScrollPastEndBottomPadding({
+        clientHeight: 500,
+        visibleArea: { topInset: 20, bottomInset: 40 },
+        trailingBottomMargin: 20,
+      }),
+    ).toBe(240);
   });
 });
 
