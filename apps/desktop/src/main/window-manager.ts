@@ -58,7 +58,7 @@ export class WindowManager {
     });
 
     this.chrome = new WebContentsView({
-      webPreferences: { preload: preloadPath('chrome'), sandbox: true, contextIsolation: true },
+      webPreferences: { preload: preloadPath('chrome'), sandbox: true, contextIsolation: true, zoomMode: 'isolated' },
     });
     this.chrome.setBackgroundColor(background);
     this.window.contentView.addChildView(this.chrome);

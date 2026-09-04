@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { desktop } from '$lib/desktop';
   import { IS_MAC } from '$lib/editor-ffi/constants';
   import { computeDocumentZoomBounds, resolveDocumentZoomIndicator, zoomEquals } from '$lib/editor-ffi/zoom';
   import { EditorZoomController } from '../editor-zoom.svelte';
+  import type { DesktopZoomAction } from '@typie/lib/desktop';
   import type { Snippet } from 'svelte';
   import type { Editor } from '$lib/editor-ffi/editor.svelte';
   import type { EditorScrollScope } from '$lib/editor-ffi/scroll.svelte';
@@ -120,33 +122,64 @@
     return event.code === 'Digit0' || event.code === 'Numpad0' || event.key === '0';
   };
 
-  const handleBrowserZoomShortcut = (event: KeyboardEvent): void => {
-    if (!active || !zoomEnabled) return;
+  const ownsZoomTarget = (target: EventTarget | null): boolean => {
+    if (!active || !zoomEnabled) return false;
 
     const editorPane = editor.inputEl?.closest<HTMLElement>('[data-pane-id]');
-    const targetPane = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-pane-id]') : null;
-    if (event.target !== editor.inputEl && (!editorPane || targetPane !== editorPane)) return;
+    const targetPane = target instanceof Element ? target.closest<HTMLElement>('[data-pane-id]') : null;
+    return target === editor.inputEl || (!!editorPane && targetPane === editorPane);
+  };
+
+  const applyZoomAction = (action: DesktopZoomAction): void => {
+    switch (action) {
+      case 'in': {
+        void zoomIn();
+        break;
+      }
+      case 'out': {
+        void zoomOut();
+        break;
+      }
+      case 'reset': {
+        void zoom.resetByKeyboard();
+        break;
+      }
+    }
+  };
+
+  const handleBrowserZoomShortcut = (event: KeyboardEvent): void => {
+    if (!ownsZoomTarget(event.target)) return;
 
     const hasZoomModifier = IS_MAC ? event.metaKey : event.ctrlKey;
     if (!hasZoomModifier || event.altKey) return;
 
     if (isZoomInShortcut(event)) {
       event.preventDefault();
-      void zoomIn();
+      applyZoomAction('in');
       return;
     }
 
     if (isZoomOutShortcut(event)) {
       event.preventDefault();
-      void zoomOut();
+      applyZoomAction('out');
       return;
     }
 
     if (isZoomResetShortcut(event)) {
       event.preventDefault();
-      void zoom.resetByKeyboard();
+      applyZoomAction('reset');
     }
   };
+
+  const handleDesktopZoomShortcut = (action: DesktopZoomAction): boolean => {
+    if (!document.hasFocus() || !ownsZoomTarget(document.activeElement)) return false;
+    applyZoomAction(action);
+    return true;
+  };
+
+  $effect(() => {
+    return desktop?.on('zoom-shortcut', handleDesktopZoomShortcut);
+  });
 
   function isTouchOnPage(touch: PinchContact): boolean {
     return editor.clientToLocal(touch.clientX, touch.clientY) !== null;

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createTabView } from './tab-view';
 import { rendererUrl } from './window-manager';
-import type { TabIcon } from '@typie/lib/desktop';
+import { nextZoomLevel } from './zoom';
+import type { DesktopZoomAction, TabIcon } from '@typie/lib/desktop';
 import type { WebContents, WebContentsView } from 'electron';
 import type { NavigationPolicy } from './navigation-policy';
 import type { TabSession } from './store';
@@ -23,10 +24,12 @@ export class TabManager {
   #onState?: (state: TabsStatePayload) => void;
   #windowManager: WindowManager;
   #policy: NavigationPolicy;
+  #zoomLevel: number;
 
-  constructor(windowManager: WindowManager, policy: NavigationPolicy) {
+  constructor(windowManager: WindowManager, policy: NavigationPolicy, zoomLevel: number) {
     this.#windowManager = windowManager;
     this.#policy = policy;
+    this.#zoomLevel = zoomLevel;
   }
 
   #step(delta: number) {
@@ -79,6 +82,7 @@ export class TabManager {
       view: createTabView({
         onTitle: (title) => this.#setTitle(id, title),
         onNavigate: (nextUrl) => {
+          tab.view.webContents.setZoomLevel(this.#zoomLevel);
           const patch: Partial<TabState> = { title: '', icon: null };
           if (this.#policy.classify(nextUrl) === 'website') patch.url = nextUrl;
           this.#update(id, patch);
@@ -192,6 +196,14 @@ export class TabManager {
 
   setBackground(color: string) {
     for (const tab of this.#tabs) tab.view.setBackgroundColor(color);
+  }
+
+  zoom(action: DesktopZoomAction) {
+    const next = nextZoomLevel(this.#zoomLevel, action);
+    if (next === this.#zoomLevel) return null;
+    this.#zoomLevel = next;
+    for (const tab of this.#tabs) tab.view.webContents.setZoomLevel(next);
+    return next;
   }
 
   setIcon(sender: WebContents, icon: TabIcon) {

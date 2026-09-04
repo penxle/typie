@@ -12,7 +12,7 @@ import { TabManager } from './tab-manager';
 import { readStoredTheme } from './theme';
 import { Updater } from './updater';
 import { WindowManager } from './window-manager';
-import type { TabIcon } from '@typie/lib/desktop';
+import type { DesktopZoomAction, TabIcon } from '@typie/lib/desktop';
 import type { ContextMenuRequest } from './context-menu';
 import type { ThemePayload } from './theme';
 import type { WindowState } from './window-manager';
@@ -39,6 +39,15 @@ let menuTabsKey = '';
 const menuTabs = () => (tabManager?.tabs ?? []).map((tab) => ({ title: tab.title, active: tab.id === tabManager?.activeTab?.id }));
 const tabsKey = (tabs: { title: string; active: boolean }[]) =>
   `${tabManager?.canReopen ? '+' : '-'}\n${tabs.map((tab) => `${tab.active ? '*' : ''}${tab.title}`).join('\n')}`;
+const setDesktopZoom = (action: DesktopZoomAction) => {
+  if (!tabManager) return;
+  const zoomLevel = tabManager.zoom(action);
+  if (zoomLevel !== null) store.save({ zoomLevel });
+};
+const handleDesktopZoomMenu = (action: DesktopZoomAction, triggeredByAccelerator: boolean) => {
+  if (triggeredByAccelerator) tabManager?.activeTab?.view.webContents.send(IPC.bridgeZoomShortcut, action);
+  else setDesktopZoom(action);
+};
 const singleInstance = app.requestSingleInstanceLock();
 
 if (singleInstance) {
@@ -124,7 +133,7 @@ const createWindow = async () => {
     onLogout: () => auth.logout().catch(() => null),
     onOpenTab: (url, background, opener) => tabManager?.openFrom(opener, url, background),
   });
-  tabManager = new TabManager(windowManager, policy);
+  tabManager = new TabManager(windowManager, policy, store.data.zoomLevel);
   const chrome = windowManager.chrome.webContents;
 
   let lastActiveId: string | null = null;
@@ -210,6 +219,10 @@ ipcMain.handle(IPC.bridgeOpenExternal, (_event, url: string) => {
   const kind = policy?.classify(url);
   if (kind !== 'blocked') return shell.openExternal(url);
 });
+ipcMain.on(IPC.bridgeZoom, (event, action: DesktopZoomAction) => {
+  if (event.sender !== tabManager?.activeTab?.view.webContents) return;
+  if (action === 'in' || action === 'out' || action === 'reset') setDesktopZoom(action);
+});
 
 const applyMenu = () => {
   menu = buildMenu(
@@ -219,6 +232,7 @@ const applyMenu = () => {
       closeWindow: () => windowManager?.window.close(),
       reopenTab: () => tabManager?.reopenLast(),
       reload: () => tabManager?.reloadActive(),
+      zoom: handleDesktopZoomMenu,
       goBack: () => tabManager?.goBack(),
       goForward: () => tabManager?.goForward(),
       nextTab: () => tabManager?.next(),

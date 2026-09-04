@@ -1,12 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
+import { normalizeZoomLevel } from './zoom';
 import type { WindowState } from './window-manager';
 
 export type TabSession = { urls: string[]; active: number };
-export type StoreData = { window: WindowState; tabs: TabSession | null };
+export type StoreData = { window: WindowState; tabs: TabSession | null; zoomLevel: number };
 
-const DEFAULT: StoreData = { window: {}, tabs: null };
+const DEFAULT: StoreData = { window: {}, tabs: null, zoomLevel: 0 };
 
 const isTabSession = (value: unknown): value is TabSession => {
   if (typeof value !== 'object' || value === null) return false;
@@ -24,6 +25,7 @@ export class Store {
       this.data = {
         window: typeof parsed.window === 'object' && parsed.window !== null ? parsed.window : {},
         tabs: isTabSession(parsed.tabs) ? parsed.tabs : null,
+        zoomLevel: normalizeZoomLevel(parsed.zoomLevel),
       };
     } catch {
       this.data = DEFAULT;
