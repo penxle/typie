@@ -261,10 +261,9 @@
 
   let createdForDocumentId: string | null = null;
 
-  const reportEditorFailure = (id: string, error: unknown, editor?: Editor) => {
+  const setEditorFailure = (id: string, editor?: Editor) => {
     if (destroyed || documentId !== id || editorFailure?.documentId === id) return;
     editorFailure = { documentId: id, editor };
-    console.error(error);
   };
 
   $effect(() => {
@@ -302,7 +301,8 @@
         ctx.editor = editor;
       } catch (err) {
         if (destroyed || createdForDocumentId !== id || documentId !== id) return;
-        reportEditorFailure(id, err);
+        console.error(err);
+        setEditorFailure(id);
       }
     });
   });
@@ -312,7 +312,7 @@
     const id = editorForDocumentId;
     const failure = editor?.failure;
     if (editor && id && failure !== undefined) {
-      reportEditorFailure(id, failure, editor);
+      setEditorFailure(id, editor);
     }
   });
 

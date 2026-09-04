@@ -2099,6 +2099,7 @@ export class Editor {
     const reason = error ?? new Error('Editor operation failed');
     this.#failure = reason;
     this.#failed = true;
+    console.error(reason);
     try {
       Sentry.captureException(reason);
     } catch {

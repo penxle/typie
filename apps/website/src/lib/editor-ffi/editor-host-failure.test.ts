@@ -188,6 +188,7 @@ describe('Editor guarded core invocation', () => {
   beforeEach(() => {
     for (const editor of snapshot()) editor.destroy();
     frames = [];
+    vi.spyOn(console, 'error').mockClear().mockImplementation(vi.fn());
     wasmHarness.createEditor.mockReset();
     wasmHarness.setThemeVariant.mockReset().mockReturnValue(null);
     sentryHarness.captureException.mockReset();
@@ -218,10 +219,13 @@ describe('Editor guarded core invocation', () => {
   it('reports the first terminal failure exactly once', async () => {
     const { editor } = await createEditor();
     const failure = new Error('terminal failure');
+    const consoleError = vi.mocked(console.error);
 
     editor.fail(failure);
     editor.fail(new Error('later failure'));
 
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(failure);
     expect(sentryHarness.captureException).toHaveBeenCalledOnce();
     expect(sentryHarness.captureException).toHaveBeenCalledWith(failure);
   });
@@ -236,6 +240,7 @@ describe('Editor guarded core invocation', () => {
     editor.fail(failure);
 
     expect(editor.failure).toBe(failure);
+    expect(sentryHarness.captureException).toHaveBeenCalledWith(failure);
     expect(core.free).toHaveBeenCalledOnce();
     expect(snapshot()).toEqual([]);
   });
@@ -364,8 +369,8 @@ describe('Editor guarded core invocation', () => {
     const { editor } = await createEditor();
     const failure = new Error('terminal failure');
     const cleanupFailure = new Error('discard failed');
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {
-      throw new Error('cleanup reporting failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((message) => {
+      if (message === 'Editor request cleanup failed:') throw new Error('cleanup reporting failed');
     });
     const update = editor.update((request) => {
       request.enqueue({ type: 'history', op: { type: 'undo' } });
