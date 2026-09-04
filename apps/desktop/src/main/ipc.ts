@@ -18,6 +18,8 @@ export const IPC = {
   bridgeOpenExternal: 'bridge:open-external',
   bridgeFocus: 'bridge:focus',
   bridgePreference: 'bridge:preference',
+  bridgeZoom: 'bridge:zoom',
+  bridgeZoomShortcut: 'bridge:zoom-shortcut',
   updateReady: 'update:ready',
   updateRestart: 'update:restart',
   windowFullscreen: 'window:fullscreen',

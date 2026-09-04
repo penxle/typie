@@ -1,4 +1,5 @@
 import { Menu, nativeImage } from 'electron';
+import type { DesktopZoomAction } from '@typie/lib/desktop';
 import type { MenuItemConstructorOptions } from 'electron';
 
 export type MenuActions = {
@@ -7,6 +8,7 @@ export type MenuActions = {
   closeWindow: () => void;
   reopenTab: () => void;
   reload: () => void;
+  zoom: (action: DesktopZoomAction, triggeredByAccelerator: boolean) => void;
   goBack: () => void;
   goForward: () => void;
   nextTab: () => void;
@@ -129,6 +131,25 @@ export const buildMenu = (
       label: '보기',
       submenu: [
         { label: '새로고침', accelerator: 'CmdOrCtrl+R', enabled: hasTabs, click: actions.reload },
+        { type: 'separator' },
+        {
+          label: '확대',
+          accelerator: 'CmdOrCtrl+Plus',
+          enabled: hasTabs,
+          click: (_item, _window, event) => actions.zoom('in', event.triggeredByAccelerator === true),
+        },
+        {
+          label: '축소',
+          accelerator: 'CmdOrCtrl+-',
+          enabled: hasTabs,
+          click: (_item, _window, event) => actions.zoom('out', event.triggeredByAccelerator === true),
+        },
+        {
+          label: '실제 크기',
+          accelerator: 'CmdOrCtrl+0',
+          enabled: hasTabs,
+          click: (_item, _window, event) => actions.zoom('reset', event.triggeredByAccelerator === true),
+        },
         { type: 'separator' },
         { label: '뒤로', accelerator: isMac ? 'Cmd+[' : 'Alt+Left', enabled: hasTabs, click: actions.goBack },
         { label: '앞으로', accelerator: isMac ? 'Cmd+]' : 'Alt+Right', enabled: hasTabs, click: actions.goForward },

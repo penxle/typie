@@ -1,11 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { TabIcon, TypieDesktopBridge } from '@typie/lib/desktop';
+import type { DesktopBridgeListeners, DesktopZoomAction, TabIcon, TypieDesktopBridge } from '@typie/lib/desktop';
 
 const IPC_THEME_CHANGED = 'theme:changed';
 const IPC_CONTEXT_MENU = 'contextmenu:request';
 const IPC_PAGE_RETRY = 'page:retry';
 const IPC_TAB_ICON = 'tab:icon';
 const IPC_TAB_OPEN = 'tab:open';
+const IPC_BRIDGE_ZOOM = 'bridge:zoom';
+const IPC_BRIDGE_ZOOM_SHORTCUT = 'bridge:zoom-shortcut';
 
 const RENDERER_DEV_PORT = '5300';
 
@@ -55,12 +57,20 @@ window.addEventListener(
 
 const appVersion = process.argv.find((arg) => arg.startsWith('--typie-app-version='))?.split('=')[1] ?? '0.0.0';
 
-const listeners = { focus: new Set<() => void>(), preference: new Set<() => void>() };
+const listeners: { [Event in keyof DesktopBridgeListeners]: Set<DesktopBridgeListeners[Event]> } = {
+  focus: new Set(),
+  preference: new Set(),
+  'zoom-shortcut': new Set(),
+};
 ipcRenderer.on('bridge:focus', () => {
   for (const listener of listeners.focus) listener();
 });
 ipcRenderer.on('bridge:preference', () => {
   for (const listener of listeners.preference) listener();
+});
+ipcRenderer.on(IPC_BRIDGE_ZOOM_SHORTCUT, (_event, action: DesktopZoomAction) => {
+  const handled = [...listeners['zoom-shortcut']].some((listener) => listener(action));
+  if (!handled) ipcRenderer.send(IPC_BRIDGE_ZOOM, action);
 });
 
 contextBridge.exposeInMainWorld(
@@ -69,7 +79,7 @@ contextBridge.exposeInMainWorld(
     version: appVersion,
     platform: process.platform as 'darwin' | 'win32',
     openExternal: (url: string) => ipcRenderer.invoke('bridge:open-external', url) as Promise<void>,
-    on: (event: 'focus' | 'preference', callback: () => void) => {
+    on: <Event extends keyof DesktopBridgeListeners>(event: Event, callback: DesktopBridgeListeners[Event]) => {
       const set = listeners[event];
       // eslint-disable-next-line @typescript-eslint/no-empty-function
       if (!set) return () => {};
