@@ -89,6 +89,7 @@ const stepIdleCallback = () => {
 beforeEach(() => {
   runtime.reset();
   vi.clearAllMocks();
+  app.preference.current.prismHdrEnabled = true;
   vi.useFakeTimers();
   animationFrames = new Map();
   idleCallbacks = new Map();
@@ -144,6 +145,19 @@ const setSourceRect = (target: HTMLElement) => {
 };
 
 describe('Prism panel indicator', () => {
+  test('consumes the browser HDR preference when WebGPU takes ownership', async () => {
+    const target = document.createElement('div');
+    const component = mount(PrismPanelIndicator, { target, props: { phase: 'welcome' } });
+    try {
+      await tick();
+      expect(app.preference.current.prismHdrEnabled).toBe(true);
+      runtime.emit({ journeyProgress: 0, owner: 'webgpu', readiness: 'ready', requestedTarget: 'prism', settledTarget: null });
+      expect(app.preference.current.prismHdrEnabled).toBe(false);
+    } finally {
+      await unmount(component);
+    }
+  });
+
   test('uses the theme-state edge color before the view-transition DOM catches up', async () => {
     const target = document.createElement('div');
     const previousTheme = document.documentElement.dataset.theme;

@@ -1,6 +1,5 @@
 import { PRISM_ICON_CSS_SIZE, resolvePrismIconShaderOffsetY } from './prism-icon-morph.ts';
 import { createAdaptiveLightResolutionPolicy, resolvePrismRenderTargets, resolvePrismRenderWork } from './prism-render-policy.ts';
-import { PRISM_SPINNER_HDR_HEADROOM_DEFAULT } from './prism-spinner-hdr.ts';
 import {
   createPrismSpinnerMorphGeometry,
   nextForwardSpinnerSilhouettePhase,
@@ -70,12 +69,11 @@ export function resolvePrismMaterialOpacityScale(transmission: number): number {
   return 1.18 + (0.7 - 1.18) * eased;
 }
 
-export function resolvePrismMorphHdrHeadroom(prismHeadroom: number, spinnerHeadroom: number, progress: number): number {
+export function resolvePrismMorphHdrHeadroom(prismHeadroom: number, progress: number): number {
   const prism = clamp(prismHeadroom || 1.25, 1, 2.5);
-  const spinner = clamp(spinnerHeadroom || PRISM_SPINNER_HDR_HEADROOM_DEFAULT, 1, 2.5);
   const normalized = clamp(progress || 0, 0, 1);
   const eased = normalized * normalized * normalized * (normalized * (normalized * 6 - 15) + 10);
-  return prism + (spinner - prism) * eased;
+  return prism + (1 - prism) * eased;
 }
 
 let cssColorProbeContext: CanvasRenderingContext2D | null | undefined;
@@ -284,7 +282,6 @@ export const prismObjectDefaults = {
   environmentLuminance: null,
   hdr: 'auto',
   hdrHeadroom: 1.25,
-  spinnerHdrHeadroom: PRISM_SPINNER_HDR_HEADROOM_DEFAULT,
 };
 
 type PrismObjectOptions = Omit<typeof prismObjectDefaults, 'environmentLuminance' | 'hdr' | 'iconEdgeColor' | 'sizeScaleOverride'> & {
@@ -677,7 +674,7 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
     }
     const prismScissor = prepareSurface(renderTargets.material.width, renderTargets.material.height, 1);
     surface.drawPrism(prismScissor);
-    const hdrHeadroom = resolvePrismMorphHdrHeadroom(options.hdrHeadroom, options.spinnerHdrHeadroom, options.spinnerMorphProgress);
+    const hdrHeadroom = resolvePrismMorphHdrHeadroom(options.hdrHeadroom, options.spinnerMorphProgress);
     surface.setHdrHeadroom(options.hdr === 'off' ? 1 : hdrHeadroom);
     surface.compositeSdr();
     if (!reducedMotion.matches) schedule();

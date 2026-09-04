@@ -2,6 +2,7 @@
   import themeData from '@typie/assets/theme.json' with { type: 'json' };
   import { PRISM_ICON_DURATION_SECONDS } from '@typie/prism-ui';
   import { token } from '@typie/styled-system/tokens';
+  import { getAppContext } from '@typie/ui/context';
   import { prefersReducedMotion } from '@typie/ui/state';
   import { onDestroy, onMount, untrack } from 'svelte';
   import PrismIcon from '~icons/typie/prism';
@@ -40,6 +41,7 @@
     themeVariant,
     welcomeAdmission = true,
   }: Props = $props();
+  const app = getAppContext();
   let actor = $state<HTMLDivElement>();
   let actorMounted = $state(true);
   let prismRendererMounted = $state(!reducedMotion);
@@ -321,6 +323,7 @@
 
   const handleSnapshot = (next: PrismRuntimeSnapshot) => {
     snapshot = next;
+    if (next.owner === 'webgpu') app.preference.current.prismHdrEnabled = false;
     if (next.readiness === 'unavailable') {
       settleStaticPresentation();
       prismRendererMounted = false;

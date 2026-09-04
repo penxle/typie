@@ -19,7 +19,7 @@ import {
   spinnerPhaseForFrameIndex,
   spinnerPhaseToWorldPhase,
 } from './internal/prism-spinner-morph.ts';
-import { PrismSpinnerPreRenderedHdrPlayer, PrismSpinnerPreRenderedPlayer } from './internal/prism-spinner-prerendered.ts';
+import { PrismSpinnerPreRenderedPlayer } from './internal/prism-spinner-prerendered.ts';
 import {
   PRISM_SPINNER_ATLAS_DURATION_MS,
   PRISM_SPINNER_ATLAS_FRAME_COUNT,
@@ -63,14 +63,11 @@ export type PrismRuntimeObjectOptions = {
 };
 
 export type PrismRuntimeSpinnerOptions = {
-  hdr?: PrismHdrMode;
   reducedMotion?: boolean;
 };
 
-function resolvePrismSpinnerAtlas(devicePixelRatio: number, hdr: PrismHdrMode) {
-  const { atlas } = resolvePrismSpinnerAssets(devicePixelRatio);
-  if (atlas.hdr) atlas.hdr.mode = hdr;
-  return atlas;
+function resolvePrismSpinnerAtlas(devicePixelRatio: number) {
+  return resolvePrismSpinnerAssets(devicePixelRatio).atlas;
 }
 
 export type PrismTargetRequestOptions = {
@@ -100,7 +97,7 @@ export type MountedPrismSpinner = {
   destroy(): void;
   readonly snapshot: PrismRuntimeSnapshot;
   subscribe(listener: (snapshot: PrismRuntimeSnapshot) => void): () => void;
-  update(options: Pick<PrismRuntimeSpinnerOptions, 'hdr' | 'reducedMotion'>): void;
+  update(options: Pick<PrismRuntimeSpinnerOptions, 'reducedMotion'>): void;
 };
 
 export type PrismRuntime = {
@@ -220,7 +217,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const canvas = document.createElement('canvas');
     const atlas = document.createElement('span');
     const atlasCanvas = document.createElement('canvas');
-    const atlasHdrCanvas = document.createElement('canvas');
     root.className = 'prism-object';
     root.style.setProperty('display', 'grid');
     root.style.setProperty('height', `${CANVAS_SIZE}px`);
@@ -238,10 +234,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     atlasCanvas.style.setProperty('grid-area', '1 / 1');
     atlasCanvas.style.setProperty('height', `${SPINNER_SIZE}px`);
     atlasCanvas.style.setProperty('width', `${SPINNER_SIZE}px`);
-    atlasHdrCanvas.style.setProperty('grid-area', '1 / 1');
-    atlasHdrCanvas.style.setProperty('height', `${SPINNER_SIZE}px`);
-    atlasHdrCanvas.style.setProperty('width', `${SPINNER_SIZE}px`);
-    atlas.append(atlasCanvas, atlasHdrCanvas);
+    atlas.append(atlasCanvas);
     root.append(svg, canvas, atlas);
     element.replaceChildren(root);
 
@@ -284,7 +277,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const listeners = new Set<(snapshot: PrismRuntimeSnapshot) => void>();
     const route = createPrismModeRoute({ reducedMotion });
     route.syncKinematics({ phase: PRISM_ICON_IDLE_PHASE_TURNS, velocity: 0 });
-    const atlasPlayer = new PrismSpinnerPreRenderedPlayer(atlasCanvas, atlasHdrCanvas);
+    const atlasPlayer = new PrismSpinnerPreRenderedPlayer(atlasCanvas);
     const pointerInteraction = createPrismPointerInteraction(element, {
       lightPeriod: prismObjectDefaults.lightPeriod,
       period: PRISM_PERIOD_SECONDS,
@@ -618,7 +611,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       cancelAtlasPreload();
       if (atlasPromise) return atlasPromise;
       atlasPromise = atlasPlayer
-        .connect(resolvePrismSpinnerAtlas(devicePixelRatio, hdr))
+        .connect(resolvePrismSpinnerAtlas(devicePixelRatio))
         .then(() => {
           if (destroyed) return;
           atlasReadiness = 'ready';
@@ -1027,7 +1020,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         if (next.hdr !== undefined && next.hdr !== hdr) {
           hdr = next.hdr;
           controller?.update({ hdr });
-          atlasPlayer.setHdrMode(hdr);
         }
         if (next.reducedMotion !== undefined) {
           reducedMotion = Boolean(next.reducedMotion);
@@ -1058,7 +1050,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const root = document.createElement('span');
     const image = document.createElement('img');
     const canvas = document.createElement('canvas');
-    const hdrCanvas = document.createElement('canvas');
     root.className = 'prism-spinner';
     root.style.setProperty('display', 'grid');
     root.style.setProperty('height', `${SPINNER_SIZE}px`);
@@ -1072,19 +1063,14 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     canvas.style.setProperty('grid-area', '1 / 1');
     canvas.style.setProperty('height', `${SPINNER_SIZE}px`);
     canvas.style.setProperty('width', `${SPINNER_SIZE}px`);
-    hdrCanvas.style.setProperty('grid-area', '1 / 1');
-    hdrCanvas.style.setProperty('height', `${SPINNER_SIZE}px`);
-    hdrCanvas.style.setProperty('width', `${SPINNER_SIZE}px`);
-    root.append(image, canvas, hdrCanvas);
+    root.append(image, canvas);
     element.replaceChildren(root);
 
     const listeners = new Set<(snapshot: PrismRuntimeSnapshot) => void>();
     let destroyed = false;
     let reducedMotion = Boolean(spinnerOptions.reducedMotion);
-    let hdr = spinnerOptions.hdr ?? 'auto';
     let apngLoadGeneration = 0;
     let playbackStartedAt: number | undefined;
-    const apngHdrPlayer = new PrismSpinnerPreRenderedHdrPlayer(hdrCanvas);
     let atlasPlayer: PrismSpinnerPreRenderedPlayer | null = null;
     let atlasPromise: Promise<void> | null = null;
     const snapshot: PrismRuntimeSnapshot = {
@@ -1104,18 +1090,16 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     function show(owner: 'apng' | 'atlas'): void {
       image.style.setProperty('display', owner === 'apng' ? 'block' : 'none');
       canvas.style.setProperty('display', owner === 'atlas' ? 'block' : 'none');
-      hdrCanvas.style.setProperty('display', 'block');
       snapshot.owner = owner;
     }
 
     function ensureAtlas(): Promise<void> {
       if (atlasPromise) return atlasPromise;
       apngLoadGeneration += 1;
-      apngHdrPlayer.disconnect();
-      const player = new PrismSpinnerPreRenderedPlayer(canvas, hdrCanvas);
+      const player = new PrismSpinnerPreRenderedPlayer(canvas);
       atlasPlayer = player;
       atlasPromise = player
-        .connect(resolvePrismSpinnerAtlas(devicePixelRatio, hdr))
+        .connect(resolvePrismSpinnerAtlas(devicePixelRatio))
         .then(() => {
           if (destroyed || atlasPlayer !== player) return;
           if (reducedMotion) player.setPhase(0);
@@ -1135,13 +1119,11 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     }
 
     async function loadApng(): Promise<void> {
-      const assets = resolvePrismSpinnerAssets(devicePixelRatio);
       const generation = ++apngLoadGeneration;
       playbackStartedAt = undefined;
       atlasPlayer?.dispose();
       atlasPlayer = null;
       atlasPromise = null;
-      apngHdrPlayer.connect({ ...assets.hdr, mode: hdr });
       const loadedAt = new Promise<number>((resolve, reject) => {
         const cleanup = () => {
           image.removeEventListener('load', onLoad);
@@ -1164,7 +1146,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         await image.decode();
         if (destroyed || generation !== apngLoadGeneration) return;
         playbackStartedAt = startedAt;
-        apngHdrPlayer.play(startedAt);
         if (reducedMotion) {
           await ensureAtlas();
           return;
@@ -1176,7 +1157,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       } catch {
         if (destroyed || generation !== apngLoadGeneration) return;
         playbackStartedAt = undefined;
-        apngHdrPlayer.disconnect();
         await ensureAtlas();
       }
     }
@@ -1192,7 +1172,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         destroyed = true;
         mounts.delete(mounted);
         apngLoadGeneration += 1;
-        apngHdrPlayer.disconnect();
         atlasPlayer?.dispose();
         listeners.clear();
         root.remove();
@@ -1209,14 +1188,6 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       },
       update(next) {
         if (destroyed) return;
-        if (next.hdr !== undefined && next.hdr !== hdr) {
-          hdr = next.hdr;
-          if (atlasPlayer) atlasPlayer.setHdrMode(hdr);
-          else {
-            const assets = resolvePrismSpinnerAssets(devicePixelRatio);
-            apngHdrPlayer.connect({ ...assets.hdr, mode: hdr });
-          }
-        }
         if (next.reducedMotion !== undefined) {
           const nextReducedMotion = Boolean(next.reducedMotion);
           if (nextReducedMotion === reducedMotion) return;
