@@ -27,6 +27,7 @@ const trigger = (name: string) =>
 
 type FixtureProps = {
   currentKind?: 'entity' | 'home';
+  isOwner?: boolean;
   rootQueryLoading?: boolean;
 };
 
@@ -36,6 +37,48 @@ const mountFixture = async (props: FixtureProps = {}) => {
 };
 
 describe('breadcrumb navigation keyboard interaction', () => {
+  it('keeps the path segment structure and geometry when navigation is non-interactive', async () => {
+    await mountFixture();
+    const interactiveSegment = document.querySelector('nav[aria-label="문서 경로"] > ol > li:first-child > button');
+    if (!(interactiveSegment instanceof HTMLElement)) throw new Error('Missing interactive breadcrumb segment');
+    const interactiveStyle = getComputedStyle(interactiveSegment);
+    const interactiveGeometry = {
+      alignItems: interactiveStyle.alignItems,
+      borderRadius: interactiveStyle.borderRadius,
+      columnGap: interactiveStyle.columnGap,
+      height: interactiveStyle.height,
+      paddingLeft: interactiveStyle.paddingLeft,
+      paddingRight: interactiveStyle.paddingRight,
+    };
+
+    if (!component) throw new Error('Missing mounted breadcrumb fixture');
+    await unmount(component);
+    component = undefined;
+    document.body.replaceChildren();
+
+    await mountFixture({ isOwner: false });
+    const path = document.querySelector('nav[aria-label="문서 경로"] > ol');
+    if (!path) throw new Error('Missing breadcrumb path');
+
+    const segments = [...path.children];
+    expect(segments).toHaveLength(2);
+    expect(segments.every((segment) => segment.matches('li'))).toBe(true);
+    expect(path.querySelector('button')).toBeNull();
+    expect(segments[0]?.querySelector(':scope > span > span[aria-hidden="true"]')).not.toBeNull();
+    expect(segments[1]?.querySelector(':scope > span > span[aria-hidden="true"]')).toBeNull();
+    const passiveSegment = segments[0]?.querySelector(':scope > span');
+    if (!(passiveSegment instanceof HTMLElement)) throw new Error('Missing non-interactive breadcrumb segment');
+    const passiveStyle = getComputedStyle(passiveSegment);
+    expect({
+      alignItems: passiveStyle.alignItems,
+      borderRadius: passiveStyle.borderRadius,
+      columnGap: passiveStyle.columnGap,
+      height: passiveStyle.height,
+      paddingLeft: passiveStyle.paddingLeft,
+      paddingRight: passiveStyle.paddingRight,
+    }).toEqual(interactiveGeometry);
+  });
+
   it('marks the current document after expanding it from an ancestor segment', async () => {
     await mountFixture();
     const folderTrigger = trigger('Folder');

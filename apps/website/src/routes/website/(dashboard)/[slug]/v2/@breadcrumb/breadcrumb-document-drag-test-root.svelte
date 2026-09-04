@@ -17,11 +17,12 @@
 
   type Props = {
     currentKind?: 'entity' | 'home';
+    isOwner?: boolean;
     rootQueryLoading?: boolean;
     withSegment?: boolean;
   };
 
-  let { currentKind = 'entity', rootQueryLoading = false, withSegment = true }: Props = $props();
+  let { currentKind = 'entity', isOwner = true, rootQueryLoading = false, withSegment = true }: Props = $props();
 
   const currentDocument = {
     __typename: 'Entity',
@@ -184,7 +185,7 @@
 <EditorBreadcrumbNavigation
   ancestors={currentKind === 'home' ? [] : ancestors}
   {current}
-  isOwner
+  {isOwner}
   onNavigate={(target) => {
     navigationTarget = target;
     navigatedSlug = target.kind === 'entity' ? target.slug : '';
