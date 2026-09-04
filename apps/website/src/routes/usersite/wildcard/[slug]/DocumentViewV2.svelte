@@ -613,7 +613,7 @@
           <div class={flex({ flexDirection: 'column' })}>
             {#if document.protectContent}
               <ContentProtect>
-                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll viewer>
+                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
                   {#snippet header()}
                     {@render documentHeader()}
                   {/snippet}
@@ -624,7 +624,7 @@
                 </EditorComponent>
               </ContentProtect>
             {:else}
-              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll viewer>
+              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
                 {#snippet header()}
                   {@render documentHeader()}
                 {/snippet}

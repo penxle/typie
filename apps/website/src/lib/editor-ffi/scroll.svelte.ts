@@ -190,6 +190,7 @@ export class EditorScrollScope {
   }
 
   bottomPaddingFor(snapshot: EditorSnapshot | undefined): number {
+    if (this.#editor.scrollRootEl === null) return 0;
     const rect = selectionHeadRect(snapshot);
     const needsKeepVisiblePadding = rect !== null || this.#hasResolvedKeepVisibleTarget(snapshot);
     const contentExtentPadding = this.#contentBottomOverflow + this.visibleArea.bottomInset;

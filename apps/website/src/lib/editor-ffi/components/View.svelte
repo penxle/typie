@@ -51,7 +51,6 @@
   type Props = {
     document$key: Editor_document$key;
     active?: boolean;
-    viewer?: boolean;
     /** window 자체를 스크롤 컨테이너로 사용한다. 페이지당 에디터 1개를 전제한다 (window에 리스너를 부착). */
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
@@ -68,7 +67,6 @@
   let {
     document$key,
     active = true,
-    viewer = false,
     useWindowScroll = false,
     style,
     viewSurfaceLayout,
@@ -477,7 +475,7 @@
         style:min-width="max-content"
         style:padding-left={`${contentInsetLeft}px`}
         style:padding-right={`${contentInsetRight}px`}
-        style:padding-bottom={viewer ? '0px' : `${ctx.scroll?.bottomPadding ?? 0}px`}
+        style:padding-bottom={`${ctx.scroll?.bottomPadding ?? 0}px`}
         class={css(
           {
             position: 'relative',
