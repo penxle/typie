@@ -366,7 +366,7 @@
             <span>의견 보내기</span>
           </button>
 
-          <!-- 더보기 서브메뉴 트리거 -->
+          <!-- 더 보기 서브메뉴 트리거 -->
           <div
             bind:this={submenuTriggerEl}
             class={flex({
@@ -393,7 +393,7 @@
             tabindex="0"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={EllipsisIcon} size={14} />
-            <span>더보기</span>
+            <span>더 보기</span>
             <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={12} />
           </div>
 
