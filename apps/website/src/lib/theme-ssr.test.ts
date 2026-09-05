@@ -7,9 +7,9 @@ describe('resolveThemeAttributes', () => {
       resolveThemeAttributes({
         routeId: '/website/(dashboard)/[slug]',
         pathname: '/abc',
-        cookies: { theme: 'dark', light: 'iceberg', dark: 'nord' },
+        cookies: { theme: 'dark', light: 'flexoki', dark: 'nord' },
       }),
-    ).toEqual({ theme: 'dark', variantLight: 'iceberg', variantDark: 'nord' });
+    ).toEqual({ theme: 'dark', variantLight: 'flexoki', variantDark: 'nord' });
   });
 
   it('defaults to auto/white/black without cookies', () => {
@@ -30,7 +30,7 @@ describe('resolveThemeAttributes', () => {
 
   it('forces dark black on landing routes regardless of cookies', () => {
     for (const routeId of ['/website/(landing)/(index)', '/website/(landing)/pricing']) {
-      expect(resolveThemeAttributes({ routeId, pathname: '/', cookies: { theme: 'light', light: 'iceberg', dark: 'nord' } })).toEqual({
+      expect(resolveThemeAttributes({ routeId, pathname: '/', cookies: { theme: 'light', light: 'flexoki', dark: 'nord' } })).toEqual({
         theme: 'dark',
         variantLight: 'white',
         variantDark: 'black',
@@ -43,7 +43,7 @@ describe('resolveThemeAttributes', () => {
       resolveThemeAttributes({
         routeId: '/website/admin/users',
         pathname: '/',
-        cookies: { theme: 'light', light: 'iceberg', dark: 'nord' },
+        cookies: { theme: 'light', light: 'flexoki', dark: 'nord' },
       }),
     ).toEqual({
       theme: 'dark',
@@ -62,7 +62,7 @@ describe('resolveThemeAttributes', () => {
 
   it('forces dark black on legal routes regardless of cookies', () => {
     for (const routeId of ['/website/legal/terms', '/website/legal/privacy']) {
-      expect(resolveThemeAttributes({ routeId, pathname: '/', cookies: { theme: 'light', light: 'iceberg', dark: 'nord' } })).toEqual({
+      expect(resolveThemeAttributes({ routeId, pathname: '/', cookies: { theme: 'light', light: 'flexoki', dark: 'nord' } })).toEqual({
         theme: 'dark',
         variantLight: 'white',
         variantDark: 'black',

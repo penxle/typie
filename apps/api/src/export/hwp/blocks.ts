@@ -1,5 +1,5 @@
-// spell-checker:words HWPTAG HWPUNIT DBEAFE DCFCE
-import { resolveColorToHex } from '../core/theme.ts';
+// spell-checker:words HWPTAG HWPUNIT
+import { resolveCalloutFillToHex, resolveColorToHex } from '../core/theme.ts';
 import { buildSectionDef, collectInlineSegments, collectParagraphsFromChildren, makeParagraph } from './paragraph.ts';
 import { allocate, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records.ts';
 import { estimateTextWidthHwp, resolveParaShape } from './styles.ts';
@@ -166,13 +166,7 @@ export function convertCalloutNode(entry: NodeEntry, ctx: HwpConvertContext, isF
   const hex = resolveColorToHex(colorKey);
   const borderColor = hexToColorref(hex || 'CCCCCC');
 
-  const bgColors: Record<string, string> = {
-    info: 'DBEAFE',
-    success: 'DCFCE7',
-    warning: 'FFF7ED',
-    danger: 'FEF2F2',
-  };
-  const bgFill = hexToColorref(bgColors[variant] ?? 'F3F4F6');
+  const bgFill = hexToColorref(resolveCalloutFillToHex(variant) ?? 'F3F4F6');
 
   const paragraphs = collectParagraphsFromChildren(entry, ctx);
 

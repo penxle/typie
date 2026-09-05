@@ -55,25 +55,6 @@ export const VARIANT_CANVAS: Record<ThemeVariant, string> = {
   'dark-everforest': '#232a2e',
 };
 
-export const VARIANT_SWATCH: Record<ThemeVariant, readonly [string, string, string, string]> = {
-  'light-white': ['#ef4444', '#eab308', '#22c55e', '#3b82f6'],
-  'light-catppuccin-latte': ['#d20f39', '#df8e1d', '#40a02b', '#1e66f5'],
-  'light-flexoki': ['#af3029', '#ad8301', '#66800b', '#205ea6'],
-  'light-everforest': ['#f85552', '#dfa000', '#8da101', '#3a94c5'],
-  'light-rose-pine-dawn': ['#b4637a', '#ea9d34', '#56949f', '#286983'],
-  'light-cupcake': ['#d57e85', '#dcb16c', '#a3b367', '#7297b9'],
-  'light-sakura': ['#df2d52', '#c29461', '#2e916d', '#006e93'],
-  'light-silk': ['#cf432e', '#cfad25', '#6ca38c', '#39aac9'],
-  'dark-black': ['#ef4444', '#eab308', '#22c55e', '#3b82f6'],
-  'dark-flexoki': ['#d14d41', '#d0a215', '#879a39', '#4385be'],
-  'dark-rose-pine': ['#eb6f92', '#f6c177', '#95b1ac', '#31748f'],
-  'dark-catppuccin-mocha': ['#f38ba8', '#f9e2af', '#a6e3a1', '#89b4fa'],
-  'dark-nightfox': ['#c94f6d', '#dbc074', '#81b29a', '#719cd6'],
-  'dark-dracula': ['#ff5555', '#f1fa8c', '#50fa7b', '#9bc4ff'],
-  'dark-nord': ['#bf616a', '#ebcb8b', '#a3be8c', '#81a1c1'],
-  'dark-everforest': ['#e67e80', '#dbbc7f', '#a7c080', '#7fbbb3'],
-};
-
 export const VARIANT_SELECTION: Record<ThemeVariant, string> = {
   'light-white': '#99ccff',
   'light-catppuccin-latte': '#cdbbfb',
