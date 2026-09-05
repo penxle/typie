@@ -29,6 +29,10 @@ val ThemeVariant.key: String
       ThemeVariant.LightSakura -> "light-sakura"
       ThemeVariant.LightSilk -> "light-silk"
       ThemeVariant.LightCupcake -> "light-cupcake"
+      ThemeVariant.LightNoctisLilac -> "light-noctis-lilac"
+      ThemeVariant.LightAtelierLakeside -> "light-atelier-lakeside"
+      ThemeVariant.LightAtelierSeaside -> "light-atelier-seaside"
+      ThemeVariant.LightGruvboxMaterial -> "light-gruvbox-material"
       ThemeVariant.DarkBlack -> "dark-black"
       ThemeVariant.DarkNord -> "dark-nord"
       ThemeVariant.DarkDracula -> "dark-dracula"
@@ -37,6 +41,10 @@ val ThemeVariant.key: String
       ThemeVariant.DarkFlexoki -> "dark-flexoki"
       ThemeVariant.DarkNightfox -> "dark-nightfox"
       ThemeVariant.DarkEverforest -> "dark-everforest"
+      ThemeVariant.DarkGruvboxMaterial -> "dark-gruvbox-material"
+      ThemeVariant.DarkMelange -> "dark-melange"
+      ThemeVariant.DarkGithub -> "dark-github"
+      ThemeVariant.DarkMonokai -> "dark-monokai"
     }
 
 private val ThemeVariant.isLight: Boolean

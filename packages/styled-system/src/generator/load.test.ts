@@ -24,7 +24,7 @@ describe('parsePreset', () => {
     expect(preset.id).toBe('light-white');
     expect(preset.mode).toBe('light');
     expect(Object.keys(preset.ui)).toHaveLength(40);
-    expect(Object.keys(preset.editor)).toHaveLength(37);
+    expect(Object.keys(preset.editor)).toHaveLength(41);
     expect(preset.source).toBeUndefined();
     expect(parsePreset(raw('light-snow'), 'light-snow.json').source?.name).toBe('n');
   });
