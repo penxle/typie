@@ -1,0 +1,22 @@
+{
+  "light": [
+    "light-white",
+    "light-catppuccin-latte",
+    "light-flexoki",
+    "light-everforest",
+    "light-rose-pine-dawn",
+    "light-cupcake",
+    "light-sakura",
+    "light-silk"
+  ],
+  "dark": [
+    "dark-black",
+    "dark-flexoki",
+    "dark-rose-pine",
+    "dark-catppuccin-mocha",
+    "dark-nightfox",
+    "dark-dracula",
+    "dark-nord",
+    "dark-everforest"
+  ]
+}

@@ -209,7 +209,7 @@
     borderRadius: '16px',
     backgroundColor: 'surface.default',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
   });
 </script>
 
@@ -218,7 +218,7 @@
     gap: '20px',
     maxWidth: '720px',
     padding: '24px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
   })}
   loading={!snapshot}
   onclose={() => {
@@ -232,21 +232,21 @@
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
       <div class={flex({ gap: '12px' })}>
         <div class={css(cardStyle, { flex: '1' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 글자</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted', marginBottom: '8px' })}>총 글자</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
             {comma(snapshot.totalCharacterCount)}
           </div>
         </div>
 
         <div class={css(cardStyle, { flex: '1' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>총 문서</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted', marginBottom: '8px' })}>총 문서</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
             {snapshot.documentCount}
           </div>
         </div>
 
         <div class={css(cardStyle, { flex: '1' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>활동일</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted', marginBottom: '8px' })}>활동일</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
             {streakData.totalDays}
           </div>
@@ -255,16 +255,16 @@
 
       <div class={flex({ gap: '12px' })}>
         <div class={css(cardStyle, { flex: '1' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '8px' })}>연속 기록</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted', marginBottom: '8px' })}>연속 기록</div>
           <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
             {streakData.currentStreak}
-            <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>일째</span>
+            <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>일째</span>
           </div>
-          <div class={flex({ gap: '12px', marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' })}>
-            <div class={css({ fontSize: '13px', color: 'text.faint' })}>
+          <div class={flex({ gap: '12px', marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.hairline' })}>
+            <div class={css({ fontSize: '13px', color: 'text.hint' })}>
               최장 <span class={css({ fontWeight: 'semibold', color: 'text.muted' })}>{streakData.longestStreak}일</span>
             </div>
-            <div class={css({ fontSize: '13px', color: 'text.faint' })}>
+            <div class={css({ fontSize: '13px', color: 'text.hint' })}>
               이번 달 <span class={css({ fontWeight: 'semibold', color: 'text.muted' })}>{streakData.thisMonthDays}일</span>
             </div>
           </div>
@@ -273,9 +273,9 @@
         {#if weekdayData && maxWeekdayAvg > 0}
           <div class={css(cardStyle, { flex: '1' })}>
             <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' })}>
-              <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>요일별</div>
+              <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>요일별</div>
               {#if bestWeekdayIndex >= 0}
-                <div class={css({ fontSize: '11px', color: 'text.faint' })}>
+                <div class={css({ fontSize: '11px', color: 'text.hint' })}>
                   {weekdayLabels[bestWeekdayIndex]}요일 최다
                 </div>
               {/if}
@@ -292,11 +292,11 @@
                         width: 'full',
                         minHeight: '2px',
                         borderRadius: '3px',
-                        backgroundColor: isBest ? 'text.default' : 'border.default',
+                        backgroundColor: isBest ? 'accent.default' : 'border.default',
                       })}
                     ></div>
                   </div>
-                  <div class={css({ fontSize: '11px', fontWeight: 'medium', color: isBest ? 'text.default' : 'text.faint' })}>
+                  <div class={css({ fontSize: '11px', fontWeight: 'medium', color: isBest ? 'text.default' : 'text.hint' })}>
                     {data.label}
                   </div>
                 </div>
@@ -317,9 +317,9 @@
           )}
 
           <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' })}>
-            <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>일일 목표</div>
+            <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>일일 목표</div>
             <button
-              class={css({ fontSize: '12px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+              class={css({ fontSize: '12px', color: 'text.muted', cursor: 'pointer', _hover: { color: 'text.default' } })}
               onclick={() => {
                 app.state.userGoalOpen = true;
                 mixpanel.track('open_user_goal_modal', { via: 'stats_modal' });
@@ -338,15 +338,15 @@
             />
             <div class={css({ fontSize: '28px', fontWeight: 'bold', color: 'text.default', fontVariantNumeric: 'tabular-nums' })}>
               {comma(progress.additions)}
-              <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>
+              <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>
                 / {comma(goal.targetCharacterCount)}자
               </span>
             </div>
           </div>
         {:else}
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint', marginBottom: '12px' })}>일일 목표</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted', marginBottom: '12px' })}>일일 목표</div>
           <button
-            class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+            class={css({ fontSize: '14px', color: 'text.muted', cursor: 'pointer', _hover: { color: 'text.default' } })}
             onclick={() => {
               app.state.userGoalOpen = true;
               mixpanel.track('open_user_goal_modal', { via: 'stats_modal' });
@@ -360,7 +360,7 @@
 
       <div class={css(cardStyle)}>
         <div class={flex({ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' })}>
-          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>지난 1년간의 기록</div>
+          <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>지난 1년간의 기록</div>
           <div class={flex({ gap: '6px' })}>
             <Button style={css.raw({ gap: '4px' })} onclick={copyActivityImage} size="sm" variant="secondary">
               <Icon icon={CopyIcon} />

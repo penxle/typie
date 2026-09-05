@@ -27,7 +27,7 @@
       maxWidth: '400px',
       backgroundColor: 'surface.default',
       textAlign: 'center',
-      boxShadow: 'medium',
+      boxShadow: 'md',
       zIndex: '1',
     })}
   >
@@ -38,12 +38,12 @@
         {error.maintenance.title}
       </h1>
 
-      <div class={css({ fontSize: '14px', color: 'text.faint', whiteSpace: 'pre-line' })}>
+      <div class={css({ fontSize: '14px', color: 'text.muted', whiteSpace: 'pre-line' })}>
         {error.maintenance.message}
       </div>
 
       {#if error.maintenance.until}
-        <div class={css({ fontSize: '13px', color: 'text.disabled' })}>
+        <div class={css({ fontSize: '13px', color: 'text.hint' })}>
           점검 종료 예정: {dayjs(error.maintenance.until).formatAsDateTime()}
         </div>
       {/if}
@@ -56,12 +56,12 @@
           paddingX: '14px',
           paddingY: '8px',
           fontSize: '13px',
-          color: 'text.subtle',
+          color: 'text.muted',
           borderWidth: '1px',
           borderColor: 'border.default',
           borderRadius: '6px',
           transition: 'common',
-          _hover: { borderColor: 'border.strong' },
+          _hover: { borderColor: 'border.emphasis' },
         })}
         href="https://penxle.channel.io/home"
         rel="noopener noreferrer"
@@ -78,7 +78,7 @@
           앗! 문제가 발생했어요
         {/if}
       </h1>
-      <div class={css({ fontSize: '14px', color: 'text.faint' })}>
+      <div class={css({ fontSize: '14px', color: 'text.muted' })}>
         {#if page.status === 404}
           입력한 주소를 다시 한 번 확인해주세요.
         {:else if error?.code === 'unexpected_error'}
@@ -93,7 +93,7 @@
       {/if}
 
       {#if error?.eventId}
-        <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'text.disabled' })}>코드: {error.eventId}</p>
+        <p class={css({ fontFamily: 'mono', fontSize: '12px', color: 'text.hint' })}>코드: {error.eventId}</p>
       {/if}
     {/if}
   </div>

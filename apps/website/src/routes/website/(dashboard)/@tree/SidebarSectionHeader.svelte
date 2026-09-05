@@ -65,7 +65,7 @@
     paddingX: '12px',
     paddingTop: '8px',
     paddingBottom: '4px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     _after: {
       content: '""',
       position: 'absolute',
@@ -73,7 +73,7 @@
       bottom: '0',
       left: '12px',
       height: '1px',
-      backgroundColor: 'border.subtle',
+      backgroundColor: 'border.hairline',
       opacity: dividerVisible ? '100' : '0',
       transition: '[opacity 150ms ease]',
     },
@@ -102,13 +102,13 @@
                 borderRadius: '4px',
                 fontSize: '13px',
                 fontWeight: 'semibold',
-                color: 'text.faint',
+                color: 'text.muted',
                 opacity: '50',
                 transition: 'common',
-                _supportHover: { color: 'text.subtle', opacity: '100' },
+                _supportHover: { color: 'text.default', opacity: '100' },
                 _focusVisible: { opacity: '100' },
               },
-              tab.value === activeTab && { color: 'text.subtle', opacity: '100' },
+              tab.value === activeTab && { color: 'text.default', opacity: '100' },
             )}
             aria-expanded={tab.value === activeTab ? open : undefined}
             aria-selected={tab.value === activeTab}
@@ -129,9 +129,9 @@
           justifyContent: 'center',
           borderRadius: '4px',
           size: '20px',
-          color: 'text.faint',
+          color: 'text.muted',
           transition: 'common',
-          _supportHover: { color: 'text.subtle' },
+          _supportHover: { color: 'text.default' },
         })}
         aria-expanded={open}
         aria-label={activeTabLabel ? `${activeTabLabel} 열기/닫기` : undefined}
@@ -151,10 +151,10 @@
         height: '24px',
         paddingX: '8px',
         borderRadius: '4px',
-        color: 'text.faint',
+        color: 'text.muted',
         opacity: '80',
         transition: 'common',
-        _supportHover: { color: 'text.subtle', opacity: '100', '& > svg': { opacity: '100' } },
+        _supportHover: { color: 'text.default', opacity: '100', '& > svg': { opacity: '100' } },
         _focusVisible: { opacity: '100', '& > svg': { opacity: '100' } },
       })}
       aria-expanded={open}

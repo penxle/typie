@@ -17,10 +17,10 @@
   const pageNumber = new QueryStringNumber('page', 1);
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+<div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
   <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>DOCUMENT MANAGEMENT</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
+    <h2 class={css({ fontSize: '18px', color: 'text.default' })}>DOCUMENT MANAGEMENT</h2>
+    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.muted' })}>
       TOTAL DOCUMENTS: {query.data.adminDocuments.totalCount}
     </p>
   </div>
@@ -28,11 +28,11 @@
   <div
     class={css({
       borderWidth: '2px',
-      borderColor: 'amber.500',
-      backgroundColor: 'gray.900',
+      borderColor: 'border.default',
+      backgroundColor: 'surface.default',
     })}
   >
-    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
+    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'border.default' })}>
       <div class={css({ position: 'relative', maxWidth: '480px' })}>
         <AdminIcon
           style={css.raw({
@@ -40,7 +40,7 @@
             left: '12px',
             top: '[50%]',
             transform: 'translateY(-50%)',
-            color: 'amber.500',
+            color: 'text.hint',
           })}
           icon={SearchIcon}
           size={16}
@@ -52,18 +52,17 @@
             paddingRight: '12px',
             paddingY: '8px',
             borderWidth: '2px',
-            borderColor: 'amber.500',
-            backgroundColor: 'gray.800',
-            color: 'amber.500',
+            borderColor: 'border.default',
+            backgroundColor: 'surface.inset',
+            color: 'text.default',
             fontSize: '13px',
             outline: 'none',
-            caretColor: 'amber.500',
+            caretColor: 'text.default',
             _placeholder: {
-              color: 'amber.400',
-              opacity: '[0.5]',
+              color: 'text.hint',
             },
             _focus: {
-              borderColor: 'amber.400',
+              borderColor: 'accent.default',
             },
           })}
           placeholder="SEARCH ID, SLUG, PERMALINK OR TITLE..."
@@ -98,7 +97,7 @@
             class={css({
               borderRadius: '8px',
               size: '40px',
-              backgroundColor: 'amber.500',
+              backgroundColor: 'accent.subtle',
               overflow: 'hidden',
             })}
           >
@@ -110,7 +109,7 @@
             <a
               class={css({
                 fontSize: '13px',
-                color: 'amber.500',
+                color: 'text.default',
                 _hover: { textDecoration: 'underline' },
               })}
               href="/admin/documents/{doc.id}"
@@ -118,7 +117,7 @@
               {doc.title}
             </a>
             {#if doc.subtitle}
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>
                 {doc.subtitle}
               </div>
             {/if}
@@ -128,10 +127,10 @@
 
       {#snippet $id(doc)}
         <div class={flex({ flexDirection: 'column', gap: '2px' })}>
-          <span class={css({ fontSize: '11px', color: 'gray.400' })}>
+          <span class={css({ fontSize: '11px', color: 'text.hint' })}>
             {doc.id}
           </span>
-          <span class={css({ fontSize: '11px', color: 'gray.400' })}>
+          <span class={css({ fontSize: '11px', color: 'text.hint' })}>
             {doc.entity.id}
           </span>
         </div>
@@ -144,7 +143,7 @@
               class={css({
                 size: '24px',
                 borderRadius: 'full',
-                backgroundColor: 'amber.500',
+                backgroundColor: 'accent.subtle',
                 overflow: 'hidden',
                 flexShrink: '0',
               })}
@@ -157,7 +156,7 @@
               <a
                 class={css({
                   fontSize: '12px',
-                  color: 'amber.500',
+                  color: 'text.default',
                   _hover: { textDecoration: 'underline' },
                 })}
                 href="/admin/users/{doc.entity.user.id}"
@@ -167,12 +166,12 @@
             </div>
           </div>
         {:else}
-          <span class={css({ fontSize: '12px', color: 'gray.400' })}>-</span>
+          <span class={css({ fontSize: '12px', color: 'text.hint' })}>-</span>
         {/if}
       {/snippet}
 
       {#snippet $path(doc)}
-        <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
+        <div class={flex({ fontSize: '12px', color: 'text.muted', alignItems: 'center', gap: '4px' })}>
           {#if doc.entity.ancestors.length > 0}
             {#each doc.entity.ancestors as ancestor, i (ancestor.id)}
               <span>
@@ -187,13 +186,13 @@
               {/if}
             {/each}
           {:else}
-            <span class={css({ color: 'gray.500' })}>-</span>
+            <span class={css({ color: 'text.hint' })}>-</span>
           {/if}
         </div>
       {/snippet}
 
       {#snippet $characters(doc)}
-        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+        <span class={css({ fontSize: '12px', color: 'text.muted' })}>
           {comma(doc.characterCount)} CHARS
         </span>
       {/snippet}
@@ -202,7 +201,7 @@
         <span
           class={css({
             fontSize: '12px',
-            color: doc.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
+            color: doc.entity.state === 'ACTIVE' ? 'success.default' : 'danger.default',
           })}
         >
           {doc.entity.state}
@@ -210,7 +209,7 @@
       {/snippet}
 
       {#snippet $updatedAt(doc)}
-        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+        <span class={css({ fontSize: '12px', color: 'text.muted' })}>
           {dayjs(doc.updatedAt).formatAsDateTime()}
         </span>
       {/snippet}

@@ -13,12 +13,12 @@
 <div
   class={css({
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
     width: 'var(--width)',
     height: 'full',
     backgroundColor: 'surface.default',
-    boxShadow: '[0px 4px 12px rgba(0, 0, 0, 0.1)]',
+    boxShadow: 'lg',
     padding: '16px',
     overflow: 'hidden',
   })}

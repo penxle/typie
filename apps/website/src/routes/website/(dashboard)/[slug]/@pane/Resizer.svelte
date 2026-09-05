@@ -162,13 +162,13 @@
   style:width="{resizer.rect.width}px"
   style:height="{resizer.rect.height}px"
   class={css({
-    backgroundColor: 'border.subtle',
+    backgroundColor: 'border.hairline',
     cursor: resizer.direction === 'horizontal' ? 'col-resize' : 'row-resize',
     userSelect: 'none',
     border: 'none',
     padding: '0',
     _hover: {
-      backgroundColor: 'border.strong',
+      backgroundColor: 'border.emphasis',
     },
   })}
   aria-label="크기 조절"

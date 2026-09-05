@@ -170,9 +170,9 @@
 
   const percentColorByState = {
     under: css.raw({ color: 'text.default' }),
-    achieved: css.raw({ color: 'accent.success.default' }),
-    over: css.raw({ color: 'accent.warning.default' }),
-    excess: css.raw({ color: 'accent.danger.default' }),
+    achieved: css.raw({ color: 'success.default' }),
+    over: css.raw({ color: 'warning.default' }),
+    excess: css.raw({ color: 'danger.default' }),
   };
 
   const fieldStyle = css.raw({
@@ -182,13 +182,13 @@
     height: '32px',
     paddingX: '12px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '4px',
     backgroundColor: 'surface.default',
     transition: 'common',
     cursor: 'pointer',
-    _hover: { borderColor: 'border.brand' },
-    _focusVisible: { borderColor: 'border.brand' },
+    _hover: { borderColor: 'border.emphasis' },
+    _focusVisible: { borderColor: 'accent.default' },
   });
 </script>
 
@@ -200,10 +200,10 @@
           marginBottom: '4px',
           padding: '12px',
           borderRadius: '8px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.canvas',
           fontSize: '13px',
           lineHeight: '[1.6]',
-          color: 'text.subtle',
+          color: 'text.muted',
         })}
       >
         완성까지 쓸 글자 수를 목표로 정해 보세요. 마감일을 함께 정하면 오늘 써야 할 분량도 알려드려요.
@@ -219,12 +219,12 @@
         size="sm"
         value={targetInput}
       />
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>자</span>
+      <span class={css({ fontSize: '13px', color: 'text.muted' })}>자</span>
     </div>
 
     <Popover style={fieldStyle} placement="bottom-start">
       {#snippet trigger()}
-        <span class={css({ fontSize: '13px', color: dueDate ? 'text.default' : 'text.faint' })}>
+        <span class={css({ fontSize: '13px', color: dueDate ? 'text.default' : 'text.hint' })}>
           {dueDate ? dayjs(dueDate).format('YYYY. M. D. 마감') : '마감일 없음 (선택)'}
         </span>
       {/snippet}
@@ -269,9 +269,9 @@
       paddingBottom: '6px',
       fontSize: '13px',
       fontWeight: tab === id ? 'semibold' : 'medium',
-      color: tab === id ? 'text.default' : 'text.faint',
+      color: tab === id ? 'text.default' : 'text.muted',
       borderBottomWidth: '2px',
-      borderColor: tab === id ? 'text.default' : 'transparent',
+      borderColor: tab === id ? 'accent.default' : 'transparent',
       transition: 'common',
       cursor: 'pointer',
     })}
@@ -295,7 +295,7 @@
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
     <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>목표</div>
     {#if targetName}
-      <div class={css({ fontSize: '13px', color: 'text.faint', minWidth: '0', truncate: true })}>{targetName}</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted', minWidth: '0', truncate: true })}>{targetName}</div>
     {/if}
   </div>
 
@@ -312,7 +312,7 @@
           flexShrink: '0',
           paddingRight: '24px',
           borderRightWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
         })}
       >
         {#if goal && !editing}
@@ -332,16 +332,16 @@
               {percent}%
             </div>
 
-            <div class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
+            <div class={css({ fontSize: '13px', color: 'text.muted', fontVariantNumeric: 'tabular-nums' })}>
               {comma(currentCount)} / {comma(goal.targetCharacterCount)}자
             </div>
 
             {#if state === 'under' && !overdue}
-              <div class={css({ fontSize: '12px', color: 'text.faint' })}>
+              <div class={css({ fontSize: '12px', color: 'text.hint' })}>
                 {comma(goal.targetCharacterCount - currentCount)}자 남음
               </div>
             {:else if state === 'over' || state === 'excess'}
-              <div class={css({ fontSize: '12px', color: state === 'excess' ? 'text.danger' : 'text.faint' })}>
+              <div class={css({ fontSize: '12px', color: state === 'excess' ? 'danger.default' : 'text.hint' })}>
                 목표보다 {comma(currentCount - goal.targetCharacterCount)}자 초과
               </div>
             {/if}
@@ -357,15 +357,15 @@
                 paddingX: '12px',
                 paddingY: '8px',
                 borderRadius: '8px',
-                backgroundColor: 'surface.muted',
+                backgroundColor: 'surface.canvas',
               })}
             >
-              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: overdueUnder ? 'text.danger' : 'text.default' })}>
+              <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: overdueUnder ? 'danger.default' : 'text.default' })}>
                 {dDayLabel(due, today)}
               </span>
 
               {#if required > 0}
-                <span class={css({ fontSize: '12px', color: 'text.faint' })}>
+                <span class={css({ fontSize: '12px', color: 'text.hint' })}>
                   {overdueUnder ? `${comma(required)}자 남음` : `오늘 ${comma(required)}자 필요`}
                 </span>
               {/if}
@@ -374,7 +374,7 @@
 
           <div class={flex({ gap: '6px', width: 'full' })}>
             <Button style={css.raw({ flex: '1' })} onclick={() => (editing = true)} size="sm" variant="secondary">수정</Button>
-            <Button style={css.raw({ flex: '1', color: 'text.danger' })} onclick={remove} size="sm" variant="secondary">삭제</Button>
+            <Button style={css.raw({ flex: '1', color: 'danger.default' })} onclick={remove} size="sm" variant="secondary">삭제</Button>
           </div>
         {:else}
           {@render goalForm()}
@@ -382,7 +382,7 @@
       </div>
 
       <div class={flex({ flexDirection: 'column', flex: '1', minWidth: '0', gap: '12px', paddingLeft: '24px' })}>
-        <div class={flex({ gap: '16px', borderBottomWidth: '1px', borderColor: 'border.subtle' })} role="tablist">
+        <div class={flex({ gap: '16px', borderBottomWidth: '1px', borderColor: 'border.hairline' })} role="tablist">
           {@render tabButton('trend', '추세')}
           {@render tabButton('history', '기록')}
         </div>

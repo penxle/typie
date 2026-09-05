@@ -95,7 +95,7 @@
       paddingX: '12px',
       paddingTop: '12px',
       paddingBottom: '2px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <div class={css({ position: 'relative' })}>
@@ -112,9 +112,9 @@
             fontSize: '12px',
             fontWeight: 'semibold',
             textAlign: 'center',
-            color: 'text.bright',
-            backgroundColor: 'surface.dark',
-            boxShadow: 'medium',
+            color: 'text.on.inverse',
+            backgroundColor: 'surface.inverse',
+            boxShadow: 'md',
             cursor: 'pointer',
             _after: {
               content: '""',
@@ -122,7 +122,7 @@
               bottom: '-4px',
               left: '[50%]',
               size: '10px',
-              backgroundColor: 'surface.dark',
+              backgroundColor: 'surface.inverse',
               transform: 'translateX(-50%) rotate(45deg)',
             },
           })}

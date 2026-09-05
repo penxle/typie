@@ -476,13 +476,13 @@
     return status === 'canceled' ? `${minutes} 만에 중단` : `${minutes} 만에 멈춤`;
   });
 
-  const headClass = flex({ alignItems: 'baseline', gap: '8px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' });
+  const headClass = flex({ alignItems: 'baseline', gap: '8px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.hairline' });
   const titleClass = css({
     minWidth: '0',
     fontSize: '13px',
     fontWeight: 'semibold',
   });
-  const metaClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const metaClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.hint' });
   const rightClass = flex({ alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: '0' });
   const segmentsClass = flex({ alignItems: 'center', gap: '2px' });
   const segmentStyle = css.raw({ width: '9px', height: '4px', borderRadius: '2px', transition: '[background-color 250ms ease]' });
@@ -493,12 +493,12 @@
     flexGrow: '1',
     minWidth: '0',
     fontSize: '12px',
-    color: 'text.faint',
+    color: 'text.muted',
   });
-  const timeClass = css({ flexShrink: '0', marginLeft: 'auto', fontSize: '11px', color: 'text.disabled' });
+  const timeClass = css({ flexShrink: '0', marginLeft: 'auto', fontSize: '11px', color: 'text.hint' });
   const chevronStyle = css.raw({
     flexShrink: '0',
-    color: 'text.disabled',
+    color: 'text.muted',
     transition: '[transform 150ms cubic-bezier(0.23, 1, 0.32, 1)]',
     _motionReduce: { transition: '[none]' },
   });
@@ -520,7 +520,7 @@
   const ringClass = css(glyphBaseStyle, {
     borderWidth: '2px',
     borderColor: 'border.default',
-    borderTopColor: 'text.subtle',
+    borderTopColor: 'border.emphasis',
     animation: 'spin 1s linear infinite',
     _motionReduce: { animation: 'none' },
   });
@@ -531,7 +531,7 @@
     paddingX: '10px',
     paddingY: '8px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
   });
   const roundHeadStyle = flex.raw({
@@ -539,7 +539,7 @@
     gap: '6px',
     fontSize: '[11.5px]',
     fontWeight: 'semibold',
-    color: 'text.subtle',
+    color: 'text.muted',
   });
   // 스테이지 접힘 행의 한 줄 요약과 같은 문법 — 점검 상자도 접혔을 때 마지막 서술의 첫 줄을 내보인다
   const roundSummaryClass = css({
@@ -547,21 +547,21 @@
     minWidth: '0',
     fontSize: '11px',
     fontWeight: 'normal',
-    color: 'text.faint',
+    color: 'text.muted',
     textAlign: 'left',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   });
-  const retryRowClass = flex({ alignItems: 'center', gap: '6px', marginTop: '10px', fontSize: '12px', color: 'text.subtle' });
+  const retryRowClass = flex({ alignItems: 'center', gap: '6px', marginTop: '10px', fontSize: '12px', color: 'text.muted' });
   const skeletonStyle = css.raw({
     marginTop: '10px',
     height: '12px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     animation: 'pulse 1.6s ease-in-out infinite',
   });
-  const systemClass = css({ marginTop: '10px', fontSize: '[12.5px]', color: 'text.faint' });
+  const systemClass = css({ marginTop: '10px', fontSize: '[12.5px]', color: 'text.muted' });
   const getParent = (element: HTMLElement) => element.parentElement;
   const stageSummaryText = (stage: StageView) => {
     if (stage.status === 'canceled') return '여기서 중단했어요';
@@ -575,12 +575,16 @@
     {#if status === 'running'}
       <span class={ringClass} in:fade={fadeIn} out:fade={fadeOut}></span>
     {:else if status === 'done'}
-      <span class={css(glyphBaseStyle, { backgroundColor: 'text.default', color: 'surface.default' })} in:fade={fadeIn} out:fade={fadeOut}>
+      <span
+        class={css(glyphBaseStyle, { backgroundColor: 'accent.default', color: 'surface.default' })}
+        in:fade={fadeIn}
+        out:fade={fadeOut}
+      >
         <Icon icon={CheckIcon} size={10} />
       </span>
     {:else if status === 'canceled'}
       <span
-        class={css(glyphBaseStyle, { backgroundColor: 'text.faint', color: 'surface.default', fontSize: '8px' })}
+        class={css(glyphBaseStyle, { backgroundColor: 'surface.inverse', color: 'text.on.inverse', fontSize: '8px' })}
         in:fade={fadeIn}
         out:fade={fadeOut}
       >
@@ -589,8 +593,8 @@
     {:else if status === 'failed'}
       <span
         class={css(glyphBaseStyle, {
-          backgroundColor: 'text.default',
-          color: 'surface.default',
+          backgroundColor: 'surface.inverse',
+          color: 'text.on.inverse',
           fontSize: '10px',
           fontWeight: 'bold',
         })}
@@ -685,10 +689,10 @@
       class={css(
         stageNameStyle,
         stage.status === 'pending'
-          ? { color: 'text.disabled', fontWeight: 'medium' }
+          ? { color: 'text.muted', fontWeight: 'medium' }
           : stage.status === 'running'
             ? {}
-            : { color: 'text.subtle' },
+            : { color: 'text.muted' },
       )}
     >
       {stage.label}
@@ -726,13 +730,11 @@
               <span
                 class={css(segmentStyle, status === 'running' ? runningSegmentStyle : {}, {
                   backgroundColor:
-                    status === 'done'
-                      ? 'text.default'
-                      : status === 'running'
-                        ? 'text.faint'
-                        : status === 'pending'
-                          ? 'border.default'
-                          : 'border.strong',
+                    status === 'done' || status === 'running'
+                      ? 'accent.default'
+                      : status === 'pending'
+                        ? 'border.default'
+                        : 'border.emphasis',
                 })}
               ></span>
             {/each}
@@ -781,7 +783,7 @@
     {:else if round !== null && result !== null}
       {#if result.kind !== 'rejected'}
         <div
-          class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' })}
+          class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.hairline' })}
           in:rise={{ block: true }}
         >
           <PrismReviewResult {round} />

@@ -94,8 +94,8 @@
 >
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '20px', paddingY: '16px' })}>
     <div class={flex({ alignItems: 'center', gap: '8px' })}>
-      <Icon style={css.raw({ color: 'text.subtle' })} icon={Trash2Icon} size={16} />
-      <span class={css({ fontSize: '14px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.subtle' })}>휴지통</span>
+      <Icon style={css.raw({ color: 'text.default' })} icon={Trash2Icon} size={16} />
+      <span class={css({ fontSize: '14px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default' })}>휴지통</span>
       {#if entityCount > 0}
         <span
           class={center({
@@ -103,7 +103,7 @@
             height: '20px',
             paddingX: '6px',
             borderRadius: 'full',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             fontSize: '12px',
             fontWeight: 'semibold',
             color: 'text.muted',
@@ -130,7 +130,7 @@
       <TrashTree loading={query.loading} onChange={() => query.refetch()} site$key={site.data} />
     {:else}
       <div class={center({ height: 'full' })}>
-        <span class={css({ fontSize: '13px', color: 'text.disabled' })}>불러오는 중...</span>
+        <span class={css({ fontSize: '13px', color: 'text.muted' })}>불러오는 중...</span>
       </div>
     {/if}
   </div>

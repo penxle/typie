@@ -286,9 +286,9 @@
           borderRadius: '6px',
           paddingX: '6px',
           gap: '2px',
-          color: 'text.subtle',
+          color: 'text.muted',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         }),
       )}
       onclick={toggleCollapse}
@@ -313,7 +313,7 @@
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', width: 'full' })}>
       <div class={css({ width: '110px' })}>
         <SegmentButtons
-          style={css.raw({ opacity: isRunning ? '50' : '100', cursor: isRunning ? 'not-allowed' : 'auto' })}
+          style={css.raw({ opacity: isRunning ? '40' : '100', cursor: isRunning ? 'not-allowed' : 'auto' })}
           items={[
             { label: '타이머', value: 'timer' },
             { label: '스톱워치', value: 'stopwatch' },
@@ -330,11 +330,13 @@
             width: '28px',
             height: '28px',
             borderRadius: '6px',
-            color: notificationEnabled ? 'text.subtle' : 'text.faint',
+            color: notificationEnabled ? 'accent.default' : 'text.muted',
+            backgroundColor: notificationEnabled ? 'surface.active' : 'transparent',
             cursor: 'pointer',
             transition: '[all 0.2s]',
-            _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: notificationEnabled ? 'accent.default' : 'text.default' },
           })}
+          aria-pressed={notificationEnabled}
           onclick={handleNotificationToggle}
           type="button"
           use:tooltip={{ message: notificationEnabled ? '알림 끄기' : '알림 켜기' }}
@@ -347,11 +349,13 @@
             width: '28px',
             height: '28px',
             borderRadius: '6px',
-            color: soundEnabled ? 'text.subtle' : 'text.faint',
+            color: soundEnabled ? 'accent.default' : 'text.muted',
+            backgroundColor: soundEnabled ? 'surface.active' : 'transparent',
             cursor: 'pointer',
             transition: '[all 0.2s]',
-            _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: soundEnabled ? 'accent.default' : 'text.default' },
           })}
+          aria-pressed={soundEnabled}
           onclick={handleSoundToggle}
           type="button"
           use:tooltip={{ message: soundEnabled ? '사운드 끄기' : '사운드 켜기' }}
@@ -364,11 +368,13 @@
             width: '28px',
             height: '28px',
             borderRadius: '6px',
-            color: showSeconds ? 'text.subtle' : 'text.faint',
+            color: showSeconds ? 'accent.default' : 'text.muted',
+            backgroundColor: showSeconds ? 'surface.active' : 'transparent',
             cursor: 'pointer',
             transition: '[all 0.2s]',
-            _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: showSeconds ? 'accent.default' : 'text.default' },
           })}
+          aria-pressed={showSeconds}
           onclick={handleShowSecondsToggle}
           type="button"
           use:tooltip={{ message: showSeconds ? '초 숨기기' : '초 표시' }}
@@ -392,14 +398,14 @@
               fontSize: '[40px]',
               fontWeight: 'extrabold',
               textAlign: 'right',
-              backgroundColor: 'transparent',
+              backgroundColor: 'surface.inset',
               color: 'text.default',
               border: 'none',
               outline: 'none',
               fontVariantNumeric: 'tabular-nums',
               paddingX: '8px',
               borderRadius: '8px',
-              _focus: { backgroundColor: 'surface.subtle' },
+              _focus: { backgroundColor: 'surface.hover' },
             })}
             max="23"
             min="0"
@@ -430,21 +436,21 @@
             type="text"
             value={hours.toString().padStart(2, '0')}
           />
-          <span class={css({ color: 'text.subtle', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
+          <span class={css({ color: 'text.muted', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
           <input
             class={css({
               width: '64px',
               fontSize: '[40px]',
               fontWeight: 'extrabold',
               textAlign: 'center',
-              backgroundColor: 'transparent',
+              backgroundColor: 'surface.inset',
               color: 'text.default',
               border: 'none',
               outline: 'none',
               fontVariantNumeric: 'tabular-nums',
               paddingX: '8px',
               borderRadius: '8px',
-              _focus: { backgroundColor: 'surface.subtle' },
+              _focus: { backgroundColor: 'surface.hover' },
             })}
             max="59"
             min="0"
@@ -476,21 +482,21 @@
             value={minutes.toString().padStart(2, '0')}
           />
           {#if showSeconds}
-            <span class={css({ color: 'text.subtle', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
+            <span class={css({ color: 'text.muted', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
             <input
               class={css({
                 width: '64px',
                 fontSize: '[40px]',
                 fontWeight: 'extrabold',
                 textAlign: 'left',
-                backgroundColor: 'transparent',
+                backgroundColor: 'surface.inset',
                 color: 'text.default',
                 border: 'none',
                 outline: 'none',
                 fontVariantNumeric: 'tabular-nums',
                 paddingX: '8px',
                 borderRadius: '8px',
-                _focus: { backgroundColor: 'surface.subtle' },
+                _focus: { backgroundColor: 'surface.hover' },
               })}
               max="59"
               min="0"
@@ -539,7 +545,7 @@
           >
             {h.toString().padStart(2, '0')}
           </div>
-          <span class={css({ color: 'text.subtle', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
+          <span class={css({ color: 'text.muted', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
           <div
             class={css({
               width: '64px',
@@ -554,7 +560,7 @@
             {m.toString().padStart(2, '0')}
           </div>
           {#if showSeconds}
-            <span class={css({ color: 'text.subtle', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
+            <span class={css({ color: 'text.muted', fontSize: '[40px]', fontWeight: 'extrabold' })}>:</span>
             <div
               class={css({
                 width: '64px',

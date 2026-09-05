@@ -73,7 +73,7 @@
 
   <div class={flex({ flexDirection: 'column', gap: '6px' })}>
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>
         {active.isFolder ? '폴더 목표' : '목표'}
       </div>
 
@@ -81,9 +81,9 @@
         class={css({
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'text.faint',
+          color: 'text.hint',
           transition: 'common',
-          _hover: { color: 'text.subtle' },
+          _hover: { color: 'text.muted' },
         })}
         onclick={() => {
           app.state.goalOpen = [active.entityId];
@@ -104,7 +104,7 @@
         columnGap: '8px',
         rowGap: '2px',
         fontSize: '13px',
-        color: 'text.subtle',
+        color: 'text.muted',
       })}
     >
       <span class={css({ whiteSpace: 'nowrap' })}>{comma(active.current)} / {comma(active.goal.targetCharacterCount)}자</span>
@@ -114,7 +114,7 @@
 
         {#if status}
           <span
-            class={css(status.warning ? { color: 'text.danger' } : { color: 'text.faint' }, { whiteSpace: 'nowrap', marginLeft: 'auto' })}
+            class={css(status.warning ? { color: 'danger.default' } : { color: 'text.hint' }, { whiteSpace: 'nowrap', marginLeft: 'auto' })}
           >
             {status.label}
           </span>

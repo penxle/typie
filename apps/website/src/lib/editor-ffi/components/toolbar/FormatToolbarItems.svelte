@@ -160,7 +160,7 @@
   class={flex({
     alignItems: 'center',
     gap: '10px',
-    opacity: editingDisabled ? '50' : '100',
+    opacity: editingDisabled ? '40' : '100',
     pointerEvents: editingDisabled ? 'none' : 'auto',
   })}
 >
@@ -185,7 +185,7 @@
                 size: '16px',
               })}
             >
-              <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+              <Icon style={css.raw({ color: 'text.muted' })} icon={MinusIcon} size={14} />
             </div>
           {:else}
             <div
@@ -234,9 +234,9 @@
             })}
           >
             {#if isTextBackgroundColorMixed}
-              <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+              <Icon style={css.raw({ color: 'text.muted' })} icon={MinusIcon} size={14} />
             {:else if selectedValue === 'none'}
-              <Icon style={css.raw({ color: 'text.disabled' })} icon={SlashIcon} size={10} />
+              <Icon style={css.raw({ color: 'text.hint' })} icon={SlashIcon} size={10} />
             {/if}
           </div>
         </div>

@@ -50,12 +50,12 @@
       paddingX: '16px',
       paddingY: '10px',
       borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       cursor: onclick ? 'pointer' : 'default',
       textAlign: 'left',
-      backgroundColor: active ? 'surface.subtle' : 'transparent',
+      backgroundColor: active ? 'surface.active' : 'transparent',
       transition: 'common',
-      _hover: onclick ? { backgroundColor: 'surface.subtle' } : undefined,
+      _hover: onclick ? { backgroundColor: 'surface.hover' } : undefined,
     }),
   );
 </script>
@@ -69,7 +69,7 @@
       size={24}
     />
   {:else}
-    <div class={css({ size: '20px', borderRadius: 'full', flexShrink: '0', marginTop: '1px', backgroundColor: 'surface.muted' })}></div>
+    <div class={css({ size: '20px', borderRadius: 'full', flexShrink: '0', marginTop: '1px', backgroundColor: 'accent.subtle' })}></div>
   {/if}
 
   <div class={css({ flexGrow: '1', minWidth: '0' })}>
@@ -79,20 +79,18 @@
       </span>
       {#if root}
         <TimeAgo
-          style={css.raw({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })}
+          style={css.raw({ fontSize: '11px', color: 'text.hint', flexShrink: '0' })}
           timestamp={new Date(root.createdAt).getTime()}
         />
       {/if}
       {#if !locatable}
-        <span
-          class={flex({ alignItems: 'center', gap: '2px', marginLeft: 'auto', fontSize: '11px', color: 'text.faint', flexShrink: '0' })}
-        >
+        <span class={flex({ alignItems: 'center', gap: '2px', marginLeft: 'auto', fontSize: '11px', color: 'text.hint', flexShrink: '0' })}>
           <Icon icon={MapPinOffIcon} size={12} />위치 없음
         </span>
       {:else if resolved || thread.data.comments.length > 1}
         <span class={flex({ alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: '0' })}>
           {#if thread.data.comments.length > 1}
-            <span class={css({ fontSize: '11px', color: 'text.faint' })}>
+            <span class={css({ fontSize: '11px', color: 'text.hint' })}>
               {thread.data.comments.length}
             </span>
           {/if}
@@ -101,7 +99,7 @@
               class={css({
                 fontSize: '11px',
                 lineHeight: '[1.2]',
-                color: 'accent.brand.default',
+                color: 'text.default',
                 _hover: { textDecoration: 'underline' },
               })}
               onclick={(e) => {
@@ -121,7 +119,7 @@
         margin: '0',
         fontSize: '13px',
         lineHeight: '[1.4]',
-        color: 'text.subtle',
+        color: 'text.muted',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
         lineClamp: 2,
@@ -133,7 +131,7 @@
 {/snippet}
 
 {#if onclick}
-  <button class={rootClass} data-comment-panel-item {onclick} type="button">
+  <button class={rootClass} aria-current={active ? 'true' : undefined} data-comment-panel-item {onclick} type="button">
     {@render content()}
   </button>
 {:else}

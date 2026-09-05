@@ -45,7 +45,7 @@
 
   const listClass = flex({ flexDirection: 'column', gap: '4px' });
   const itemClass = css({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '[1.5]' });
-  const noticeClass = css({ color: 'text.faint' });
+  const noticeClass = css({ color: 'text.hint' });
 </script>
 
 {#if loading}

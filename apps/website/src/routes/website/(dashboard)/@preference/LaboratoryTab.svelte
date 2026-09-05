@@ -35,6 +35,6 @@
   </div>
 
   <SettingsCard>
-    <div class={css({ padding: '16px', fontSize: '14px', color: 'text.muted' })}>현재 활성화된 실험실 기능이 없어요.</div>
+    <div class={css({ padding: '16px', fontSize: '14px', color: 'text.hint' })}>현재 활성화된 실험실 기능이 없어요.</div>
   </SettingsCard>
 </div>

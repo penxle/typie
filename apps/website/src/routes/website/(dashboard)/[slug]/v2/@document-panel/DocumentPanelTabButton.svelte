@@ -31,10 +31,10 @@
     size: '24px',
     flexShrink: '0',
     borderRadius: '4px',
-    color: 'text.faint',
+    color: 'text.muted',
     transition: 'common',
-    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-    _expanded: { color: 'text.default!', backgroundColor: 'surface.muted' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+    _expanded: { color: 'text.default!', backgroundColor: 'surface.active', _hover: { backgroundColor: 'surface.active' } },
   })}
   aria-expanded={isExpanded && isTab}
   onclick={() => {

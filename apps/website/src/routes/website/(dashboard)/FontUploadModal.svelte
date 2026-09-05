@@ -195,8 +195,8 @@
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
   <div class={center({ gap: '8px', padding: '12px' })}>
     <div class={center({ gap: '4px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} size={14} />
-      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>폰트 업로드하기</span>
+      <Icon style={css.raw({ color: 'text.default' })} icon={TypeIcon} size={14} />
+      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>폰트 업로드하기</span>
     </div>
 
     <div
@@ -205,13 +205,13 @@
         borderRadius: 'full',
         paddingX: '8px',
         paddingY: '2px',
-        backgroundColor: 'accent.brand.subtle',
+        backgroundColor: 'accent.subtle',
         userSelect: 'none',
       })}
       use:tooltip={{ message: 'FULL ACCESS 전용 기능이에요', placement: 'top', delay: 0 }}
     >
-      <Icon style={css.raw({ color: 'text.brand' })} icon={GemIcon} size={12} />
-      <span class={css({ fontSize: '11px', fontWeight: 'bold', color: 'text.brand' })}>FULL</span>
+      <Icon style={css.raw({ color: 'text.default' })} icon={GemIcon} size={12} />
+      <span class={css({ fontSize: '11px', fontWeight: 'bold', color: 'text.default' })}>FULL</span>
     </div>
   </div>
 
@@ -224,16 +224,16 @@
         gap: '8px',
         borderRadius: '4px',
         fontSize: '14px',
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.canvas',
         padding: '12px',
       })}
     >
       <div class={center({ gap: '4px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} size={12} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint' })}>이용 안내</span>
+        <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={12} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>이용 안내</span>
       </div>
 
-      <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.faint' })}>
+      <ul class={css({ listStyle: 'disc', paddingLeft: '20px', fontSize: '13px', color: 'text.muted' })}>
         <li>TTF 또는 OTF 확장자를 가진 폰트 파일을 업로드할 수 있어요.</li>
         <li>기울어진 폰트는 업로드할 수 없어요.</li>
         <li>업로드된 폰트는 내 글이라면 어디서나 이용할 수 있어요.</li>
@@ -248,14 +248,14 @@
         position: 'relative',
         borderRadius: '8px',
         border: '2px dashed',
-        borderColor: isDragging ? 'accent.brand.default' : 'border.default',
-        backgroundColor: isDragging ? 'accent.brand.subtle' : 'surface.default',
+        borderColor: isDragging ? 'accent.default' : 'border.default',
+        backgroundColor: isDragging ? 'accent.subtle' : 'surface.default',
         padding: '24px',
         textAlign: 'center',
         transition: 'background',
         cursor: inflight ? 'default' : 'pointer',
         _hover: {
-          backgroundColor: isDragging ? 'accent.brand.subtle' : 'surface.subtle',
+          backgroundColor: isDragging ? 'accent.subtle' : 'surface.hover',
         },
       })}
       aria-busy={inflight}
@@ -277,17 +277,17 @@
     >
       <div class={flex({ flexDirection: 'column', gap: '12px', alignItems: 'center' })}>
         {#if inflight}
-          <RingSpinner style={css.raw({ color: 'text.subtle', size: '24px' })} />
-          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.subtle' })}>
+          <RingSpinner style={css.raw({ color: 'text.muted', size: '24px' })} />
+          <div class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>
             폰트 업로드 중... ({uploadProgress.current}/{uploadProgress.total})
           </div>
         {:else}
-          <Icon style={css.raw({ color: isDragging ? 'text.brand' : 'text.subtle' })} icon={UploadIcon} size={24} />
+          <Icon style={css.raw({ color: isDragging ? 'accent.default' : 'text.muted' })} icon={UploadIcon} size={24} />
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-            <div class={css({ fontSize: '14px', fontWeight: 'medium', color: isDragging ? 'text.brand' : 'text.subtle' })}>
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', color: isDragging ? 'accent.default' : 'text.muted' })}>
               클릭하거나 파일을 드래그해서 업로드
             </div>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>TTF 또는 OTF 파일 (여러 개 가능)</div>
+            <div class={css({ fontSize: '12px', color: 'text.muted' })}>TTF 또는 OTF 파일 (여러 개 가능)</div>
           </div>
         {/if}
       </div>

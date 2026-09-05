@@ -42,7 +42,7 @@
   class={css({
     position: 'relative',
     minHeight: '[100vh]',
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
   })}
 >
   <div
@@ -52,7 +52,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -79,7 +79,7 @@
           display: 'block',
           fontSize: '[11px]',
           fontFamily: 'mono',
-          color: 'dark.gray.500',
+          color: 'text.muted',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           marginBottom: '24px',
@@ -92,7 +92,7 @@
         class={css({
           fontSize: { sm: '[36px]', lg: '[56px]' },
           fontWeight: 'medium',
-          color: 'dark.gray.100',
+          color: 'text.default',
           lineHeight: '[1.2]',
           letterSpacing: '[-0.02em]',
           fontFamily: 'Paperlogy',
@@ -101,13 +101,13 @@
       >
         숨기는 건 없습니다.
         <br />
-        <span class={css({ color: 'dark.gray.400' })}>숫자로 증명합니다.</span>
+        <span class={css({ color: 'text.muted' })}>숫자로 증명합니다.</span>
       </h1>
 
       <p
         class={css({
           fontSize: { sm: '16px', lg: '18px' },
-          color: 'dark.gray.400',
+          color: 'text.muted',
           lineHeight: '[1.65]',
           maxWidth: '[480px]',
         })}
@@ -145,7 +145,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -158,7 +158,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -246,9 +246,9 @@
       paddingY: { sm: '80px', lg: '120px' },
       paddingX: { sm: '24px', lg: '80px' },
       borderTopWidth: '1px',
-      borderTopColor: 'dark.gray.900',
+      borderTopColor: 'border.hairline',
       borderBottomWidth: '1px',
-      borderBottomColor: 'dark.gray.900',
+      borderBottomColor: 'border.hairline',
     })}
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
@@ -270,7 +270,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -283,7 +283,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -298,7 +298,7 @@
           grid({ columns: { sm: 1, md: 2 }, gap: '0' }),
           css({
             borderTopWidth: '1px',
-            borderTopColor: 'dark.gray.900',
+            borderTopColor: 'border.hairline',
             opacity: '0',
             transform: 'translate3d(0, 20px, 0)',
             transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s]',
@@ -316,9 +316,9 @@
               paddingY: { sm: '32px', lg: '48px' },
               paddingRight: { sm: '0', lg: '48px' },
               borderBottomWidth: '1px',
-              borderBottomColor: 'dark.gray.900',
+              borderBottomColor: 'border.hairline',
               borderRightWidth: { sm: '0', lg: '1px' },
-              borderRightColor: 'dark.gray.900',
+              borderRightColor: 'border.hairline',
             })}
           >
             <span
@@ -326,7 +326,7 @@
                 display: 'block',
                 fontSize: '[11px]',
                 fontFamily: 'mono',
-                color: 'dark.gray.600',
+                color: 'text.muted',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
                 marginBottom: '16px',
@@ -338,7 +338,7 @@
               class={css({
                 fontSize: { sm: '[48px]', lg: '[64px]' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 lineHeight: '[1]',
                 fontFamily: 'Paperlogy',
                 marginBottom: '12px',
@@ -346,7 +346,7 @@
             >
               {formatWithUnit(query.data.stats.systemServiceDays.current, '일')}
             </p>
-            <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>첫 번째 사용자가 가입한 날부터</p>
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>첫 번째 사용자가 가입한 날부터</p>
           </div>
 
           <div
@@ -354,7 +354,7 @@
               paddingY: { sm: '32px', lg: '48px' },
               paddingLeft: { sm: '0', lg: '48px' },
               borderBottomWidth: '1px',
-              borderBottomColor: 'dark.gray.900',
+              borderBottomColor: 'border.hairline',
             })}
           >
             <span
@@ -362,7 +362,7 @@
                 display: 'block',
                 fontSize: '[11px]',
                 fontFamily: 'mono',
-                color: 'dark.gray.600',
+                color: 'text.muted',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
                 marginBottom: '16px',
@@ -374,7 +374,7 @@
               class={css({
                 fontSize: { sm: '[48px]', lg: '[64px]' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 lineHeight: '[1]',
                 fontFamily: 'Paperlogy',
                 marginBottom: '12px',
@@ -382,7 +382,7 @@
             >
               {formatWithUnit(query.data.stats.documentsTotal.current, '개')}
             </p>
-            <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피에서 작성된 글</p>
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>타이피에서 작성된 글</p>
           </div>
 
           <div
@@ -390,9 +390,9 @@
               paddingY: { sm: '32px', lg: '48px' },
               paddingRight: { sm: '0', lg: '48px' },
               borderBottomWidth: { sm: '1px', md: '0' },
-              borderBottomColor: 'dark.gray.900',
+              borderBottomColor: 'border.hairline',
               borderRightWidth: { sm: '0', lg: '1px' },
-              borderRightColor: 'dark.gray.900',
+              borderRightColor: 'border.hairline',
             })}
           >
             <span
@@ -400,7 +400,7 @@
                 display: 'block',
                 fontSize: '[11px]',
                 fontFamily: 'mono',
-                color: 'dark.gray.600',
+                color: 'text.muted',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
                 marginBottom: '16px',
@@ -412,7 +412,7 @@
               class={css({
                 fontSize: { sm: '[48px]', lg: '[64px]' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 lineHeight: '[1]',
                 fontFamily: 'Paperlogy',
                 marginBottom: '12px',
@@ -420,7 +420,7 @@
             >
               {formatWithUnit(query.data.stats.usersTotal.current, '명')}
             </p>
-            <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피와 함께하는 사용자</p>
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>타이피와 함께하는 사용자</p>
           </div>
 
           <div
@@ -434,7 +434,7 @@
                 display: 'block',
                 fontSize: '[11px]',
                 fontFamily: 'mono',
-                color: 'dark.gray.600',
+                color: 'text.muted',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
                 marginBottom: '16px',
@@ -446,7 +446,7 @@
               class={css({
                 fontSize: { sm: '[48px]', lg: '[64px]' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 lineHeight: '[1]',
                 fontFamily: 'Paperlogy',
                 marginBottom: '12px',
@@ -454,7 +454,7 @@
             >
               {formatWithUnit(query.data.stats.charactersInput.current, '자')}
             </p>
-            <p class={css({ fontSize: '14px', color: 'dark.gray.500' })}>타이피에서 입력된 모든 글자</p>
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>타이피에서 입력된 모든 글자</p>
           </div>
         {:else}
           {#each Array.from({ length: 4 }, (_, i) => i) as i (i)}
@@ -464,16 +464,16 @@
                 paddingRight: { sm: '0', lg: i % 2 === 0 ? '48px' : '0' },
                 paddingLeft: { sm: '0', lg: i % 2 === 1 ? '48px' : '0' },
                 borderBottomWidth: i < 2 ? '1px' : { sm: i === 2 ? '1px' : '0', md: '0' },
-                borderBottomColor: 'dark.gray.900',
+                borderBottomColor: 'border.hairline',
                 borderRightWidth: { sm: '0', lg: i % 2 === 0 ? '1px' : '0' },
-                borderRightColor: 'dark.gray.900',
+                borderRightColor: 'border.hairline',
               })}
             >
               <div
                 class={css({
                   width: '[80px]',
                   height: '11px',
-                  backgroundColor: 'dark.gray.800',
+                  backgroundColor: 'skeleton.base',
                   borderRadius: '2px',
                   marginBottom: '16px',
                   animation: 'pulse 1.5s ease-in-out infinite',
@@ -483,7 +483,7 @@
                 class={css({
                   width: '[160px]',
                   height: { sm: '[48px]', lg: '[64px]' },
-                  backgroundColor: 'dark.gray.900',
+                  backgroundColor: 'skeleton.base/50',
                   borderRadius: '4px',
                   marginBottom: '12px',
                   animation: 'pulse 1.5s ease-in-out infinite',
@@ -493,7 +493,7 @@
                 class={css({
                   width: '[200px]',
                   height: '14px',
-                  backgroundColor: 'dark.gray.800',
+                  backgroundColor: 'skeleton.base',
                   borderRadius: '2px',
                   animation: 'pulse 1.5s ease-in-out infinite',
                 })}
@@ -535,7 +535,7 @@
               display: 'block',
               fontSize: '[11px]',
               fontFamily: 'mono',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               letterSpacing: '[0.1em]',
               textTransform: 'uppercase',
               marginBottom: '24px',
@@ -548,7 +548,7 @@
             class={css({
               fontSize: { sm: '[32px]', lg: '[48px]' },
               fontWeight: 'medium',
-              color: 'dark.gray.100',
+              color: 'text.default',
               lineHeight: '[1.2]',
               letterSpacing: '[-0.02em]',
               fontFamily: 'Paperlogy',
@@ -561,7 +561,7 @@
           <p
             class={css({
               fontSize: { sm: '16px', lg: '18px' },
-              color: 'dark.gray.400',
+              color: 'text.muted',
               lineHeight: '[1.65]',
             })}
           >
@@ -583,7 +583,7 @@
               class={css({
                 fontSize: { sm: '18px', lg: '20px' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 marginBottom: '12px',
                 fontFamily: 'Paperlogy',
               })}
@@ -593,7 +593,7 @@
             <p
               class={css({
                 fontSize: '15px',
-                color: 'dark.gray.400',
+                color: 'text.muted',
                 lineHeight: '[1.65]',
               })}
             >
@@ -606,7 +606,7 @@
               class={css({
                 fontSize: { sm: '18px', lg: '20px' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 marginBottom: '12px',
                 fontFamily: 'Paperlogy',
               })}
@@ -616,7 +616,7 @@
             <p
               class={css({
                 fontSize: '15px',
-                color: 'dark.gray.400',
+                color: 'text.muted',
                 lineHeight: '[1.65]',
               })}
             >
@@ -629,7 +629,7 @@
               class={css({
                 fontSize: { sm: '18px', lg: '20px' },
                 fontWeight: 'medium',
-                color: 'dark.gray.100',
+                color: 'text.default',
                 marginBottom: '12px',
                 fontFamily: 'Paperlogy',
               })}
@@ -639,7 +639,7 @@
             <p
               class={css({
                 fontSize: '15px',
-                color: 'dark.gray.400',
+                color: 'text.muted',
                 lineHeight: '[1.65]',
               })}
             >
@@ -657,7 +657,7 @@
       paddingY: { sm: '80px', lg: '120px' },
       paddingX: { sm: '24px', lg: '80px' },
       borderTopWidth: '1px',
-      borderTopColor: 'dark.gray.900',
+      borderTopColor: 'border.hairline',
     })}
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
@@ -683,7 +683,7 @@
               display: 'block',
               fontSize: '[11px]',
               fontFamily: 'mono',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               letterSpacing: '[0.1em]',
               textTransform: 'uppercase',
               marginBottom: '24px',
@@ -696,7 +696,7 @@
             class={css({
               fontSize: { sm: '[32px]', lg: '[48px]' },
               fontWeight: 'medium',
-              color: 'dark.gray.100',
+              color: 'text.default',
               lineHeight: '[1.2]',
               letterSpacing: '[-0.02em]',
               fontFamily: 'Paperlogy',
@@ -709,7 +709,7 @@
           <p
             class={css({
               fontSize: { sm: '16px', lg: '18px' },
-              color: 'dark.gray.400',
+              color: 'text.muted',
               lineHeight: '[1.65]',
               maxWidth: '[400px]',
             })}
@@ -731,11 +731,11 @@
               paddingY: '16px',
               fontSize: '15px',
               fontWeight: 'semibold',
-              color: 'dark.gray.950',
-              backgroundColor: 'dark.brand.300',
+              color: 'surface.default',
+              backgroundColor: 'accent.default',
               transition: '[all 0.2s ease-out]',
               _hover: {
-                backgroundColor: 'dark.brand.200',
+                backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
               },
             }),
           )}

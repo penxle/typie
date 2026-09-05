@@ -27,12 +27,12 @@
     paddingX: '16px',
     paddingY: '36px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '10px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     textAlign: 'center',
     fontSize: '12px',
-    color: 'text.faint',
+    color: 'text.hint',
   });
 
   const cards = $derived(margin.segmentCards);
@@ -431,7 +431,7 @@
     gap: '4px',
     flex: 'none',
     fontSize: '11px',
-    color: 'text.faint',
+    color: 'text.hint',
     whiteSpace: 'nowrap',
   });
 

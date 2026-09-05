@@ -477,15 +477,15 @@
                     size={24}
                   />
                 {/if}
-                <span class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })}>
+                <span class={css({ fontSize: '13px', color: 'text.hint', _hover: { color: 'text.muted' } })}>
                   {entityView.data.site.name}
                 </span>
               </a>
 
               {#each entityView.data.ancestors as ancestor (ancestor.id)}
                 {#if ancestor.node.__typename === 'FolderView'}
-                  <span class={css({ fontSize: '13px', color: 'text.faint' })}>/</span>
-                  <a class={css({ fontSize: '13px', color: 'text.faint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
+                  <span class={css({ fontSize: '13px', color: 'text.hint' })}>/</span>
+                  <a class={css({ fontSize: '13px', color: 'text.hint', _hover: { color: 'text.muted' } })} href={`/${ancestor.slug}`}>
                     {ancestor.node.name}
                   </a>
                 {/if}
@@ -513,8 +513,8 @@
                   paddingY: '4px',
                   borderRadius: 'full',
                   borderWidth: '1px',
-                  borderColor: 'border.subtle',
-                  backgroundColor: 'surface.subtle',
+                  borderColor: 'border.hairline',
+                  backgroundColor: 'surface.canvas',
                   fontSize: '12px',
                   fontWeight: 'medium',
                   color: 'text.muted',
@@ -526,7 +526,7 @@
             {/if}
 
             <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-              <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.faint' })}>
+              <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.hint' })}>
                 {#if document.allowReaction && document.reactions.length > 0}
                   <div class={flex({ align: 'center', gap: '3px' })}>
                     <Icon icon={SmileIcon} />
@@ -684,7 +684,7 @@
               />
 
               {#if form.errors.password}
-                <p class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.password}</p>
+                <p class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{form.errors.password}</p>
               {/if}
             </div>
 

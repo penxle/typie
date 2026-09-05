@@ -79,7 +79,7 @@
                   gap: '14px',
                   paddingY: '12px',
                   cursor: 'pointer',
-                  _hover: { '& .folder-name': { color: 'text.muted' } },
+                  _hover: { '& .folder-name': { color: 'text.default' } },
                 })}
                 href={`/${entity.slug}`}
               >
@@ -89,7 +89,7 @@
                       flexShrink: '0',
                       size: '48px',
                       borderRadius: '8px',
-                      backgroundColor: 'surface.subtle',
+                      backgroundColor: 'surface.canvas',
                       overflow: 'hidden',
                     })}
                   >
@@ -108,10 +108,10 @@
                       flexShrink: '0',
                       size: '48px',
                       borderRadius: '8px',
-                      backgroundColor: 'surface.subtle',
+                      backgroundColor: 'surface.canvas',
                     })}
                   >
-                    <Icon style={css.raw({ color: 'text.faint' })} icon={FolderIcon} size={18} />
+                    <Icon style={css.raw({ color: 'text.hint' })} icon={FolderIcon} size={18} />
                   </div>
                 {/if}
 
@@ -128,7 +128,7 @@
                     <span class="folder-name">{entity.node.name}</span>
                   </p>
                   {#if entity.node.folderCount > 0 || entity.node.documentCount > 0}
-                    <p class={css({ marginTop: '2px', fontSize: '13px', color: 'text.faint' })}>
+                    <p class={css({ marginTop: '2px', fontSize: '13px', color: 'text.hint' })}>
                       {#if entity.node.folderCount > 0}
                         폴더 {entity.node.folderCount}개
                       {/if}
@@ -142,7 +142,7 @@
                   {/if}
                 </div>
 
-                <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={16} />
+                <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={ChevronRightIcon} size={16} />
               </a>
             {/if}
           {/each}
@@ -160,9 +160,9 @@
                   gap: '24px',
                   paddingY: '20px',
                   borderTopWidth: index === 0 ? '0' : '1px',
-                  borderColor: 'border.subtle',
+                  borderColor: 'border.hairline',
                   cursor: 'pointer',
-                  _hover: { '& .document-title': { color: 'text.muted' } },
+                  _hover: { '& .document-title': { color: 'text.default' } },
                 })}
                 href={`/${entity.slug}`}
               >
@@ -170,7 +170,7 @@
                   <div class={flex({ alignItems: 'center', gap: '6px' })}>
                     {#if entity.node.hasPassword}
                       <Icon
-                        style={css.raw({ flexShrink: '0', color: 'text.faint' })}
+                        style={css.raw({ flexShrink: '0', color: 'text.muted' })}
                         icon={entity.node.passwordUnlocked ? LockOpenIcon : LockIcon}
                         size={14}
                       />
@@ -199,7 +199,7 @@
                         fontSize: '14px',
                         fontWeight: 'medium',
                         lineHeight: '[1.5]',
-                        color: 'text.subtle',
+                        color: 'text.muted',
                         lineClamp: '2',
                       })}
                     >
@@ -222,7 +222,7 @@
                   {/if}
 
                   {#if query.data.siteView.dateDisplay !== 'NONE'}
-                    <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.faint' })}>
+                    <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.hint' })}>
                       {dayjs(query.data.siteView.dateDisplay === 'CREATED_AT' ? entity.node.createdAt : entity.node.updatedAt).format(
                         'YYYY. M. D.',
                       )}
@@ -237,7 +237,7 @@
                       width: { base: '72px', md: '100px' },
                       aspectRatio: '1/1',
                       borderRadius: '6px',
-                      backgroundColor: 'surface.subtle',
+                      backgroundColor: 'surface.canvas',
                       overflow: 'hidden',
                     })}
                   >
@@ -265,7 +265,7 @@
           paddingY: '80px',
         })}
       >
-        <p class={css({ fontSize: '14px', color: 'text.faint' })}>공유된 콘텐츠가 없어요</p>
+        <p class={css({ fontSize: '14px', color: 'text.hint' })}>공유된 콘텐츠가 없어요</p>
       </div>
     {/if}
   </div>

@@ -83,9 +83,9 @@
     fontSize: '13px',
     fontWeight: 'medium',
     color: 'text.default',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.inset',
     transition: 'common',
-    _hover: { backgroundColor: 'interactive.hover' },
+    _hover: { backgroundColor: 'surface.hover' },
   });
   const qrSvg = toSvgSource(generate(`${env.PUBLIC_WEBSITE_URL}/app`), {
     on: 'currentColor',
@@ -95,7 +95,7 @@
     height: 80,
   });
   const sectionTitleClass = css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' });
-  const sectionNoteClass = css({ fontSize: '12px', color: 'text.faint' });
+  const sectionNoteClass = css({ fontSize: '12px', color: 'text.hint' });
 
   const close = () => {
     open = false;
@@ -221,10 +221,7 @@
       borderRadius: '8px',
       borderWidth: '1px',
       borderColor: open ? 'border.default' : 'transparent',
-      boxShadow: open ? '[0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06)]' : '[none]',
-      _dark: {
-        boxShadow: open ? '[0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2)]' : '[none]',
-      },
+      boxShadow: open ? 'md' : '[none]',
       backgroundColor: open ? 'surface.default' : 'transparent',
       transitionProperty: '[border-color, box-shadow, background-color]',
       transitionDuration: '200ms',
@@ -271,10 +268,10 @@
               borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 'medium',
-              color: 'text.danger',
+              color: 'danger.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               mixpanel.track('logout', { via: 'sidebar' });
@@ -306,7 +303,7 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               close();
@@ -314,9 +311,9 @@
             }}
             type="button"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SmartphoneIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SmartphoneIcon} size={14} />
             <span>타이피 앱</span>
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={QrCodeIcon} size={12} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={QrCodeIcon} size={12} />
           </button>
 
           <a
@@ -330,15 +327,15 @@
               fontWeight: 'medium',
               color: 'text.default',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             href="https://penxle.channel.io"
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={MessageCircleQuestionIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={MessageCircleQuestionIcon} size={14} />
             <span>고객센터</span>
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
           </a>
 
           <button
@@ -353,7 +350,7 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               close();
@@ -362,7 +359,7 @@
             }}
             type="button"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={MessageSquareIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={MessageSquareIcon} size={14} />
             <span>의견 보내기</span>
           </button>
 
@@ -380,9 +377,11 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              backgroundColor: submenuOpen ? 'surface.muted' : 'transparent',
-              _hover: { backgroundColor: 'surface.muted' },
+              backgroundColor: submenuOpen ? 'surface.hover' : 'transparent',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
+            aria-expanded={submenuOpen}
+            aria-haspopup="menu"
             onpointerenter={() => {
               submenuOpen = true;
             }}
@@ -392,9 +391,9 @@
             role="button"
             tabindex="0"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={EllipsisIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={EllipsisIcon} size={14} />
             <span>더 보기</span>
-            <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={12} />
+            <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.default' })} icon={ChevronRightIcon} size={12} />
           </div>
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
@@ -408,7 +407,7 @@
               paddingBottom: '4px',
             })}
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={EclipseIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={EclipseIcon} size={14} />
             <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>테마</span>
             <div
               class={flex({
@@ -416,7 +415,7 @@
                 alignItems: 'center',
                 borderRadius: '6px',
                 padding: '2px',
-                backgroundColor: 'surface.muted',
+                backgroundColor: 'surface.inset',
               })}
             >
               {#each [{ value: 'auto' as const, icon: MonitorIcon }, { value: 'light' as const, icon: SunIcon }, { value: 'dark' as const, icon: MoonIcon }] as t (t.value)}
@@ -424,12 +423,12 @@
                   class={center({
                     borderRadius: '4px',
                     size: '20px',
-                    color: theme.currentTheme === t.value ? 'text.default' : 'text.faint',
-                    backgroundColor: theme.currentTheme === t.value ? 'surface.default' : 'transparent',
-                    boxShadow: theme.currentTheme === t.value ? 'small' : '[none]',
+                    color: theme.currentTheme === t.value ? 'text.default' : 'text.muted',
+                    backgroundColor: theme.currentTheme === t.value ? 'surface.active' : 'transparent',
+                    boxShadow: theme.currentTheme === t.value ? 'sm' : '[none]',
                     transition: 'common',
                     cursor: 'pointer',
-                    _hover: theme.currentTheme === t.value ? {} : { color: 'text.subtle' },
+                    _hover: theme.currentTheme === t.value ? {} : { color: 'text.default' },
                   })}
                   onclick={() => {
                     mixpanel.track('switch_theme', { old: theme.currentTheme, new: t.value, via: 'sidebar' });
@@ -455,11 +454,11 @@
                 fontWeight: 'medium',
                 color: 'text.default',
                 transition: 'common',
-                _hover: { backgroundColor: 'surface.muted' },
+                _hover: { backgroundColor: 'surface.hover' },
               })}
               href="/admin"
             >
-              <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ShieldUserIcon} size={14} />
+              <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ShieldUserIcon} size={14} />
               <span>어드민</span>
             </a>
           {/if}
@@ -476,7 +475,7 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               close();
@@ -485,7 +484,7 @@
             }}
             type="button"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SettingsIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SettingsIcon} size={14} />
             <span>설정</span>
           </button>
         </div>
@@ -509,7 +508,7 @@
         cursor: 'pointer',
         transition: 'common',
         ...(!open && {
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         }),
       })}
       onclick={() => {
@@ -530,7 +529,7 @@
         style={css.raw({
           marginLeft: 'auto',
           flexShrink: '0',
-          color: 'text.faint',
+          color: 'text.default',
           transitionProperty: '[transform]',
           transitionDuration: '200ms',
           transitionTimingFunction: 'ease',
@@ -551,10 +550,7 @@
       borderRadius: '8px',
       padding: '4px',
       backgroundColor: 'surface.default',
-      boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08)]',
-      _dark: {
-        boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.25)]',
-      },
+      boxShadow: 'lg',
       zIndex: 'tooltip',
       pointerEvents: 'auto',
       transformOrigin: 'left top',
@@ -578,15 +574,15 @@
           color: 'text.default',
           whiteSpace: 'nowrap',
           transition: 'common',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         href="https://discord.gg/MteQ9AMa4B"
         rel="noopener noreferrer"
         target="_blank"
       >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={DiscordIcon} size={14} />
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={DiscordIcon} size={14} />
         <span>유저 커뮤니티</span>
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
       </a>
     {/if}
 
@@ -602,15 +598,15 @@
         color: 'text.default',
         whiteSpace: 'nowrap',
         transition: 'common',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       href="https://x.com/typieofficial"
       rel="noopener noreferrer"
       target="_blank"
     >
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={Repeat2Icon} size={14} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={Repeat2Icon} size={14} />
       <span class={flex({ alignItems: 'center', gap: '4px' })}>공식 <Icon icon={XBrandIcon} size={10} /></span>
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
     </a>
 
     <button
@@ -627,7 +623,7 @@
         whiteSpace: 'nowrap',
         transition: 'common',
         cursor: 'pointer',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         close();
@@ -636,7 +632,7 @@
       }}
       type="button"
     >
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={NewspaperIcon} size={14} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={NewspaperIcon} size={14} />
       <span>업데이트 노트</span>
     </button>
 
@@ -656,7 +652,7 @@
         whiteSpace: 'nowrap',
         transition: 'common',
         cursor: 'pointer',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         close();
@@ -665,7 +661,7 @@
       }}
       type="button"
     >
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={KeyboardIcon} size={14} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={KeyboardIcon} size={14} />
       <span>단축키</span>
     </button>
   </div>
@@ -681,7 +677,7 @@
   <div class={flex({ direction: 'column', gap: '20px', padding: '32px' })}>
     <div class={flex({ direction: 'column', alignItems: 'center', gap: '4px' })}>
       <span class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default' })}>타이피 - 언제든 이어 쓰는 글쓰기 앱</span>
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>데스크톱과 모바일, 어디서든 이어 쓰세요.</span>
+      <span class={css({ fontSize: '13px', color: 'text.muted' })}>데스크톱과 모바일, 어디서든 이어 쓰세요.</span>
     </div>
 
     <div class={flex({ direction: 'column', gap: '12px' })}>
@@ -729,7 +725,7 @@
           class={css({
             alignSelf: 'center',
             fontSize: '12px',
-            color: 'text.faint',
+            color: 'text.muted',
             transition: 'common',
             _hover: { color: 'text.default' },
           })}

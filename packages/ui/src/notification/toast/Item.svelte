@@ -18,7 +18,7 @@
     </div>
 
     {#if description}
-      <div class={css({ fontSize: '13px', color: 'text.faint' })}>{description}</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>{description}</div>
     {/if}
   </div>
 </Component>

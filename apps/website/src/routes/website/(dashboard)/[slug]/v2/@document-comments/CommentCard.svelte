@@ -118,7 +118,7 @@
       size={24}
     />
   {:else}
-    <div class={css({ size: '24px', borderRadius: 'full', flexShrink: '0', marginTop: '1px', backgroundColor: 'surface.muted' })}></div>
+    <div class={css({ size: '24px', borderRadius: 'full', flexShrink: '0', marginTop: '1px', backgroundColor: 'accent.subtle' })}></div>
   {/if}
 
   <div class={css({ flexGrow: '1', minWidth: '0' })}>
@@ -129,7 +129,7 @@
         {comment.data.user.name}
       </span>
       <TimeAgo
-        style={css.raw({ fontSize: '11px', color: 'text.faint', flexShrink: '0' })}
+        style={css.raw({ fontSize: '11px', color: 'text.hint', flexShrink: '0' })}
         timestamp={new Date(comment.data.createdAt).getTime()}
       />
 
@@ -141,32 +141,28 @@
           class={css({ marginLeft: 'auto', opacity: '0', transition: 'common', _groupHover: { opacity: '100' } })}
         >
           <Menu
-            style={css.raw({ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' })}
+            style={css.raw({
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              size: '20px',
+              padding: '0',
+              borderWidth: '0',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              color: 'text.muted',
+              backgroundColor: 'transparent',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+              _expanded: { backgroundColor: 'surface.active', color: 'text.default' },
+            })}
             listStyle={css.raw({ minWidth: '100px' })}
             offset={4}
             placement="bottom-end"
             bind:open={menuOpen}
           >
             {#snippet button()}
-              <button
-                class={css(
-                  {
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    size: '20px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    color: 'text.faint',
-                    transition: 'common',
-                    _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
-                  },
-                  menuOpen && { backgroundColor: 'surface.muted', color: 'text.subtle' },
-                )}
-                type="button"
-              >
-                <Icon icon={EllipsisIcon} size={12} />
-              </button>
+              <Icon icon={EllipsisIcon} size={12} />
             {/snippet}
 
             {#if canEdit}
@@ -204,13 +200,13 @@
             fontSize: '13px',
             lineHeight: '[1.4]',
             color: 'text.default',
-            backgroundColor: 'surface.subtle',
+            backgroundColor: 'surface.default',
             resize: 'none',
             minHeight: '36px',
             maxHeight: '120px',
             outline: 'none',
             transition: 'common',
-            _focus: { borderColor: 'accent.brand.default', backgroundColor: 'surface.default' },
+            _focus: { borderColor: 'accent.default', backgroundColor: 'surface.default' },
           })}
           onkeydown={handleKeydown}
           rows={1}
@@ -230,10 +226,10 @@
               size: '22px',
               borderRadius: 'full',
               cursor: 'pointer',
-              backgroundColor: 'surface.subtle',
-              color: 'text.faint',
+              backgroundColor: 'surface.default',
+              color: 'text.muted',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             })}
             onclick={cancel}
             type="button"
@@ -254,12 +250,12 @@
               hasEditText
                 ? {
                     cursor: 'pointer',
-                    backgroundColor: 'accent.brand.default',
-                    color: 'text.bright',
-                    _hover: { backgroundColor: 'accent.brand.hover' },
-                    _active: { backgroundColor: 'accent.brand.active' },
+                    backgroundColor: 'accent.default',
+                    color: 'surface.default',
+                    _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
+                    _active: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 80%, black)]' },
                   }
-                : { cursor: 'default', backgroundColor: 'surface.muted', color: 'text.disabled' },
+                : { cursor: 'default', backgroundColor: 'accent.default', color: 'surface.default', opacity: '40' },
             )}
             disabled={!hasEditText}
             onclick={() => void save()}
@@ -276,7 +272,7 @@
           margin: '0',
           fontSize: '13px',
           lineHeight: '[1.4]',
-          color: 'text.subtle',
+          color: 'text.muted',
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
           userSelect: 'text',

@@ -859,7 +859,7 @@
           width: 'full',
           inset: '0',
           borderRadius: '12px',
-          backgroundColor: 'black/15',
+          backgroundColor: 'accent.subtle',
           pointerEvents: 'auto',
           zIndex: '[-1]',
         })}
@@ -942,10 +942,10 @@
             backdropBlur: '6px',
           })}
         >
-          <div class={center({ size: '48px', borderRadius: '12px', backgroundColor: 'surface.muted', color: 'text.faint' })}>
+          <div class={center({ size: '48px', borderRadius: '12px', backgroundColor: 'surface.inset', color: 'text.hint' })}>
             <Icon icon={LayoutDashboardIcon} size={20} />
           </div>
-          <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center', lineHeight: '[1.6]' })}>
+          <p class={css({ fontSize: '13px', color: 'text.hint', textAlign: 'center', lineHeight: '[1.6]' })}>
             위젯 편집을 눌러
             <br />
             원하는 위젯을 추가해보세요
@@ -980,11 +980,11 @@
                     backgroundColor: 'surface.default',
                     borderWidth: '1px',
                     borderColor: 'border.default',
-                    color: 'text.subtle',
+                    color: 'text.muted',
                     transitionProperty: '[opacity]',
                     transitionDuration: '200ms',
                     transform: 'translate(-8px, -8px)',
-                    _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+                    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                     zIndex: '10',
                     cursor: 'pointer',
                   })}
@@ -1090,11 +1090,13 @@
     pointerEvents: 'auto',
     cursor: 'pointer',
     borderWidth: '0',
-    color: isHidden ? 'text.faint' : 'text.default',
-    _hover: { color: 'text.default', backgroundColor: 'surface.dark/10' },
+    backgroundColor: isHidden ? 'transparent' : 'surface.active',
+    color: isHidden ? 'text.muted' : 'text.default',
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
     transition: '[background-color 0.2s, color 0.2s]',
   })}
   aria-label={isHidden ? '위젯 보기' : '위젯 숨기기'}
+  aria-pressed={!isHidden}
   onclick={() => {
     app.preference.current.widgetHidden = !isHidden;
     mixpanel.track('toggle_widget_visibility', {
@@ -1152,11 +1154,11 @@
               backgroundColor: 'surface.default',
               borderWidth: '1px',
               borderColor: 'border.default',
-              color: 'text.subtle',
+              color: 'text.muted',
               transitionProperty: '[opacity]',
               transitionDuration: '200ms',
               transform: 'translate(-8px, -8px)',
-              _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
               zIndex: '10',
               cursor: 'pointer',
             })}

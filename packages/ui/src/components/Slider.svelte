@@ -48,9 +48,9 @@
     width: 'full',
     height: '8px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.inset',
     cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? '50' : '100',
+    opacity: disabled ? '40' : '100',
   })}
   aria-disabled={disabled}
   aria-valuemax={max}
@@ -86,7 +86,7 @@
       left: '0',
       height: 'full',
       borderRadius: '4px',
-      backgroundColor: 'accent.brand.default',
+      backgroundColor: 'accent.default',
       transition: isDragging ? undefined : 'common',
     })}
   ></div>
@@ -103,8 +103,8 @@
       borderRadius: 'full',
       backgroundColor: 'surface.default',
       borderWidth: '2px',
-      borderColor: 'accent.brand.default',
-      boxShadow: '[0 2px 4px rgba(0,0,0,0.1)]',
+      borderColor: 'accent.default',
+      boxShadow: 'sm',
       cursor: disabled ? 'not-allowed' : 'grab',
       transition: isDragging ? undefined : 'common',
     })}

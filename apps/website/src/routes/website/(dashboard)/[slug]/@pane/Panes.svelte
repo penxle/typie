@@ -120,7 +120,7 @@
     position: 'relative',
     width: 'full',
     height: 'full',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.canvas',
     overflow: 'hidden',
   })}
 >
@@ -176,7 +176,7 @@
           class={css({
             position: 'absolute',
             pointerEvents: 'none',
-            boxShadow: '[0 0 0 1px token(colors.border.default)]',
+            boxShadow: '[0 0 0 1px token(colors.accent.default)]',
             zIndex: 'overEditor',
           })}
           out:fade|global={{
@@ -205,10 +205,10 @@
           pointerEvents: 'none',
           transition:
             '[left 150ms cubic-bezier(0.2,0,0,1), top 150ms cubic-bezier(0.2,0,0,1), width 150ms cubic-bezier(0.2,0,0,1), height 150ms cubic-bezier(0.2,0,0,1)]',
-          backgroundColor: { base: 'accent.info.default/8', _dark: 'accent.info.default/15' },
+          backgroundColor: { base: 'accent.default/8', _dark: 'accent.default/15' },
           borderWidth: '[1.5px]',
           borderStyle: 'solid',
-          borderColor: { base: 'accent.info.default/30', _dark: 'accent.info.default/40' },
+          borderColor: { base: 'accent.default/30', _dark: 'accent.default/40' },
           borderRadius: '8px',
           zIndex: 'ghost',
         })}

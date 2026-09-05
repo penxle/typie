@@ -20,8 +20,8 @@
     },
     variants: {
       color: {
-        primary: { backgroundColor: 'interactive.hover' },
-        secondary: { backgroundColor: 'surface.muted' },
+        primary: { backgroundColor: 'border.default' },
+        secondary: { backgroundColor: 'border.hairline' },
       },
     },
   });

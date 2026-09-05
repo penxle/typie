@@ -73,7 +73,7 @@
 
 {#snippet category(cat: CheatsheetCategory)}
   <div>
-    <h3 class={css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.faint', marginBottom: '8px' })}>{cat.title}</h3>
+    <h3 class={css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.muted', marginBottom: '8px' })}>{cat.title}</h3>
 
     <div class={flex({ direction: 'column', gap: '2px' })}>
       {#each cat.shortcuts as shortcut (shortcut.id)}
@@ -89,7 +89,7 @@
           <div class={flex({ alignItems: 'center', gap: '3px', flexShrink: '0' })}>
             {#each shortcut.sequences as sequence, sequenceIndex (sequenceIndex)}
               {#if sequenceIndex > 0}
-                <span class={css({ paddingX: '2px', fontSize: '11px', color: 'text.faint' })}>/</span>
+                <span class={css({ paddingX: '2px', fontSize: '11px', color: 'text.hint' })}>/</span>
               {/if}
               <div class={flex({ alignItems: 'center', gap: '3px' })}>
                 {#each sequence.keys as key, keyIndex (keyIndex)}
@@ -104,11 +104,11 @@
                       paddingY: '4px',
                       fontSize: '11px',
                       lineHeight: '[1]',
-                      color: 'text.subtle',
+                      color: 'text.muted',
                       borderWidth: '1px',
-                      borderColor: 'border.subtle',
+                      borderColor: 'border.hairline',
                       borderRadius: '4px',
-                      backgroundColor: 'surface.subtle',
+                      backgroundColor: 'surface.inset',
                     })}
                   >
                     {#if typeof displayedKey === 'string'}
@@ -142,7 +142,7 @@
         class={css({
           padding: '0',
           fontSize: '12px',
-          color: 'text.subtle',
+          color: 'text.muted',
           borderWidth: '0',
           backgroundColor: 'transparent',
           cursor: 'pointer',

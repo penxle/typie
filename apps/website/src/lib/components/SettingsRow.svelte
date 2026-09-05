@@ -18,7 +18,7 @@
       {@render label()}
     </div>
     {#if description}
-      <div class={css({ fontSize: '12px', fontWeight: 'normal', color: 'text.subtle', marginBottom: '12px' })}>
+      <div class={css({ fontSize: '12px', fontWeight: 'normal', color: 'text.muted', marginBottom: '12px' })}>
         {@render description()}
       </div>
     {/if}
@@ -48,14 +48,14 @@
         {@render label()}
       </div>
       {#if description}
-        <div class={css({ fontSize: '12px', fontWeight: 'normal', color: 'text.subtle', marginTop: '2px' })}>
+        <div class={css({ fontSize: '12px', fontWeight: 'normal', color: 'text.muted', marginTop: '2px' })}>
           {@render description()}
         </div>
       {/if}
     </div>
 
     <div class={css({ flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' })}>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>
         {@render value()}
       </div>
       {#if error}

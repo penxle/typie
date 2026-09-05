@@ -22,7 +22,7 @@
   const THUMB_OPACITY = 75;
   const THUMB_IDLE = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 18%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
   const THUMB_ENGAGED = `color-mix(in srgb, color-mix(in srgb, ${token('colors.surface.inverse')} 30%, ${token('colors.surface.default')}) ${THUMB_OPACITY}%, transparent)`;
-  const INDICATOR_BASE = `color-mix(in srgb, ${token('colors.surface.default')} 50%, ${token('colors.surface.subtle')} 50%)`;
+  const INDICATOR_BASE = `color-mix(in srgb, ${token('colors.surface.default')} 50%, ${token('colors.surface.canvas')} 50%)`;
   const INDICATOR_SURFACE = `color-mix(in srgb, ${INDICATOR_BASE} 75%, transparent)`;
 
   const recentMarkRecipe = cva({
@@ -36,9 +36,9 @@
     },
     variants: {
       kind: {
-        added: { backgroundColor: 'edit.added' },
-        modified: { backgroundColor: 'edit.modified' },
-        deleted: { backgroundColor: 'edit.deleted' },
+        added: { backgroundColor: 'success.default' },
+        modified: { backgroundColor: 'warning.default' },
+        deleted: { backgroundColor: 'danger.default' },
       },
     },
   });
@@ -465,7 +465,7 @@
       paddingY: '4px',
       fontSize: '11px',
       whiteSpace: 'nowrap',
-      color: 'text.faint',
+      color: 'text.hint',
       fontVariantNumeric: 'tabular-nums',
       transition: 'opacity',
       transitionDuration: '300ms',

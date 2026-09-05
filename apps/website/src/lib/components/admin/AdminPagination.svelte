@@ -24,27 +24,27 @@
     justifyContent: 'space-between',
     padding: '16px',
     borderTopWidth: '2px',
-    borderColor: 'amber.500',
+    borderColor: 'border.default',
   })}
 >
-  <div class={css({ fontSize: '11px', color: 'amber.500' })}>
+  <div class={css({ fontSize: '11px', color: 'text.muted' })}>
     SHOWING {startIndex}-{endIndex} OF {totalCount}
   </div>
   <div class={flex({ gap: '12px' })}>
     <button
       class={css({
         borderWidth: '1px',
-        borderColor: 'amber.500',
+        borderColor: 'border.default',
         padding: '6px',
         backgroundColor: 'transparent',
-        color: pageNumber === 1 ? 'gray.400' : 'amber.500',
+        color: 'text.muted',
         cursor: pageNumber === 1 ? 'not-allowed' : 'pointer',
+        _disabled: { opacity: '40' },
         _hover:
           pageNumber === 1
             ? {}
             : {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
+                backgroundColor: 'surface.hover',
               },
       })}
       disabled={pageNumber === 1}
@@ -56,17 +56,17 @@
     <button
       class={css({
         borderWidth: '1px',
-        borderColor: 'amber.500',
+        borderColor: 'border.default',
         padding: '6px',
         backgroundColor: 'transparent',
-        color: pageNumber === totalPages ? 'gray.400' : 'amber.500',
+        color: 'text.muted',
         cursor: pageNumber === totalPages ? 'not-allowed' : 'pointer',
+        _disabled: { opacity: '40' },
         _hover:
           pageNumber === totalPages
             ? {}
             : {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
+                backgroundColor: 'surface.hover',
               },
       })}
       disabled={pageNumber === totalPages}

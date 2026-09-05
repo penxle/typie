@@ -472,9 +472,9 @@
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',
-      color: 'text.subtle',
+      color: 'text.muted',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     타임라인
@@ -483,11 +483,11 @@
   <div class={flex({ flexDirection: 'column', flex: '1', overflow: 'auto' })}>
     {#if isLoading}
       <div class={center({ padding: '32px' })}>
-        <RingSpinner style={css.raw({ size: '24px', color: 'text.subtle' })} />
+        <RingSpinner style={css.raw({ size: '24px', color: 'text.muted' })} />
       </div>
     {:else if headsAsc.length === 0}
-      <div class={center({ padding: '32px', flexDirection: 'column', gap: '8px', color: 'text.subtle', fontSize: '13px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={IconClockFading} size={24} />
+      <div class={center({ padding: '32px', flexDirection: 'column', gap: '8px', color: 'text.muted', fontSize: '13px' })}>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={IconClockFading} size={24} />
         아직 버전 기록이 없습니다
       </div>
     {:else}
@@ -500,12 +500,12 @@
                 top: '0',
                 padding: '8px',
                 paddingX: '20px',
-                backgroundColor: 'surface.subtle',
+                backgroundColor: 'surface.canvas',
                 borderBottomWidth: '1px',
-                borderColor: 'surface.muted',
+                borderColor: 'border.hairline',
                 fontSize: '12px',
                 fontWeight: 'semibold',
-                color: 'text.subtle',
+                color: 'text.muted',
                 zIndex: '1',
               })}
             >
@@ -519,13 +519,14 @@
               <div
                 class={flex({
                   alignItems: 'center',
-                  backgroundColor: isSelected ? 'surface.muted' : 'transparent',
+                  backgroundColor: isSelected ? 'surface.active' : 'transparent',
                   borderLeftWidth: '3px',
-                  borderLeftColor: isSelected ? 'accent.brand.default' : 'transparent',
+                  borderLeftColor: isSelected ? 'accent.default' : 'transparent',
                   transition: 'all',
                   transitionDuration: '150ms',
-                  _hover: { backgroundColor: isSelected ? 'surface.muted' : 'surface.subtle' },
+                  _hover: { backgroundColor: 'surface.hover' },
                 })}
+                aria-current={isSelected ? 'true' : undefined}
               >
                 <button
                   class={css({
@@ -543,7 +544,7 @@
                   type="button"
                 >
                   <Icon
-                    style={css.raw({ flexShrink: '0', color: isSelected ? 'accent.brand.default' : 'text.subtle' })}
+                    style={css.raw({ flexShrink: '0', color: isSelected ? 'accent.default' : 'text.muted' })}
                     icon={ClockRewindIcon}
                     size={14}
                   />
@@ -566,26 +567,26 @@
                           aria-label="통계 제외됨"
                           use:tooltip={{ message: '통계 제외됨', placement: 'top' }}
                         >
-                          <Icon style={css.raw({ color: 'text.faint' })} icon={BarChart3OffIcon} size={12} />
+                          <Icon style={css.raw({ color: 'text.muted' })} icon={BarChart3OffIcon} size={12} />
                         </div>
                       {/if}
                     </div>
                     <div class={flex({ alignItems: 'center', gap: '6px', minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap' })}>
-                      <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.subtle' })}>
+                      <div class={css({ flexShrink: '0', fontSize: '11px', color: 'text.muted' })}>
                         {time.fromNow()}
                       </div>
                       {#if head.additions}
                         <div class={center({ flexShrink: '0' })} in:fly={{ y: 10, duration: 150 }}>
-                          <Icon style={css.raw({ size: '10px', color: 'text.success' })} icon={PlusIcon} />
-                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.success' })}>
+                          <Icon style={css.raw({ size: '10px', color: 'success.default' })} icon={PlusIcon} />
+                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'success.default' })}>
                             {head.additions.toLocaleString()}
                           </span>
                         </div>
                       {/if}
                       {#if head.deletions}
                         <div class={center({ flexShrink: '0' })} in:fly={{ y: 10, duration: 150 }}>
-                          <Icon style={css.raw({ size: '10px', color: 'text.danger' })} icon={MinusIcon} />
-                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.danger' })}>
+                          <Icon style={css.raw({ size: '10px', color: 'danger.default' })} icon={MinusIcon} />
+                          <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'danger.default' })}>
                             {head.deletions.toLocaleString()}
                           </span>
                         </div>
@@ -627,10 +628,10 @@
                       class={center({
                         borderRadius: '4px',
                         size: '20px',
-                        color: 'text.faint',
+                        color: 'text.muted',
                         transition: 'common',
-                        _hover: { backgroundColor: 'interactive.hover' },
-                        _pressed: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+                        _hover: { backgroundColor: 'surface.hover' },
+                        _pressed: { backgroundColor: 'surface.active', color: 'text.default' },
                       })}
                       aria-pressed={open}
                     >
@@ -675,15 +676,15 @@
         borderRadius: '12px',
         padding: '12px',
         paddingRight: '16px',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'surface.default',
         border: '1px solid',
         borderColor: 'border.default',
-        boxShadow: '[0 8px 32px rgba(0,0,0,0.08)]',
+        boxShadow: 'xl',
         zIndex: 'overEditor',
         pointerEvents: 'auto',
       })}
     >
-      <Icon style={css.raw({ color: 'gray.500' })} icon={IconClockFading} size={18} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={IconClockFading} size={18} />
 
       <div class={flex({ position: 'relative', flexGrow: '1', align: 'center', minWidth: '100px', maxWidth: '420px', height: '36px' })}>
         <button
@@ -708,10 +709,10 @@
               width: 'full',
               height: '4px',
               borderRadius: 'full',
-              backgroundColor: { base: 'gray.500', _dark: 'dark.gray.500' },
+              backgroundColor: 'surface.inset',
               transition: 'all',
               transitionDuration: isDraggingSlider ? '0ms' : '150ms',
-              _groupHover: { backgroundColor: { base: 'gray.400', _dark: 'dark.gray.600' } },
+              _groupHover: { backgroundColor: 'surface.hover' },
             })}
           ></div>
           <div
@@ -724,7 +725,7 @@
               translateY: '-1/2',
               height: '4px',
               borderRadius: 'full',
-              backgroundColor: 'accent.brand.default',
+              backgroundColor: 'accent.default',
               transition: 'all',
               transitionDuration: isDraggingSlider ? '0ms' : '150ms',
               transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
@@ -750,8 +751,8 @@
               cursor: 'ew-resize',
               transition: 'all',
               transitionDuration: isDraggingSlider ? '0ms' : '150ms',
-              boxShadow: '[0 2px 8px rgba(0,0,0,0.1)]',
-              _hover: { scale: '[1.2]', boxShadow: '[0 4px 12px rgba(0,0,0,0.15)]' },
+              boxShadow: 'md',
+              _hover: { scale: '[1.2]', boxShadow: 'lg' },
               _active: { scale: '[1.1]' },
             })}
             use:anchor
@@ -782,23 +783,23 @@
         class={css({
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'surface.dark',
+          backgroundColor: 'surface.inverse',
           borderRadius: '8px',
           zIndex: 'overEditor',
           fontSize: '12px',
-          color: 'text.bright',
+          color: 'text.on.inverse',
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
           opacity: showTooltip ? '100' : '0',
           transition: 'opacity',
           transitionDuration: '150ms',
-          boxShadow: '[0 4px 12px rgba(0,0,0,0.15)]',
+          boxShadow: 'lg',
         })}
         role="tooltip"
         use:floating
       >
         {dayjs(headsAsc[sliderIndex]?.updatedAt).formatAsSmart()}
-        <div class={css({ size: '6px', backgroundColor: 'surface.dark', zIndex: 'overEditor' })} use:arrow></div>
+        <div class={css({ size: '6px', backgroundColor: 'surface.inverse', zIndex: 'overEditor' })} use:arrow></div>
       </div>
 
       {#if shownHeadId === null || shownHeadId === latestHeadId}
@@ -808,8 +809,8 @@
             width: '75px',
             gap: '6px',
             paddingY: '8px',
-            backgroundColor: 'accent.brand.subtle',
-            color: 'accent.brand.default',
+            backgroundColor: 'accent.subtle',
+            color: 'text.default',
             borderRadius: '8px',
             fontSize: '13px',
             fontWeight: 'semibold',
@@ -827,17 +828,17 @@
             gap: '6px',
             width: '75px',
             paddingY: '8px',
-            backgroundColor: 'accent.brand.default',
-            color: 'text.bright',
+            backgroundColor: 'accent.default',
+            color: 'surface.default',
             borderRadius: '8px',
             fontSize: '13px',
             fontWeight: 'medium',
             cursor: 'pointer',
             transition: 'all',
             transitionDuration: '150ms',
-            _hover: { backgroundColor: 'accent.brand.hover', transform: 'translateY(-1px)' },
-            _active: { backgroundColor: 'accent.brand.active', transform: 'translateY(0)' },
-            _disabled: { cursor: 'default', backgroundColor: 'accent.brand.default', transform: 'none' },
+            _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]', transform: 'translateY(-1px)' },
+            _active: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 80%, black)]', transform: 'translateY(0)' },
+            _disabled: { cursor: 'default', backgroundColor: 'accent.default', transform: 'none' },
           })}
           aria-busy={restoring}
           disabled={restoring}
@@ -846,7 +847,7 @@
           use:tooltip={{ message: '이 시점으로 문서를 복원하고 타임라인에 새로 추가합니다', placement: 'top' }}
         >
           {#if restoring}
-            <RingSpinner style={css.raw({ size: '14px', color: 'text.bright' })} />
+            <RingSpinner style={css.raw({ size: '14px', color: 'surface.default' })} />
           {:else}
             <Icon style={css.raw({ size: '14px' })} icon={IconClockFading} />
           {/if}

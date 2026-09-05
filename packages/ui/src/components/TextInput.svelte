@@ -49,35 +49,33 @@
       display: 'flex',
       alignItems: 'center',
       borderWidth: '1px',
-      borderColor: 'border.subtle',
-      color: 'text.faint',
+      borderColor: 'border.default',
+      color: 'text.hint',
       backgroundColor: 'surface.default',
       transition: 'common',
       overflow: 'hidden',
       _hover: {
-        borderColor: 'border.brand',
+        borderColor: 'border.emphasis',
       },
       '&:has(input:focus)': {
-        borderColor: 'border.brand',
+        borderColor: 'accent.default',
       },
       '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
         color: 'text.default',
-        borderColor: 'border.subtle',
-      },
-      '&:has(input:disabled)': {
-        color: 'text.disabled',
-        backgroundColor: 'interactive.disabled',
         borderColor: 'border.default',
       },
+      '&:has(input:disabled)': {
+        opacity: '40',
+      },
       '&:has(input:read-only)': {
-        color: 'text.disabled',
-        backgroundColor: 'surface.subtle',
+        color: 'text.muted',
+        backgroundColor: 'surface.canvas',
         borderColor: 'border.default',
       },
       '&:has(input[aria-invalid="true"])': {
-        borderColor: 'border.danger',
+        borderColor: 'danger.default',
         '&:has(input:focus)': {
-          borderColor: 'border.danger',
+          borderColor: 'danger.default',
         },
         '&:has(input:not(:placeholder-shown)), &:has(input[aria-live="polite"])': {
           color: 'text.default',

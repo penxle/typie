@@ -540,14 +540,14 @@
                   display: open || activeColIndex !== null ? 'flex' : 'none',
                   width: '24px',
                   height: '18px',
-                  backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                  backgroundColor: open ? 'surface.active' : 'surface.default',
                   borderWidth: '1px',
-                  borderColor: 'border.strong',
+                  borderColor: 'border.emphasis',
                   borderRadius: '4px',
-                  color: open ? 'text.default' : 'text.faint',
-                  boxShadow: 'small',
+                  color: open ? 'text.default' : 'text.muted',
+                  boxShadow: 'sm',
                   cursor: 'pointer',
-                  _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+                  _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                 })}
                 aria-pressed={open}
                 type="button"
@@ -689,14 +689,14 @@
                   display: open || activeRowIndex !== null ? 'flex' : 'none',
                   width: '18px',
                   height: '24px',
-                  backgroundColor: open ? 'interactive.hover' : 'surface.default',
+                  backgroundColor: open ? 'surface.active' : 'surface.default',
                   borderWidth: '1px',
-                  borderColor: 'border.strong',
+                  borderColor: 'border.emphasis',
                   borderRadius: '4px',
-                  color: open ? 'text.default' : 'text.faint',
-                  boxShadow: 'small',
+                  color: open ? 'text.default' : 'text.muted',
+                  boxShadow: 'sm',
                   cursor: 'pointer',
-                  _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+                  _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                 })}
                 aria-pressed={open}
                 type="button"
@@ -806,13 +806,13 @@
         style:height="{overlay.bounds.height}px"
         class={css({
           position: 'absolute',
-          backgroundColor: isResizing ? 'accent.brand.default' : 'transparent',
+          backgroundColor: isResizing ? 'border.emphasis' : 'transparent',
           cursor: 'col-resize',
           pointerEvents: isActive ? 'auto' : 'none',
           opacity: isResizing ? '100' : '0',
           transition: '[opacity 0.15s]',
           zIndex: isLastCol ? '[1]' : undefined,
-          _hover: { opacity: '100', backgroundColor: 'accent.brand.default' },
+          _hover: { opacity: '100', backgroundColor: 'border.emphasis' },
         })}
         aria-label={isLastCol ? '테이블 너비 조절' : '열 너비 조절'}
         type="button"
@@ -844,12 +844,12 @@
       class={center({
         height: 'full',
         borderRadius: '4px',
-        color: 'text.disabled',
-        backgroundColor: 'surface.muted',
+        color: 'text.muted',
+        backgroundColor: 'surface.inset',
         display: isLastColumnHovered ? 'flex' : 'none',
         opacity: '90',
-        _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
-        _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
+        _hover: { display: 'flex', backgroundColor: 'surface.hover' },
+        _active: { color: 'text.default', backgroundColor: 'surface.active' },
       })}
       aria-label="열 추가"
       onclick={() => insertAxis('vertical', lastColumnIndex, false)}
@@ -880,12 +880,12 @@
         class={center({
           width: 'full',
           borderRadius: '4px',
-          color: 'text.disabled',
-          backgroundColor: 'surface.muted',
+          color: 'text.muted',
+          backgroundColor: 'surface.inset',
           display: isLastRowHovered ? 'flex' : 'none',
           opacity: '90',
-          _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
-          _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
+          _hover: { display: 'flex', backgroundColor: 'surface.hover' },
+          _active: { color: 'text.default', backgroundColor: 'surface.active' },
         })}
         aria-label="행 추가"
         onclick={() => insertAxis('horizontal', rowCount - 1, false)}
@@ -918,12 +918,12 @@
         style:height="{addButtonSize}px"
         class={center({
           borderRadius: 'full',
-          color: 'text.disabled',
-          backgroundColor: 'surface.muted',
+          color: 'text.muted',
+          backgroundColor: 'surface.inset',
           display: isLastRowHovered && isLastColumnHovered ? 'flex' : 'none',
           opacity: '90',
-          _hover: { display: 'flex', backgroundColor: 'interactive.hover' },
-          _active: { color: 'text.bright', backgroundColor: 'accent.brand.default' },
+          _hover: { display: 'flex', backgroundColor: 'surface.hover' },
+          _active: { color: 'text.default', backgroundColor: 'surface.active' },
         })}
         aria-label="행 및 열 추가"
         onclick={() => {
@@ -958,9 +958,9 @@
       zIndex: '50',
       backgroundColor: 'surface.default',
       borderRadius: '6px',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       borderWidth: '1px',
-      borderColor: 'border.strong',
+      borderColor: 'border.emphasis',
       padding: '2px',
       cursor: 'default',
     })}
@@ -975,13 +975,13 @@
           <button
             class={center({
               display: 'flex',
-              color: open ? 'text.default' : 'text.faint',
-              backgroundColor: open ? 'interactive.hover' : 'transparent',
+              color: open ? 'accent.default' : 'text.muted',
+              backgroundColor: open ? 'surface.active' : 'transparent',
               width: '24px',
               height: '24px',
               borderRadius: '4px',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             })}
             aria-pressed={open}
             type="button"
@@ -1032,13 +1032,13 @@
         <button
           class={center({
             display: 'flex',
-            color: open ? 'text.default' : 'text.faint',
-            backgroundColor: open ? 'interactive.hover' : 'transparent',
+            color: open ? 'accent.default' : 'text.muted',
+            backgroundColor: open ? 'surface.active' : 'transparent',
             width: '24px',
             height: '24px',
             borderRadius: '4px',
             cursor: 'pointer',
-            _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
           })}
           aria-pressed={open}
           type="button"
@@ -1054,7 +1054,7 @@
           }}
         >
           <div
-            class={css({ width: '14px', height: '0', borderBottomWidth: '2px', borderBottomStyle: 'solid', borderColor: 'text.default' })}
+            class={css({ width: '14px', height: '0', borderBottomWidth: '2px', borderBottomStyle: 'solid', borderColor: 'border.default' })}
           ></div>
           <span>실선</span>
         </MenuItem>
@@ -1065,7 +1065,13 @@
           }}
         >
           <div
-            class={css({ width: '14px', height: '0', borderBottomWidth: '2px', borderBottomStyle: 'dashed', borderColor: 'text.default' })}
+            class={css({
+              width: '14px',
+              height: '0',
+              borderBottomWidth: '2px',
+              borderBottomStyle: 'dashed',
+              borderColor: 'border.default',
+            })}
           ></div>
           <span>파선</span>
         </MenuItem>
@@ -1076,7 +1082,13 @@
           }}
         >
           <div
-            class={css({ width: '14px', height: '0', borderBottomWidth: '2px', borderBottomStyle: 'dotted', borderColor: 'text.default' })}
+            class={css({
+              width: '14px',
+              height: '0',
+              borderBottomWidth: '2px',
+              borderBottomStyle: 'dotted',
+              borderColor: 'border.default',
+            })}
           ></div>
           <span>점선</span>
         </MenuItem>
@@ -1112,16 +1124,16 @@
           <button
             class={center({
               display: 'flex',
-              color: open ? 'text.default' : 'text.faint',
-              backgroundColor: open ? 'interactive.hover' : 'surface.default',
+              color: open ? 'text.default' : 'text.muted',
+              backgroundColor: open ? 'surface.active' : 'surface.default',
               width: '26px',
               height: '26px',
               borderRadius: '6px',
               borderWidth: '1px',
-              borderColor: 'border.strong',
-              boxShadow: 'small',
+              borderColor: 'border.emphasis',
+              boxShadow: 'sm',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             })}
             aria-pressed={open}
             type="button"

@@ -22,10 +22,9 @@
     borderColor: 'border.default',
     borderRadius: '10px',
     fontSize: '13px',
-    color: 'text.faint',
+    color: 'text.muted',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   })}
 >
   <Icon style={css.raw({ flexShrink: '0' })} icon={CircleAlertIcon} size={14} />

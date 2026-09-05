@@ -161,7 +161,7 @@
     zIndex: 'overEditor',
     backgroundColor: 'surface.default',
     borderRadius: '6px',
-    boxShadow: 'small',
+    boxShadow: 'sm',
   })}
   aria-label="찾기 및 바꾸기"
   data-pane-chrome-reveal-exclusion
@@ -199,11 +199,11 @@
           size: '22px',
           padding: '3px',
           borderRadius: '4px',
-          color: 'text.faint',
+          color: 'text.muted',
           backgroundColor: 'transparent',
-          _hover: { backgroundColor: 'surface.muted' },
-          _pressed: { color: 'accent.brand.default', backgroundColor: 'accent.brand.subtle' },
-          _focus: { backgroundColor: 'surface.muted' },
+          _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+          _pressed: { color: 'accent.default', backgroundColor: 'surface.active' },
+          _focus: { backgroundColor: 'surface.hover' },
         })}
         aria-pressed={app.preference.current.searchMatchWholeWord}
         onclick={() => (app.preference.current.searchMatchWholeWord = !app.preference.current.searchMatchWholeWord)}
@@ -236,7 +236,7 @@
 
   <div class={flex({ flex: '1', flexDirection: 'column', gap: '4px' })}>
     <div class={flex({ alignItems: 'center', height: '30px' })}>
-      <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+      <div class={css({ flex: '1', paddingLeft: '4px', width: '60px', fontSize: '12px', fontWeight: 'medium', color: 'text.hint' })}>
         {#if editor && editor.searchMatches.length > 0}
           {editor.searchMatches.findIndex((m) => m.active) + 1} / {editor.searchMatches.length}
         {:else}
@@ -250,10 +250,10 @@
             size: '24px',
             padding: '4px',
             borderRadius: '4px',
-            color: 'text.faint',
-            _hover: { backgroundColor: 'surface.muted' },
-            _disabled: { opacity: '[0.5]', _hover: { backgroundColor: 'transparent' } },
-            _focus: { backgroundColor: 'surface.muted' },
+            color: 'text.muted',
+            _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+            _disabled: { opacity: '40', _hover: { backgroundColor: 'transparent' } },
+            _focus: { backgroundColor: 'surface.hover' },
           })}
           disabled={!findText}
           onclick={() => editor?.findPrevious()}
@@ -267,10 +267,10 @@
             size: '24px',
             padding: '4px',
             borderRadius: '4px',
-            color: 'text.faint',
-            _hover: { backgroundColor: 'surface.muted' },
-            _disabled: { opacity: '[0.5]', _hover: { backgroundColor: 'transparent' } },
-            _focus: { backgroundColor: 'surface.muted' },
+            color: 'text.muted',
+            _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+            _disabled: { opacity: '40', _hover: { backgroundColor: 'transparent' } },
+            _focus: { backgroundColor: 'surface.hover' },
           })}
           disabled={!findText}
           onclick={() => editor?.findNext()}
@@ -289,10 +289,10 @@
             size: '24px',
             padding: '4px',
             borderRadius: '4px',
-            color: 'text.faint',
-            _hover: { backgroundColor: 'surface.muted' },
-            _disabled: { opacity: '[0.5]', _hover: { backgroundColor: 'transparent' } },
-            _focus: { backgroundColor: 'surface.muted' },
+            color: 'text.muted',
+            _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+            _disabled: { opacity: '40', _hover: { backgroundColor: 'transparent' } },
+            _focus: { backgroundColor: 'surface.hover' },
           })}
           disabled={!findText}
           onclick={() => editor?.replace(replaceText)}
@@ -306,10 +306,10 @@
             size: '24px',
             padding: '4px',
             borderRadius: '4px',
-            color: 'text.faint',
-            _hover: { backgroundColor: 'surface.muted' },
-            _disabled: { opacity: '[0.5]', _hover: { backgroundColor: 'transparent' } },
-            _focus: { backgroundColor: 'surface.muted' },
+            color: 'text.muted',
+            _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+            _disabled: { opacity: '40', _hover: { backgroundColor: 'transparent' } },
+            _focus: { backgroundColor: 'surface.hover' },
           })}
           disabled={!findText}
           onclick={() => editor?.replaceAll(replaceText)}
@@ -324,9 +324,9 @@
           size: '24px',
           padding: '4px',
           borderRadius: '4px',
-          color: 'text.faint',
-          _hover: { backgroundColor: 'surface.muted' },
-          _focus: { backgroundColor: 'surface.muted' },
+          color: 'text.muted',
+          _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+          _focus: { backgroundColor: 'surface.hover' },
         })}
         onclick={close}
         type="button"

@@ -34,14 +34,14 @@ export class WindowManager {
   #loginAttached = false;
 
   #loginQuery: Record<string, string>;
-  #theme: Theme;
+  #theme: ThemePayload;
   readonly window: BaseWindow;
   readonly chrome: WebContentsView;
 
   constructor(state: WindowState, theme: ThemePayload, loginQuery: Record<string, string>) {
     this.#loginQuery = loginQuery;
-    this.#theme = theme.theme;
-    const { background, symbol } = themeColors(theme.theme);
+    this.#theme = theme;
+    const { background, symbol } = themeColors(theme);
     this.window = new BaseWindow({
       width: state.bounds?.width ?? 1280,
       height: state.bounds?.height ?? 800,
@@ -98,14 +98,14 @@ export class WindowManager {
   }
 
   get theme(): Theme {
-    return this.#theme;
+    return this.#theme.theme;
   }
 
   get background(): string {
     return themeColors(this.#theme).background;
   }
 
-  setTheme(theme: Theme) {
+  setTheme(theme: ThemePayload) {
     this.#theme = theme;
     const { background, symbol } = themeColors(theme);
     this.window.setBackgroundColor(background);
@@ -142,7 +142,7 @@ export class WindowManager {
         webPreferences: { preload: preloadPath('page'), sandbox: true, contextIsolation: true },
       });
       this.#login.setBackgroundColor(this.background);
-      this.#login.webContents.loadURL(rendererUrl('login', { ...this.#loginQuery, theme: this.#theme })).catch(() => null);
+      this.#login.webContents.loadURL(rendererUrl('login', { ...this.#loginQuery, theme: this.#theme.theme })).catch(() => null);
     }
     this.setChromeVisible(false);
     this.window.contentView.addChildView(this.#login);

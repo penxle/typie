@@ -379,6 +379,6 @@
     in:fade={{ ...fadeIn, duration: reducedMotion() ? 0 : fadeIn.duration }}
     out:fade={{ ...fadeOut, duration: reducedMotion() ? 0 : fadeOut.duration }}
   >
-    <RingSpinner style={css.raw({ size: '20px', color: 'text.faint' })} />
+    <RingSpinner style={css.raw({ size: '20px', color: 'text.muted' })} />
   </div>
 {/if}

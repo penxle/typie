@@ -435,10 +435,10 @@
     borderRadius: 'full',
     fontSize: '12px',
     fontWeight: 'medium',
-    color: 'text.subtle',
-    backgroundColor: 'surface.muted',
+    color: 'text.muted',
+    backgroundColor: 'surface.inset',
     transition: '[background-color 150ms ease]',
-    _hover: { backgroundColor: 'interactive.hover' },
+    _hover: { backgroundColor: 'surface.hover' },
   });
   let listOpen = $state(false);
   const listToggleLabel = $derived(listOpen ? '대화 목록 닫기' : '대화 목록 열기');
@@ -621,9 +621,11 @@
     borderWidth: '1px',
     borderRadius: '10px',
   });
-  const calloutNeutralStyle = css.raw({ borderColor: 'border.subtle', backgroundColor: 'surface.subtle' });
-  const calloutDangerStyle = css.raw({ borderColor: 'border.danger', backgroundColor: 'accent.danger.subtle' });
-  const calloutTextClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
+  const calloutNeutralStyle = css.raw({ borderColor: 'border.hairline', backgroundColor: 'surface.canvas' });
+  const calloutDangerStyle = css.raw({ borderColor: 'danger.default', backgroundColor: 'danger.subtle' });
+  const calloutTextStyle = css.raw({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]' });
+  const calloutTextClass = css(calloutTextStyle, { color: 'text.muted' });
+  const calloutDangerTextClass = css(calloutTextStyle, { color: 'text.on.danger.subtle' });
 
   const panelOpen = $derived(app.preference.current.prismPanelOpen);
   const panelInteractive = $derived(panelOpen);
@@ -894,7 +896,7 @@
 <svelte:document bind:visibilityState />
 
 <PrismPanelHeader creditBalance={user.data.prismCredit.balance}>
-  {#snippet children(buttonClass)}
+  {#snippet children(buttonClass, buttonStyle)}
     {#if titleEditing}
       <input
         bind:this={titleInput}
@@ -906,10 +908,10 @@
           paddingX: '8px',
           paddingY: '3px',
           borderWidth: '1px',
-          borderColor: 'border.strong',
+          borderColor: 'border.emphasis',
           borderRadius: '6px',
           fontSize: '12px',
-          backgroundColor: 'surface.default',
+          backgroundColor: 'surface.inset',
           outline: 'none',
         })}
         aria-label="대화 제목"
@@ -937,12 +939,13 @@
           maxWidth: '220px',
           borderRadius: '6px',
           fontSize: '12px',
-          color: 'text.subtle',
+          color: 'text.muted',
           overflow: 'hidden',
-          backgroundColor: listOpen ? 'surface.muted' : 'transparent',
-          _hover: { backgroundColor: 'surface.muted' },
+          backgroundColor: listOpen ? 'surface.active' : 'transparent',
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         aria-label={`${listToggleLabel}: ${currentTitle}`}
+        aria-pressed={listOpen}
         onclick={() => (listOpen = !listOpen)}
         type="button"
         use:tooltip={{ message: '대화 목록 열기' }}
@@ -953,83 +956,81 @@
 
     {#if currentSession}
       {@const session = currentSession}
-      <Menu
-        ontransitionend={() => {
-          if (!pendingTitleEdit) return;
-          pendingTitleEdit = false;
-          void startTitleEdit();
-        }}
-        placement="bottom-end"
-      >
-        {#snippet button({ open })}
-          <div
-            class={cx(buttonClass, open ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
-            aria-label="대화 메뉴"
-            use:tooltip={{ message: '대화 메뉴' }}
-          >
+      <div class={css({ display: 'flex' })} use:tooltip={{ message: '대화 메뉴' }}>
+        <Menu
+          style={css.raw(buttonStyle, { _expanded: { color: 'text.default', backgroundColor: 'surface.active' } })}
+          buttonAriaLabel="대화 메뉴"
+          ontransitionend={() => {
+            if (!pendingTitleEdit) return;
+            pendingTitleEdit = false;
+            void startTitleEdit();
+          }}
+          placement="bottom-end"
+        >
+          {#snippet button()}
             <Icon icon={EllipsisIcon} size={16} />
-          </div>
-        {/snippet}
+          {/snippet}
 
-        {#snippet children({ close })}
-          <MenuItem
-            icon={PencilIcon}
-            onclick={() => {
-              pendingTitleEdit = true;
-              close();
-            }}
-          >
-            이름 바꾸기
-          </MenuItem>
-          {#if session.archivedAt == null}
+          {#snippet children({ close })}
             <MenuItem
-              icon={ArchiveIcon}
+              icon={PencilIcon}
               onclick={() => {
+                pendingTitleEdit = true;
                 close();
-                void archiveSession(session.id, 'header_menu');
               }}
             >
-              보관
+              이름 바꾸기
             </MenuItem>
-          {:else}
+            {#if session.archivedAt == null}
+              <MenuItem
+                icon={ArchiveIcon}
+                onclick={() => {
+                  close();
+                  void archiveSession(session.id, 'header_menu');
+                }}
+              >
+                보관
+              </MenuItem>
+            {:else}
+              <MenuItem
+                icon={ArchiveRestoreIcon}
+                onclick={() => {
+                  close();
+                  void unarchiveSession(session.id, 'header_menu');
+                }}
+              >
+                복원
+              </MenuItem>
+            {/if}
             <MenuItem
-              icon={ArchiveRestoreIcon}
+              icon={TrashIcon}
               onclick={() => {
                 close();
-                void unarchiveSession(session.id, 'header_menu');
+                requestDelete(session, 'header_menu');
               }}
+              variant="danger"
             >
-              복원
+              삭제
             </MenuItem>
-          {/if}
-          <MenuItem
-            icon={TrashIcon}
-            onclick={() => {
-              close();
-              requestDelete(session, 'header_menu');
-            }}
-            variant="danger"
-          >
-            삭제
-          </MenuItem>
 
-          <HorizontalDivider color="secondary" />
+            <HorizontalDivider color="secondary" />
 
-          <div
-            class={flex({
-              flexDirection: 'column',
-              gap: '4px',
-              paddingX: '10px',
-              paddingY: '4px',
-              fontSize: '12px',
-              color: 'text.faint',
-              userSelect: 'none',
-            })}
-          >
-            <IdCopyMenuItem id={session.id} label="대화 ID 복사" />
-          </div>
-        {/snippet}
-      </Menu>
+            <div
+              class={flex({
+                flexDirection: 'column',
+                gap: '4px',
+                paddingX: '10px',
+                paddingY: '4px',
+                fontSize: '12px',
+                color: 'text.hint',
+                userSelect: 'none',
+              })}
+            >
+              <IdCopyMenuItem id={session.id} label="대화 ID 복사" />
+            </div>
+          {/snippet}
+        </Menu>
+      </div>
     {/if}
 
     <button
@@ -1043,7 +1044,7 @@
     </button>
 
     <button
-      class={cx(buttonClass, listOpen ? css({ color: 'text.default', backgroundColor: 'surface.muted' }) : undefined)}
+      class={cx(buttonClass, listOpen ? css({ color: 'text.default', backgroundColor: 'surface.active' }) : undefined)}
       aria-label={app.state.prismBadge ? '대화 목록, 확인할 항목 있음' : '대화 목록'}
       aria-pressed={listOpen}
       onclick={() => (listOpen = !listOpen)}
@@ -1121,16 +1122,16 @@
             </div>
           {:else if statusKind === 'error'}
             <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-              <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-              <span class={calloutTextClass}>{chat.error}</span>
+              <Icon style={css.raw({ flexShrink: '0', color: 'text.on.danger.subtle' })} icon={CircleAlertIcon} size={14} />
+              <span class={calloutDangerTextClass}>{chat.error}</span>
               <Button style={css.raw({ flexShrink: '0' })} onclick={() => void chat.load(selected.current)} size="sm" variant="secondary">
                 다시 불러오기
               </Button>
             </div>
           {:else}
             <div class={css(calloutStyle, calloutDangerStyle)} in:swap={{ box: statusEl, from: statusFrom }}>
-              <Icon style={css.raw({ flexShrink: '0', color: 'text.danger' })} icon={CircleAlertIcon} size={14} />
-              <span class={calloutTextClass}>실시간 연결이 끊겼어요</span>
+              <Icon style={css.raw({ flexShrink: '0', color: 'text.on.danger.subtle' })} icon={CircleAlertIcon} size={14} />
+              <span class={calloutDangerTextClass}>실시간 연결이 끊겼어요</span>
               <Button style={css.raw({ flexShrink: '0' })} onclick={resetReconnect} size="sm" variant="secondary">다시 연결</Button>
             </div>
           {/if}
@@ -1147,7 +1148,7 @@
         aria-hidden={!chipsVisible}
         in:rise
       >
-        <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>제안</p>
+        <p class={css({ marginBottom: '6px', fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>제안</p>
         <div class={flex({ position: 'relative', zIndex: '2', flexWrap: 'wrap', gap: '6px' })}>
           {#each startChipsFor(openDocuments.snapshot().documents.length > 0) as chip (chip.insert)}
             <button class={chipClass} onclick={() => onChipInsert(chip)} tabindex={chipsVisible ? 0 : -1} type="button">

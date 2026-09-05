@@ -227,7 +227,7 @@
     paddingX: '12px',
     paddingY: '11px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
     fontSize: '13px',
     fontWeight: 'medium',
@@ -238,17 +238,17 @@
     cursor: 'pointer',
     transition: 'common',
     _hover: {
-      borderColor: 'border.default',
-      backgroundColor: 'surface.subtle',
+      borderColor: 'border.emphasis',
+      backgroundColor: 'surface.hover',
     },
   });
 
   const optionCheckedStyle = css.raw({
-    borderColor: 'accent.brand.default',
-    backgroundColor: 'accent.brand.subtle',
+    borderColor: 'accent.default',
+    backgroundColor: 'surface.active',
     _hover: {
-      borderColor: 'accent.brand.hover',
-      backgroundColor: 'accent.brand.subtle',
+      borderColor: 'accent.default',
+      backgroundColor: 'surface.active',
     },
   });
 
@@ -265,14 +265,14 @@
     borderRadius: '5px',
     fontSize: '11px',
     fontWeight: 'bold',
-    color: 'text.faint',
-    backgroundColor: 'surface.muted',
+    color: 'text.hint',
+    backgroundColor: 'surface.inset',
     transition: 'common',
   });
 
   const keyCheckedStyle = css.raw({
-    color: 'text.bright',
-    backgroundColor: 'accent.brand.default',
+    color: 'surface.default',
+    backgroundColor: 'accent.default',
   });
 </script>
 
@@ -288,10 +288,10 @@
   closable={false}
   open={true}
 >
-  <div class={css({ flexShrink: '0', height: '2px', backgroundColor: 'surface.muted' })}>
+  <div class={css({ flexShrink: '0', height: '2px', backgroundColor: 'surface.inset' })}>
     <div
       style:width={`${progress}%`}
-      class={css({ height: 'full', backgroundColor: 'accent.brand.default', transition: '[width 250ms ease]' })}
+      class={css({ height: 'full', backgroundColor: 'accent.default', transition: '[width 250ms ease]' })}
     ></div>
   </div>
 
@@ -301,10 +301,10 @@
         display: 'flex',
         padding: '4px',
         borderRadius: '6px',
-        color: 'text.faint',
+        color: 'text.muted',
         cursor: 'pointer',
         transition: 'colors',
-        _hover: { color: 'text.subtle', backgroundColor: 'surface.subtle' },
+        _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
       })}
       aria-label="닫기"
       onclick={handleClose}
@@ -317,7 +317,7 @@
   <div bind:this={stepContainerEl} class={css({ overflow: 'hidden' })}>
     {#key step}
       <div class={css({ paddingX: '40px', paddingTop: '34px', paddingBottom: '28px' })} in:stepIntro>
-        <div class={css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.faint', letterSpacing: '0.02em' })}>
+        <div class={css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.hint', letterSpacing: '0.02em' })}>
           질문 {step + 1} / {total}{#if step === 0}
             <span class={css({ marginX: '4px' })}>·</span>
             1분이면 끝나요{/if}
@@ -349,7 +349,7 @@
               paddingX: '12px',
               paddingY: '10px',
               borderWidth: '1px',
-              borderColor: 'border.subtle',
+              borderColor: 'border.default',
               borderRadius: '8px',
               fontSize: '14px',
               lineHeight: '[1.5]',
@@ -357,9 +357,9 @@
               backgroundColor: 'surface.default',
               resize: 'none',
               transition: 'common',
-              _hover: { borderColor: 'border.default' },
-              _focus: { outline: 'none', borderColor: 'border.brand' },
-              _placeholder: { color: 'text.faint' },
+              _hover: { borderColor: 'border.emphasis' },
+              _focus: { outline: 'none', borderColor: 'accent.default' },
+              _placeholder: { color: 'text.hint' },
             })}
             aria-label={question.title}
             placeholder={question.placeholder}
@@ -396,12 +396,12 @@
               {#each inputOptions as option (option.value)}
                 <div class={flex({ direction: 'column', gap: '8px' })}>
                   <label
-                    class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}
+                    class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}
                     for={`user-survey-${question.id}-${option.value}`}
                   >
                     {option.prompt}
                     {#if option.input === 'optional'}
-                      <span class={css({ marginLeft: '2px', fontWeight: 'normal', color: 'text.faint' })}>(선택)</span>
+                      <span class={css({ marginLeft: '2px', fontWeight: 'normal', color: 'text.hint' })}>(선택)</span>
                     {/if}
                   </label>
                   <TextInput

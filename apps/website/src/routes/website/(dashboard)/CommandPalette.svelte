@@ -451,7 +451,7 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 <Modal
-  style={css.raw({ maxWidth: '600px', height: '600px', backgroundColor: 'surface.subtle' })}
+  style={css.raw({ maxWidth: '600px', height: '600px', backgroundColor: 'surface.canvas' })}
   focusTrapOptions={{ initialFocus: () => inputEl }}
   onclose={close}
   open={app.state.commandPaletteOpen}
@@ -490,7 +490,7 @@
     />
 
     <div class={center({ position: 'absolute', left: '8px', top: '1/2', translate: 'auto', translateY: '-1/2', pointerEvents: 'none' })}>
-      <Icon style={css.raw({ color: 'text.disabled' })} icon={SearchIcon} size={18} />
+      <Icon style={css.raw({ color: 'text.hint' })} icon={SearchIcon} size={18} />
     </div>
 
     <div
@@ -509,8 +509,8 @@
           class={center({
             borderRadius: 'full',
             size: '16px',
-            color: 'text.faint',
-            backgroundColor: 'surface.muted',
+            color: 'text.muted',
+            backgroundColor: 'surface.inset',
             pointerEvents: 'auto',
           })}
           onclick={() => {
@@ -533,8 +533,8 @@
           fontFamily: 'mono',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'text.faint',
-          backgroundColor: 'surface.muted',
+          color: 'text.hint',
+          backgroundColor: 'surface.inset',
         })}
       >
         <span>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</span>
@@ -546,7 +546,7 @@
     </div>
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'border.hairline' })}></div>
 
   <div bind:this={listEl} class={flex({ flexDirection: 'column', flexGrow: '1', paddingX: '12px', overflowY: 'auto' })}>
     {#each searchHitsByType.entries() as [type, hits], index (index)}
@@ -557,7 +557,7 @@
           paddingX: '8px',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'text.faint',
+          color: 'text.muted',
         })}
       >
         {match(type)
@@ -576,10 +576,10 @@
             borderRadius: '6px',
             paddingX: '8px',
             paddingY: '6px',
-            _hover: { backgroundColor: 'surface.muted' },
-            _selected: { backgroundColor: 'surface.muted' },
-            _focus: { backgroundColor: 'surface.muted' },
-            '& em': { color: 'text.brand' },
+            _hover: { backgroundColor: 'surface.hover' },
+            _selected: { backgroundColor: 'surface.hover' },
+            _focus: { backgroundColor: 'surface.hover' },
+            '& em': { color: 'accent.default' },
           })}
           aria-selected={selectedResultIndex === hit.idx}
           onclick={() => {
@@ -598,7 +598,13 @@
         >
           {#if hit.__typename === 'SearchHitCommand'}
             <div
-              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+              class={center({
+                flexShrink: '0',
+                borderRadius: '6px',
+                size: '24px',
+                color: 'text.default',
+                backgroundColor: 'surface.inset',
+              })}
             >
               <Icon icon={hit.icon} size={16} />
             </div>
@@ -606,7 +612,13 @@
             <span class={css({ minWidth: '0', fontSize: '14px', fontWeight: 'medium', truncate: true })}>{hit.label ?? hit.name}</span>
           {:else if hit.__typename === 'SearchHitDocument'}
             <div
-              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+              class={center({
+                flexShrink: '0',
+                borderRadius: '6px',
+                size: '24px',
+                color: 'text.default',
+                backgroundColor: 'surface.inset',
+              })}
             >
               <EntityIcon entity$key={hit.document.entity} size={16} />
             </div>
@@ -628,7 +640,13 @@
             {/if}
           {:else if hit.__typename === 'SearchHitFolder'}
             <div
-              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+              class={center({
+                flexShrink: '0',
+                borderRadius: '6px',
+                size: '24px',
+                color: 'text.default',
+                backgroundColor: 'surface.inset',
+              })}
             >
               <EntityIcon entity$key={hit.folder.entity} fallback={FolderIcon} size={16} />
             </div>
@@ -643,7 +661,13 @@
             </div>
           {:else if hit.__typename === 'SearchHitRecent'}
             <div
-              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+              class={center({
+                flexShrink: '0',
+                borderRadius: '6px',
+                size: '24px',
+                color: 'text.default',
+                backgroundColor: 'surface.inset',
+              })}
             >
               <EntityIcon entity$key={hit.entity} size={16} />
             </div>
@@ -668,7 +692,7 @@
     {/each}
   </div>
 
-  <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
+  <div class={css({ height: '1px', backgroundColor: 'border.hairline' })}></div>
 
   <div
     class={flex({
@@ -676,8 +700,8 @@
       gap: '16px',
       paddingX: '12px',
       paddingY: '12px',
-      color: 'text.faint',
-      backgroundColor: 'surface.muted',
+      color: 'text.hint',
+      backgroundColor: 'surface.default',
     })}
   >
     <div class={flex({ alignItems: 'center', gap: '8px' })}>

@@ -47,23 +47,22 @@
     padding: '14px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   });
   const headerClass = flex({ alignItems: 'center', gap: '6px', marginBottom: '10px' });
   const titleClass = css({ fontSize: '13px', fontWeight: 'semibold' });
   const actionsClass = flex({ alignItems: 'center', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' });
-  const noticeClass = css({ marginRight: 'auto', minWidth: '0', fontSize: '[11.5px]', color: 'text.faint' });
+  const noticeClass = css({ marginRight: 'auto', minWidth: '0', fontSize: '[11.5px]', color: 'text.muted' });
   const tailClass = flex({
     alignItems: 'center',
     gap: '8px',
     marginTop: '12px',
     paddingTop: '10px',
     borderTopWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     fontSize: '[12.5px]',
     fontWeight: 'semibold',
-    color: 'text.subtle',
+    color: 'text.muted',
   });
 </script>
 
@@ -71,7 +70,7 @@
   {@const Body = entry.body}
   <div class={cardClass}>
     <div class={headerClass}>
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.subtle' })} icon={entry.icon} size={14} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={entry.icon} size={14} />
       <p class={titleClass}>{entry.title}</p>
     </div>
 

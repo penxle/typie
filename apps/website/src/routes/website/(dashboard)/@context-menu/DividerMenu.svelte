@@ -380,7 +380,7 @@
     paddingX: '10px',
     paddingY: '4px',
     fontSize: '12px',
-    color: 'text.faint',
+    color: 'text.hint',
     userSelect: 'none',
   })}
 >

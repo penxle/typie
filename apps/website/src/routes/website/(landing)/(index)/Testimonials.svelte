@@ -122,9 +122,9 @@
     position: 'relative',
     paddingX: { sm: '24px', lg: '80px' },
     paddingY: { sm: '80px', lg: '120px' },
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
     borderTopWidth: '1px',
-    borderTopColor: 'dark.gray.900',
+    borderTopColor: 'border.hairline',
     overflow: 'hidden',
   })}
 >
@@ -135,7 +135,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -166,7 +166,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -179,7 +179,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -194,7 +194,7 @@
         <p
           class={css({
             fontSize: { sm: '16px', lg: '18px' },
-            color: 'dark.gray.400',
+            color: 'text.muted',
             lineHeight: '[1.65]',
             maxWidth: '[400px]',
           })}
@@ -208,12 +208,12 @@
               class={css({
                 width: '8px',
                 height: '8px',
-                backgroundColor: idx === currentIndex ? 'dark.brand.400' : 'dark.gray.700',
+                backgroundColor: idx === currentIndex ? 'accent.default' : 'border.default',
                 border: 'none',
                 cursor: 'pointer',
                 transition: '[background-color 0.3s ease-out]',
                 _hover: {
-                  backgroundColor: idx === currentIndex ? 'dark.brand.400' : 'dark.gray.600',
+                  backgroundColor: idx === currentIndex ? 'accent.default' : 'border.emphasis',
                 },
               })}
               aria-label={testimonial.author}
@@ -249,7 +249,7 @@
             left: '0',
             right: '0',
             height: '[120px]',
-            background: '[linear-gradient(to bottom, token(colors.dark.gray.950), transparent)]',
+            background: '[linear-gradient(to bottom, token(colors.surface.canvas), transparent)]',
             zIndex: '20',
             pointerEvents: 'none',
           })}
@@ -261,7 +261,7 @@
             left: '0',
             right: '0',
             height: '[120px]',
-            background: '[linear-gradient(to top, token(colors.dark.gray.950), transparent)]',
+            background: '[linear-gradient(to top, token(colors.surface.canvas), transparent)]',
             zIndex: '20',
             pointerEvents: 'none',
           })}
@@ -277,17 +277,14 @@
             height: '[180px]',
             paddingX: '24px',
             paddingY: '20px',
-            backgroundColor: 'dark.gray.900',
+            backgroundColor: 'surface.default',
             borderWidth: '1px',
-            borderColor: 'dark.brand.400',
+            borderColor: 'accent.default',
             textAlign: 'left',
             cursor: 'pointer',
             overflow: 'hidden',
             zIndex: '[15]',
             transition: '[border-color 0.3s ease-out]',
-            _hover: {
-              borderColor: 'dark.brand.300',
-            },
           })}
           onclick={() => window.open(activeCard.url, '_blank', 'noopener,noreferrer')}
           type="button"
@@ -301,7 +298,7 @@
               <p
                 class={css({
                   fontSize: '15px',
-                  color: 'dark.gray.200',
+                  color: 'text.muted',
                   lineHeight: '[1.65]',
                   marginBottom: '20px',
                   whiteSpace: 'pre-line',
@@ -323,10 +320,10 @@
                   src={activeCard.avatar}
                 />
                 <div>
-                  <span class={css({ display: 'block', fontSize: '14px', fontWeight: 'medium', color: 'dark.gray.100' })}>
+                  <span class={css({ display: 'block', fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>
                     {activeCard.author}
                   </span>
-                  <span class={css({ display: 'block', fontSize: '12px', color: 'dark.gray.500' })}>
+                  <span class={css({ display: 'block', fontSize: '12px', color: 'text.hint' })}>
                     {activeCard.handle}
                   </span>
                 </div>
@@ -357,18 +354,18 @@
                 left: '0',
                 width: 'full',
                 height: '[180px]',
-                backgroundColor: 'dark.gray.950',
+                backgroundColor: 'surface.canvas',
                 borderTopWidth: '0',
                 borderBottomWidth: '0',
                 borderLeftWidth: '1px',
                 borderRightWidth: '1px',
-                borderColor: 'dark.gray.900',
+                borderColor: 'border.hairline',
                 textAlign: 'left',
                 cursor: 'pointer',
                 overflow: 'hidden',
                 transition: '[transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out, border-color 0.2s ease-out]',
                 _hover: {
-                  borderColor: 'dark.gray.800',
+                  borderColor: 'border.emphasis',
                 },
               })}
               onclick={() => (currentIndex = idx)}
@@ -378,7 +375,7 @@
                 <p
                   class={css({
                     fontSize: '15px',
-                    color: 'dark.gray.400',
+                    color: 'text.muted',
                     lineHeight: '[1.65]',
                     whiteSpace: 'pre-line',
                     lineClamp: '3',
@@ -403,10 +400,10 @@
                     src={testimonial.avatar}
                   />
                   <div>
-                    <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'medium', color: 'dark.gray.500' })}>
+                    <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>
                       {testimonial.author}
                     </span>
-                    <span class={css({ display: 'block', fontSize: '11px', color: 'dark.gray.600' })}>
+                    <span class={css({ display: 'block', fontSize: '11px', color: 'text.hint' })}>
                       {testimonial.handle}
                     </span>
                   </div>

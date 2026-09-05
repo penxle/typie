@@ -24,15 +24,15 @@
   const pieDashArray = $derived(`${Math.min(1, Math.max(0, pie ?? 0)) * PIE_C} ${PIE_C}`);
 
   const strokeByState = {
-    under: css.raw({ stroke: { base: 'gray.500', _dark: 'dark.gray.400' } }),
-    achieved: css.raw({ stroke: 'accent.success.default' }),
-    over: css.raw({ stroke: 'accent.warning.default' }),
-    excess: css.raw({ stroke: 'accent.danger.default' }),
+    under: css.raw({ stroke: 'accent.default' }),
+    achieved: css.raw({ stroke: 'success.default' }),
+    over: css.raw({ stroke: 'warning.default' }),
+    excess: css.raw({ stroke: 'danger.default' }),
   };
 </script>
 
 <svg class={css(style)} height={size} viewBox="0 0 32 32" width={size}>
-  <circle class={css({ fill: '[none]', stroke: { base: 'gray.200', _dark: 'dark.gray.800' } })} cx="16" cy="16" r={R} stroke-width="3.5" />
+  <circle class={css({ fill: '[none]', stroke: 'surface.inset' })} cx="16" cy="16" r={R} stroke-width="3.5" />
   <circle
     style:stroke-dasharray={ringDashArray}
     class={css({ fill: '[none]', transition: '[stroke 0.3s ease, stroke-dasharray 0.3s ease]' }, strokeByState[state])}
@@ -48,7 +48,7 @@
       style:stroke-dasharray={pieDashArray}
       class={css(
         { fill: '[none]', transition: '[stroke 0.3s ease, stroke-dasharray 0.3s ease]' },
-        { stroke: pieWarning ? 'accent.danger.default' : { base: 'gray.300', _dark: 'dark.gray.700' } },
+        { stroke: pieWarning ? 'danger.default' : 'border.emphasis' },
       )}
       cx="16"
       cy="16"

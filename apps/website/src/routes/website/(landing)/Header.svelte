@@ -19,9 +19,9 @@
 
 <header
   class={css({
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
     borderBottomWidth: '1px',
-    borderBottomColor: 'dark.gray.800',
+    borderBottomColor: 'border.hairline',
     position: 'fixed',
     top: '0',
     left: '0',
@@ -60,12 +60,12 @@
         class={css({
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'dark.gray.400',
+          color: 'text.muted',
           paddingY: '8px',
           paddingX: '20px',
           transition: '[color 0.2s ease-out]',
           _hover: {
-            color: 'dark.gray.100',
+            color: 'text.default',
           },
         })}
         href="/pricing"
@@ -77,12 +77,12 @@
         class={css({
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'dark.gray.400',
+          color: 'text.muted',
           paddingY: '8px',
           paddingX: '20px',
           transition: '[color 0.2s ease-out]',
           _hover: {
-            color: 'dark.gray.100',
+            color: 'text.default',
           },
         })}
         href="/changelog"
@@ -94,12 +94,12 @@
         class={css({
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'dark.gray.400',
+          color: 'text.muted',
           paddingY: '8px',
           paddingX: '20px',
           transition: '[color 0.2s ease-out]',
           _hover: {
-            color: 'dark.gray.100',
+            color: 'text.default',
           },
         })}
         href="/download"
@@ -117,13 +117,13 @@
             marginLeft: '16px',
             paddingX: '20px',
             paddingY: '10px',
-            backgroundColor: 'dark.gray.800',
-            color: 'dark.gray.100',
+            backgroundColor: 'surface.inset',
+            color: 'text.default',
             fontSize: '14px',
             fontWeight: 'medium',
             transition: '[all 0.2s ease-out]',
             _hover: {
-              backgroundColor: 'dark.gray.700',
+              backgroundColor: 'surface.hover',
             },
           }),
         )}
@@ -147,11 +147,11 @@
       <button
         class={css({
           padding: '8px',
-          backgroundColor: 'transparent',
-          color: 'dark.gray.400',
+          backgroundColor: mobileMenuOpen ? 'surface.active' : 'transparent',
+          color: mobileMenuOpen ? 'text.default' : 'text.muted',
           transition: '[color 0.2s ease-out]',
           _hover: {
-            color: 'dark.gray.100',
+            color: 'text.default',
           },
         })}
         onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
@@ -170,9 +170,9 @@
       top: '56px',
       left: '0',
       right: '0',
-      backgroundColor: 'dark.gray.950',
+      backgroundColor: 'surface.canvas',
       borderBottomWidth: '1px',
-      borderBottomColor: 'dark.gray.800',
+      borderBottomColor: 'border.hairline',
       zIndex: '40',
       display: { sm: 'block', lg: 'none' },
     })}
@@ -184,14 +184,14 @@
         display: 'block',
         fontSize: '15px',
         fontWeight: 'medium',
-        color: 'dark.gray.400',
+        color: 'text.muted',
         paddingY: '16px',
         paddingX: '24px',
         borderBottomWidth: '1px',
-        borderBottomColor: 'dark.gray.900',
+        borderBottomColor: 'border.hairline',
         transition: '[color 0.2s ease-out]',
         _hover: {
-          color: 'dark.gray.100',
+          color: 'text.default',
         },
       })}
       href="/"
@@ -204,14 +204,14 @@
         display: 'block',
         fontSize: '15px',
         fontWeight: 'medium',
-        color: 'dark.gray.400',
+        color: 'text.muted',
         paddingY: '16px',
         paddingX: '24px',
         borderBottomWidth: '1px',
-        borderBottomColor: 'dark.gray.900',
+        borderBottomColor: 'border.hairline',
         transition: '[color 0.2s ease-out]',
         _hover: {
-          color: 'dark.gray.100',
+          color: 'text.default',
         },
       })}
       href="/pricing"
@@ -224,14 +224,14 @@
         display: 'block',
         fontSize: '15px',
         fontWeight: 'medium',
-        color: 'dark.gray.400',
+        color: 'text.muted',
         paddingY: '16px',
         paddingX: '24px',
         borderBottomWidth: '1px',
-        borderBottomColor: 'dark.gray.900',
+        borderBottomColor: 'border.hairline',
         transition: '[color 0.2s ease-out]',
         _hover: {
-          color: 'dark.gray.100',
+          color: 'text.default',
         },
       })}
       href="/changelog"
@@ -244,14 +244,14 @@
         display: 'block',
         fontSize: '15px',
         fontWeight: 'medium',
-        color: 'dark.gray.400',
+        color: 'text.muted',
         paddingY: '16px',
         paddingX: '24px',
         borderBottomWidth: '1px',
-        borderBottomColor: 'dark.gray.900',
+        borderBottomColor: 'border.hairline',
         transition: '[color 0.2s ease-out]',
         _hover: {
-          color: 'dark.gray.100',
+          color: 'text.default',
         },
       })}
       href="/download"
@@ -270,13 +270,13 @@
             gap: '8px',
             paddingX: '20px',
             paddingY: '14px',
-            backgroundColor: 'dark.gray.800',
-            color: 'dark.gray.100',
+            backgroundColor: 'surface.inset',
+            color: 'text.default',
             fontSize: '15px',
             fontWeight: 'medium',
             transition: '[all 0.2s ease-out]',
             _hover: {
-              backgroundColor: 'dark.gray.700',
+              backgroundColor: 'surface.hover',
             },
           }),
         )}

@@ -54,9 +54,9 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'review.issue.default' },
-        closed: { backgroundColor: 'border.strong' },
-        strength: { backgroundColor: 'review.strength.default' },
+        open: { backgroundColor: 'review.issue' },
+        closed: { backgroundColor: 'border.emphasis' },
+        strength: { backgroundColor: 'review.strength' },
       },
       active: { true: { width: '10px', opacity: '100' }, false: { width: '6px', opacity: '55' } },
     },

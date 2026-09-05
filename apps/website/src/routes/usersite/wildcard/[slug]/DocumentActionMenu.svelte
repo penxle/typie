@@ -78,7 +78,7 @@
     style={css.raw({
       borderRadius: '4px',
       padding: '3px',
-      _hover: { backgroundColor: 'surface.muted' },
+      _hover: { backgroundColor: 'surface.hover' },
     })}
     placement="bottom-start"
   >
@@ -103,21 +103,21 @@
     <form class={css({ display: 'flex', flexDirection: 'column', gap: '8px' })} onsubmit={form.handleSubmit}>
       <label class={css({ fontSize: '14px' })} for="reason">
         신고 사유
-        <span class={css({ fontSize: '12px', color: 'text.disabled' })}>(선택)</span>
+        <span class={css({ fontSize: '12px', color: 'text.muted' })}>(선택)</span>
       </label>
 
       <textarea
         id="reason"
         class={css({
           borderWidth: '1px',
-          borderColor: 'border.strong',
+          borderColor: 'border.default',
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '10px',
           fontSize: '15px',
           resize: 'none',
-          _hover: { borderColor: 'border.strong' },
-          _focus: { borderColor: 'accent.brand.default' },
+          _hover: { borderColor: 'border.emphasis' },
+          _focus: { borderColor: 'accent.default' },
         })}
         placeholder="신고 사유를 적어주세요"
         rows="3"

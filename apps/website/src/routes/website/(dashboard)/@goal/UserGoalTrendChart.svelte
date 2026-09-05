@@ -62,8 +62,8 @@
   const barWidth = $derived(width > 0 ? (width - (days.length - 1) * gap) / days.length : 0);
   const barHeight = (additions: number) => (additions / yMax) * height;
 
-  const barFill = css.raw({ fill: { base: 'gray.400', _dark: 'dark.gray.600' } });
-  const targetStroke = css.raw({ stroke: { base: 'gray.300', _dark: 'dark.gray.700' } });
+  const barFill = css.raw({ fill: 'accent.default' });
+  const targetStroke = css.raw({ stroke: 'border.emphasis' });
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '4px' })}>
@@ -98,7 +98,7 @@
     {/if}
   </div>
 
-  <div class={flex({ justifyContent: 'space-between', fontSize: '10px', color: 'text.faint' })}>
+  <div class={flex({ justifyContent: 'space-between', fontSize: '10px', color: 'text.hint' })}>
     <span>{dayClock.now.subtract(27, 'day').format('M월 D일')}</span>
     <span>{dayClock.now.format('M월 D일')}{target === null ? '' : ' · ┄ 목표선'}</span>
   </div>

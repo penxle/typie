@@ -79,22 +79,22 @@
     transitionProperty: '[background-color, transform, opacity]',
     transitionDuration: '[100ms]',
     _active: { transform: 'scale(0.98)' },
-    _disabled: { opacity: '60', cursor: 'default', transform: 'none' },
+    _disabled: { opacity: '40', cursor: 'default', transform: 'none' },
   });
 
   const linkStyle = css.raw({
     fontWeight: 'medium',
-    color: 'text.subtle',
+    color: 'text.muted',
     _hover: { color: 'text.default', textDecoration: 'underline', textUnderlineOffset: '2px' },
   });
 
   const linkClass = css(linkStyle);
   const primaryClass = css(buttonStyle, {
-    backgroundColor: 'accent.brand.default',
-    color: 'text.bright',
-    _hover: { backgroundColor: 'accent.brand.hover' },
+    backgroundColor: 'accent.default',
+    color: 'surface.default',
+    _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
   });
-  const cancelClass = css(linkStyle, { alignSelf: 'center', fontSize: '13px', color: 'text.disabled' });
+  const cancelClass = css(linkStyle, { alignSelf: 'center', fontSize: '13px', color: 'text.hint' });
 </script>
 
 <div
@@ -103,8 +103,8 @@
 ></div>
 
 <main
-  style:--grid-line-color={token('colors.decoration.grid.brand')}
-  style:--cross-line-color={token('colors.decoration.grid.brand.subtle')}
+  style:--grid-line-color={token('colors.border.default')}
+  style:--cross-line-color={token('colors.border.hairline')}
   style:--grid-size="30px"
   style:--line-thickness="1px"
   class={center({
@@ -127,7 +127,7 @@
       padding: '40px',
       borderRadius: '12px',
       backgroundColor: 'surface.default',
-      boxShadow: 'medium',
+      boxShadow: 'md',
     })}
     aria-labelledby="login-title"
   >
@@ -139,7 +139,7 @@
       <h1 id="login-title" class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold', wordBreak: 'keep-all' })}>
         타이피에 오신 것을 환영해요!
       </h1>
-      <p class={css({ fontSize: { base: '13px', lg: '14px' }, lineHeight: '[1.6]', color: 'text.faint', wordBreak: 'keep-all' })}>
+      <p class={css({ fontSize: { base: '13px', lg: '14px' }, lineHeight: '[1.6]', color: 'text.hint', wordBreak: 'keep-all' })}>
         작성부터 공유까지, 타이피 하나로 해결해요.
       </p>
     </div>
@@ -150,9 +150,9 @@
           <GlobeIcon class={css({ size: '18px' })} />
           브라우저로 로그인
         </button>
-        <p class={css({ fontSize: '12px', textAlign: 'center', color: 'text.faint' })}>로그인은 브라우저에서 안전하게 진행돼요.</p>
+        <p class={css({ fontSize: '12px', textAlign: 'center', color: 'text.hint' })}>로그인은 브라우저에서 안전하게 진행돼요.</p>
         {#if error}
-          <p class={css({ fontSize: '13px', textAlign: 'center', color: 'text.danger', wordBreak: 'keep-all' })} role="alert">{error}</p>
+          <p class={css({ fontSize: '13px', textAlign: 'center', color: 'danger.default', wordBreak: 'keep-all' })} role="alert">{error}</p>
         {/if}
       </div>
     {:else}
@@ -165,8 +165,8 @@
             paddingY: '14px',
             borderRadius: '8px',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
-            backgroundColor: 'surface.subtle',
+            borderColor: 'border.hairline',
+            backgroundColor: 'surface.canvas',
           })}
         >
           <span
@@ -176,14 +176,14 @@
               borderRadius: 'full',
               borderWidth: '2px',
               borderColor: 'border.default',
-              borderTopColor: 'accent.brand.default',
+              borderTopColor: 'accent.default',
               animation: 'spin 0.8s linear infinite',
             })}
             aria-hidden="true"
           ></span>
           <div class={flex({ flexDirection: 'column', gap: '2px', minWidth: '0' })}>
             <div class={css({ fontSize: '14px', fontWeight: 'semibold' })}>브라우저에서 로그인을 마쳐주세요</div>
-            <div class={css({ fontSize: '12px', color: 'text.faint', wordBreak: 'keep-all' })}>
+            <div class={css({ fontSize: '12px', color: 'text.hint', wordBreak: 'keep-all' })}>
               {#if showFallback}
                 브라우저가 열리지 않았나요?
                 <button class={linkClass} onclick={login} type="button">다시 열기</button>
@@ -202,7 +202,7 @@
   </section>
 
   {#if version}
-    <div class={css({ position: 'absolute', bottom: '16px', fontSize: '11px', color: 'text.disabled', userSelect: 'none' })}>
+    <div class={css({ position: 'absolute', bottom: '16px', fontSize: '11px', color: 'text.hint', userSelect: 'none' })}>
       v{version}{envName && envName !== 'prod' ? ` · ${envName}` : ''}
     </div>
   {/if}

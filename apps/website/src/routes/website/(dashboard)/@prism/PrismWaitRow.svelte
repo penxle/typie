@@ -21,15 +21,15 @@
     else if (snapshot.readiness !== 'loading') onSpinnerPlaybackChange?.(null);
   };
 
-  const rowStyle = flex.raw({ alignItems: 'center', gap: '8px', minHeight: '20px', fontSize: '12px', color: 'text.faint' });
+  const rowStyle = flex.raw({ alignItems: 'center', gap: '8px', minHeight: '20px', fontSize: '12px', color: 'text.muted' });
   const shimmerClass = css({
     width: '[fit-content]',
-    color: '[transparent]',
-    backgroundImage: '[linear-gradient(90deg, token(colors.text.faint) 30%, token(colors.text.default) 50%, token(colors.text.faint) 70%)]',
+    color: 'transparent',
+    backgroundImage: '[linear-gradient(90deg, token(colors.text.muted) 30%, token(colors.text.default) 50%, token(colors.text.muted) 70%)]',
     backgroundSize: '[200% 100%]',
     backgroundClip: 'text',
     animation: '[shimmer 1.8s linear infinite]',
-    _motionReduce: { animation: 'none', color: 'text.faint', backgroundImage: 'none' },
+    _motionReduce: { animation: 'none', color: 'text.muted', backgroundImage: 'none' },
   });
 </script>
 

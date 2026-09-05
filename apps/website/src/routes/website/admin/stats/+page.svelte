@@ -372,20 +372,20 @@
   }
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+<div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
   <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>STATISTICS DASHBOARD</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>SYSTEM METRICS AND ANALYTICS</p>
+    <h2 class={css({ fontSize: '18px', color: 'text.default' })}>STATISTICS DASHBOARD</h2>
+    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.muted' })}>SYSTEM METRICS AND ANALYTICS</p>
   </div>
 
   <div
     class={css({
       borderWidth: '2px',
-      borderColor: 'amber.500',
-      backgroundColor: 'gray.900',
+      borderColor: 'border.default',
+      backgroundColor: 'surface.default',
     })}
   >
-    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
+    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'border.default' })}>
       <div class={flex({ flexDirection: 'column', gap: '16px' })}>
         <div class={flex({ gap: '8px', flexWrap: 'wrap' })}>
           {#each presets as preset (preset.label)}
@@ -394,14 +394,13 @@
                 paddingX: '12px',
                 paddingY: '6px',
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 backgroundColor: 'transparent',
-                color: 'amber.500',
+                color: 'text.default',
                 fontSize: '11px',
                 cursor: 'pointer',
                 _hover: {
-                  backgroundColor: 'amber.500',
-                  color: 'gray.900',
+                  backgroundColor: 'surface.hover',
                 },
               })}
               onclick={() => applyPreset(preset)}
@@ -414,21 +413,21 @@
 
         <div class={flex({ gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' })}>
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            <label class={css({ fontSize: '11px', color: 'amber.400' })} for="start-date">START DATE</label>
+            <label class={css({ fontSize: '11px', color: 'text.muted' })} for="start-date">START DATE</label>
             <input
               id="start-date"
               class={css({
                 paddingX: '12px',
                 paddingY: '8px',
                 borderWidth: '2px',
-                borderColor: 'amber.500',
-                backgroundColor: 'gray.800',
-                color: 'amber.500',
+                borderColor: 'border.default',
+                backgroundColor: 'surface.inset',
+                color: 'text.default',
                 fontSize: '13px',
                 outline: 'none',
-                caretColor: 'amber.500',
+                caretColor: 'text.default',
                 _focus: {
-                  borderColor: 'amber.400',
+                  borderColor: 'accent.default',
                 },
               })}
               type="date"
@@ -437,21 +436,21 @@
           </div>
 
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            <label class={css({ fontSize: '11px', color: 'amber.400' })} for="end-date">END DATE</label>
+            <label class={css({ fontSize: '11px', color: 'text.muted' })} for="end-date">END DATE</label>
             <input
               id="end-date"
               class={css({
                 paddingX: '12px',
                 paddingY: '8px',
                 borderWidth: '2px',
-                borderColor: 'amber.500',
-                backgroundColor: 'gray.800',
-                color: 'amber.500',
+                borderColor: 'border.default',
+                backgroundColor: 'surface.inset',
+                color: 'text.default',
                 fontSize: '13px',
                 outline: 'none',
-                caretColor: 'amber.500',
+                caretColor: 'text.default',
                 _focus: {
-                  borderColor: 'amber.400',
+                  borderColor: 'accent.default',
                 },
               })}
               type="date"
@@ -460,20 +459,20 @@
           </div>
 
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-            <label class={css({ fontSize: '11px', color: 'amber.400' })} for="granularity">GRANULARITY</label>
+            <label class={css({ fontSize: '11px', color: 'text.muted' })} for="granularity">GRANULARITY</label>
             <select
               id="granularity"
               class={css({
                 paddingX: '12px',
                 paddingY: '8px',
                 borderWidth: '2px',
-                borderColor: 'amber.500',
-                backgroundColor: 'gray.800',
-                color: 'amber.500',
+                borderColor: 'border.default',
+                backgroundColor: 'surface.inset',
+                color: 'text.default',
                 fontSize: '13px',
                 cursor: 'pointer',
                 _focus: {
-                  borderColor: 'amber.400',
+                  borderColor: 'accent.default',
                 },
               })}
               bind:value={granularity.current}
@@ -490,7 +489,7 @@
     <div class={css({ overflowX: 'auto' })}>
       <table class={css({ width: 'full', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: '1200px' })}>
         <thead>
-          <tr class={css({ borderBottomWidth: '2px', borderColor: 'amber.500' })}>
+          <tr class={css({ borderBottomWidth: '2px', borderColor: 'border.default' })}>
             <th
               style="width: 12%"
               class={css({
@@ -499,7 +498,7 @@
                 fontSize: '11px',
                 fontFamily: 'mono',
                 fontWeight: 'normal',
-                color: 'amber.500',
+                color: 'text.default',
                 textAlign: 'left',
               })}
             >
@@ -514,7 +513,7 @@
                   fontSize: '11px',
                   fontFamily: 'mono',
                   fontWeight: 'normal',
-                  color: 'amber.500',
+                  color: 'text.default',
                   textAlign: 'left',
                 })}
               >
@@ -529,19 +528,19 @@
               <tr
                 class={css({
                   borderBottomWidth: i < periods().length - 1 ? '1px' : '0',
-                  borderColor: 'gray.800',
+                  borderColor: 'border.hairline',
                   _hover: {
-                    backgroundColor: 'gray.800',
+                    backgroundColor: 'surface.hover',
                   },
                 })}
               >
-                <td class={css({ padding: '20px', fontSize: '12px', color: 'amber.500' })}>
+                <td class={css({ padding: '20px', fontSize: '12px', color: 'text.default' })}>
                   {formatPeriod(period)}
                 </td>
                 {#each columns as column (column.key)}
-                  <td class={css({ padding: '20px', fontSize: '12px', color: 'amber.500' })}>
+                  <td class={css({ padding: '20px', fontSize: '12px', color: 'text.default' })}>
                     {#if loadingStates[column.key]}
-                      <span class={css({ color: 'amber.400' })}>LOADING...</span>
+                      <span class={css({ color: 'text.muted' })}>LOADING...</span>
                     {:else if column.format}
                       {column.format(columnData[column.key]?.[period] ?? 0)}
                     {:else}
@@ -554,7 +553,7 @@
           {:else}
             <tr>
               <td class={css({ padding: '64px', textAlign: 'center' })} colspan={columns.length + 1}>
-                <div class={css({ fontSize: '13px', fontFamily: 'mono', color: 'amber.400' })}>NO DATA</div>
+                <div class={css({ fontSize: '13px', fontFamily: 'mono', color: 'text.hint' })}>NO DATA</div>
               </td>
             </tr>
           {/if}

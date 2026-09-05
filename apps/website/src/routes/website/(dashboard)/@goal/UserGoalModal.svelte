@@ -163,10 +163,10 @@
           marginBottom: '4px',
           padding: '12px',
           borderRadius: '8px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.canvas',
           fontSize: '13px',
           lineHeight: '[1.6]',
-          color: 'text.subtle',
+          color: 'text.muted',
         })}
       >
         매일 쓸 글자 수를 정해 보세요. 달성한 날이 기록으로 쌓이고, 연속 달성 일수도 볼 수 있어요.
@@ -182,7 +182,7 @@
         size="sm"
         value={input}
       />
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>자</span>
+      <span class={css({ fontSize: '13px', color: 'text.muted' })}>자</span>
     </div>
 
     <div class={flex({ gap: '6px' })}>
@@ -217,7 +217,7 @@
           flexShrink: '0',
           paddingRight: '24px',
           borderRightWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
         })}
       >
         {#if goal && !editing}
@@ -235,13 +235,13 @@
                 fontSize: '32px',
                 fontWeight: 'bold',
                 fontVariantNumeric: 'tabular-nums',
-                color: progress.achieved ? 'accent.success.default' : 'text.default',
+                color: progress.achieved ? 'success.default' : 'text.default',
               })}
             >
               {comma(progress.additions)}
             </div>
 
-            <div class={css({ fontSize: '13px', color: 'text.subtle', fontVariantNumeric: 'tabular-nums' })}>
+            <div class={css({ fontSize: '13px', color: 'text.muted', fontVariantNumeric: 'tabular-nums' })}>
               / {comma(goal.targetCharacterCount)}자
             </div>
           </div>
@@ -255,16 +255,16 @@
               paddingX: '12px',
               paddingY: '8px',
               borderRadius: '8px',
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.canvas',
             })}
           >
             <span class={css({ fontSize: '14px', fontWeight: 'semibold', color: 'text.default' })}>달성 연속 {progress.streak}일</span>
-            <span class={css({ fontSize: '12px', color: 'text.faint' })}>최고 기록 {progress.bestStreak}일</span>
+            <span class={css({ fontSize: '12px', color: 'text.muted' })}>최고 기록 {progress.bestStreak}일</span>
           </div>
 
           <div class={flex({ gap: '6px', width: 'full' })}>
             <Button style={css.raw({ flex: '1' })} onclick={() => (editing = true)} size="sm" variant="secondary">수정</Button>
-            <Button style={css.raw({ flex: '1', color: 'text.danger' })} onclick={remove} size="sm" variant="secondary">해제</Button>
+            <Button style={css.raw({ flex: '1', color: 'danger.default' })} onclick={remove} size="sm" variant="secondary">해제</Button>
           </div>
         {:else}
           {@render goalForm()}
@@ -275,17 +275,17 @@
         <div class={css({ position: 'relative', flex: '1', minHeight: '0' })}>
           <div class={flex({ position: 'absolute', inset: '0', flexDirection: 'column', gap: '16px', overflowY: 'auto' })}>
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-              <div class={css({ fontSize: '11px', color: 'text.faint' })}>달성 · 최근 16주</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>달성 · 최근 16주</div>
               <UserGoalDots user$key={me} />
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-              <div class={css({ fontSize: '11px', color: 'text.faint' })}>일별 글자 수 · 최근 4주</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>일별 글자 수 · 최근 4주</div>
               <UserGoalTrendChart user$key={me} />
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-              <div class={css({ fontSize: '11px', color: 'text.faint' })}>일별 기록</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>일별 기록</div>
               <UserGoalHistoryTable user$key={me} />
             </div>
           </div>

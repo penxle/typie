@@ -296,11 +296,11 @@
     }}
   >
     {#if copied}
-      <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
+      <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.default' })}>복사되었어요</div>
     {:else}
-      <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>
+      <Icon style={css.raw({ color: 'text.default' })} icon={LinkIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.default' })}>
         {activeTab === 'publish' ? '조회' : '편집'}
         {isSingleDocument ? '링크' : '링크 모두'} 복사
       </div>
@@ -321,7 +321,7 @@
         color: activeTab === 'publish' ? 'text.default' : 'text.muted',
         transition: 'common',
         _hover: {
-          color: activeTab === 'publish' ? 'text.default' : 'text.subtle',
+          color: 'text.default',
         },
         _after: {
           content: '""',
@@ -329,7 +329,7 @@
           bottom: '0',
           insetX: '0',
           height: '3px',
-          backgroundColor: activeTab === 'publish' ? 'accent.brand.default' : 'transparent',
+          backgroundColor: activeTab === 'publish' ? 'accent.default' : 'transparent',
           transition: 'common',
         },
       })}
@@ -347,7 +347,7 @@
         color: activeTab === 'share' ? 'text.default' : 'text.muted',
         transition: 'common',
         _hover: {
-          color: activeTab === 'share' ? 'text.default' : 'text.subtle',
+          color: 'text.default',
         },
         _after: {
           content: '""',
@@ -355,7 +355,7 @@
           bottom: '0',
           insetX: '0',
           height: '3px',
-          backgroundColor: activeTab === 'share' ? 'accent.brand.default' : 'transparent',
+          backgroundColor: activeTab === 'share' ? 'accent.default' : 'transparent',
           transition: 'common',
         },
       })}
@@ -380,12 +380,12 @@
 {#if activeTab === 'publish'}
   <div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 조회 권한</div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>문서 조회 권한</div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={BlendIcon} size={14} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>공개 범위</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={BlendIcon} size={14} />
+          <div class={css({ fontSize: '12px', color: 'text.muted' })}>공개 범위</div>
         </div>
 
         <Select
@@ -417,8 +417,8 @@
       <div class={flex({ flexDirection: 'column', gap: '8px' })}>
         <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={LockKeyholeIcon} />
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>비밀번호 보호</div>
+            <Icon style={css.raw({ color: 'text.muted' })} icon={LockKeyholeIcon} />
+            <div class={css({ fontSize: '12px', color: 'text.muted' })}>비밀번호 보호</div>
           </div>
 
           <Switch values={documents.data.map((d) => d.password !== null)} bind:checked={form.fields.hasPassword} />
@@ -436,7 +436,7 @@
                 height: '32px',
                 fontFamily: 'mono',
                 fontSize: '12px',
-                color: 'text.subtle',
+                color: 'text.default',
               })}
               autocomplete="off"
               data-1p-ignore
@@ -451,11 +451,11 @@
                 top: '1/2',
                 right: '8px',
                 size: '20px',
-                color: 'text.disabled',
+                color: 'text.muted',
                 userSelect: 'none',
                 translate: 'auto',
                 translateY: '-1/2',
-                _hover: { color: 'text.disabled' },
+                _hover: { color: 'text.default' },
               })}
               onclick={generateRandomPassword}
               type="button"
@@ -479,8 +479,8 @@
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={IdCardIcon} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>연령 제한</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={IdCardIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.muted' })}>연령 제한</div>
         </div>
 
         <Select
@@ -496,12 +496,12 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>썸네일</div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>썸네일</div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={ImageIcon} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>미리보기 이미지</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={ImageIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.muted' })}>미리보기 이미지</div>
         </div>
 
         <div class={flex({ gap: '8px', alignItems: 'center' })}>
@@ -511,9 +511,9 @@
                 width: '64px',
                 height: '36px',
                 borderRadius: '6px',
-                backgroundColor: 'surface.muted',
+                backgroundColor: 'surface.inset',
                 fontSize: '10px',
-                color: 'text.faint',
+                color: 'text.hint',
               })}
               disabled={thumbnailUploading}
               onclick={handleThumbnailUpload}
@@ -545,8 +545,8 @@
                 class={center({
                   size: '24px',
                   borderRadius: '4px',
-                  color: 'text.faint',
-                  _hover: { backgroundColor: 'surface.muted', color: 'text.danger' },
+                  color: 'text.muted',
+                  _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
                 })}
                 onclick={handleThumbnailRemove}
                 type="button"
@@ -563,8 +563,8 @@
                 borderWidth: '1px',
                 borderStyle: 'dashed',
                 borderRadius: '6px',
-                color: 'text.faint',
-                _hover: { backgroundColor: 'surface.muted' },
+                color: 'text.muted',
+                _hover: { backgroundColor: 'surface.hover' },
               })}
               disabled={thumbnailUploading}
               onclick={handleThumbnailUpload}
@@ -582,12 +582,12 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 상호작용</div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>문서 상호작용</div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={SmileIcon} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>이모지 반응</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={SmileIcon} />
+          <div class={css({ fontSize: '12px', color: 'text.muted' })}>이모지 반응</div>
         </div>
 
         <Select
@@ -602,14 +602,14 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 보호</div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>문서 보호</div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={ShieldIcon} />
+          <Icon style={css.raw({ color: 'text.muted' })} icon={ShieldIcon} />
           <div class={flex({ flexDirection: 'column' })}>
-            <div class={css({ fontSize: '12px', color: 'text.subtle' })}>내용 보호</div>
-            <p class={css({ fontSize: '10px', color: 'text.faint' })}>우클릭, 복사 및 다운로드 제한</p>
+            <div class={css({ fontSize: '12px', color: 'text.muted' })}>내용 보호</div>
+            <p class={css({ fontSize: '10px', color: 'text.muted' })}>우클릭, 복사 및 다운로드 제한</p>
           </div>
         </div>
 
@@ -620,12 +620,12 @@
 {:else if activeTab === 'share'}
   <div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>문서 편집 권한</div>
+      <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>문서 편집 권한</div>
 
       <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={BlendIcon} size={14} />
-          <div class={css({ fontSize: '12px', color: 'text.subtle' })}>편집 범위</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={BlendIcon} size={14} />
+          <div class={css({ fontSize: '12px', color: 'text.muted' })}>편집 범위</div>
         </div>
 
         <Select

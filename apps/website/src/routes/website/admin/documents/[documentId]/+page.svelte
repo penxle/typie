@@ -16,24 +16,23 @@
 </script>
 
 {#if query.data.adminDocument}
-  <div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+  <div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
       <div class={flex({ alignItems: 'center', gap: '12px' })}>
         <button
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '12px',
             paddingY: '6px',
             fontSize: '12px',
-            color: 'amber.500',
+            color: 'text.default',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             backgroundColor: 'transparent',
             _hover: {
-              backgroundColor: 'amber.500',
-              color: 'gray.900',
+              backgroundColor: 'surface.hover',
             },
           })}
           onclick={() => history.back()}
@@ -42,25 +41,24 @@
           <AdminIcon icon={ArrowLeftIcon} size={16} />
           BACK TO LIST
         </button>
-        <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>DOCUMENT DETAILS</h2>
+        <h2 class={css({ fontSize: '18px', color: 'text.default' })}>DOCUMENT DETAILS</h2>
       </div>
       <div class={flex({ gap: '8px' })}>
         <a
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '12px',
             paddingY: '6px',
             fontSize: '12px',
-            color: 'amber.500',
+            color: 'text.default',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             backgroundColor: 'transparent',
             textDecoration: 'none',
             _hover: {
-              backgroundColor: 'amber.500',
-              color: 'gray.900',
+              backgroundColor: 'surface.hover',
             },
           })}
           href={query.data.adminDocument.entity.url}
@@ -73,19 +71,18 @@
         <a
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '12px',
             paddingY: '6px',
             fontSize: '12px',
-            color: 'amber.500',
+            color: 'text.default',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             backgroundColor: 'transparent',
             textDecoration: 'none',
             _hover: {
-              backgroundColor: 'amber.500',
-              color: 'gray.900',
+              backgroundColor: 'surface.hover',
             },
           })}
           href="/{query.data.adminDocument.entity.slug}"
@@ -111,35 +108,35 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>CONTENT</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>CONTENT</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>TITLE</div>
-              <div class={css({ fontSize: '14px', color: 'amber.500' })}>
+              <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>TITLE</div>
+              <div class={css({ fontSize: '14px', color: 'text.default' })}>
                 {query.data.adminDocument.title}
               </div>
             </div>
 
             <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>SUBTITLE</div>
-              <div class={css({ fontSize: '12px', color: query.data.adminDocument.subtitle ? 'amber.500' : 'gray.400' })}>
+              <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>SUBTITLE</div>
+              <div class={css({ fontSize: '12px', color: query.data.adminDocument.subtitle ? 'text.default' : 'text.hint' })}>
                 {query.data.adminDocument.subtitle || '(NO SUBTITLE)'}
               </div>
             </div>
 
             <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>EXCERPT</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>EXCERPT</div>
               <div
                 class={css({
                   fontSize: '12px',
                   fontFamily: 'mono',
-                  color: query.data.adminDocument.excerpt ? 'amber.500' : 'gray.400',
+                  color: query.data.adminDocument.excerpt ? 'text.default' : 'text.hint',
                   lineHeight: '[1.5]',
                 })}
               >
@@ -148,8 +145,8 @@
             </div>
 
             <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>CHARACTERS</div>
-              <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>CHARACTERS</div>
+              <div class={css({ fontSize: '12px', color: 'text.default' })}>
                 {comma(query.data.adminDocument.characterCount)}
               </div>
             </div>
@@ -163,34 +160,34 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>METADATA</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>METADATA</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>DOCUMENT ID</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>DOCUMENT ID</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {query.data.adminDocument.id}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>TYPE</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>TYPE</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 [{query.data.adminDocument.type}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATE</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>STATE</span>
               <span
                 class={css({
                   fontSize: '12px',
-                  color: query.data.adminDocument.entity.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                  color: query.data.adminDocument.entity.state === 'ACTIVE' ? 'success.default' : 'danger.default',
                 })}
               >
                 [{query.data.adminDocument.entity.state}]
@@ -198,15 +195,15 @@
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>CREATED</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>CREATED</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {dayjs(query.data.adminDocument.createdAt).formatAsDateTime()}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>UPDATED</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>UPDATED</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {dayjs(query.data.adminDocument.updatedAt).formatAsDateTime()}
               </span>
             </div>
@@ -217,14 +214,14 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PATH</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>PATH</h3>
 
-          <div class={flex({ fontSize: '12px', color: 'amber.400', alignItems: 'center', gap: '4px' })}>
+          <div class={flex({ fontSize: '12px', color: 'text.muted', alignItems: 'center', gap: '4px' })}>
             {#if query.data.adminDocument.entity.ancestors.length > 0}
               {#each query.data.adminDocument.entity.ancestors as ancestor, i (ancestor.id)}
                 <span>
@@ -239,7 +236,7 @@
                 {/if}
               {/each}
             {:else}
-              <span class={css({ color: 'gray.500' })}>-</span>
+              <span class={css({ color: 'text.hint' })}>-</span>
             {/if}
           </div>
         </div>
@@ -249,18 +246,18 @@
           <div
             class={css({
               borderWidth: '2px',
-              borderColor: 'amber.500',
+              borderColor: 'border.default',
               padding: '24px',
-              backgroundColor: 'gray.900',
+              backgroundColor: 'surface.default',
             })}
           >
-            <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>USER</h3>
+            <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>USER</h3>
 
             <div class={flex({ gap: '12px', alignItems: 'center', marginBottom: '16px' })}>
               <div
                 class={css({
                   size: '40px',
-                  backgroundColor: 'amber.500',
+                  backgroundColor: 'accent.subtle',
                   overflow: 'hidden',
                   flexShrink: '0',
                 })}
@@ -274,14 +271,14 @@
                   class={css({
                     fontSize: '14px',
                     fontWeight: 'bold',
-                    color: 'amber.500',
+                    color: 'text.default',
                     _hover: { textDecoration: 'underline' },
                   })}
                   href="/admin/users/{query.data.adminDocument.entity.user.id}"
                 >
                   {query.data.adminDocument.entity.user.name}
                 </a>
-                <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+                <div class={css({ fontSize: '11px', color: 'text.muted' })}>
                   {query.data.adminDocument.entity.user.email}
                 </div>
               </div>
@@ -293,25 +290,25 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>SHARE OPTIONS</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>SHARE OPTIONS</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>VISIBILITY</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>VISIBILITY</span>
               <span
                 class={css({
                   fontSize: '12px',
                   color:
                     query.data.adminDocument.entity.visibility === 'UNLISTED'
-                      ? 'green.400'
+                      ? 'success.default'
                       : query.data.adminDocument.entity.visibility === 'PUBLIC'
-                        ? 'blue.400'
-                        : 'gray.400',
+                        ? 'warning.default'
+                        : 'text.hint',
                 })}
               >
                 [{query.data.adminDocument.entity.visibility}]
@@ -319,23 +316,23 @@
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>PASSWORD</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminDocument.password ? 'amber.500' : 'gray.400' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>PASSWORD</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminDocument.password ? 'text.default' : 'text.hint' })}>
                 {query.data.adminDocument.password || 'NONE'}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>CONTENT RATING</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>CONTENT RATING</span>
               <span
                 class={css({
                   fontSize: '12px',
                   color:
                     query.data.adminDocument.contentRating === 'ALL'
-                      ? 'green.400'
+                      ? 'success.default'
                       : query.data.adminDocument.contentRating === 'R15'
-                        ? 'blue.400'
-                        : 'red.400',
+                        ? 'warning.default'
+                        : 'danger.default',
                 })}
               >
                 [{query.data.adminDocument.contentRating}]
@@ -343,15 +340,15 @@
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>REACTIONS</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminDocument.allowReaction ? 'green.400' : 'gray.400' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>REACTIONS</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminDocument.allowReaction ? 'success.default' : 'text.hint' })}>
                 {query.data.adminDocument.allowReaction ? 'ALLOWED' : 'DISABLED'}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>CONTENT COPY</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminDocument.protectContent ? 'amber.500' : 'gray.400' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>CONTENT COPY</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminDocument.protectContent ? 'text.default' : 'text.hint' })}>
                 {query.data.adminDocument.protectContent ? 'PROTECTED' : 'ALLOWED'}
               </span>
             </div>
@@ -362,16 +359,16 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ENGAGEMENT</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>ENGAGEMENT</h3>
 
           <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-            <span class={css({ fontSize: '11px', color: 'amber.400' })}>REACTIONS</span>
-            <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+            <span class={css({ fontSize: '11px', color: 'text.muted' })}>REACTIONS</span>
+            <span class={css({ fontSize: '12px', color: 'text.default' })}>
               {query.data.adminDocument.reactionCount}
             </span>
           </div>

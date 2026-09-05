@@ -21,7 +21,7 @@
     variants: {
       color: {
         primary: { backgroundColor: 'border.default' },
-        secondary: { backgroundColor: 'border.strong' },
+        secondary: { backgroundColor: 'border.hairline' },
       },
     },
   });

@@ -25,7 +25,7 @@
   const linesAfter = generateLines(5);
 
   const textLine = css({
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     borderRadius: '4px',
     flexShrink: '0',
     transformOrigin: 'left',
@@ -41,7 +41,7 @@
 
   <div
     class={css({
-      backgroundColor: 'surface.muted',
+      backgroundColor: 'skeleton.base',
       borderRadius: '8px',
       width: 'full',
       height: '320px',

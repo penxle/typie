@@ -31,7 +31,7 @@
     paddingX: '4px',
     paddingY: '1px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.inset',
     fontFamily: 'mono',
     fontSize: '[0.9em]',
   });
@@ -59,8 +59,8 @@
   const numberMarkers = [css({ listStyleType: 'decimal' }), css({ listStyleType: 'lower-alpha' }), css({ listStyleType: 'lower-roman' })];
 
   const taskItem = css({ display: 'flex', gap: '8px', listStyleType: 'none' });
-  const taskBox = css({ flexShrink: '0', marginTop: '6px', color: 'text.faint' });
-  const taskBoxChecked = css({ flexShrink: '0', marginTop: '6px', color: 'text.subtle' });
+  const taskBox = css({ flexShrink: '0', marginTop: '6px', color: 'text.muted' });
+  const taskBoxChecked = css({ flexShrink: '0', marginTop: '6px', color: 'accent.default' });
 
   const detailsSummary = css({
     display: 'flex',
@@ -76,7 +76,7 @@
   });
 
   const detailsChevron = css.raw({
-    color: 'text.faint',
+    color: 'text.default',
     transitionProperty: '[transform]',
     transitionDuration: '200ms',
     transitionTimingFunction: 'ease',
@@ -91,7 +91,7 @@
 
   const detailsClip = css({ minHeight: '0', overflow: 'hidden' });
 
-  const noteBox = css({ fontSize: '[calc(13em/15)]', color: 'text.faint', '& *': { color: '[inherit]' } });
+  const noteBox = css({ fontSize: '[calc(13em/15)]', color: 'text.hint', '& *': { color: '[inherit]' } });
 
   const detailsBody = css({
     paddingTop: '10px',
@@ -100,11 +100,11 @@
     transitionTimingFunction: 'ease',
   });
 
-  const tableScroll = css({ overflowX: 'auto', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '6px' });
+  const tableScroll = css({ overflowX: 'auto', borderWidth: '1px', borderColor: 'border.hairline', borderRadius: '6px' });
   const table = css({ borderCollapse: 'collapse', width: 'full', fontSize: '[calc(14em/15)]', lineHeight: '[1.6]' });
-  const headCell = css({ paddingX: '12px', paddingY: '8px', fontWeight: 'semibold', backgroundColor: 'surface.subtle' });
-  const bodyCell = css({ paddingX: '12px', paddingY: '8px', borderTopWidth: '1px', borderColor: 'border.subtle' });
-  const cellDivider = css({ borderLeftWidth: '1px', borderColor: 'border.subtle', _first: { borderLeftWidth: '0' } });
+  const headCell = css({ paddingX: '12px', paddingY: '8px', fontWeight: 'semibold', backgroundColor: 'surface.canvas' });
+  const bodyCell = css({ paddingX: '12px', paddingY: '8px', borderTopWidth: '1px', borderColor: 'border.hairline' });
+  const cellDivider = css({ borderLeftWidth: '1px', borderColor: 'border.hairline', _first: { borderLeftWidth: '0' } });
 
   const alignments = {
     left: css({ textAlign: 'left' }),
@@ -199,7 +199,7 @@
         class={css({
           padding: '12px',
           borderRadius: '6px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           fontFamily: 'mono',
           fontSize: '[calc(14em/15)]',
           lineHeight: '[1.6]',
@@ -228,7 +228,7 @@
         </div>
       </div>
     {:else if block.kind === 'blockquote'}
-      <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.strong', paddingLeft: '13px', color: 'text.faint' })}>
+      <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.emphasis', paddingLeft: '13px', color: 'text.muted' })}>
         <ChangelogMarkdown blocks={block.children} {depth} />
       </blockquote>
     {:else if block.kind === 'note'}
@@ -238,7 +238,7 @@
     {:else if block.kind === 'space'}
       <div style:height={`calc(${block.lines} * 1.75em - ${depth > 0 ? 7 : 13}px)`} class={css({ flexShrink: '0' })}></div>
     {:else if block.kind === 'hr'}
-      <hr class={css({ flexShrink: '0', height: '1px', backgroundColor: 'border.subtle', border: 'none' })} />
+      <hr class={css({ flexShrink: '0', height: '1px', backgroundColor: 'border.hairline', border: 'none' })} />
     {/if}
   {/each}
 </div>

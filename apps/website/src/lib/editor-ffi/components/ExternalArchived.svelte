@@ -31,7 +31,7 @@
         justifyContent: 'space-between',
         alignItems: 'center',
         borderRadius: '4px',
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.inset',
         width: 'full',
         height: '48px',
       })}
@@ -43,7 +43,7 @@
           paddingX: '14px',
           paddingY: '12px',
           fontSize: '14px',
-          color: 'text.disabled',
+          color: 'text.hint',
           flex: '[1 999 0px]',
           minWidth: '0',
         })}
@@ -132,16 +132,16 @@
           overflowY: 'auto',
           padding: '12px',
           borderRadius: '6px',
-          backgroundColor: 'surface.subtle',
+          backgroundColor: 'surface.canvas',
           '& pre': {
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-all',
             padding: '12px',
             borderRadius: '6px',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             fontSize: '13px',
             fontFamily: 'mono',
-            color: 'text.subtle',
+            color: 'text.muted',
           },
           '& pre code': {
             fontFamily: '[inherit]',
@@ -163,7 +163,7 @@
             maxWidth: 'full',
           },
           '& a': {
-            color: 'accent.brand.default',
+            color: 'text.default',
             textDecoration: 'underline',
           },
         })}

@@ -23,19 +23,19 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'review.issue.subtle' },
-        closed: { backgroundColor: 'surface.muted' },
-        strength: { backgroundColor: 'review.strength.subtle' },
+        open: { backgroundColor: '[color-mix(in oklch, token(colors.review.issue) 16%, transparent)]' },
+        closed: { backgroundColor: 'surface.inset' },
+        strength: { backgroundColor: '[color-mix(in oklch, token(colors.review.strength) 16%, transparent)]' },
       },
       active: { true: {}, false: {} },
     },
     compoundVariants: [
-      { tone: 'open', active: false, css: { _groupHover: { backgroundColor: 'review.issue.default', opacity: '80' } } },
-      { tone: 'closed', active: false, css: { _groupHover: { backgroundColor: 'border.strong', opacity: '80' } } },
-      { tone: 'strength', active: false, css: { _groupHover: { backgroundColor: 'review.strength.default', opacity: '80' } } },
-      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', opacity: '100' } },
-      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', opacity: '100' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', opacity: '100' } },
+      { tone: 'open', active: false, css: { _groupHover: { backgroundColor: 'review.issue', opacity: '80' } } },
+      { tone: 'closed', active: false, css: { _groupHover: { backgroundColor: 'border.emphasis', opacity: '80' } } },
+      { tone: 'strength', active: false, css: { _groupHover: { backgroundColor: 'review.strength', opacity: '80' } } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue', opacity: '100' } },
+      { tone: 'closed', active: true, css: { backgroundColor: 'border.emphasis', opacity: '100' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength', opacity: '100' } },
     ],
   });
 
@@ -58,29 +58,33 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'review.issue.subtle', color: 'review.issue.default' },
-        closed: { backgroundColor: 'surface.muted', color: 'text.faint' },
+        open: { backgroundColor: '[color-mix(in oklch, token(colors.review.issue) 16%, transparent)]', color: 'review.issue' },
+        closed: { backgroundColor: 'surface.inset', color: 'text.hint' },
         strength: {
-          backgroundColor: 'review.strength.subtle',
-          color: 'review.strength.default',
+          backgroundColor: '[color-mix(in oklch, token(colors.review.strength) 16%, transparent)]',
+          color: 'review.strength',
         },
       },
       active: { true: {}, false: {} },
     },
     compoundVariants: [
-      { tone: 'open', active: false, css: { _groupHover: { borderColor: 'review.issue.default' } } },
-      { tone: 'closed', active: false, css: { _groupHover: { borderColor: 'border.strong' } } },
-      { tone: 'strength', active: false, css: { _groupHover: { borderColor: 'review.strength.default' } } },
+      { tone: 'open', active: false, css: { _groupHover: { borderColor: 'review.issue' } } },
+      { tone: 'closed', active: false, css: { _groupHover: { borderColor: 'border.emphasis' } } },
+      { tone: 'strength', active: false, css: { _groupHover: { borderColor: 'review.strength' } } },
       {
         tone: 'open',
         active: true,
-        css: { backgroundColor: 'review.issue.default', borderColor: 'review.issue.default', color: 'surface.default' },
+        css: { backgroundColor: 'review.issue', borderColor: 'review.issue', color: 'surface.default' },
       },
-      { tone: 'closed', active: true, css: { backgroundColor: 'border.strong', borderColor: 'border.strong', color: 'text.bright' } },
+      {
+        tone: 'closed',
+        active: true,
+        css: { backgroundColor: 'surface.inverse', borderColor: 'surface.inverse', color: 'text.on.inverse' },
+      },
       {
         tone: 'strength',
         active: true,
-        css: { backgroundColor: 'review.strength.default', borderColor: 'review.strength.default', color: 'surface.default' },
+        css: { backgroundColor: 'review.strength', borderColor: 'review.strength', color: 'surface.default' },
       },
     ],
   });

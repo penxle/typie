@@ -191,8 +191,8 @@
                     justifyContent: 'center',
                     borderRadius: 'full',
                     size: 'full',
-                    backgroundColor: 'gray.900/60',
-                    color: 'text.bright',
+                    backgroundColor: 'surface.inverse/60',
+                    color: 'text.on.inverse',
                   },
                 })}
               >
@@ -239,11 +239,11 @@
                   alignItems: 'center',
                   justifyContent: 'center',
                   size: '22px',
-                  color: 'text.subtle',
+                  color: 'text.muted',
                   cursor: 'pointer',
                   borderRadius: '4px',
                   transition: 'common',
-                  _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+                  _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
                 })}
                 onclick={() => (updateEmailOpen = true)}
                 type="button"
@@ -274,7 +274,7 @@
           {/snippet}
           {#snippet error()}
             {#if form.errors.name}
-              <p class={css({ fontSize: '12px', color: 'text.danger', textAlign: 'right' })}>{form.errors.name}</p>
+              <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{form.errors.name}</p>
             {/if}
           {/snippet}
         </SettingsRow>
@@ -297,8 +297,8 @@
         {#snippet value()}
           {#if user.data.personalIdentity}
             <div class={flex({ align: 'center', gap: '6px' })}>
-              <Icon style={css.raw({ color: 'text.success' })} icon={CheckCircle2Icon} size={12} />
-              <span class={css({ color: 'text.success' })}>인증 완료</span>
+              <Icon style={css.raw({ color: 'success.default' })} icon={CheckCircle2Icon} size={12} />
+              <span class={css({ color: 'success.default' })}>인증 완료</span>
             </div>
           {:else}
             <Button onclick={handleVerification} size="sm" variant="secondary">인증하기</Button>
@@ -350,7 +350,7 @@
           문의나 지원 요청 시 이 ID를 알려주시면 더 빠르게 도와드릴 수 있어요.
         {/snippet}
         {#snippet value()}
-          <div class={css({ fontSize: '12px', fontFamily: 'mono', color: 'text.subtle', letterSpacing: '[0]' })}>
+          <div class={css({ fontSize: '12px', fontFamily: 'mono', color: 'text.muted', letterSpacing: '[0]' })}>
             {user.data.id}
           </div>
         {/snippet}

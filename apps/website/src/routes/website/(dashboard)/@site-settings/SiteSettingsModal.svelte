@@ -87,7 +87,7 @@
         paddingX: '12px',
         width: '200px',
         borderRightWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         overflowY: 'auto',
       })}
     >
@@ -98,7 +98,7 @@
               class={css({
                 fontSize: '11px',
                 fontWeight: 'semibold',
-                color: 'text.disabled',
+                color: 'text.muted',
                 textTransform: 'uppercase',
                 letterSpacing: '[0.05em]',
               })}
@@ -119,11 +119,11 @@
                   fontSize: '13px',
                   color: 'text.muted',
                   transition: 'common',
-                  _hover: { backgroundColor: 'surface.subtle' },
+                  _hover: { backgroundColor: 'surface.hover' },
                   _selected: {
                     color: 'text.default',
                     fontWeight: 'medium',
-                    backgroundColor: 'surface.muted',
+                    backgroundColor: 'surface.active',
                   },
                 })}
                 aria-selected={currentTab?.path === path}

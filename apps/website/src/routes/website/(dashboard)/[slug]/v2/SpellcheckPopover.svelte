@@ -113,17 +113,17 @@
           alignItems: 'center',
           gap: '4px',
           borderWidth: '1px',
-          borderColor: 'border.danger',
+          borderColor: 'danger.default',
           borderRadius: '4px',
           paddingX: '8px',
           paddingY: '4px',
           fontSize: '13px',
           fontWeight: 'semibold',
-          color: 'text.danger',
-          backgroundColor: 'accent.danger.subtle',
+          color: 'text.on.danger.subtle',
+          backgroundColor: 'danger.subtle',
           transition: 'common',
-          boxShadow: 'small',
-          _hover: { backgroundColor: { base: 'red.100', _dark: 'dark.red.800' } },
+          boxShadow: 'sm',
+          _hover: { boxShadow: 'lg' },
         })}
         onclick={() => apply(correction)}
         type="button"
@@ -142,10 +142,10 @@
         borderColor: 'border.default',
         borderRadius: '4px',
         backgroundColor: 'surface.default',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
-        boxShadow: 'small',
-        _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+        boxShadow: 'sm',
+        _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
       })}
       onclick={dismiss}
       type="button"

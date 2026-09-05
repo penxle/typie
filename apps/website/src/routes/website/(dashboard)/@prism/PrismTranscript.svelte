@@ -525,7 +525,7 @@
                 {unavailableMessage}
               />
             {:else if item.entry.role === 'run-failed'}
-              <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'text.danger' })}>
+              <div class={css({ alignSelf: 'center', fontSize: '11px', color: 'danger.default' })}>
                 응답을 마치지 못했어요. 다시 보내 주세요
               </div>
             {:else if item.entry.role === 'workflow'}
@@ -577,8 +577,8 @@
         zIndex: '2',
         size: '28px',
         borderRadius: 'full',
-        backgroundColor: 'surface.dark',
-        color: 'text.bright',
+        backgroundColor: 'surface.inverse',
+        color: 'text.on.inverse',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

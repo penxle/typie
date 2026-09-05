@@ -110,13 +110,13 @@
           borderColor: 'border.default',
           borderRadius: '12px',
           backgroundColor: 'surface.default',
-          boxShadow: 'medium',
+          boxShadow: 'md',
           textAlign: 'left',
           cursor: 'pointer',
           transitionProperty: '[border-color, box-shadow]',
           transitionDuration: '200ms',
           transitionTimingFunction: 'ease',
-          _hover: { borderColor: 'border.strong' },
+          _hover: { borderColor: 'border.emphasis' },
         })}
         onclick={open}
         type="button"
@@ -129,7 +129,7 @@
               objectFit: 'cover',
               borderRadius: '8px',
               marginBottom: '12px',
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.inset',
               opacity: imageLoaded ? '100' : '0',
               transitionProperty: '[opacity]',
               transitionDuration: imageInstant ? '0ms' : '300ms',
@@ -144,7 +144,7 @@
           />
         {/if}
 
-        <div class={css({ marginBottom: '6px', fontSize: '11px', color: 'text.faint' })}>
+        <div class={css({ marginBottom: '6px', fontSize: '11px', color: 'text.hint' })}>
           {dayjs(highlight.date).formatAsDate()} · 업데이트 노트
         </div>
 
@@ -173,7 +173,7 @@
           borderWidth: '1px',
           borderColor: 'border.default',
           borderRadius: '6px',
-          color: 'text.faint',
+          color: 'text.hint',
           backgroundColor: 'surface.default',
           cursor: 'pointer',
           transitionProperty: '[opacity, background-color, border-color, color]',
@@ -181,8 +181,8 @@
           transitionTimingFunction: 'ease',
           opacity: '0',
           _groupHover: { opacity: '100' },
-          _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
-          _focusVisible: { opacity: '100', backgroundColor: 'surface.muted', color: 'text.subtle' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.muted' },
+          _focusVisible: { opacity: '100', backgroundColor: 'surface.hover', color: 'text.muted' },
         })}
         aria-label="닫기"
         onclick={dismiss}

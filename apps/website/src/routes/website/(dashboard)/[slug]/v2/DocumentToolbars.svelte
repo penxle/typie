@@ -58,7 +58,7 @@
   const rowShell = css.raw({
     flexShrink: '0',
     borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     position: 'relative',
     backgroundColor: 'surface.default',
   });
@@ -147,7 +147,7 @@
           class={flex({
             alignItems: 'center',
             gap: '4px',
-            opacity: editingDisabled ? '50' : '100',
+            opacity: editingDisabled ? '40' : '100',
             pointerEvents: editingDisabled ? 'none' : 'auto',
           })}
         >
@@ -177,7 +177,7 @@
         <div
           class={flex({
             alignItems: 'center',
-            opacity: editingDisabled ? '50' : '100',
+            opacity: editingDisabled ? '40' : '100',
             pointerEvents: editingDisabled ? 'none' : 'auto',
           })}
         >

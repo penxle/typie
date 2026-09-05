@@ -59,110 +59,58 @@
         primary: {
           fontWeight: 'semibold',
           letterSpacing: '-0.01em',
-          color: {
-            _enabled: {
-              base: 'text.bright',
-              _hover: 'text.bright',
-              _active: 'text.bright',
-              _pressed: 'text.bright',
-            },
-            _disabled: 'text.disabled',
-          },
+          color: 'surface.default',
           backgroundColor: {
-            _enabled: {
-              base: 'accent.brand.default',
-              _hover: 'accent.brand.hover',
-              _active: 'accent.brand.active',
-              _pressed: 'accent.brand.active',
-            },
-            _disabled: 'interactive.disabled',
+            base: 'accent.default',
+            _hover: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
+            _active: '[color-mix(in oklch, token(colors.accent.default) 80%, black)]',
+            _pressed: '[color-mix(in oklch, token(colors.accent.default) 80%, black)]',
           },
-          boxShadow: {
-            _enabled: {
-              base: 'buttonDefault',
-              _hover: 'buttonHover',
-            },
-          },
+          boxShadow: 'sm',
+          _disabled: { opacity: '40' },
         },
         secondary: {
           fontWeight: 'medium',
-          color: {
-            _enabled: {
-              base: 'text.subtle',
-              _hover: 'text.subtle',
-              _active: 'text.subtle',
-              _pressed: 'text.subtle',
-            },
-            _disabled: 'text.disabled',
-          },
+          color: 'text.muted',
           backgroundColor: {
-            _enabled: {
-              base: 'surface.default',
-              // subtle이 아니라 muted다 — subtle 배경 카드 위에 앉은 버튼의 hover가 카드에 녹아 사라진다
-              _hover: 'surface.muted',
-              _active: 'interactive.hover',
-              _pressed: 'interactive.hover',
-            },
-            _disabled: 'interactive.disabled',
+            base: 'surface.default',
+            _hover: 'surface.hover',
+            _active: 'surface.active',
+            _pressed: 'surface.active',
           },
           borderWidth: '1px',
-          borderColor: {
-            _enabled: 'border.subtle',
-            _disabled: 'border.subtle',
-          },
-          boxShadow: {
-            _enabled: { base: 'buttonSubtle' },
-          },
+          borderColor: 'border.hairline',
+          boxShadow: 'sm',
+          _disabled: { opacity: '40' },
         },
         ghost: {
           fontWeight: 'medium',
           color: {
-            _enabled: {
-              base: 'text.subtle',
-              _hover: 'text.default',
-              _active: 'text.default',
-              _pressed: 'text.default',
-            },
-            _disabled: 'text.disabled',
+            base: 'text.muted',
+            _hover: 'text.default',
+            _active: 'text.default',
+            _pressed: 'text.default',
           },
           backgroundColor: {
-            _enabled: {
-              base: 'transparent',
-              // secondary와 같은 이유 — subtle 배경 카드 위에서 hover가 카드에 녹아 사라진다
-              _hover: 'surface.muted',
-              _active: 'interactive.hover',
-              _pressed: 'interactive.hover',
-            },
-            _disabled: 'transparent',
+            base: 'transparent',
+            _hover: 'surface.hover',
+            _active: 'surface.active',
+            _pressed: 'surface.active',
           },
+          _disabled: { opacity: '40' },
         },
         danger: {
           fontWeight: 'semibold',
           letterSpacing: '-0.01em',
-          color: {
-            _enabled: {
-              base: 'text.bright',
-              _hover: 'text.bright',
-              _active: 'text.bright',
-              _pressed: 'text.bright',
-            },
-            _disabled: 'text.disabled',
-          },
+          color: 'text.on.danger',
           backgroundColor: {
-            _enabled: {
-              base: 'accent.danger.default',
-              _hover: 'accent.danger.hover',
-              _active: 'accent.danger.active',
-              _pressed: 'accent.danger.active',
-            },
-            _disabled: 'interactive.disabled',
+            base: 'danger.default',
+            _hover: '[color-mix(in oklch, token(colors.danger.default) 88%, black)]',
+            _active: '[color-mix(in oklch, token(colors.danger.default) 80%, black)]',
+            _pressed: '[color-mix(in oklch, token(colors.danger.default) 80%, black)]',
           },
-          boxShadow: {
-            _enabled: {
-              base: 'buttonDefault',
-              _hover: 'buttonHover',
-            },
-          },
+          boxShadow: 'sm',
+          _disabled: { opacity: '40' },
         },
       },
       size: {
@@ -179,10 +127,10 @@
     },
     variants: {
       color: {
-        primary: { color: 'text.bright' },
-        secondary: { color: 'text.subtle' },
-        ghost: { color: 'text.subtle' },
-        danger: { color: 'text.danger' },
+        primary: { color: 'surface.default' },
+        secondary: { color: 'text.muted' },
+        ghost: { color: 'text.muted' },
+        danger: { color: 'text.on.danger' },
       },
     },
   });

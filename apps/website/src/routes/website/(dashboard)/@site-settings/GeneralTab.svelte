@@ -188,8 +188,8 @@
                   justifyContent: 'center',
                   borderRadius: '4px',
                   size: 'full',
-                  backgroundColor: 'gray.900/60',
-                  color: 'text.bright',
+                  backgroundColor: 'surface.inverse/70',
+                  color: 'text.on.inverse',
                 },
               })}
             >
@@ -239,7 +239,7 @@
         {/snippet}
         {#snippet error()}
           {#if form.errors.name}
-            <p class={css({ fontSize: '12px', color: 'text.danger', textAlign: 'right' })}>{form.errors.name}</p>
+            <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{form.errors.name}</p>
           {/if}
         {/snippet}
       </SettingsRow>
@@ -267,8 +267,8 @@
                 <span
                   class={css({
                     fontSize: '13px',
-                    color: 'text.subtle',
-                    backgroundColor: 'surface.muted',
+                    color: 'text.muted',
+                    backgroundColor: 'surface.inset',
                     paddingX: '12px',
                     height: 'full',
                     display: 'flex',
@@ -297,7 +297,7 @@
         {/snippet}
         {#snippet error()}
           {#if slugForm.errors.slug}
-            <p class={css({ fontSize: '12px', color: 'text.danger', textAlign: 'right' })}>{slugForm.errors.slug}</p>
+            <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{slugForm.errors.slug}</p>
           {/if}
         {/snippet}
       </SettingsRow>
@@ -371,11 +371,11 @@
         borderRadius: '8px',
         paddingX: '12px',
         paddingY: '8px',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'surface.canvas',
       })}
     >
-      <RingSpinner style={css.raw({ size: '13px', color: 'text.faint' })} />
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>삭제될 항목 계산중...</span>
+      <RingSpinner style={css.raw({ size: '13px', color: 'text.muted' })} />
+      <span class={css({ fontSize: '13px', color: 'text.muted' })}>삭제될 항목 계산중...</span>
     </div>
   {:else if siteInfo.data}
     {@const folders = siteInfo.data.site.folderCount}
@@ -390,11 +390,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'accent.danger.subtle',
+          backgroundColor: 'danger.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
+        <Icon style={css.raw({ color: 'text.on.danger.subtle' })} icon={TriangleAlertIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.danger.subtle' })}>
           {items.join('와 ')}가 함께 삭제돼요
         </span>
       </div>
@@ -406,11 +406,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'accent.success.subtle',
+          backgroundColor: 'success.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'text.success' })} icon={CheckIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 스페이스예요</span>
+        <Icon style={css.raw({ color: 'text.on.success.subtle' })} icon={CheckIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.success.subtle' })}>비어있는 스페이스예요</span>
       </div>
     {/if}
 
@@ -419,7 +419,7 @@
       <div class={flex({ flexDirection: 'column', gap: '6px' })}>
         <label class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.default' })} for="delete-confirm">
           삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수(
-          <span class={css({ fontWeight: 'bold', color: 'text.danger' })}>{documents}</span>
+          <span class={css({ fontWeight: 'bold', color: 'danger.default' })}>{documents}</span>
           )를 입력해주세요.
         </label>
         <TextInput
@@ -432,7 +432,7 @@
           bind:value={deleteConfirmInput}
         />
         {#if deleteConfirmError}
-          <p class={css({ fontSize: '12px', color: 'text.danger' })}>{deleteConfirmError}</p>
+          <p class={css({ fontSize: '12px', color: 'danger.default' })}>{deleteConfirmError}</p>
         {/if}
       </div>
     {/if}

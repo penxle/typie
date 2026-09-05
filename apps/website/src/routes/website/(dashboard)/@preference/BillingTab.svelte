@@ -257,7 +257,7 @@
                 {/if}
               </span>
             {:else if subscription.state === SubscriptionState.IN_GRACE_PERIOD}
-              <span class={css({ color: 'text.danger' })}>
+              <span class={css({ color: 'danger.default' })}>
                 결제에 실패해 결제를 다시 시도하고 있어요. 결제가 확인되지 않으면 곧 이용이 제한돼요. 결제 수단을 확인해 주세요.
               </span>
             {:else if switching}
@@ -267,7 +267,7 @@
                 {dayjs(subscription.currentPeriodEndsAt).formatAsDate()}에 다음 플랜으로 전환 예정
               </span>
             {:else if subscription.state === SubscriptionState.WILL_EXPIRE}
-              <span class={css({ color: 'text.danger' })}>
+              <span class={css({ color: 'danger.default' })}>
                 {dayjs(subscription.currentPeriodEndsAt).formatAsDate()} 해지 예정
               </span>
             {:else if indefinite}
@@ -402,7 +402,7 @@
       </SettingsCard>
 
       {#if isInAppPurchase}
-        <p class={css({ marginTop: '12px', fontSize: '13px', color: 'text.faint' })}>
+        <p class={css({ marginTop: '12px', fontSize: '13px', color: 'text.muted' })}>
           이 구독은 앱에서 결제되었어요. 플랜 변경 및 해지는 App Store 또는 Google Play에서 관리할 수 있어요.
         </p>
       {/if}

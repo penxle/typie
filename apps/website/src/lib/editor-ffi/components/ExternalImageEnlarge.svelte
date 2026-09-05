@@ -94,16 +94,16 @@
         <button
           class={center({
             borderWidth: '[1.5px]',
-            borderColor: 'border.strong',
+            borderColor: 'border.default',
             borderRadius: 'full',
             marginBottom: '4px',
-            color: 'text.faint',
+            color: 'text.muted',
             size: '40px',
             backgroundColor: 'surface.default',
-            boxShadow: 'small',
+            boxShadow: 'sm',
             _hover: {
-              borderColor: { base: 'gray.500', _dark: 'dark.gray.400' },
-              color: 'text.subtle',
+              borderColor: 'border.emphasis',
+              color: 'text.default',
             },
           })}
           aria-label="닫기"
@@ -112,7 +112,7 @@
         >
           <Icon icon={XIcon} />
         </button>
-        <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'text.disabled', textAlign: 'center' })}>
+        <span class={css({ display: 'block', fontSize: '13px', fontWeight: 'semibold', color: 'text.hint', textAlign: 'center' })}>
           ESC
         </span>
       </div>

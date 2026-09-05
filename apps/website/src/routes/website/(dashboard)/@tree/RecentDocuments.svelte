@@ -208,7 +208,7 @@
 >
   {#if documents.length === 0}
     <li class={flex({ alignItems: 'center', height: '32px', paddingX: '8px' })}>
-      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.disabled' })}>
+      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.hint' })}>
         {sort === 'VIEWED_AT' ? '최근 본 문서가 없어요' : '최근 수정한 문서가 없어요'}
       </p>
     </li>
@@ -231,10 +231,10 @@
           paddingY: '6px',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.disabled',
+          color: 'text.muted',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.muted' },
+          _supportHover: { color: 'text.default' },
         })}
         disabled={query.loading}
         onclick={showMore}

@@ -1103,7 +1103,7 @@
           <Entity entity$key={entity} />
         {:else}
           <div class={flex({ alignItems: 'center', flexGrow: '1', paddingX: '8px' })}>
-            <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.disabled' })}>아직 문서가 없어요</p>
+            <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.hint' })}>아직 문서가 없어요</p>
           </div>
         {/each}
       </div>
@@ -1129,10 +1129,10 @@
       style:max-width={ghostEntityName ? `${dragging.element.offsetWidth}px` : undefined}
       class={flex({
         position: 'fixed',
-        backgroundColor: 'accent.info.default',
+        backgroundColor: 'accent.default',
         opacity: dragging.drop ? undefined : '[0.5]',
         gap: '8px',
-        color: 'text.bright',
+        color: 'surface.default',
         alignItems: 'center',
         justifyContent: 'center',
         paddingX: '8px',
@@ -1148,7 +1148,7 @@
       {#if ghostEntityName}
         <div class={flex({ alignItems: 'center', gap: '2px', minWidth: '0' })}>
           <Icon
-            style={css.raw({ color: 'text.bright', flexShrink: '0' })}
+            style={css.raw({ color: 'surface.default', flexShrink: '0' })}
             icon={entityIconMap.get(dragging?.element.dataset.icon ?? '') ??
               (ghostEntityType === 'folder' ? FolderIcon : ghostEntityType === 'divider' ? MinusIcon : FileIcon)}
             size={14}
@@ -1169,19 +1169,19 @@
       {:else}
         {#if ghostEntityCount.folder > 0}
           <div class={center({ gap: '2px' })}>
-            <Icon style={css.raw({ color: 'text.bright' })} icon={FolderIcon} size={14} />
+            <Icon style={css.raw({ color: 'surface.default' })} icon={FolderIcon} size={14} />
             {ghostEntityCount.folder}
           </div>
         {/if}
         {#if ghostEntityCount.document > 0}
           <div class={center({ gap: '2px' })}>
-            <Icon style={css.raw({ color: 'text.bright' })} icon={FileIcon} size={14} />
+            <Icon style={css.raw({ color: 'surface.default' })} icon={FileIcon} size={14} />
             {ghostEntityCount.document}
           </div>
         {/if}
         {#if ghostEntityCount.divider > 0}
           <div class={center({ gap: '2px' })}>
-            <Icon style={css.raw({ color: 'text.bright' })} icon={MinusIcon} size={14} />
+            <Icon style={css.raw({ color: 'surface.default' })} icon={MinusIcon} size={14} />
             {ghostEntityCount.divider}
           </div>
         {/if}

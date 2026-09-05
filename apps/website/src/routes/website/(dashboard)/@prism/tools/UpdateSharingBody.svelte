@@ -120,9 +120,9 @@
     whiteSpace: 'nowrap',
     lineHeight: '[1.5]',
   });
-  const changeClass = flex({ alignItems: 'center', gap: '4px', flexShrink: '0', fontSize: '[11.5px]', color: 'text.faint' });
-  const nextClass = css({ fontWeight: 'semibold', color: 'text.subtle' });
-  const noticeClass = css({ color: 'text.faint' });
+  const changeClass = flex({ alignItems: 'center', gap: '4px', flexShrink: '0', fontSize: '[11.5px]', color: 'text.hint' });
+  const nextClass = css({ fontWeight: 'semibold', color: 'text.muted' });
+  const noticeClass = css({ color: 'text.hint' });
 </script>
 
 {#if loading}

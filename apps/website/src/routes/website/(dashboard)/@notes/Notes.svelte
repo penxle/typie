@@ -462,7 +462,7 @@
         backgroundColor: 'surface.default',
         borderRadius: '14px',
         overflow: 'hidden',
-        boxShadow: 'large',
+        boxShadow: 'lg',
       })}
     >
       <textarea
@@ -532,7 +532,7 @@
             paddingY: '32px',
             textAlign: 'center',
             fontSize: '14px',
-            color: 'text.faint',
+            color: 'text.muted',
           })}
           role="status"
         >
@@ -545,7 +545,7 @@
             alignItems: 'center',
             gap: '12px',
             paddingY: '32px',
-            color: 'text.faint',
+            color: 'text.muted',
             fontSize: '14px',
           })}
         >
@@ -601,12 +601,12 @@
               paddingY: '6px',
               fontSize: '13px',
               fontWeight: 'medium',
-              color: 'text.subtle',
+              color: 'text.muted',
               cursor: 'pointer',
               borderRadius: '6px',
               transitionProperty: 'common!',
-              backgroundColor: 'surface.dark/10',
-              _hover: { color: 'text.default', backgroundColor: 'surface.dark/15' },
+              backgroundColor: 'surface.inset',
+              _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               handleCollapse();
@@ -675,7 +675,7 @@
               paddingY: '32px',
               textAlign: 'center',
               fontSize: '14px',
-              color: 'text.faint',
+              color: 'text.hint',
             })}
           >
             떠오르는 생각이나 아이디어를 자유롭게 기록해보세요

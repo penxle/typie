@@ -23,10 +23,10 @@
       class={center({
         borderRadius: '4px',
         size: '24px',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-        _pressed: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+        _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+        _pressed: { color: 'text.default', backgroundColor: 'surface.active' },
       })}
       aria-label="창 메뉴"
       aria-pressed={open}

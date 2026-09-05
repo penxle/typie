@@ -138,9 +138,9 @@
     class={css({
       padding: '20px',
       borderRadius: '12px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
       borderWidth: '1px',
-      borderColor: 'border.default',
+      borderColor: 'border.hairline',
     })}
   >
     <h3 class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default', marginBottom: '16px' })}>
@@ -215,10 +215,10 @@
       borderRadius: '8px',
       paddingX: '12px',
       paddingY: '10px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
     })}
   >
-    <p class={css({ paddingX: '4px', fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>알림음 미리 듣기</p>
+    <p class={css({ paddingX: '4px', fontSize: '11px', fontWeight: 'medium', color: 'text.muted' })}>알림음 미리 듣기</p>
     <div class={flex({ gap: '4px', marginTop: '4px' })}>
       {#each previewSounds as sound (sound.kind)}
         <button
@@ -229,9 +229,9 @@
             paddingX: '8px',
             paddingY: '6px',
             fontSize: '12px',
-            color: playing === sound.kind ? 'text.default' : 'text.subtle',
+            color: playing === sound.kind ? 'text.default' : 'text.muted',
             transition: 'common',
-            _hover: { backgroundColor: 'surface.muted' },
+            _hover: { backgroundColor: 'surface.hover' },
           })}
           aria-label={`${sound.label} 알림음 ${playing === sound.kind ? '중지' : '재생'}`}
           aria-pressed={playing === sound.kind}
@@ -244,8 +244,8 @@
               justifyContent: 'center',
               size: '22px',
               borderRadius: 'full',
-              color: playing === sound.kind ? 'white' : 'text.faint',
-              backgroundColor: playing === sound.kind ? 'accent.brand.default' : 'surface.muted',
+              color: playing === sound.kind ? 'surface.default' : 'text.muted',
+              backgroundColor: playing === sound.kind ? 'accent.default' : 'surface.inset',
             })}
           >
             <Icon icon={playing === sound.kind ? SquareIcon : PlayIcon} size={10} />

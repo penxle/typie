@@ -44,7 +44,7 @@
     width: 'fit',
     cursor: 'pointer',
     fontSize: '11px',
-    color: 'text.disabled',
+    color: 'text.hint',
     transition: 'common',
     _hover: { color: 'text.muted' },
     _focus: { color: 'text.muted' },

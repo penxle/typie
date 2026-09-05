@@ -48,7 +48,7 @@
 </script>
 
 <button
-  class={css({ marginLeft: 'auto', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
+  class={css({ marginLeft: 'auto', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.hover' } })}
   onclick={() => (open = true)}
   type="button"
   use:anchor
@@ -63,7 +63,7 @@
       inset: '0',
       zIndex: 'overEditor',
       lgDown: {
-        backgroundColor: 'gray.900/30',
+        backgroundColor: 'scrim',
         transition: 'opacity',
       },
     })}
@@ -84,7 +84,7 @@
       paddingX: '12px',
       backgroundColor: 'surface.default',
       width: 'full',
-      boxShadow: 'medium',
+      boxShadow: 'md',
       zIndex: 'overEditor',
       lgDown: {
         position: '[fixed!]',
@@ -112,8 +112,8 @@
           translateY: '-1/2',
           borderRadius: '4px',
           padding: '2px',
-          color: 'text.faint',
-          _hover: { backgroundColor: 'interactive.hover' },
+          color: 'text.muted',
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={() => (open = false)}
         type="button"
@@ -127,9 +127,9 @@
         <a
           class={center({
             borderRadius: '6px',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             size: '48px',
-            _hover: { backgroundColor: 'interactive.hover' },
+            _hover: { backgroundColor: 'surface.hover' },
           })}
           href={`https://x.com/intent/post?text=${href}`}
           rel="noopener noreferrer"
@@ -144,9 +144,9 @@
         <a
           class={center({
             borderRadius: '6px',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             size: '48px',
-            _hover: { backgroundColor: 'interactive.hover' },
+            _hover: { backgroundColor: 'surface.hover' },
           })}
           href={`https://share.planet.moe/share?text=${href}`}
           rel="noopener noreferrer"
@@ -170,9 +170,9 @@
           paddingLeft: '12px',
           paddingRight: '8px',
           height: '36px',
-          backgroundColor: 'surface.subtle',
+          backgroundColor: 'surface.canvas',
           _hover: {
-            borderColor: 'border.strong',
+            borderColor: 'border.emphasis',
           },
         }),
       )}
@@ -189,8 +189,8 @@
         class={css({
           borderRadius: '4px',
           padding: '3px',
-          color: 'text.faint',
-          _hover: { backgroundColor: 'interactive.hover' },
+          color: 'text.muted',
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={handleCopyLink}
         type="button"

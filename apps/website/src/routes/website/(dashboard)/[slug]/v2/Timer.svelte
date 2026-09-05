@@ -90,7 +90,10 @@
 </script>
 
 <button
-  class={css({ display: 'flex', alignItems: 'center', gap: '6px' }, app.timerState.current.status === 'focus' && { color: 'blue.600' })}
+  class={css(
+    { display: 'flex', alignItems: 'center', gap: '6px' },
+    app.timerState.current.status === 'focus' && { color: 'accent.default' },
+  )}
   aria-expanded={open}
   onclick={() => (open = !open)}
   type="button"
@@ -110,12 +113,12 @@
       alignItems: 'center',
       gap: '12px',
       borderWidth: '1px',
-      borderColor: 'gray.200',
+      borderColor: 'border.default',
       borderRadius: '12px',
       padding: '16px',
-      backgroundColor: 'white',
+      backgroundColor: 'surface.default',
       minWidth: '240px',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       overflowY: 'auto',
       zIndex: '50',
     })}
@@ -126,7 +129,7 @@
       <p>타이머</p>
 
       <button
-        class={css({ borderRadius: '4px', padding: '2px', _hover: { backgroundColor: 'gray.100' } })}
+        class={css({ borderRadius: '4px', padding: '2px', _hover: { backgroundColor: 'surface.hover' } })}
         onclick={() => (open = false)}
         type="button"
       >
@@ -142,8 +145,8 @@
             class={css({
               padding: '4px',
               borderRadius: '6px',
-              backgroundColor: 'gray.100',
-              _hover: { backgroundColor: 'gray.200' },
+              backgroundColor: 'surface.inset',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => (focusDuration = Math.max(5, focusDuration - durationStep))}
             type="button"
@@ -155,8 +158,8 @@
             class={css({
               padding: '4px',
               borderRadius: '6px',
-              backgroundColor: 'gray.100',
-              _hover: { backgroundColor: 'gray.200' },
+              backgroundColor: 'surface.inset',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => (focusDuration += durationStep)}
             type="button"
@@ -173,8 +176,8 @@
             class={css({
               padding: '4px',
               borderRadius: '6px',
-              backgroundColor: 'gray.100',
-              _hover: { backgroundColor: 'gray.200' },
+              backgroundColor: 'surface.inset',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => (restDuration = Math.max(5, restDuration - durationStep))}
             type="button"
@@ -186,8 +189,8 @@
             class={css({
               padding: '4px',
               borderRadius: '6px',
-              backgroundColor: 'gray.100',
-              _hover: { backgroundColor: 'gray.200' },
+              backgroundColor: 'surface.inset',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => (restDuration += durationStep)}
             type="button"
@@ -203,9 +206,9 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'blue.600',
-            color: 'white',
-            _hover: { backgroundColor: 'blue.700' },
+            backgroundColor: 'accent.default',
+            color: 'surface.default',
+            _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
           })}
           onclick={() => {
             app.timerState.current.status = 'focus';
@@ -224,8 +227,8 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'gray.100',
-            _hover: { backgroundColor: 'gray.200' },
+            backgroundColor: 'surface.inset',
+            _hover: { backgroundColor: 'surface.hover' },
           })}
           onclick={(e) => resetTimer(e)}
           type="button"
@@ -239,7 +242,7 @@
         <div class={css({ fontSize: '24px', fontWeight: 'bold' })}>
           {formatTime(app.timerState.current.currentTime)}
         </div>
-        <div class={css({ fontSize: '14px', color: 'gray.500' })}>
+        <div class={css({ fontSize: '14px', color: 'text.muted' })}>
           {app.timerState.current.status === 'focus' ? '작업 중' : '휴식 중'}
         </div>
       </div>
@@ -249,9 +252,9 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'blue.600',
-            color: 'white',
-            _hover: { backgroundColor: 'blue.700' },
+            backgroundColor: 'accent.default',
+            color: 'surface.default',
+            _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
           })}
           onclick={() => {
             if (timerInterval) {
@@ -272,8 +275,8 @@
             flex: '1',
             padding: '8px',
             borderRadius: '8px',
-            backgroundColor: 'gray.100',
-            _hover: { backgroundColor: 'gray.200' },
+            backgroundColor: 'surface.inset',
+            _hover: { backgroundColor: 'surface.hover' },
           })}
           onclick={(e) => resetTimer(e)}
           type="button"
@@ -293,7 +296,7 @@
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '[rgba(0,0,0,0.8)]',
+      backgroundColor: 'scrim',
       zIndex: '50',
     })}
   >
@@ -304,17 +307,17 @@
         alignItems: 'center',
         gap: '16px',
         padding: '24px',
-        backgroundColor: 'white',
+        backgroundColor: 'surface.default',
         borderRadius: '12px',
         minWidth: '320px',
-        boxShadow: 'medium',
+        boxShadow: 'md',
       })}
     >
       <div class={css({ fontSize: '20px', fontWeight: 'bold' })}>휴식 시간</div>
-      <div class={css({ fontSize: '14px', color: 'gray.600', textAlign: 'center' })}>
+      <div class={css({ fontSize: '14px', color: 'text.muted', textAlign: 'center' })}>
         지금은 휴식 시간입니다. 잠시 일을 멈추고 휴식을 취하세요.
       </div>
-      <div class={css({ fontSize: '24px', fontWeight: 'bold', color: 'blue.600' })}>
+      <div class={css({ fontSize: '24px', fontWeight: 'bold', color: 'text.default' })}>
         {formatTime(app.timerState.current.currentTime)}
       </div>
       <div class={flex({ gap: '8px', width: 'full' })}>
@@ -323,9 +326,9 @@
             flex: '1',
             padding: '12px',
             borderRadius: '8px',
-            backgroundColor: 'blue.600',
-            color: 'white',
-            _hover: { backgroundColor: 'blue.700' },
+            backgroundColor: 'accent.default',
+            color: 'surface.default',
+            _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
           })}
           onclick={() => {
             app.timerState.current.keepFocus = true;

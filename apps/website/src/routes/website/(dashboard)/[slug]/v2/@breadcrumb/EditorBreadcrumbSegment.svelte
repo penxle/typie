@@ -22,7 +22,7 @@
 {/if}
 <span>{item.kind === 'home' ? '홈' : item.name}</span>
 {#if !isCurrent}
-  <span class={css({ display: 'grid', placeItems: 'center', color: 'text.faint' })} aria-hidden="true">
+  <span class={css({ display: 'grid', placeItems: 'center', color: 'text.hint' })} aria-hidden="true">
     <Icon icon={ChevronRightIcon} size={14} />
   </span>
 {/if}

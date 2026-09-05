@@ -23,11 +23,11 @@
         right: '-4px',
         borderRadius: '4px',
         size: '20px',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
         _hover: {
-          color: 'text.subtle',
-          backgroundColor: 'surface.muted',
+          color: 'text.default',
+          backgroundColor: 'surface.hover',
         },
       })}
       onclick={() => {
@@ -41,7 +41,7 @@
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
         <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>새 업데이트가 있어요</div>
-        <div class={css({ fontSize: '13px', color: 'text.faint' })}>페이지를 새로고침해 최신 버전을 사용하세요</div>
+        <div class={css({ fontSize: '13px', color: 'text.muted' })}>페이지를 새로고침해 최신 버전을 사용하세요</div>
       </div>
 
       <Button

@@ -135,7 +135,7 @@
       paddingY: '6px',
       borderRadius: '8px',
       transition: 'common',
-      _hover: { backgroundColor: 'surface.muted' },
+      _hover: { backgroundColor: 'surface.hover' },
     }),
   )}
   aria-selected="false"
@@ -162,9 +162,9 @@
       class={center({
         borderRadius: '4px',
         size: '24px',
-        color: 'text.subtle',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { backgroundColor: 'interactive.hover' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={async () => {
         if (!SubscribeModal.gate('entity_recover')) {
@@ -205,9 +205,9 @@
       class={center({
         borderRadius: '4px',
         size: '24px',
-        color: 'text.subtle',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { backgroundColor: 'interactive.hover' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         Dialog.confirm({

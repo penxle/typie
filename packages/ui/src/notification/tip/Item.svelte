@@ -24,16 +24,16 @@
 <Component {...rest}>
   <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={LightbulbIcon} size={12} />
-      <div class={css({ fontSize: '13px', color: 'text.faint' })}>이용 팁</div>
+      <Icon style={css.raw({ color: 'text.muted' })} icon={LightbulbIcon} size={12} />
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>이용 팁</div>
     </div>
 
     <button onclick={dismiss} type="button">
-      <Icon style={css.raw({ color: 'text.faint' })} icon={XIcon} size={12} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={XIcon} size={12} />
     </button>
   </div>
 
-  <div class={css({ marginTop: '8px', fontSize: '14px', fontWeight: 'medium', color: 'text.subtle', verticalAlign: 'middle' })}>
+  <div class={css({ marginTop: '8px', fontSize: '14px', fontWeight: 'medium', color: 'text.default', verticalAlign: 'middle' })}>
     {#each tokens as token, index (index)}
       {#if token.startsWith('`') && token.endsWith('`')}
         <Shortcut shortcut={token.slice(1, -1)} />
@@ -44,6 +44,6 @@
   </div>
 
   {#if description}
-    <div class={css({ fontSize: '13px', color: 'text.faint' })}>{description}</div>
+    <div class={css({ fontSize: '13px', color: 'text.muted' })}>{description}</div>
   {/if}
 </Component>

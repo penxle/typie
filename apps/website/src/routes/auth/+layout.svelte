@@ -19,8 +19,8 @@
 <div class={flex({ flexDirection: 'column', minHeight: '[100dvh]' })}>
   <EnvironmentBanner />
   <div
-    style:--grid-line-color={token('colors.decoration.grid.brand')}
-    style:--cross-line-color={token('colors.decoration.grid.brand.subtle')}
+    style:--grid-line-color={token('colors.border.default')}
+    style:--cross-line-color={token('colors.border.hairline')}
     style:--grid-size="30px"
     style:--line-thickness="1px"
     class={center({
@@ -29,7 +29,7 @@
       flex: '1',
       height: 'full',
       overflowY: 'auto',
-      backgroundColor: 'surface.default',
+      backgroundColor: 'surface.canvas',
       backgroundImage:
         '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
       backgroundSize: 'var(--grid-size) var(--grid-size)',
@@ -42,7 +42,7 @@
         maxWidth: '400px',
         width: 'full',
         backgroundColor: 'surface.default',
-        boxShadow: 'medium',
+        boxShadow: 'md',
       })}
     >
       {@render children?.()}

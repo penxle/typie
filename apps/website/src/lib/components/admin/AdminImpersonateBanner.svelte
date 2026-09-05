@@ -53,7 +53,7 @@
 {#if query.data.impersonation}
   <div
     class={css({
-      backgroundColor: 'amber.500',
+      backgroundColor: 'warning.subtle',
       fontFamily: 'mono',
       fontSize: '12px',
       letterSpacing: '0.02em',
@@ -69,27 +69,27 @@
     >
       <div class={flex({ alignItems: 'center', gap: '16px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <AdminIcon style={css.raw({ color: 'gray.900' })} icon={AlertTriangleIcon} size={16} />
-          <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>IMPERSONATING</span>
+          <AdminIcon style={css.raw({ color: 'text.on.warning.subtle' })} icon={AlertTriangleIcon} size={16} />
+          <span class={css({ fontWeight: 'bold', color: 'text.on.warning.subtle' })}>IMPERSONATING</span>
         </div>
 
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
-            <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
+            <span class={css({ fontWeight: 'bold', color: 'text.on.warning.subtle' })}>
               {query.data.impersonation.admin.name}
             </span>
-            <span class={css({ color: 'gray.700', fontSize: '11px' })}>
+            <span class={css({ color: 'text.on.warning.subtle', fontSize: '11px' })}>
               ({query.data.impersonation.admin.email})
             </span>
           </div>
 
-          <AdminIcon style={css.raw({ color: 'gray.700' })} icon={ArrowRightIcon} size={16} />
+          <AdminIcon style={css.raw({ color: 'text.on.warning.subtle' })} icon={ArrowRightIcon} size={16} />
 
           <div class={flex({ alignItems: 'center', gap: '6px' })}>
-            <span class={css({ fontWeight: 'bold', color: 'gray.900' })}>
+            <span class={css({ fontWeight: 'bold', color: 'text.on.warning.subtle' })}>
               {query.data.impersonation.user.name}
             </span>
-            <span class={css({ color: 'gray.700', fontSize: '11px' })}>
+            <span class={css({ color: 'text.on.warning.subtle', fontSize: '11px' })}>
               ({query.data.impersonation.user.email})
             </span>
           </div>
@@ -102,16 +102,15 @@
           paddingY: '6px',
           fontSize: '11px',
           fontWeight: 'medium',
-          color: 'amber.500',
-          backgroundColor: 'gray.900',
+          color: 'text.on.warning.subtle',
+          backgroundColor: 'transparent',
           borderWidth: '1px',
-          borderColor: 'gray.900',
+          borderColor: 'warning.default',
           cursor: 'pointer',
           transition: 'common',
           _hover: {
-            backgroundColor: 'amber.500',
-            color: 'gray.900',
-            borderColor: 'gray.900',
+            backgroundColor: 'warning.default',
+            color: 'text.on.warning',
           },
         })}
         onclick={() => (confirmModalOpen = true)}
@@ -136,7 +135,7 @@
   >
     <div class={css({ marginBottom: '16px' })}>
       <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO STOP IMPERSONATING?</p>
-      <p class={css({ color: 'amber.400' })}>
+      <p class={css({ color: 'text.muted' })}>
         CURRENT USER: {query.data.impersonation?.user.name.toUpperCase()} ({query.data.impersonation?.user.email})
       </p>
     </div>

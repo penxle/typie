@@ -35,8 +35,8 @@
       rects,
     };
   });
-  const edge = $derived(token(highlight.kind === 'strength' ? 'colors.review.strength.default' : 'colors.review.issue.default'));
-  const fill = $derived(token(highlight.kind === 'strength' ? 'colors.review.strength.highlight' : 'colors.review.issue.highlight'));
+  const edge = $derived(token(highlight.kind === 'strength' ? 'colors.review.strength' : 'colors.review.issue'));
+  const fill = $derived(edge);
 </script>
 
 {#if editor}

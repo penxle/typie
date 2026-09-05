@@ -38,7 +38,7 @@
   class={css({
     position: 'relative',
     minHeight: { sm: '[calc(100dvh - 56px)]', lg: '[calc(100dvh - 64px)]' },
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
     display: 'flex',
     flexDirection: 'column',
     paddingX: { sm: '24px', lg: '80px' },
@@ -51,7 +51,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -105,7 +105,7 @@
             xmlns="http://www.w3.org/2000/svg"
           >
             <path
-              class={css({ fill: 'dark.gray.800' })}
+              class={css({ fill: 'border.hairline' })}
               d="M249.82 166.581c4.034-13.581 12.781-26.582 21.392-35.33 1.929-1.957.571-5.251-2.187-5.251-31.524 0-59.001 24.651-73.466 61.141-8.965-11.016-22.289-18.576-37.474-20.236 3.993-13.703 12.808-26.838 21.487-35.654 1.929-1.957.571-5.251-2.187-5.251-37.283 0-68.889 34.438-80.0539 82.188.0407-.054-1.3311 7.87-1.3311 12.082 0 29.673 24.937 53.73 55.701 53.73 20.659 0 38.683-10.854 48.299-26.973C209.616 263.146 227.64 274 248.299 274 279.063 274 304 249.943 304 220.27s-24.136-52.92-54.207-53.689h.027Z"
             />
           </svg>
@@ -113,7 +113,7 @@
             class={css({
               fontSize: { sm: '[42px]', lg: '[72px]' },
               fontWeight: 'semibold',
-              color: 'dark.gray.100',
+              color: 'text.default',
               lineHeight: '[1.2]',
               letterSpacing: '[-0.02em]',
               fontFamily: 'Paperlogy',
@@ -130,7 +130,7 @@
               <span
                 class={css({
                   position: 'relative',
-                  color: 'dark.brand.300',
+                  color: 'text.default',
                   _after: {
                     content: '""',
                     position: 'absolute',
@@ -138,7 +138,7 @@
                     right: '0',
                     bottom: '[2px]',
                     height: '[3px]',
-                    backgroundColor: 'dark.brand.400',
+                    backgroundColor: 'text.default',
                     opacity: '[0.6]',
                   },
                 })}
@@ -152,7 +152,7 @@
         <p
           class={css({
             fontSize: { sm: '16px', lg: '18px' },
-            color: 'dark.gray.400',
+            color: 'text.muted',
             lineHeight: '[1.65]',
             maxWidth: '[480px]',
             marginBottom: { sm: '36px', lg: '48px' },
@@ -182,11 +182,11 @@
                 paddingY: '16px',
                 fontSize: '15px',
                 fontWeight: 'semibold',
-                color: 'dark.gray.950',
-                backgroundColor: 'dark.brand.300',
+                color: 'surface.default',
+                backgroundColor: 'accent.default',
                 transition: '[all 0.2s ease-out]',
                 _hover: {
-                  backgroundColor: 'dark.brand.200',
+                  backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
                 },
               }),
             )}
@@ -215,7 +215,7 @@
             <span
               class={css({
                 fontSize: '13px',
-                color: 'dark.gray.500',
+                color: 'text.muted',
                 textTransform: 'uppercase',
                 letterSpacing: '[0.08em]',
               })}
@@ -225,9 +225,9 @@
             <div class={css({ display: 'flex', alignItems: 'center', gap: '8px' })}>
               <a
                 class={css({
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   transition: '[color 0.2s ease-out]',
-                  _hover: { color: 'dark.gray.200' },
+                  _hover: { color: 'text.default' },
                 })}
                 href={env.PUBLIC_AUTH_URL}
               >
@@ -235,9 +235,9 @@
               </a>
               <a
                 class={css({
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   transition: '[color 0.2s ease-out]',
-                  _hover: { color: 'dark.gray.200' },
+                  _hover: { color: 'text.default' },
                 })}
                 href="/download"
               >
@@ -245,9 +245,9 @@
               </a>
               <a
                 class={css({
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   transition: '[color 0.2s ease-out]',
-                  _hover: { color: 'dark.gray.200' },
+                  _hover: { color: 'text.default' },
                 })}
                 href="/download"
               >
@@ -255,9 +255,9 @@
               </a>
               <a
                 class={css({
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   transition: '[color 0.2s ease-out]',
-                  _hover: { color: 'dark.gray.200' },
+                  _hover: { color: 'text.default' },
                 })}
                 href={APP_STORE_URL}
                 rel="noopener noreferrer"
@@ -267,9 +267,9 @@
               </a>
               <a
                 class={css({
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   transition: '[color 0.2s ease-out]',
-                  _hover: { color: 'dark.gray.200' },
+                  _hover: { color: 'text.default' },
                 })}
                 href={PLAY_STORE_URL}
                 rel="noopener noreferrer"
@@ -303,7 +303,7 @@
             width: '[calc(100% + 48px)]',
             height: '[calc(100% + 48px)]',
             borderWidth: '1px',
-            borderColor: 'dark.gray.800',
+            borderColor: 'border.hairline',
             pointerEvents: 'none',
           })}
         ></div>
@@ -311,10 +311,10 @@
         <div
           class={css({
             position: 'relative',
-            backgroundColor: 'dark.gray.900',
+            backgroundColor: 'surface.default',
             padding: '8px',
             borderWidth: '1px',
-            borderColor: 'dark.gray.800',
+            borderColor: 'border.hairline',
           })}
         >
           <img
@@ -337,9 +337,9 @@
       paddingX: { sm: '24px', lg: '80px' },
       paddingY: { sm: '24px', lg: '32px' },
       borderTopWidth: '1px',
-      borderTopColor: 'dark.gray.900',
+      borderTopColor: 'border.hairline',
       borderBottomWidth: '1px',
-      borderBottomColor: 'dark.gray.900',
+      borderBottomColor: 'border.hairline',
     })}
   >
     <div
@@ -356,7 +356,7 @@
       <p
         class={css({
           fontSize: '13px',
-          color: 'dark.gray.500',
+          color: 'text.hint',
           fontFamily: 'mono',
         })}
       >
@@ -369,17 +369,17 @@
             width: '[8px]',
             height: '[8px]',
             borderRadius: 'full',
-            backgroundColor: '[#22c55e]',
+            backgroundColor: 'success.default',
           })}
         ></span>
-        <span class={css({ fontSize: '13px', color: 'dark.gray.400', fontFamily: 'mono' })}>
+        <span class={css({ fontSize: '13px', color: 'text.hint', fontFamily: 'mono' })}>
           {#if browser}
             <NumberFlow
-              class={css({ color: 'dark.gray.200', fontWeight: 'semibold' })}
+              class={css({ color: 'text.muted', fontWeight: 'semibold' })}
               value={activeWritersQuery.data?.activeWritersCount ?? 0}
             />
           {:else}
-            <strong class={css({ color: 'dark.gray.200', fontWeight: 'semibold' })}>
+            <strong class={css({ color: 'text.muted', fontWeight: 'semibold' })}>
               {(activeWritersQuery.data?.activeWritersCount ?? 0).toLocaleString()}
             </strong>
           {/if}

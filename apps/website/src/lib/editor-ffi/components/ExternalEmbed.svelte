@@ -145,13 +145,13 @@
           {@html asset.html}
         </div>
       {:else}
-        <div class={flex({ borderWidth: '1px', borderColor: 'border.subtle', borderRadius: '6px' })}>
+        <div class={flex({ borderWidth: '1px', borderColor: 'border.hairline', borderRadius: '6px' })}>
           <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px', gap: '4px', minWidth: '0' })}>
             <p class={css({ fontSize: '14px', fontWeight: 'medium', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
               {asset.title ?? '(제목 없음)'}
             </p>
             {#if asset.description}
-              <p class={css({ fontSize: '12px', color: 'text.faint', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
+              <p class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
                 {asset.description}
               </p>
             {/if}
@@ -197,10 +197,10 @@
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: '4px',
-              color: 'text.bright',
-              backgroundColor: '[#363839/70]',
+              color: 'text.on.inverse',
+              backgroundColor: 'surface.inverse/70',
               size: '28px',
-              _hover: { backgroundColor: '[#363839/40]' },
+              _hover: { backgroundColor: 'surface.inverse/85' },
             })}
             aria-label="링크 열기"
             onclick={() => window.open(asset.url, '_blank', 'noopener,noreferrer')}
@@ -220,10 +220,10 @@
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '4px',
-                color: 'text.bright',
-                backgroundColor: '[#363839/70]',
+                color: 'text.on.inverse',
+                backgroundColor: 'surface.inverse/70',
                 size: '28px',
-                _hover: { backgroundColor: '[#363839/40]' },
+                _hover: { backgroundColor: 'surface.inverse/85' },
               })}
               aria-label="임베드 삭제"
               onclick={deleteNode}
@@ -244,7 +244,7 @@
           justifyContent: 'space-between',
           alignItems: 'center',
           borderRadius: '4px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           width: 'full',
           height: '48px',
           paddingX: '14px',
@@ -252,9 +252,7 @@
         })}
         use:anchor
       >
-        <div
-          class={flex({ align: 'center', gap: '12px', fontSize: '14px', color: error ? 'text.danger' : 'text.disabled', minWidth: '0' })}
-        >
+        <div class={flex({ align: 'center', gap: '12px', fontSize: '14px', color: error ? 'danger.default' : 'text.hint', minWidth: '0' })}>
           {#if inflight}
             <RingSpinner style={css.raw({ size: '20px', flexShrink: '0' })} />
             <span class={css({ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>링크 임베드 중...</span>
@@ -278,8 +276,8 @@
               align: 'center',
               borderRadius: '4px',
               padding: '4px',
-              color: 'text.disabled',
-              _hover: { backgroundColor: 'interactive.hover', color: 'text.danger' },
+              color: 'text.muted',
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             })}
             aria-label="임베드 삭제"
             onclick={deleteNode}
@@ -304,7 +302,7 @@
       paddingX: '6px',
       paddingY: '4px',
       backgroundColor: 'surface.default',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       zIndex: 'editor',
     })}
     onsubmit={(e) => {

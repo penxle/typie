@@ -32,7 +32,7 @@
     class={css({
       position: 'fixed',
       borderRadius: '2px',
-      backgroundColor: { base: 'accent.info.default/30', _dark: 'accent.info.default/40' },
+      backgroundColor: { base: 'accent.default/30', _dark: 'accent.default/40' },
       pointerEvents: 'none',
       zIndex: 'sidebar',
     })}

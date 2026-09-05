@@ -24,15 +24,15 @@
         fontFamily: 'mono',
         fontSize: '12px',
         fontWeight: 'medium',
-        color: 'text.subtle',
-        backgroundColor: 'surface.muted',
+        color: 'text.muted',
+        backgroundColor: 'surface.inset',
       })}
     >
       {key}
     </kbd>
 
     {#if index < keys.length - 1}
-      <span class={css({ color: 'text.faint', marginX: '1px' })}>+</span>
+      <span class={css({ color: 'text.hint', marginX: '1px' })}>+</span>
     {/if}
   {/each}
 </span>

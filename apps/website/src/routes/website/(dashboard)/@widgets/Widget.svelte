@@ -37,8 +37,8 @@
       gap: '8px',
       height: '36px',
       borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
-      backgroundColor: 'surface.subtle',
+      borderColor: 'border.hairline',
+      backgroundColor: 'surface.canvas',
       borderTopLeftRadius: '8px',
       borderTopRightRadius: '8px',
       userSelect: 'none',
@@ -48,7 +48,7 @@
   >
     <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', flexGrow: '1' })}>
       {#if icon}
-        <Icon style={css.raw({ color: 'text.subtle' })} {icon} size={14} />
+        <Icon style={css.raw({ color: 'text.default' })} {icon} size={14} />
       {/if}
       <span
         class={css({

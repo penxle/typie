@@ -61,7 +61,7 @@
       bottom: '0',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '[rgba(0, 0, 0, 0.8)]',
+      backgroundColor: 'scrim',
       zIndex: '[1000]',
     })}
     onclick={handleBackdropClick}
@@ -75,11 +75,11 @@
         width: 'full',
         maxWidth: '[500px]',
         margin: '20px',
-        backgroundColor: 'gray.900',
+        backgroundColor: 'surface.default',
         borderWidth: '2px',
-        borderColor: 'amber.500',
+        borderColor: 'border.default',
         fontFamily: 'mono',
-        boxShadow: '[0 0 20px rgba(251, 191, 36, 0.3)]',
+        boxShadow: 'xl',
       })}
     >
       {#if title}
@@ -88,33 +88,33 @@
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBottomWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '20px',
             paddingY: '16px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h2 class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500', letterSpacing: '0.05em' })}>
+          <h2 class={css({ fontSize: '14px', fontWeight: 'bold', color: 'text.default', letterSpacing: '0.05em' })}>
             {title.toUpperCase()}
           </h2>
           <button
             class={css({
               padding: '6px',
-              color: 'gray.900',
-              backgroundColor: 'amber.500',
+              color: 'text.muted',
+              backgroundColor: 'transparent',
               borderWidth: '1px',
-              borderColor: 'amber.500',
+              borderColor: 'border.default',
               cursor: 'pointer',
               transition: 'common',
               _hover: {
-                backgroundColor: 'amber.400',
-                borderColor: 'amber.400',
+                backgroundColor: 'surface.hover',
+                borderColor: 'border.emphasis',
               },
             })}
             onclick={() => (open = false)}
             type="button"
           >
-            <AdminIcon style={css.raw({ color: 'gray.900' })} icon={XIcon} size={16} />
+            <AdminIcon style={css.raw({ color: 'text.muted' })} icon={XIcon} size={16} />
           </button>
         </div>
       {/if}
@@ -122,7 +122,7 @@
       <div
         class={css({
           padding: '20px',
-          color: 'amber.500',
+          color: 'text.default',
           fontSize: '12px',
           lineHeight: '[1.6]',
         })}
@@ -137,10 +137,10 @@
             justifyContent: 'flex-end',
             gap: '12px',
             borderTopWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '20px',
             paddingY: '16px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
           {@render footer()}
@@ -152,10 +152,10 @@
             justifyContent: 'flex-end',
             gap: '12px',
             borderTopWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '20px',
             paddingY: '16px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
           {#if actions.cancel}
@@ -165,15 +165,15 @@
                 paddingY: '6px',
                 fontSize: '12px',
                 fontWeight: 'medium',
-                color: 'gray.900',
-                backgroundColor: 'amber.500',
+                color: 'text.default',
+                backgroundColor: 'surface.default',
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 cursor: 'pointer',
                 transition: 'common',
                 _hover: {
-                  backgroundColor: 'amber.400',
-                  borderColor: 'amber.400',
+                  backgroundColor: 'surface.hover',
+                  borderColor: 'border.emphasis',
                 },
               })}
               onclick={actions.cancel.onclick || (() => (open = false))}
@@ -190,23 +190,30 @@
                 paddingY: '6px',
                 fontSize: '12px',
                 fontWeight: 'medium',
-                color: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
-                backgroundColor: 'gray.900',
+                color: actions.confirm.variant === 'danger' ? 'text.on.danger' : 'surface.default',
+                backgroundColor: actions.confirm.variant === 'danger' ? 'danger.default' : 'accent.default',
                 borderWidth: '1px',
-                borderColor: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
+                borderColor: actions.confirm.variant === 'danger' ? 'danger.default' : 'accent.default',
                 cursor: 'pointer',
                 transition: 'common',
                 _hover: {
-                  backgroundColor: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
-                  color: 'gray.900',
-                  borderColor: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
+                  backgroundColor:
+                    actions.confirm.variant === 'danger'
+                      ? '[color-mix(in oklch, token(colors.danger.default) 88%, black)]'
+                      : '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
+                  color: actions.confirm.variant === 'danger' ? 'text.on.danger' : 'surface.default',
+                  borderColor:
+                    actions.confirm.variant === 'danger'
+                      ? '[color-mix(in oklch, token(colors.danger.default) 88%, black)]'
+                      : '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
                 },
                 _disabled: {
-                  opacity: '[0.4]',
+                  opacity: '40',
                   cursor: 'not-allowed',
                   _hover: {
-                    backgroundColor: 'gray.900',
-                    color: actions.confirm.variant === 'danger' ? 'red.500' : 'amber.500',
+                    backgroundColor: actions.confirm.variant === 'danger' ? 'danger.default' : 'accent.default',
+                    color: actions.confirm.variant === 'danger' ? 'text.on.danger' : 'surface.default',
+                    borderColor: actions.confirm.variant === 'danger' ? 'danger.default' : 'accent.default',
                   },
                 },
               })}

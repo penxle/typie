@@ -241,7 +241,7 @@
         paddingX: '12px',
         width: '200px',
         borderRightWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         overflowY: 'auto',
       })}
     >
@@ -249,7 +249,7 @@
         {#each tabGroups as group, groupIndex (group.label)}
           <div>
             {#if groupIndex > 0}
-              <div class={css({ height: '1px', backgroundColor: 'border.subtle', marginBottom: '16px' })}></div>
+              <div class={css({ height: '1px', backgroundColor: 'border.hairline', marginBottom: '16px' })}></div>
             {/if}
 
             <div class={css({ paddingX: '10px', paddingY: '4px', marginBottom: '4px' })}>
@@ -257,7 +257,7 @@
                 class={css({
                   fontSize: '11px',
                   fontWeight: 'semibold',
-                  color: 'text.disabled',
+                  color: 'text.muted',
                   textTransform: 'uppercase',
                   letterSpacing: '[0.05em]',
                 })}
@@ -278,11 +278,11 @@
                     fontSize: '13px',
                     color: 'text.muted',
                     transition: 'common',
-                    _hover: { backgroundColor: 'surface.subtle' },
+                    _hover: { backgroundColor: 'surface.hover' },
                     _selected: {
                       color: 'text.default',
                       fontWeight: 'medium',
-                      backgroundColor: 'surface.muted',
+                      backgroundColor: 'surface.active',
                     },
                   })}
                   aria-selected={currentTab?.path === path}

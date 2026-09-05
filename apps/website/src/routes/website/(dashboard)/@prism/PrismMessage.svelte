@@ -23,7 +23,7 @@
         paddingY: '8px',
         borderRadius: '12px',
         borderBottomRightRadius: '2px',
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.inset',
         fontSize: '14px',
         lineHeight: '[1.6]',
         whiteSpace: 'pre-wrap',

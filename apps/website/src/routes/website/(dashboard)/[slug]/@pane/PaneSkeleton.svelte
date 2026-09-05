@@ -93,14 +93,14 @@
   }
 
   const bar = css({
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     borderRadius: '4px',
     animation: '[var(--pane-skeleton-motion, pulse 2s ease-in-out infinite)]',
     flexShrink: '0',
   });
 
   const textLine = css({
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     borderRadius: '4px',
     flexShrink: '0',
     transformOrigin: 'left',
@@ -108,12 +108,12 @@
 
   const divider = css({
     height: '1px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'border.default',
     flexShrink: '0',
   });
 
   const verticalDivider = css({
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'border.default',
     flexShrink: '0',
   });
 
@@ -121,7 +121,7 @@
     alignItems: 'center',
     flexShrink: '0',
     borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
   });
 </script>
 
@@ -286,7 +286,7 @@
             <!-- Image placeholder -->
             <div
               class={css({
-                backgroundColor: 'surface.muted',
+                backgroundColor: 'skeleton.base',
                 borderRadius: '8px',
                 width: 'full',
                 height: '320px',
@@ -358,7 +358,7 @@
             class={css({
               padding: '12px',
               borderRadius: '8px',
-              backgroundColor: 'surface.subtle',
+              backgroundColor: 'surface.canvas',
               animation: '[var(--pane-skeleton-motion, pulse 2s ease-in-out infinite)]',
             })}
           >

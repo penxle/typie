@@ -52,10 +52,10 @@
     <span class={css({ whiteSpace: 'pre-line' })}>{value.message}</span>
 
     {#if value.trailingIcon}
-      <Icon style={css.raw({ color: 'text.bright', opacity: '70' })} icon={value.trailingIcon} size={12} />
+      <Icon style={css.raw({ color: 'text.on.inverse', opacity: '50' })} icon={value.trailingIcon} size={12} />
     {/if}
     {#if value.trailing}
-      <span class={css({ color: 'text.bright', opacity: '70' })}>{value.trailing}</span>
+      <span class={css({ color: 'text.on.inverse', opacity: '50' })}>{value.trailing}</span>
     {/if}
 
     {#if value.keys}
@@ -65,8 +65,8 @@
           alignItems: 'center',
           fontFamily: '[Pretendard]',
           fontWeight: 'medium',
-          color: 'text.bright',
-          opacity: '70',
+          color: 'text.on.inverse',
+          opacity: '50',
           lineHeight: '[1em]',
         })}
       >
@@ -105,9 +105,9 @@
           paddingX: '8px',
           paddingY: '4px',
           fontSize: '12px',
-          color: 'text.bright',
-          backgroundColor: 'surface.dark',
-          boxShadow: 'medium',
+          color: 'text.on.inverse',
+          backgroundColor: 'surface.inverse',
+          boxShadow: 'md',
         },
         presentation.kind === 'wrapper' ? presentation.tooltipStyle : undefined,
       )}
@@ -142,7 +142,7 @@
         class={css({
           borderTopLeftRadius: '2px',
           size: '8px',
-          backgroundColor: 'surface.dark',
+          backgroundColor: 'surface.inverse',
         })}
         use:arrowAction
       ></div>

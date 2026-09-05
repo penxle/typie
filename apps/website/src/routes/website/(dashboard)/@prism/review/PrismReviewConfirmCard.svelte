@@ -399,11 +399,10 @@
     padding: '14px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   });
   const titleClass = css({ fontSize: '13px', fontWeight: 'semibold', marginBottom: '10px' });
-  const labelClass = css({ fontSize: '11px', color: 'text.faint', marginBottom: '4px' });
+  const labelClass = css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' });
   const optionStyle = css.raw({
     display: 'flex',
     alignItems: 'center',
@@ -415,8 +414,8 @@
     borderRadius: '8px',
     textAlign: 'left',
     transition: '[border-color 150ms ease, background-color 150ms ease]',
-    _hover: { backgroundColor: 'surface.muted' },
-    _disabled: { opacity: '50', _hover: { backgroundColor: 'transparent' } },
+    _hover: { backgroundColor: 'surface.hover' },
+    _disabled: { opacity: '40', _hover: { backgroundColor: 'transparent' } },
   });
   const readonlyOptionStyle = css.raw({
     display: 'flex',
@@ -436,18 +435,18 @@
     marginTop: '12px',
     paddingTop: '10px',
     borderTopWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     fontSize: '[12.5px]',
     fontWeight: 'semibold',
-    color: 'text.subtle',
+    color: 'text.muted',
   });
-  const whenClass = css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'normal', color: 'text.disabled' });
-  const countClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const whenClass = css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'normal', color: 'text.hint' });
+  const countClass = css({ flexShrink: '0', fontSize: '11px', color: 'text.hint' });
   const skeletonStyle = css.raw({
     flexShrink: '0',
     height: '10px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     animation: 'pulse 1.6s ease-in-out infinite',
   });
   const loading = $derived(lineagesLoading || (open && preparing && current === null));
@@ -460,7 +459,7 @@
     fontSize: '12px',
     fontWeight: 'semibold',
     fontVariantNumeric: 'tabular-nums',
-    color: 'text.brand',
+    color: 'text.default',
   });
   const startLabelClass = css({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontVariantNumeric: 'tabular-nums' });
   const activeTagClass = css({
@@ -468,17 +467,17 @@
     paddingX: '4px',
     paddingY: '1px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '4px',
     fontSize: '10px',
-    color: 'text.faint',
+    color: 'text.hint',
   });
   const documentTitleClass = flex({ alignItems: 'center', gap: '6px', minWidth: '0' });
   const documentTitleFillClass = flex({ alignItems: 'center', gap: '6px', flexGrow: '1', minWidth: '0' });
   const ellipsisClass = css({ flexGrow: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const shrinkTitleClass = css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   const spacerClass = css({ flexGrow: '1' });
-  const timeStyle = css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' });
+  const timeStyle = css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.hint' });
   const timeClass = css(timeStyle);
 
   const toggleClass = flex({
@@ -486,9 +485,9 @@
     gap: '5px',
     marginTop: '9px',
     fontSize: '[11.5px]',
-    color: 'text.faint',
+    color: 'text.muted',
     transition: '[color 150ms ease]',
-    _hover: { color: 'text.subtle' },
+    _hover: { color: 'text.default' },
   });
   // surface 스케일은 한 단계 올릴수록 라이트에서 어두워지고 다크에서 밝아진다 — 카드가 이미 그 규칙이라
   // (라이트 default · 다크 subtle), 패널은 카드에서 한 단계 더 올린 자리에 선다.
@@ -496,25 +495,24 @@
     marginTop: '8px',
     padding: '12px',
     borderWidth: '1px',
-    borderColor: 'border.default',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
-    backgroundColor: 'surface.subtle',
-    _dark: { backgroundColor: 'surface.muted' },
+    backgroundColor: 'surface.canvas',
   });
   // 카드 바깥 라벨(대상 문서·검토 깊이)은 바로 아래에 테두리 있는 행이 붙어 4px로 충분하지만,
   // 패널 안은 테두리 없는 줄이 이어져 같은 간격이면 제목이 첫 줄에 붙어 읽힌다.
-  const panelLabelClass = css({ marginBottom: '8px', fontSize: '11px', color: 'text.faint' });
-  const useRowClass = flex({ alignItems: 'baseline', gap: '7px', paddingY: '[1.5px]', fontSize: '[11.5px]', color: 'text.subtle' });
+  const panelLabelClass = css({ marginBottom: '8px', fontSize: '11px', color: 'text.muted' });
+  const useRowClass = flex({ alignItems: 'baseline', gap: '7px', paddingY: '[1.5px]', fontSize: '[11.5px]', color: 'text.muted' });
   const useTierClass = css({ flexShrink: '0', fontWeight: 'semibold', color: 'text.default' });
   const railRowClass = flex({ gap: '9px' });
   const railColClass = flex({ flexDirection: 'column', alignItems: 'center', flexShrink: '0', width: '9px' });
   const nodeStyle = css.raw({ flexShrink: '0', size: '9px', marginTop: '4px', borderRadius: 'full' });
-  const nodeOnStyle = css.raw({ backgroundColor: 'text.default' });
-  const nodeOffStyle = css.raw({ borderWidth: '1px', borderColor: 'text.disabled' });
+  const nodeOnStyle = css.raw({ backgroundColor: 'accent.default' });
+  const nodeOffStyle = css.raw({ borderWidth: '1px', borderColor: 'border.emphasis' });
   const linkStyle = css.raw({ flexGrow: '1', width: '1px', marginTop: '3px' });
-  const linkOnStyle = css.raw({ backgroundColor: 'text.default' });
+  const linkOnStyle = css.raw({ backgroundColor: 'accent.default' });
   const linkOffStyle = css.raw({
-    backgroundImage: '[repeating-linear-gradient(to bottom, {colors.text.disabled} 0 2px, transparent 2px 4px)]',
+    backgroundImage: '[repeating-linear-gradient(to bottom, {colors.border.emphasis} 0 2px, transparent 2px 4px)]',
   });
   const railBodyStyle = css.raw({ flexGrow: '1', minWidth: '0', paddingBottom: '9px' });
   // 높이를 못으로 박아 둔다 — 태그가 붙고 안 붙고에 따라 행이 들쭉날쭉하면 티어를 옮길 때 레일이 출렁인다.
@@ -531,7 +529,7 @@
     lineHeight: '[1.2]',
     fontSize: '10px',
     fontWeight: 'normal',
-    color: 'text.disabled',
+    color: 'text.hint',
   });
   const dividerClass = css({ height: '1px', marginY: '11px', backgroundColor: 'border.default' });
   const itemStyle = css.raw({ display: 'flex', alignItems: 'center', gap: '8px', paddingY: '[2.5px]', fontSize: '12px' });
@@ -547,7 +545,7 @@
       class={css(
         readonlyOptionStyle,
         { marginBottom: '12px' },
-        decided ? { borderColor: 'border.strong' } : { color: 'text.faint', borderColor: 'border.subtle' },
+        decided ? { borderColor: 'accent.default' } : { color: 'text.hint', borderColor: 'border.hairline' },
       )}
       aria-current={decided ? 'true' : undefined}
     >
@@ -565,12 +563,12 @@
       </div>
     </div>
   {:else if documents.length === 0}
-    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.hint', borderColor: 'border.hairline' })}>
       <span class={ellipsisClass}>열린 문서가 없어요</span>
     </div>
   {:else}
     <Menu
-      style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.subtle', _expanded: { borderColor: 'border.strong' } })}
+      style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.hairline', _expanded: { borderColor: 'border.emphasis' } })}
       listStyle={css.raw({ maxHeight: '240px', overflowY: 'auto' })}
       offset={4}
       placement="bottom-start"
@@ -598,7 +596,7 @@
         {#if selected?.active}
           <span class={activeTagClass}>활성</span>
         {/if}
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
       {/snippet}
 
       {#each documents as doc (doc.documentId)}
@@ -619,7 +617,7 @@
             {/if}
             <div class={css({ flexShrink: '0', size: '14px' })}>
               {#if doc.documentId === selected?.documentId}
-                <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+                <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
               {/if}
             </div>
           </div>
@@ -630,20 +628,20 @@
 
   {#if readonly && chosenBase !== null}
     <div class={labelClass}>지난 리뷰</div>
-    <div class={css(readonlyOptionStyle, { marginBottom: '12px', borderColor: 'border.strong' })} aria-current="true">
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', borderColor: 'accent.default' })} aria-current="true">
       <span class={shrinkTitleClass}>{lineageRowLabel(chosenBase)}</span>
       <TimeAgo style={timeStyle} timestamp={new Date(chosenBase.createdAt).getTime()} />
     </div>
   {:else if preserveLineageRow}
     <div class={labelClass}>지난 리뷰</div>
-    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.faint', borderColor: 'border.subtle' })}>
+    <div class={css(readonlyOptionStyle, { marginBottom: '12px', color: 'text.hint', borderColor: 'border.hairline' })}>
       <span>불러오는 중</span>
     </div>
   {:else if lineages.length > 0 && !readonly}
     {@const chosenLineage = lineages.find((lineage) => lineage.id === lineageChoice) ?? null}
     <div class={labelClass}>지난 리뷰</div>
     <Menu
-      style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.subtle', _expanded: { borderColor: 'border.strong' } })}
+      style={css.raw(optionStyle, { marginBottom: '12px', borderColor: 'border.hairline', _expanded: { borderColor: 'border.emphasis' } })}
       listStyle={css.raw({ maxHeight: '240px', overflowY: 'auto' })}
       offset={4}
       placement="bottom-start"
@@ -655,7 +653,7 @@
           <TimeAgo style={timeStyle} timestamp={new Date(chosenLineage.createdAt).getTime()} />
         {/if}
         <span class={spacerClass}></span>
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={expanded ? ChevronUpIcon : ChevronDownIcon} size={14} />
       {/snippet}
 
       {#each lineages as lineage (lineage.id)}
@@ -669,7 +667,7 @@
             {/if}
             <div class={css({ flexShrink: '0', size: '14px' })}>
               {#if lineage.id === lineageChoice}
-                <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+                <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
               {/if}
             </div>
           </div>
@@ -680,7 +678,7 @@
           <span class={ellipsisClass}>새로 시작</span>
           <div class={css({ flexShrink: '0', size: '14px' })}>
             {#if lineageChoice === 'fresh'}
-              <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+              <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
             {/if}
           </div>
         </div>
@@ -694,7 +692,7 @@
       {@const on = readonly ? decided && chosenTier === opt.tier : tier === opt.tier}
       {#if readonly}
         <div
-          class={css(readonlyOptionStyle, on ? { borderColor: 'border.strong' } : { color: 'text.faint', borderColor: 'border.subtle' })}
+          class={css(readonlyOptionStyle, on ? { borderColor: 'accent.default' } : { color: 'text.hint', borderColor: 'border.hairline' })}
           aria-current={on ? 'true' : undefined}
         >
           <span>{opt.label}</span>
@@ -708,7 +706,7 @@
         {@const quote = quoteOf(opt.tier)}
         {@const barred = lockedTier !== null && lockedTier !== opt.tier}
         <button
-          class={css(optionStyle, { borderColor: on ? 'border.strong' : 'border.subtle' })}
+          class={css(optionStyle, { borderColor: on ? 'accent.default' : 'border.hairline' })}
           aria-pressed={on}
           disabled={barred}
           onclick={() => (pickedTier = opt.tier)}
@@ -756,14 +754,14 @@
               {/if}
             </div>
             <div class={css(railBodyStyle, index + 1 === STAGES.length ? { paddingBottom: '0' } : {})}>
-              <div class={css(railNameStyle, on ? { color: 'text.subtle' } : { color: 'text.disabled' })}>
+              <div class={css(railNameStyle, on ? { color: 'text.muted' } : { color: 'text.hint' })}>
                 <span>{stage.label}</span>
                 {#if !on}
                   <span class={spacerClass}></span>
                   <span class={fromTagClass}>{tierLabelOf(stageIntroducedIn(stage.key))}부터</span>
                 {/if}
               </div>
-              <div class={css(railDescStyle, on ? { color: 'text.faint' } : { color: 'text.disabled' })}>{stage.description}</div>
+              <div class={css(railDescStyle, on ? { color: 'text.muted' } : { color: 'text.hint' })}>{stage.description}</div>
             </div>
           </div>
         {/each}
@@ -773,7 +771,7 @@
         <div class={panelLabelClass}>받아보는 것</div>
         {#each panelDeliverables as item (item.label)}
           {@const on = panelTier !== null && tierCovers(panelTier, item.from)}
-          <div class={css(itemStyle, on ? { color: 'text.subtle' } : { color: 'text.disabled' })}>
+          <div class={css(itemStyle, on ? { color: 'text.muted' } : { color: 'text.hint' })}>
             <Icon style={markStyle} icon={on ? CheckIcon : MinusIcon} size={12} />
             <span>{item.label}</span>
           </div>

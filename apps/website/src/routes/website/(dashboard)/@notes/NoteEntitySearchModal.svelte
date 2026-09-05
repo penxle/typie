@@ -291,10 +291,10 @@
         paddingX: '16px',
         paddingY: '12px',
         borderBottomWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
       })}
     >
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SearchIcon} size={18} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={SearchIcon} size={18} />
       <input
         class={css({
           flexGrow: '1',
@@ -326,7 +326,7 @@
             gap: '12px',
             paddingX: '16px',
             paddingY: '32px',
-            color: 'text.faint',
+            color: 'text.hint',
             fontSize: '13px',
           })}
         >
@@ -334,7 +334,7 @@
           <Button onclick={retryActiveQuery} size="sm" variant="secondary">다시 시도</Button>
         </div>
       {:else if results.length === 0}
-        <div class={center({ paddingY: '32px', color: 'text.faint', fontSize: '13px' })}>
+        <div class={center({ paddingY: '32px', color: 'text.hint', fontSize: '13px' })}>
           {emptyMessage}
         </div>
       {:else}
@@ -346,8 +346,8 @@
               paddingX: '16px',
               paddingY: '8px',
               cursor: item.isLinked ? 'default' : 'pointer',
-              opacity: item.isLinked ? '50' : '100',
-              backgroundColor: index === selectedIndex ? 'surface.muted' : 'transparent',
+              opacity: item.isLinked ? '40' : '100',
+              backgroundColor: index === selectedIndex ? 'surface.hover' : 'transparent',
             })}
             data-note-search-index={index}
             onclick={() => handleSelect(item)}
@@ -364,7 +364,7 @@
               {item.title}
             </span>
             {#if item.isLinked}
-              <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'accent.success.default' })} icon={CheckIcon} size={16} />
+              <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'accent.default' })} icon={CheckIcon} size={16} />
             {/if}
           </button>
         {/each}
@@ -378,9 +378,9 @@
         paddingX: '16px',
         paddingY: '8px',
         borderTopWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         fontSize: '11px',
-        color: 'text.faint',
+        color: 'text.hint',
         flexShrink: '0',
       })}
     >

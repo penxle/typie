@@ -15,7 +15,7 @@
       position: 'fixed',
       inset: '0',
       zIndex: '[9999]',
-      backgroundColor: 'black/60',
+      backgroundColor: 'scrim',
       backdropFilter: '[blur(4px)]',
     })}
   >
@@ -27,17 +27,17 @@
         padding: '32px',
         borderRadius: '16px',
         backgroundColor: 'surface.default',
-        boxShadow: 'large',
+        boxShadow: 'lg',
         width: 'full',
         maxWidth: '420px',
         textAlign: 'center',
       })}
     >
-      <Icon style={css.raw({ color: 'text.danger' })} icon={AlertTriangleIcon} size={32} />
+      <Icon style={css.raw({ color: 'danger.default' })} icon={AlertTriangleIcon} size={32} />
 
       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
         <h2 class={css({ fontSize: '18px', fontWeight: 'bold' })}>오류가 발생했어요</h2>
-        <p class={css({ fontSize: '14px', color: 'text.faint' })}>
+        <p class={css({ fontSize: '14px', color: 'text.muted' })}>
           예기치 않은 오류가 발생했어요.
           <br />
           페이지를 새로고침해 주세요.

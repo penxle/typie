@@ -91,8 +91,8 @@
         borderRadius: 'full',
         marginRight: '-8px',
         size: '32px',
-        color: 'text.bright',
-        backgroundColor: 'surface.dark',
+        color: 'text.on.inverse',
+        backgroundColor: 'surface.inverse',
       },
     })}
   >
@@ -139,13 +139,13 @@
       paddingTop: '16px',
       paddingBottom: '32px',
       width: 'full',
-      backgroundColor: 'surface.default',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px' })}>
       <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
 
-      <div class={css({ color: 'text.brand' })}>
+      <div class={css({ color: 'text.default' })}>
         <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>2,900</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
         <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
@@ -154,10 +154,10 @@
 
     <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
-    <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>
+    <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>
       {#each PLAN_FEATURES.full as feature, index (index)}
         <li class={flex({ alignItems: 'center', gap: '6px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={feature.icon} size={14} />
+          <Icon style={css.raw({ color: 'text.muted' })} icon={feature.icon} size={14} />
           <span>{feature.label}</span>
         </li>
       {/each}

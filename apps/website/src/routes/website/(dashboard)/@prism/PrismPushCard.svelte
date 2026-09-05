@@ -92,11 +92,11 @@
     paddingX: '12px',
     paddingY: '10px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '10px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
   });
-  const textClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle' });
+  const textClass = css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.muted' });
   const buttonStyle = css.raw({ flexShrink: '0' });
 </script>
 

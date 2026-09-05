@@ -35,7 +35,7 @@
     borderWidth: '1px',
     borderColor: 'border.default',
     borderRadius: '8px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
   });
   const savedStyle = flex({
     alignItems: 'center',
@@ -46,14 +46,14 @@
     paddingX: '8px',
     paddingY: '4px',
     borderRadius: '8px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.canvas',
   });
   const textStyle = css({
     flexGrow: '1',
     minWidth: '0',
     fontSize: '12px',
     lineHeight: '[1.5]',
-    color: 'text.subtle',
+    color: 'text.default',
     whiteSpace: 'pre-wrap',
   });
   const editStyle = css({
@@ -61,7 +61,7 @@
     marginLeft: 'auto',
     fontSize: '11px',
     fontWeight: 'semibold',
-    color: 'text.faint',
+    color: 'text.muted',
     _hover: { color: 'text.default' },
   });
   const submitStyle = flex({
@@ -70,8 +70,8 @@
     flexShrink: '0',
     size: '22px',
     borderRadius: 'full',
-    backgroundColor: 'surface.dark',
-    color: 'text.bright',
+    backgroundColor: 'accent.default',
+    color: 'surface.default',
   });
 </script>
 
@@ -104,7 +104,7 @@
         backgroundColor: 'transparent',
         resize: 'none',
         outline: 'none',
-        _placeholder: { color: 'text.faint' },
+        _placeholder: { color: 'text.hint' },
       })}
       onkeydown={(event) => {
         if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {

@@ -12,14 +12,14 @@
 
   let open = $state(false);
 
-  const toggleClass = css({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'text.faint' });
+  const toggleClass = css({ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'text.hint' });
   const chevronStyle = css.raw({ transition: '[transform 150ms cubic-bezier(0.23, 1, 0.32, 1)]', _motionReduce: { transition: '[none]' } });
   const chevronOpenStyle = css.raw({ transform: 'rotate(180deg)' });
   const listWrapClass = css({ marginTop: '6px' });
   const listClass = css({
     paddingLeft: '10px',
     borderLeftWidth: '2px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     maxHeight: '168px',
     overflowY: 'auto',
     scrollbarWidth: 'none',
@@ -45,7 +45,7 @@
         <div class={listClass} use:scrollFog={{ orientation: 'vertical', size: 16 }}>
           {#each rows as entry, index (index)}
             <div class={rowClass}>
-              {entry.label}{#if entry.count > 1}<span class={css({ marginLeft: '4px', color: 'text.disabled' })}>×{entry.count}</span>{/if}
+              {entry.label}{#if entry.count > 1}<span class={css({ marginLeft: '4px', color: 'text.hint' })}>×{entry.count}</span>{/if}
             </div>
           {/each}
         </div>

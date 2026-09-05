@@ -34,7 +34,7 @@
 {#if card}
   {@const Card = card}
   <div use:tooltip={{ message: guarded ? unavailableMessage : null, placement: 'bottom', delay: 0, arrow: false }}>
-    <div class={css({ '&[data-readonly=true]': { opacity: '70' } })} aria-disabled={guarded} data-readonly={guarded} inert={guarded}>
+    <div class={css({ '&[data-readonly=true]': { opacity: '40' } })} aria-disabled={guarded} data-readonly={guarded} inert={guarded}>
       <Card disabled={guarded} {message} {open} resolve={(input) => resolve(message.agentId, message.toolCallId, input)} {sessionId} />
     </div>
   </div>
@@ -43,7 +43,7 @@
     class={flex({ alignItems: 'center', gap: '8px' })}
     use:tooltip={{ message: guarded ? unavailableMessage : null, placement: 'bottom', delay: 0, arrow: false }}
   >
-    <span class={css({ fontSize: '11px', color: 'text.danger' })}>요청을 처리하지 못했어요</span>
+    <span class={css({ fontSize: '11px', color: 'danger.default' })}>요청을 처리하지 못했어요</span>
     <Button disabled={guarded} onclick={() => onRetry(message.toolCallId)} size="sm" variant="secondary">다시 시도</Button>
   </div>
 {/if}

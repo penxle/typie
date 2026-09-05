@@ -86,13 +86,13 @@
     backgroundColor: 'surface.default',
     cursor: 'pointer',
     transition: 'common',
-    _hover: { borderColor: 'border.strong', color: 'text.default' },
+    _hover: { borderColor: 'border.emphasis', color: 'text.default' },
   });
 
   const choiceSelectedStyle = css.raw({
-    borderColor: 'border.strong',
+    borderColor: 'accent.default',
     color: 'text.default',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.active',
   });
 </script>
 
@@ -105,10 +105,10 @@
         marginY: '-4px',
         padding: '4px',
         borderRadius: '6px',
-        color: 'text.faint',
+        color: 'text.muted',
         cursor: 'pointer',
         transition: 'colors',
-        _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+        _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
       })}
       aria-label="닫기"
       onclick={close}
@@ -150,7 +150,7 @@
         paddingX: '12px',
         paddingY: '10px',
         borderWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.default',
         borderRadius: '8px',
         fontSize: '14px',
         lineHeight: '[1.5]',
@@ -158,9 +158,9 @@
         backgroundColor: 'surface.default',
         resize: 'none',
         transition: 'common',
-        _hover: { borderColor: 'border.default' },
-        _focus: { outline: 'none', borderColor: 'border.brand' },
-        _placeholder: { color: 'text.faint' },
+        _hover: { borderColor: 'border.emphasis' },
+        _focus: { outline: 'none', borderColor: 'accent.default' },
+        _placeholder: { color: 'text.hint' },
       })}
       aria-label="내용"
       onkeydown={(e) => {

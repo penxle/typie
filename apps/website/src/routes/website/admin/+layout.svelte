@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
+  import { getThemeContext } from '@typie/ui/context';
   import BarChartIcon from '~icons/lucide/bar-chart';
   import FileTextIcon from '~icons/lucide/file-text';
   import HomeIcon from '~icons/lucide/home';
@@ -14,6 +15,18 @@
   let { data, children } = $props();
 
   const query = $derived(hydrateQuery(() => data.query));
+
+  const theme = getThemeContext();
+
+  $effect(() => {
+    theme.overrideTheme = 'dark';
+    theme.overrideVariant = { light: 'white', dark: 'black' };
+
+    return () => {
+      theme.overrideTheme = undefined;
+      theme.overrideVariant = undefined;
+    };
+  });
 
   const navItems = [
     { href: '/admin', label: '홈', icon: HomeIcon },
@@ -33,7 +46,7 @@
   };
 </script>
 
-<div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'gray.900', fontFamily: 'mono' })}>
+<div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'surface.default', fontFamily: 'mono' })}>
   <EnvironmentBanner />
   <AdminImpersonateBanner query$key={query.data} />
 
@@ -43,17 +56,17 @@
         flexDirection: 'column',
         width: '240px',
         borderRightWidth: '2px',
-        borderColor: 'amber.500',
-        backgroundColor: 'gray.900',
+        borderColor: 'border.default',
+        backgroundColor: 'surface.default',
       })}
     >
-      <div class={css({ borderBottomWidth: '2px', borderColor: 'amber.500', padding: '24px', textAlign: 'center' })}>
+      <div class={css({ borderBottomWidth: '2px', borderColor: 'border.default', padding: '24px', textAlign: 'center' })}>
         <div
           class={css({
             fontSize: '14px',
-            color: 'amber.500',
+            color: 'text.default',
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             paddingX: '16px',
             paddingY: '8px',
             marginBottom: '8px',
@@ -61,7 +74,7 @@
         >
           TYPIE ADMIN
         </div>
-        <div class={css({ fontSize: '10px', color: 'amber.400' })}>SYSTEM v1.0</div>
+        <div class={css({ fontSize: '10px', color: 'text.muted' })}>SYSTEM v1.0</div>
       </div>
 
       <nav class={flex({ flexDirection: 'column', gap: '4px', paddingX: '16px', paddingY: '24px' })}>
@@ -74,16 +87,16 @@
               paddingX: '16px',
               paddingY: '8px',
               fontSize: '12px',
-              color: isActive(item.href) ? 'gray.900' : 'amber.500',
-              backgroundColor: isActive(item.href) ? 'amber.500' : 'transparent',
+              color: isActive(item.href) ? 'text.default' : 'text.muted',
+              backgroundColor: isActive(item.href) ? 'surface.active' : 'transparent',
               borderWidth: '1px',
-              borderColor: isActive(item.href) ? 'amber.500' : 'transparent',
+              borderColor: isActive(item.href) ? 'accent.default' : 'transparent',
               marginBottom: '2px',
               textDecoration: 'none',
               _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
-                borderColor: 'amber.500',
+                backgroundColor: isActive(item.href) ? 'surface.active' : 'surface.hover',
+                color: 'text.default',
+                borderColor: isActive(item.href) ? 'accent.default' : 'border.emphasis',
               },
             })}
             href={item.href}
@@ -99,19 +112,19 @@
       <div
         class={css({
           borderTopWidth: '2px',
-          borderColor: 'amber.500',
+          borderColor: 'border.default',
           borderWidth: '2px',
           padding: '16px',
           marginX: '12px',
           marginBottom: '12px',
         })}
       >
-        <div class={css({ fontSize: '10px', color: 'amber.400', marginBottom: '12px' })}>CURRENT USER</div>
+        <div class={css({ fontSize: '10px', color: 'text.muted', marginBottom: '12px' })}>CURRENT USER</div>
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
           <div
             class={css({
               size: '32px',
-              backgroundColor: 'amber.500',
+              backgroundColor: 'accent.subtle',
               overflow: 'hidden',
               flexShrink: '0',
             })}
@@ -121,10 +134,10 @@
             {/if}
           </div>
           <div class={css({ flex: '1', minWidth: '0' })}>
-            <div class={css({ fontSize: '11px', color: 'amber.500', truncate: true })}>
+            <div class={css({ fontSize: '11px', color: 'text.default', truncate: true })}>
               {query.data.me.name.toUpperCase()}
             </div>
-            <div class={css({ fontSize: '10px', color: 'amber.400', truncate: true })}>
+            <div class={css({ fontSize: '10px', color: 'text.muted', truncate: true })}>
               {query.data.me.email}
             </div>
           </div>
@@ -138,14 +151,14 @@
             width: 'full',
             textAlign: 'center',
             borderWidth: '2px',
-            borderColor: 'red.500',
+            borderColor: 'danger.default',
             paddingY: '10px',
             fontSize: '12px',
-            color: 'red.500',
+            color: 'danger.default',
             textDecoration: 'none',
             _hover: {
-              backgroundColor: 'red.500',
-              color: 'gray.900',
+              backgroundColor: 'danger.default',
+              color: 'text.on.danger',
             },
           })}
           href="/initial"
@@ -161,19 +174,19 @@
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottomWidth: '2px',
-          borderColor: 'amber.500',
+          borderColor: 'border.default',
           paddingX: '24px',
           paddingY: '16px',
           height: '64px',
-          backgroundColor: 'gray.900',
+          backgroundColor: 'surface.default',
         })}
       >
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <h1 class={css({ fontSize: '14px', color: 'amber.500' })}>System Status: ONLINE</h1>
+          <h1 class={css({ fontSize: '14px', color: 'text.default' })}>System Status: ONLINE</h1>
         </div>
       </header>
 
-      <div class={css({ flex: '1', padding: '24px', overflowY: 'auto', backgroundColor: 'gray.900' })}>
+      <div class={css({ flex: '1', padding: '24px', overflowY: 'auto', backgroundColor: 'surface.default' })}>
         {@render children()}
       </div>
     </main>

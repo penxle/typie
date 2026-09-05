@@ -124,12 +124,12 @@
   const weekdays = [null, '월', null, '수', null, '금', null];
 
   const cssByLevel = {
-    0: css.raw({ backgroundColor: { base: 'gray.200', _dark: 'dark.gray.800' } }),
-    1: css.raw({ backgroundColor: { base: 'green.300', _dark: 'dark.green.700' } }),
-    2: css.raw({ backgroundColor: { base: 'green.500', _dark: 'dark.green.500' } }),
-    3: css.raw({ backgroundColor: { base: 'green.600', _dark: 'dark.green.400' } }),
-    4: css.raw({ backgroundColor: { base: 'green.700', _dark: 'dark.green.300' } }),
-    5: css.raw({ backgroundColor: { base: 'green.800', _dark: 'dark.green.200' } }),
+    0: css.raw({ backgroundColor: 'surface.inset' }),
+    1: css.raw({ backgroundColor: 'palette.green/30' }),
+    2: css.raw({ backgroundColor: 'palette.green/50' }),
+    3: css.raw({ backgroundColor: 'palette.green/70' }),
+    4: css.raw({ backgroundColor: 'palette.green/85' }),
+    5: css.raw({ backgroundColor: 'palette.green' }),
   };
 
   const { anchor, floating } = createFloatingActions({
@@ -163,7 +163,7 @@
             insetY: '0',
             fontSize: '10px',
             fontWeight: 'medium',
-            color: 'text.faint',
+            color: 'text.hint',
           })}
         >
           {weekday}
@@ -181,7 +181,7 @@
           paddingY: '1px',
           fontSize: '10px',
           fontWeight: 'medium',
-          color: 'text.faint',
+          color: 'text.hint',
           whiteSpace: 'nowrap',
           overflow: 'visible',
         })}
@@ -213,8 +213,8 @@
       borderRadius: '6px',
       paddingX: '10px',
       paddingY: '6px',
-      color: 'text.bright',
-      backgroundColor: 'surface.dark',
+      color: 'text.on.inverse',
+      backgroundColor: 'surface.inverse',
       zIndex: 'modal',
     })}
     use:floating

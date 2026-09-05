@@ -219,11 +219,11 @@
     }}
   >
     {#if copied}
-      <Icon style={css.raw({ color: 'text.link' })} icon={CheckIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>복사되었어요</div>
+      <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.default' })}>복사되었어요</div>
     {:else}
-      <Icon style={css.raw({ color: 'text.link' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.link' })}>
+      <Icon style={css.raw({ color: 'text.default' })} icon={LinkIcon} size={12} />
+      <div class={css({ fontSize: '12px', color: 'text.default' })}>
         {isSingleFolder ? '게시 링크 복사' : '게시 링크 모두 복사'}
       </div>
     {/if}
@@ -234,12 +234,12 @@
 
 <div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>폴더 조회 권한</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>폴더 조회 권한</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={BlendIcon} size={14} />
-        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>공개 범위</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={BlendIcon} size={14} />
+        <div class={css({ fontSize: '12px', color: 'text.muted' })}>공개 범위</div>
       </div>
 
       <Select
@@ -313,12 +313,12 @@
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>썸네일</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>썸네일</div>
 
     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={ImageIcon} />
-        <div class={css({ fontSize: '12px', color: 'text.subtle' })}>미리보기 이미지</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={ImageIcon} />
+        <div class={css({ fontSize: '12px', color: 'text.muted' })}>미리보기 이미지</div>
       </div>
 
       <div class={flex({ gap: '8px', alignItems: 'center' })}>
@@ -328,9 +328,9 @@
               width: '64px',
               height: '36px',
               borderRadius: '6px',
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.inset',
               fontSize: '10px',
-              color: 'text.faint',
+              color: 'text.hint',
             })}
             disabled={thumbnailUploading}
             onclick={handleThumbnailUpload}
@@ -362,8 +362,8 @@
               class={center({
                 size: '24px',
                 borderRadius: '4px',
-                color: 'text.faint',
-                _hover: { backgroundColor: 'surface.muted', color: 'text.danger' },
+                color: 'text.muted',
+                _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
               })}
               onclick={handleThumbnailRemove}
               type="button"
@@ -380,8 +380,8 @@
               borderWidth: '1px',
               borderStyle: 'dashed',
               borderRadius: '6px',
-              color: 'text.faint',
-              _hover: { backgroundColor: 'surface.muted' },
+              color: 'text.muted',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             disabled={thumbnailUploading}
             onclick={handleThumbnailUpload}

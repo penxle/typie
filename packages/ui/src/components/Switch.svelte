@@ -26,7 +26,7 @@
       alignItems: 'center',
       borderRadius: 'full',
       aspectRatio: '[2/1]',
-      backgroundColor: { base: 'interactive.hover', _checked: 'accent.brand.default' },
+      backgroundColor: { base: 'surface.inset', _checked: 'accent.default' },
       transition: 'common',
       appearance: 'none',
       cursor: 'pointer',
@@ -38,9 +38,8 @@
         backgroundColor: 'surface.default',
       },
       _disabled: {
-        backgroundColor: 'surface.muted!',
+        opacity: '40',
         cursor: 'not-allowed',
-        _after: { backgroundColor: 'interactive.disabled' },
       },
     },
     variants: {
@@ -51,7 +50,7 @@
       indeterminate: {
         true: {
           justifyContent: 'center',
-          backgroundColor: '[color-mix(in srgb, {colors.accent.brand.default}, {colors.surface.default})]',
+          backgroundColor: '[color-mix(in srgb, {colors.accent.default}, {colors.surface.default})]',
           _after: {
             width: '1/2',
             aspectRatio: '1/1',

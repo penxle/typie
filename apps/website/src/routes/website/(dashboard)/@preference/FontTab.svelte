@@ -106,9 +106,9 @@
         paddingY: '6px',
         fontSize: '13px',
         fontWeight: 'medium',
-        color: 'text.subtle',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         if (SubscribeModal.gate('font_tab_upload')) {
@@ -117,7 +117,7 @@
       }}
       type="button"
     >
-      <Icon style={css.raw({ color: 'text.faint' })} icon={PlusIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={PlusIcon} size={14} />
       <span>직접 업로드</span>
     </button>
   </div>
@@ -141,9 +141,9 @@
               paddingY: '6px',
               fontSize: '13px',
               fontWeight: 'medium',
-              color: 'text.subtle',
+              color: 'text.muted',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               Dialog.confirm({
@@ -208,7 +208,7 @@
     {/each}
   {:else}
     <SettingsCard>
-      <div class={css({ paddingX: '20px', paddingY: '40px', fontSize: '13px', color: 'text.subtle', textAlign: 'center' })}>
+      <div class={css({ paddingX: '20px', paddingY: '40px', fontSize: '13px', color: 'text.muted', textAlign: 'center' })}>
         아직 직접 업로드한 폰트가 없어요.
         <br />
         우측 상단의 직접 업로드 버튼이나 문서 에디터의 폰트 패밀리 메뉴에서 추가할 수 있어요.

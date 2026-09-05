@@ -55,9 +55,9 @@
     gap: '2px',
     fontSize: '12px',
     fontWeight: 'medium',
-    color: 'text.brand',
+    color: 'text.default',
     transition: 'common',
-    _hover: { textDecoration: 'underline' },
+    textDecoration: 'underline',
   });
 </script>
 
@@ -92,7 +92,7 @@
     </SettingsRow>
   </SettingsCard>
 
-  <p class={css({ marginTop: '10px', paddingX: '2px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
+  <p class={css({ marginTop: '10px', paddingX: '2px', fontSize: '12px', lineHeight: '[1.6]', color: 'text.muted' })}>
     이 설정은 현재 브라우저에서 받는 모든 타이피 알림에만 적용돼요. 다른 브라우저나 모바일 앱의 알림에는 영향을 주지 않아요.
   </p>
 
@@ -101,7 +101,7 @@
   </h2>
 
   <div class={css({ paddingX: '2px' })}>
-    <p class={css({ fontSize: '12px', lineHeight: '[1.6]', color: 'text.faint' })}>
+    <p class={css({ fontSize: '12px', lineHeight: '[1.6]', color: 'text.muted' })}>
       알림과 관련해 자주 찾는 설정으로 바로 이동할 수 있어요.
     </p>
     <div class={flex({ alignItems: 'center', gap: '16px', marginTop: '8px' })}>

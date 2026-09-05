@@ -348,13 +348,13 @@
                   gap: '12px',
                   borderRadius: '10px',
                   borderWidth: '1px',
-                  borderColor: 'border.subtle',
+                  borderColor: 'border.hairline',
                   paddingX: '16px',
                   paddingY: '12px',
-                  backgroundColor: 'surface.subtle',
+                  backgroundColor: 'surface.canvas',
                 })}
               >
-                <Icon style={css.raw({ flexShrink: '0', color: 'text.subtle' })} icon={MoonIcon} size={18} />
+                <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={MoonIcon} size={18} />
                 <div>
                   <p class={flex({ alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>
                     쉬는 달엔 결제도 쉬어요
@@ -366,10 +366,10 @@
                         placement: 'top-start',
                       }}
                     >
-                      <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} size={12} />
+                      <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={12} />
                     </span>
                   </p>
-                  <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.faint' })}>쓰지 않은 달의 결제는 자동으로 건너뛰어요</p>
+                  <p class={css({ marginTop: '2px', fontSize: '12px', color: 'text.muted' })}>쓰지 않은 달의 결제는 자동으로 건너뛰어요</p>
                 </div>
               </div>
             </div>
@@ -381,16 +381,16 @@
                   flexDirection: 'column',
                   gap: '14px',
                   borderRightWidth: '1px',
-                  borderColor: 'border.subtle',
+                  borderColor: 'border.hairline',
                   paddingRight: '24px',
                   fontSize: '14px',
                   fontWeight: 'medium',
-                  color: 'text.subtle',
+                  color: 'text.muted',
                 })}
               >
                 {#each PLAN_FEATURES.full as feature, index (index)}
                   <li class={flex({ alignItems: 'center', gap: '10px' })}>
-                    <Icon style={css.raw({ color: 'text.faint' })} icon={feature.icon} size={16} />
+                    <Icon style={css.raw({ color: 'text.muted' })} icon={feature.icon} size={16} />
                     <span>{feature.label}</span>
                   </li>
                 {/each}
@@ -402,11 +402,11 @@
                     class={css({
                       borderRadius: '8px',
                       borderWidth: '1px',
-                      borderColor: 'border.subtle',
+                      borderColor: 'border.hairline',
                       padding: '16px',
                       fontSize: '13px',
                       color: 'text.muted',
-                      backgroundColor: 'surface.default',
+                      backgroundColor: 'surface.canvas',
                     })}
                   >
                     구독이 예약되어 있어요. 무료 체험이 끝나면 자동으로 시작돼요.
@@ -417,12 +417,12 @@
                       padding: '16px',
                       borderRadius: '8px',
                       borderWidth: '1px',
-                      borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.subtle',
-                      backgroundColor: interval === PlanInterval.MONTHLY ? 'accent.brand.subtle' : 'surface.default',
+                      borderColor: interval === PlanInterval.MONTHLY ? 'accent.default' : 'border.hairline',
+                      backgroundColor: interval === PlanInterval.MONTHLY ? 'surface.active' : 'surface.default',
                       cursor: 'pointer',
                       transition: 'common',
                       textAlign: 'left',
-                      _hover: { borderColor: interval === PlanInterval.MONTHLY ? 'accent.brand.default' : 'border.default' },
+                      _hover: { borderColor: interval === PlanInterval.MONTHLY ? 'accent.default' : 'border.emphasis' },
                     })}
                     onclick={() => (interval = PlanInterval.MONTHLY)}
                     type="button"
@@ -431,7 +431,7 @@
                       <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>월간</span>
                       <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>2,900원</span>
                     </div>
-                    <div class={css({ fontSize: '13px', color: 'text.subtle', marginTop: '6px' })}>매월 결제</div>
+                    <div class={css({ fontSize: '13px', color: 'text.muted', marginTop: '6px' })}>매월 결제</div>
                   </button>
 
                   <button
@@ -439,12 +439,12 @@
                       padding: '16px',
                       borderRadius: '8px',
                       borderWidth: '1px',
-                      borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.subtle',
-                      backgroundColor: interval === PlanInterval.YEARLY ? 'accent.brand.subtle' : 'surface.default',
+                      borderColor: interval === PlanInterval.YEARLY ? 'accent.default' : 'border.hairline',
+                      backgroundColor: interval === PlanInterval.YEARLY ? 'surface.active' : 'surface.default',
                       cursor: 'pointer',
                       transition: 'common',
                       textAlign: 'left',
-                      _hover: { borderColor: interval === PlanInterval.YEARLY ? 'accent.brand.default' : 'border.default' },
+                      _hover: { borderColor: interval === PlanInterval.YEARLY ? 'accent.default' : 'border.emphasis' },
                     })}
                     onclick={() => (interval = PlanInterval.YEARLY)}
                     type="button"
@@ -459,8 +459,8 @@
                             paddingY: '1px',
                             fontSize: '10px',
                             fontWeight: 'semibold',
-                            color: 'text.bright',
-                            backgroundColor: 'accent.brand.default',
+                            color: 'text.default',
+                            backgroundColor: 'accent.subtle',
                           })}
                         >
                           2개월 무료
@@ -468,13 +468,13 @@
                       </div>
                       <span class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>29,000원</span>
                     </div>
-                    <div class={css({ fontSize: '13px', color: 'text.subtle', marginTop: '6px' })}>
-                      매년 결제 · <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>월 2,416원</span>
+                    <div class={css({ fontSize: '13px', color: 'text.muted', marginTop: '6px' })}>
+                      매년 결제 · <span class={css({ color: 'text.default', fontWeight: 'medium' })}>월 2,416원</span>
                     </div>
                   </button>
 
                   <div class={flex({ flexDirection: 'column', gap: '10px', marginTop: 'auto', paddingTop: '14px' })}>
-                    <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>언제든 해지할 수 있어요.</p>
+                    <p class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center' })}>언제든 해지할 수 있어요.</p>
 
                     <Button style={css.raw({ width: 'full' })} onclick={() => goToStep('payment')} size="lg">구독하기</Button>
                   </div>
@@ -484,7 +484,7 @@
           {:else}
             <div class={css({ paddingX: '32px', paddingTop: '24px' })}>
               <button
-                class={css({ fontSize: '13px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.muted' } })}
+                class={css({ fontSize: '13px', color: 'text.hint', cursor: 'pointer', _hover: { color: 'text.muted' } })}
                 onclick={() => goToStep('plan')}
                 type="button"
               >
@@ -498,46 +498,46 @@
                   class={css({
                     borderRadius: '8px',
                     borderWidth: '1px',
-                    borderColor: 'border.subtle',
+                    borderColor: 'border.hairline',
                     padding: '16px',
                     fontSize: '13px',
-                    backgroundColor: 'surface.default',
+                    backgroundColor: 'surface.canvas',
                   })}
                 >
                   <div class={flex({ justify: 'space-between' })}>
-                    <span class={css({ color: 'text.subtle' })}>플랜</span>
+                    <span class={css({ color: 'text.muted' })}>플랜</span>
                     <span class={css({ color: 'text.default', fontWeight: 'medium' })}>
                       {interval === PlanInterval.YEARLY ? '연간' : '월간'} · FULL ACCESS
                     </span>
                   </div>
 
                   <div class={flex({ justify: 'space-between', marginTop: '8px' })}>
-                    <span class={css({ color: 'text.subtle' })}>플랜 금액</span>
+                    <span class={css({ color: 'text.muted' })}>플랜 금액</span>
                     <span class={css({ color: 'text.default' })}>{comma(planFee)}원</span>
                   </div>
 
                   {#if user.data.credit > 0}
                     <div class={flex({ justify: 'space-between', marginTop: '8px' })}>
-                      <span class={css({ color: 'text.subtle' })}>보유 구독 캐시</span>
+                      <span class={css({ color: 'text.muted' })}>보유 구독 캐시</span>
                       <span class={css({ color: 'text.default' })}>{comma(user.data.credit)}원</span>
                     </div>
                   {/if}
 
                   {#if !isTrial && creditDiscount > 0}
                     <div class={flex({ justify: 'space-between', marginTop: '8px' })}>
-                      <span class={css({ color: 'text.subtle' })}>구독 캐시 차감</span>
-                      <span class={css({ color: 'accent.brand.default', fontWeight: 'medium' })}>-{comma(creditDiscount)}원</span>
+                      <span class={css({ color: 'text.muted' })}>구독 캐시 차감</span>
+                      <span class={css({ color: 'text.default', fontWeight: 'medium' })}>-{comma(creditDiscount)}원</span>
                     </div>
                   {/if}
 
-                  <div class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' })}>
+                  <div class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.hairline' })}>
                     {#if isTrial}
                       <div class={flex({ justify: 'space-between', fontSize: '14px', fontWeight: 'semibold' })}>
                         <span class={css({ color: 'text.default' })}>오늘 결제 금액</span>
                         <span class={css({ color: 'text.default' })}>0원</span>
                       </div>
                       <div class={flex({ justify: 'space-between', marginTop: '6px', fontSize: '12px' })}>
-                        <span class={css({ color: 'text.subtle' })}>첫 결제일</span>
+                        <span class={css({ color: 'text.muted' })}>첫 결제일</span>
                         {#if user.data.credit > 0}
                           <span class={flex({ alignItems: 'center', gap: '3px', color: 'text.default' })}>
                             {firstBillingDate} · 예상 {comma(finalAmount)}원
@@ -549,7 +549,7 @@
                                 placement: 'top-start',
                               }}
                             >
-                              <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} size={12} />
+                              <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={12} />
                             </span>
                           </span>
                         {:else}
@@ -571,8 +571,8 @@
                       borderRadius: '8px',
                       padding: '14px',
                       fontSize: '12px',
-                      color: 'text.brand',
-                      backgroundColor: 'accent.brand.subtle',
+                      color: 'text.default',
+                      backgroundColor: 'accent.subtle',
                       lineHeight: '[1.6]',
                     })}
                   >
@@ -589,9 +589,9 @@
                       alignItems: 'center',
                       borderRadius: '8px',
                       borderWidth: '1px',
-                      borderColor: 'border.subtle',
+                      borderColor: 'border.hairline',
                       padding: '14px',
-                      backgroundColor: 'surface.default',
+                      backgroundColor: 'surface.canvas',
                     })}
                   >
                     {#if user.data.billingKey?.type === BillingKeyType.KAKAOPAY}
@@ -613,7 +613,7 @@
                         alignSelf: 'flex-end',
                         fontSize: '13px',
                         fontWeight: 'medium',
-                        color: 'text.faint',
+                        color: 'text.hint',
                         cursor: 'pointer',
                         _hover: { color: 'text.muted' },
                       })}
@@ -639,12 +639,12 @@
                     class={css({
                       padding: '12px',
                       borderRadius: '6px',
-                      backgroundColor: 'accent.danger.subtle',
+                      backgroundColor: 'danger.subtle',
                       borderWidth: '1px',
-                      borderColor: 'border.danger',
+                      borderColor: 'danger.default',
                     })}
                   >
-                    <div class={css({ fontSize: '13px', color: 'text.danger' })}>{submitError}</div>
+                    <div class={css({ fontSize: '13px', color: 'text.on.danger.subtle' })}>{submitError}</div>
                   </div>
                 {/if}
 
@@ -659,7 +659,7 @@
                     {/if}
                   </Button>
 
-                  <div class={flex({ alignItems: 'center', justify: 'center', gap: '5px', fontSize: '12px', color: 'text.faint' })}>
+                  <div class={flex({ alignItems: 'center', justify: 'center', gap: '5px', fontSize: '12px', color: 'text.hint' })}>
                     <Icon icon={LockIcon} size={12} />
                     <span>결제 정보는 암호화되어 안전하게 전송돼요.</span>
                   </div>

@@ -24,11 +24,11 @@
       paddingX: '20px',
       flexShrink: '0',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     <div class={flex({ alignItems: 'center', gap: '6px', fontWeight: 'semibold' })}>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>코멘트</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>코멘트</div>
       {#if comments && list.length > 0}
         <div
           class={css({
@@ -37,8 +37,8 @@
             paddingY: '2px',
             fontSize: '11px',
             fontWeight: 'semibold',
-            color: 'accent.brand.default',
-            backgroundColor: 'accent.brand.subtle',
+            color: 'text.default',
+            backgroundColor: 'accent.subtle',
           })}
         >
           {list.length}
@@ -47,7 +47,7 @@
     </div>
     {#if comments}
       <button
-        class={css({ fontSize: '12px', color: 'text.faint', transition: 'common', _hover: { color: 'text.subtle' } })}
+        class={css({ fontSize: '12px', color: 'text.hint', transition: 'common', _hover: { color: 'text.muted' } })}
         onclick={() => comments.setShowResolved(!comments.showResolved)}
         type="button"
       >
@@ -58,10 +58,10 @@
 
   {#if !comments || list.length === 0}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', paddingY: '60px' })}>
-      <div class={center({ size: '64px', borderRadius: '16px', backgroundColor: 'surface.muted', color: 'text.faint' })}>
+      <div class={center({ size: '64px', borderRadius: '16px', backgroundColor: 'surface.inset', color: 'text.hint' })}>
         <Icon icon={MessageSquareTextIcon} size={28} />
       </div>
-      <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+      <p class={css({ fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
         {comments?.showResolved ? '해결된 코멘트가 없어요' : '아직 코멘트가 없어요'}
       </p>
     </div>

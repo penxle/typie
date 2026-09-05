@@ -29,9 +29,10 @@
   class={center({
     borderRadius: '4px',
     size: '24px',
-    color: 'text.faint',
+    color: 'text.muted',
     transition: 'common',
-    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+    _pressed: { color: 'text.default', backgroundColor: 'surface.active' },
   })}
   aria-label={zenMode.active ? '집중 모드 끄기' : '집중 모드 켜기'}
   aria-pressed={zenMode.active}

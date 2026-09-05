@@ -3,7 +3,7 @@
   import { center } from '@typie/styled-system/patterns';
 </script>
 
-<div class={center({ gap: '8px', color: 'text.subtle' })}>
+<div class={center({ gap: '8px', color: 'text.default' })}>
   <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'current' })}></div>
   <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'current' })}></div>
   <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'current' })}></div>

@@ -9,7 +9,7 @@ import { NavigationPolicy } from './navigation-policy';
 import { initSentry } from './sentry';
 import { Store } from './store';
 import { TabManager } from './tab-manager';
-import { readStoredTheme } from './theme';
+import { defaultThemePayload, readStoredTheme, themeColors } from './theme';
 import { Updater } from './updater';
 import { WindowManager } from './window-manager';
 import type { DesktopZoomAction, TabIcon } from '@typie/lib/desktop';
@@ -113,8 +113,8 @@ const showLoggedIn = () => {
 
 const applyTheme = (theme: ThemePayload) => {
   chromeWebContents()?.send(IPC.theme, theme);
-  windowManager?.setTheme(theme.theme);
-  tabManager?.setBackground(windowManager?.background ?? '#ffffff');
+  windowManager?.setTheme(theme);
+  tabManager?.setBackground(windowManager?.background ?? themeColors(defaultThemePayload('light')).background);
 };
 
 const createWindow = async () => {

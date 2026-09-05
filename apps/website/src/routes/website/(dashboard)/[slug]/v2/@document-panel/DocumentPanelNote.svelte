@@ -269,17 +269,17 @@
       paddingX: '20px',
       flexShrink: '0',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     <div class={flex({ alignItems: 'center', gap: '6px', fontWeight: 'semibold' })}>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>노트</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>노트</div>
       {#if openVisibleCount > 0}
         <div
           class={css({
             fontSize: '11px',
             color: 'text.default',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             paddingX: '6px',
             paddingY: '2px',
             borderRadius: '4px',
@@ -293,9 +293,9 @@
     <button
       class={center({
         size: '20px',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { color: 'text.subtle' },
+        _hover: { color: 'text.default' },
         cursor: 'pointer',
       })}
       onclick={() => handleAddNote('button')}
@@ -362,13 +362,13 @@
           class={center({
             size: '64px',
             borderRadius: '16px',
-            backgroundColor: 'surface.muted',
-            color: 'text.faint',
+            backgroundColor: 'surface.canvas',
+            color: 'text.hint',
           })}
         >
           <Icon icon={StickyNoteIcon} size={28} />
         </div>
-        <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+        <p class={css({ fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
           떠오르는 생각이나 아이디어를
           <br />
           자유롭게 기록해보세요
@@ -383,7 +383,7 @@
         flexDirection: 'column',
         gap: '6px',
         borderTopWidth: '1px',
-        borderColor: 'surface.muted',
+        borderColor: 'border.hairline',
         paddingTop: '6px',
         marginTop: 'auto',
       })}
@@ -395,12 +395,12 @@
           paddingX: '12px',
           paddingY: '8px',
           fontSize: '12px',
-          color: 'text.faint',
+          color: 'text.muted',
           cursor: 'pointer',
           borderRadius: '6px',
           transition: 'common',
           transitionProperty: '[color, background-color]',
-          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
         })}
         onclick={() => (resolvedExpanded = !resolvedExpanded)}
         type="button"
@@ -416,7 +416,7 @@
             fontSize: '11px',
             fontWeight: 'semibold',
             color: 'text.default',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             paddingX: '6px',
             paddingY: '2px',
             borderRadius: '4px',

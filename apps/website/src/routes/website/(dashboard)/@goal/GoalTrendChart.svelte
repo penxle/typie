@@ -63,9 +63,9 @@
     return anchor ? { date: dayjs.max(created, dayjs(anchor.date).kst()), value: anchor.characterCount } : null;
   });
 
-  const actualStroke = css.raw({ stroke: { base: 'gray.600', _dark: 'dark.gray.400' } });
-  const targetStroke = css.raw({ stroke: { base: 'gray.300', _dark: 'dark.gray.700' } });
-  const paceStroke = css.raw({ stroke: { base: 'gray.400', _dark: 'dark.gray.600' } });
+  const actualStroke = css.raw({ stroke: 'accent.default' });
+  const targetStroke = css.raw({ stroke: 'border.emphasis' });
+  const paceStroke = css.raw({ stroke: 'border.emphasis' });
 </script>
 
 <div class={flex({ flexDirection: 'column', gap: '8px' })}>
@@ -93,21 +93,21 @@
           />
         {/if}
         <polyline class={css({ fill: '[none]' }, actualStroke)} points={linePoints} stroke-linejoin="round" stroke-width="2" />
-        <circle class={css({ fill: { base: 'gray.700', _dark: 'dark.gray.300' } })} cx={x(today)} cy={y(current)} r="3" />
-        <text class={css({ fill: 'text.faint', fontSize: '10px' })} x={padding.left} y={height - 6}>{first.format('M월 D일')}</text>
-        <text class={css({ fill: 'text.faint', fontSize: '10px' })} text-anchor="end" x={width - padding.right} y={height - 6}>
+        <circle class={css({ fill: 'accent.default' })} cx={x(today)} cy={y(current)} r="3" />
+        <text class={css({ fill: 'text.hint', fontSize: '10px' })} x={padding.left} y={height - 6}>{first.format('M월 D일')}</text>
+        <text class={css({ fill: 'text.hint', fontSize: '10px' })} text-anchor="end" x={width - padding.right} y={height - 6}>
           {last.format('M월 D일')}
         </text>
       </svg>
     {:else if history.length === 0}
-      <div class={css({ paddingY: '24px', textAlign: 'center', fontSize: '13px', color: 'text.faint' })}>
+      <div class={css({ paddingY: '24px', textAlign: 'center', fontSize: '13px', color: 'text.hint' })}>
         아직 기록이 없어요. 글을 쓰면 하루하루의 글자 수가 쌓여요.
       </div>
     {/if}
   </div>
 
   {#if history.length > 0}
-    <div class={flex({ alignItems: 'center', gap: '12px', fontSize: '12px', color: 'text.faint' })}>
+    <div class={flex({ alignItems: 'center', gap: '12px', fontSize: '12px', color: 'text.hint' })}>
       <div class={flex({ alignItems: 'center', gap: '4px' })}>
         <svg height="8" width="16">
           <line class={css(actualStroke)} stroke-width="2" x1="0" x2="16" y1="4" y2="4" />

@@ -277,9 +277,9 @@
             height: '26px',
             borderRadius: '6px',
             paddingX: '6px',
-            color: 'text.subtle',
+            color: 'text.muted',
             transition: 'common',
-            _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             cursor: 'pointer',
           })}
           onclick={(event) => {
@@ -298,9 +298,9 @@
           height: '26px',
           borderRadius: '6px',
           paddingX: '6px',
-          color: 'text.subtle',
+          color: 'text.muted',
           transition: 'common',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
           cursor: 'pointer',
         })}
         onclick={(event) => {
@@ -323,9 +323,9 @@
           borderRadius: '6px',
           paddingX: '6px',
           gap: '2px',
-          color: 'text.subtle',
+          color: 'text.muted',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         }),
       )}
       onclick={toggleCollapse}
@@ -360,13 +360,13 @@
           class={center({
             size: '48px',
             borderRadius: '12px',
-            backgroundColor: 'surface.muted',
-            color: 'text.faint',
+            backgroundColor: 'surface.canvas',
+            color: 'text.hint',
           })}
         >
           <Icon icon={StickyNoteIcon} size={20} />
         </div>
-        <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>문서를 열면 연결된 노트를 볼 수 있어요</p>
+        <p class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center' })}>문서를 열면 연결된 노트를 볼 수 있어요</p>
       </div>
     {:else if siteId && entityId}
       <NoteList
@@ -416,13 +416,13 @@
             class={center({
               size: '48px',
               borderRadius: '12px',
-              backgroundColor: 'surface.muted',
-              color: 'text.faint',
+              backgroundColor: 'surface.canvas',
+              color: 'text.hint',
             })}
           >
             <Icon icon={StickyNoteIcon} size={20} />
           </div>
-          <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>
+          <p class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center' })}>
             떠오르는 생각이나 아이디어를
             <br />
             자유롭게 기록해보세요

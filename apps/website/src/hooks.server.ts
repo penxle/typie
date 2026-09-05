@@ -8,6 +8,7 @@ import { logger, logging } from '@typie/lib/svelte';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/public';
 import { PUBLIC_IMAGE_TAG } from '$env/static/public';
+import { resolveThemeAttributes } from '$lib/theme-ssr';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 
 Sentry.init({
@@ -24,23 +25,22 @@ Sentry.init({
 const log = logger.getChild('http');
 
 const theme: Handle = async ({ event, resolve }) => {
-  const theme = event.cookies.get('typie-th');
-  const lightVariant = event.cookies.get('typie-th-lv') ?? 'white';
-  const darkVariant = event.cookies.get('typie-th-dv') ?? 'black';
+  const attrs = resolveThemeAttributes({
+    routeId: event.route.id,
+    pathname: event.url.pathname,
+    cookies: {
+      theme: event.cookies.get('typie-th'),
+      light: event.cookies.get('typie-th-lv'),
+      dark: event.cookies.get('typie-th-dv'),
+    },
+  });
 
   return resolve(event, {
-    transformPageChunk: ({ html }) => {
-      if (event.url.pathname.includes('landing')) {
-        return html.replace('%app.theme%', 'dark').replace('%app.variant.light%', 'white').replace('%app.variant.dark%', 'black');
-      }
-
-      const defaultTheme = event.url.pathname.includes('_webview') ? 'light' : 'auto';
-      const themeValue = theme && ['auto', 'light', 'dark'].includes(theme) ? theme : defaultTheme;
-      return html
-        .replace('%app.theme%', () => themeValue)
-        .replace('%app.variant.light%', () => lightVariant)
-        .replace('%app.variant.dark%', () => darkVariant);
-    },
+    transformPageChunk: ({ html }) =>
+      html
+        .replace('%app.theme%', () => attrs.theme)
+        .replace('%app.variant.light%', () => attrs.variantLight)
+        .replace('%app.variant.dark%', () => attrs.variantDark),
   });
 };
 

@@ -51,7 +51,7 @@
   <!-- Writing Position Section -->
   <div>
     <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '4px' })}>시선 고정</h2>
-    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]', marginBottom: '20px' })}>
+    <p class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]', marginBottom: '20px' })}>
       작성 중인 줄을 화면의 일정한 위치에 고정하여 목과 눈의 피로를 줄이고 집중력을 높일 수 있어요.
     </p>
 
@@ -86,7 +86,7 @@
           {/snippet}
           {#snippet value()}
             <div class={flex({ width: 'full', align: 'center', gap: '16px' })}>
-              <div class={css({ flexShrink: '0', fontSize: '12px', color: 'text.subtle', fontWeight: 'medium' })}>화면 상단</div>
+              <div class={css({ flexShrink: '0', fontSize: '12px', color: 'text.muted', fontWeight: 'medium' })}>화면 상단</div>
               <Slider
                 max={1}
                 min={0}
@@ -99,7 +99,7 @@
                 tooltipFormatter={(v) => `${Math.round(v * 100)}%`}
                 bind:value={app.preference.current.typewriterPosition}
               />
-              <div class={css({ flexShrink: '0', fontSize: '12px', color: 'text.subtle', fontWeight: 'medium' })}>화면 하단</div>
+              <div class={css({ flexShrink: '0', fontSize: '12px', color: 'text.muted', fontWeight: 'medium' })}>화면 하단</div>
             </div>
           {/snippet}
         </SettingsRow>

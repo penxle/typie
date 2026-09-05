@@ -138,7 +138,7 @@
       top: '14px',
       left: '18px',
       fontSize: '12px',
-      color: 'text.faint',
+      color: 'text.hint',
       cursor: 'pointer',
       userSelect: 'none',
       visibility: index === 0 ? 'hidden' : 'visible',
@@ -156,7 +156,7 @@
       top: '14px',
       right: '18px',
       fontSize: '12px',
-      color: 'text.faint',
+      color: 'text.hint',
       cursor: 'pointer',
       userSelect: 'none',
       visibility: isLast ? 'hidden' : 'visible',
@@ -209,7 +209,7 @@
             width: i === index ? '18px' : '6px',
             height: '6px',
             borderRadius: 'full',
-            backgroundColor: i === index ? 'accent.brand.default' : 'interactive.hover',
+            backgroundColor: i === index ? 'accent.default' : 'border.default',
             transition: 'common',
           })}
         ></div>

@@ -39,7 +39,7 @@
 
   const modKey = IS_MAC ? '⌘' : 'Ctrl+';
   const modKeyStyle = IS_MAC ? css.raw({ fontSize: '14px' }) : undefined;
-  const shortcutStyle = flex.raw({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '12px' });
+  const shortcutStyle = flex.raw({ alignItems: 'center', marginLeft: 'auto', color: 'text.hint', fontSize: '12px' });
 
   const shiftKey = IS_MAC ? '⇧' : 'Shift+';
 
