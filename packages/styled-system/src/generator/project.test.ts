@@ -20,15 +20,15 @@ const preset: Preset = {
   } as Preset['ui'],
   editor: {
     ...fill(EDITOR_KEYS, '#222222'),
-    'text.blue': '#0000ff',
-    'text.green': '#00ff00',
-    'text.amber': '#ffbf00',
-    'text.red': '#ff0000',
+    'ui.callout.info': '#0000ff',
+    'ui.callout.success': '#00ff00',
+    'ui.callout.warning': '#ffbf00',
+    'ui.callout.danger': '#ff0000',
   } as Preset['editor'],
 };
 
 describe('projectEditorColors', () => {
-  it('adds the eight projected keys and keeps the 37 content keys', () => {
+  it('adds the four projected keys and keeps the 41 content keys', () => {
     const colors = projectEditorColors(preset);
     expect(Object.keys(colors)).toHaveLength(45);
     expect(colors['ui.text.default']).toBe('#010101');

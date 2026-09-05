@@ -75,6 +75,10 @@ export const EDITOR_KEYS = [
   'selection',
   'ui.blockquote.message-sent',
   'ui.blockquote.message-received',
+  'ui.callout.info',
+  'ui.callout.success',
+  'ui.callout.warning',
+  'ui.callout.danger',
   'ui.search-match',
   'ui.search-match-active',
   'ui.comment-highlight',
@@ -91,10 +95,6 @@ export const PROJECTED_KEYS: Record<string, ProjectionSource> = {
   'ui.text.muted': { from: 'ui', key: 'text.muted' },
   'ui.border.default': { from: 'ui', key: 'border.default' },
   'ui.surface.muted': { from: 'ui', key: 'surface.inset' },
-  'ui.callout.info': { from: 'editor', key: 'text.blue' },
-  'ui.callout.success': { from: 'editor', key: 'text.green' },
-  'ui.callout.warning': { from: 'editor', key: 'text.amber' },
-  'ui.callout.danger': { from: 'editor', key: 'text.red' },
 };
 
 export type PresetMode = 'light' | 'dark';

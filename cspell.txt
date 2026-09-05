@@ -88,6 +88,7 @@ getenv
 glyf
 googleid
 graphqls
+gruvbox
 hdel
 healthz
 hgetall
@@ -142,11 +143,13 @@ mearie
 mediump
 meili
 meilisearch
+melange
 memcpy
 metas
 milli
 milliunits
 minid
+monokai
 monzo
 movflags
 msearch
@@ -157,6 +160,7 @@ napi
 natgw
 ngram
 nightfox
+noctis
 noeviction
 noopener
 nord
