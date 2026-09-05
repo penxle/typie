@@ -65,8 +65,6 @@ export const emitPresets = (source: ThemeSource): string => {
   const quoted = presets.find((preset) => preset.label.includes("'"));
   if (quoted) throw new Error(`${quoted.id}: label must not contain a single quote`);
   const names = (mode: 'light' | 'dark') => presets.filter((preset) => preset.mode === mode).map((preset) => variantName(preset.id));
-  const swatch = (preset: Preset) =>
-    `[${(['text.red', 'text.yellow', 'text.green', 'text.blue'] as const).map((key) => `'${preset.editor[key]}'`).join(', ')}]`;
   const lines = [
     `export const LIGHT_VARIANTS = ${tuple(names('light'))};`,
     `export const DARK_VARIANTS = ${tuple(names('dark'))};`,
@@ -84,10 +82,6 @@ export const emitPresets = (source: ThemeSource): string => {
     '',
     'export const VARIANT_CANVAS: Record<ThemeVariant, string> = {',
     ...presets.map((preset) => `  '${preset.id}': '${preset.ui['surface.canvas']}',`),
-    '};',
-    '',
-    'export const VARIANT_SWATCH: Record<ThemeVariant, readonly [string, string, string, string]> = {',
-    ...presets.map((preset) => `  '${preset.id}': ${swatch(preset)},`),
     '};',
     '',
     'export const VARIANT_SELECTION: Record<ThemeVariant, string> = {',

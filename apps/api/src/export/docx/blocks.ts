@@ -12,7 +12,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import { resolveColorToHex } from '../core/theme.ts';
+import { resolveCalloutFillToHex, resolveColorToHex } from '../core/theme.ts';
 import type { IParagraphOptions, ISpacingProperties } from 'docx';
 
 export type FileChild = Paragraph | Table;
@@ -73,16 +73,7 @@ export function convertCallout(node: { variant?: string }, innerElements: FileCh
   const variant = node.variant ?? 'info';
   const colorKey = `ui.callout.${variant}`;
   const hex = resolveColorToHex(colorKey);
-
-  // 연한 배경색 생성 (hex + 20% 불투명도 근사)
-  // cspell:disable-next-line
-  const bgColors: Record<string, string> = {
-    info: 'DBEAFE', // cspell:disable-line
-    success: 'DCFCE7', // cspell:disable-line
-    warning: 'FFF7ED',
-    danger: 'FEF2F2',
-  };
-  const bgFill = bgColors[variant] ?? 'F3F4F6';
+  const bgFill = resolveCalloutFillToHex(variant) ?? 'F3F4F6';
   const borderColor = hex ?? 'CCCCCC';
 
   const cellChildren = innerElements.filter((el): el is Paragraph => el instanceof Paragraph);

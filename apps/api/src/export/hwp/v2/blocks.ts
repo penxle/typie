@@ -1,5 +1,5 @@
-// spell-checker:words HWPTAG HWPUNIT DBEAFE DCFCE
-import { resolveColorToHex } from '../../core/theme.ts';
+// spell-checker:words HWPTAG HWPUNIT
+import { resolveCalloutFillToHex, resolveColorToHex } from '../../core/theme.ts';
 import { buildSectionDef, makeEmptyParagraph, makeInlineObjectParagraph, makeParagraph } from '../paragraph.ts';
 import { hexToColorref, pxToHwpunit } from '../records.ts';
 import { resolveParaShape } from '../styles.ts';
@@ -106,13 +106,7 @@ export function calloutToRecordsV2(variant: string, children: Uint8Array[][], ct
   const hex = resolveColorToHex(`ui.callout.${variant}`);
   const borderColor = hexToColorref(hex || 'CCCCCC');
 
-  const bgColors: Record<string, string> = {
-    info: 'DBEAFE',
-    success: 'DCFCE7',
-    warning: 'FFF7ED',
-    danger: 'FEF2F2',
-  };
-  const bgFill = hexToColorref(bgColors[variant] ?? 'F3F4F6');
+  const bgFill = hexToColorref(resolveCalloutFillToHex(variant) ?? 'F3F4F6');
 
   return makeSingleCellTableV2(
     children.flat(),

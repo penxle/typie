@@ -71,7 +71,7 @@ describe('emitConditions', () => {
 describe('emitPresets', () => {
   const output = emitPresets({ roster, presets });
 
-  it('exports the variant tuples, labels, canvas colors and swatches without a hidden concept', () => {
+  it('exports the variant tuples, labels, canvas and selection colors without a hidden concept', () => {
     expect(output).toContain("export const LIGHT_VARIANTS = ['white', 'catppuccin-latte'] as const;");
     expect(output).toContain("export const DARK_VARIANTS = ['black', 'rose-pine'] as const;");
     expect(output).not.toContain('HIDDEN_');
@@ -81,10 +81,8 @@ describe('emitPresets', () => {
     expect(output).toContain("'dark-rose-pine': 'dark-rose-pine',");
     expect(output).toContain("'light-catppuccin-latte': '#fafafa',");
     expect(output).toContain('export const VARIANT_LABELS: Record<ThemeVariant, string> = {');
-    expect(output).toContain('export const VARIANT_SWATCH: Record<ThemeVariant, readonly [string, string, string, string]> = {');
-    expect(output).toContain("'dark-black': ['#aa0000', '#aaaa00', '#00aa00', '#0000aa'],");
     expect(output).toContain('export const VARIANT_SELECTION: Record<ThemeVariant, string> = {');
-    expect(output.match(/^export /gm)).toHaveLength(11);
+    expect(output.match(/^export /gm)).toHaveLength(10);
   });
 });
 

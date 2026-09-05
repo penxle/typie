@@ -32,6 +32,8 @@ const plugin = () => {
             .replace(/\[data-variant-dark=["']?[^'"\]]+["']?\]/, '')
             .trim();
           mediaSelector = `${baseSelector}:not([data-theme="light"] *)[data-variant-dark="${variant}"]`;
+        } else if (/^:root\[data-theme=['"]?dark['"]?\]/.test(rule.selector)) {
+          mediaSelector = rule.selector.replace(/\[data-theme=["']?dark["']?\]/, ':not([data-theme="light"])');
         } else {
           const baseSelector = rule.selector.replace(/\[data-theme=["']?dark["']?\]\s*/, '');
           mediaSelector = `${baseSelector}:not([data-theme="light"] *)`;
