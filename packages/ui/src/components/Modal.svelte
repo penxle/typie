@@ -135,6 +135,7 @@
             maxHeight: 'full',
             backgroundColor: 'surface.default',
             boxShadow: 'xl',
+            _dark: { borderWidth: '1px', borderColor: 'border.default' },
             overflowY: 'auto',
             outlineWidth: '0',
             userSelect: 'text',

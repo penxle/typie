@@ -244,6 +244,7 @@
       overflow: 'hidden',
       backgroundColor: 'surface.default',
       boxShadow: 'lg',
+      _dark: { borderWidth: '1px', borderColor: 'border.default' },
     })}
     onfocusout={handlePopupFocusOut}
     use:floating

@@ -297,6 +297,7 @@
         overflowY: 'auto',
         backgroundColor: 'surface.default',
         boxShadow: 'lg',
+        _dark: { borderWidth: '1px', borderColor: 'border.default' },
         zIndex: 'tooltip',
         pointerEvents: 'auto',
         transformOrigin: 'left top',

@@ -311,6 +311,7 @@
         borderRadius: '12px',
         minWidth: '320px',
         boxShadow: 'md',
+        _dark: { borderWidth: '1px', borderColor: 'border.default' },
       })}
     >
       <div class={css({ fontSize: '20px', fontWeight: 'bold' })}>휴식 시간</div>
