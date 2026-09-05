@@ -46,52 +46,59 @@
 
 <div
   style:width={panelOpen ? `${width}px` : '0px'}
-  style:pointer-events={panelInteractive ? 'auto' : 'none'}
   style:transition-duration={previewWidth === null ? `${panelMotionDuration}ms` : '0ms'}
   style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
+  class={css({ flexShrink: '0', height: 'full', transitionProperty: '[width]' })}
+  aria-hidden="true"
+  data-prism-panel-spacer
+></div>
+
+<div
+  style:width={`${width}px`}
+  style:--prism-panel-hidden={panelOpen ? '0%' : '100%'}
+  style:pointer-events="none"
+  style:transition-duration={`${panelMotionDuration}ms`}
+  style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
   class={css({
-    position: 'relative',
-    flexShrink: '0',
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    bottom: '0',
     height: 'full',
     zIndex: 'panel',
-    transitionProperty: '[width]',
+    transitionProperty: '[--prism-panel-hidden]',
   })}
   data-prism-panel-shell
-  data-prism-panel-spacer
   data-zen-mode-closing-surface
 >
-  <div class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}>
-    <div
+  <div
+    style:clip-path="inset(0 0 0 calc(var(--prism-panel-hidden) + 1px))"
+    style:pointer-events={panelInteractive ? 'auto' : 'none'}
+    class={css({ position: 'absolute', inset: '0', overflow: 'hidden' })}
+    data-prism-panel-reveal
+  >
+    <aside
+      bind:this={panel}
       style:width={`${width}px`}
       style:transform={panelOpen ? 'scale(1)' : `scale(${PANEL_HIDDEN_SCALE})`}
       style:transition-duration={`${panelMotionDuration}ms`}
       style:transition-timing-function={PRISM_VISIBILITY_MOTION.easing}
-      class={css({
+      class={flex({
         position: 'absolute',
         top: '0',
         right: '0',
         bottom: '0',
+        flexDirection: 'column',
         height: 'full',
+        overflow: 'hidden',
+        backgroundColor: 'surface.default',
         transformOrigin: 'center',
         transitionProperty: '[transform]',
       })}
+      inert={!panelInteractive}
     >
-      <aside
-        bind:this={panel}
-        class={flex({
-          position: 'absolute',
-          inset: '0',
-          flexDirection: 'column',
-          width: 'full',
-          height: 'full',
-          overflow: 'hidden',
-          backgroundColor: 'surface.default',
-        })}
-        inert={!panelInteractive}
-      >
-        {@render children()}
-      </aside>
-    </div>
+      {@render children()}
+    </aside>
 
     <div
       style:width={`${width}px`}
@@ -111,62 +118,74 @@
       })}
       aria-hidden="true"
     ></div>
-
-    <!-- Clipping and the visible boundary share the shell's moving edge. -->
-    <div
-      class={css({
-        position: 'absolute',
-        top: '0',
-        bottom: '0',
-        left: '0',
-        width: '1px',
-        zIndex: 'panel',
-        pointerEvents: 'none',
-        backgroundColor: 'border.subtle',
-      })}
-      aria-hidden="true"
-    ></div>
   </div>
 
   <div
-    style:transform="translateX(-50%)"
+    style:width={`${width}px`}
+    style:transform="translateX(var(--prism-panel-hidden))"
     class={css({
       position: 'absolute',
       top: '0',
       bottom: '0',
       left: '0',
-      display: 'flex',
-      justifyContent: 'center',
-      width: '8px',
-      cursor: 'col-resize',
-      zIndex: '4',
-      _hoverAfter: {
-        content: '""',
-        display: 'block',
-        borderRadius: '4px',
-        height: 'full',
-        width: '2px',
-        backgroundColor: 'border.strong',
-        opacity: '50',
-      },
+      boxSizing: 'border-box',
+      borderLeftWidth: '1px',
+      borderColor: 'border.subtle',
+      zIndex: 'panel',
+      pointerEvents: 'none',
     })}
-    use:pointerCapture={{
-      start: (event): ResizeSession | null => {
-        if (!event.isPrimary || event.button !== 0) return null;
-        event.preventDefault();
-        const session = { startX: event.clientX, startWidth: width };
-        previewWidth = session.startWidth;
-        return session;
-      },
-      move: updateResize,
-      end: (session, event) => {
-        updateResize(session, event);
-        if (previewWidth !== null) app.preference.current.prismPanelWidth = previewWidth;
-        previewWidth = null;
-      },
-      cancel: () => {
-        previewWidth = null;
-      },
-    }}
-  ></div>
+    data-prism-panel-edge
+  >
+    <div
+      style:pointer-events={panelInteractive ? 'auto' : 'none'}
+      style:transform="translateX(-50%)"
+      class={css({
+        position: 'absolute',
+        top: '0',
+        bottom: '0',
+        left: '[-1px]',
+        display: 'flex',
+        justifyContent: 'center',
+        width: '8px',
+        cursor: 'col-resize',
+        zIndex: '4',
+        _hoverAfter: {
+          content: '""',
+          display: 'block',
+          borderRadius: '4px',
+          height: 'full',
+          width: '2px',
+          backgroundColor: 'border.strong',
+          opacity: '50',
+        },
+      })}
+      data-prism-panel-resize-handle
+      use:pointerCapture={{
+        start: (event): ResizeSession | null => {
+          if (!event.isPrimary || event.button !== 0) return null;
+          event.preventDefault();
+          const session = { startX: event.clientX, startWidth: width };
+          previewWidth = session.startWidth;
+          return session;
+        },
+        move: updateResize,
+        end: (session, event) => {
+          updateResize(session, event);
+          if (previewWidth !== null) app.preference.current.prismPanelWidth = previewWidth;
+          previewWidth = null;
+        },
+        cancel: () => {
+          previewWidth = null;
+        },
+      }}
+    ></div>
+  </div>
 </div>
+
+<style>
+  @property --prism-panel-hidden {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 100%;
+  }
+</style>
