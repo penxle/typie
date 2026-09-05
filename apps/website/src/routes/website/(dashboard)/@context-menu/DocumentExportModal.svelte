@@ -192,7 +192,7 @@
 
       <div class={flex({ flexDirection: 'column', gap: '16px' })}>
         <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
-          <div class={css({ fontSize: '13px', color: 'text.subtle' })}>파일 형식</div>
+          <div class={css({ fontSize: '13px', color: 'text.muted' })}>파일 형식</div>
           <Select
             items={formatItems}
             onselect={(value: string) => {
@@ -211,14 +211,14 @@
               alignItems: 'center',
               gap: '8px',
               fontSize: '12px',
-              color: 'text.subtle',
-              backgroundColor: 'surface.subtle',
+              color: 'text.muted',
+              backgroundColor: 'surface.canvas',
               paddingX: '12px',
               paddingY: '8px',
               borderRadius: '6px',
             })}
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={InfoIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.muted' })} icon={InfoIcon} size={14} />
             <span>{formatNotice[format]}</span>
           </div>
         {/if}
@@ -236,15 +236,15 @@
           class={flex({
             flexDirection: 'column',
             gap: '16px',
-            opacity: layoutDisabled ? '50' : '100',
+            opacity: layoutDisabled ? '40' : '100',
             pointerEvents: layoutDisabled ? 'none' : 'auto',
           })}
         >
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
             <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
-                <div class={css({ fontSize: '13px', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+                <Icon style={css.raw({ color: 'text.muted' })} icon={FileIcon} />
+                <div class={css({ fontSize: '13px', color: 'text.muted' })}>페이지 크기 (mm)</div>
               </div>
               <Select
                 disabled={layoutDisabled}
@@ -261,8 +261,8 @@
 
             <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveHorizontalIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={MoveHorizontalIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>너비</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}
@@ -279,8 +279,8 @@
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={MoveVerticalIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={MoveVerticalIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>높이</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}
@@ -301,13 +301,13 @@
 
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '13px', color: 'text.subtle' })}>여백 (mm)</div>
+              <Icon style={css.raw({ color: 'text.muted' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', color: 'text.muted' })}>여백 (mm)</div>
             </div>
             <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelTopDashedIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>위</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={PanelTopDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>위</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}
@@ -325,8 +325,8 @@
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelBottomDashedIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>아래</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={PanelBottomDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>아래</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}
@@ -344,8 +344,8 @@
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelLeftDashedIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>왼쪽</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={PanelLeftDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>왼쪽</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}
@@ -363,8 +363,8 @@
                 />
               </div>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                <Icon style={css.raw({ size: '14px', color: 'text.subtle' })} icon={PanelRightDashedIcon} />
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>오른쪽</div>
+                <Icon style={css.raw({ size: '14px', color: 'text.muted' })} icon={PanelRightDashedIcon} />
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>오른쪽</div>
                 <TextInput
                   style={css.raw({ width: '100px' })}
                   disabled={layoutDisabled}

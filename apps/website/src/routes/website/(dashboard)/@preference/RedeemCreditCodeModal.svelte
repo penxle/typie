@@ -64,7 +64,7 @@
 
   <form class={flex({ direction: 'column', gap: '20px' })} onsubmit={form.handleSubmit}>
     <div class={flex({ direction: 'column', gap: '8px' })}>
-      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="code">할인 코드</label>
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })} for="code">할인 코드</label>
       <TextInput
         id="code"
         style={css.raw({ width: 'full', textTransform: 'uppercase' })}
@@ -77,7 +77,7 @@
       />
 
       {#if form.errors.code}
-        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.code}</div>
+        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{form.errors.code}</div>
       {/if}
     </div>
 

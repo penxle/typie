@@ -10,9 +10,9 @@
     position: 'relative',
     paddingX: { sm: '24px', lg: '80px' },
     paddingY: { sm: '80px', lg: '120px' },
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
     borderTopWidth: '1px',
-    borderTopColor: 'dark.gray.900',
+    borderTopColor: 'border.hairline',
   })}
 >
   <div
@@ -22,7 +22,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -56,7 +56,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -69,7 +69,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -84,7 +84,7 @@
         <p
           class={css({
             fontSize: { sm: '16px', lg: '18px' },
-            color: 'dark.gray.400',
+            color: 'text.muted',
             lineHeight: '[1.65]',
             maxWidth: '[400px]',
           })}
@@ -104,11 +104,11 @@
             paddingY: '18px',
             fontSize: '16px',
             fontWeight: 'semibold',
-            color: 'dark.gray.950',
-            backgroundColor: 'dark.brand.300',
+            color: 'surface.default',
+            backgroundColor: 'accent.default',
             transition: '[all 0.2s ease-out]',
             _hover: {
-              backgroundColor: 'dark.brand.200',
+              backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
             },
           }),
         )}

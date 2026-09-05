@@ -70,11 +70,11 @@
 {#snippet uploadFontFamilyItem()}
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <Icon
-      style={css.raw({ color: 'text.faint', transitionProperty: '[none]', _groupHover: { color: 'text.brand' } })}
+      style={css.raw({ color: 'text.muted', transitionProperty: '[none]', _groupHover: { color: 'text.default' } })}
       icon={PlusIcon}
       size={14}
     />
-    <span class={css({ color: 'text.subtle', _groupHover: { color: 'text.brand' } })}>직접 업로드</span>
+    <span class={css({ color: 'text.muted', _groupHover: { color: 'text.default' } })}>직접 업로드</span>
   </div>
 {/snippet}
 

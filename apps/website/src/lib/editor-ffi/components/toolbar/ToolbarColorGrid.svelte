@@ -145,7 +145,7 @@
             margin: 'auto',
             width: '1px',
             height: '14px',
-            backgroundColor: 'text.disabled',
+            backgroundColor: 'text.hint',
             transform: 'rotate(45deg)',
           })}
         ></div>

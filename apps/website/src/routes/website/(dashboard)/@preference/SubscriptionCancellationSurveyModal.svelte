@@ -79,15 +79,15 @@
 
   const labelStyle = css.raw({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' });
   const calloutTitleStyle = css.raw({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' });
-  const calloutBodyStyle = css.raw({ marginTop: '2px', fontSize: '12px', color: 'text.faint', lineHeight: '[1.55]' });
-  const calloutIconStyle = css.raw({ flexShrink: '0', marginTop: '1px', color: 'text.subtle' });
-  const strongStyle = css.raw({ fontWeight: 'semibold', color: 'text.subtle' });
+  const calloutBodyStyle = css.raw({ marginTop: '2px', fontSize: '12px', color: 'text.muted', lineHeight: '[1.55]' });
+  const calloutIconStyle = css.raw({ flexShrink: '0', marginTop: '1px', color: 'text.muted' });
+  const strongStyle = css.raw({ fontWeight: 'semibold', color: 'text.default' });
   const linkStyle = css.raw({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '2px',
     fontWeight: 'semibold',
-    color: 'text.subtle',
+    color: 'text.default',
     textDecoration: 'underline',
     textUnderlineOffset: '2px',
   });
@@ -138,13 +138,13 @@
 {#snippet supportLink()}
   <a class={css(linkStyle)} href="https://penxle.channel.io" rel="noopener noreferrer" target="_blank">
     고객센터
-    <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+    <Icon style={css.raw({ color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
   </a>
 {/snippet}
 
 <Modal style={css.raw({ padding: '24px', maxWidth: '440px' })} bind:open>
   <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>구독 해지</h2>
-  <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>
+  <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
     {#if user.data.subscription?.state === SubscriptionState.IN_GRACE_PERIOD}
       해지하면 바로 유료 기능을 사용할 수 없어요.
     {:else if periodEndsAt}
@@ -157,10 +157,10 @@
       <div class={css(labelStyle)}>해지 이유</div>
       <Menu
         style={css.raw(fieldStyle, {
-          borderColor: 'border.subtle',
-          color: selected ? 'text.default' : 'text.faint',
-          _hover: { borderColor: 'border.default' },
-          _expanded: { borderColor: 'border.brand', _hover: { borderColor: 'border.brand' } },
+          borderColor: 'border.default',
+          color: selected ? 'text.default' : 'text.hint',
+          _hover: { borderColor: 'border.emphasis' },
+          _expanded: { borderColor: 'accent.default', _hover: { borderColor: 'accent.default' } },
         })}
         listStyle={css.raw({ paddingX: '4px' })}
         offset={4}
@@ -172,7 +172,7 @@
           <Icon
             style={css.raw({
               flexShrink: '0',
-              color: 'text.faint',
+              color: 'text.hint',
               transition: 'common',
               transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             })}
@@ -188,10 +188,10 @@
           <MenuItem onclick={() => (reason = option.value)}>
             {#snippet suffix()}
               {#if reason === option.value}
-                <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+                <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
               {/if}
             {/snippet}
-            <span class={css({ color: option.pinned ? 'text.faint' : undefined })}>{option.label}</span>
+            <span class={css({ color: option.pinned ? 'text.muted' : undefined })}>{option.label}</span>
           </MenuItem>
         {/each}
       </Menu>
@@ -203,11 +203,11 @@
           alignItems: 'flex-start',
           gap: '12px',
           borderWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
           borderRadius: '10px',
           paddingX: '16px',
           paddingY: '12px',
-          backgroundColor: 'surface.subtle',
+          backgroundColor: 'surface.canvas',
         })}
       >
         {#if selected.guidance === 'waiver'}
@@ -263,7 +263,7 @@
         <label class={css(labelStyle)} for="cancellation-text">
           {selected?.prompt ?? CANCELLATION_TEXT_PROMPT}
           {#if textInput === 'optional'}
-            <span class={css({ marginLeft: '2px', fontWeight: 'normal', color: 'text.faint' })}>(선택)</span>
+            <span class={css({ marginLeft: '2px', fontWeight: 'normal', color: 'text.hint' })}>(선택)</span>
           {/if}
         </label>
         <textarea
@@ -274,7 +274,7 @@
             paddingX: '12px',
             paddingY: '10px',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.default',
             borderRadius: '6px',
             fontSize: '14px',
             lineHeight: '[1.5]',
@@ -282,9 +282,9 @@
             backgroundColor: 'surface.default',
             resize: 'none',
             transition: 'common',
-            _hover: { borderColor: 'border.default' },
-            _focus: { outline: 'none', borderColor: 'border.brand' },
-            _placeholder: { color: 'text.faint' },
+            _hover: { borderColor: 'border.emphasis' },
+            _focus: { outline: 'none', borderColor: 'accent.default' },
+            _placeholder: { color: 'text.hint' },
           })}
           placeholder={CANCELLATION_TEXT_PLACEHOLDER}
           bind:value={text}></textarea>

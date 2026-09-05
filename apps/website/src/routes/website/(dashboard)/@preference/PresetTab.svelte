@@ -281,7 +281,7 @@
   <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
     <div>
       <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default' })}>프리셋</h1>
-      <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]', marginTop: '8px' })}>
+      <p class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]', marginTop: '8px' })}>
         새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.
       </p>
     </div>
@@ -294,9 +294,9 @@
         paddingY: '6px',
         fontSize: '13px',
         fontWeight: 'medium',
-        color: 'text.subtle',
+        color: 'text.muted',
         transition: 'common',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         Dialog.confirm({
@@ -310,7 +310,7 @@
       }}
       type="button"
     >
-      <Icon style={css.raw({ color: 'text.faint' })} icon={RotateCcwIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={RotateCcwIcon} size={14} />
       <span>초기화</span>
     </button>
   </div>
@@ -405,10 +405,11 @@
                 borderRadius: '6px',
                 height: '28px',
                 _hover: {
-                  backgroundColor: 'surface.muted',
+                  backgroundColor: 'surface.hover',
                 },
                 _focusWithin: {
-                  backgroundColor: 'surface.muted',
+                  backgroundColor: 'surface.active',
+                  _hover: { backgroundColor: 'surface.active' },
                 },
               })}
               use:fontSizeAnchorAction
@@ -422,7 +423,7 @@
                   paddingY: '4px',
                   fontSize: '12px',
                   fontWeight: 'medium',
-                  color: 'text.subtle',
+                  color: 'text.muted',
                   textAlign: 'left',
                   backgroundColor: 'transparent',
                   border: 'none',
@@ -443,7 +444,7 @@
                   top: '1/2',
                   translate: 'auto',
                   translateY: '-1/2',
-                  color: 'text.faint',
+                  color: 'text.muted',
                   pointerEvents: 'none',
                   transform: fontSizeOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
                   transitionDuration: '150ms',
@@ -458,11 +459,11 @@
                 bind:this={fontSizeFloatingElement}
                 class={css({
                   borderWidth: '1px',
-                  borderColor: 'border.subtle',
+                  borderColor: 'border.hairline',
                   borderBottomRadius: '4px',
                   backgroundColor: 'surface.default',
                   zIndex: 'menu',
-                  boxShadow: 'small',
+                  boxShadow: 'sm',
                   overflow: 'hidden',
                   maxHeight: '[min(200px, var(--floating-available-height, 200px))]',
                   overflowY: 'auto',
@@ -482,11 +483,12 @@
                       paddingY: '8px',
                       fontSize: '12px',
                       fontWeight: 'medium',
-                      color: 'text.subtle',
-                      backgroundColor: fontSize === value ? 'surface.muted' : 'transparent',
+                      color: 'text.muted',
+                      backgroundColor: fontSize === value ? 'surface.active' : 'transparent',
                       transition: 'common',
-                      _hover: { backgroundColor: 'surface.muted' },
+                      _hover: { backgroundColor: 'surface.hover' },
                     })}
+                    aria-current={fontSize === value ? 'true' : undefined}
                     onclick={() => {
                       fontSizeInputValue = String(value / 100);
                       updateTemplate({ fontSize: value });
@@ -498,7 +500,7 @@
                   >
                     <span>{label}</span>
                     {#if fontSize === value}
-                      <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+                      <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
                     {:else}
                       <div style:width="14px"></div>
                     {/if}
@@ -515,8 +517,8 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>자간</div>
+            <Icon style={css.raw({ color: 'text.default' })} icon={LetterSpacingIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>자간</div>
           </div>
         {/snippet}
         {#snippet value()}
@@ -535,8 +537,8 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={LineHeightIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>행간</div>
+            <Icon style={css.raw({ color: 'text.default' })} icon={LineHeightIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>행간</div>
           </div>
         {/snippet}
         {#snippet value()}
@@ -561,8 +563,8 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>레이아웃 모드</div>
+            <Icon style={css.raw({ color: 'text.default' })} icon={FileTextIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>레이아웃 모드</div>
           </div>
         {/snippet}
         {#snippet value()}
@@ -595,8 +597,8 @@
         <SettingsRow>
           {#snippet label()}
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
-              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+              <Icon style={css.raw({ color: 'text.default' })} icon={FileIcon} />
+              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>페이지 크기 (mm)</div>
             </div>
           {/snippet}
           {#snippet value()}
@@ -629,7 +631,7 @@
                   type="number"
                   value={layout.type === 'paginated' ? pxToMm(layout.pageWidth) : 0}
                 />
-                <span class={css({ fontSize: '12px', color: 'text.faint' })}>×</span>
+                <span class={css({ fontSize: '12px', color: 'text.hint' })}>×</span>
                 <TextInput
                   style={css.raw({ width: '70px' })}
                   min="100"
@@ -655,14 +657,14 @@
         <SettingsRow>
           {#snippet label()}
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>여백 (mm)</div>
+              <Icon style={css.raw({ color: 'text.default' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>여백 (mm)</div>
             </div>
           {/snippet}
           {#snippet value()}
             <div class={flex({ gap: '8px', alignItems: 'center' })}>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={PanelTopIcon} size={14} />
+                <Icon style={css.raw({ color: 'text.muted' })} icon={PanelTopIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
                   max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('top', layout))) : undefined}
@@ -680,7 +682,7 @@
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={PanelBottomIcon} size={14} />
+                <Icon style={css.raw({ color: 'text.muted' })} icon={PanelBottomIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
                   max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('bottom', layout))) : undefined}
@@ -698,7 +700,7 @@
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={PanelLeftIcon} size={14} />
+                <Icon style={css.raw({ color: 'text.muted' })} icon={PanelLeftIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
                   max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('left', layout))) : undefined}
@@ -716,7 +718,7 @@
                 />
               </div>
               <div class={flex({ gap: '4px', alignItems: 'center' })}>
-                <Icon style={css.raw({ color: 'text.faint' })} icon={PanelRightIcon} size={14} />
+                <Icon style={css.raw({ color: 'text.muted' })} icon={PanelRightIcon} size={14} />
                 <TextInput
                   style={css.raw({ width: '56px' })}
                   max={layout.type === 'paginated' ? String(pxToMm(getMaxMargin('right', layout))) : undefined}
@@ -743,8 +745,8 @@
         <SettingsRow>
           {#snippet label()}
             <div class={flex({ alignItems: 'center', gap: '8px' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 폭</div>
+              <Icon style={css.raw({ color: 'text.default' })} icon={RulerDimensionLineIcon} />
+              <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>본문 폭</div>
             </div>
           {/snippet}
           {#snippet value()}
@@ -775,8 +777,8 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowRightToLineIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>첫 줄 들여쓰기</div>
+            <Icon style={css.raw({ color: 'text.default' })} icon={ArrowRightToLineIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>첫 줄 들여쓰기</div>
           </div>
         {/snippet}
         {#snippet value()}
@@ -803,8 +805,8 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={AlignVerticalSpaceAroundIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>문단 사이 간격</div>
+            <Icon style={css.raw({ color: 'text.default' })} icon={AlignVerticalSpaceAroundIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.default' })}>문단 사이 간격</div>
           </div>
         {/snippet}
         {#snippet value()}

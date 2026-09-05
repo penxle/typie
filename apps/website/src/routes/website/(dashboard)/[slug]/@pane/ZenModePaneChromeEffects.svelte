@@ -30,15 +30,15 @@
   const ENGAGED_SPOT_STRENGTH = 0.85;
   const ENGAGED_SEGMENT_STRENGTH = 0.5;
   const ENGAGED_SPOT_ENTER_DELAY_MS = 500;
-  const MUTED_SURFACE = token('colors.surface.muted');
+  const MUTED_SURFACE = token('colors.surface.hover');
   const CONTINUOUS_SURFACE = token('colors.surface.default');
-  const PAGINATED_SURFACE = token('colors.surface.subtle');
+  const PAGINATED_SURFACE = token('colors.surface.canvas');
   const TRANSIENT_BASE = `color-mix(in srgb, ${CONTINUOUS_SURFACE} 50%, ${PAGINATED_SURFACE} 50%)`;
   const ACTIVE_SURFACE = `color-mix(in srgb, ${MUTED_SURFACE} 80%, ${TRANSIENT_BASE} 20%)`;
   const TRANSIENT_SURFACE = `color-mix(in srgb, ${TRANSIENT_BASE} 75%, transparent)`;
   const ENGAGED_SEGMENT_SURFACE = `color-mix(in srgb, ${ACTIVE_SURFACE} ${ENGAGED_SEGMENT_STRENGTH * 100}%, transparent)`;
-  const TRANSIENT_EDGE = `color-mix(in srgb, ${TRANSIENT_BASE} 40%, ${token('colors.border.subtle')} 60%)`;
-  const ENGAGED_EDGE_BASE = `color-mix(in srgb, ${ACTIVE_SURFACE} 36%, ${token('colors.border.default')} 64%)`;
+  const TRANSIENT_EDGE = `color-mix(in srgb, ${TRANSIENT_BASE} 40%, ${token('colors.border.hairline')} 60%)`;
+  const ENGAGED_EDGE_BASE = `color-mix(in srgb, ${ACTIVE_SURFACE} 36%, ${token('colors.border.emphasis')} 64%)`;
   const ENGAGED_EDGE = `color-mix(in srgb, ${ENGAGED_EDGE_BASE} ${ENGAGED_SEGMENT_STRENGTH * 100}%, transparent)`;
 
   let { lane, toolbarSeparatorOffsets = [] }: Props = $props();

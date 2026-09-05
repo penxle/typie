@@ -10,28 +10,30 @@
   import PrismIcon from '~icons/typie/prism';
   import PrismCreditIcon from '~icons/typie/prism-credit';
   import { pushState } from '$app/navigation';
+  import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
 
   type Props = {
     creditBalance?: number;
-    children?: Snippet<[buttonClass: string]>;
+    children?: Snippet<[buttonClass: string, buttonStyle: SystemStyleObject]>;
   };
 
   let { creditBalance, children }: Props = $props();
 
   const app = getAppContext();
-  const buttonClass = css({
+  const buttonStyle = css.raw({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: '0',
     borderRadius: '4px',
     size: '24px',
-    color: 'text.faint',
+    color: 'text.muted',
     transition: '[transform 160ms cubic-bezier(0.23, 1, 0.32, 1)]',
-    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
     _active: { transform: 'scale(0.95)' },
   });
+  const buttonClass = css(buttonStyle);
 </script>
 
 <header
@@ -41,12 +43,12 @@
     height: '44px',
     paddingX: '14px',
     borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     flexShrink: '0',
   })}
 >
   {#if creditBalance === undefined}
-    <Icon style={css.raw({ color: 'text.subtle', flexShrink: '0' })} icon={PrismIcon} size={16} />
+    <Icon style={css.raw({ color: 'text.default', flexShrink: '0' })} icon={PrismIcon} size={16} />
     <span class={css({ fontSize: '13px', fontWeight: 'semibold', letterSpacing: '[0.04em]' })}>PRISM</span>
   {:else}
     <Menu
@@ -60,14 +62,14 @@
         paddingY: '4px',
         borderRadius: '6px',
         transition: 'common',
-        _hover: { backgroundColor: 'surface.muted' },
-        _expanded: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
+        _expanded: { backgroundColor: 'surface.active' },
       })}
       buttonAriaLabel="PRISM 메뉴"
       placement="bottom-start"
     >
       {#snippet button()}
-        <Icon style={css.raw({ color: 'text.subtle', flexShrink: '0' })} icon={PrismIcon} size={16} />
+        <Icon style={css.raw({ color: 'text.default', flexShrink: '0' })} icon={PrismIcon} size={16} />
         <span class={css({ fontSize: '13px', fontWeight: 'semibold', letterSpacing: '[0.04em]' })}>PRISM</span>
       {/snippet}
 
@@ -80,7 +82,7 @@
               gap: '4px',
               marginLeft: 'auto',
               fontSize: '12px',
-              color: creditBalance < 0 ? 'text.danger' : 'text.brand',
+              color: creditBalance < 0 ? 'danger.default' : 'text.default',
             })}
           >
             <Icon icon={PrismCreditIcon} size={12} />
@@ -91,7 +93,7 @@
       </MenuItem>
     </Menu>
   {/if}
-  {@render children?.(buttonClass)}
+  {@render children?.(buttonClass, buttonStyle)}
   <button
     class={cx(buttonClass, children ? undefined : css({ marginLeft: 'auto' }))}
     aria-label="PRISM 닫기"

@@ -53,7 +53,7 @@
   class={flex({
     position: 'absolute',
     flexDirection: 'column',
-    color: 'text.disabled',
+    color: 'text.hint',
     pointerEvents: 'none',
     userSelect: 'none',
   })}

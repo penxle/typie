@@ -91,7 +91,7 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ align: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={UsersIcon} size={16} />
+            <Icon style={css.raw({ color: 'text.default' })} icon={UsersIcon} size={16} />
             <span>초대한 친구</span>
           </div>
         {/snippet}
@@ -105,7 +105,7 @@
       <SettingsRow>
         {#snippet label()}
           <div class={flex({ align: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.disabled' })} icon={GiftIcon} size={16} />
+            <Icon style={css.raw({ color: 'text.default' })} icon={GiftIcon} size={16} />
             <span>지금까지 내가 받은 혜택</span>
           </div>
         {/snippet}
@@ -130,35 +130,35 @@
       class={css({
         borderRadius: '8px',
         borderWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         padding: '20px',
         backgroundColor: 'surface.default',
       })}
     >
       <ul class={flex({ direction: 'column', gap: '12px' })}>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
-          <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
-          <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
+          <span class={css({ color: 'text.muted', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
+          <span class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
             초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요.
           </span>
         </li>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
-          <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
-          <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
+          <span class={css({ color: 'text.muted', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
+          <span class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
             친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 구독 캐시를 지급받아요. 지급받은 구독 캐시로 바로 FULL
             ACCESS 플랜을 체험해볼 수 있어요.
           </span>
         </li>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
-          <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
-          <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>
+          <span class={css({ color: 'text.muted', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
+          <span class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
             친구가 구독 캐시를 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 구독 캐시를 지급받아요. 이 구독
             캐시는 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.
           </span>
         </li>
         <li class={flex({ gap: '8px', alignItems: 'flex-start' })}>
-          <span class={css({ color: 'text.disabled', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
-          <span class={css({ fontSize: '13px', color: 'text.faint', lineHeight: '[1.6]' })}>초대 횟수에는 제한이 없어요.</span>
+          <span class={css({ color: 'text.muted', fontSize: '13px', flexShrink: 0, marginTop: '2px' })}>•</span>
+          <span class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>초대 횟수에는 제한이 없어요.</span>
         </li>
       </ul>
     </div>

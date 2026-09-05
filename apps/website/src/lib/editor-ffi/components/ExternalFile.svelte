@@ -112,17 +112,17 @@
           alignItems: 'center',
           gap: '12px',
           borderWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
           borderRadius: '8px',
           paddingX: '16px',
           paddingY: '12px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           transition: 'common',
-          _hover: { borderColor: 'border.default' },
+          _hover: { borderColor: 'border.emphasis' },
         }),
       )}
     >
-      <Icon class={css({ color: 'text.muted', flexShrink: '0' })} icon={FileIcon} size={20} />
+      <Icon class={css({ color: 'text.default', flexShrink: '0' })} icon={FileIcon} size={20} />
 
       <div class={flex({ direction: 'column', flex: '1', minWidth: '0' })}>
         <span
@@ -152,7 +152,7 @@
             color: 'text.muted',
             opacity: '0',
             transition: 'common',
-            _hover: { backgroundColor: 'interactive.hover', color: 'text.danger' },
+            _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
             _groupHover: { opacity: '100' },
           })}
           aria-label="파일 삭제"
@@ -168,7 +168,7 @@
       {/if}
 
       {#if stage === 'uploading'}
-        <RingSpinner style={css.raw({ size: '20px', color: 'text.disabled' })} />
+        <RingSpinner style={css.raw({ size: '20px', color: 'text.muted' })} />
       {:else if asset}
         <button
           class={css({
@@ -176,7 +176,7 @@
             borderRadius: '4px',
             color: 'text.muted',
             transition: 'common',
-            _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+            _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
           })}
           aria-label="파일 다운로드"
           onclick={handleDownload}
@@ -198,11 +198,11 @@
           justifyContent: 'space-between',
           alignItems: 'center',
           borderRadius: '4px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           width: 'full',
           height: '48px',
         }),
-        isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.palette.blue)]' }),
+        isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
       )}
       use:anchor
     >
@@ -213,7 +213,7 @@
           paddingX: '14px',
           paddingY: '12px',
           fontSize: '14px',
-          color: isAttachmentDropTarget ? 'palette.blue' : 'text.disabled',
+          color: isAttachmentDropTarget ? 'accent.default' : 'text.hint',
         })}
       >
         <Icon icon={FileIcon} size={20} />
@@ -222,7 +222,7 @@
 
       {#if stage === 'resolving'}
         <div class={css({ marginRight: '14px' })}>
-          <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
+          <RingSpinner style={css.raw({ size: '16px', color: 'text.muted' })} />
         </div>
       {:else if canEdit && !isAttachmentDropTarget}
         <div
@@ -231,25 +231,21 @@
           }}
           role="none"
         >
-          <Menu>
-            {#snippet button({ open }: { open: boolean })}
-              <div
-                class={css(
-                  {
-                    marginRight: '12px',
-                    borderRadius: '4px',
-                    padding: '2px',
-                    color: 'text.disabled',
-                    opacity: '0',
-                    transition: 'common',
-                    _hover: { backgroundColor: 'interactive.hover' },
-                    _groupHover: { opacity: '100' },
-                  },
-                  open && { opacity: '100' },
-                )}
-              >
-                <Icon icon={EllipsisIcon} size={20} />
-              </div>
+          <Menu
+            style={css.raw({
+              marginRight: '12px',
+              borderRadius: '4px',
+              padding: '2px',
+              color: 'text.muted',
+              opacity: '0',
+              transition: 'common',
+              _hover: { backgroundColor: 'surface.hover' },
+              _groupHover: { opacity: '100' },
+              _expanded: { opacity: '100', backgroundColor: 'surface.active' },
+            })}
+          >
+            {#snippet button()}
+              <Icon icon={EllipsisIcon} size={20} />
             {/snippet}
 
             <MenuItem onclick={deleteNode} variant="danger">
@@ -275,10 +271,10 @@
       fontSize: '13px',
       color: 'text.muted',
       backgroundColor: 'surface.default',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       transition: 'common',
       zIndex: 'editor',
-      _hover: { backgroundColor: 'interactive.hover' },
+      _hover: { backgroundColor: 'surface.hover' },
     })}
     onclick={handleUpload}
     type="button"

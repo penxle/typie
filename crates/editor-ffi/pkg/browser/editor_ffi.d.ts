@@ -745,7 +745,7 @@ export type TableRowNodeAttr = void;
 
 export type TextNodeAttr = void;
 
-export type ThemeVariant = "dark-black" | "dark-charcoal" | "dark-espresso" | "dark-graphite" | "dark-midnight" | "dark-navy" | "dark-obsidian" | "dark-storm" | "light-butter" | "light-latte" | "light-lavender" | "light-mint" | "light-peach" | "light-rose" | "light-snow" | "light-white";
+export type ThemeVariant = "dark-black" | "dark-catppuccin-mocha" | "dark-dracula" | "dark-everforest" | "dark-flexoki" | "dark-nightfox" | "dark-nord" | "dark-rose-pine" | "light-catppuccin-latte" | "light-cupcake" | "light-everforest" | "light-flexoki" | "light-rose-pine-dawn" | "light-sakura" | "light-silk" | "light-white";
 
 export type TrackedRangeOp = { type: "add"; id: string; group: string; selection: Selection; metadata?: string; invalidate_on_text_change?: boolean } | { type: "add_frozen"; id: string; group: string; selection: StableSelection; metadata?: string } | { type: "remove"; id: string } | { type: "set_group"; id: string; group: string } | { type: "clear_group"; group: string } | { type: "replace_groups_from_prose"; expected_text: string; groups: string[]; ranges: ProseTrackedRangeRegistration[] } | { type: "invalidate"; id: string } | { type: "set_group_decoration"; group: string; style: DecorationStyle; enabled: boolean; z_index?: number } | { type: "remove_group_decoration"; group: string } | { type: "replace_text"; id: string; expected_text?: string | undefined; replacement: string };
 

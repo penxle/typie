@@ -213,13 +213,13 @@
         fontWeight: 'medium',
         textAlign: 'left',
         outlineWidth: '0',
-        color: 'text.subtle',
+        color: 'text.muted',
         transition: 'common',
         cursor: 'pointer',
-        _focus: { backgroundColor: 'surface.muted' },
+        _focus: { backgroundColor: 'surface.hover' },
       },
-      !focusManaged && { _hover: { backgroundColor: 'surface.muted' } },
-      submenuOpen && { backgroundColor: 'surface.muted' },
+      !focusManaged && { _hover: { backgroundColor: 'surface.hover' } },
+      submenuOpen && { backgroundColor: 'surface.hover' },
       style,
     ),
   )}
@@ -268,16 +268,16 @@
   {:else if icon}
     <Icon
       style={css.raw({
-        color: 'text.faint',
-        _groupFocus: { color: 'text.subtle' },
-        _groupHover: focusManaged ? undefined : { color: 'text.subtle' },
+        color: 'text.muted',
+        _groupFocus: { color: 'text.muted' },
+        _groupHover: focusManaged ? undefined : { color: 'text.muted' },
       })}
       {icon}
       size={14}
     />
   {/if}
   <span>{label}</span>
-  <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={12} />
+  <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.muted' })} icon={ChevronRightIcon} size={12} />
 </div>
 
 <!-- 서브메뉴 (포탈) -->
@@ -296,10 +296,7 @@
         maxHeight: '[calc(100dvh - 16px)]',
         overflowY: 'auto',
         backgroundColor: 'surface.default',
-        boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08)]',
-        _dark: {
-          boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.25)]',
-        },
+        boxShadow: 'lg',
         zIndex: 'tooltip',
         pointerEvents: 'auto',
         transformOrigin: 'left top',

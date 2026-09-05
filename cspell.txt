@@ -23,6 +23,7 @@ amazonses
 androidx
 anifantakis
 aosp
+apca
 apng
 apollographql
 apos
@@ -39,6 +40,7 @@ buildx
 bullmq
 bunx
 bytea
+catppuccin
 cbor
 cdylib
 centiseconds
@@ -51,6 +53,7 @@ colr
 crds
 crdt
 creds
+culori
 cxzv
 dearmor
 decryptor
@@ -64,6 +67,7 @@ dotum
 ebgp
 edgi
 epub
+everforest
 expirable
 eulyoo
 fanfic
@@ -72,6 +76,7 @@ ffffl
 ffigen
 ffprobe
 fira
+flexoki
 fntf
 fnts
 fract
@@ -151,8 +156,10 @@ nanum
 napi
 natgw
 ngram
+nightfox
 noeviction
 noopener
+nord
 noreferrer
 nori
 noto
@@ -211,6 +218,7 @@ retriable
 rgba
 ridi
 rlib
+rosé
 roughjs
 rpop
 rpush
@@ -218,6 +226,7 @@ rustc
 sadd
 saeeum
 safi
+sakura
 scard
 serde
 setex
@@ -255,6 +264,7 @@ unconfigure
 unmigratable
 UNDISPATCHED
 uniffi
+unparseable
 unplugin
 unpushed
 unquantized

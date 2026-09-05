@@ -58,7 +58,7 @@
   }
 
   .prism-review-highlight::before {
-    color: var(--review-fill);
+    color: color-mix(in oklch, var(--review-fill) 35%, transparent);
     background: linear-gradient(
       180deg,
       color-mix(in oklch, currentColor 4%, transparent) 0%,
@@ -67,6 +67,10 @@
       color-mix(in oklch, currentColor 24%, transparent) 100%
     );
     mix-blend-mode: color;
+  }
+
+  :root[data-theme='dark'] .prism-review-highlight::before {
+    color: var(--review-fill);
   }
 
   .prism-review-highlight::after {

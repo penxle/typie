@@ -527,15 +527,15 @@
 
 {#if isMobileDevice()}
   <div
-    style:--grid-line-color={token('colors.decoration.grid.brand')}
-    style:--cross-line-color={token('colors.decoration.grid.brand.subtle')}
+    style:--grid-line-color={token('colors.border.default')}
+    style:--cross-line-color={token('colors.border.hairline')}
     style:--grid-size="30px"
     style:--line-thickness="1px"
     class={center({
       width: '[100dvw]',
       height: '[100dvh]',
       overflowY: 'auto',
-      backgroundColor: 'surface.default',
+      backgroundColor: 'surface.canvas',
       backgroundImage:
         '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
       backgroundSize: 'var(--grid-size) var(--grid-size)',
@@ -551,7 +551,7 @@
         width: 'full',
         maxWidth: '400px',
         backgroundColor: 'surface.default',
-        boxShadow: 'medium',
+        boxShadow: 'md',
       })}
     >
       <div class={flex({ justifyContent: 'flex-start' })}>
@@ -565,13 +565,13 @@
           글쓰기를 이어가 보세요
         </h1>
 
-        <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>
+        <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.muted' })}>
           모바일에서도 타이피의 몰입감 있는 글쓰기 환경을 그대로 이용하실 수 있어요.
         </div>
       </div>
 
-      <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'surface.subtle' })}>
-        <p class={css({ fontSize: '13px', color: 'text.faint' })}>현재 로그인 정보</p>
+      <div class={css({ borderRadius: '8px', paddingY: '8px', textAlign: 'center', backgroundColor: 'surface.canvas' })}>
+        <p class={css({ fontSize: '13px', color: 'text.muted' })}>현재 로그인 정보</p>
         <p class={css({ marginTop: '2px', fontSize: '14px' })}>{query.data.me.email}</p>
       </div>
 
@@ -614,9 +614,9 @@
           gap: '12px',
           paddingX: '20px',
           paddingY: '10px',
-          backgroundColor: 'accent.brand.subtle',
+          backgroundColor: 'accent.subtle',
           fontSize: '13px',
-          color: 'text.brand',
+          color: 'text.default',
         })}
       >
         <span class={css({ fontWeight: 'semibold' })}>지금은 읽기 전용 상태예요. 글 열람과 공유는 계속 가능해요.</span>
@@ -631,11 +631,11 @@
             fontSize: '12px',
             fontWeight: 'semibold',
             whiteSpace: 'nowrap',
-            color: 'text.bright',
-            backgroundColor: 'accent.brand.default',
+            color: 'surface.default',
+            backgroundColor: 'accent.default',
             cursor: 'pointer',
             transition: 'common',
-            _hover: { backgroundColor: 'accent.brand.hover' },
+            _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
           })}
           onclick={() => SubscribeModalState.show('readonly_banner')}
           type="button"

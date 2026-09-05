@@ -76,7 +76,7 @@
   const editState = noteEdits.get(note.data.id, { content: note.data.content, color: note.data.color }, siteId);
   const content = $derived(editState?.content ?? note.data.content);
   const color = $derived(editState?.color ?? note.data.color);
-  const colorHex = $derived(getNoteColor(color) ?? token('colors.surface.default'));
+  const colorHex = $derived(getNoteColor(color) ?? token('colors.palette.gray'));
 
   onDestroy(() => {
     editState?.flush();
@@ -115,7 +115,7 @@
         flexDirection: 'column',
         position: 'relative',
         minHeight: '0',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'surface.canvas',
         borderRadius: '8px',
         cursor: reorderEnabled ? 'grab' : 'default',
       }),
@@ -190,7 +190,7 @@
             resize: 'none',
             lineHeight: '[1.65]',
             textDecorationLine: displayStatus === 'RESOLVED' ? 'line-through' : 'none',
-            textDecorationColor: displayStatus === 'RESOLVED' ? 'text.faint' : 'transparent',
+            textDecorationColor: displayStatus === 'RESOLVED' ? 'text.muted' : 'transparent',
             opacity: displayStatus === 'RESOLVED' && !resolving ? '55' : '100',
           })}
           disabled={palette}
@@ -226,7 +226,7 @@
           right: '8px',
           size: '22px',
           borderRadius: '4px',
-          color: 'text.faint',
+          color: 'text.muted',
           cursor: 'pointer',
           transition: 'common',
           opacity: '0',
@@ -235,17 +235,17 @@
           },
           _hover: {
             color: 'text.default',
-            backgroundColor: 'surface.dark/10',
+            backgroundColor: 'surface.hover',
           },
           _focusVisible: {
             opacity: '100',
             color: 'text.default',
-            backgroundColor: 'surface.dark/10',
+            backgroundColor: 'surface.hover',
           },
           '&[aria-expanded="true"]': {
             opacity: '100',
             color: 'text.default',
-            backgroundColor: 'surface.dark/10',
+            backgroundColor: 'surface.active',
           },
         })}
         placement="bottom-end"

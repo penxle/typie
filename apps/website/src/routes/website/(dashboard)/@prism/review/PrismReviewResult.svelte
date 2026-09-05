@@ -116,8 +116,7 @@
     padding: '14px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   });
   const titleClass = css({ fontSize: '13px', fontWeight: 'semibold', marginBottom: '10px' });
   // 수치는 서브행 상자 안에 항목별 행으로 담는다 — 행마다 아이콘·라벨·값의 같은 구조를 반복한다
@@ -127,7 +126,7 @@
     paddingX: '10px',
     paddingY: '10px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
   });
 
@@ -141,19 +140,19 @@
     flexShrink: '0',
     transition: '[background-color 150ms ease, border-color 150ms ease]',
   });
-  const thumbOnStyle = css.raw({ borderColor: 'border.strong', backgroundColor: 'surface.muted', color: 'text.default' });
+  const thumbOnStyle = css.raw({ borderColor: 'accent.default', backgroundColor: 'surface.active', color: 'text.default' });
   const thumbOffStyle = css.raw({
     borderColor: 'border.default',
     backgroundColor: 'surface.default',
-    color: 'text.faint',
-    _hover: { color: 'text.subtle' },
+    color: 'text.muted',
+    _hover: { color: 'text.default' },
   });
 </script>
 
 {#snippet statRow(icon: Component, label: string, count: number)}
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
-    <Icon style={css.raw({ color: 'text.faint' })} {icon} size={14} />
-    <span class={css({ color: 'text.subtle' })}>{label}</span>
+    <Icon style={css.raw({ color: 'text.muted' })} {icon} size={14} />
+    <span class={css({ color: 'text.muted' })}>{label}</span>
     <span class={css({ fontWeight: 'semibold' })}>{count}개</span>
   </div>
 {/snippet}
@@ -162,7 +161,7 @@
   <div class={titleClass}>리뷰를 마쳤어요</div>
 
   {#if lead !== null}
-    <p class={css({ marginBottom: '10px', lineHeight: '[1.65]', color: 'text.subtle', lineClamp: '4' })}>{lead}</p>
+    <p class={css({ marginBottom: '10px', lineHeight: '[1.65]', color: 'text.muted', lineClamp: '4' })}>{lead}</p>
   {/if}
 
   <div class={countsBoxClass}>
@@ -178,7 +177,7 @@
 
   {#if round.dispositionSummary}
     {@const s = round.dispositionSummary}
-    <p class={css({ marginTop: '8px', fontSize: '11px', color: 'text.faint' })}>
+    <p class={css({ marginTop: '8px', fontSize: '11px', color: 'text.hint' })}>
       이어진 {s.carried} · 해소 {s.resolved} · 철회 {s.withdrawn} · 신규 {s.new}
     </p>
   {/if}
@@ -207,10 +206,10 @@
       marginTop: '12px',
       paddingTop: '10px',
       borderTopWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
     })}
   >
-    <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint' })}>이번 리뷰 어땠나요?</span>
+    <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.muted' })}>이번 리뷰 어땠나요?</span>
     <button
       class={css(thumbStyle, reaction === 'UP' ? thumbOnStyle : thumbOffStyle)}
       aria-label="좋았어요"

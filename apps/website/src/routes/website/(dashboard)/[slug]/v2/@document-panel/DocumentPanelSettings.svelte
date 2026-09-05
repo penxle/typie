@@ -337,21 +337,21 @@
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',
-      color: 'text.subtle',
+      color: 'text.muted',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     본문 설정
   </div>
 
   <div class={flex({ flexDirection: 'column', gap: '16px', overflowY: 'auto', paddingY: '16px' })}>
-    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>기본 서식</div>
+    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>기본 서식</div>
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글꼴</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>글꼴</div>
       </div>
       <SearchableDropdown
         style={css.raw({ width: '140px' })}
@@ -377,8 +377,8 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 굵기</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>글자 굵기</div>
       </div>
       <Select
         items={fontWeightItems}
@@ -393,8 +393,8 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>글자 크기</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>글자 크기</div>
       </div>
       <div
         bind:this={fontSizeAnchorElement}
@@ -405,7 +405,7 @@
           borderRadius: '4px',
           width: '140px',
           height: '28px',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         use:fontSizeAnchorAction
       >
@@ -418,7 +418,7 @@
             paddingRight: '24px',
             fontSize: '12px',
             fontWeight: 'medium',
-            color: 'text.subtle',
+            color: 'text.muted',
             textAlign: 'right',
             backgroundColor: 'transparent',
             border: 'none',
@@ -447,7 +447,7 @@
               top: '1/2',
               translate: 'auto',
               translateY: '-1/2',
-              color: 'text.faint',
+              color: 'text.muted',
               transform: fontSizeOpened ? 'rotate(-180deg)' : 'rotate(0deg)',
               transitionDuration: '150ms',
             })}
@@ -461,11 +461,11 @@
           bind:this={fontSizeFloatingElement}
           class={css({
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             borderBottomRadius: '4px',
             backgroundColor: 'surface.default',
             zIndex: 'menu',
-            boxShadow: 'small',
+            boxShadow: 'sm',
             overflow: 'hidden',
           })}
           use:fontSizeFloatingAction
@@ -492,8 +492,8 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={LetterSpacingIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>자간</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={LetterSpacingIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>자간</div>
       </div>
       <Select
         items={values.letterSpacing.map((s) => ({ value: s.value, label: s.label }))}
@@ -508,8 +508,8 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '16px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={LineHeightIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>행간</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={LineHeightIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>행간</div>
       </div>
       <Select
         items={values.lineHeight.map((s) => ({ value: s.value, label: s.label }))}
@@ -525,12 +525,12 @@
     <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
     {#if layoutMode}
-      <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>레이아웃</div>
+      <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>레이아웃</div>
 
       <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
         <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={FileTextIcon} />
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>레이아웃 모드</div>
+          <Icon style={css.raw({ color: 'text.muted' })} icon={FileTextIcon} />
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>레이아웃 모드</div>
         </div>
         <div class={css({ width: '140px' })}>
           <SegmentButtons
@@ -548,8 +548,8 @@
       {#if layoutMode?.type === 'paginated'}
         <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>페이지 크기 (mm)</div>
+            <Icon style={css.raw({ color: 'text.muted' })} icon={FileIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>페이지 크기 (mm)</div>
           </div>
           <Select
             items={[...values.pageLayout, { label: '직접 지정', value: 'custom' }]}
@@ -559,7 +559,7 @@
           <div class={flex({ flexDirection: 'column', gap: '8px' })}>
             <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
               <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>너비</div>
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>너비</div>
                 <TextInput
                   style={css.raw({ width: '80px' })}
                   min="100"
@@ -570,7 +570,7 @@
                 />
               </div>
               <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-                <div class={css({ fontSize: '12px', color: 'text.subtle', width: '32px' })}>높이</div>
+                <div class={css({ fontSize: '12px', color: 'text.muted', width: '32px' })}>높이</div>
                 <TextInput
                   style={css.raw({ width: '80px' })}
                   min="100"
@@ -586,12 +586,12 @@
 
         <div class={flex({ flexDirection: 'column', gap: '6px', paddingX: '20px' })}>
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>여백 (mm)</div>
+            <Icon style={css.raw({ color: 'text.muted' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>여백 (mm)</div>
           </div>
           <div class={grid({ columns: 2, columnGap: '12px', rowGap: '8px', paddingLeft: '8px' })}>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>상단</div>
+              <div class={css({ fontSize: '12px', color: 'text.muted' })}>상단</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
                 max={String(pxToMm(getMaxMargin('top', fromLayoutMode(layoutMode))))}
@@ -603,7 +603,7 @@
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>하단</div>
+              <div class={css({ fontSize: '12px', color: 'text.muted' })}>하단</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
                 max={String(pxToMm(getMaxMargin('bottom', fromLayoutMode(layoutMode))))}
@@ -615,7 +615,7 @@
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>왼쪽</div>
+              <div class={css({ fontSize: '12px', color: 'text.muted' })}>왼쪽</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
                 max={String(pxToMm(getMaxMargin('left', fromLayoutMode(layoutMode))))}
@@ -627,7 +627,7 @@
               />
             </div>
             <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-              <div class={css({ fontSize: '12px', color: 'text.subtle' })}>오른쪽</div>
+              <div class={css({ fontSize: '12px', color: 'text.muted' })}>오른쪽</div>
               <TextInput
                 style={css.raw({ width: '80px' })}
                 max={String(pxToMm(getMaxMargin('right', fromLayoutMode(layoutMode))))}
@@ -643,8 +643,8 @@
       {:else}
         <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
           <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <Icon style={css.raw({ color: 'text.faint' })} icon={RulerDimensionLineIcon} />
-            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 폭</div>
+            <Icon style={css.raw({ color: 'text.muted' })} icon={RulerDimensionLineIcon} />
+            <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>본문 폭</div>
           </div>
           <div class={css({ width: '200px' })}>
             <SegmentButtons
@@ -667,12 +667,12 @@
       <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
     {/if}
 
-    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>세부 레이아웃</div>
+    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>세부 레이아웃</div>
 
     <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={ArrowRightToLineIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>첫 줄 들여쓰기</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={ArrowRightToLineIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>첫 줄 들여쓰기</div>
       </div>
       <div class={css({ width: '200px' })}>
         <SegmentButtons
@@ -693,8 +693,8 @@
 
     <div class={flex({ flexDirection: 'column', gap: '8px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={AlignVerticalSpaceAroundIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>문단 사이 간격</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={AlignVerticalSpaceAroundIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>문단 사이 간격</div>
       </div>
       <div class={css({ width: '200px' })}>
         <SegmentButtons
@@ -715,14 +715,14 @@
 
     <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
 
-    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>편집 경험</div>
+    <div class={css({ paddingX: '20px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>편집 경험</div>
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={TypeIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>타자기 모드</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={TypeIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>타자기 모드</div>
         <Tooltip message="현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다." placement="top">
-          <Icon style={css.raw({ color: 'text.faint' })} icon={InfoIcon} />
+          <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} />
         </Tooltip>
       </div>
       <Switch
@@ -756,8 +756,8 @@
 
     <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '20px' })}>
       <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.faint' })} icon={HighlighterIcon} />
-        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>현재 줄 강조</div>
+        <Icon style={css.raw({ color: 'text.muted' })} icon={HighlighterIcon} />
+        <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>현재 줄 강조</div>
       </div>
       <Switch
         onchange={() => {

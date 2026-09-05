@@ -1,32 +1,20 @@
+import { variantConditions } from './conditions.generated';
+
+const hoverGuard =
+  ':not(:where(:focus-visible, [aria-pressed="true"], [aria-checked="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"]), [aria-haspopup][aria-expanded="true"], [data-context-menu-open="true"]))';
+
 export const conditions = {
   extend: {
     enabled: '&:is(:enabled, a[aria-disabled="false"])',
     disabled: '&:is(:disabled, [aria-disabled="true"])',
-    hover: ['@media (hover: hover) and (pointer: fine)', '&:hover:not([aria-pressed="true"])'],
+    hover: ['@media (hover: hover) and (pointer: fine)', `&:hover${hoverGuard}`],
     groupHover: ['@media (hover: hover) and (pointer: fine)', '.group:hover &'],
-    supportHover: ['@media (hover: hover) and (pointer: fine)', '&:hover'],
+    supportHover: ['@media (hover: hover) and (pointer: fine)', `&:hover${hoverGuard}`],
     active: ['@media (hover: hover) and (pointer: fine)', '&:active'],
     hoverAfter: ['@media (hover: hover) and (pointer: fine)', '&:hover::after'],
     groupSelected: '.group:is([aria-selected=true], [data-selected]) &',
 
     dark: '[data-theme="dark"] &',
-
-    lightWhite: '[data-theme="light"][data-variant-light="white"] &',
-    lightSnow: '[data-theme="light"][data-variant-light="snow"] &',
-    lightButter: '[data-theme="light"][data-variant-light="butter"] &',
-    lightPeach: '[data-theme="light"][data-variant-light="peach"] &',
-    lightRose: '[data-theme="light"][data-variant-light="rose"] &',
-    lightLavender: '[data-theme="light"][data-variant-light="lavender"] &',
-    lightMint: '[data-theme="light"][data-variant-light="mint"] &',
-    lightLatte: '[data-theme="light"][data-variant-light="latte"] &',
-
-    darkBlack: '[data-theme="dark"][data-variant-dark="black"] &',
-    darkCharcoal: '[data-theme="dark"][data-variant-dark="charcoal"] &',
-    darkGraphite: '[data-theme="dark"][data-variant-dark="graphite"] &',
-    darkMidnight: '[data-theme="dark"][data-variant-dark="midnight"] &',
-    darkNavy: '[data-theme="dark"][data-variant-dark="navy"] &',
-    darkObsidian: '[data-theme="dark"][data-variant-dark="obsidian"] &',
-    darkStorm: '[data-theme="dark"][data-variant-dark="storm"] &',
-    darkEspresso: '[data-theme="dark"][data-variant-dark="espresso"] &',
+    ...variantConditions,
   },
 };

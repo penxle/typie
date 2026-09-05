@@ -119,9 +119,9 @@
         paddingX: '20px',
         fontSize: '13px',
         fontWeight: 'semibold',
-        color: 'text.subtle',
+        color: 'text.muted',
         borderBottomWidth: '1px',
-        borderColor: 'surface.muted',
+        borderColor: 'border.hairline',
       })}
     >
       {featureName}
@@ -139,9 +139,9 @@
         textAlign: 'center',
       })}
     >
-      <Icon style={css.raw({ color: 'text.faint' })} icon={featureIcon} size={32} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={featureIcon} size={32} />
 
-      <p class={css({ fontSize: '13px', color: 'text.faint', whiteSpace: 'pre-line' })}>
+      <p class={css({ fontSize: '13px', color: 'text.muted', whiteSpace: 'pre-line' })}>
         {description}
       </p>
 
@@ -182,7 +182,7 @@
         height: 'full',
         overflow: 'hidden',
         borderLeftWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         transitionProperty: '[padding-top]',
         transitionTimingFunction: '[var(--editor-pane-overlay-motion-easing, cubic-bezier(0.22, 1, 0.36, 1))]',
       })}
@@ -220,11 +220,11 @@
             justifyContent: 'center',
             gap: '8px',
             height: 'full',
-            color: 'text.faint',
+            color: 'text.hint',
             fontSize: '12px',
           })}
         >
-          <Icon style={css.raw({ color: 'text.faint' })} icon={ConstructionIcon} size={24} />
+          <Icon style={css.raw({ color: 'text.hint' })} icon={ConstructionIcon} size={24} />
           아직 준비중인 기능이에요
         </div>
       {/if}
@@ -248,7 +248,7 @@
           borderRadius: '4px',
           height: 'full',
           width: '2px',
-          backgroundColor: 'border.strong',
+          backgroundColor: 'border.emphasis',
           opacity: '50',
         },
       })}

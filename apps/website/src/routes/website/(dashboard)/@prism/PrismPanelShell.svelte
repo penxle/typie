@@ -130,7 +130,7 @@
       left: '0',
       boxSizing: 'border-box',
       borderLeftWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       zIndex: 'panel',
       pointerEvents: 'none',
     })}
@@ -155,7 +155,7 @@
           borderRadius: '4px',
           height: 'full',
           width: '2px',
-          backgroundColor: 'border.strong',
+          backgroundColor: 'border.emphasis',
           opacity: '50',
         },
       })}

@@ -30,14 +30,14 @@
     class={css({
       paddingX: '8px',
       paddingY: '8px',
-      backgroundColor: 'surface.muted',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <div
       class={css({
-        backgroundColor: { base: 'amber.50', _dark: 'amber.950/50' },
+        backgroundColor: 'warning.subtle',
         borderWidth: '1px',
-        borderColor: { base: 'amber.200', _dark: 'amber.900' },
+        borderColor: 'warning.default',
         borderRadius: '8px',
       })}
     >
@@ -51,8 +51,8 @@
         })}
       >
         <div class={flex({ alignItems: 'center', gap: '12px' })}>
-          <InfoIcon class={css({ color: { base: 'amber.400', _dark: 'amber.700' }, width: '20px', height: '20px' })} />
-          <div class={css({ fontSize: '14px', color: 'text.default' })}>
+          <InfoIcon class={css({ color: 'text.on.warning.subtle', width: '20px', height: '20px' })} />
+          <div class={css({ fontSize: '14px', color: 'text.on.warning.subtle' })}>
             <span class={css({ fontWeight: 'medium' })}>서비스 점검 안내:</span>
             <span class={css({ marginLeft: '8px' })}>2026년 7월 20일 오전 2시부터 오전 4시까지 서버 점검이 예정되어 있어요.</span>
           </div>
@@ -63,13 +63,13 @@
             position: 'absolute',
             right: '20px',
             padding: '4px',
-            color: 'text.faint',
+            color: 'text.on.warning.subtle',
             cursor: 'pointer',
             borderRadius: '4px',
             transition: 'common',
             _hover: {
-              backgroundColor: { base: 'amber.100', _dark: 'amber.950' },
-              color: { base: 'amber.700', _dark: 'amber.400' },
+              backgroundColor: 'surface.hover',
+              color: 'text.default',
             },
           })}
           aria-label="24시간동안 숨기기"

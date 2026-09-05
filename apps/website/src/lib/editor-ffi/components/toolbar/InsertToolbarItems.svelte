@@ -44,7 +44,7 @@
   class={flex({
     alignItems: 'center',
     gap: '4px',
-    opacity: editingDisabled ? '50' : '100',
+    opacity: editingDisabled ? '40' : '100',
     pointerEvents: editingDisabled ? 'none' : 'auto',
   })}
 >

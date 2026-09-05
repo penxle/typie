@@ -160,7 +160,7 @@
   };
 </script>
 
-<div class={css({ position: 'relative', width: '50px', opacity: disabled ? '50' : '100', pointerEvents: disabled ? 'none' : 'auto' })}>
+<div class={css({ position: 'relative', width: '50px', opacity: disabled ? '40' : '100', pointerEvents: disabled ? 'none' : 'auto' })}>
   <div
     bind:this={anchorElement}
     class={css({
@@ -169,10 +169,10 @@
       borderRadius: '4px',
       height: '24px',
       _hover: {
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.hover',
       },
       '& > input:focus': {
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.active',
       },
     })}
     use:anchorAction
@@ -186,7 +186,7 @@
         paddingLeft: '4px',
         paddingRight: '20px',
         fontSize: '14px',
-        color: 'text.subtle',
+        color: 'text.muted',
         textAlign: 'left',
         backgroundColor: 'transparent',
         border: 'none',
@@ -223,7 +223,7 @@
           top: '1/2',
           translate: 'auto',
           translateY: '-1/2',
-          color: 'text.faint',
+          color: 'text.muted',
           transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
           transitionDuration: '150ms',
         })}
@@ -238,11 +238,11 @@
       bind:this={floatingElement}
       class={css({
         borderWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         borderBottomRadius: '4px',
         backgroundColor: 'surface.default',
         zIndex: 'menu',
-        boxShadow: 'small',
+        boxShadow: 'sm',
         overflow: 'hidden',
       })}
       use:floatingAction

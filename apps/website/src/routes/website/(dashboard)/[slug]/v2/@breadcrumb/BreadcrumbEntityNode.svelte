@@ -21,7 +21,7 @@
     paddingX: '8px',
     borderRadius: '6px',
     transition: 'common',
-    _supportHover: { backgroundColor: 'surface.muted' },
+    _supportHover: { backgroundColor: 'surface.hover' },
   });
 
   const nestedEntityTreeRowStyle = css.raw({
@@ -29,7 +29,7 @@
     borderLeftRadius: '0',
     marginLeft: '-1px',
     paddingLeft: '14px',
-    _supportHover: { borderColor: 'border.strong' },
+    _supportHover: { borderColor: 'border.emphasis' },
   });
 
   type Props = {
@@ -173,14 +173,14 @@
     data-breadcrumb-entity-id={entity.data.id}
     role="presentation"
   >
-    <div class={css({ width: 'full', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+    <div class={css({ width: 'full', height: '1px', backgroundColor: 'border.default' })}></div>
   </div>
 {:else}
   <div
     bind:this={row}
     class={css(
       {
-        '&:focus > [data-breadcrumb-tree-row]': { backgroundColor: 'surface.muted' },
+        '&:focus > [data-breadcrumb-tree-row]': { backgroundColor: 'surface.hover' },
       },
       document && { touchAction: 'none' },
     )}
@@ -212,12 +212,13 @@
           },
           nested && nestedEntityTreeRowStyle,
         ),
-        (highlighted || currentDocument) && css({ backgroundColor: 'surface.muted' }),
+        highlighted && css({ backgroundColor: 'surface.hover' }),
+        !highlighted && currentDocument && css({ backgroundColor: 'surface.active' }),
       )}
       data-breadcrumb-tree-row
     >
       {#if folder}
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={expanded ? ChevronDownIcon : ChevronRightIcon} size={14} />
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.muted' })} icon={expanded ? ChevronDownIcon : ChevronRightIcon} size={14} />
         <EntityIcon entity$key={entity.data} fallback={FolderIcon} size={14} />
         <EntityName name={entity.data.node.__typename === 'Folder' ? entity.data.node.name : ''} active={currentDocument} />
       {:else}
@@ -236,13 +237,13 @@
               paddingY: '6px',
               fontSize: '14px',
               fontWeight: 'medium',
-              color: 'text.disabled',
+              color: 'text.hint',
             })}
           >
             폴더 내용을 불러오지 못했어요
           </div>
         {:else if !children.data}
-          <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.disabled' })}>
+          <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.muted' })}>
             <RingSpinner style={css.raw({ size: '14px' })} />
           </div>
         {:else}
@@ -267,7 +268,7 @@
                 paddingY: '6px',
                 fontSize: '14px',
                 fontWeight: 'medium',
-                color: 'text.disabled',
+                color: 'text.hint',
               })}
             >
               폴더가 비어있어요

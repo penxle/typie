@@ -40,12 +40,12 @@
 
 <details class={flex({ flexDirection: 'column', marginBottom: open ? '12px' : '8px' })} bind:open>
   <summary class={flex({ alignItems: 'center', gap: '4px', cursor: 'pointer', marginBottom: open ? '8px' : '0', userSelect: 'none' })}>
-    <Icon style={css.raw({ color: 'text.faint' })} icon={IconType} size={12} />
-    <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>글자 수</div>
-    <Icon style={css.raw({ color: 'text.faint', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />
+    <Icon style={css.raw({ color: 'text.muted' })} icon={IconType} size={12} />
+    <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>글자 수</div>
+    <Icon style={css.raw({ color: 'text.muted', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' })} icon={IconChevronRight} size={14} />
     <div class={css({ flexGrow: '1' })}></div>
     {#if !open}
-      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })} in:fly={{ y: 2, duration: 150 }}>
+      <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })} in:fly={{ y: 2, duration: 150 }}>
         {#if hasSelection}
           {comma(counts.selectionWithWhitespace)}자 /
         {/if}
@@ -57,8 +57,8 @@
   {#if open}
     <div class={flex({ flexDirection: 'column', gap: '2px' })} in:fly={{ y: -2, duration: 150 }}>
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'text.faint' })}>공백 포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+        <dt class={css({ color: 'text.muted' })}>공백 포함</dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
           {#if hasSelection}
             {comma(counts.selectionWithWhitespace)}자 /
           {/if}
@@ -67,8 +67,8 @@
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'text.faint' })}>공백 미포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+        <dt class={css({ color: 'text.muted' })}>공백 미포함</dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
           {#if hasSelection}
             {comma(counts.selectionWithoutWhitespace)}자 /
           {/if}
@@ -77,8 +77,8 @@
       </dl>
 
       <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-        <dt class={css({ color: 'text.faint' })}>공백/부호 미포함</dt>
-        <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+        <dt class={css({ color: 'text.muted' })}>공백/부호 미포함</dt>
+        <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
           {#if hasSelection}
             {comma(counts.selectionWithoutWhitespaceAndPunctuation)}자 /
           {/if}

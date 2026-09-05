@@ -115,9 +115,9 @@
     size: '20px',
     borderRadius: '4px',
     cursor: 'pointer',
-    color: 'text.faint',
+    color: 'text.muted',
     transition: 'common',
-    _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
   });
 </script>
 
@@ -139,7 +139,7 @@
           paddingX: '10px',
           paddingY: '8px',
           borderBottomWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
         })}
       >
         <div class={css({ display: 'flex', alignItems: 'center', gap: '6px' })}>
@@ -150,8 +150,8 @@
                 fontSize: '11px',
                 fontWeight: 'bold',
                 lineHeight: 'none',
-                color: 'text.subtle',
-                backgroundColor: 'surface.muted',
+                color: 'text.default',
+                backgroundColor: 'accent.subtle',
                 borderRadius: '4px',
                 paddingX: '6px',
                 paddingY: '2px',
@@ -165,19 +165,19 @@
         <div class={css({ display: 'flex', alignItems: 'center', gap: '2px' })}>
           {#if canManageThread(thread, comments.myId, comments.isOwner)}
             <Menu
-              style={css.raw({ display: 'flex', padding: '0', borderWidth: '0', backgroundColor: 'transparent' })}
+              style={css.raw(headerButtonStyle, {
+                padding: '0',
+                borderWidth: '0',
+                backgroundColor: 'transparent',
+                _expanded: { backgroundColor: 'surface.active', color: 'text.default' },
+              })}
               listStyle={css.raw({ minWidth: '120px' })}
               offset={4}
               placement="bottom-end"
               bind:open={headerMenuOpen}
             >
               {#snippet button()}
-                <button
-                  class={css(headerButtonStyle, headerMenuOpen && { backgroundColor: 'surface.muted', color: 'text.subtle' })}
-                  type="button"
-                >
-                  <Icon icon={EllipsisIcon} size={12} />
-                </button>
+                <Icon icon={EllipsisIcon} size={12} />
               {/snippet}
 
               <MenuItem icon={Trash2Icon} onclick={() => confirmDeleteThread(thread.id)} variant="danger">스레드 삭제</MenuItem>
@@ -228,7 +228,7 @@
         {/each}
       </div>
 
-      <div class={css({ borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
+      <div class={css({ borderTopWidth: '1px', borderColor: 'border.hairline' })}></div>
       <CommentComposer
         oncancel={() => tryClose(comments.close)}
         ondirty={(d) => (composerDirty = d)}

@@ -59,10 +59,10 @@
             paddingX: '8px',
             paddingY: '4px',
             transition: 'common',
-            _hover: { backgroundColor: 'surface.muted' },
-            _expanded: { backgroundColor: 'surface.muted' },
+            _hover: { backgroundColor: 'surface.hover' },
+            _expanded: { backgroundColor: 'surface.active' },
             _disabled: {
-              opacity: '70',
+              opacity: '40',
             },
           },
           style,
@@ -70,6 +70,7 @@
       )}
       aria-disabled={disabled}
       aria-expanded={open}
+      aria-haspopup="listbox"
       {disabled}
       onclick={() => {
         if (disabled) {
@@ -82,17 +83,17 @@
       {#if displayItem}
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
           {#if displayItem.icon}
-            <Icon style={css.raw({ color: 'text.faint' })} icon={displayItem.icon} size={14} />
+            <Icon style={css.raw({ color: 'text.muted' })} icon={displayItem.icon} size={14} />
           {/if}
 
-          <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+          <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>
             {displayItem.label}
           </span>
         </div>
 
         {#if chevron}
           <Icon
-            style={css.raw({ color: 'text.faint', '& *': { strokeWidth: '[1.5px]' } })}
+            style={css.raw({ color: 'text.muted', '& *': { strokeWidth: '[1.5px]' } })}
             icon={open ? ChevronUpIcon : ChevronDownIcon}
             size={14}
           />
@@ -115,12 +116,12 @@
         <div class={flex({ alignItems: 'flex-start', gap: '8px' })}>
           {#if item.icon}
             <div class={center({ height: '[1lh]' })}>
-              <Icon style={css.raw({ color: 'text.faint' })} icon={item.icon} size={14} />
+              <Icon style={css.raw({ color: 'text.muted' })} icon={item.icon} size={14} />
             </div>
           {/if}
 
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-            <span class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+            <span class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>
               {item.label}
               {#if item.trailing}
                 <item.trailing />
@@ -128,16 +129,16 @@
             </span>
 
             {#if item.description}
-              <span class={css({ fontSize: '11px', color: 'text.faint', wordBreak: 'keep-all' })}>{item.description}</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted', wordBreak: 'keep-all' })}>{item.description}</span>
             {/if}
           </div>
         </div>
 
         {#if selectedValues.includes(item.value)}
           {#if isIndeterminate}
-            <Icon style={css.raw({ color: 'text.subtle' })} icon={MinusIcon} size={14} />
+            <Icon style={css.raw({ color: 'accent.default' })} icon={MinusIcon} size={14} />
           {:else}
-            <Icon style={css.raw({ color: 'text.subtle' })} icon={CheckIcon} size={14} />
+            <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
           {/if}
         {:else}
           <div style:width="14px"></div>

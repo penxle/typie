@@ -41,7 +41,7 @@
 
 {#if recentRows.length > 0}
   <div class={flex({ flexDirection: 'column', height: 'full' })}>
-    <div class={flex({ paddingY: '4px', fontSize: '11px', color: 'text.faint', borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
+    <div class={flex({ paddingY: '4px', fontSize: '11px', color: 'text.muted', borderBottomWidth: '1px', borderColor: 'border.hairline' })}>
       <span class={css({ flex: '1' })}>날짜</span>
       <span class={css({ flex: '1', textAlign: 'center' })}>글자 수</span>
       <span class={css({ flex: '1', textAlign: 'right' })}>증감</span>
@@ -55,12 +55,12 @@
             fontSize: '12px',
             fontVariantNumeric: 'tabular-nums',
             borderBottomWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
           })}
         >
-          <span class={css({ flex: '1', color: 'text.faint' })}>{dayjs(row.date).kst().format('M월 D일')}</span>
-          <span class={css({ flex: '1', textAlign: 'center', color: 'text.subtle' })}>{comma(row.characterCount)}자</span>
-          <span class={css({ flex: '1', textAlign: 'right', color: row.diff !== null && row.diff < 0 ? 'text.danger' : 'text.faint' })}>
+          <span class={css({ flex: '1', color: 'text.hint' })}>{dayjs(row.date).kst().format('M월 D일')}</span>
+          <span class={css({ flex: '1', textAlign: 'center', color: 'text.muted' })}>{comma(row.characterCount)}자</span>
+          <span class={css({ flex: '1', textAlign: 'right', color: row.diff !== null && row.diff < 0 ? 'danger.default' : 'text.hint' })}>
             {row.diff === null ? '—' : `${row.diff >= 0 ? '+' : ''}${comma(row.diff)}`}
           </span>
         </div>
@@ -68,7 +68,7 @@
     </div>
   </div>
 {:else}
-  <div class={css({ paddingY: '24px', textAlign: 'center', fontSize: '13px', color: 'text.faint' })}>
+  <div class={css({ paddingY: '24px', textAlign: 'center', fontSize: '13px', color: 'text.hint' })}>
     아직 기록이 없어요. 글을 쓰면 하루하루의 글자 수가 쌓여요.
   </div>
 {/if}

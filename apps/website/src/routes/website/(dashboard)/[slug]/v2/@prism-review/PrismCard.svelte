@@ -131,11 +131,11 @@
     },
     variants: {
       tone: {
-        active: { borderColor: 'review.issue.default', backgroundColor: 'surface.default', boxShadow: 'medium' },
-        activeStrength: { borderColor: 'review.strength.default', backgroundColor: 'surface.default', boxShadow: 'medium' },
-        open: { borderColor: 'border.default', backgroundColor: 'surface.default', boxShadow: 'small' },
-        settled: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
-        settledActive: { borderColor: 'border.subtle', backgroundColor: 'surface.subtle' },
+        active: { borderColor: 'review.issue', backgroundColor: 'surface.default', boxShadow: 'md' },
+        activeStrength: { borderColor: 'review.strength', backgroundColor: 'surface.default', boxShadow: 'md' },
+        open: { borderColor: 'border.default', backgroundColor: 'surface.default', boxShadow: 'sm' },
+        settled: { borderColor: 'border.hairline', backgroundColor: 'surface.canvas' },
+        settledActive: { borderColor: 'border.hairline', backgroundColor: 'surface.canvas' },
       },
       clickable: { true: { cursor: 'pointer' }, false: {} },
     },
@@ -162,19 +162,19 @@
     },
     variants: {
       tone: {
-        open: { backgroundColor: 'review.issue.subtle', color: 'review.issue.default' },
+        open: { backgroundColor: '[color-mix(in oklch, token(colors.review.issue) 16%, transparent)]', color: 'review.issue' },
         strength: {
-          backgroundColor: 'review.strength.subtle',
-          color: 'review.strength.default',
+          backgroundColor: '[color-mix(in oklch, token(colors.review.strength) 16%, transparent)]',
+          color: 'review.strength',
         },
-        settled: { backgroundColor: 'surface.muted', color: 'text.faint' },
+        settled: { backgroundColor: 'surface.inset', color: 'text.hint' },
       },
       active: { true: {}, false: {} },
     },
     compoundVariants: [
-      { tone: 'open', active: true, css: { backgroundColor: 'review.issue.default', color: 'surface.default' } },
-      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength.default', color: 'surface.default' } },
-      { tone: 'settled', active: true, css: { backgroundColor: 'border.strong', color: 'text.bright' } },
+      { tone: 'open', active: true, css: { backgroundColor: 'review.issue', color: 'surface.default' } },
+      { tone: 'strength', active: true, css: { backgroundColor: 'review.strength', color: 'surface.default' } },
+      { tone: 'settled', active: true, css: { backgroundColor: 'surface.inverse', color: 'text.on.inverse' } },
     ],
   });
 
@@ -203,10 +203,10 @@
     borderWidth: '1px',
     borderColor: 'border.default',
     borderRadius: '6px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     fontSize: '12px',
     lineHeight: '[1.55]',
-    color: 'text.subtle',
+    color: 'text.muted',
     resize: 'none',
   });
 
@@ -214,19 +214,19 @@
     flex: 'none',
     fontSize: '11px',
     fontWeight: 'semibold',
-    color: 'text.faint',
+    color: 'text.hint',
     cursor: 'pointer',
-    _hover: { color: 'text.subtle' },
+    _hover: { color: 'text.muted' },
   });
 
   const editSaveClass = css({
     flex: 'none',
     fontSize: '11px',
     fontWeight: 'semibold',
-    color: 'text.brand',
+    color: 'text.default',
     cursor: 'pointer',
-    _hover: { color: 'accent.brand.hover' },
-    _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+    _hover: { color: 'text.default' },
+    _disabled: { opacity: '40', cursor: 'not-allowed' },
   });
 
   // 카드 반응 — 취사선택 표시라 선택된 버튼의 재클릭은 해제로 간다
@@ -240,13 +240,13 @@
       borderRadius: '4px',
       cursor: 'pointer',
       transition: '[background-color 0.15s ease, color 0.15s ease]',
-      _hover: { backgroundColor: 'surface.muted' },
-      _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+      _hover: { backgroundColor: 'surface.hover' },
+      _disabled: { opacity: '40', cursor: 'not-allowed' },
     },
     variants: {
       selected: {
-        true: { color: 'text.brand' },
-        false: { color: 'text.faint', _hover: { color: 'text.subtle' } },
+        true: { backgroundColor: 'surface.active', color: 'text.default' },
+        false: { color: 'text.muted', _hover: { color: 'text.default' } },
       },
     },
   });
@@ -257,15 +257,15 @@
     paddingX: '12px',
     paddingY: '8px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '6px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     fontSize: '11px',
     lineHeight: '[1.55]',
-    color: 'text.faint',
+    color: 'text.muted',
   });
 
-  const calloutLeadClass = css({ fontWeight: 'bold', color: 'text.subtle' });
+  const calloutLeadClass = css({ fontWeight: 'bold', color: 'text.muted' });
 
   // 아이콘만 남긴 헤더 버튼 — 음수 마진으로 24px 히트 영역을 쓰면서 헤더 높이는 칩 높이에 맞춘다.
   // 카드 패딩을 파고드는(flush) 것은 오른쪽 끝 버튼만이다 — 중간 버튼까지 파고들면 이웃 버튼과 붙는다
@@ -278,11 +278,11 @@
       size: '24px',
       marginY: '-4px',
       borderRadius: '6px',
-      color: 'text.faint',
+      color: 'text.muted',
       cursor: 'pointer',
       transition: '[background-color 0.15s ease, color 0.15s ease]',
-      _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
-      _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+      _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+      _disabled: { opacity: '40', cursor: 'not-allowed' },
     },
     variants: {
       flush: { true: { marginRight: '-4px' }, false: {} },
@@ -323,7 +323,7 @@
           minWidth: '0',
           fontSize: '13px',
           fontWeight: expanded ? 'bold' : 'semibold',
-          color: dimmed ? 'text.faint' : 'text.default',
+          color: dimmed ? 'text.muted' : 'text.default',
           textAlign: 'left',
           truncate: true,
         })}
@@ -338,10 +338,10 @@
             paddingX: '4px',
             paddingY: '1px',
             borderRadius: '4px',
-            backgroundColor: 'accent.brand.subtle',
+            backgroundColor: 'accent.subtle',
             fontSize: '10px',
             fontWeight: 'bold',
-            color: 'text.brand',
+            color: 'text.default',
           })}
         >
           신규
@@ -349,7 +349,7 @@
       {/if}
 
       {#if slot.comments || slot.state}
-        <span class={flex({ align: 'center', gap: '8px', flex: 'none', marginLeft: 'auto', fontSize: '11px', color: 'text.faint' })}>
+        <span class={flex({ align: 'center', gap: '8px', flex: 'none', marginLeft: 'auto', fontSize: '11px', color: 'text.hint' })}>
           {#if slot.comments}
             <span class={css({ whiteSpace: 'nowrap' })}>댓글 {shownComments.length}</span>
           {/if}
@@ -395,7 +395,7 @@
   {#if !settled}
     <div class={css(revealRecipe.raw({ shown: !expanded }))}>
       <div class={revealInnerClass} data-reveal="snippet">
-        <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.5]', color: 'text.faint', lineClamp: '3' })}>
+        <p class={css({ marginTop: '8px', fontSize: '12px', lineHeight: '[1.5]', color: 'text.muted', lineClamp: '3' })}>
           {body}
         </p>
       </div>
@@ -414,11 +414,11 @@
             borderColor: 'border.default',
             borderTopRightRadius: '4px',
             borderBottomRightRadius: '4px',
-            backgroundColor: 'surface.subtle',
+            backgroundColor: 'surface.canvas',
             fontFamily: 'prose',
             fontSize: '13px',
             lineHeight: '[1.7]',
-            color: 'text.subtle',
+            color: 'text.muted',
           })}
         >
           {quote}
@@ -434,7 +434,7 @@
             marginTop: '12px',
             fontSize: '13px',
             lineHeight: '[1.65]',
-            color: 'text.subtle',
+            color: 'text.muted',
           })}
         >
           {#each paragraphs as paragraph, index (index)}
@@ -458,7 +458,7 @@
       {/if}
 
       {#if talkShown}
-        <div class={css({ marginTop: '20px', paddingTop: '16px', borderTopWidth: '1px', borderColor: 'border.subtle' })}>
+        <div class={css({ marginTop: '20px', paddingTop: '16px', borderTopWidth: '1px', borderColor: 'border.hairline' })}>
           {#each shownComments as comment (comment.id)}
             <div class={flex({ gap: '8px', marginTop: '12px', _first: { marginTop: '0' } })}>
               {#if comment.author === 'AI'}
@@ -469,8 +469,8 @@
                     flex: 'none',
                     size: '22px',
                     borderRadius: 'full',
-                    backgroundColor: 'surface.muted',
-                    color: 'text.faint',
+                    backgroundColor: 'surface.inset',
+                    color: 'text.hint',
                   })}
                 >
                   <Icon icon={PrismIcon} size={12} />
@@ -484,8 +484,8 @@
                 />
               {/if}
               <div class={css({ flexGrow: '1', minWidth: '0' })}>
-                <div class={flex({ align: 'center', gap: '4px', fontSize: '11px', color: 'text.faint' })}>
-                  <span class={css({ minWidth: '0', fontWeight: 'semibold', color: 'text.subtle', truncate: true })}>
+                <div class={flex({ align: 'center', gap: '4px', fontSize: '11px', color: 'text.hint' })}>
+                  <span class={css({ minWidth: '0', fontWeight: 'semibold', color: 'text.muted', truncate: true })}>
                     {authorLabel(comment)}
                   </span>
                   <span>·</span>
@@ -499,9 +499,9 @@
                         marginLeft: 'auto',
                         size: '18px',
                         borderRadius: '4px',
-                        color: 'text.faint',
+                        color: 'text.muted',
                         cursor: 'pointer',
-                        _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+                        _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                       })}
                       placement="bottom-end"
                     >
@@ -568,9 +568,7 @@
                     </button>
                   </div>
                 {:else}
-                  <p
-                    class={css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.subtle', whiteSpace: 'pre-wrap' })}
-                  >
+                  <p class={css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.muted', whiteSpace: 'pre-wrap' })}>
                     {comment.body}
                   </p>
                 {/if}
@@ -580,7 +578,7 @@
 
           {#if !settled}
             {#if locked}
-              <p class={css({ marginTop: '12px', _first: { marginTop: '0' }, fontSize: '11px', color: 'text.faint' })}>
+              <p class={css({ marginTop: '12px', _first: { marginTop: '0' }, fontSize: '11px', color: 'text.hint' })}>
                 리뷰가 진행되는 동안에는 답글을 남길 수 없어요
               </p>
             {/if}
@@ -597,7 +595,7 @@
                 borderWidth: '1px',
                 borderColor: 'border.default',
                 borderRadius: '6px',
-                backgroundColor: 'surface.subtle',
+                backgroundColor: 'surface.canvas',
               })}
             >
               <textarea
@@ -610,8 +608,8 @@
                   lineHeight: '[1.5]',
                   backgroundColor: 'transparent',
                   resize: 'none',
-                  _placeholder: { color: 'text.faint' },
-                  _disabled: { color: 'text.disabled', cursor: 'not-allowed' },
+                  _placeholder: { color: 'text.hint' },
+                  _disabled: { opacity: '40', cursor: 'not-allowed' },
                 })}
                 disabled={sending || locked}
                 onkeydown={(event) => {
@@ -636,10 +634,10 @@
                   flex: 'none',
                   size: '24px',
                   borderRadius: 'full',
-                  backgroundColor: 'accent.brand.default',
-                  color: 'text.bright',
+                  backgroundColor: 'accent.default',
+                  color: 'surface.default',
                   cursor: 'pointer',
-                  _disabled: { backgroundColor: 'interactive.disabled', color: 'text.disabled', cursor: 'not-allowed' },
+                  _disabled: { opacity: '40', cursor: 'not-allowed' },
                 })}
                 aria-label="답글 남기기"
                 disabled={!canSubmit || locked}
@@ -660,10 +658,10 @@
             flex.raw({ align: 'center', gap: '6px' }),
             talkShown
               ? { marginTop: '16px' }
-              : { marginTop: '20px', paddingTop: '16px', borderTopWidth: '1px', borderColor: 'border.subtle' },
+              : { marginTop: '20px', paddingTop: '16px', borderTopWidth: '1px', borderColor: 'border.hairline' },
           )}
         >
-          <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.faint' })}>이 피드백 어땠나요?</span>
+          <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '11px', color: 'text.muted' })}>이 피드백 어땠나요?</span>
           <button
             class={css(reactionThumbRecipe.raw({ selected: reaction === 'UP' }))}
             aria-label="좋았어요"

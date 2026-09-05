@@ -130,8 +130,8 @@
     paddingY: '5px',
     borderRadius: '6px',
     transition: 'common',
-    _supportHover: { backgroundColor: 'surface.muted' },
-    '&[aria-current="page"]': { backgroundColor: 'surface.muted' },
+    _supportHover: { backgroundColor: 'surface.hover' },
+    '&[aria-current="page"]': { backgroundColor: 'surface.active' },
   });
   const primaryNavigationLabelClass = css({
     fontSize: '13px',
@@ -139,8 +139,8 @@
     color: 'text.muted',
     '[aria-current="page"] > &': { fontWeight: 'bold', color: 'text.default' },
   });
-  const primaryNavigationIconStyle = css.raw({ flexShrink: '0', color: 'text.faint' });
-  const primaryNavigationShortcutClass = flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' });
+  const primaryNavigationIconStyle = css.raw({ flexShrink: '0', color: 'text.muted' });
+  const primaryNavigationShortcutClass = flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.hint', fontSize: '11px' });
 
   const site = $derived(user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]);
 
@@ -564,14 +564,14 @@
       width: 'var(--width)',
       maxWidth: 'var(--max-width)',
       height: 'full',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
       borderTopWidth: app.preference.current.sidebarHidden ? '1px' : undefined,
       borderBottomWidth: app.preference.current.sidebarHidden ? '1px' : undefined,
       borderRightWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       borderTopRightRadius: app.preference.current.sidebarHidden ? '12px' : undefined,
       borderBottomRightRadius: app.preference.current.sidebarHidden ? '12px' : undefined,
-      boxShadow: 'card',
+      boxShadow: 'sm',
       transitionProperty: '[border, border-radius, box-shadow]',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
@@ -700,7 +700,7 @@
                     state={dailyGoal.achieved ? 'achieved' : 'under'}
                   />
                   {#if dailyGoal.streak > 0}
-                    <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>{dailyGoal.streak}일 연속</span>
+                    <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.hint' })}>{dailyGoal.streak}일 연속</span>
                   {/if}
                 </div>
               {/if}
@@ -717,7 +717,7 @@
               <Icon style={primaryNavigationIconStyle} icon={BarChart3Icon} size={16} />
               <span class={primaryNavigationLabelClass}>통계</span>
               {#if currentStreak > 0}
-                <span class={css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>
+                <span class={css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'medium', color: 'text.hint' })}>
                   {currentStreak}일 연속
                 </span>
               {/if}
@@ -743,7 +743,7 @@
           cursor: 'row-resize',
           touchAction: 'none',
           userSelect: 'none',
-          '&:hover > div': { height: '2px', backgroundColor: 'border.strong' },
+          '&:hover > div': { height: '2px', backgroundColor: 'border.emphasis' },
         })}
         use:pointerCapture={{
           start: startNavigationResizer,
@@ -760,7 +760,7 @@
             right: '8px',
             height: navigationClipPreview === null ? '1px' : '2px',
             borderRadius: 'full',
-            backgroundColor: navigationClipPreview === null ? 'border.default' : 'border.strong',
+            backgroundColor: navigationClipPreview === null ? 'border.default' : 'border.emphasis',
             pointerEvents: 'none',
             transform: 'translateY(-50%)',
             transition: '[background-color 150ms ease, height 150ms ease]',
@@ -780,7 +780,7 @@
             overflowX: 'hidden',
             scrollbar: 'hidden',
             borderBottomWidth: canScrollDown ? '1px' : '0',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             transition: '[border-width 150ms ease]',
           })}
           data-entity-row-drag-scroll-surface
@@ -802,10 +802,10 @@
                   class={center({
                     borderRadius: '4px',
                     size: '24px',
-                    color: 'text.faint',
+                    color: 'text.muted',
                     opacity: '50',
                     transition: 'common',
-                    _hover: { color: 'text.subtle', opacity: '100' },
+                    _hover: { color: 'text.default', opacity: '100' },
                     _focusVisible: { opacity: '100' },
                   })}
                   onclick={async () => {
@@ -839,10 +839,10 @@
                   class={center({
                     borderRadius: '4px',
                     size: '24px',
-                    color: 'text.faint',
+                    color: 'text.muted',
                     opacity: '50',
                     transition: 'common',
-                    _hover: { color: 'text.subtle', opacity: '100' },
+                    _hover: { color: 'text.default', opacity: '100' },
                     _focusVisible: { opacity: '100' },
                   })}
                   onclick={async () => {
@@ -916,7 +916,7 @@
         marginLeft: '4px',
         height: 'full',
         width: '2px',
-        backgroundColor: 'border.strong',
+        backgroundColor: 'border.emphasis',
         opacity: '50',
       },
     })}

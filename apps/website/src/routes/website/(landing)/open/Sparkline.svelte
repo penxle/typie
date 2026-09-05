@@ -40,7 +40,7 @@
         Plot.lineY(chartData, {
           x: 'date',
           y: 'value',
-          stroke: '#525252',
+          stroke: 'currentColor',
           strokeWidth,
         }),
       ],
@@ -59,6 +59,7 @@
   class={css({
     width: `[${width}px]`,
     height: `[${height}px]`,
+    color: 'accent.default',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

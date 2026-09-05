@@ -1,57 +1,28 @@
-import { defineTokens } from '@pandacss/dev';
+import { defineSemanticTokens } from '@pandacss/dev';
 
-export const shadows = defineTokens.shadows({
-  small: {
-    value: ['0 1px 2px {colors.shadow.default/3}', '0 2px 4px {colors.shadow.default/3}'],
+export const semanticShadows = defineSemanticTokens.shadows({
+  sm: {
+    value: {
+      base: ['0 0 2px {colors.shadow.default/4}', '0 1px 4px {colors.shadow.default/3}'],
+      _dark: ['0 0 2px {colors.shadow.default/6}', '0 1px 4px {colors.shadow.default/5}'],
+    },
   },
-  medium: {
-    value: ['0 1px 2px {colors.shadow.default/5}', '0 2px 4px {colors.shadow.default/5}', '0 4px 8px {colors.shadow.default/5}'],
+  md: {
+    value: {
+      base: ['0 0 3px {colors.shadow.default/4}', '0 2px 8px {colors.shadow.default/3}'],
+      _dark: ['0 0 3px {colors.shadow.default/6}', '0 2px 8px {colors.shadow.default/5}'],
+    },
   },
-  large: {
-    value: [
-      '0 1px 2px {colors.shadow.default/7}',
-      '0 2px 4px {colors.shadow.default/7}',
-      '0 4px 8px {colors.shadow.default/7}',
-      '0 8px 16px {colors.shadow.default/7}',
-    ],
+  lg: {
+    value: {
+      base: ['0 0 4px {colors.shadow.default/4}', '0 4px 16px {colors.shadow.default/3}'],
+      _dark: ['0 0 4px {colors.shadow.default/6}', '0 4px 16px {colors.shadow.default/5}'],
+    },
   },
-  card: {
-    value: ['0 3px 6px -2px {colors.shadow.default/3}', '0 1px 1px {colors.shadow.default/5}'],
-  },
-  modern: {
-    value: ['0 4px 6px -1px rgba(0, 0, 0, 0.1)', '0 2px 4px -2px rgba(0, 0, 0, 0.1)'],
-  },
-  modernLg: {
-    value: ['0 10px 15px -3px rgba(0, 0, 0, 0.1)', '0 4px 6px -4px rgba(0, 0, 0, 0.1)'],
-  },
-  modernXl: {
-    value: ['0 20px 25px -5px rgba(0, 0, 0, 0.1)', '0 8px 10px -6px rgba(0, 0, 0, 0.1)'],
-  },
-  brandGlow: {
-    value: '0 0 60px 20px rgba(209, 130, 57, 0.15)',
-  },
-  brandGlowLg: {
-    value: '0 0 80px 30px rgba(209, 130, 57, 0.2)',
-  },
-  cardGlow: {
-    value: '0 0 30px rgba(209, 130, 57, 0.2)',
-  },
-  cardGlowSubtle: {
-    value: '0 0 20px rgba(209, 130, 57, 0.1)',
-  },
-  menu: {
-    value: ['0 4px 16px {colors.shadow.default/8}', '0 2px 4px {colors.shadow.default/4}', '0 0 0 0.5px {colors.shadow.default/3}'],
-  },
-  modal: {
-    value: ['0 9px 48px {colors.shadow.default/8}', '0 6px 24px {colors.shadow.default/10}', '0 1px 1px {colors.shadow.default/4}'],
-  },
-  buttonDefault: {
-    value: ['0 1px 2px {colors.shadow.default/10}', 'inset 0 1px 0 rgba(255, 255, 255, 0.12)'],
-  },
-  buttonHover: {
-    value: ['0 2px 4px {colors.shadow.default/12}', 'inset 0 1px 0 rgba(255, 255, 255, 0.12)'],
-  },
-  buttonSubtle: {
-    value: '0 1px 2px {colors.shadow.default/5}',
+  xl: {
+    value: {
+      base: ['0 0 6px {colors.shadow.default/4}', '0 8px 32px {colors.shadow.default/3}'],
+      _dark: ['0 0 6px {colors.shadow.default/6}', '0 8px 32px {colors.shadow.default/5}'],
+    },
   },
 });

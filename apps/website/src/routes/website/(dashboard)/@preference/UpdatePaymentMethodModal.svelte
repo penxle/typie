@@ -225,12 +225,12 @@
         class={css({
           padding: '12px',
           borderRadius: '6px',
-          backgroundColor: 'accent.danger.subtle',
+          backgroundColor: 'danger.subtle',
           borderWidth: '1px',
-          borderColor: 'border.danger',
+          borderColor: 'danger.default',
         })}
       >
-        <div class={css({ fontSize: '13px', color: 'text.danger' })}>{submitError}</div>
+        <div class={css({ fontSize: '13px', color: 'text.on.danger.subtle' })}>{submitError}</div>
       </div>
     {/if}
 

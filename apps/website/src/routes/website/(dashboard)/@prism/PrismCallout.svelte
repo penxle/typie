@@ -30,14 +30,14 @@
     variants: {
       tone: {
         info: {
-          borderColor: 'accent.info.default/30',
-          color: 'accent.info.default',
-          backgroundColor: 'accent.info.subtle',
+          borderColor: 'accent.default/30',
+          color: 'text.default',
+          backgroundColor: 'accent.subtle',
         },
         warning: {
-          borderColor: 'accent.warning.default',
-          color: 'accent.warning.default',
-          backgroundColor: 'accent.warning.subtle',
+          borderColor: 'warning.default',
+          color: 'text.on.warning.subtle',
+          backgroundColor: 'warning.subtle',
         },
       },
     },
@@ -46,7 +46,7 @@
 
 <div class={css(rootStyle.raw({ tone }), style)}>
   <Icon style={css.raw({ flexShrink: '0' })} {icon} size={14} />
-  <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', color: 'text.subtle', wordBreak: 'keep-all' })}>
+  <span class={css({ flexGrow: '1', minWidth: '0', fontSize: '12px', lineHeight: '[1.5]', wordBreak: 'keep-all' })}>
     {message}
   </span>
   {#if action}

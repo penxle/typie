@@ -77,17 +77,17 @@
       gap: '16px',
       paddingX: { sm: '20px', lg: '24px' },
       paddingY: '18px',
-      color: 'dark.gray.100',
+      color: 'text.default',
       transition: '[background-color 0.2s ease-out]',
-      _hover: { backgroundColor: 'dark.gray.900' },
-      '& + &': { borderTopWidth: '1px', borderTopColor: 'dark.gray.800' },
+      _hover: { backgroundColor: 'surface.hover' },
+      '& + &': { borderTopWidth: '1px', borderTopColor: 'border.hairline' },
     }),
   );
 </script>
 
 <Helmet description="타이피 데스크톱 앱과 모바일 앱을 내려받으세요." title="다운로드" />
 
-<div class={css({ position: 'relative', minHeight: '[100vh]', backgroundColor: 'dark.gray.950' })}>
+<div class={css({ position: 'relative', minHeight: '[100vh]', backgroundColor: 'surface.canvas' })}>
   <div
     class={css({
       position: 'absolute',
@@ -95,7 +95,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -118,7 +118,7 @@
           display: 'block',
           fontSize: '[11px]',
           fontFamily: 'mono',
-          color: 'dark.gray.500',
+          color: 'text.muted',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           marginBottom: '24px',
@@ -131,7 +131,7 @@
         class={css({
           fontSize: { sm: '[36px]', lg: '[56px]' },
           fontWeight: 'medium',
-          color: 'dark.gray.100',
+          color: 'text.default',
           lineHeight: '[1.2]',
           letterSpacing: '[-0.02em]',
           fontFamily: 'Paperlogy',
@@ -141,7 +141,7 @@
         타이피 다운로드
       </h1>
 
-      <p class={css({ fontSize: { sm: '16px', lg: '18px' }, color: 'dark.gray.400', lineHeight: '[1.65]', maxWidth: '[480px]' })}>
+      <p class={css({ fontSize: { sm: '16px', lg: '18px' }, color: 'text.muted', lineHeight: '[1.65]', maxWidth: '[480px]' })}>
         데스크톱과 모바일, 어디서든 이어 쓰세요.
       </p>
 
@@ -166,10 +166,10 @@
                 paddingY: '16px',
                 fontSize: '15px',
                 fontWeight: 'semibold',
-                color: 'dark.gray.950',
-                backgroundColor: 'dark.brand.300',
+                color: 'surface.default',
+                backgroundColor: 'accent.default',
                 transition: '[background-color 0.2s ease-out]',
-                _hover: { backgroundColor: 'dark.brand.200' },
+                _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
               }),
             )}
             href={primary.item.url}
@@ -179,7 +179,7 @@
             <Icon icon={primary.item.external ? ArrowUpRightIcon : DownloadIcon} size={18} />
             {primary.label}
           </a>
-          <span class={css({ fontSize: '13px', color: 'dark.gray.500' })}>{primary.note}</span>
+          <span class={css({ fontSize: '13px', color: 'text.hint' })}>{primary.note}</span>
         </div>
       {/if}
     </div>
@@ -198,10 +198,10 @@
       {#each [{ title: '데스크톱', note: 'macOS 11 이상 · Windows 10 이상', items: desktop }, { title: '모바일', note: 'iOS · Android', items: mobile }] as group (group.title)}
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
           <div class={flex({ alignItems: 'baseline', justifyContent: 'space-between', paddingX: '4px' })}>
-            <h2 class={css({ fontSize: '15px', fontWeight: 'medium', color: 'dark.gray.100' })}>{group.title}</h2>
-            <span class={css({ fontSize: '12px', color: 'dark.gray.500' })}>{group.note}</span>
+            <h2 class={css({ fontSize: '15px', fontWeight: 'medium', color: 'text.default' })}>{group.title}</h2>
+            <span class={css({ fontSize: '12px', color: 'text.hint' })}>{group.note}</span>
           </div>
-          <div class={css({ borderWidth: '1px', borderColor: 'dark.gray.800', backgroundColor: 'dark.gray.950' })}>
+          <div class={css({ borderWidth: '1px', borderColor: 'border.hairline', backgroundColor: 'surface.canvas' })}>
             {#each group.items as item (item.id)}
               <a
                 class={rowClass}
@@ -209,12 +209,12 @@
                 rel={item.external ? 'noopener noreferrer' : 'noopener'}
                 target={item.external ? '_blank' : undefined}
               >
-                <Icon style={css.raw({ color: 'dark.gray.400', flexShrink: '0' })} icon={item.icon} size={20} />
+                <Icon style={css.raw({ color: 'text.default', flexShrink: '0' })} icon={item.icon} size={20} />
                 <span class={css({ fontSize: '15px', fontWeight: 'medium' })}>{item.platform}</span>
-                <span class={css({ fontSize: '13px', fontFamily: 'mono', color: 'dark.gray.500' })}>{item.detail}</span>
+                <span class={css({ fontSize: '13px', fontFamily: 'mono', color: 'text.hint' })}>{item.detail}</span>
                 <span class={css({ flex: '1' })}></span>
                 <Icon
-                  style={css.raw({ color: 'dark.gray.500', transition: '[color 0.2s ease-out]', _groupHover: { color: 'dark.brand.300' } })}
+                  style={css.raw({ color: 'text.muted', transition: '[color 0.2s ease-out]', _groupHover: { color: 'text.default' } })}
                   icon={item.external ? ArrowUpRightIcon : DownloadIcon}
                   size={18}
                 />

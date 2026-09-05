@@ -20,7 +20,7 @@
   let { characterCount, createdAt, documentCount, folderCount, loading, visibility }: Props = $props();
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '120px', opacity: '70' })}>
+<div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '120px' })}>
   <div class={css({ fontWeight: 'semibold' })}>
     {#if visibility === EntityVisibility.PUBLIC}
       <span>공개 폴더</span>
@@ -55,5 +55,5 @@
     <div>총 {comma(characterCount)}자</div>
   {/if}
 
-  <div>생성: {dayjs(createdAt).formatAsDateTime()}</div>
+  <div class={css({ opacity: '50' })}>생성: {dayjs(createdAt).formatAsDateTime()}</div>
 </div>

@@ -25,7 +25,7 @@
   };
 
   const CONTINUOUS_SURFACE = token('colors.surface.default');
-  const PAGINATED_SURFACE = token('colors.surface.subtle');
+  const PAGINATED_SURFACE = token('colors.surface.canvas');
   const TRANSIENT_BASE = `color-mix(in srgb, ${CONTINUOUS_SURFACE} 50%, ${PAGINATED_SURFACE} 50%)`;
   const TRANSIENT_SURFACE = `color-mix(in srgb, ${TRANSIENT_BASE} 75%, transparent)`;
   const TRANSIENT_VISIBLE_MS = 1500;
@@ -181,7 +181,7 @@
 >
   <div
     bind:this={controlsElement}
-    style:color={token(engaged ? 'colors.text.default' : 'colors.text.subtle')}
+    style:color={token(engaged ? 'colors.text.default' : 'colors.text.muted')}
     style:opacity={presented ? '1' : '0'}
     style:pointer-events={interactive ? 'auto' : 'none'}
     style:border-radius={borderRadius}

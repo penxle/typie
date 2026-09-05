@@ -40,7 +40,7 @@
     paddingX: '4px',
     paddingY: '1px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.inset',
     fontFamily: 'mono',
     fontSize: '[0.9em]',
   });
@@ -68,20 +68,20 @@
   const numberMarkers = [css({ listStyleType: 'decimal' }), css({ listStyleType: 'lower-alpha' }), css({ listStyleType: 'lower-roman' })];
 
   const taskItem = css({ display: 'flex', gap: '6px', listStyleType: 'none' });
-  const taskBox = css({ flexShrink: '0', marginTop: '5px', color: 'text.faint' });
-  const taskBoxChecked = css({ flexShrink: '0', marginTop: '5px', color: 'text.subtle' });
+  const taskBox = css({ flexShrink: '0', marginTop: '5px', color: 'text.default' });
+  const taskBoxChecked = css({ flexShrink: '0', marginTop: '5px', color: 'accent.default' });
 
   const tableScroll = css({
     overflowX: 'auto',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '6px',
   });
 
   const table = css({ borderCollapse: 'collapse', width: 'full', fontSize: '13px', lineHeight: '[1.5]' });
-  const headCell = css({ paddingX: '10px', paddingY: '6px', fontWeight: 'semibold', backgroundColor: 'surface.subtle' });
-  const bodyCell = css({ paddingX: '10px', paddingY: '6px', borderTopWidth: '1px', borderColor: 'border.subtle' });
-  const cellDivider = css({ borderLeftWidth: '1px', borderColor: 'border.subtle', _first: { borderLeftWidth: '0' } });
+  const headCell = css({ paddingX: '10px', paddingY: '6px', fontWeight: 'semibold', backgroundColor: 'surface.canvas' });
+  const bodyCell = css({ paddingX: '10px', paddingY: '6px', borderTopWidth: '1px', borderColor: 'border.hairline' });
+  const cellDivider = css({ borderLeftWidth: '1px', borderColor: 'border.hairline', _first: { borderLeftWidth: '0' } });
 
   const alignments = {
     left: css({ textAlign: 'left' }),
@@ -180,7 +180,7 @@
           paddingY: '10px',
           paddingLeft: '10px',
           borderRadius: '6px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           fontFamily: 'mono',
           fontSize: '13px',
           lineHeight: '[1.6]',
@@ -188,7 +188,7 @@
           whiteSpace: 'pre',
         })}><code class={css({ display: 'inline-block', paddingRight: '10px' })}>{block.text}</code></pre>
     {:else if block.kind === 'blockquote'}
-      <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.strong', paddingLeft: '10px', color: 'text.subtle' })}>
+      <blockquote class={css({ borderLeftWidth: '2px', borderColor: 'border.emphasis', paddingLeft: '10px', color: 'text.muted' })}>
         <PrismMarkdown blocks={block.children} {dense} {depth} {plain} {settled} />
       </blockquote>
     {:else if block.kind === 'card'}

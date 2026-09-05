@@ -54,7 +54,7 @@
     bind:value={fields.cardNumber}
   />
   {#if errors.cardNumber}
-    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{errors.cardNumber}</div>
+    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{errors.cardNumber}</div>
   {/if}
 </div>
 
@@ -70,7 +70,7 @@
       bind:value={fields.expiryDate}
     />
     {#if errors.expiryDate}
-      <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{errors.expiryDate}</div>
+      <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{errors.expiryDate}</div>
     {/if}
   </div>
 
@@ -86,7 +86,7 @@
       bind:value={fields.passwordTwoDigits}
     />
     {#if errors.passwordTwoDigits}
-      <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{errors.passwordTwoDigits}</div>
+      <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{errors.passwordTwoDigits}</div>
     {/if}
   </div>
 </div>
@@ -102,7 +102,7 @@
     bind:value={fields.birthOrBusinessRegistrationNumber}
   />
   {#if errors.birthOrBusinessRegistrationNumber}
-    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>
+    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>
       {errors.birthOrBusinessRegistrationNumber}
     </div>
   {/if}

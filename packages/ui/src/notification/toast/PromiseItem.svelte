@@ -23,7 +23,7 @@
       })}
     >
       <div class={css({ overflow: 'hidden' })}>
-        <RingSpinner style={css.raw({ height: '[1lh]', color: 'text.faint' })} />
+        <RingSpinner style={css.raw({ height: '[1lh]', color: 'text.muted' })} />
       </div>
     </div>
     <div class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>

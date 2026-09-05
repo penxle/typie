@@ -58,8 +58,8 @@
         borderRadius: 'full',
         marginRight: '-8px',
         size: '32px',
-        color: 'text.bright',
-        backgroundColor: 'surface.dark',
+        color: 'text.on.inverse',
+        backgroundColor: 'surface.inverse',
       },
     })}
   >
@@ -98,5 +98,5 @@
     안 받을게요
   </Button>
 
-  <div class={css({ marginTop: '16px', fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>나중에 설정에서 변경할 수 있어요</div>
+  <div class={css({ marginTop: '16px', fontSize: '12px', color: 'text.hint', textAlign: 'center' })}>나중에 설정에서 변경할 수 있어요</div>
 </Modal>

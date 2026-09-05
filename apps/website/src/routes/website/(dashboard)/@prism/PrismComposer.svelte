@@ -50,9 +50,9 @@
     borderRadius: '8px',
     fontSize: '12px',
     fontWeight: 'semibold',
-    color: 'text.subtle',
-    _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
-    _disabled: { color: 'text.disabled!', backgroundColor: 'transparent!' },
+    color: 'text.muted',
+    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+    _disabled: { opacity: '40', backgroundColor: 'transparent!' },
   });
 
   const popoverStyle = css.raw({
@@ -66,14 +66,14 @@
     borderColor: 'border.default',
     borderRadius: '8px',
     backgroundColor: 'surface.default',
-    boxShadow: 'menu',
+    boxShadow: 'lg',
   });
 
   const stopButtonStyle = css.raw({
     size: '28px',
     borderRadius: 'full',
-    backgroundColor: 'surface.dark',
-    color: 'text.bright',
+    backgroundColor: 'surface.inverse',
+    color: 'text.on.inverse',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -217,7 +217,7 @@
             paddingY: '6px',
             borderRadius: '6px',
             fontSize: '12px',
-            '&[data-highlighted="true"]': { backgroundColor: 'surface.muted' },
+            '&[data-highlighted="true"]': { backgroundColor: 'surface.hover' },
           })}
           aria-selected={index === slashIndex}
           data-highlighted={index === slashIndex}
@@ -228,9 +228,9 @@
           type="button"
         >
           <span class={css({ fontWeight: 'semibold' })}>/{command.name}</span>
-          <span class={css({ color: 'text.faint' })}>{command.description}</span>
+          <span class={css({ color: 'text.muted' })}>{command.description}</span>
           {#if command.argumentHint !== null}
-            <span class={css({ marginLeft: 'auto', color: 'text.disabled' })}>{command.argumentHint}</span>
+            <span class={css({ marginLeft: 'auto', color: 'text.hint' })}>{command.argumentHint}</span>
           {/if}
         </button>
       {/each}
@@ -247,10 +247,9 @@
         borderColor: 'border.default',
         borderRadius: '10px',
         backgroundColor: 'surface.default',
-        _dark: { backgroundColor: 'surface.subtle' },
-        boxShadow: 'small',
+        boxShadow: 'sm',
         transition: '[border-color 150ms ease]',
-        _focusWithin: { borderColor: 'border.strong' },
+        _focusWithin: { borderColor: 'accent.default' },
         paddingX: '14px',
         paddingTop: '12px',
         paddingBottom: '10px',
@@ -259,7 +258,7 @@
   >
     {#if status !== null}
       <div class={flex({ alignItems: 'center', gap: '8px', minHeight: '44px' })} in:swap={{ box: boxEl, from: heightFrom }}>
-        <p class={css({ flexGrow: '1', fontSize: '13px', color: 'text.subtle' })} role="status">{status.text}</p>
+        <p class={css({ flexGrow: '1', fontSize: '13px', color: 'text.muted' })} role="status">{status.text}</p>
         {#if status.stop === null}
           <button class={css(stopButtonStyle)} aria-label="중단" onclick={() => onStop()} type="button">
             <Icon icon={StopIcon} size={12} />
@@ -275,8 +274,8 @@
               borderRadius: '8px',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'text.subtle',
-              _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+              color: 'text.muted',
+              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
             })}
             onclick={() => onStop()}
             type="button"
@@ -298,7 +297,7 @@
             resize: 'none',
             backgroundColor: 'transparent',
             outline: 'none',
-            _disabled: { opacity: '50' },
+            _disabled: { opacity: '40' },
           })}
           disabled={blocked}
           oninput={() => (slashDismissed = false)}
@@ -311,7 +310,7 @@
         <div class={flex({ alignItems: 'center', gap: '8px', minHeight: '28px' })}>
           <Menu style={policyAnchorStyle} offset={8} placement="top-start">
             {#snippet button()}
-              <Icon style={css.raw({ color: 'text.subtle' })} icon={currentPolicy.icon} size={14} />
+              <Icon style={css.raw({ color: 'text.muted' })} icon={currentPolicy.icon} size={14} />
               <span>{currentPolicy.label}</span>
               <Icon icon={ChevronDownIcon} size={12} />
             {/snippet}
@@ -320,11 +319,11 @@
               <MenuItem icon={option.icon} onclick={() => policy.onChange(option.value)}>
                 <div class={flex({ flexDirection: 'column', gap: '2px' })}>
                   <span>{option.label}</span>
-                  <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>{option.description}</span>
+                  <span class={css({ fontSize: '11px', fontWeight: 'medium', color: 'text.muted' })}>{option.description}</span>
                 </div>
 
                 {#if option.value === policy.current}
-                  <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+                  <Icon style={css.raw({ marginLeft: 'auto', color: 'accent.default' })} icon={CheckIcon} size={14} />
                 {/if}
               </MenuItem>
             {/each}
@@ -335,7 +334,7 @@
               class={css({
                 minWidth: '0',
                 fontSize: '12px',
-                color: 'text.faint',
+                color: 'danger.default',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -356,15 +355,15 @@
                 marginLeft: 'auto',
                 size: '28px',
                 borderRadius: 'full',
-                backgroundColor: empty ? 'surface.muted' : 'accent.brand.default',
-                color: empty ? 'text.faint' : 'text.bright',
+                backgroundColor: 'accent.default',
+                color: 'surface.default',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: '0',
                 transition: '[transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms ease, color 150ms ease]',
                 _active: { transform: 'scale(0.97)' },
-                _disabled: { backgroundColor: 'surface.muted', color: 'text.faint' },
+                _disabled: { opacity: '40' },
               })}
               aria-label="보내기"
               disabled={sendDisabled || busy || empty}

@@ -227,41 +227,40 @@
   const invoiceStateColor = (state: string) => {
     switch (state) {
       case 'PAID': {
-        return 'green.400';
+        return 'success.default';
       }
       case 'CANCELED': {
-        return 'gray.400';
+        return 'text.hint';
       }
       case 'OVERDUE': {
-        return 'red.400';
+        return 'danger.default';
       }
       case 'UPCOMING': {
-        return 'amber.400';
+        return 'warning.default';
       }
       default: {
-        return 'gray.400';
+        return 'text.hint';
       }
     }
   };
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+<div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
   <div class={flex({ alignItems: 'center', gap: '12px' })}>
     <button
       class={css({
         borderWidth: '2px',
-        borderColor: 'amber.500',
+        borderColor: 'border.default',
         paddingX: '12px',
         paddingY: '6px',
         fontSize: '12px',
-        color: 'amber.500',
+        color: 'text.default',
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
         backgroundColor: 'transparent',
         _hover: {
-          backgroundColor: 'amber.500',
-          color: 'gray.900',
+          backgroundColor: 'surface.hover',
         },
       })}
       onclick={() => history.back()}
@@ -270,7 +269,7 @@
       <AdminIcon icon={ArrowLeftIcon} size={16} />
       BACK TO LIST
     </button>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER DETAILS</h2>
+    <h2 class={css({ fontSize: '18px', color: 'text.default' })}>USER DETAILS</h2>
   </div>
 
   {#if query.data.adminUser}
@@ -287,18 +286,18 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PROFILE</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>PROFILE</h3>
 
           <div class={flex({ gap: '20px', marginBottom: '24px' })}>
             <div
               class={css({
                 size: '80px',
-                backgroundColor: 'amber.500',
+                backgroundColor: 'accent.subtle',
                 overflow: 'hidden',
                 flexShrink: '0',
               })}
@@ -309,10 +308,10 @@
             </div>
 
             <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-              <h4 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'amber.500' })}>
+              <h4 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.default' })}>
                 {query.data.adminUser.name}
               </h4>
-              <div class={css({ fontSize: '12px', color: 'amber.400' })}>
+              <div class={css({ fontSize: '12px', color: 'text.muted' })}>
                 {query.data.adminUser.email}
               </div>
             </div>
@@ -323,26 +322,26 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ACTIVITY</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>ACTIVITY</h3>
 
           <div class={grid({ gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '32px' })}>
             <div>
-              <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
+              <div class={css({ fontSize: '24px', color: 'text.default', marginBottom: '4px' })}>
                 {query.data.adminUser.documentCount}
               </div>
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>DOCUMENTS</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>DOCUMENTS</div>
             </div>
 
             <div>
-              <div class={css({ fontSize: '24px', color: 'amber.500', marginBottom: '4px' })}>
+              <div class={css({ fontSize: '24px', color: 'text.default', marginBottom: '4px' })}>
                 {comma(query.data.adminUser.usage.totalCharacterCount)}
               </div>
-              <div class={css({ fontSize: '11px', color: 'amber.400' })}>CHARACTERS</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted' })}>CHARACTERS</div>
             </div>
           </div>
         </div>
@@ -351,12 +350,12 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>
             PAYMENT HISTORY ({query.data.adminUser.paymentInvoices.length})
           </h3>
 
@@ -367,30 +366,30 @@
                 <div
                   class={css({
                     borderWidth: '1px',
-                    borderColor: 'amber.500',
+                    borderColor: 'border.default',
                     padding: '16px',
                   })}
                 >
                   <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' })}>
                     <div class={flex({ alignItems: 'center', gap: '8px' })}>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                      <span class={css({ fontSize: '12px', color: 'text.default' })}>
                         {dayjs(invoice.dueAt).format('YYYY-MM-DD')}
                       </span>
                       <span class={css({ fontSize: '12px', color: invoiceStateColor(invoice.state) })}>
                         [{invoice.state}]
                       </span>
                     </div>
-                    <span class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>
+                    <span class={css({ fontSize: '14px', fontWeight: 'bold', color: 'text.default' })}>
                       ₩{comma(invoice.amount)}
                     </span>
                   </div>
 
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>
                     {invoice.subscription.plan.name}
                   </div>
 
                   {#if successRecord}
-                    <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+                    <div class={css({ fontSize: '11px', color: 'text.muted' })}>
                       BILLING: ₩{comma(successRecord.billingAmount)} / CREDIT: ₩{comma(successRecord.creditAmount)}
                     </div>
                   {/if}
@@ -400,16 +399,16 @@
                       class={css({
                         marginTop: '8px',
                         borderWidth: '1px',
-                        borderColor: 'red.500',
+                        borderColor: 'danger.default',
                         paddingX: '10px',
                         paddingY: '4px',
                         fontSize: '11px',
-                        color: 'red.500',
+                        color: 'danger.default',
                         backgroundColor: 'transparent',
                         cursor: 'pointer',
                         _hover: {
-                          backgroundColor: 'red.500',
-                          color: 'gray.900',
+                          backgroundColor: 'danger.default',
+                          color: 'text.on.danger',
                         },
                       })}
                       onclick={() => {
@@ -426,7 +425,7 @@
               {/each}
             </div>
           {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO PAYMENT HISTORY</div>
+            <div class={css({ fontSize: '12px', color: 'text.hint' })}>NO PAYMENT HISTORY</div>
           {/if}
         </div>
 
@@ -434,12 +433,12 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>
             SITES ({query.data.adminUser.sites.length})
           </h3>
 
@@ -449,7 +448,7 @@
                 <div
                   class={css({
                     borderWidth: '1px',
-                    borderColor: 'amber.500',
+                    borderColor: 'border.default',
                     padding: '16px',
                   })}
                 >
@@ -457,7 +456,7 @@
                     class={css({
                       fontSize: '14px',
                       fontWeight: 'bold',
-                      color: 'amber.500',
+                      color: 'text.default',
                       _hover: { textDecoration: 'underline' },
                       display: 'block',
                       marginBottom: '4px',
@@ -468,14 +467,14 @@
                   >
                     {site.name}
                   </a>
-                  <div class={css({ fontSize: '12px', color: 'amber.400' })}>
+                  <div class={css({ fontSize: '12px', color: 'text.muted' })}>
                     {site.url}
                   </div>
                 </div>
               {/each}
             </div>
           {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>NO SITES OWNED</div>
+            <div class={css({ fontSize: '12px', color: 'text.hint' })}>NO SITES OWNED</div>
           {/if}
         </div>
       </div>
@@ -486,34 +485,34 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>METADATA</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>METADATA</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>USER ID</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>USER ID</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {query.data.adminUser.id}
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>ROLE</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminUser.role === 'ADMIN' ? 'amber.500' : 'gray.400' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>ROLE</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminUser.role === 'ADMIN' ? 'text.default' : 'text.hint' })}>
                 [{query.data.adminUser.role}]
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATE</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>STATE</span>
               <span
                 class={css({
                   fontSize: '12px',
-                  color: query.data.adminUser.state === 'ACTIVE' ? 'green.400' : 'red.400',
+                  color: query.data.adminUser.state === 'ACTIVE' ? 'success.default' : 'danger.default',
                 })}
               >
                 [{query.data.adminUser.state}]
@@ -521,8 +520,8 @@
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>JOINED</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>JOINED</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {dayjs(query.data.adminUser.createdAt).formatAsDateTime()}
               </span>
             </div>
@@ -533,26 +532,26 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>AUTHENTICATION</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>AUTHENTICATION</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div>
-              <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '8px' })}>LOGIN METHODS</div>
+              <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '8px' })}>LOGIN METHODS</div>
               {#if query.data.adminUser.singleSignOns.length > 0}
                 <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                   {#each query.data.adminUser.singleSignOns as sso (sso.id)}
-                    <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+                    <div class={css({ fontSize: '12px', color: 'text.default' })}>
                       [{sso.provider}] {sso.email}
                     </div>
                   {/each}
                 </div>
               {:else}
-                <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+                <div class={css({ fontSize: '12px', color: 'text.default' })}>
                   [EMAIL] {query.data.adminUser.email}
                 </div>
               {/if}
@@ -564,32 +563,32 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>IDENTITY</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>IDENTITY</h3>
 
           {#if query.data.adminUser.personalIdentity}
             <div class={flex({ flexDirection: 'column', gap: '16px' })}>
               <div>
-                <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>NAME</div>
-                <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
+                <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>NAME</div>
+                <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'bold' })}>
                   {query.data.adminUser.personalIdentity.name}
                 </div>
               </div>
 
               <div class={grid({ gridTemplateColumns: '1fr 1fr', gap: '16px' })}>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>BIRTH DATE</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>BIRTH DATE</div>
+                  <div class={css({ fontSize: '12px', color: 'text.default' })}>
                     {dayjs(query.data.adminUser.personalIdentity.birthDate).format('YYYY-MM-DD')}
                   </div>
                 </div>
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>GENDER</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>GENDER</div>
+                  <div class={css({ fontSize: '12px', color: 'text.default' })}>
                     [{query.data.adminUser.personalIdentity.gender}]
                   </div>
                 </div>
@@ -597,15 +596,15 @@
 
               {#if query.data.adminUser.personalIdentity.phoneNumber}
                 <div>
-                  <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PHONE NUMBER</div>
-                  <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+                  <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>PHONE NUMBER</div>
+                  <div class={css({ fontSize: '12px', color: 'text.default' })}>
                     {query.data.adminUser.personalIdentity.phoneNumber}
                   </div>
                 </div>
               {/if}
             </div>
           {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '24px' })}>NO IDENTITY VERIFICATION</div>
+            <div class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center', paddingY: '24px' })}>NO IDENTITY VERIFICATION</div>
           {/if}
         </div>
 
@@ -613,35 +612,35 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>SUBSCRIPTION</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>SUBSCRIPTION</h3>
 
           {#if query.data.adminUser.subscription}
             <div class={flex({ flexDirection: 'column', gap: '16px' })}>
               <div>
-                <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
-                <div class={css({ fontSize: '14px', color: 'amber.500', fontWeight: 'bold' })}>
+                <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>PLAN</div>
+                <div class={css({ fontSize: '14px', color: 'text.default', fontWeight: 'bold' })}>
                   {query.data.adminUser.subscription.plan.name}
                 </div>
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>STATUS</span>
+                <span class={css({ fontSize: '11px', color: 'text.muted' })}>STATUS</span>
                 <span
                   class={css({
                     fontSize: '12px',
                     color:
                       query.data.adminUser.subscription.state === 'ACTIVE'
-                        ? 'green.400'
+                        ? 'success.default'
                         : query.data.adminUser.subscription.state === 'WILL_EXPIRE'
-                          ? 'amber.400'
+                          ? 'warning.default'
                           : query.data.adminUser.subscription.state === 'IN_GRACE_PERIOD'
-                            ? 'red.400'
-                            : 'gray.400',
+                            ? 'danger.default'
+                            : 'text.hint',
                   })}
                 >
                   [{query.data.adminUser.subscription.state}]
@@ -649,15 +648,15 @@
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>STARTED</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                <span class={css({ fontSize: '11px', color: 'text.muted' })}>STARTED</span>
+                <span class={css({ fontSize: '12px', color: 'text.default' })}>
                   {dayjs(query.data.adminUser.subscription.startsAt).formatAsDateTime()}
                 </span>
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>PERIOD ENDS</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                <span class={css({ fontSize: '11px', color: 'text.muted' })}>PERIOD ENDS</span>
+                <span class={css({ fontSize: '12px', color: 'text.default' })}>
                   {isIndefinitePeriod(query.data.adminUser.subscription.currentPeriodEndsAt)
                     ? 'INDEFINITE'
                     : dayjs(query.data.adminUser.subscription.currentPeriodEndsAt).formatAsDateTime()}
@@ -665,14 +664,14 @@
               </div>
 
               <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                <span class={css({ fontSize: '11px', color: 'amber.400' })}>PAYMENT METHOD</span>
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                <span class={css({ fontSize: '11px', color: 'text.muted' })}>PAYMENT METHOD</span>
+                <span class={css({ fontSize: '12px', color: 'text.default' })}>
                   [{query.data.adminUser.subscription.plan.availability}]
                 </span>
               </div>
             </div>
           {:else}
-            <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '24px' })}>NO ACTIVE SUBSCRIPTION</div>
+            <div class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center', paddingY: '24px' })}>NO ACTIVE SUBSCRIPTION</div>
           {/if}
         </div>
 
@@ -680,28 +679,28 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PAYMENT</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>PAYMENT</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>BILLING KEY</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>BILLING KEY</span>
               {#if query.data.adminUser.billingKey}
-                <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                <span class={css({ fontSize: '12px', color: 'text.default' })}>
                   {query.data.adminUser.billingKey.name}
                 </span>
               {:else}
-                <span class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</span>
+                <span class={css({ fontSize: '12px', color: 'text.hint' })}>NONE</span>
               {/if}
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>CREDIT BALANCE</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminUser.credit === 0 ? 'gray.400' : 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>CREDIT BALANCE</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminUser.credit === 0 ? 'text.hint' : 'text.default' })}>
                 ₩{comma(query.data.adminUser.credit)}
               </span>
             </div>
@@ -712,24 +711,24 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PRISM CREDIT</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>PRISM CREDIT</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>BALANCE</span>
-              <span class={css({ fontSize: '12px', color: query.data.adminPrismCredit.display === 0 ? 'gray.400' : 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>BALANCE</span>
+              <span class={css({ fontSize: '12px', color: query.data.adminPrismCredit.display === 0 ? 'text.hint' : 'text.default' })}>
                 {comma(query.data.adminPrismCredit.display)} ({query.data.adminPrismCredit.total}m)
               </span>
             </div>
 
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>PAID / FREE</span>
-              <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>PAID / FREE</span>
+              <span class={css({ fontSize: '12px', color: 'text.default' })}>
                 {query.data.adminPrismCredit.paid}m / {query.data.adminPrismCredit.free}m
               </span>
             </div>
@@ -737,11 +736,11 @@
             <button
               class={css({
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 paddingX: '12px',
                 paddingY: '8px',
                 fontSize: '12px',
-                color: 'amber.500',
+                color: 'text.default',
                 width: 'full',
               })}
               onclick={() => openPrismRefund('REMAINDER', null)}
@@ -753,17 +752,17 @@
             {#if query.data.adminPrismCreditEntries.length > 0}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each query.data.adminPrismCreditEntries as entry (entry.id)}
-                  <div class={css({ borderWidth: '1px', borderColor: 'amber.500', padding: '8px' })}>
+                  <div class={css({ borderWidth: '1px', borderColor: 'border.default', padding: '8px' })}>
                     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                      <span class={css({ fontSize: '11px', color: 'text.muted' })}>
                         {dayjs(entry.createdAt).formatAsDateTime()} [{entry.kind}]
                       </span>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                      <span class={css({ fontSize: '12px', color: 'text.default' })}>
                         {entry.paidDelta}m / {entry.freeDelta}m
                       </span>
                     </div>
                     {#if entry.key || entry.note || entry.actor || entry.expiresAt}
-                      <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>
+                      <div class={css({ fontSize: '11px', color: 'text.muted', marginTop: '4px' })}>
                         {#if entry.key}KEY: {entry.key}{/if}
                         {#if entry.actor}
                           BY: {entry.actor.name}{/if}
@@ -777,17 +776,17 @@
                 {/each}
               </div>
             {:else}
-              <div class={css({ fontSize: '12px', color: 'gray.400', textAlign: 'center', paddingY: '8px' })}>NO ENTRIES</div>
+              <div class={css({ fontSize: '12px', color: 'text.hint', textAlign: 'center', paddingY: '8px' })}>NO ENTRIES</div>
             {/if}
 
             <button
               class={css({
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 paddingX: '12px',
                 paddingY: '8px',
                 fontSize: '12px',
-                color: 'amber.500',
+                color: 'text.default',
                 backgroundColor: 'transparent',
                 width: 'full',
                 display: 'flex',
@@ -795,8 +794,7 @@
                 justifyContent: 'center',
                 gap: '8px',
                 _hover: {
-                  backgroundColor: 'amber.500',
-                  color: 'gray.900',
+                  backgroundColor: 'surface.hover',
                 },
               })}
               onclick={handleGrantPrismCredit}
@@ -808,11 +806,11 @@
             <button
               class={css({
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 paddingX: '12px',
                 paddingY: '8px',
                 fontSize: '12px',
-                color: 'amber.500',
+                color: 'text.default',
                 backgroundColor: 'transparent',
                 width: 'full',
                 display: 'flex',
@@ -820,8 +818,7 @@
                 justifyContent: 'center',
                 gap: '8px',
                 _hover: {
-                  backgroundColor: 'amber.500',
-                  color: 'gray.900',
+                  backgroundColor: 'surface.hover',
                 },
               })}
               onclick={handleAdjustPrismCredit}
@@ -830,24 +827,24 @@
               ADJUST PRISM CREDIT
             </button>
 
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '8px' })}>PURCHASES</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginTop: '8px' })}>PURCHASES</div>
             {#if query.data.adminPrismCreditPurchases.length === 0}
-              <div class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</div>
+              <div class={css({ fontSize: '12px', color: 'text.hint' })}>NONE</div>
             {:else}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each query.data.adminPrismCreditPurchases as purchase (purchase.id)}
-                  <div class={css({ borderWidth: '1px', borderColor: 'amber.500', padding: '8px' })}>
+                  <div class={css({ borderWidth: '1px', borderColor: 'border.default', padding: '8px' })}>
                     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                      <span class={css({ fontSize: '11px', color: 'text.muted' })}>
                         {dayjs(purchase.paidAt ?? purchase.createdAt).formatAsDateTime()} [{purchase.state}] {purchase.pack}
                       </span>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>
+                      <span class={css({ fontSize: '12px', color: 'text.default' })}>
                         {comma(purchase.price)}원 · {purchase.credits}+{purchase.bonusCredits} · REFUNDED {comma(purchase.refundedAmount)}원
                       </span>
                     </div>
-                    <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>KEY: {purchase.paymentKey}</div>
+                    <div class={css({ fontSize: '11px', color: 'text.muted', marginTop: '4px' })}>KEY: {purchase.paymentKey}</div>
                     {#if purchase.state === 'FAILED' && purchase.data?.failure}
-                      <div class={css({ fontSize: '11px', color: 'red.500', marginTop: '4px' })}>
+                      <div class={css({ fontSize: '11px', color: 'danger.default', marginTop: '4px' })}>
                         FAIL: {purchase.data.failure.code}{purchase.data.failure.message ? ` ${purchase.data.failure.message}` : ''}
                       </div>
                     {/if}
@@ -856,11 +853,11 @@
                         class={css({
                           marginTop: '6px',
                           borderWidth: '1px',
-                          borderColor: 'amber.500',
+                          borderColor: 'border.default',
                           paddingX: '8px',
                           paddingY: '4px',
                           fontSize: '11px',
-                          color: 'amber.500',
+                          color: 'text.default',
                         })}
                         onclick={() => openPrismRefund('WITHDRAWAL', purchase.id)}
                         type="button"
@@ -873,28 +870,32 @@
               </div>
             {/if}
 
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '8px' })}>REFUNDS</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginTop: '8px' })}>REFUNDS</div>
             {#if query.data.adminPrismCreditRefunds.length === 0}
-              <div class={css({ fontSize: '12px', color: 'gray.400' })}>NONE</div>
+              <div class={css({ fontSize: '12px', color: 'text.hint' })}>NONE</div>
             {:else}
               <div class={flex({ flexDirection: 'column', gap: '8px' })}>
                 {#each query.data.adminPrismCreditRefunds as refund (refund.id)}
                   <div
-                    class={css({ borderWidth: '1px', borderColor: refund.state === 'PENDING' ? 'red.500' : 'amber.500', padding: '8px' })}
+                    class={css({
+                      borderWidth: '1px',
+                      borderColor: refund.state === 'PENDING' ? 'danger.default' : 'border.default',
+                      padding: '8px',
+                    })}
                   >
                     <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-                      <span class={css({ fontSize: '11px', color: 'amber.400' })}>
+                      <span class={css({ fontSize: '11px', color: 'text.muted' })}>
                         {dayjs(refund.createdAt).formatAsDateTime()} [{refund.state}] {refund.kind} / {refund.method}
                       </span>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>{comma(refund.amount)}원</span>
+                      <span class={css({ fontSize: '12px', color: 'text.default' })}>{comma(refund.amount)}원</span>
                     </div>
-                    <div class={css({ fontSize: '11px', color: 'amber.400', marginTop: '4px' })}>
+                    <div class={css({ fontSize: '11px', color: 'text.muted', marginTop: '4px' })}>
                       BY: {refund.actor.name} · NOTE: {refund.note}
                       {#if refund.purchaseId}
                         · PURCHASE: {refund.purchaseId}{/if}
                     </div>
                     {#each prismRefundCancels(refund.data) as cancel (cancel.purchaseId)}
-                      <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+                      <div class={css({ fontSize: '11px', color: 'text.muted' })}>
                         CANCEL {cancel.paymentKey}: {comma(cancel.amount)}원 [{cancel.status}]
                       </div>
                     {/each}
@@ -903,11 +904,11 @@
                         <button
                           class={css({
                             borderWidth: '1px',
-                            borderColor: 'amber.500',
+                            borderColor: 'border.default',
                             paddingX: '8px',
                             paddingY: '4px',
                             fontSize: '11px',
-                            color: 'amber.500',
+                            color: 'text.default',
                           })}
                           onclick={() => handleRetryPrismRefund(refund.id, 'PG_CANCEL')}
                           type="button"
@@ -917,11 +918,11 @@
                         <button
                           class={css({
                             borderWidth: '1px',
-                            borderColor: 'amber.500',
+                            borderColor: 'border.default',
                             paddingX: '8px',
                             paddingY: '4px',
                             fontSize: '11px',
-                            color: 'amber.500',
+                            color: 'text.default',
                           })}
                           onclick={() => handleRetryPrismRefund(refund.id, 'MANUAL')}
                           type="button"
@@ -941,20 +942,20 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>PREFERENCES</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>PREFERENCES</h3>
 
           <div class={flex({ flexDirection: 'column', gap: '16px' })}>
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-              <span class={css({ fontSize: '11px', color: 'amber.400' })}>MARKETING</span>
+              <span class={css({ fontSize: '11px', color: 'text.muted' })}>MARKETING</span>
               <span
                 class={css({
                   fontSize: '12px',
-                  color: query.data.adminUser.marketingConsent ? 'green.400' : 'gray.400',
+                  color: query.data.adminUser.marketingConsent ? 'success.default' : 'text.hint',
                 })}
               >
                 {query.data.adminUser.marketingConsent ? 'CONSENTED' : 'NOT CONSENTED'}
@@ -967,21 +968,21 @@
         <div
           class={css({
             borderWidth: '2px',
-            borderColor: 'amber.500',
+            borderColor: 'border.default',
             padding: '24px',
-            backgroundColor: 'gray.900',
+            backgroundColor: 'surface.default',
           })}
         >
-          <h3 class={css({ fontSize: '16px', color: 'amber.500', marginBottom: '20px' })}>ACTIONS</h3>
+          <h3 class={css({ fontSize: '16px', color: 'text.default', marginBottom: '20px' })}>ACTIONS</h3>
           <button
             class={css({
               borderWidth: '1px',
-              borderColor: 'amber.500',
+              borderColor: 'border.default',
               paddingX: '12px',
               paddingY: '8px',
               marginY: '8px',
               fontSize: '12px',
-              color: 'amber.500',
+              color: 'text.default',
               backgroundColor: 'transparent',
               width: 'full',
               display: 'flex',
@@ -989,8 +990,7 @@
               justifyContent: 'center',
               gap: '8px',
               _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
+                backgroundColor: 'surface.hover',
               },
             })}
             onclick={() => (impersonateModalOpen = true)}
@@ -1002,12 +1002,12 @@
           <button
             class={css({
               borderWidth: '1px',
-              borderColor: 'amber.500',
+              borderColor: 'border.default',
               paddingX: '12px',
               paddingY: '8px',
               marginY: '8px',
               fontSize: '12px',
-              color: 'amber.500',
+              color: 'text.default',
               backgroundColor: 'transparent',
               width: 'full',
               display: 'flex',
@@ -1015,8 +1015,7 @@
               justifyContent: 'center',
               gap: '8px',
               _hover: {
-                backgroundColor: 'amber.500',
-                color: 'gray.900',
+                backgroundColor: 'surface.hover',
               },
             })}
             onclick={async () => {
@@ -1050,7 +1049,7 @@
     >
       <div class={css({ marginBottom: '16px' })}>
         <p class={css({ marginBottom: '8px' })}>ARE YOU SURE YOU WANT TO IMPERSONATE THIS USER?</p>
-        <p class={css({ color: 'amber.400' })}>
+        <p class={css({ color: 'text.muted' })}>
           USER: {query.data.adminUser.name.toUpperCase()} ({query.data.adminUser.email})
         </p>
       </div>
@@ -1071,37 +1070,46 @@
       {#if selectedInvoice}
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
           <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>INVOICE</div>
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.id}</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>INVOICE</div>
+            <div class={css({ fontSize: '12px', color: 'text.default' })}>{selectedInvoice.id}</div>
           </div>
 
           <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>PLAN</div>
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>{selectedInvoice.subscription.plan.name}</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>PLAN</div>
+            <div class={css({ fontSize: '12px', color: 'text.default' })}>{selectedInvoice.subscription.plan.name}</div>
           </div>
 
           <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>AMOUNT</div>
-            <div class={css({ fontSize: '14px', fontWeight: 'bold', color: 'amber.500' })}>₩{comma(selectedInvoice.amount)}</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>AMOUNT</div>
+            <div class={css({ fontSize: '14px', fontWeight: 'bold', color: 'text.default' })}>₩{comma(selectedInvoice.amount)}</div>
           </div>
 
-          <div class={css({ color: 'red.400', fontSize: '11px', padding: '8px', borderWidth: '1px', borderColor: 'red.500' })}>
+          <div
+            class={css({
+              color: 'text.on.danger.subtle',
+              fontSize: '11px',
+              padding: '8px',
+              borderWidth: '1px',
+              borderColor: 'danger.default',
+              backgroundColor: 'danger.subtle',
+            })}
+          >
             THIS WILL CANCEL THE PAYMENT AND EXPIRE THE SUBSCRIPTION IMMEDIATELY.
           </div>
 
           <div>
-            <div class={css({ fontSize: '11px', color: 'amber.400', marginBottom: '4px' })}>REASON</div>
+            <div class={css({ fontSize: '11px', color: 'text.muted', marginBottom: '4px' })}>REASON</div>
             <input
               class={css({
                 width: 'full',
                 padding: '8px',
                 fontSize: '12px',
-                color: 'amber.500',
-                backgroundColor: 'transparent',
+                color: 'text.default',
+                backgroundColor: 'surface.inset',
                 borderWidth: '1px',
-                borderColor: 'amber.500',
+                borderColor: 'border.default',
                 outline: 'none',
-                _focus: { borderColor: 'amber.400' },
+                _focus: { borderColor: 'accent.default' },
               })}
               placeholder="Enter refund reason..."
               bind:value={refundReason}
@@ -1131,35 +1139,35 @@
       {#if refundTarget}
         {@const quote = prismRefundQuote}
         <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-          <div class={css({ fontSize: '12px', color: 'amber.500' })}>
+          <div class={css({ fontSize: '12px', color: 'text.default' })}>
             {refundTarget.kind}{refundTarget.purchaseId ? ` · ${refundTarget.purchaseId}` : ''}
           </div>
           {#if !quote}
-            <div class={css({ fontSize: '12px', color: 'gray.400' })}>LOADING…</div>
+            <div class={css({ fontSize: '12px', color: 'text.muted' })}>LOADING…</div>
           {:else if !quote.eligible}
-            <div class={css({ fontSize: '12px', color: 'red.500' })}>NOT ELIGIBLE: {quote.reason}</div>
+            <div class={css({ fontSize: '12px', color: 'danger.default' })}>NOT ELIGIBLE: {quote.reason}</div>
           {:else}
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>AMOUNT: {comma(quote.amount)}원</div>
-            <div class={css({ fontSize: '12px', color: 'amber.500' })}>RECLAIM: paid {quote.paidCredits} / free {quote.freeCredits}</div>
+            <div class={css({ fontSize: '12px', color: 'text.default' })}>AMOUNT: {comma(quote.amount)}원</div>
+            <div class={css({ fontSize: '12px', color: 'text.default' })}>RECLAIM: paid {quote.paidCredits} / free {quote.freeCredits}</div>
             {#if quote.shortfall > 0}
-              <div class={css({ fontSize: '12px', color: 'red.500' })}>
+              <div class={css({ fontSize: '12px', color: 'danger.default' })}>
                 PG SHORTFALL: {comma(quote.shortfall)}원 — PG_CANCEL UNAVAILABLE, METHOD FORCED TO MANUAL
               </div>
             {/if}
-            <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+            <div class={css({ fontSize: '11px', color: 'text.muted' })}>
               {#each quote.cancels as cancel (cancel.purchaseId)}
                 <div>CANCEL {cancel.paymentKey}: {comma(cancel.amount)}원</div>
               {/each}
             </div>
-            <label class={css({ fontSize: '11px', color: 'amber.400' })}>
+            <label class={css({ fontSize: '11px', color: 'text.muted' })}>
               METHOD
               <select
                 class={css({
                   marginLeft: '8px',
-                  backgroundColor: 'gray.900',
-                  color: 'amber.500',
+                  backgroundColor: 'surface.inset',
+                  color: 'text.default',
                   borderWidth: '1px',
-                  borderColor: 'amber.500',
+                  borderColor: 'border.default',
                 })}
                 bind:value={prismRefundMethod}
               >
@@ -1167,16 +1175,16 @@
                 <option value="MANUAL">MANUAL</option>
               </select>
             </label>
-            <label class={css({ fontSize: '11px', color: 'amber.400' })}>
+            <label class={css({ fontSize: '11px', color: 'text.muted' })}>
               NOTE (required)
               <input
                 class={css({
                   marginLeft: '8px',
                   width: 'full',
-                  backgroundColor: 'gray.900',
-                  color: 'amber.500',
+                  backgroundColor: 'surface.inset',
+                  color: 'text.default',
                   borderWidth: '1px',
-                  borderColor: 'amber.500',
+                  borderColor: 'border.default',
                   padding: '4px',
                 })}
                 bind:value={prismRefundNote}

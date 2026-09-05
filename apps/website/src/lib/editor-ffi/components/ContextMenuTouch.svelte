@@ -94,10 +94,10 @@
         color: 'text.default',
         whiteSpace: 'nowrap',
         WebkitTapHighlightColor: 'transparent',
-        _active: { backgroundColor: 'surface.muted' },
+        _active: { backgroundColor: 'surface.active' },
         _disabled: { opacity: '40', cursor: 'default' },
       },
-      pressedAction === action && { backgroundColor: 'surface.muted' },
+      pressedAction === action && { backgroundColor: 'surface.active' },
     );
 
   const dividerStyle = css({ width: '1px', alignSelf: 'stretch', marginY: '4px', backgroundColor: 'border.default' });
@@ -115,7 +115,7 @@
       borderWidth: '1px',
       borderRadius: 'full',
       backgroundColor: 'surface.default',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       pointerEvents: 'auto',
       userSelect: 'none',
       WebkitUserSelect: 'none',

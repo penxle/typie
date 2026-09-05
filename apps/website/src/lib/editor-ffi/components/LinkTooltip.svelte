@@ -151,12 +151,12 @@
     <div
       class={css({
         borderWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         borderRadius: '4px',
         paddingX: '4px',
         paddingY: '4px',
         backgroundColor: 'surface.default',
-        boxShadow: 'small',
+        boxShadow: 'sm',
         overflow: 'hidden',
       })}
     >
@@ -172,10 +172,10 @@
           paddingRight: '4px',
           paddingY: '2px',
           backgroundColor: 'surface.default',
-          color: 'text.subtle',
+          color: 'text.muted',
         })}
       >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={GlobeIcon} size={12} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={GlobeIcon} size={12} />
         <span
           class={css({
             display: 'block',
@@ -186,7 +186,7 @@
             whiteSpace: 'nowrap',
             fontSize: '12px',
             lineHeight: '[1.2]',
-            color: 'text.subtle',
+            color: 'text.muted',
           })}
         >
           {tooltipTarget.link.href}
@@ -202,7 +202,7 @@
               width: '20px',
               height: '20px',
               borderRadius: '4px',
-              color: 'text.subtle',
+              color: 'text.muted',
               transition: 'common',
             })}
             aria-label="링크 복사"
@@ -225,7 +225,7 @@
               paddingX: '6px',
               fontSize: '11px',
               fontWeight: 'medium',
-              color: 'text.subtle',
+              color: 'text.muted',
               transition: 'common',
             })}
             onclick={() => openToolbarLinkEditor(tooltipTarget)}

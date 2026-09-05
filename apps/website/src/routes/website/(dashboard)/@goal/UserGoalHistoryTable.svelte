@@ -67,7 +67,7 @@
 </script>
 
 <div class={flex({ flexDirection: 'column' })}>
-  <div class={flex({ paddingY: '4px', fontSize: '11px', color: 'text.faint', borderBottomWidth: '1px', borderColor: 'border.subtle' })}>
+  <div class={flex({ paddingY: '4px', fontSize: '11px', color: 'text.muted', borderBottomWidth: '1px', borderColor: 'border.hairline' })}>
     <span class={css({ flex: '1' })}>날짜</span>
     <span class={css({ flex: '1', textAlign: 'center' })}>쓴 글자</span>
     <span class={css({ flex: '1', textAlign: 'right' })}>달성</span>
@@ -80,17 +80,12 @@
         fontSize: '12px',
         fontVariantNumeric: 'tabular-nums',
         borderBottomWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
       })}
     >
-      <span class={css({ flex: '1', color: 'text.faint' })}>{row.label}</span>
-      <span class={css({ flex: '1', textAlign: 'center', color: 'text.subtle' })}>{comma(row.additions)}자</span>
-      <span
-        class={css(
-          { flex: '1', textAlign: 'right' },
-          row.achieved ? { color: 'text.success' } : row.achieved === false ? { color: 'text.faint' } : { color: 'text.disabled' },
-        )}
-      >
+      <span class={css({ flex: '1', color: 'text.hint' })}>{row.label}</span>
+      <span class={css({ flex: '1', textAlign: 'center', color: 'text.muted' })}>{comma(row.additions)}자</span>
+      <span class={css({ flex: '1', textAlign: 'right' }, row.achieved ? { color: 'success.default' } : { color: 'text.hint' })}>
         {row.achieved ? '달성' : row.achieved === false ? '미달성' : '—'}
       </span>
     </div>

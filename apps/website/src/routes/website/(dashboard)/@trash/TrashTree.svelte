@@ -79,8 +79,8 @@
 >
   {#if showLoading}
     <div class={center({ flexGrow: '1', flexDirection: 'column', gap: '10px' })}>
-      <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
-      <p class={css({ fontSize: '13px', color: 'text.disabled' })}>불러오는 중...</p>
+      <RingSpinner style={css.raw({ size: '24px', color: 'text.muted' })} />
+      <p class={css({ fontSize: '13px', color: 'text.muted' })}>불러오는 중...</p>
     </div>
   {:else if site.data.deletedEntities.length > 0}
     <div
@@ -102,7 +102,7 @@
               paddingY: '8px',
               fontSize: '13px',
               fontWeight: 'semibold',
-              color: 'text.subtle',
+              color: 'text.muted',
               backgroundColor: 'surface.default',
             })}
           >
@@ -120,9 +120,9 @@
     </div>
   {:else}
     <div class={center({ flexGrow: '1', flexDirection: 'column', gap: '8px' })}>
-      <Icon style={css.raw({ color: 'text.disabled' })} icon={Trash2Icon} size={32} />
-      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>휴지통이 비어있어요</p>
-      <p class={css({ fontSize: '13px', color: 'text.disabled' })}>삭제 후 30일동안 보관돼요</p>
+      <Icon style={css.raw({ color: 'text.hint' })} icon={Trash2Icon} size={32} />
+      <p class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.hint' })}>휴지통이 비어있어요</p>
+      <p class={css({ fontSize: '13px', color: 'text.hint' })}>삭제 후 30일동안 보관돼요</p>
     </div>
   {/if}
 </div>

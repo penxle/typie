@@ -109,7 +109,7 @@
     position: 'relative',
     paddingX: { sm: '24px', lg: '80px' },
     paddingY: { sm: '80px', lg: '120px' },
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
   })}
 >
   <div
@@ -119,7 +119,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -143,7 +143,7 @@
           display: 'block',
           fontSize: '[11px]',
           fontFamily: 'mono',
-          color: 'dark.gray.500',
+          color: 'text.muted',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           marginBottom: '24px',
@@ -157,7 +157,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -165,7 +165,7 @@
         >
           작가가 원하는 것,
           <br />
-          <span class={css({ color: 'dark.gray.400' })}>그대로.</span>
+          <span class={css({ color: 'text.muted' })}>그대로.</span>
         </h2>
 
         <button
@@ -173,14 +173,14 @@
             fontSize: '[24px]',
             fontFamily: 'mono',
             fontWeight: 'medium',
-            color: 'dark.gray.600',
+            color: 'text.muted',
             background: '[none]',
             border: '[none]',
             cursor: 'pointer',
             padding: '0',
             flexShrink: '[0]',
             transition: '[color 0.2s]',
-            _hover: { color: 'dark.gray.400' },
+            _hover: { color: 'text.default' },
           })}
           onclick={toggleAll}
           type="button"
@@ -229,7 +229,8 @@
               fontSize: '[28px]',
               fontFamily: 'mono',
               fontWeight: 'light',
-              color: isExpanded(feature.id) ? 'dark.brand.400' : 'dark.gray.700',
+              color: isExpanded(feature.id) ? 'accent.default' : 'text.hint',
+              opacity: isExpanded(feature.id) ? '100' : '40',
               flexShrink: '[0]',
               lineHeight: '[1]',
               transition: '[color 0.2s]',
@@ -244,7 +245,7 @@
                 class={css({
                   fontSize: { sm: '18px', lg: '20px' },
                   fontWeight: 'medium',
-                  color: 'dark.gray.100',
+                  color: 'text.default',
                   fontFamily: 'Paperlogy',
                 })}
               >
@@ -255,7 +256,7 @@
                   fontSize: '[20px]',
                   fontFamily: 'mono',
                   fontWeight: 'medium',
-                  color: 'dark.gray.600',
+                  color: 'text.muted',
                 })}
               >
                 {isExpanded(feature.id) ? '−' : '+'}
@@ -265,7 +266,7 @@
             <p
               class={css({
                 fontSize: { sm: '14px', lg: '15px' },
-                color: 'dark.gray.300',
+                color: 'text.muted',
                 lineHeight: '[1.55]',
               })}
             >
@@ -276,7 +277,7 @@
               <p
                 class={css({
                   fontSize: { sm: '13px', lg: '14px' },
-                  color: 'dark.gray.500',
+                  color: 'text.muted',
                   lineHeight: '[1.65]',
                   whiteSpace: 'normal',
                   marginTop: '12px',

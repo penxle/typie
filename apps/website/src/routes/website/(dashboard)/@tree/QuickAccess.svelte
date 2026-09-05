@@ -101,12 +101,12 @@
             justifyContent: 'center',
             borderRadius: '4px',
             size: '24px',
-            color: 'text.faint',
+            color: 'text.muted',
             opacity: '50',
             transition: 'common',
-            _hover: { color: 'text.subtle', opacity: '100' },
+            _hover: { color: 'text.default', opacity: '100' },
             _focusVisible: { opacity: '100' },
-            _expanded: { color: 'text.subtle', backgroundColor: 'surface.muted', opacity: '100' },
+            _expanded: { color: 'text.default', backgroundColor: 'surface.active', opacity: '100' },
           })}
           buttonAriaLabel="최근 문서 정렬"
           placement="bottom-start"
@@ -116,7 +116,7 @@
           {/snippet}
 
           <div
-            class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.disabled' })}
+            class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}
             role="presentation"
           >
             정렬 기준
@@ -130,7 +130,7 @@
             >
               {option.label}
               {#if sort === option.value}
-                <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+                <Icon style={css.raw({ marginLeft: 'auto', color: 'accent.default' })} icon={CheckIcon} size={14} />
               {/if}
             </MenuItem>
           {/each}

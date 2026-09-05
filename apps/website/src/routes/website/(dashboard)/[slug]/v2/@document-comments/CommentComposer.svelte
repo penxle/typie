@@ -113,13 +113,13 @@
         fontSize: '13px',
         lineHeight: '[1.4]',
         color: 'text.default',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'surface.default',
         resize: 'none',
         minHeight: '36px',
         maxHeight: '120px',
         outline: 'none',
         transition: 'colors',
-        _focus: { borderColor: 'accent.brand.default', backgroundColor: 'surface.default' },
+        _focus: { borderColor: 'accent.default', backgroundColor: 'surface.default' },
       })}
       onkeydown={handleKeydown}
       {placeholder}
@@ -144,12 +144,12 @@
         hasText && !pending
           ? {
               cursor: 'pointer',
-              backgroundColor: 'accent.brand.default',
-              color: 'text.bright',
-              _hover: { backgroundColor: 'accent.brand.hover' },
-              _active: { backgroundColor: 'accent.brand.active' },
+              backgroundColor: 'accent.default',
+              color: 'surface.default',
+              _hover: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]' },
+              _active: { backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 80%, black)]' },
             }
-          : { cursor: 'default', backgroundColor: 'surface.muted', color: 'text.disabled' },
+          : { cursor: 'default', backgroundColor: 'accent.default', color: 'surface.default', opacity: '40' },
       )}
       disabled={!hasText || pending}
       onclick={() => void submit()}

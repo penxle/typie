@@ -86,7 +86,7 @@
       borderTopRightRadius: '16px',
       borderWidth: '1px',
       borderColor: 'border.default',
-      boxShadow: 'large',
+      boxShadow: 'lg',
       zIndex: 'modal',
     })}
     transition:slide={{ duration: 250, axis: 'y' }}
@@ -116,7 +116,7 @@
                   css({
                     position: 'relative',
                     width: '300px',
-                    opacity: isAdded ? '50' : '100',
+                    opacity: isAdded ? '40' : '100',
                     cursor: isAdded ? 'not-allowed!' : 'grab!',
                   }),
                   !isAdded &&
@@ -150,13 +150,13 @@
                       backgroundColor: 'surface.default',
                       borderWidth: '1px',
                       borderColor: 'border.default',
-                      color: 'text.subtle',
+                      color: 'text.muted',
                       opacity: '0',
                       transitionProperty: '[opacity]',
                       transitionDuration: '200ms',
                       transform: 'translate(-8px, -8px)',
                       _groupHover: { opacity: '100' },
-                      _hover: { backgroundColor: 'surface.subtle', color: 'text.default' },
+                      _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                       zIndex: '10',
                       cursor: 'pointer',
                     })}
@@ -191,11 +191,11 @@
         paddingX: '20px',
         paddingY: '8px',
         borderTop: '1px solid',
-        borderColor: 'interactive.hover',
-        backgroundColor: 'surface.muted',
+        borderColor: 'border.hairline',
+        backgroundColor: 'surface.canvas',
       })}
     >
-      <div class={css({ fontSize: '14px', color: 'text.faint' })}>위젯을 드래그해서 배치해 보세요</div>
+      <div class={css({ fontSize: '14px', color: 'text.muted' })}>위젯을 드래그해서 배치해 보세요</div>
       <Button
         onclick={() => {
           open = false;

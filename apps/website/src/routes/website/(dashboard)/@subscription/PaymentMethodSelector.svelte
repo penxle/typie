@@ -37,17 +37,17 @@
             gap: '6px',
             borderRadius: '6px',
             borderWidth: '1px',
-            borderColor: method === option.value ? 'accent.brand.default' : 'border.subtle',
+            borderColor: method === option.value ? 'accent.default' : 'border.hairline',
             padding: '12px',
             fontSize: '13px',
             fontWeight: 'medium',
-            color: reason ? 'text.disabled' : 'text.default',
-            backgroundColor: 'surface.default',
+            color: 'text.default',
+            backgroundColor: method === option.value ? 'surface.active' : 'surface.default',
             cursor: reason ? 'not-allowed' : 'pointer',
-            opacity: reason ? '50' : '100',
+            opacity: reason ? '40' : '100',
             transition: 'common',
             _hover: {
-              borderColor: reason ? 'border.subtle' : method === option.value ? 'accent.brand.default' : 'border.default',
+              borderColor: reason ? 'border.hairline' : method === option.value ? 'accent.default' : 'border.emphasis',
             },
           })}
           aria-label={option.value === BillingKeyType.KAKAOPAY ? option.label : undefined}

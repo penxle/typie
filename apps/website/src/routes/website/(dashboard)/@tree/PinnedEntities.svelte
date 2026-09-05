@@ -195,7 +195,7 @@
 >
   {#if entities.length === 0}
     <li class={flex({ alignItems: 'center', height: '32px', paddingX: '8px' })}>
-      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.disabled' })}>고정한 항목이 없어요</p>
+      <p class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.hint' })}>고정한 항목이 없어요</p>
     </li>
   {:else}
     {#each visible as entity (entity.id)}
@@ -220,10 +220,10 @@
           paddingY: '6px',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.disabled',
+          color: 'text.muted',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.muted' },
+          _supportHover: { color: 'text.default' },
         })}
         onclick={() => (visibleCount += PAGE_SIZE)}
         type="button"

@@ -45,7 +45,7 @@
   role="alert"
 >
   <div
-    style:color={token('colors.border.strong')}
+    style:color={token('colors.border.emphasis')}
     class={css({ width: '48px', height: '48px', marginBottom: '20px' })}
     aria-hidden="true"
     data-prism-panel-failure-icon
@@ -53,6 +53,6 @@
     <PrismFailureIcon class={css({ width: 'full', height: 'full' })} />
   </div>
   <h2 id={titleId} class={css({ fontSize: '20px', fontWeight: 'bold' })}>앗! 문제가 생겼어요</h2>
-  <p id={messageId} class={css({ marginTop: '8px', fontSize: '14px', color: 'text.faint' })}>잠시 후 다시 시도해 주세요.</p>
+  <p id={messageId} class={css({ marginTop: '8px', fontSize: '14px', color: 'text.muted' })}>잠시 후 다시 시도해 주세요.</p>
   <Button style={css.raw({ marginTop: '20px' })} onclick={onRetry} size="md" bind:element={retryButton}>다시 시도</Button>
 </div>

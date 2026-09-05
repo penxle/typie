@@ -1,3 +1,4 @@
+import { DEFAULT_DARK_VARIANT, DEFAULT_LIGHT_VARIANT } from '@typie/styled-system/presets';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopBridgeListeners, DesktopZoomAction, TabIcon, TypieDesktopBridge } from '@typie/lib/desktop';
 
@@ -20,8 +21,8 @@ const readTheme = () => {
   const root = document.documentElement;
   return {
     theme: resolveTheme(root.dataset.theme),
-    variantLight: root.dataset.variantLight ?? 'white',
-    variantDark: root.dataset.variantDark ?? 'black',
+    variantLight: root.dataset.variantLight ?? DEFAULT_LIGHT_VARIANT,
+    variantDark: root.dataset.variantDark ?? DEFAULT_DARK_VARIANT,
   };
 };
 

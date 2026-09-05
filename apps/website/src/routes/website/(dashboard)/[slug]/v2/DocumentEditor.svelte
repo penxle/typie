@@ -1105,10 +1105,10 @@
                   class={center({
                     borderRadius: '4px',
                     size: '24px',
-                    color: 'text.faint',
+                    color: 'text.muted',
                     transition: 'common',
-                    _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-                    _pressed: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
+                    _pressed: { color: 'text.default', backgroundColor: 'surface.active' },
                   })}
                   aria-pressed={open}
                   type="button"
@@ -1145,7 +1145,7 @@
             </EditorBreadcrumb>
             {#if document.locked}
               <span
-                class={center({ flexShrink: '0', color: 'text.faint' })}
+                class={center({ flexShrink: '0', color: 'text.muted' })}
                 aria-label="편집이 잠겨있는 문서예요."
                 role="img"
                 use:tooltip={{ message: '편집이 잠겨있는 문서예요.' }}
@@ -1164,15 +1164,15 @@
                     paddingY: '4px',
                     borderRadius: '4px',
                     borderWidth: '1px',
-                    borderColor: 'border.brand',
+                    borderColor: 'border.default',
                     fontSize: '11px',
                     fontWeight: 'semibold',
                     whiteSpace: 'nowrap',
-                    color: 'text.brand',
+                    color: 'text.default',
                     backgroundColor: 'transparent',
                     cursor: 'pointer',
                     transition: 'common',
-                    _hover: { backgroundColor: 'accent.brand.subtle' },
+                    _hover: { backgroundColor: 'surface.hover' },
                   })}
                   onclick={() => SubscribeModal.show('document_header')}
                   type="button"
@@ -1249,9 +1249,9 @@
                             borderWidth: '1px',
                             borderColor: 'border.default',
                             backgroundColor: 'surface.default',
-                            boxShadow: 'small',
+                            boxShadow: 'sm',
                             fontSize: '13px',
-                            color: 'text.subtle',
+                            color: 'text.muted',
                           })}
                           data-pane-chrome-reveal-exclusion
                           onpointerenter={() => {
@@ -1283,10 +1283,10 @@
                                 fontSize: '12px',
                                 fontWeight: 'medium',
                                 color: 'text.default',
-                                backgroundColor: 'surface.subtle',
+                                backgroundColor: 'surface.canvas',
                                 cursor: 'pointer',
                                 transition: 'common',
-                                _hover: { backgroundColor: 'surface.muted' },
+                                _hover: { backgroundColor: 'surface.hover' },
                               })}
                               onclick={() => {
                                 toggleEditLock();

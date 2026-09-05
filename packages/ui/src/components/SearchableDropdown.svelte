@@ -213,12 +213,13 @@
       alignItems: 'center',
       borderRadius: '4px',
       height: '24px',
-      opacity: disabled ? '50' : '100',
+      opacity: disabled ? '40' : '100',
       _hover: {
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.hover',
       },
       _focusWithin: {
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.active',
+        _hover: { backgroundColor: 'surface.active' },
       },
     },
     style,
@@ -235,7 +236,7 @@
         paddingLeft: '4px',
         paddingRight: '20px',
         fontSize: '14px',
-        color: 'text.subtle',
+        color: 'text.muted',
         textAlign: 'left',
         backgroundColor: 'transparent',
         border: 'none',
@@ -274,7 +275,7 @@
         top: '1/2',
         translate: 'auto',
         translateY: '-1/2',
-        color: 'text.faint',
+        color: 'text.muted',
         transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
         transitionDuration: '150ms',
       })}
@@ -290,11 +291,11 @@
     style:width="{anchorWidth}px"
     class={css({
       borderWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       borderBottomRadius: '4px',
       backgroundColor: 'surface.default',
       zIndex: 'menu',
-      boxShadow: 'small',
+      boxShadow: 'lg',
       overflow: 'hidden',
     })}
     use:floatingAction

@@ -136,23 +136,23 @@
   });
 </script>
 
-<div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', fontWeight: 'medium' })}>
+<div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.muted', fontWeight: 'medium' })}>
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
     {#if folderIds.length > 0}
       <div class={center({ gap: '2px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={FolderIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={FolderIcon} size={14} />
         {folderIds.length}개
       </div>
     {/if}
     {#if documentIds.length > 0}
       <div class={center({ gap: '2px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={FileIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={FileIcon} size={14} />
         {documentIds.length}개
       </div>
     {/if}
     {#if dividerIds.length > 0}
       <div class={center({ gap: '2px' })}>
-        <Icon style={css.raw({ color: 'text.disabled' })} icon={MinusIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={MinusIcon} size={14} />
         {dividerIds.length}개
       </div>
     {/if}
@@ -326,11 +326,11 @@
       borderRadius: '8px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'accent.danger.subtle',
+      backgroundColor: 'danger.subtle',
     })}
   >
-    <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
-    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
+    <Icon style={css.raw({ color: 'text.on.danger.subtle' })} icon={TriangleAlertIcon} size={14} />
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.danger.subtle' })}>
       {items.join(', ')}{josa(items.at(-1) || '', '이', '가')} 삭제돼요
     </span>
   </div>
@@ -342,7 +342,7 @@
       borderRadius: '8px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />

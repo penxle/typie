@@ -178,7 +178,7 @@
         borderRadius: '8px',
         transition: 'common',
         cursor: 'pointer',
-        _supportHover: { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.hover' },
       }),
     )}
     aria-selected="false"
@@ -191,7 +191,7 @@
     role="treeitem"
   >
     <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
-      <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.muted', flexShrink: '0' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
       <EntityIcon style={css.raw({ flexShrink: '0' })} entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
       <EntityName name={folder.data.name} />
@@ -211,9 +211,9 @@
         class={center({
           borderRadius: '4px',
           size: '24px',
-          color: 'text.subtle',
+          color: 'text.muted',
           transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={async () => {
           if (!SubscribeModal.gate('entity_recover')) {
@@ -253,9 +253,9 @@
         class={center({
           borderRadius: '4px',
           size: '24px',
-          color: 'text.subtle',
+          color: 'text.muted',
           transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={() => {
           Dialog.confirm({
@@ -296,12 +296,12 @@
         })}
       >
         <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
-          <RingSpinner style={css.raw({ size: '14px', color: 'text.disabled' })} />
+          <RingSpinner style={css.raw({ size: '14px', color: 'text.muted' })} />
           <span
             class={css({
               fontSize: '14px',
               fontWeight: 'medium',
-              color: 'text.disabled',
+              color: 'text.muted',
               lineClamp: '1',
             })}
           >
@@ -313,7 +313,7 @@
       {#each childEntities as entity (entity.id)}
         <TrashEntity entity$key={entity} onChange={() => children.refetch()} />
       {:else}
-        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.hint' })}>
           폴더가 비어있어요
         </div>
       {/each}

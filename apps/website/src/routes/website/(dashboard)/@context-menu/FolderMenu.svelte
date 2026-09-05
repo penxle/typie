@@ -750,15 +750,15 @@
     paddingX: '10px',
     paddingY: '4px',
     fontSize: '12px',
-    color: 'text.faint',
+    color: 'text.hint',
     userSelect: 'none',
   })}
 >
   <div class={css({ fontWeight: 'medium' })}>
     {#if entity.visibility === EntityVisibility.PUBLIC}
-      <span class={css({ color: 'accent.success.default' })}>공개 폴더</span>
+      <span class={css({ color: 'success.default' })}>공개 폴더</span>
     {:else if entity.visibility === EntityVisibility.UNLISTED}
-      <span class={css({ color: 'accent.brand.default' })}>링크 조회 가능 폴더</span>
+      <span class={css({ color: 'accent.default' })}>링크 조회 가능 폴더</span>
     {:else}
       <span>비공개 폴더</span>
     {/if}
@@ -802,11 +802,11 @@
         borderRadius: '8px',
         paddingX: '12px',
         paddingY: '8px',
-        backgroundColor: 'surface.subtle',
+        backgroundColor: 'surface.canvas',
       })}
     >
-      <RingSpinner style={css.raw({ size: '13px', color: 'text.faint' })} />
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>함께 삭제될 항목 계산중...</span>
+      <RingSpinner style={css.raw({ size: '13px', color: 'text.muted' })} />
+      <span class={css({ fontSize: '13px', color: 'text.muted' })}>함께 삭제될 항목 계산중...</span>
     </div>
   {:else if descendants.data}
     {@const folders = descendants.data.entity.descendants.filter((d) => d.type === EntityType.FOLDER).length}
@@ -826,11 +826,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'accent.danger.subtle',
+          backgroundColor: 'danger.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'text.danger' })} icon={TriangleAlertIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.danger' })}>
+        <Icon style={css.raw({ color: 'text.on.danger.subtle' })} icon={TriangleAlertIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.danger.subtle' })}>
           {items.join('와 ')}{josa(items.at(-1) || '', '이', '가')} 함께 삭제돼요
         </span>
       </div>
@@ -842,11 +842,11 @@
           borderRadius: '8px',
           paddingX: '12px',
           paddingY: '8px',
-          backgroundColor: 'accent.success.subtle',
+          backgroundColor: 'success.subtle',
         })}
       >
-        <Icon style={css.raw({ color: 'text.success' })} icon={CheckIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.success' })}>비어있는 폴더예요</span>
+        <Icon style={css.raw({ color: 'text.on.success.subtle' })} icon={CheckIcon} size={14} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.success.subtle' })}>비어있는 폴더예요</span>
       </div>
     {/if}
   {/if}
@@ -858,7 +858,7 @@
       borderRadius: '8px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />

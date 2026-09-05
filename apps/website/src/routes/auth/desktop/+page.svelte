@@ -14,6 +14,6 @@
 
   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
     <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>로그인이 완료됐어요</h1>
-    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint' })}>타이피 앱으로 돌아가세요. 이 창은 닫아도 돼요.</div>
+    <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.muted' })}>타이피 앱으로 돌아가세요. 이 창은 닫아도 돼요.</div>
   </div>
 </div>

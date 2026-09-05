@@ -161,15 +161,15 @@
     flexShrink: '0',
     width: '176px',
     borderRightWidth: '1px',
-    borderColor: 'border.subtle',
-    backgroundColor: 'surface.subtle',
+    borderColor: 'border.hairline',
+    backgroundColor: 'surface.canvas',
   });
   const railTopClass = css({
     paddingX: '14px',
     paddingTop: '20px',
     paddingBottom: '16px',
     borderBottomWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
   });
   // 본문 스크롤러와 같은 이유로 불투명해야 한다 — 색은 레일 배경을 따른다
   const railTocClass = css({
@@ -177,7 +177,7 @@
     minHeight: '0',
     paddingX: '10px',
     paddingY: '16px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     overflowY: 'auto',
   });
 
@@ -188,7 +188,7 @@
     fontSize: '10px',
     fontWeight: 'extrabold',
     letterSpacing: '[0.09em]',
-    color: 'text.faint',
+    color: 'text.muted',
     _first: { marginTop: '0' },
   });
   const tocItemRecipe = cva({
@@ -206,8 +206,8 @@
     },
     variants: {
       active: {
-        true: { backgroundColor: 'accent.brand.subtle', fontWeight: 'bold', color: 'text.brand' },
-        false: { color: 'text.subtle', _hover: { backgroundColor: 'surface.muted' } },
+        true: { backgroundColor: 'surface.active', fontWeight: 'bold', color: 'text.default' },
+        false: { color: 'text.muted', _hover: { backgroundColor: 'surface.hover' } },
       },
     },
   });
@@ -217,8 +217,8 @@
     flexShrink: '0',
     size: '30px',
     borderRadius: 'full',
-    backgroundColor: 'accent.brand.subtle',
-    color: 'text.brand',
+    backgroundColor: 'accent.subtle',
+    color: 'text.default',
   });
 
   // 배경은 장식이 아니라 스크롤 경로다 — 투명 스크롤러는 컴포지터가 레이어로 승격하지 않아(LCD 텍스트 보존)
@@ -229,16 +229,16 @@
 
   const sectionHeadClass = flex({ alignItems: 'baseline', gap: '9px', marginBottom: '14px' });
   const sectionTitleClass = css({ fontSize: '19px', fontWeight: 'bold' });
-  const sectionCaptionClass = css({ fontSize: '12px', color: 'text.faint' });
+  const sectionCaptionClass = css({ fontSize: '12px', color: 'text.hint' });
   // 선은 그룹 경계에만 긋는다 — 절 사이는 여백이 가르고, 그룹 전환은 더 큰 쉼이어야 한다
-  const groupDividerClass = css({ height: '1px', marginTop: '40px', marginBottom: '32px', backgroundColor: 'border.subtle' });
+  const groupDividerClass = css({ height: '1px', marginTop: '40px', marginBottom: '32px', backgroundColor: 'border.hairline' });
   // TOC의 그룹 라벨과 같은 시각 언어 — 목차에서 익힌 표지를 본문에서 재회한다
   const groupHeadClass = css({
     marginBottom: '20px',
     fontSize: '12px',
     fontWeight: 'extrabold',
     letterSpacing: '[0.09em]',
-    color: 'text.faint',
+    color: 'text.muted',
   });
   const groupSectionsClass = flex({ direction: 'column', gap: '36px' });
 
@@ -259,7 +259,7 @@
     borderLeftWidth: '3px',
     borderTopRightRadius: '4px',
     borderBottomRightRadius: '4px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     fontFamily: 'prose',
     fontSize: '14px',
     lineHeight: '[1.7]',
@@ -269,12 +269,12 @@
     display: 'block',
     width: 'full',
     borderColor: 'border.default',
-    color: 'text.subtle',
+    color: 'text.muted',
     textAlign: 'left',
     transition: '[color 0.15s ease]',
-    _hover: { color: 'text.brand' },
+    _hover: { color: 'text.default' },
   });
-  const quoteStaticStyle = css.raw(quoteStyle, { borderColor: 'border.subtle', color: 'text.subtle' });
+  const quoteStaticStyle = css.raw(quoteStyle, { borderColor: 'border.hairline', color: 'text.muted' });
 
   const chipRowClass = flex({ wrap: 'wrap', gap: '4px', marginTop: '8px' });
   // 번호는 여백의 레일·카드가 쓰는 번호와 같다
@@ -284,11 +284,11 @@
     paddingX: '8px',
     paddingY: '3px',
     borderRadius: '5px',
-    backgroundColor: 'accent.brand.subtle',
+    backgroundColor: 'accent.subtle',
     fontSize: '11px',
     fontWeight: 'semibold',
     textAlign: 'left',
-    color: 'text.brand',
+    color: 'text.default',
   });
   const rankClass = flex({
     alignItems: 'center',
@@ -301,12 +301,12 @@
     borderRadius: 'full',
     fontSize: '11px',
     fontWeight: 'bold',
-    color: 'text.subtle',
+    color: 'text.muted',
   });
   const skeletonStyle = css.raw({
     height: '12px',
     borderRadius: '4px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'skeleton.base',
     animation: 'pulse 1.6s ease-in-out infinite',
   });
 </script>
@@ -339,7 +339,7 @@
     </span>
     <div class={css({ fontSize: '13px', fontWeight: 'bold' })}>타이피 PRISM</div>
   </div>
-  <div class={css({ marginTop: '9px', fontSize: '11px', lineHeight: '[1.45]', color: 'text.faint' })}>
+  <div class={css({ marginTop: '9px', fontSize: '11px', lineHeight: '[1.45]', color: 'text.muted' })}>
     {header.title}
     <br />
     {round.ordinal}회차 · 피드백 {round.issueCount}개
@@ -409,7 +409,7 @@
 
         {#if detail === null}
           {#if query.error}
-            <div class={flex({ alignItems: 'center', gap: '8px', fontSize: '12px', color: 'text.subtle' })}>
+            <div class={flex({ alignItems: 'center', gap: '8px', fontSize: '12px', color: 'text.muted' })}>
               총평을 불러오지 못했어요
               <Button onclick={() => query.refetch()} size="sm" variant="secondary">다시 시도</Button>
             </div>

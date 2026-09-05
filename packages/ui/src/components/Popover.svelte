@@ -81,6 +81,7 @@
   class={css(style)}
   aria-disabled={disabled}
   aria-expanded={open}
+  aria-haspopup="dialog"
   {disabled}
   onclick={(e) => {
     if (disabled) {
@@ -109,7 +110,7 @@
         paddingX: '12px',
         paddingY: '8px',
         backgroundColor: 'surface.default',
-        boxShadow: 'menu',
+        boxShadow: 'lg',
         zIndex: 'tooltip',
         pointerEvents: 'auto',
       },

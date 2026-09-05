@@ -77,7 +77,7 @@
       marginTop: '40px',
       paddingTop: '24px',
       borderTopWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       width: 'full',
       maxWidth: 'var(--prosemirror-max-width)',
     })}
@@ -89,10 +89,10 @@
           gap: '12px',
           padding: '16px',
           borderRadius: '8px',
-          backgroundColor: 'surface.subtle',
+          backgroundColor: 'surface.canvas',
           cursor: 'pointer',
           transition: 'background',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         href={`/${entityView.data.prev.slug}`}
       >
@@ -102,7 +102,7 @@
               flexShrink: '0',
               size: '48px',
               borderRadius: '6px',
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.default',
               overflow: 'hidden',
             })}
           >
@@ -116,7 +116,7 @@
         {/if}
 
         <div class={flex({ flexDirection: 'column', justifyContent: 'center', gap: '4px', flex: '1', minWidth: '0' })}>
-          <div class={flex({ alignItems: 'center', gap: '4px', color: 'text.faint', fontSize: '12px' })}>
+          <div class={flex({ alignItems: 'center', gap: '4px', color: 'text.muted', fontSize: '12px' })}>
             <Icon icon={ChevronLeftIcon} size={14} />
             <span>이전 글</span>
           </div>
@@ -127,7 +127,7 @@
                   display: 'inline-flex',
                   verticalAlign: 'middle',
                   marginRight: '4px',
-                  color: 'text.faint',
+                  color: 'text.muted',
                   transform: 'translateY(-2px)',
                 })}
               >
@@ -150,10 +150,10 @@
           gap: '12px',
           padding: '16px',
           borderRadius: '8px',
-          backgroundColor: 'surface.subtle',
+          backgroundColor: 'surface.canvas',
           cursor: 'pointer',
           transition: 'background',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         href={`/${entityView.data.next.slug}`}
       >
@@ -163,7 +163,7 @@
               flexShrink: '0',
               size: '48px',
               borderRadius: '6px',
-              backgroundColor: 'surface.muted',
+              backgroundColor: 'surface.default',
               overflow: 'hidden',
             })}
           >
@@ -186,7 +186,7 @@
             minWidth: '0',
           })}
         >
-          <div class={flex({ alignItems: 'center', gap: '4px', color: 'text.faint', fontSize: '12px' })}>
+          <div class={flex({ alignItems: 'center', gap: '4px', color: 'text.muted', fontSize: '12px' })}>
             <span>다음 글</span>
             <Icon icon={ChevronRightIcon} size={14} />
           </div>
@@ -197,7 +197,7 @@
                   display: 'inline-flex',
                   verticalAlign: 'middle',
                   marginRight: '4px',
-                  color: 'text.faint',
+                  color: 'text.muted',
                   transform: 'translateY(-2px)',
                 })}
               >

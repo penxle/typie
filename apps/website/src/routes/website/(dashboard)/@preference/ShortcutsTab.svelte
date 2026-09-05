@@ -71,7 +71,7 @@
                     <span
                       class={css({
                         fontSize: '11px',
-                        color: 'text.subtle',
+                        color: 'text.hint',
                         fontWeight: 'medium',
                         marginX: '6px',
                       })}
@@ -85,7 +85,7 @@
                         <span
                           class={css({
                             fontSize: '11px',
-                            color: 'text.disabled',
+                            color: 'text.hint',
                             fontWeight: 'normal',
                           })}
                         >
@@ -103,9 +103,9 @@
                           fontSize: '11px',
                           fontWeight: 'normal',
                           fontFamily: 'mono',
-                          color: 'text.subtle',
+                          color: 'text.muted',
                           borderWidth: '1px',
-                          borderColor: 'border.subtle',
+                          borderColor: 'border.hairline',
                           borderRadius: '4px',
                         })}
                       >

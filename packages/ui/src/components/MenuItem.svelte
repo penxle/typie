@@ -79,18 +79,14 @@
         textAlign: 'left',
         outlineWidth: '0',
         transition: 'common',
-        _focus: { backgroundColor: 'surface.muted' },
+        _focus: { backgroundColor: 'surface.hover' },
         _disabled: {
-          color: 'text.disabled!',
+          opacity: '40',
           backgroundColor: 'transparent!',
+          pointerEvents: 'none',
         },
         '[data-submenu-safezone] &': {
           cursor: 'default',
-        },
-      },
-      icon: {
-        _groupDisabled: {
-          color: 'text.disabled!',
         },
       },
     },
@@ -98,21 +94,22 @@
       variant: {
         default: {
           root: {
-            color: 'text.subtle',
+            color: 'text.muted',
+            _focus: { color: 'text.default' },
           },
           icon: {
-            color: 'text.faint',
-            _groupFocus: { color: 'text.subtle' },
+            color: 'text.muted',
+            _groupFocus: { color: 'text.default' },
           },
         },
         danger: {
           root: {
-            color: 'text.subtle',
-            _focus: { color: 'text.danger' },
+            color: 'text.muted',
+            _focus: { color: 'danger.default' },
           },
           icon: {
-            color: 'text.faint',
-            _groupFocus: { color: 'text.danger' },
+            color: 'text.muted',
+            _groupFocus: { color: 'danger.default' },
           },
         },
       },
@@ -120,7 +117,7 @@
         true: {},
         false: {
           root: {
-            _hover: { backgroundColor: 'surface.muted' },
+            _hover: { backgroundColor: 'surface.hover' },
             '[data-submenu-safezone] &': { _hover: { backgroundColor: 'transparent' } },
           },
         },
@@ -131,9 +128,13 @@
         variant: 'default',
         focusManaged: false,
         css: {
+          root: {
+            _hover: { color: 'text.default' },
+            '[data-submenu-safezone] &': { _hover: { color: 'text.muted' } },
+          },
           icon: {
-            _groupHover: { color: 'text.subtle' },
-            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
+            _groupHover: { color: 'text.default' },
+            '[data-submenu-safezone] .group:hover &': { color: 'text.muted' },
           },
         },
       },
@@ -142,12 +143,12 @@
         focusManaged: false,
         css: {
           root: {
-            _hover: { color: 'text.danger' },
-            '[data-submenu-safezone] &': { _hover: { color: 'text.subtle' } },
+            _hover: { color: 'danger.default' },
+            '[data-submenu-safezone] &': { _hover: { color: 'text.muted' } },
           },
           icon: {
-            _groupHover: { color: 'text.danger' },
-            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
+            _groupHover: { color: 'danger.default' },
+            '[data-submenu-safezone] .group:hover &': { color: 'text.muted' },
           },
         },
       },

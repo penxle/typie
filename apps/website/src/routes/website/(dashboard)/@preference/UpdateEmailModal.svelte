@@ -61,9 +61,9 @@
         class={css({
           padding: '12px',
           borderRadius: '6px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.canvas',
           fontSize: '14px',
-          color: 'text.subtle',
+          color: 'text.muted',
         })}
       >
         {email}
@@ -75,7 +75,7 @@
       <TextInput id="email" autofocus placeholder="new@example.com" type="email" bind:value={form.fields.email} />
 
       {#if form.errors.email}
-        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{form.errors.email}</div>
+        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{form.errors.email}</div>
       {/if}
     </div>
 

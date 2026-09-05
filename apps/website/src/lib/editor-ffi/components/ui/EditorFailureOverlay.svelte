@@ -137,7 +137,7 @@
             marginY: 'auto',
             backgroundColor: 'surface.default',
             textAlign: 'center',
-            boxShadow: 'small',
+            boxShadow: 'sm',
             zIndex: '1',
             pointerEvents: 'auto',
           })}
@@ -145,7 +145,7 @@
         >
           <Logo class={css({ width: '24px', height: '24px' })} />
           <h2 id={titleId} class={css({ fontSize: '20px', fontWeight: 'bold' })}>앗! 문제가 발생했어요</h2>
-          <p id={messageId} class={css({ fontSize: '14px', color: 'text.faint' })}>잠시 후 다시 시도해주세요.</p>
+          <p id={messageId} class={css({ fontSize: '14px', color: 'text.muted' })}>잠시 후 다시 시도해주세요.</p>
           <Button onclick={onAction} size="md" bind:element={actionButton}>{actionLabel}</Button>
         </div>
       </div>

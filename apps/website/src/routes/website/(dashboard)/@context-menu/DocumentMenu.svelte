@@ -527,7 +527,7 @@
       borderRadius: '8px',
       paddingX: '12px',
       paddingY: '8px',
-      backgroundColor: 'surface.subtle',
+      backgroundColor: 'surface.canvas',
     })}
   >
     <Icon style={css.raw({ color: 'text.muted' })} icon={InfoIcon} size={14} />
@@ -746,16 +746,16 @@
     paddingX: '10px',
     paddingY: '4px',
     fontSize: '12px',
-    color: 'text.faint',
+    color: 'text.hint',
     userSelect: 'none',
   })}
 >
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <div class={css({ fontWeight: 'medium' })}>
       {#if entity.visibility === EntityVisibility.PUBLIC}
-        <span class={css({ color: 'accent.success.default' })}>공개 조회</span>
+        <span class={css({ color: 'success.default' })}>공개 조회</span>
       {:else if entity.visibility === EntityVisibility.UNLISTED}
-        <span class={css({ color: 'accent.brand.default' })}>링크 조회</span>
+        <span class={css({ color: 'text.default' })}>링크 조회</span>
       {:else}
         <span>비공개</span>
       {/if}
@@ -765,7 +765,7 @@
 
     <div class={css({ fontWeight: 'medium' })}>
       {#if entity.availability === EntityAvailability.UNLISTED}
-        <span class={css({ color: 'accent.brand.default' })}>링크 편집</span>
+        <span class={css({ color: 'text.default' })}>링크 편집</span>
       {:else}
         <span>나만 편집</span>
       {/if}

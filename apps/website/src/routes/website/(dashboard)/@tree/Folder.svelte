@@ -242,23 +242,23 @@
           borderRadius: '6px',
           transition: 'common',
           cursor: 'pointer',
-          _supportHover: { backgroundColor: 'surface.muted' },
-          '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
-          '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
+          _supportHover: { backgroundColor: 'surface.hover' },
+          '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
+          '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
         },
         folder.data.entity.depth > 0 && {
           borderLeftWidth: '1px',
           borderLeftRadius: '0',
           marginLeft: '-1px',
           paddingLeft: '14px',
-          _supportHover: { borderColor: 'border.strong' },
+          _supportHover: { borderColor: 'border.emphasis' },
         },
         selected && {
-          backgroundColor: 'accent.info.subtle',
-          _supportHover: { backgroundColor: 'accent.info.subtle' },
-          '&:has([aria-pressed="true"])': { backgroundColor: 'accent.info.subtle' },
+          backgroundColor: 'surface.active',
+          _supportHover: { backgroundColor: 'surface.active' },
+          '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active' },
           '&[data-context-menu-open="true"]': {
-            backgroundColor: 'accent.info.subtle',
+            backgroundColor: 'surface.active',
           },
         },
       ),
@@ -277,7 +277,7 @@
   >
     <EntitySelectionIndicator entityId={folder.data.entity.id} visibility={folder.data.entity.visibility} />
 
-    <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+    <Icon style={css.raw({ color: 'text.muted' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
     <EntityIcon entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
     {#if editing}
@@ -391,13 +391,13 @@
           paddingY: '6px',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.disabled',
+          color: 'text.hint',
         })}
       >
         폴더 내용을 불러오지 못했어요
       </div>
     {:else if !children.data}
-      <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.disabled' })}>
+      <div class={css({ paddingLeft: '14px', paddingRight: '8px', paddingY: '6px', color: 'text.muted' })}>
         <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
     {:else}
@@ -411,7 +411,7 @@
             paddingY: '6px',
             fontSize: '14px',
             fontWeight: 'medium',
-            color: 'text.disabled',
+            color: 'text.hint',
           })}
           use:contextMenu={{ content: emptyFolderMenuContent }}
         >

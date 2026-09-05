@@ -20,7 +20,7 @@
   class={css({
     position: 'relative',
     minHeight: '[100vh]',
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
   })}
 >
   <div
@@ -30,7 +30,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -58,7 +58,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -71,7 +71,7 @@
           class={css({
             fontSize: { sm: '[36px]', lg: '[56px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
             fontFamily: 'Paperlogy',
@@ -80,13 +80,13 @@
         >
           새로운 기능,
           <br />
-          <span class={css({ color: 'dark.gray.400' })}>더 나은 경험.</span>
+          <span class={css({ color: 'text.muted' })}>더 나은 경험.</span>
         </h1>
 
         <p
           class={css({
             fontSize: { sm: '16px', lg: '18px' },
-            color: 'dark.gray.400',
+            color: 'text.muted',
             lineHeight: '[1.65]',
             maxWidth: '[400px]',
           })}
@@ -147,7 +147,7 @@
                   class={css({
                     fontSize: { sm: '13px', lg: '14px' },
                     fontFamily: 'mono',
-                    color: 'dark.gray.400',
+                    color: 'text.hint',
                     letterSpacing: '[0.02em]',
                   })}
                 >
@@ -162,7 +162,7 @@
                   fontSize: { sm: '[24px]', lg: '[32px]' },
                   fontWeight: 'medium',
                   marginBottom: '24px',
-                  color: 'dark.gray.100',
+                  color: 'text.default',
                   lineHeight: '[1.2]',
                   letterSpacing: '[-0.02em]',
                   fontFamily: 'Paperlogy',
@@ -187,7 +187,7 @@
                       width: '[calc(100% + 24px)]',
                       height: '[calc(100% + 24px)]',
                       borderWidth: '1px',
-                      borderColor: 'dark.gray.900',
+                      borderColor: 'border.hairline',
                       pointerEvents: 'none',
                       display: { sm: 'none', lg: 'block' },
                     })}
@@ -195,10 +195,10 @@
                   <div
                     class={css({
                       position: 'relative',
-                      backgroundColor: 'dark.gray.900',
+                      backgroundColor: 'surface.default',
                       padding: '4px',
                       borderWidth: '1px',
-                      borderColor: 'dark.gray.900',
+                      borderColor: 'border.hairline',
                     })}
                   >
                     <img
@@ -222,7 +222,7 @@
                   maxWidth: '[680px]',
                   fontSize: { sm: '15px', lg: '16px' },
                   lineHeight: '[1.75]',
-                  color: 'dark.gray.300',
+                  color: 'text.muted',
                   '& p': {
                     marginBottom: '20px',
                   },
@@ -231,7 +231,7 @@
                   },
                   '& h1, & h2, & h3': {
                     fontWeight: 'medium',
-                    color: 'dark.gray.100',
+                    color: 'text.default',
                     fontFamily: 'Paperlogy',
                   },
                   '& h1': {
@@ -267,19 +267,19 @@
                     paddingLeft: '4px',
                   },
                   '& a': {
-                    color: 'dark.brand.300',
+                    color: 'text.default',
                     textDecoration: 'underline',
-                    textDecorationColor: '[oklch(0.55 0.18 70 / 0.5)]',
+                    textDecorationColor: 'text.default/50',
                     textUnderlineOffset: '3px',
                     transition: '[all 0.2s ease]',
                     _hover: {
-                      color: 'dark.brand.200',
-                      textDecorationColor: 'dark.brand.300',
+                      color: 'text.default',
+                      textDecorationColor: 'text.default',
                     },
                   },
                   '& strong, & b': {
                     fontWeight: 'semibold',
-                    color: 'dark.gray.100',
+                    color: 'text.default',
                   },
                   '& em, & i': {
                     fontStyle: 'italic',
@@ -289,8 +289,8 @@
                     opacity: '[0.6]',
                   },
                   '& code': {
-                    backgroundColor: 'dark.gray.800',
-                    color: 'dark.gray.200',
+                    backgroundColor: 'surface.inset',
+                    color: 'text.muted',
                     paddingX: '7px',
                     paddingY: '3px',
                     fontSize: '14px',
@@ -298,13 +298,13 @@
                     borderRadius: '[2px]',
                   },
                   '& pre': {
-                    backgroundColor: 'dark.gray.900',
-                    color: 'dark.gray.200',
+                    backgroundColor: 'surface.inset',
+                    color: 'text.muted',
                     padding: '24px',
                     marginY: '24px',
                     overflow: 'auto',
                     borderWidth: '1px',
-                    borderColor: 'dark.gray.900',
+                    borderColor: 'border.hairline',
                   },
                   '& pre code': {
                     backgroundColor: 'transparent',
@@ -316,16 +316,16 @@
                   },
                   '& blockquote': {
                     borderLeftWidth: '2px',
-                    borderLeftColor: 'dark.brand.400',
+                    borderLeftColor: 'border.default',
                     paddingLeft: '24px',
                     marginY: '24px',
-                    color: 'dark.gray.400',
+                    color: 'text.muted',
                     fontStyle: 'italic',
                   },
                   '& hr': {
                     border: 'none',
                     borderTopWidth: '1px',
-                    borderTopColor: 'dark.gray.900',
+                    borderTopColor: 'border.hairline',
                     marginY: '40px',
                   },
                   '& details': {
@@ -337,7 +337,7 @@
                     gap: '8px',
                     listStyle: 'none',
                     fontWeight: 'medium',
-                    color: 'dark.gray.100',
+                    color: 'text.default',
                     cursor: 'pointer',
                     userSelect: 'none',
                   },
@@ -348,7 +348,7 @@
                     flexShrink: '0',
                     width: '16px',
                     height: '16px',
-                    color: 'dark.gray.500',
+                    color: 'text.default',
                     transition: '[transform 200ms ease]',
                   },
                   '& details[open] summary svg': {
@@ -378,7 +378,7 @@
                   },
                   '& [data-note]': {
                     fontSize: '[calc(13em/15)]',
-                    color: 'dark.gray.500',
+                    color: 'text.hint',
                   },
                   '& [data-note] *': {
                     color: '[inherit]',
@@ -388,7 +388,7 @@
                     height: 'auto',
                     marginY: '24px',
                     borderWidth: '1px',
-                    borderColor: 'dark.gray.900',
+                    borderColor: 'border.hairline',
                   },
                 })}
               >
@@ -419,12 +419,12 @@
                 width: '40px',
                 height: '40px',
                 borderWidth: '1px',
-                borderColor: 'dark.gray.900',
-                color: 'dark.gray.400',
+                borderColor: 'border.hairline',
+                color: 'text.muted',
                 transition: '[all 0.2s ease-out]',
                 _hover: {
-                  borderColor: 'dark.gray.700',
-                  color: 'dark.gray.200',
+                  borderColor: 'border.emphasis',
+                  color: 'text.default',
                 },
               })}
               aria-label="이전 페이지"
@@ -450,13 +450,13 @@
                     justifyContent: 'center',
                     width: '40px',
                     height: '40px',
-                    backgroundColor: pageIndex + 1 === data.currentPage ? 'dark.gray.800' : 'transparent',
-                    color: pageIndex + 1 === data.currentPage ? 'dark.gray.100' : 'dark.gray.500',
+                    backgroundColor: pageIndex + 1 === data.currentPage ? 'surface.active' : 'transparent',
+                    color: pageIndex + 1 === data.currentPage ? 'text.default' : 'text.muted',
                     fontSize: '14px',
                     fontFamily: 'mono',
                     transition: '[all 0.2s ease]',
                     _hover: {
-                      color: 'dark.gray.200',
+                      color: pageIndex + 1 === data.currentPage ? 'text.default' : 'text.default',
                     },
                   })}
                   href={`?page=${pageIndex + 1}`}
@@ -471,7 +471,7 @@
                     justifyContent: 'center',
                     width: '40px',
                     height: '40px',
-                    color: 'dark.gray.600',
+                    color: 'text.hint',
                     fontSize: '14px',
                   })}
                 >
@@ -490,12 +490,12 @@
                 width: '40px',
                 height: '40px',
                 borderWidth: '1px',
-                borderColor: 'dark.gray.900',
-                color: 'dark.gray.400',
+                borderColor: 'border.hairline',
+                color: 'text.muted',
                 transition: '[all 0.2s ease-out]',
                 _hover: {
-                  borderColor: 'dark.gray.700',
-                  color: 'dark.gray.200',
+                  borderColor: 'border.emphasis',
+                  color: 'text.default',
                 },
               })}
               aria-label="다음 페이지"

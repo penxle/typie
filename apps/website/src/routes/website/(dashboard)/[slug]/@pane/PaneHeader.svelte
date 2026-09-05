@@ -46,7 +46,7 @@
     borderColor: 'border.default',
     borderRadius: '6px',
     transition: 'common',
-    _supportHover: { backgroundColor: 'surface.muted' },
+    _supportHover: { backgroundColor: 'surface.hover' },
   });
 
   $effect(() => {
@@ -145,9 +145,9 @@
                 size: '24px',
                 flexShrink: '0',
                 borderRadius: '6px',
-                color: 'text.faint',
+                color: 'text.muted',
                 transition: 'common',
-                _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+                _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
               })}
               onclick={() => {
                 app.state.sidebarPeek = false;
@@ -216,7 +216,7 @@
 
         {#if placement.topRight}
           <button
-            class={css(prismButton, prismPanelOpen ? { backgroundColor: 'surface.muted' } : {})}
+            class={css(prismButton, prismPanelOpen ? { backgroundColor: 'surface.active' } : {})}
             aria-label={app.state.prismBadge ? 'PRISM 열기/닫기, 확인할 항목 있음' : 'PRISM 열기/닫기'}
             aria-pressed={prismPanelOpen}
             onclick={() => {
@@ -228,7 +228,7 @@
             use:tooltip={{ message: prismPanelOpen ? 'PRISM 닫기' : 'PRISM 열기', keys: ['Mod', 'E'] }}
           >
             <span class={css({ position: 'relative', display: 'flex', flexShrink: '0' })}>
-              <Icon style={css.raw({ color: prismPanelOpen ? 'text.default' : 'text.faint' })} icon={PrismIcon} size={14} />
+              <Icon style={css.raw({ color: prismPanelOpen ? 'accent.default' : 'text.muted' })} icon={PrismIcon} size={14} />
               {#if app.state.prismBadge}
                 <PrismBadgeDot />
               {/if}
@@ -239,7 +239,7 @@
                 fontWeight: 'semibold',
                 letterSpacing: '[0.04em]',
                 lineHeight: '[1]',
-                color: prismPanelOpen ? 'text.default' : 'text.muted',
+                color: prismPanelOpen ? 'accent.default' : 'text.muted',
               })}
             >
               PRISM
@@ -251,7 +251,7 @@
   </div>
 
   <div
-    class={css({ width: 'full', height: '1px', flexShrink: '0', backgroundColor: zenModeEnabled ? 'transparent' : 'surface.muted' })}
+    class={css({ width: 'full', height: '1px', flexShrink: '0', backgroundColor: zenModeEnabled ? 'transparent' : 'border.hairline' })}
     aria-hidden="true"
     data-pane-header-boundary
   ></div>

@@ -142,15 +142,15 @@
           position: 'absolute',
           inset: '0',
           borderRadius: 'full',
-          backgroundColor: 'interactive.hover',
+          backgroundColor: 'border.default',
           size: '4px',
           margin: 'auto',
           opacity: '100',
           transition: 'common',
           _groupHover: { opacity: '0' },
         },
-        visibility === EntityVisibility.PUBLIC && { backgroundColor: 'accent.success.default' },
-        visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.brand.default' },
+        visibility === EntityVisibility.PUBLIC && { backgroundColor: 'success.default' },
+        visibility === EntityVisibility.UNLISTED && { backgroundColor: 'accent.default' },
         selected && { opacity: '0' },
       )}
     ></div>

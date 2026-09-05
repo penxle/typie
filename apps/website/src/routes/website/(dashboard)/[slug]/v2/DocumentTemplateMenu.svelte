@@ -67,8 +67,8 @@
     textAlign: '[inherit]',
     transition: 'common',
     pointerEvents: 'auto',
-    _hover: { color: 'text.faint' },
-    _expanded: { color: 'text.faint' },
+    _hover: { color: 'text.muted' },
+    _expanded: { color: 'text.default' },
   })}
   buttonAriaLabel="템플릿 불러오기"
   listStyle={css.raw({ width: '280px', maxWidth: '[calc(100vw - 16px)]', maxHeight: '[min(268px, var(--floating-available-height))]' })}
@@ -95,7 +95,7 @@
             alignItems: 'center',
             flexShrink: '0',
             gap: '4px',
-            color: 'text.faint',
+            color: 'text.hint',
             opacity: '0',
             transition: 'common',
             _groupFocus: { opacity: '100' },
@@ -107,7 +107,7 @@
       {/snippet}
     </MenuItem>
   {:else}
-    <div class={css({ paddingX: '10px', paddingY: '8px', fontSize: '13px', color: 'text.faint', textAlign: 'left' })} role="presentation">
+    <div class={css({ paddingX: '10px', paddingY: '8px', fontSize: '13px', color: 'text.hint', textAlign: 'left' })} role="presentation">
       아직 템플릿이 없어요.
     </div>
   {/each}

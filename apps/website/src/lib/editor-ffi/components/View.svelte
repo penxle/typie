@@ -185,7 +185,7 @@
 
   const layoutMode = $derived(ctx.editor?.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
-  const layoutBackground = $derived(token(isPaginated ? 'colors.surface.subtle' : 'colors.surface.default'));
+  const layoutBackground = $derived(token(isPaginated ? 'colors.surface.canvas' : 'colors.surface.default'));
   const pageWidth = $derived(ctx.editor?.pageSizes[0]?.width ?? 0);
   const zoomLayout: DocumentZoomLayout | null = $derived.by(() => {
     if (layoutMode?.type === 'continuous' && layoutMode.max_width > 0) {

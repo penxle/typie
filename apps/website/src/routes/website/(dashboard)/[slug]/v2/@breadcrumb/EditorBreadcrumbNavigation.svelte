@@ -56,8 +56,8 @@
   const interactiveSegmentClass = css({
     cursor: 'pointer',
     transition: 'common',
-    _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
-    _expanded: { backgroundColor: 'surface.muted', color: 'text.default' },
+    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+    _expanded: { backgroundColor: 'surface.active', color: 'text.default' },
   });
 
   function pathItemId(pathItem: BreadcrumbPathItem) {
@@ -191,7 +191,7 @@
     paddingRight: '4px',
     fontSize: '12px',
     fontWeight: 'medium',
-    color: 'text.subtle',
+    color: 'text.muted',
   })}
   aria-label="문서 경로"
 >
@@ -242,8 +242,8 @@
       paddingX: '0',
       paddingY: '0',
       overflow: 'hidden',
-      backgroundColor: 'surface.subtle',
-      boxShadow: 'menu',
+      backgroundColor: 'surface.default',
+      boxShadow: 'lg',
     })}
     onfocusout={handlePopupFocusOut}
     use:floating

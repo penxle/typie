@@ -255,18 +255,18 @@
             </PaneHeaderControls>
           {/snippet}
 
-          <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', fontSize: '12px', color: 'text.subtle' })}>
+          <div class={flex({ alignItems: 'center', gap: '4px', paddingLeft: '8px', fontSize: '12px', color: 'text.muted' })}>
             <Icon icon={FileXIcon} size={14} />
             <span>삭제된 {name}</span>
           </div>
         </PaneHeader>
 
         <div class={center({ flexDirection: 'column', gap: '20px', flexGrow: '1', minHeight: '0', textAlign: 'center' })}>
-          <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
+          <Icon style={css.raw({ size: '56px', color: 'text.muted', '& *': { strokeWidth: '[1.25px]' } })} icon={FileXIcon} />
 
           <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-            <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>{name}가 삭제되었어요</h1>
-            <p class={css({ fontSize: '14px', color: 'text.faint' })}>
+            <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.default' })}>{name}가 삭제되었어요</h1>
+            <p class={css({ fontSize: '14px', color: 'text.muted' })}>
               {name}가 삭제되어 더 이상 접근할 수 없어요.
               <br />
               다른 {name}를 선택해주세요

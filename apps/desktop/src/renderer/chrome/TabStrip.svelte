@@ -238,17 +238,17 @@
     borderRadius: '8px',
     fontSize: '13px',
     fontWeight: 'medium',
-    color: 'text.subtle',
+    color: 'text.muted',
     cursor: 'default',
     outline: 'none',
     transition:
       '[width 160ms cubic-bezier(0.23, 1, 0.32, 1), min-width 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), color 120ms ease, background-color 120ms ease, box-shadow 120ms ease]',
-    '&:hover': { color: 'text.default', backgroundColor: 'surface.muted' },
+    '&:hover': { color: 'text.default', backgroundColor: 'surface.hover' },
     '&[data-active="true"]': {
       backgroundColor: 'surface.default',
       color: 'text.default',
       fontWeight: 'semibold',
-      boxShadow: '[0 0 0 1px {colors.border.subtle}, 0 1px 2px {colors.shadow.default/6}]',
+      boxShadow: '[0 0 0 1px {colors.border.hairline}, 0 1px 2px {colors.shadow.default/6}]',
     },
     '&:hover .close, &[data-active="true"] .close, & .close:focus-visible': { opacity: '100', pointerEvents: 'auto' },
     '&[data-closing="true"], &[data-entering="true"]': {
@@ -263,8 +263,8 @@
         '[width 160ms cubic-bezier(0.23, 1, 0.32, 1), min-width 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 100ms cubic-bezier(0.23, 1, 0.32, 1)]',
     },
     '&[data-entering="true"]': { transition: '[none]' },
-    '&[data-dragging="true"]': { zIndex: '2', backgroundColor: 'surface.default', boxShadow: 'small' },
-    _focusVisible: { boxShadow: '[inset 0 0 0 2px {colors.accent.brand.default}]' },
+    '&[data-dragging="true"]': { zIndex: '2', backgroundColor: 'surface.default', boxShadow: 'sm' },
+    _focusVisible: { boxShadow: '[inset 0 0 0 2px {colors.accent.default}]' },
     _motionReduce: { transitionDuration: '[0ms]' },
   });
 
@@ -286,15 +286,15 @@
     flexShrink: '0',
     size: '18px',
     borderRadius: 'full',
-    color: 'text.faint',
+    color: 'text.hint',
     opacity: '0',
     pointerEvents: 'none',
     transitionProperty: '[opacity, background-color, color, transform]',
     transitionDuration: '[100ms]',
     transitionTimingFunction: '[cubic-bezier(0.23, 1, 0.32, 1)]',
-    _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
     _active: { transform: 'scale(0.94)' },
-    _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.brand.default}]' },
+    _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.default}]' },
   });
 
   const iconButtonStyle = css.raw({
@@ -305,12 +305,12 @@
     size: '28px',
     marginY: '6px',
     borderRadius: 'full',
-    color: 'text.subtle',
+    color: 'text.muted',
     transitionProperty: '[background-color, color, transform, opacity]',
     transitionDuration: '[100ms]',
-    _hover: { backgroundColor: 'interactive.hover', color: 'text.default' },
+    _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
     _active: { transform: 'scale(0.95)' },
-    _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.brand.default}]' },
+    _focusVisible: { boxShadow: '[0 0 0 2px {colors.accent.default}]' },
   });
 
   const iconButtonClass = css(iconButtonStyle);
@@ -326,9 +326,9 @@
     height: '[40px]',
     paddingLeft: isMac ? '[96px]' : '[8px]',
     paddingRight: isMac ? '[8px]' : '[140px]',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.canvas',
     userSelect: 'none',
-    _after: { content: '""', position: 'absolute', left: '0', right: '0', bottom: '0', height: '1px', backgroundColor: 'border.subtle' },
+    _after: { content: '""', position: 'absolute', left: '0', right: '0', bottom: '0', height: '1px', backgroundColor: 'border.hairline' },
     '&[data-fullscreen="true"]': { paddingLeft: '[8px]', paddingRight: '[8px]' },
   })}
   data-fullscreen={fullscreen}
@@ -395,7 +395,7 @@
             {#if TabIcon}
               <span
                 style:color={tab.icon.color ? getEntityIconColor(tab.icon.color) : undefined}
-                class={css({ display: 'flex', flexShrink: '0', color: 'text.faint' })}
+                class={css({ display: 'flex', flexShrink: '0', color: 'text.hint' })}
               >
                 <TabIcon class={css({ size: '14px' })} />
               </span>

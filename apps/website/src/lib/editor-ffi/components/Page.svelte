@@ -54,9 +54,9 @@
       isolation: 'isolate',
       ...(isPaginated && {
         backgroundColor: 'surface.default',
-        boxShadow: '[0_2px_8px_rgba(0,0,0,0.1)]',
+        boxShadow: 'md',
         ringWidth: '1px',
-        ringColor: 'black/5',
+        ringColor: 'border.hairline',
       }),
     })}
     {@attach (el) => {

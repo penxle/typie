@@ -52,7 +52,7 @@
 
   const itemClass = css({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '[1.5]' });
   const summaryClass = css({ marginTop: '6px', lineHeight: '[1.5]' });
-  const noticeClass = css({ color: 'text.faint' });
+  const noticeClass = css({ color: 'text.hint' });
 </script>
 
 {#if loading}

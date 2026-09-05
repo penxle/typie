@@ -181,7 +181,7 @@
     {#if showHomeItem}
       <div
         class={css({
-          '&:focus > [data-breadcrumb-tree-row]': { backgroundColor: 'surface.muted' },
+          '&:focus > [data-breadcrumb-tree-row]': { backgroundColor: 'surface.hover' },
         })}
         aria-level="1"
         aria-selected="false"
@@ -210,22 +210,22 @@
             color: 'text.muted',
             cursor: 'pointer',
             transition: 'common',
-            _supportHover: { backgroundColor: 'surface.muted' },
+            _supportHover: { backgroundColor: 'surface.hover' },
           })}
           data-breadcrumb-tree-row
         >
-          <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={HomeIcon} size={14} />
+          <Icon style={css.raw({ flexShrink: '0', color: 'text.muted' })} icon={HomeIcon} size={14} />
           <EntityName name="홈" />
         </div>
       </div>
     {/if}
 
     {#if activeQuery.error}
-      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.hint' })}>
         폴더 내용을 불러오지 못했어요
       </div>
     {:else if !entities}
-      <div class={css({ paddingX: '8px', paddingY: '6px', color: 'text.disabled' })}>
+      <div class={css({ paddingX: '8px', paddingY: '6px', color: 'text.muted' })}>
         <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
     {:else}
@@ -241,7 +241,7 @@
           {onToggleFolder}
         />
       {:else}
-        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.hint' })}>
           폴더가 비어있어요
         </div>
       {/each}

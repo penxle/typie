@@ -1,5 +1,6 @@
 <script lang="ts">
   import { EntityAvailability, EntityVisibility } from '@typie/lib/enums';
+  import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import { comma } from '@typie/ui/utils';
@@ -17,7 +18,7 @@
   let { availability, characterCount, createdAt, updatedAt, visibility }: Props = $props();
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '140px', opacity: '70' })}>
+<div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '140px' })}>
   <div class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'semibold' })}>
     {#if visibility === EntityVisibility.PUBLIC}
       <span>공개 조회</span>
@@ -40,7 +41,7 @@
     <div>총 {comma(characterCount)}자</div>
   {/if}
 
-  <div>
+  <div class={css({ opacity: '50' })}>
     <div>생성: {dayjs(createdAt).formatAsDateTime()}</div>
     <div>수정: {dayjs(updatedAt).formatAsDateTime()}</div>
   </div>

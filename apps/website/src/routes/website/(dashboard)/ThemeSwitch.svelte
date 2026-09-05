@@ -32,15 +32,15 @@
       class={center({
         borderRadius: '8px',
         size: '32px',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
         _hover: {
-          color: 'text.subtle',
-          backgroundColor: 'surface.muted',
+          color: 'text.default',
+          backgroundColor: 'surface.hover',
         },
         '&[aria-pressed="true"]': {
-          color: 'text.subtle',
-          backgroundColor: 'surface.muted',
+          color: 'text.default',
+          backgroundColor: 'surface.active',
         },
       })}
       aria-pressed={open}
@@ -62,7 +62,7 @@
       {themes[name].label}
 
       {#if theme.currentTheme === name}
-        <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+        <Icon style={css.raw({ marginLeft: 'auto', color: 'accent.default' })} icon={CheckIcon} size={14} />
       {/if}
     </MenuItem>
   {/each}

@@ -60,9 +60,9 @@
           borderRadius: '6px',
           paddingX: '6px',
           gap: '2px',
-          color: 'text.subtle',
+          color: 'text.muted',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         }),
       )}
       onclick={toggleCollapse}
@@ -83,25 +83,25 @@
 
   <div class={flex({ flexDirection: 'column', gap: '8px' })}>
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>변화량</dt>
-      <dd class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'medium', color: 'text.subtle' })}>
+      <dt class={css({ color: 'text.hint' })}>변화량</dt>
+      <dd class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'medium', color: 'text.muted' })}>
         {#if difference === 0}
           없음
         {:else}
-          <Icon style={css.raw({ color: 'text.faint' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
+          <Icon style={css.raw({ color: 'text.muted' })} icon={difference >= 0 ? TrendingUpIcon : TrendingDownIcon} size={14} />
           <span>{difference >= 0 ? '+' : '-'}{comma(Math.abs(difference))}자</span>
         {/if}
       </dd>
     </dl>
 
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>입력한 글자</dt>
-      <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(additions ?? 0)}자</dd>
+      <dt class={css({ color: 'text.hint' })}>입력한 글자</dt>
+      <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>{comma(additions ?? 0)}자</dd>
     </dl>
 
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>지운 글자</dt>
-      <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>{comma(deletions ?? 0)}자</dd>
+      <dt class={css({ color: 'text.hint' })}>지운 글자</dt>
+      <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>{comma(deletions ?? 0)}자</dd>
     </dl>
   </div>
 </Widget>

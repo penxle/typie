@@ -100,13 +100,14 @@
       width: chevron ? 'fit' : '24px',
       height: '24px',
       textAlign: 'left',
-      color: active ? 'text.brand' : 'text.subtle',
+      color: active ? 'accent.default' : 'text.muted',
+      backgroundColor: active ? 'surface.active' : 'transparent',
       transition: 'common',
       _enabled: {
-        _hover: { color: 'text.brand' },
-        _expanded: { color: 'text.brand' },
+        _hover: { color: active ? 'accent.default' : 'text.default', _expanded: { color: 'accent.default' } },
+        _expanded: { color: 'accent.default', backgroundColor: 'surface.active' },
       },
-      _disabled: { opacity: '50' },
+      _disabled: { opacity: '40' },
       flexShrink: '0',
     },
     style,
@@ -126,7 +127,7 @@
   {#if chevron}
     <Icon
       style={css.raw({
-        color: 'text.faint',
+        color: 'text.muted',
         transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
         transitionDuration: '150ms',
       })}
@@ -140,11 +141,11 @@
   <div
     class={css({
       borderWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       borderBottomRadius: '4px',
       backgroundColor: 'surface.default',
       zIndex: 'overEditor',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       overflow: 'hidden',
     })}
     use:floatingAction

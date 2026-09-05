@@ -352,7 +352,11 @@
       />
 
       {#if stage === 'uploading'}
-        <div class={center({ position: 'absolute', inset: '0', backgroundColor: 'white/50' })} aria-label="이미지 업로드 중" role="status">
+        <div
+          class={center({ position: 'absolute', inset: '0', backgroundColor: 'surface.default/50' })}
+          aria-label="이미지 업로드 중"
+          role="status"
+        >
           {#if showUploadSpinner}
             <div
               style:width={`${uploadSpinnerVisualSize}px`}
@@ -360,7 +364,7 @@
               style:transform={fixedControlTransform}
               style:transform-origin="center"
             >
-              <RingSpinner style={css.raw({ size: 'full', color: 'text.disabled' })} />
+              <RingSpinner style={css.raw({ size: 'full', color: 'text.muted' })} />
             </div>
           {/if}
         </div>
@@ -377,11 +381,11 @@
             class={center({
               borderRadius: '4px',
               size: '28px',
-              color: 'text.bright',
-              backgroundColor: '[#363839/70]',
+              color: 'text.on.inverse',
+              backgroundColor: 'surface.inverse/70',
               opacity: '0',
               transition: 'opacity',
-              _hover: { backgroundColor: '[#363839/40]' },
+              _hover: { backgroundColor: 'surface.inverse/85' },
               _groupHover: { opacity: '100' },
             })}
             aria-label="이미지 확대 보기"
@@ -399,11 +403,11 @@
               class={center({
                 borderRadius: '4px',
                 size: '28px',
-                color: 'text.bright',
-                backgroundColor: '[#363839/70]',
+                color: 'text.on.inverse',
+                backgroundColor: 'surface.inverse/70',
                 opacity: '0',
                 transition: 'opacity',
-                _hover: { backgroundColor: '[#363839/40]' },
+                _hover: { backgroundColor: 'surface.inverse/85' },
                 _groupHover: { opacity: '100' },
               })}
               aria-label="이미지 삭제"
@@ -485,11 +489,11 @@
             justifyContent: 'space-between',
             alignItems: 'center',
             borderRadius: '4px',
-            backgroundColor: 'surface.muted',
+            backgroundColor: 'surface.inset',
             width: 'full',
             height: '48px',
           }),
-          isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.palette.blue)]' }),
+          isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
         )}
         use:anchor
       >
@@ -500,7 +504,7 @@
             paddingX: '14px',
             paddingY: '12px',
             fontSize: '14px',
-            color: isAttachmentDropTarget ? 'palette.blue' : 'text.disabled',
+            color: isAttachmentDropTarget ? 'accent.default' : 'text.hint',
           })}
         >
           <Icon icon={ImageIcon} size={20} />
@@ -517,7 +521,7 @@
 
         {#if stage === 'resolving' || stage === 'uploading'}
           <div class={css({ marginRight: '14px' })}>
-            <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
+            <RingSpinner style={css.raw({ size: '16px', color: 'text.muted' })} />
           </div>
         {:else if canEdit && !isAttachmentDropTarget}
           <button
@@ -525,8 +529,8 @@
               marginRight: '12px',
               borderRadius: '4px',
               padding: '4px',
-              color: 'text.disabled',
-              _hover: { backgroundColor: 'interactive.hover', color: 'text.danger' },
+              color: 'text.muted',
+              _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
             })}
             aria-label="이미지 삭제"
             onclick={deleteNode}
@@ -556,10 +560,10 @@
       fontSize: '13px',
       color: 'text.muted',
       backgroundColor: 'surface.default',
-      boxShadow: 'small',
+      boxShadow: 'sm',
       transition: 'common',
       zIndex: 'editor',
-      _hover: { backgroundColor: 'interactive.hover' },
+      _hover: { backgroundColor: 'surface.hover' },
     })}
     onclick={handleUpload}
     type="button"

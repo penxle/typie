@@ -24,27 +24,27 @@
     paddingLeft: '16px',
     paddingY: '6px',
     paddingRight: '8px',
-    backgroundColor: 'surface.subtle',
+    backgroundColor: 'surface.default',
     borderRadius: '8px',
-    boxShadow: 'medium',
+    boxShadow: 'md',
     border: '1px solid',
-    borderColor: 'border.default',
+    borderColor: 'border.hairline',
   })}
   transition:fade={{ duration: 100 }}
 >
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <div class={flex({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>
-      <span class={css({ color: 'text.subtle' })}>{treeState.selectedEntityIds.size}</span>
+    <div class={flex({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>
+      <span class={css({ color: 'text.default' })}>{treeState.selectedEntityIds.size}</span>
       <span>개 선택됨</span>
     </div>
     <button
       class={center({
         size: '24px',
         borderRadius: '4px',
-        color: 'text.faint',
+        color: 'text.muted',
         transition: 'common',
         _hover: {
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.hover',
         },
       })}
       onclick={() => {
@@ -54,7 +54,7 @@
       type="button"
       use:tooltip={{ message: '선택 해제' }}
     >
-      <Icon style={css.raw({ color: 'text.faint' })} icon={XIcon} size={16} />
+      <Icon style={css.raw({ color: 'text.muted' })} icon={XIcon} size={16} />
     </button>
   </div>
   <div class={css({ width: '1px', height: '24px', backgroundColor: 'border.default' })}></div>
@@ -64,14 +64,14 @@
         class={center({
           borderRadius: '4px',
           size: '24px',
-          color: 'text.faint',
+          color: 'text.muted',
           transition: 'common',
-          _hover: { backgroundColor: 'surface.muted' },
-          _pressed: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
+          _pressed: { backgroundColor: 'surface.active' },
         })}
         aria-pressed={open}
       >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={EllipsisIcon} size={16} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={EllipsisIcon} size={16} />
       </div>
     {/snippet}
 

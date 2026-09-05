@@ -143,13 +143,17 @@
             justifyContent: 'center',
             size: '32px',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             borderRadius: 'full',
-            color: 'text.subtle',
+            color: 'text.muted',
             backgroundColor: 'surface.default',
             transition: 'common',
             _hover: {
-              backgroundColor: 'surface.subtle',
+              backgroundColor: 'surface.hover',
+              color: 'text.default',
+            },
+            _expanded: {
+              backgroundColor: 'surface.active',
               color: 'text.default',
             },
           })}
@@ -172,7 +176,7 @@
               {themes[name].label}
 
               {#if theme.currentTheme === name}
-                <Icon style={css.raw({ marginLeft: 'auto', color: 'text.brand' })} icon={CheckIcon} size={14} />
+                <Icon style={css.raw({ marginLeft: 'auto', color: 'accent.default' })} icon={CheckIcon} size={14} />
               {/if}
             </MenuItem>
           {/each}
@@ -183,7 +187,7 @@
             {#snippet button()}
               {#if query.data.me?.avatar}
                 <Img
-                  style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.subtle', borderRadius: 'full' })}
+                  style={css.raw({ size: '32px', borderWidth: '1px', borderColor: 'border.hairline', borderRadius: 'full' })}
                   alt={`${query.data.me.name}의 아바타`}
                   image$key={query.data.me.avatar}
                   size={32}
@@ -193,9 +197,9 @@
                   class={css({
                     size: '32px',
                     borderWidth: '1px',
-                    borderColor: 'border.subtle',
+                    borderColor: 'border.hairline',
                     borderRadius: 'full',
-                    backgroundColor: 'interactive.hover',
+                    backgroundColor: 'accent.subtle',
                   })}
                 ></div>
               {/if}

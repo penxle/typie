@@ -20,8 +20,8 @@
       activeIndicator: {
         position: 'absolute',
         borderRadius: '4px',
-        backgroundColor: 'surface.default',
-        boxShadow: 'small',
+        backgroundColor: 'surface.active',
+        boxShadow: 'sm',
         transition: '[left 100ms cubic-bezier(0.3, 0, 0, 1)]',
       },
       button: {
@@ -73,7 +73,7 @@
       flexShrink: '0',
       padding: '4px',
       borderRadius: '8px',
-      backgroundColor: 'surface.muted',
+      backgroundColor: 'surface.inset',
     },
     style,
   )}

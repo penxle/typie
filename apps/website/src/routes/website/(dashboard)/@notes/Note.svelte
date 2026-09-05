@@ -90,7 +90,7 @@
   const color = $derived(editState?.color ?? note.color);
   const displayStatus = $derived(cancelling ? 'OPEN' : resolving ? 'RESOLVED' : note.status);
   const isResolved = $derived(displayStatus === 'RESOLVED');
-  const colorHex = $derived(getNoteColor(color) ?? token('colors.surface.default'));
+  const colorHex = $derived(getNoteColor(color) ?? token('colors.palette.gray'));
 
   function getEntityTitle(entity: NoteEntity): string {
     if (entity.node.__typename === 'Document') return entity.node.title || '(제목 없음)';
@@ -170,12 +170,12 @@
         minHeight: '0',
         borderRadius: '10px',
         cursor: reorderEnabled ? 'grab' : 'default',
-        backgroundColor: expanded ? 'surface.default' : 'surface.subtle',
-        boxShadow: expanded ? 'large' : 'small',
+        backgroundColor: expanded ? 'surface.default' : 'surface.canvas',
+        boxShadow: expanded ? 'lg' : 'sm',
         borderWidth: '1px',
-        borderColor: expanded ? 'border.subtle' : 'transparent',
+        borderColor: expanded ? 'border.hairline' : 'transparent',
         _hover: {
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
         },
       }),
     )}
@@ -254,7 +254,7 @@
               lineHeight: '[1.55]',
               whiteSpace: 'pre-wrap',
               textDecorationLine: isResolved ? 'line-through' : 'none',
-              textDecorationColor: isResolved ? 'text.faint' : 'transparent',
+              textDecorationColor: isResolved ? 'text.muted' : 'transparent',
               opacity: isResolved && !resolving ? '50' : '100',
             })}
             onblur={() => {
@@ -275,13 +275,13 @@
               fontSize: '14px',
               lineHeight: '[1.55]',
               paddingRight: '22px',
-              color: content.trim() ? 'text.default' : 'text.faint',
+              color: content.trim() ? 'text.default' : 'text.hint',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               lineClamp: '3',
               opacity: isResolved && !resolving ? '50' : '100',
               textDecorationLine: isResolved ? 'line-through' : 'none',
-              textDecorationColor: isResolved ? 'text.faint' : 'transparent',
+              textDecorationColor: isResolved ? 'text.muted' : 'transparent',
             })}
           >
             {content.trim() || '(내용 없음)'}
@@ -301,7 +301,7 @@
             <div class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap' })}>
               {#each note.entities as entity (entity.id)}
                 {#if entity.node.__typename === 'Folder'}
-                  <span class={flex({ alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>
+                  <span class={flex({ alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.hint' })}>
                     <EntityIcon entity$key={entity} fallback={FolderIcon} size={12} />
                     <span class={css({ lineClamp: '1' })}>{getEntityTitle(entity)}</span>
                   </span>
@@ -312,10 +312,10 @@
                       gap: '4px',
                       fontSize: '12px',
                       fontWeight: 'medium',
-                      color: 'text.faint',
+                      color: 'text.hint',
                       borderRadius: '4px',
                       paddingX: '2px',
-                      _hover: { color: 'text.subtle', backgroundColor: 'surface.dark/10' },
+                      _hover: { color: 'text.muted', backgroundColor: 'surface.hover' },
                     })}
                     href={`/${entity.slug}`}
                     onclick={(e) => e.stopPropagation()}
@@ -324,9 +324,9 @@
                     <span class={css({ lineClamp: '1' })}>{getEntityTitle(entity)}</span>
                   </a>
                 {/if}
-                <span class={css({ fontSize: '12px', color: 'text.faint' })}>·</span>
+                <span class={css({ fontSize: '12px', color: 'text.hint' })}>·</span>
               {/each}
-              <TimeAgo style={css.raw({ fontSize: '12px', color: 'text.faint' })} timestamp={new Date(note.updatedAt).getTime()} />
+              <TimeAgo style={css.raw({ fontSize: '12px', color: 'text.hint' })} timestamp={new Date(note.updatedAt).getTime()} />
             </div>
           </div>
         </div>
@@ -360,7 +360,7 @@
               size="12px"
             />
 
-            <div class={css({ width: '1px', height: '12px', backgroundColor: 'border.subtle' })}></div>
+            <div class={css({ width: '1px', height: '12px', backgroundColor: 'border.hairline' })}></div>
 
             <button
               class={flex({
@@ -368,7 +368,7 @@
                 gap: '4px',
                 fontSize: '12px',
                 fontWeight: 'medium',
-                color: 'text.subtle',
+                color: 'text.muted',
                 cursor: 'pointer',
                 flexShrink: '0',
                 _hover: { color: 'text.default' },
@@ -388,7 +388,7 @@
                 minWidth: '0',
                 overflow: 'hidden',
                 fontSize: '11px',
-                color: 'text.faint',
+                color: 'text.hint',
                 whiteSpace: 'nowrap',
               })}
               aria-atomic="true"
@@ -397,7 +397,7 @@
               {#if editState?.saveDisplay === 'saving'}
                 저장 중...
               {:else if editState?.saveDisplay === 'failed'}
-                <span class={css({ color: 'text.danger' })}>저장 실패</span>
+                <span class={css({ color: 'danger.default' })}>저장 실패</span>
               {/if}
             </span>
           </div>
@@ -405,7 +405,7 @@
           {#if note.entities.length > 0}
             <div class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap' })}>
               {#each note.entities as entity (entity.id)}
-                <div class={flex({ alignItems: 'center', gap: '2px', fontSize: '12px', color: 'text.faint', minWidth: '0' })}>
+                <div class={flex({ alignItems: 'center', gap: '2px', fontSize: '12px', color: 'text.hint', minWidth: '0' })}>
                   <EntityIcon
                     style={css.raw({ flexShrink: '0' })}
                     entity$key={entity}
@@ -417,7 +417,7 @@
                     class={center({
                       size: '14px',
                       borderRadius: '2px',
-                      color: 'text.faint',
+                      color: 'text.muted',
                       cursor: 'pointer',
                       flexShrink: '0',
                       _hover: { color: 'text.default' },
@@ -444,7 +444,7 @@
         right: '8px',
         size: '22px',
         borderRadius: '4px',
-        color: 'text.faint',
+        color: 'text.muted',
         cursor: 'pointer',
         transition: 'common!',
         opacity: '0',
@@ -453,17 +453,17 @@
         },
         _hover: {
           color: 'text.default',
-          backgroundColor: 'surface.dark/10',
+          backgroundColor: 'surface.hover',
         },
         _focusVisible: {
           opacity: '100',
           color: 'text.default',
-          backgroundColor: 'surface.dark/10',
+          backgroundColor: 'surface.hover',
         },
         '&[aria-expanded="true"]': {
           opacity: '100',
           color: 'text.default',
-          backgroundColor: 'surface.dark/10',
+          backgroundColor: 'surface.active',
         },
       })}
       placement="bottom-end"

@@ -43,13 +43,13 @@
             height: '18px',
             borderWidth: '1px',
             borderStyle: 'solid',
-            borderColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.brand.default' : 'border.default',
+            borderColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.default' : 'border.default',
             borderRadius: '2px',
-            backgroundColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'accent.brand.default/25' : 'surface.default',
+            backgroundColor: rowIdx < hoveredRow && colIdx < hoveredCol ? 'surface.active' : 'surface.default',
             transition: '[background-color 0.1s ease]',
             cursor: 'pointer',
             _hover: {
-              borderColor: 'accent.brand.default',
+              borderColor: 'accent.default',
             },
           })}
           aria-label={`${rowIdx + 1} x ${colIdx + 1}`}
@@ -69,7 +69,7 @@
   <div
     class={css({
       fontSize: '12px',
-      color: 'text.subtle',
+      color: 'text.muted',
       fontVariantNumeric: 'tabular-nums',
     })}
   >

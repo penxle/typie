@@ -27,8 +27,8 @@
 {#if message && !dismissed}
   <div
     class={css({
-      backgroundColor: 'accent.warning.subtle',
-      color: 'accent.warning.default',
+      backgroundColor: 'warning.subtle',
+      color: 'text.on.warning.subtle',
       fontSize: '13px',
     })}
   >
@@ -57,7 +57,7 @@
           cursor: 'pointer',
           backgroundColor: 'transparent',
           borderWidth: '0',
-          color: 'accent.warning.default',
+          color: 'text.on.warning.subtle',
           padding: '0',
         })}
         onclick={dismiss}

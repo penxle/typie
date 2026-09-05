@@ -77,23 +77,23 @@
         paddingY: '4px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.muted' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
-        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.hover' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
+        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
       },
       divider.data.entity.depth > 0 && {
         borderLeftWidth: '1px',
         borderLeftRadius: '0',
         marginLeft: '-1px',
         paddingLeft: '14px',
-        _supportHover: { borderColor: 'border.strong' },
+        _supportHover: { borderColor: 'border.emphasis' },
       },
       selected && {
-        backgroundColor: 'accent.info.subtle',
-        _supportHover: { backgroundColor: 'accent.info.subtle' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.info.subtle' },
+        backgroundColor: 'surface.active',
+        _supportHover: { backgroundColor: 'surface.active' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active' },
         '&[data-context-menu-open="true"]': {
-          backgroundColor: 'accent.info.subtle',
+          backgroundColor: 'surface.active',
         },
       },
     ),
@@ -111,7 +111,7 @@
 >
   <EntitySelectionIndicator dot={false} entityId={divider.data.entity.id} />
 
-  <div class={css({ flexGrow: '1', height: '1px', backgroundColor: 'interactive.hover' })}></div>
+  <div class={css({ flexGrow: '1', height: '1px', backgroundColor: 'border.default' })}></div>
 
   <Menu placement="bottom-start">
     {#snippet button({ open })}
@@ -119,12 +119,12 @@
         class={center({
           borderRadius: '4px',
           size: '16px',
-          color: 'text.disabled',
+          color: 'text.muted',
           opacity: '0',
           transition: 'common',
-          _hover: { backgroundColor: 'interactive.hover' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
           _groupHover: { opacity: '100' },
-          _pressed: { backgroundColor: 'interactive.hover', opacity: '100' },
+          _pressed: { backgroundColor: 'surface.active', color: 'text.default', opacity: '100' },
         })}
         aria-pressed={open}
       >

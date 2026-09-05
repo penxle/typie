@@ -144,13 +144,14 @@
         cursor: 'pointer',
         touchAction: 'none',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.muted' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
-        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.hover' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
+        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
       },
-      active && { backgroundColor: 'surface.muted' },
+      active && { backgroundColor: 'surface.active' },
     ),
   )}
+  aria-current={active ? 'true' : undefined}
   data-icon={folder.data.entity.icon}
   data-icon-color={folder.data.entity.iconColor}
   data-id={folder.data.entity.id}

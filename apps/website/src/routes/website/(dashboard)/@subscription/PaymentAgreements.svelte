@@ -50,7 +50,7 @@
     class={css({
       borderRadius: '8px',
       borderWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       padding: '16px',
       backgroundColor: 'surface.default',
     })}
@@ -60,14 +60,14 @@
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>전체 동의</span>
       </Checkbox>
 
-      <div class={css({ height: '1px', backgroundColor: 'border.subtle' })}></div>
+      <div class={css({ height: '1px', backgroundColor: 'border.hairline' })}></div>
 
       <div class={flex({ direction: 'column', gap: '8px' })}>
         {#each agreements as agreement (agreement.name)}
           <Checkbox checked={checkedNames.includes(agreement.name)} onchange={() => toggle(agreement.name)} size="sm">
-            <span class={css({ fontSize: '13px', color: 'text.subtle' })}>
+            <span class={css({ fontSize: '13px', color: 'text.muted' })}>
               <a
-                class={css({ color: 'text.default', textDecoration: 'underline', _hover: { color: 'accent.brand.default' } })}
+                class={css({ color: 'text.default', textDecoration: 'underline' })}
                 href={agreement.url}
                 rel="noopener noreferrer"
                 target="_blank"
@@ -83,6 +83,6 @@
   </div>
 
   {#if error}
-    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{error}</div>
+    <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{error}</div>
   {/if}
 </div>

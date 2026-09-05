@@ -16,10 +16,10 @@
   const pageNumber = new QueryStringNumber('page', 1);
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+<div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
   <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>USER MANAGEMENT</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>
+    <h2 class={css({ fontSize: '18px', color: 'text.default' })}>USER MANAGEMENT</h2>
+    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.muted' })}>
       TOTAL USERS: {query.data.adminUsers.totalCount}
     </p>
   </div>
@@ -27,11 +27,11 @@
   <div
     class={css({
       borderWidth: '2px',
-      borderColor: 'amber.500',
-      backgroundColor: 'gray.900',
+      borderColor: 'border.default',
+      backgroundColor: 'surface.default',
     })}
   >
-    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'amber.500' })}>
+    <div class={css({ padding: '20px', borderBottomWidth: '2px', borderColor: 'border.default' })}>
       <div class={css({ position: 'relative', maxWidth: '480px' })}>
         <AdminIcon
           style={css.raw({
@@ -39,7 +39,7 @@
             left: '12px',
             top: '[50%]',
             transform: 'translateY(-50%)',
-            color: 'amber.500',
+            color: 'text.default',
           })}
           icon={SearchIcon}
           size={16}
@@ -51,18 +51,17 @@
             paddingRight: '12px',
             paddingY: '8px',
             borderWidth: '2px',
-            borderColor: 'amber.500',
-            backgroundColor: 'gray.800',
-            color: 'amber.500',
+            borderColor: 'border.default',
+            backgroundColor: 'surface.inset',
+            color: 'text.default',
             fontSize: '13px',
             outline: 'none',
-            caretColor: 'amber.500',
+            caretColor: 'text.default',
             _placeholder: {
-              color: 'amber.400',
-              opacity: '[0.5]',
+              color: 'text.hint',
             },
             _focus: {
-              borderColor: 'amber.400',
+              borderColor: 'accent.default',
             },
           })}
           placeholder="SEARCH ID, NAME OR EMAIL..."
@@ -96,7 +95,7 @@
             class={css({
               borderRadius: 'full',
               size: '40px',
-              backgroundColor: 'amber.500',
+              backgroundColor: 'accent.subtle',
               overflow: 'hidden',
             })}
           >
@@ -108,14 +107,14 @@
             <a
               class={css({
                 fontSize: '13px',
-                color: 'amber.500',
+                color: 'text.default',
                 _hover: { textDecoration: 'underline' },
               })}
               href="/admin/users/{user.id}"
             >
               {user.name}
             </a>
-            <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+            <div class={css({ fontSize: '11px', color: 'text.muted' })}>
               {user.email}
             </div>
           </div>
@@ -123,7 +122,7 @@
       {/snippet}
 
       {#snippet $id(user)}
-        <span class={css({ fontSize: '12px', color: 'gray.400' })}>
+        <span class={css({ fontSize: '12px', color: 'text.hint' })}>
           {user.id}
         </span>
       {/snippet}
@@ -133,22 +132,22 @@
           <span
             class={css({
               fontSize: '12px',
-              color: user.subscription.state === 'ACTIVE' ? 'green.400' : 'amber.400',
+              color: user.subscription.state === 'ACTIVE' ? 'success.default' : 'warning.default',
             })}
           >
             {user.subscription.plan.name}
           </span>
         {:else}
-          <span class={css({ fontSize: '12px', color: 'gray.400' })}>FREE</span>
+          <span class={css({ fontSize: '12px', color: 'text.hint' })}>FREE</span>
         {/if}
       {/snippet}
 
       {#snippet $activity(user)}
         <div class={css({ fontSize: '12px' })}>
-          <div class={css({ color: 'amber.500' })}>
+          <div class={css({ color: 'text.default' })}>
             {user.documentCount} DOCUMENTS
           </div>
-          <div class={css({ fontSize: '11px', color: 'amber.400' })}>
+          <div class={css({ fontSize: '11px', color: 'text.muted' })}>
             {comma(user.usage.totalCharacterCount)} CHARS
           </div>
         </div>
@@ -158,7 +157,7 @@
         <span
           class={css({
             fontSize: '12px',
-            color: user.state === 'ACTIVE' ? 'green.400' : 'red.400',
+            color: user.state === 'ACTIVE' ? 'success.default' : 'danger.default',
           })}
         >
           {user.state}
@@ -166,7 +165,7 @@
       {/snippet}
 
       {#snippet $createdAt(user)}
-        <span class={css({ fontSize: '12px', color: 'amber.400' })}>
+        <span class={css({ fontSize: '12px', color: 'text.muted' })}>
           {dayjs(user.createdAt).formatAsDateTime()}
         </span>
       {/snippet}

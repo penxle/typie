@@ -20,11 +20,12 @@
       size: '24px',
       flexShrink: '0',
       borderRadius: '4px',
-      color: active ? 'accent.brand.default' : 'text.faint',
+      color: active ? 'accent.default' : 'text.muted',
+      backgroundColor: active ? 'surface.active' : 'transparent',
       transition: 'common',
       _hover: {
-        color: active ? 'accent.brand.hover' : 'text.subtle',
-        backgroundColor: 'surface.muted',
+        color: active ? 'accent.default' : 'text.default',
+        backgroundColor: 'surface.hover',
       },
     })}
     aria-pressed={active}

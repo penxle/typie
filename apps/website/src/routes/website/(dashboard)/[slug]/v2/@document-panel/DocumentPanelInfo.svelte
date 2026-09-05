@@ -78,9 +78,9 @@
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',
-      color: 'text.subtle',
+      color: 'text.muted',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     정보
@@ -90,7 +90,7 @@
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>공유 및 게시</div>
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>공유 및 게시</div>
 
           {#if user.data.id === document.data.entity.user.id}
             <a
@@ -100,7 +100,7 @@
               target="_blank"
               use:tooltip={{ message: '스페이스에서 열기' }}
             >
-              <Icon style={css.raw({ color: 'text.faint', _groupHover: { color: 'text.subtle' } })} icon={ExternalLinkIcon} size={14} />
+              <Icon style={css.raw({ color: 'text.muted', _groupHover: { color: 'text.default' } })} icon={ExternalLinkIcon} size={14} />
             </a>
           {/if}
         </div>
@@ -110,9 +110,9 @@
             class={css({
               fontSize: '13px',
               fontWeight: 'medium',
-              color: 'text.faint',
+              color: 'text.hint',
               transition: 'common',
-              _hover: { color: 'text.subtle' },
+              _hover: { color: 'text.muted' },
             })}
             onclick={() => {
               app.state.shareOpen = [document.data.entity.id];
@@ -135,8 +135,8 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'accent.success.default',
-              backgroundColor: 'accent.success.subtle',
+              color: 'text.on.success.subtle',
+              backgroundColor: 'success.subtle',
               userSelect: 'none',
             })}
           >
@@ -151,8 +151,8 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'accent.brand.default',
-              backgroundColor: 'accent.brand.subtle',
+              color: 'text.default',
+              backgroundColor: 'accent.subtle',
               userSelect: 'none',
             })}
           >
@@ -168,7 +168,7 @@
               fontSize: '12px',
               fontWeight: 'semibold',
               color: 'text.muted',
-              backgroundColor: 'surface.subtle',
+              backgroundColor: 'surface.canvas',
               userSelect: 'none',
             })}
           >
@@ -185,8 +185,8 @@
               width: 'fit',
               fontSize: '12px',
               fontWeight: 'semibold',
-              color: 'accent.brand.default',
-              backgroundColor: 'accent.brand.subtle',
+              color: 'text.default',
+              backgroundColor: 'accent.subtle',
               userSelect: 'none',
             })}
           >
@@ -202,7 +202,7 @@
               fontSize: '12px',
               fontWeight: 'semibold',
               color: 'text.muted',
-              backgroundColor: 'surface.subtle',
+              backgroundColor: 'surface.canvas',
               userSelect: 'none',
             })}
           >
@@ -213,17 +213,17 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>최초 생성 시각</div>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs(document.data.createdAt).formatAsDateTime()}</div>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>최초 생성 시각</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>{dayjs(document.data.createdAt).formatAsDateTime()}</div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>마지막 수정 시각</div>
-      <div class={css({ fontSize: '13px', color: 'text.subtle' })}>{dayjs(document.data.updatedAt).formatAsDateTime()}</div>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>마지막 수정 시각</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted' })}>{dayjs(document.data.updatedAt).formatAsDateTime()}</div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.subtle' })}>본문 정보</div>
+      <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>본문 정보</div>
 
       <div class={flex({ flexDirection: 'column' })}>
         <DocumentPanelCharacterCount {editor} />

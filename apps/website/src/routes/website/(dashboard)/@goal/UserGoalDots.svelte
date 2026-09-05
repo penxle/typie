@@ -76,38 +76,36 @@
           class={css(
             { size: '10px', borderRadius: 'full' },
             day.row?.achieved
-              ? { backgroundColor: 'accent.success.default' }
+              ? { backgroundColor: 'success.default' }
               : day.row && day.row.additions > 0
-                ? { backgroundColor: 'accent.success.default', opacity: '40' }
+                ? { backgroundColor: 'success.default', opacity: '40' }
                 : day.row
-                  ? { backgroundColor: { base: 'gray.300', _dark: 'dark.gray.700' } }
-                  : { borderWidth: '1px', borderColor: { base: 'gray.300', _dark: 'dark.gray.700' } },
+                  ? { backgroundColor: 'border.default' }
+                  : { borderWidth: '1px', borderColor: 'border.emphasis' },
           )}
         ></div>
       </Tooltip>
     {/each}
   </div>
 
-  <div class={flex({ alignItems: 'center', flexWrap: 'wrap', gap: '10px', fontSize: '11px', color: 'text.faint' })}>
+  <div class={flex({ alignItems: 'center', flexWrap: 'wrap', gap: '10px', fontSize: '11px', color: 'text.muted' })}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'accent.success.default' })}></div>
+      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'success.default' })}></div>
       <span>달성</span>
     </div>
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'accent.success.default', opacity: '40' })}></div>
+      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'success.default', opacity: '40' })}></div>
       <span>일부 달성</span>
     </div>
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: { base: 'gray.300', _dark: 'dark.gray.700' } })}></div>
+      <div class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'border.default' })}></div>
       <span>미달성</span>
     </div>
 
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
-      <div
-        class={css({ size: '8px', borderRadius: 'full', borderWidth: '1px', borderColor: { base: 'gray.300', _dark: 'dark.gray.700' } })}
-      ></div>
+      <div class={css({ size: '8px', borderRadius: 'full', borderWidth: '1px', borderColor: 'border.emphasis' })}></div>
       <span>목표 없음</span>
     </div>
   </div>

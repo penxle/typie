@@ -1242,10 +1242,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         }
 
         let b = &frame.border;
-        let border_color = match &frame.node {
-            Some(Node::Blockquote(_) | Node::FoldTitle(_)) => self.theme.color("ui.border.default"),
-            _ => self.theme.color("ui.border"),
-        };
+        let border_color = self.theme.color("ui.border.default");
 
         if frame.edges.left && b.left > 0.0 {
             self.sink.fill_path(

@@ -56,9 +56,9 @@
           borderRadius: '6px',
           paddingX: '6px',
           gap: '2px',
-          color: 'text.subtle',
+          color: 'text.muted',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         }),
       )}
       onclick={toggleCollapse}
@@ -75,8 +75,8 @@
 
   <div class={flex({ flexDirection: 'column', gap: '8px' })}>
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>공백 포함</dt>
-      <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+      <dt class={css({ color: 'text.muted' })}>공백 포함</dt>
+      <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
         {#if selectionCountWithWhitespace > 0}
           {comma(selectionCountWithWhitespace)}자 /
         {/if}
@@ -85,8 +85,8 @@
     </dl>
 
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>공백 미포함</dt>
-      <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+      <dt class={css({ color: 'text.muted' })}>공백 미포함</dt>
+      <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
         {#if selectionCountWithWhitespace > 0}
           {comma(selectionCountWithoutWhitespace)}자 /
         {/if}
@@ -95,8 +95,8 @@
     </dl>
 
     <dl class={flex({ justifyContent: 'space-between', gap: '8px', fontSize: '13px' })}>
-      <dt class={css({ color: 'text.faint' })}>공백/부호 미포함</dt>
-      <dd class={css({ fontWeight: 'medium', color: 'text.subtle' })}>
+      <dt class={css({ color: 'text.muted' })}>공백/부호 미포함</dt>
+      <dd class={css({ fontWeight: 'medium', color: 'text.muted' })}>
         {#if selectionCountWithWhitespace > 0}
           {comma(selectionCountWithoutWhitespaceAndPunctuation)}자 /
         {/if}

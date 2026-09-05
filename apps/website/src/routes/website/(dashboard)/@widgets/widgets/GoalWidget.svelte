@@ -144,9 +144,9 @@
           borderRadius: '6px',
           paddingX: '6px',
           gap: '2px',
-          color: 'text.subtle',
+          color: 'text.muted',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.default' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         }),
       )}
       onclick={toggleCollapse}
@@ -169,16 +169,16 @@
       {@const due = entityGoal.goal.dueAt ? dayjs(entityGoal.goal.dueAt).kst() : null}
       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
         <div class={flex({ justifyContent: 'space-between', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px', fontSize: '13px' })}>
-          <span class={css({ color: 'text.faint', whiteSpace: 'nowrap' })}>{entityGoal.isFolder ? '폴더 목표' : '문서 목표'}</span>
+          <span class={css({ color: 'text.muted', whiteSpace: 'nowrap' })}>{entityGoal.isFolder ? '폴더 목표' : '문서 목표'}</span>
 
           <div class={flex({ alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', columnGap: '6px', marginLeft: 'auto' })}>
-            <span class={css({ color: 'text.subtle', whiteSpace: 'nowrap' })}>{comma(entityGoal.current)} / {comma(target)}자</span>
+            <span class={css({ color: 'text.muted', whiteSpace: 'nowrap' })}>{comma(entityGoal.current)} / {comma(target)}자</span>
 
             {#if due}
               {@const status = dueStatus(entityGoal.current, target, due, today, 'compact')}
 
               {#if status}
-                <span class={css(status.warning ? { color: 'text.danger' } : { color: 'text.faint' }, { whiteSpace: 'nowrap' })}>
+                <span class={css(status.warning ? { color: 'danger.default' } : { color: 'text.hint' }, { whiteSpace: 'nowrap' })}>
                   {status.label}
                 </span>
               {/if}
@@ -199,14 +199,14 @@
         type="button"
       >
         <ProgressRing progress={userGoal.additions / userGoal.target} size={20} state={userGoal.achieved ? 'achieved' : 'under'} />
-        <span class={css({ fontSize: '13px', color: 'text.subtle', whiteSpace: 'nowrap' })}>
+        <span class={css({ fontSize: '13px', color: 'text.muted', whiteSpace: 'nowrap' })}>
           오늘 {comma(userGoal.additions)} / {comma(userGoal.target)}자
         </span>
       </button>
     {/if}
 
     {#if !entityGoal && !userGoal && !meQuery.loading}
-      <span class={css({ fontSize: '13px', color: 'text.faint' })}>설정된 목표가 없어요</span>
+      <span class={css({ fontSize: '13px', color: 'text.hint' })}>설정된 목표가 없어요</span>
     {/if}
   </div>
 </Widget>

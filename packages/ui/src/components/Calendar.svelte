@@ -70,8 +70,8 @@
   }
 
   function cellColor(day: Dayjs) {
-    if (isOutside(day)) return 'text.disabled' as const;
-    if (isWeekend(day)) return 'text.faint' as const;
+    if (isOutside(day)) return 'text.hint' as const;
+    if (isWeekend(day)) return 'text.muted' as const;
     return 'text.default' as const;
   }
 
@@ -82,9 +82,9 @@
     width: '24px',
     height: '24px',
     borderRadius: '4px',
-    color: 'text.subtle',
+    color: 'text.muted',
     cursor: 'pointer',
-    _hover: { color: 'text.default', backgroundColor: 'surface.subtle' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
   });
 
   const baseCellStyle = css.raw({
@@ -106,14 +106,14 @@
   });
 
   const activeStyle = css.raw({
-    color: 'text.bright',
-    _before: { backgroundColor: 'text.default' },
+    color: 'surface.default',
+    _before: { backgroundColor: 'accent.default' },
   });
 
   const todayCellStyle = css.raw({
     _before: {
       borderWidth: '1px',
-      borderColor: 'border.default',
+      borderColor: 'accent.default',
     },
   });
 </script>
@@ -138,7 +138,7 @@
       marginBottom: '8px',
     })}
   >
-    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.faint', paddingLeft: '6px', marginRight: 'auto' })}>
+    <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default', paddingLeft: '6px', marginRight: 'auto' })}>
       {viewDate.format('YYYY년 M월')}
     </span>
 
@@ -166,7 +166,7 @@
   <!-- Weekday headers -->
   <div class={css({ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', marginBottom: '2px' })}>
     {#each WEEKDAYS as day (day)}
-      <span class={css({ fontSize: '11px', color: 'text.faint', width: '34px', textAlign: 'center', lineHeight: '[24px]' })}>{day}</span>
+      <span class={css({ fontSize: '11px', color: 'text.muted', width: '34px', textAlign: 'center', lineHeight: '[24px]' })}>{day}</span>
     {/each}
   </div>
 
@@ -178,7 +178,7 @@
           baseCellStyle,
           { color: cellColor(day) },
           isOutside(day) && { opacity: '30', cursor: 'default' },
-          !isOutside(day) && !isSelected(day) && { _hover: activeStyle },
+          !isOutside(day) && !isSelected(day) && { _hover: { _before: { backgroundColor: 'surface.hover' } } },
           !isOutside(day) && isSelected(day) && activeStyle,
           !isOutside(day) && isToday(day) && !isSelected(day) && todayCellStyle,
         )}

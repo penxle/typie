@@ -77,7 +77,7 @@
       textAlign: 'center',
       textWrap: 'balance',
       wordBreak: 'keep-all',
-      color: 'text.faint',
+      color: 'text.muted',
       pointerEvents: 'none',
       willChange: 'opacity, transform, filter',
     })}

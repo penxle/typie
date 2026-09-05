@@ -36,20 +36,20 @@
 
   const change = $derived(calculateChange(data, type));
   const changeValue = $derived(formatChange(change));
-  const changeColor = $derived(change === 0 ? 'dark.gray.500' : change > 0 ? '[#22c55e]' : '[#ef4444]');
+  const changeColor = $derived(change === 0 ? 'text.hint' : change > 0 ? 'success.default' : 'danger.default');
 </script>
 
 <div
   class={css({
-    backgroundColor: 'dark.gray.900',
+    backgroundColor: 'surface.default',
     borderWidth: '1px',
-    borderColor: 'dark.gray.800',
+    borderColor: 'border.hairline',
     padding: { sm: '24px', lg: '28px' },
     position: 'relative',
     transition: '[all 0.2s ease-out]',
     _hover: {
-      borderColor: 'dark.gray.700',
-      backgroundColor: 'dark.gray.900/80',
+      borderColor: 'border.emphasis',
+      backgroundColor: 'surface.hover',
     },
   })}
 >
@@ -59,13 +59,13 @@
         class={css({
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'dark.gray.200',
+          color: 'text.muted',
           marginBottom: '4px',
         })}
       >
         {title}
       </h3>
-      <p class={css({ fontSize: '13px', color: 'dark.gray.500' })}>{description}</p>
+      <p class={css({ fontSize: '13px', color: 'text.muted' })}>{description}</p>
     </div>
     <Sparkline {data} height={28} width={80} />
   </div>
@@ -74,7 +74,7 @@
     class={css({
       fontSize: { sm: '[32px]', lg: '[36px]' },
       fontWeight: 'medium',
-      color: 'dark.gray.100',
+      color: 'text.default',
       lineHeight: '[1]',
       marginBottom: '10px',
       fontFamily: 'Paperlogy',
@@ -84,7 +84,7 @@
   </p>
 
   <div class={flex({ alignItems: 'center', gap: '8px' })}>
-    <span class={css({ fontSize: '12px', fontFamily: 'mono', color: 'dark.gray.400', textTransform: 'uppercase' })}>
+    <span class={css({ fontSize: '12px', fontFamily: 'mono', color: 'text.muted', textTransform: 'uppercase' })}>
       {type === 'daily' ? '전일 대비' : '30일 전 대비'}
     </span>
     <span class={css({ fontSize: '13px', fontFamily: 'mono', fontWeight: 'medium', color: changeColor })}>{changeValue}</span>

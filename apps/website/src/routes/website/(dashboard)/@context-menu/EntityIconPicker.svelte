@@ -39,7 +39,8 @@
           borderRadius: 'full',
           cursor: 'pointer',
           transition: 'common',
-          _hover: { boxShadow: '[0 0 0 2px token(colors.border.strong)]' },
+          _hover: { boxShadow: '[0 0 0 2px token(colors.border.emphasis)]' },
+          _checked: { boxShadow: '[0 0 0 2px token(colors.accent.default)]' },
         })}
         aria-checked={iconColor !== undefined && c.value === iconColor}
         aria-label={c.label}
@@ -79,7 +80,8 @@
           borderRadius: '4px',
           cursor: 'pointer',
           transition: 'common',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
+          _checked: { backgroundColor: 'surface.active' },
         })}
         aria-checked={icon !== undefined && entry.name === icon}
         aria-label={entry.name}
@@ -92,8 +94,14 @@
         </span>
         {#if icon !== undefined && entry.name === icon}
           <div
-            style:background-color={currentIconColor}
-            class={css({ position: 'absolute', bottom: '0', width: '3px', height: '3px', borderRadius: 'full' })}
+            class={css({
+              position: 'absolute',
+              bottom: '0',
+              width: '3px',
+              height: '3px',
+              borderRadius: 'full',
+              backgroundColor: 'accent.default',
+            })}
           ></div>
         {/if}
       </button>

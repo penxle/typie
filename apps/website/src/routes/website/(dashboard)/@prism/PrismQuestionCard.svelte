@@ -76,12 +76,11 @@
     borderColor: 'border.default',
     borderRadius: '10px',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   });
   const questionClass = css({ fontSize: '14px', fontWeight: 'semibold', lineHeight: '[1.6]' });
-  const hintClass = css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.faint' });
-  const pagerClass = css({ marginBottom: '6px', fontSize: '11px', color: 'text.faint' });
+  const hintClass = css({ marginTop: '2px', fontSize: '12px', lineHeight: '[1.55]', color: 'text.muted' });
+  const pagerClass = css({ marginBottom: '6px', fontSize: '11px', color: 'text.hint' });
 
   const optionStyle = css.raw({
     display: 'flex',
@@ -91,13 +90,16 @@
     marginTop: '6px',
     borderWidth: '1px',
     borderRadius: '9px',
-    backgroundColor: 'surface.subtle',
-    _dark: { backgroundColor: 'surface.muted' },
+    backgroundColor: 'surface.canvas',
     textAlign: 'left',
     transition: '[border-color 150ms ease]',
   });
-  const optionOnStyle = css.raw({ borderColor: 'border.strong', boxShadow: '[inset 0 0 0 1px token(colors.border.strong)]' });
-  const optionOffStyle = css.raw({ borderColor: 'border.subtle', _hover: { borderColor: 'border.strong' } });
+  const optionOnStyle = css.raw({
+    borderColor: 'accent.default',
+    backgroundColor: 'surface.active',
+    boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]',
+  });
+  const optionOffStyle = css.raw({ borderColor: 'border.hairline', _hover: { borderColor: 'border.emphasis' } });
 
   const markClass = (shape: 'check' | 'radio', on: boolean) =>
     css(
@@ -106,15 +108,15 @@
         marginTop: '3px',
         size: '14px',
         borderWidth: '[1.5px]',
-        borderColor: 'border.strong',
+        borderColor: 'border.emphasis',
         transition: '[border-color 150ms ease, border-width 150ms ease, background-color 150ms ease]',
       },
       shape === 'radio' ? { borderRadius: 'full' } : { position: 'relative', borderRadius: '3px' },
-      on && shape === 'radio' ? { borderWidth: '4px', borderColor: 'text.default' } : {},
+      on && shape === 'radio' ? { borderWidth: '4px', borderColor: 'accent.default' } : {},
       on && shape === 'check'
         ? {
-            borderColor: 'text.default',
-            backgroundColor: 'text.default',
+            borderColor: 'accent.default',
+            backgroundColor: 'accent.default',
             _after: {
               content: '""',
               position: 'absolute',
@@ -141,10 +143,10 @@
     backgroundColor: 'transparent',
     resize: 'none',
     outline: 'none',
-    _placeholder: { color: 'text.faint' },
+    _placeholder: { color: 'text.hint' },
   });
-  const descClass = css({ marginTop: '1px', fontSize: '[11.5px]', lineHeight: '[1.5]', color: 'text.faint' });
-  const footerClass = flex({ alignItems: 'center', gap: '10px', marginTop: '8px', fontSize: '[11.5px]', color: 'text.faint' });
+  const descClass = css({ marginTop: '1px', fontSize: '[11.5px]', lineHeight: '[1.5]', color: 'text.muted' });
+  const footerClass = flex({ alignItems: 'center', gap: '10px', marginTop: '8px', fontSize: '[11.5px]', color: 'text.muted' });
   const footerTextClass = css({ minWidth: '0' });
 
   const bubbleClass = css({
@@ -156,13 +158,13 @@
     paddingY: '8px',
     borderRadius: '12px',
     borderBottomRightRadius: '2px',
-    backgroundColor: 'surface.muted',
+    backgroundColor: 'surface.inset',
     fontSize: '14px',
     lineHeight: '[1.6]',
     whiteSpace: 'pre-wrap',
   });
 
-  const closedClass = css({ fontSize: '12px', color: 'text.faint' });
+  const closedClass = css({ fontSize: '12px', color: 'text.hint' });
 </script>
 
 {#if total > 0 && shown === null && message.status === 'pending' && open}

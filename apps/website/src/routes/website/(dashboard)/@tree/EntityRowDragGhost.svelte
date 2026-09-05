@@ -27,8 +27,8 @@
     paddingX: '8px',
     paddingY: '4px',
     borderRadius: 'full',
-    backgroundColor: 'accent.info.default',
-    color: 'text.bright',
+    backgroundColor: 'accent.default',
+    color: 'surface.default',
     fontSize: '14px',
     fontWeight: 'bold',
     pointerEvents: 'none',
@@ -40,7 +40,7 @@
   use:portal
 >
   <Icon
-    style={css.raw({ flexShrink: '0', color: 'text.bright' })}
+    style={css.raw({ flexShrink: '0', color: 'surface.default' })}
     icon={entityIconMap.get(ghost.icon ?? '') ?? (ghost.type === 'folder' ? FolderIcon : FileIcon)}
     size={14}
   />

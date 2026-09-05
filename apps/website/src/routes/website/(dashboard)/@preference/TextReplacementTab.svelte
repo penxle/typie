@@ -421,7 +421,7 @@
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
   <div>
     <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default', marginBottom: '4px' })}>텍스트 대치</h1>
-    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>입력 중 특정 텍스트를 자동으로 변환해요.</p>
+    <p class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>입력 중 특정 텍스트를 자동으로 변환해요.</p>
   </div>
 
   <div>
@@ -442,9 +442,9 @@
                     class={css({
                       fontSize: '11px',
                       fontWeight: 'medium',
-                      color: 'text.faint',
+                      color: 'text.muted',
                       borderWidth: '1px',
-                      borderColor: 'border.subtle',
+                      borderColor: 'border.hairline',
                       paddingX: '6px',
                       paddingY: '2px',
                       borderRadius: 'full',
@@ -456,21 +456,21 @@
                 {#snippet tooltipMessage()}
                   <span class={css({ fontFamily: 'mono' })}>
                     {item.match}
-                    <span class={css({ marginX: '4px', color: 'text.faint' })}>→</span>
+                    <span class={css({ marginX: '4px', color: 'text.on.inverse' })}>→</span>
                     {item.substitute}
                   </span>
                 {/snippet}
                 <Tooltip message={tooltipMessage} placement="top">
-                  <Icon style={css.raw({ color: 'text.disabled' })} icon={InfoIcon} size={14} />
+                  <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={14} />
                 </Tooltip>
               </div>
             {:else}
               <span class={flex({ alignItems: 'center', gap: '6px', fontFamily: 'mono', fontSize: '12px' })}>
-                <code class={css({ backgroundColor: 'surface.muted', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
+                <code class={css({ backgroundColor: 'surface.inset', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
                   {item.match}
                 </code>
-                <span class={css({ color: 'text.faint' })}>→</span>
-                <code class={css({ backgroundColor: 'surface.muted', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
+                <span class={css({ color: 'text.hint' })}>→</span>
+                <code class={css({ backgroundColor: 'surface.inset', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
                   {item.substitute}
                 </code>
               </span>
@@ -480,9 +480,9 @@
                     marginLeft: '8px',
                     fontSize: '11px',
                     fontWeight: 'medium',
-                    color: 'text.faint',
+                    color: 'text.muted',
                     borderWidth: '1px',
-                    borderColor: 'border.subtle',
+                    borderColor: 'border.hairline',
                     paddingX: '6px',
                     paddingY: '2px',
                     borderRadius: 'full',
@@ -511,14 +511,14 @@
                   {#each smartQuoteItems as sq (sq.textReplacementId)}
                     <span>
                       {sq.match}
-                      <span class={css({ marginX: '4px', color: 'text.faint' })}>→</span>
+                      <span class={css({ marginX: '4px', color: 'text.on.inverse' })}>→</span>
                       {sq.substitute}
                     </span>
                   {/each}
                 </div>
               {/snippet}
               <Tooltip message={smartQuoteTooltip} placement="top">
-                <Icon style={css.raw({ color: 'text.disabled' })} icon={InfoIcon} size={14} />
+                <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={14} />
               </Tooltip>
             </div>
           {/snippet}
@@ -542,18 +542,18 @@
           paddingY: '6px',
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'text.subtle',
+          color: 'text.muted',
           transition: 'common',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={() => startCreate()}
         type="button"
       >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={PlusIcon} size={14} />
+        <Icon style={css.raw({ color: 'text.muted' })} icon={PlusIcon} size={14} />
         <span>추가</span>
       </button>
     </div>
-    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]', marginBottom: '20px' })}>
+    <p class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]', marginBottom: '20px' })}>
       위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.
     </p>
 
@@ -573,7 +573,7 @@
                     size="sm"
                     bind:value={formMatch}
                   />
-                  <span class={css({ color: 'text.faint', fontSize: '13px' })}>→</span>
+                  <span class={css({ color: 'text.hint', fontSize: '13px' })}>→</span>
                   <TextInput
                     style={css.raw({ flex: '1', fontFamily: 'mono' })}
                     placeholder="삽입할 텍스트"
@@ -587,7 +587,7 @@
                 <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
                   <div class={flex({ alignItems: 'center', gap: '8px' })}>
                     <Switch checked={formRegex} onchange={() => (formRegex = !formRegex)} />
-                    <span class={css({ fontSize: '13px', color: 'text.subtle' })}>정규식</span>
+                    <span class={css({ fontSize: '13px', color: 'text.muted' })}>정규식</span>
                   </div>
                   <div class={flex({ gap: '8px' })}>
                     <Button onclick={cancelForm} size="sm" variant="secondary">취소</Button>
@@ -595,7 +595,7 @@
                   </div>
                 </div>
                 {#if formError}
-                  <p class={css({ fontSize: '12px', color: 'text.danger', marginTop: '8px' })}>{formError}</p>
+                  <p class={css({ fontSize: '12px', color: 'danger.default', marginTop: '8px' })}>{formError}</p>
                 {/if}
               </div>
             {:else}
@@ -606,8 +606,8 @@
                       <div
                         class={css({
                           cursor: 'grab',
-                          color: 'text.faint',
-                          _hover: { color: 'text.subtle' },
+                          color: 'text.muted',
+                          _hover: { color: 'text.default' },
                           _active: { cursor: 'grabbing' },
                         })}
                         data-drag-handle
@@ -617,9 +617,9 @@
                       <span
                         class={css({
                           fontSize: '11px',
-                          color: 'text.faint',
+                          color: 'text.hint',
                           fontVariantNumeric: 'tabular-nums',
-                          backgroundColor: 'surface.muted',
+                          backgroundColor: 'surface.inset',
                           paddingX: '6px',
                           paddingY: '2px',
                           borderRadius: '4px',
@@ -634,9 +634,9 @@
                             class={css({
                               fontSize: '11px',
                               fontWeight: 'medium',
-                              color: 'text.faint',
+                              color: 'text.muted',
                               borderWidth: '1px',
-                              borderColor: 'border.subtle',
+                              borderColor: 'border.hairline',
                               paddingX: '6px',
                               paddingY: '2px',
                               borderRadius: 'full',
@@ -648,20 +648,20 @@
                         {#snippet customTooltipMessage()}
                           <span class={css({ fontFamily: 'mono' })}>
                             {item.match}
-                            <span class={css({ marginX: '4px', color: 'text.faint' })}>→</span>
+                            <span class={css({ marginX: '4px', color: 'text.on.inverse' })}>→</span>
                             {item.substitute}
                           </span>
                         {/snippet}
                         <Tooltip message={customTooltipMessage} placement="top">
-                          <Icon style={css.raw({ color: 'text.disabled' })} icon={InfoIcon} size={14} />
+                          <Icon style={css.raw({ color: 'text.default' })} icon={InfoIcon} size={14} />
                         </Tooltip>
                       {:else}
                         <span class={flex({ alignItems: 'center', gap: '6px', fontFamily: 'mono', fontSize: '12px' })}>
-                          <code class={css({ backgroundColor: 'surface.muted', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
+                          <code class={css({ backgroundColor: 'surface.inset', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
                             {item.match}
                           </code>
-                          <span class={css({ color: 'text.faint' })}>→</span>
-                          <code class={css({ backgroundColor: 'surface.muted', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
+                          <span class={css({ color: 'text.hint' })}>→</span>
+                          <code class={css({ backgroundColor: 'surface.inset', paddingX: '6px', paddingY: '2px', borderRadius: '4px' })}>
                             {item.substitute}
                           </code>
                         </span>
@@ -670,9 +670,9 @@
                             class={css({
                               fontSize: '11px',
                               fontWeight: 'medium',
-                              color: 'text.faint',
+                              color: 'text.muted',
                               borderWidth: '1px',
-                              borderColor: 'border.subtle',
+                              borderColor: 'border.hairline',
                               paddingX: '6px',
                               paddingY: '2px',
                               borderRadius: 'full',
@@ -687,7 +687,7 @@
                   {#snippet value()}
                     <div class={flex({ alignItems: 'center', gap: '8px' })}>
                       <Switch checked={item.state === 'ACTIVE'} onchange={() => toggleState(item)} />
-                      <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
+                      <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.hairline' })}></div>
                       <button
                         class={css({
                           display: 'flex',
@@ -695,9 +695,9 @@
                           justifyContent: 'center',
                           size: '28px',
                           borderRadius: '6px',
-                          color: 'text.faint',
+                          color: 'text.muted',
                           transition: 'common',
-                          _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+                          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                         })}
                         onclick={() => startEdit(item)}
                         type="button"
@@ -711,9 +711,9 @@
                           justifyContent: 'center',
                           size: '28px',
                           borderRadius: '6px',
-                          color: 'text.faint',
+                          color: 'text.muted',
                           transition: 'common',
-                          _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+                          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
                         })}
                         onclick={() => handleDelete(item)}
                         type="button"
@@ -730,7 +730,7 @@
       </SettingsCard>
     {:else if !creatingNew}
       <SettingsCard>
-        <div class={css({ padding: '20px', fontSize: '13px', color: 'text.subtle', textAlign: 'center' })}>
+        <div class={css({ padding: '20px', fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
           아직 사용자 대치 규칙이 없어요.
         </div>
       </SettingsCard>
@@ -748,7 +748,7 @@
                 size="sm"
                 bind:value={formMatch}
               />
-              <span class={css({ color: 'text.faint', fontSize: '13px' })}>→</span>
+              <span class={css({ color: 'text.hint', fontSize: '13px' })}>→</span>
               <TextInput
                 style={css.raw({ flex: '1', fontFamily: 'mono' })}
                 placeholder="삽입할 텍스트"
@@ -762,7 +762,7 @@
             <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
               <div class={flex({ alignItems: 'center', gap: '8px' })}>
                 <Switch checked={formRegex} onchange={() => (formRegex = !formRegex)} />
-                <span class={css({ fontSize: '13px', color: 'text.subtle' })}>정규식</span>
+                <span class={css({ fontSize: '13px', color: 'text.muted' })}>정규식</span>
               </div>
               <div class={flex({ gap: '8px' })}>
                 <Button onclick={cancelForm} size="sm" variant="secondary">취소</Button>
@@ -770,7 +770,7 @@
               </div>
             </div>
             {#if formError}
-              <p class={css({ fontSize: '12px', color: 'text.danger', marginTop: '8px' })}>{formError}</p>
+              <p class={css({ fontSize: '12px', color: 'danger.default', marginTop: '8px' })}>{formError}</p>
             {/if}
           </div>
         </SettingsCard>

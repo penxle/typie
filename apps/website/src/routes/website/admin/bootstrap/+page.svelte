@@ -101,34 +101,34 @@
     paddingX: '12px',
     paddingY: '8px',
     borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.800',
-    color: 'amber.500',
+    borderColor: 'border.default',
+    backgroundColor: 'surface.inset',
+    color: 'text.default',
     fontSize: '13px',
     outline: 'none',
-    caretColor: 'amber.500',
+    caretColor: 'text.default',
     _focus: {
-      borderColor: 'amber.400',
+      borderColor: 'accent.default',
     },
     _placeholder: {
-      color: 'amber.700',
+      color: 'text.hint',
     },
   });
 
-  const labelStyle = css({ fontSize: '11px', color: 'amber.400' });
+  const labelStyle = css({ fontSize: '11px', color: 'text.muted' });
 
   const sectionStyle = css({
     borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.900',
+    borderColor: 'border.default',
+    backgroundColor: 'surface.default',
   });
 
   const sectionHeaderStyle = css({
     padding: '16px',
     borderBottomWidth: '2px',
-    borderColor: 'amber.500',
+    borderColor: 'border.default',
     fontSize: '14px',
-    color: 'amber.500',
+    color: 'text.default',
   });
 
   const sectionBodyStyle = css({ padding: '20px' });
@@ -138,31 +138,31 @@
     paddingX: '12px',
     paddingY: '8px',
     borderWidth: '2px',
-    borderColor: 'amber.500',
-    backgroundColor: 'gray.800',
-    color: 'amber.500',
+    borderColor: 'border.default',
+    backgroundColor: 'surface.inset',
+    color: 'text.default',
     fontSize: '13px',
     outline: 'none',
-    caretColor: 'amber.500',
+    caretColor: 'text.default',
     minHeight: '80px',
     resize: 'vertical',
     _focus: {
-      borderColor: 'amber.400',
+      borderColor: 'accent.default',
     },
     _placeholder: {
-      color: 'amber.700',
+      color: 'text.hint',
     },
   });
 </script>
 
-<div class={flex({ flexDirection: 'column', gap: '24px', color: 'amber.500' })}>
+<div class={flex({ flexDirection: 'column', gap: '24px', color: 'text.default' })}>
   <div>
-    <h2 class={css({ fontSize: '18px', color: 'amber.500' })}>BOOTSTRAP CONFIG</h2>
-    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'amber.400' })}>SERVICE STATUS AND VERSION CONTROL</p>
+    <h2 class={css({ fontSize: '18px', color: 'text.default' })}>BOOTSTRAP CONFIG</h2>
+    <p class={css({ marginTop: '8px', fontSize: '13px', color: 'text.muted' })}>SERVICE STATUS AND VERSION CONTROL</p>
   </div>
 
   {#if loading}
-    <div class={css({ fontSize: '13px', color: 'amber.400' })}>LOADING...</div>
+    <div class={css({ fontSize: '13px', color: 'text.muted' })}>LOADING...</div>
   {:else if bootstrapData}
     <form onsubmit={handleSubmit}>
       <div class={flex({ flexDirection: 'column', gap: '24px' })}>
@@ -178,8 +178,8 @@
                     width: '48px',
                     height: '24px',
                     borderWidth: '2px',
-                    borderColor: 'amber.500',
-                    backgroundColor: bootstrapData.maintenance.enabled ? 'amber.500' : 'gray.800',
+                    borderColor: 'border.default',
+                    backgroundColor: bootstrapData.maintenance.enabled ? 'accent.default' : 'surface.inset',
                     position: 'relative',
                     cursor: 'pointer',
                   })}
@@ -196,13 +196,13 @@
                       top: '2px',
                       width: '16px',
                       height: '16px',
-                      backgroundColor: bootstrapData.maintenance.enabled ? 'gray.900' : 'amber.500',
+                      backgroundColor: 'surface.default',
                       transitionProperty: '[left]',
                       transitionDuration: '0.2s',
                     })}
                   ></div>
                 </button>
-                <span class={css({ fontSize: '11px', color: bootstrapData.maintenance.enabled ? 'amber.500' : 'amber.700' })}>
+                <span class={css({ fontSize: '11px', color: bootstrapData.maintenance.enabled ? 'text.default' : 'text.hint' })}>
                   {bootstrapData.maintenance.enabled ? 'ON' : 'OFF'}
                 </span>
               </div>
@@ -264,13 +264,13 @@
                           width: '16px',
                           height: '16px',
                           borderWidth: '2px',
-                          borderColor: 'amber.500',
+                          borderColor: 'border.default',
                           backgroundColor: bootstrapData.maintenance.platforms.includes(platform as 'ios' | 'android' | 'web' | 'api')
-                            ? 'amber.500'
+                            ? 'accent.default'
                             : 'transparent',
                         })}
                       ></div>
-                      <span class={css({ fontSize: '12px', color: 'amber.500' })}>{platform.toUpperCase()}</span>
+                      <span class={css({ fontSize: '12px', color: 'text.default' })}>{platform.toUpperCase()}</span>
                     </button>
                   {/each}
                 </div>
@@ -298,15 +298,15 @@
                       paddingX: '16px',
                       paddingY: '8px',
                       borderWidth: '2px',
-                      borderColor: 'amber.500',
-                      backgroundColor: 'amber.500',
-                      color: 'gray.900',
+                      borderColor: 'accent.default',
+                      backgroundColor: 'accent.default',
+                      color: 'surface.default',
                       fontSize: '13px',
                       cursor: 'pointer',
                       whiteSpace: 'nowrap',
                       _hover: {
-                        backgroundColor: 'amber.400',
-                        borderColor: 'amber.400',
+                        backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
+                        borderColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
                       },
                     })}
                     onclick={addIp}
@@ -317,7 +317,7 @@
                 </div>
 
                 {#if bootstrapData.maintenance.allowedIps.length === 0}
-                  <div class={css({ fontSize: '12px', color: 'amber.700' })}>NO ALLOWED IPS</div>
+                  <div class={css({ fontSize: '12px', color: 'text.hint' })}>NO ALLOWED IPS</div>
                 {:else}
                   <div class={flex({ flexDirection: 'column', gap: '4px' })}>
                     {#each bootstrapData.maintenance.allowedIps as ip (ip)}
@@ -328,18 +328,20 @@
                           paddingX: '12px',
                           paddingY: '8px',
                           borderWidth: '1px',
-                          borderColor: 'amber.700',
+                          borderColor: 'border.default',
                         })}
                       >
-                        <span class={css({ fontSize: '13px', color: 'amber.500' })}>{ip}</span>
+                        <span class={css({ fontSize: '13px', color: 'text.default' })}>{ip}</span>
                         <button
                           class={css({
                             backgroundColor: 'transparent',
                             border: 'none',
-                            color: 'red.500',
+                            paddingX: '12px',
+                            paddingY: '6px',
+                            color: 'danger.default',
                             fontSize: '12px',
                             cursor: 'pointer',
-                            _hover: { color: 'red.400' },
+                            _hover: { backgroundColor: 'danger.default', color: 'text.on.danger' },
                           })}
                           onclick={() => removeIp(ip)}
                           type="button"
@@ -359,8 +361,8 @@
           <div class={sectionHeaderStyle}>MIN VERSION</div>
           <div class={sectionBodyStyle}>
             <div class={flex({ flexDirection: 'column', gap: '16px' })}>
-              <div class={css({ borderWidth: '1px', borderColor: 'amber.700', padding: '16px' })}>
-                <div class={css({ fontSize: '12px', color: 'amber.500', marginBottom: '12px' })}>iOS</div>
+              <div class={css({ borderWidth: '1px', borderColor: 'border.default', padding: '16px' })}>
+                <div class={css({ fontSize: '12px', color: 'text.muted', marginBottom: '12px' })}>iOS</div>
                 <div class={flex({ gap: '16px' })}>
                   <div class={flex({ flexDirection: 'column', gap: '8px', flex: '1' })}>
                     <label class={labelStyle} for="ios-version">VERSION</label>
@@ -385,8 +387,8 @@
                 </div>
               </div>
 
-              <div class={css({ borderWidth: '1px', borderColor: 'amber.700', padding: '16px' })}>
-                <div class={css({ fontSize: '12px', color: 'amber.500', marginBottom: '12px' })}>ANDROID</div>
+              <div class={css({ borderWidth: '1px', borderColor: 'border.default', padding: '16px' })}>
+                <div class={css({ fontSize: '12px', color: 'text.muted', marginBottom: '12px' })}>ANDROID</div>
                 <div class={flex({ gap: '16px' })}>
                   <div class={flex({ flexDirection: 'column', gap: '8px', flex: '1' })}>
                     <label class={labelStyle} for="android-version">VERSION</label>
@@ -419,8 +421,8 @@
             class={css({
               padding: '12px',
               borderWidth: '2px',
-              borderColor: message.type === 'success' ? 'green.500' : 'red.500',
-              color: message.type === 'success' ? 'green.500' : 'red.500',
+              borderColor: message.type === 'success' ? 'success.default' : 'danger.default',
+              color: message.type === 'success' ? 'success.default' : 'danger.default',
               fontSize: '12px',
             })}
           >
@@ -434,17 +436,17 @@
               paddingX: '24px',
               paddingY: '12px',
               borderWidth: '2px',
-              borderColor: 'amber.500',
-              backgroundColor: 'amber.500',
-              color: 'gray.900',
+              borderColor: 'accent.default',
+              backgroundColor: 'accent.default',
+              color: 'surface.default',
               fontSize: '13px',
               cursor: 'pointer',
               _hover: {
-                backgroundColor: 'amber.400',
-                borderColor: 'amber.400',
+                backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
+                borderColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
               },
               _disabled: {
-                opacity: '50',
+                opacity: '40',
                 cursor: 'not-allowed',
               },
             })}
@@ -457,6 +459,6 @@
       </div>
     </form>
   {:else}
-    <div class={css({ fontSize: '13px', color: 'red.500' })}>FAILED TO LOAD BOOTSTRAP CONFIG</div>
+    <div class={css({ fontSize: '13px', color: 'danger.default' })}>FAILED TO LOAD BOOTSTRAP CONFIG</div>
   {/if}
 </div>

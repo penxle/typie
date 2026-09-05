@@ -132,26 +132,26 @@
     fontWeight: 'semibold',
     whiteSpace: 'nowrap',
     flexShrink: '0',
-    color: 'text.bright',
-    backgroundColor: 'accent.brand.default',
+    color: 'text.default',
+    backgroundColor: 'accent.subtle',
   });
   const summaryCardClass = css({
     borderRadius: '8px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     padding: '16px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
   });
   const summaryRowStyle = flex.raw({ justify: 'space-between' });
-  const summaryLabelClass = css({ color: 'text.subtle' });
+  const summaryLabelClass = css({ color: 'text.muted' });
   const stateBadgeClass = flex({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 'full',
     size: '32px',
-    color: 'text.bright',
-    backgroundColor: 'surface.dark',
+    color: 'text.on.inverse',
+    backgroundColor: 'surface.inverse',
   });
   const stateCreditStyle = css.raw({
     display: 'inline-flex',
@@ -159,7 +159,7 @@
     gap: '3px',
     fontWeight: 'semibold',
     fontVariantNumeric: 'tabular-nums',
-    color: 'text.brand',
+    color: 'text.default',
   });
 </script>
 
@@ -167,9 +167,9 @@
   <div class={css({ paddingX: '32px', paddingTop: '32px' })}>
     <div class={flex({ alignItems: 'center', justify: 'space-between' })}>
       <h2 class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.default' })}>크레딧 충전하기</h2>
-      <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '13px', color: 'text.subtle' })}>
+      <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '13px', color: 'text.muted' })}>
         보유 크레딧
-        <span class={css(stateCreditStyle, { color: balance < 0 ? 'text.danger' : 'text.brand' })}>
+        <span class={css(stateCreditStyle, { color: balance < 0 ? 'danger.default' : 'text.default' })}>
           <Icon icon={PrismCreditIcon} size={14} />{comma(balance)}
         </span>
       </div>
@@ -182,16 +182,16 @@
         {@const on = grid.pack === picked}
         <button
           class={css(packRowStyle, {
-            borderColor: on ? 'accent.brand.default' : 'border.subtle',
-            backgroundColor: on ? 'accent.brand.subtle' : 'surface.default',
-            _hover: { borderColor: on ? 'accent.brand.default' : 'border.default' },
+            borderColor: on ? 'accent.default' : 'border.hairline',
+            backgroundColor: on ? 'surface.active' : 'surface.default',
+            _hover: { borderColor: on ? 'accent.default' : 'border.emphasis' },
           })}
           aria-pressed={on}
           onclick={() => (picked = grid.pack)}
           type="button"
         >
           <span class={creditClass}>
-            <Icon style={css.raw({ color: 'text.brand' })} icon={PrismCreditIcon} size={14} />{comma(grid.credits)}
+            <Icon style={css.raw({ color: 'text.default' })} icon={PrismCreditIcon} size={14} />{comma(grid.credits)}
           </span>
           {#if grid.bonus > 0}
             <span class={bonusBadgeClass}>보너스 +{comma(grid.bonus)}</span>
@@ -211,7 +211,7 @@
         </button>
       {/each}
 
-      <div class={flex({ alignItems: 'center', justify: 'center', gap: '4px', marginTop: '4px', fontSize: '12px', color: 'text.faint' })}>
+      <div class={flex({ alignItems: 'center', justify: 'center', gap: '4px', marginTop: '4px', fontSize: '12px', color: 'text.muted' })}>
         충전 후 보유 크레딧
         <span
           class={css({
@@ -220,7 +220,7 @@
             gap: '2px',
             fontWeight: 'medium',
             fontVariantNumeric: 'tabular-nums',
-            color: balance + chosen.credits + chosen.bonus < 0 ? 'text.danger' : 'text.subtle',
+            color: balance + chosen.credits + chosen.bonus < 0 ? 'danger.default' : 'text.muted',
           })}
         >
           <Icon icon={PrismCreditIcon} size={12} />{comma(balance + chosen.credits + chosen.bonus)}
@@ -243,7 +243,7 @@
                 fontVariantNumeric: 'tabular-nums',
               })}
             >
-              <Icon style={css.raw({ color: 'text.brand' })} icon={PrismCreditIcon} size={14} />{comma(chosen.credits)}
+              <Icon style={css.raw({ color: 'text.default' })} icon={PrismCreditIcon} size={14} />{comma(chosen.credits)}
             </span>
             {#if chosen.bonus > 0}
               <span class={bonusBadgeClass}>보너스 +{comma(chosen.bonus)}</span>
@@ -251,7 +251,7 @@
           </span>
         </div>
 
-        <div class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.subtle' })}>
+        <div class={css({ marginTop: '12px', paddingTop: '12px', borderTopWidth: '1px', borderColor: 'border.hairline' })}>
           <div class={flex({ justify: 'space-between', fontSize: '14px', fontWeight: 'semibold' })}>
             <span class={css({ color: 'text.default' })}>결제 금액</span>
             <span class={css({ color: 'text.default' })}>{comma(chosen.price)}원</span>
@@ -266,7 +266,7 @@
             alignItems: 'center',
             borderRadius: '8px',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             padding: '14px',
             backgroundColor: 'surface.default',
           })}
@@ -287,12 +287,12 @@
             alignItems: 'center',
             borderRadius: '8px',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             padding: '14px',
             backgroundColor: 'surface.default',
           })}
         >
-          <span class={css({ fontSize: '14px', color: 'text.subtle' })}>등록된 결제 수단이 없어요</span>
+          <span class={css({ fontSize: '14px', color: 'text.muted' })}>등록된 결제 수단이 없어요</span>
           <Button onclick={onEditBillingKey} size="sm" variant="secondary">결제 수단 등록</Button>
         </div>
       {/if}
@@ -302,12 +302,12 @@
           class={css({
             padding: '12px',
             borderRadius: '6px',
-            backgroundColor: 'accent.danger.subtle',
+            backgroundColor: 'danger.subtle',
             borderWidth: '1px',
-            borderColor: 'border.danger',
+            borderColor: 'danger.default',
           })}
         >
-          <div class={css({ fontSize: '13px', color: 'text.danger' })}>{submitError}</div>
+          <div class={css({ fontSize: '13px', color: 'text.on.danger.subtle' })}>{submitError}</div>
         </div>
       {/if}
 
@@ -316,7 +316,7 @@
           {comma(chosen.price)}원 결제하기
         </Button>
 
-        <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'text.faint' })}>
+        <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'text.hint' })}>
           <div class={flex({ alignItems: 'center', gap: '5px' })}>
             <Icon icon={LockIcon} size={12} />
             <span>결제 정보는 암호화되어 안전하게 전송돼요.</span>
@@ -358,12 +358,12 @@
 
       <div class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px' })}>
         <div class={flex({ justify: 'space-between' })}>
-          <span class={css({ color: 'text.subtle' })}>충전 크레딧</span>
+          <span class={css({ color: 'text.muted' })}>충전 크레딧</span>
           <span class={css(stateCreditStyle)}><Icon icon={PrismCreditIcon} size={14} />{comma(charged.credits)}</span>
         </div>
         {#if charged.bonus > 0}
           <div class={flex({ justify: 'space-between' })}>
-            <span class={css({ color: 'text.subtle' })}>보너스</span>
+            <span class={css({ color: 'text.muted' })}>보너스</span>
             <span class={css(stateCreditStyle)}><Icon icon={PrismCreditIcon} size={14} />{comma(charged.bonus)}</span>
           </div>
         {/if}
@@ -373,7 +373,7 @@
 
       <div class={flex({ justify: 'space-between', fontSize: '13px' })}>
         <span class={css({ fontWeight: 'semibold', color: 'text.default' })}>보유 크레딧</span>
-        <span class={css(stateCreditStyle, { color: charged.after < 0 ? 'text.danger' : 'text.brand' })}>
+        <span class={css(stateCreditStyle, { color: charged.after < 0 ? 'danger.default' : 'text.default' })}>
           <Icon icon={PrismCreditIcon} size={14} />{comma(charged.after)}
         </span>
       </div>
@@ -392,8 +392,6 @@
       </div>
     </div>
 
-    <Button style={css.raw({ marginTop: '24px', width: 'full' })} onclick={() => (resultOpen = false)} type="button" variant="secondary">
-      닫기
-    </Button>
+    <Button style={css.raw({ marginTop: '24px', width: 'full' })} onclick={() => (resultOpen = false)} type="button">닫기</Button>
   {/if}
 </Modal>

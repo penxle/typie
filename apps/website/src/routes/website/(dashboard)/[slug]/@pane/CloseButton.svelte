@@ -25,9 +25,9 @@
     center.raw({
       borderRadius: '4px',
       size: '24px',
-      color: 'text.faint',
+      color: 'text.muted',
       transition: 'common',
-      _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+      _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
     }),
     style,
   )}

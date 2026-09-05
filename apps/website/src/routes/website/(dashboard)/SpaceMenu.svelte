@@ -182,10 +182,7 @@
       borderRadius: '8px',
       borderWidth: '1px',
       borderColor: open ? 'border.default' : 'transparent',
-      boxShadow: open ? '[0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06)]' : '[none]',
-      _dark: {
-        boxShadow: open ? '[0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2)]' : '[none]',
-      },
+      boxShadow: open ? 'md' : '[none]',
       backgroundColor: open ? 'surface.default' : 'transparent',
       transitionProperty: '[border-color, box-shadow, background-color]',
       transitionDuration: '200ms',
@@ -204,7 +201,7 @@
         cursor: 'pointer',
         transition: 'common',
         ...(!open && {
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         }),
       })}
       onclick={() => {
@@ -218,7 +215,7 @@
         style={css.raw({
           marginLeft: 'auto',
           flexShrink: '0',
-          color: 'text.faint',
+          color: 'text.default',
           transitionProperty: '[transform]',
           transitionDuration: '200ms',
           transitionTimingFunction: 'ease',
@@ -277,7 +274,7 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               close();
@@ -286,7 +283,7 @@
             }}
             type="button"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SettingsIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SettingsIcon} size={14} />
             <span>스페이스 설정</span>
           </button>
 
@@ -301,15 +298,15 @@
               fontWeight: 'medium',
               color: 'text.default',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             href={site.url}
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ExternalLinkIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ExternalLinkIcon} size={14} />
             <span>스페이스 열기</span>
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ArrowUpRightIcon} size={12} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
           </a>
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
@@ -326,7 +323,7 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              _hover: { backgroundColor: 'surface.muted' },
+              _hover: { backgroundColor: 'surface.hover' },
             })}
             onclick={() => {
               close();
@@ -335,7 +332,7 @@
             }}
             type="button"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={Trash2Icon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={Trash2Icon} size={14} />
             <span>휴지통</span>
           </button>
 
@@ -355,9 +352,11 @@
               color: 'text.default',
               transition: 'common',
               cursor: 'pointer',
-              backgroundColor: submenuOpen ? 'surface.muted' : 'transparent',
-              _hover: { backgroundColor: 'surface.muted' },
+              backgroundColor: submenuOpen ? 'surface.hover' : 'transparent',
+              _hover: { backgroundColor: 'surface.hover' },
             })}
+            aria-expanded={submenuOpen}
+            aria-haspopup="menu"
             onpointerenter={() => {
               submenuOpen = true;
             }}
@@ -367,9 +366,9 @@
             role="button"
             tabindex="0"
           >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={ChevronsUpDownIcon} size={14} />
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ChevronsUpDownIcon} size={14} />
             <span>스페이스 전환</span>
-            <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.faint' })} icon={ChevronRightIcon} size={12} />
+            <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.default' })} icon={ChevronRightIcon} size={12} />
           </div>
         </div>
       </div>
@@ -388,10 +387,7 @@
       borderRadius: '8px',
       padding: '4px',
       backgroundColor: 'surface.default',
-      boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08)]',
-      _dark: {
-        boxShadow: '[0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.25)]',
-      },
+      boxShadow: 'lg',
       zIndex: 'tooltip',
       pointerEvents: 'auto',
       transformOrigin: 'left top',
@@ -417,7 +413,7 @@
           whiteSpace: 'nowrap',
           transition: 'common',
           cursor: 'pointer',
-          _hover: { backgroundColor: 'surface.muted' },
+          _hover: { backgroundColor: 'surface.hover' },
         })}
         onclick={() => {
           paneGroup.switchToSite(s.id);
@@ -429,7 +425,7 @@
         <span class={css({ truncate: true })}>{s.name}</span>
         {#if s.id === site.id}
           <Icon
-            style={css.raw({ marginLeft: 'auto', paddingLeft: '4px', flexShrink: '0', color: 'text.brand' })}
+            style={css.raw({ marginLeft: 'auto', paddingLeft: '4px', flexShrink: '0', color: 'accent.default' })}
             icon={CheckIcon}
             size={14}
           />
@@ -449,11 +445,11 @@
         borderRadius: '6px',
         fontSize: '13px',
         fontWeight: 'medium',
-        color: 'text.muted',
+        color: 'text.default',
         whiteSpace: 'nowrap',
         transition: 'common',
         cursor: 'pointer',
-        _hover: { backgroundColor: 'surface.muted' },
+        _hover: { backgroundColor: 'surface.hover' },
       })}
       onclick={() => {
         close();
@@ -466,7 +462,7 @@
       }}
       type="button"
     >
-      <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={PlusIcon} size={14} />
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={PlusIcon} size={14} />
       <span>새 스페이스 생성</span>
     </button>
   </div>

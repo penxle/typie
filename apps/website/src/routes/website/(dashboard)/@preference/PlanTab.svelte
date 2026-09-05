@@ -51,7 +51,7 @@
   <!-- Tab Header -->
   <div>
     <h1 class={css({ fontSize: '20px', fontWeight: 'semibold', color: 'text.default', marginBottom: '4px' })}>플랜</h1>
-    <p class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>
+    <p class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
       처음엔 가볍게 시작하고, 필요할 땐 제한 없이 모든 기능을 사용할 수 있어요.
     </p>
   </div>
@@ -65,7 +65,7 @@
           class={flex({
             flexDirection: 'column',
             borderWidth: '1px',
-            borderColor: 'border.subtle',
+            borderColor: 'border.hairline',
             borderRadius: '8px',
             padding: '24px',
             backgroundColor: 'surface.default',
@@ -73,7 +73,7 @@
         >
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
             <div class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default' })}>구독 없음</div>
-            <div class={css({ fontSize: '13px', color: 'text.subtle', lineHeight: '[1.6]' })}>
+            <div class={css({ fontSize: '13px', color: 'text.muted', lineHeight: '[1.6]' })}>
               지금은 읽기 전용 상태예요. 글 열람과 공유는 계속 가능해요.
             </div>
           </div>
@@ -85,7 +85,7 @@
         class={flex({
           flexDirection: 'column',
           borderWidth: '1px',
-          borderColor: 'border.subtle',
+          borderColor: 'border.hairline',
           borderRadius: '8px',
           padding: '24px',
           backgroundColor: 'surface.default',
@@ -93,12 +93,12 @@
       >
         <div class={flex({ flexDirection: 'column', gap: '4px', marginBottom: '20px' })}>
           <div class={css({ fontSize: '15px', fontWeight: 'semibold', color: 'text.default' })}>FULL ACCESS</div>
-          <div class={css({ fontSize: '13px', color: 'text.subtle' })}>더 많은 도구와 함께, 자유롭게 글을 시작해보세요.</div>
+          <div class={css({ fontSize: '13px', color: 'text.muted' })}>더 많은 도구와 함께, 자유롭게 글을 시작해보세요.</div>
         </div>
 
         <div class={flex({ alignItems: 'baseline', gap: '4px', marginBottom: '20px' })}>
           <span class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.default' })}>2,900</span>
-          <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>원 / 월</span>
+          <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>원 / 월</span>
         </div>
 
         {#if isOnTrial}
@@ -110,10 +110,10 @@
               height: '32px',
               fontSize: '13px',
               fontWeight: 'semibold',
-              color: 'accent.brand.default',
-              backgroundColor: 'accent.brand.subtle',
+              color: 'text.default',
+              backgroundColor: 'surface.active',
               borderWidth: '1px',
-              borderColor: 'accent.brand.default',
+              borderColor: 'accent.default',
               borderRadius: '6px',
               marginBottom: '8px',
             })}
@@ -129,10 +129,10 @@
                 height: '32px',
                 fontSize: '13px',
                 fontWeight: 'semibold',
-                color: 'text.disabled',
-                backgroundColor: 'surface.muted',
+                color: 'text.default',
+                backgroundColor: 'surface.canvas',
                 borderWidth: '1px',
-                borderColor: 'border.subtle',
+                borderColor: 'border.hairline',
                 borderRadius: '6px',
                 marginBottom: '20px',
               })}
@@ -158,10 +158,10 @@
               height: '32px',
               fontSize: '13px',
               fontWeight: 'semibold',
-              color: 'text.disabled',
-              backgroundColor: 'surface.muted',
+              color: 'text.default',
+              backgroundColor: 'surface.active',
               borderWidth: '1px',
-              borderColor: 'border.subtle',
+              borderColor: 'accent.default',
               borderRadius: '6px',
               marginBottom: '20px',
             })}
@@ -179,11 +179,11 @@
           </Button>
         {/if}
 
-        <div class={css({ borderTopWidth: '1px', borderColor: 'border.subtle', paddingTop: '20px' })}>
+        <div class={css({ borderTopWidth: '1px', borderColor: 'border.hairline', paddingTop: '20px' })}>
           <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
             {#each PLAN_FEATURES.full as feature, index (index)}
               <li class={flex({ alignItems: 'flex-start', gap: '8px' })}>
-                <Icon style={css.raw({ color: 'text.subtle', flexShrink: 0, marginTop: '2px' })} icon={feature.icon} size={14} />
+                <Icon style={css.raw({ color: 'text.default', flexShrink: 0, marginTop: '2px' })} icon={feature.icon} size={14} />
                 <span class={css({ fontSize: '13px', color: 'text.default', lineHeight: '[1.6]' })}>{feature.label}</span>
               </li>
             {/each}

@@ -96,11 +96,11 @@
       paddingX: '16px',
       paddingBottom: '10px',
       borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
       fontSize: '14px',
       fontWeight: 'medium',
       lineHeight: '[1.4]',
-      color: 'text.subtle',
+      color: 'text.muted',
     })}
   >
     <div></div>
@@ -119,12 +119,12 @@
           marginY: '-4px',
           padding: '4px',
           borderRadius: '6px',
-          color: 'text.faint',
+          color: 'text.muted',
           cursor: 'pointer',
           transitionProperty: '[background-color, color]',
           transitionDuration: '200ms',
           transitionTimingFunction: 'ease',
-          _hover: { backgroundColor: 'surface.muted', color: 'text.subtle' },
+          _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
         })}
         aria-label="닫기"
         onclick={() => {
@@ -145,7 +145,7 @@
         height: '[min(80vh, 800px)]',
         marginBottom: '-24px',
         fontSize: '14px',
-        color: 'text.faint',
+        color: 'text.hint',
       })}
     >
       업데이트 노트를 불러오지 못했어요
@@ -178,7 +178,7 @@
               style:top={idx === 0 ? '14px' : '0'}
               style:bottom={idx === entries.length - 1 ? 'auto' : '0'}
               style:height={idx === entries.length - 1 ? '14px' : undefined}
-              class={css({ position: 'absolute', left: '3px', width: '1px', backgroundColor: 'border.subtle' })}
+              class={css({ position: 'absolute', left: '3px', width: '1px', backgroundColor: 'border.hairline' })}
             ></div>
           {/if}
 
@@ -194,12 +194,12 @@
                 paddingBottom: '8px',
               })}
             >
-              <div class={css({ flexShrink: '0', size: '7px', borderRadius: 'full', backgroundColor: 'border.strong' })}></div>
+              <div class={css({ flexShrink: '0', size: '7px', borderRadius: 'full', backgroundColor: 'border.emphasis' })}></div>
               <span
                 class={css({
                   fontSize: '12px',
                   fontWeight: 'medium',
-                  color: 'text.subtle',
+                  color: 'text.muted',
                   whiteSpace: 'nowrap',
                   fontVariantNumeric: 'tabular-nums',
                 })}
@@ -222,7 +222,7 @@
                   marginBottom: '22px',
                   borderRadius: '8px',
                   borderWidth: '1px',
-                  borderColor: 'border.subtle',
+                  borderColor: 'border.hairline',
                 })}
                 alt={entry.title}
                 loading="lazy"
@@ -230,7 +230,7 @@
               />
             {/if}
 
-            <div class={css({ fontSize: '15px', color: 'text.subtle' })}>
+            <div class={css({ fontSize: '15px', color: 'text.default' })}>
               <ChangelogMarkdown blocks={parseMarkdown(entry.body)} />
             </div>
           </div>

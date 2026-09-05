@@ -40,18 +40,18 @@
   {@const Block = app.block}
   <Block {failedIds} {message} {onRetry} {reconnecting} {requests} {resolve} {sessionId} {transcript} {unavailableMessage} />
 {:else if message.status === 'running'}
-  <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', color: 'text.subtle' })}>
+  <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', color: 'text.muted' })}>
     <div
       class={css({
         size: '5px',
         borderRadius: 'full',
         flexShrink: '0',
-        backgroundColor: 'border.strong',
+        backgroundColor: 'border.emphasis',
         animation: 'pulse 1.6s ease-in-out infinite',
       })}
     ></div>
     작업 진행 중 · 경과 {minutes}분
   </div>
 {:else}
-  <div class={css({ fontSize: '12px', color: 'text.faint' })}>작업이 끝났어요</div>
+  <div class={css({ fontSize: '12px', color: 'text.hint' })}>작업이 끝났어요</div>
 {/if}

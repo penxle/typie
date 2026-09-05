@@ -69,7 +69,16 @@
 
 {#if documentView.data.allowReaction}
   <button
-    class={css({ marginTop: '2px', borderRadius: '4px', padding: '3px', _hover: { backgroundColor: 'surface.muted' } })}
+    class={css({
+      marginTop: '2px',
+      borderRadius: '4px',
+      padding: '3px',
+      color: 'text.muted',
+      _hover: { backgroundColor: 'surface.hover' },
+      _expanded: { color: 'text.default', backgroundColor: 'surface.active' },
+    })}
+    aria-expanded={open}
+    aria-haspopup="dialog"
     onclick={() => {
       open = true;
       mixpanel.track('open_document_reaction_popover');
@@ -86,11 +95,11 @@
         columns: 5,
         gap: '6px',
         borderWidth: '1px',
-        borderColor: 'border.subtle',
+        borderColor: 'border.hairline',
         borderRadius: '6px',
         padding: '4px',
         backgroundColor: 'surface.default',
-        boxShadow: 'small',
+        boxShadow: 'sm',
       })}
       use:floating
       transition:fade={{ duration: 100 }}
@@ -98,7 +107,7 @@
       {#each Object.keys(emojis) as emoji (emoji)}
         <li>
           <button
-            class={center({ borderRadius: '4px', padding: '5px', size: 'full', _supportHover: { backgroundColor: 'surface.muted' } })}
+            class={center({ borderRadius: '4px', padding: '5px', size: 'full', _supportHover: { backgroundColor: 'surface.hover' } })}
             onclick={async () => {
               await createDocumentReaction({ input: { documentId: documentView.data.id, emoji } });
               mixpanel.track('create_document_reaction', { emoji });

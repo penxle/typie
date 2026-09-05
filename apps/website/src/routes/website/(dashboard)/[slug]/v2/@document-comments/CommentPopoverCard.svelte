@@ -71,10 +71,10 @@
   style:width="280px"
   class={css({
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     borderRadius: '8px',
     backgroundColor: 'surface.default',
-    boxShadow: 'small',
+    boxShadow: 'sm',
     zIndex: 'menu',
     pointerEvents: 'auto',
     overflow: 'hidden',

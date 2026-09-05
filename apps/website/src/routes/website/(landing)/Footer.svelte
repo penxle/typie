@@ -10,10 +10,10 @@
 <footer
   class={css({
     width: 'full',
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
     position: 'relative',
     borderTopWidth: '1px',
-    borderTopColor: 'dark.gray.900',
+    borderTopColor: 'border.hairline',
     paddingX: { sm: '24px', lg: '80px' },
   })}
 >
@@ -24,7 +24,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -55,15 +55,15 @@
                 width: '32px',
                 height: '32px',
                 borderWidth: '1px',
-                borderColor: 'dark.gray.900',
-                color: 'dark.gray.500',
+                borderColor: 'border.hairline',
+                color: 'text.muted',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: '[all 0.2s ease]',
                 _hover: {
-                  borderColor: 'dark.gray.700',
-                  color: 'dark.gray.300',
+                  borderColor: 'border.emphasis',
+                  color: 'text.default',
                 },
               })}
               aria-label="X"
@@ -76,15 +76,15 @@
                 width: '32px',
                 height: '32px',
                 borderWidth: '1px',
-                borderColor: 'dark.gray.900',
-                color: 'dark.gray.500',
+                borderColor: 'border.hairline',
+                color: 'text.muted',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: '[all 0.2s ease]',
                 _hover: {
-                  borderColor: 'dark.gray.700',
-                  color: 'dark.gray.300',
+                  borderColor: 'border.emphasis',
+                  color: 'text.default',
                 },
               })}
               aria-label="GitHub"
@@ -100,7 +100,7 @@
             fontSize: '12px',
             lineHeight: '[1.7]',
             letterSpacing: '[0.02em]',
-            color: 'dark.gray.500',
+            color: 'text.hint',
           })}
         >
           <p>(주) 펜슬컴퍼니</p>
@@ -118,7 +118,7 @@
             fontSize: '[11px]',
             fontFamily: 'mono',
             fontWeight: 'medium',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             marginBottom: '20px',
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
@@ -130,10 +130,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/"
@@ -143,10 +143,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/pricing"
@@ -156,10 +156,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/changelog"
@@ -169,10 +169,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/download"
@@ -182,10 +182,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/open"
@@ -195,10 +195,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="https://penxle.channel.io"
@@ -216,7 +216,7 @@
             fontSize: '[11px]',
             fontFamily: 'mono',
             fontWeight: 'medium',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             marginBottom: '20px',
             textTransform: 'uppercase',
             letterSpacing: '[0.1em]',
@@ -228,10 +228,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/legal/terms"
@@ -243,10 +243,10 @@
           <a
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               transition: '[color 0.2s ease]',
               _hover: {
-                color: 'dark.gray.200',
+                color: 'text.default',
               },
             })}
             href="/legal/privacy"

@@ -129,7 +129,7 @@
     paddingBottom: '4px',
     fontSize: '11px',
     fontWeight: 'medium',
-    color: 'text.faint',
+    color: 'text.muted',
   });
 
   const row = css({
@@ -138,9 +138,10 @@
     alignItems: 'center',
     marginX: '6px',
     borderRadius: '6px',
-    '&:hover, &[data-highlighted="true"]': { backgroundColor: 'surface.muted' },
+    '&:hover, &[data-highlighted="true"]': { backgroundColor: 'surface.hover' },
     '&[data-current="true"] .title': { fontWeight: 'semibold', color: 'text.default' },
     '&:hover .more, &:focus-within .more, &[data-highlighted="true"] .more, & .more[data-open="true"]': { opacity: '100' },
+    '& .more[data-open="true"]': { color: 'text.default', backgroundColor: 'surface.active' },
   });
 
   const rowButton = css({
@@ -153,13 +154,13 @@
     paddingRight: '4px',
     paddingY: '7px',
     fontSize: '13px',
-    color: 'text.subtle',
+    color: 'text.muted',
     textAlign: 'left',
   });
 
   const rowTitle = css({ flexGrow: '1', minWidth: '0' });
 
-  const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.info.default' });
+  const rowDot = css({ flexShrink: '0', size: '6px', borderRadius: 'full', backgroundColor: 'accent.default' });
 
   const more = css({
     display: 'flex',
@@ -169,10 +170,10 @@
     marginRight: '6px',
     size: '24px',
     borderRadius: '4px',
-    color: 'text.faint',
+    color: 'text.muted',
     opacity: '0',
     transition: '[opacity 120ms ease]',
-    _hover: { color: 'text.subtle', backgroundColor: 'surface.subtle' },
+    _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
   });
 
   const editInput = css({
@@ -183,7 +184,7 @@
     paddingX: '4px',
     paddingY: '3px',
     borderWidth: '1px',
-    borderColor: 'border.strong',
+    borderColor: 'border.emphasis',
     borderRadius: '4px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
@@ -213,15 +214,11 @@
       paddingX: '10px',
       paddingY: '8px',
       borderBottomWidth: '1px',
-      borderColor: 'border.subtle',
+      borderColor: 'border.hairline',
     })}
   >
     <div class={flex({ position: 'relative', alignItems: 'center', flexGrow: '1', minWidth: '0' })}>
-      <Icon
-        style={css.raw({ position: 'absolute', left: '8px', color: 'text.faint', pointerEvents: 'none' })}
-        icon={SearchIcon}
-        size={14}
-      />
+      <Icon style={css.raw({ position: 'absolute', left: '8px', color: 'text.hint', pointerEvents: 'none' })} icon={SearchIcon} size={14} />
       <input
         bind:this={searchEl}
         class={css({
@@ -231,9 +228,9 @@
           paddingY: '6px',
           borderRadius: '6px',
           fontSize: '13px',
-          backgroundColor: 'surface.muted',
+          backgroundColor: 'surface.inset',
           outline: 'none',
-          _placeholder: { color: 'text.faint' },
+          _placeholder: { color: 'text.hint' },
         })}
         placeholder="대화 검색"
         type="text"
@@ -248,8 +245,8 @@
         flexShrink: '0',
         size: '24px',
         borderRadius: '4px',
-        color: 'text.faint',
-        _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+        color: 'text.muted',
+        _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
       })}
       aria-label="목록 닫기"
       onclick={onClose}
@@ -267,11 +264,11 @@
       role="listbox"
     >
       {#if sessions.length === 0}
-        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
           아직 대화가 없어요
         </div>
       {:else if visible.length === 0 && archived.length === 0}
-        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+        <div class={css({ paddingX: '14px', paddingY: '24px', fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
           "{query.trim()}"에 맞는 대화가 없어요
         </div>
       {/if}
@@ -294,8 +291,8 @@
             paddingBottom: '4px',
             fontSize: '11px',
             fontWeight: 'medium',
-            color: 'text.faint',
-            _hover: { color: 'text.subtle' },
+            color: 'text.muted',
+            _hover: { color: 'text.default' },
           })}
           aria-expanded={showArchived}
           onclick={() => (archivedOpen = !archivedOpen)}
@@ -358,7 +355,7 @@
           <span class={css({ srOnly: true })}>확인할 항목 있음</span>
         {/if}
         <TimeAgo
-          style={css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.faint' })}
+          style={css.raw({ flexShrink: '0', fontSize: '11px', color: 'text.hint' })}
           timestamp={dayjs(session.updatedAt).valueOf()}
         />
       </button>
@@ -428,7 +425,7 @@
               paddingX: '10px',
               paddingY: '4px',
               fontSize: '12px',
-              color: 'text.faint',
+              color: 'text.hint',
               userSelect: 'none',
             })}
           >

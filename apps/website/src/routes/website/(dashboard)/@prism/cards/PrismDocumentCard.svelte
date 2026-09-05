@@ -61,8 +61,7 @@
     borderRadius: '10px',
     fontSize: '13px',
     backgroundColor: 'surface.default',
-    _dark: { backgroundColor: 'surface.subtle' },
-    boxShadow: 'small',
+    boxShadow: 'sm',
   });
   const titleClass = css({ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '0' });
 </script>
@@ -74,7 +73,7 @@
         height: '14px',
         width: '[60%]',
         borderRadius: '4px',
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'skeleton.base',
         animation: 'pulse 1.6s ease-in-out infinite',
       })}
     ></div>
@@ -98,7 +97,7 @@
       textAlign: 'left',
       cursor: 'pointer',
       transition: '[background-color 150ms ease]',
-      _hover: { backgroundColor: 'surface.muted' },
+      _hover: { backgroundColor: 'surface.hover' },
     })}
     onclick={() => void goto(`/${doc.entity.slug}`)}
     type="button"
@@ -115,11 +114,11 @@
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
         fontSize: '11px',
-        color: 'text.faint',
+        color: 'text.muted',
       })}
     >
       {doc.subtitle ?? `${doc.characterCount.toLocaleString()}자`}
     </span>
-    <Icon style={css.raw({ flexShrink: '0', marginLeft: 'auto', color: 'text.faint' })} icon={ChevronRightIcon} size={14} />
+    <Icon style={css.raw({ flexShrink: '0', marginLeft: 'auto', color: 'text.muted' })} icon={ChevronRightIcon} size={14} />
   </button>
 {/if}

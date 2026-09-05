@@ -160,9 +160,9 @@
         paddingY: '6px',
         borderRadius: '6px',
         transition: 'common',
-        _supportHover: { backgroundColor: 'surface.muted' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
-        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.muted' },
+        _supportHover: { backgroundColor: 'surface.hover' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
+        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
       },
       source === 'tree' &&
         document.data.entity.depth > 0 && {
@@ -170,22 +170,23 @@
           borderLeftRadius: '0',
           marginLeft: '-1px',
           paddingLeft: '14px',
-          _supportHover: { borderColor: 'border.strong' },
+          _supportHover: { borderColor: 'border.emphasis' },
         },
       source !== 'tree' && { touchAction: 'none' },
       active && {
-        backgroundColor: 'surface.muted',
+        backgroundColor: 'surface.active',
       },
       selected && {
-        backgroundColor: 'accent.info.subtle',
-        _supportHover: { backgroundColor: 'accent.info.subtle' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'accent.info.subtle' },
+        backgroundColor: 'surface.active',
+        _supportHover: { backgroundColor: 'surface.active' },
+        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active' },
         '&[data-context-menu-open="true"]': {
-          backgroundColor: 'accent.info.subtle',
+          backgroundColor: 'surface.active',
         },
       },
     ),
   )}
+  aria-current={active ? 'page' : undefined}
   aria-selected={source === 'tree' ? 'false' : undefined}
   data-document-type={document.data.documentType}
   data-icon={document.data.entity.icon}

@@ -73,7 +73,7 @@
     position: 'absolute',
     left: `${HANDLE_RADIUS - STEM_WIDTH / 2}px`,
     width: `${STEM_WIDTH}px`,
-    backgroundColor: 'text.default',
+    backgroundColor: 'accent.default',
     borderRadius: 'full',
   });
 
@@ -82,7 +82,7 @@
     width: `${HANDLE_RADIUS * 2}px`,
     height: `${HANDLE_RADIUS * 2}px`,
     borderRadius: 'full',
-    backgroundColor: 'text.default',
+    backgroundColor: 'accent.default',
   });
 </script>
 

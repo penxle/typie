@@ -49,12 +49,12 @@
       padding: '12px',
       cursor: 'pointer',
       transition: '[border-color 0.15s ease, background-color 0.15s ease]',
-      _hover: { backgroundColor: 'surface.subtle' },
+      _hover: { backgroundColor: 'surface.hover' },
     },
     variants: {
       shown: {
-        true: { borderColor: 'border.brand' },
-        false: { borderColor: 'border.subtle' },
+        true: { borderColor: 'accent.default' },
+        false: { borderColor: 'border.hairline' },
       },
     },
   });
@@ -62,8 +62,8 @@
 
 <Modal style={css.raw({ maxWidth: '420px' })} bind:open>
   <div class={center({ gap: '4px', padding: '12px' })}>
-    <Icon style={css.raw({ color: 'text.faint' })} icon={ReviewLensIcon} size={14} />
-    <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.faint' })}>프리즘 리뷰</span>
+    <Icon style={css.raw({ color: 'text.default' })} icon={ReviewLensIcon} size={14} />
+    <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>프리즘 리뷰</span>
   </div>
 
   <HorizontalDivider />
@@ -75,7 +75,7 @@
         {#if index > 0}
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
         {/if}
-        <div class={css({ fontSize: '11px', color: 'text.faint' })}>
+        <div class={css({ fontSize: '11px', color: 'text.muted' })}>
           {group.tierLabel} · 시작 {dayjs(group.startedAt).format('M월 D일')}
         </div>
       {/if}
@@ -98,7 +98,7 @@
               type="button"
             >
               <span class={css({ flex: 'none', fontSize: '13px', fontWeight: 'bold' })}>{round.ordinal}회차</span>
-              <span class={css({ minWidth: '0', fontSize: '12px', color: 'text.subtle', truncate: true })}>{round.tierLabel}</span>
+              <span class={css({ minWidth: '0', fontSize: '12px', color: 'text.muted', truncate: true })}>{round.tierLabel}</span>
             </button>
             {#if shown}
               <span
@@ -107,10 +107,10 @@
                   paddingX: '6px',
                   paddingY: '2px',
                   borderRadius: '4px',
-                  backgroundColor: 'accent.brand.subtle',
+                  backgroundColor: 'surface.active',
                   fontSize: '10px',
                   fontWeight: 'bold',
-                  color: 'text.brand',
+                  color: 'text.default',
                 })}
               >
                 표시 중
@@ -119,7 +119,7 @@
           </div>
 
           <div class={flex({ alignItems: 'center', gap: '12px', marginTop: '4px' })}>
-            <span class={css({ minWidth: '0', fontSize: '11px', color: 'text.faint' })}>
+            <span class={css({ minWidth: '0', fontSize: '11px', color: 'text.hint' })}>
               피드백 {round.issueCount}개 · <TimeAgo timestamp={new Date(round.createdAt).getTime()} />
             </span>
             {#if sessionId !== null}
@@ -128,9 +128,9 @@
                   flex: 'none',
                   marginLeft: 'auto',
                   fontSize: '11px',
-                  color: 'text.faint',
+                  color: 'text.hint',
                   cursor: 'pointer',
-                  _hover: { color: 'text.subtle' },
+                  _hover: { color: 'text.muted' },
                 })}
                 aria-label={`${round.ordinal}회차 대화 보기`}
                 onclick={() => goSession(sessionId)}

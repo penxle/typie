@@ -46,7 +46,7 @@
   class={css({
     position: 'relative',
     minHeight: '[100vh]',
-    backgroundColor: 'dark.gray.950',
+    backgroundColor: 'surface.canvas',
   })}
 >
   <div
@@ -56,7 +56,7 @@
       top: '0',
       bottom: '0',
       width: '1px',
-      backgroundColor: 'dark.gray.800',
+      backgroundColor: 'border.hairline',
       display: { sm: 'none', lg: 'block' },
     })}
   ></div>
@@ -83,7 +83,7 @@
           display: 'block',
           fontSize: '[11px]',
           fontFamily: 'mono',
-          color: 'dark.gray.500',
+          color: 'text.muted',
           letterSpacing: '[0.1em]',
           textTransform: 'uppercase',
           marginBottom: '24px',
@@ -96,7 +96,7 @@
         class={css({
           fontSize: { sm: '[36px]', lg: '[56px]' },
           fontWeight: 'medium',
-          color: 'dark.gray.100',
+          color: 'text.default',
           lineHeight: '[1.2]',
           letterSpacing: '[-0.02em]',
           fontFamily: 'Paperlogy',
@@ -105,13 +105,13 @@
       >
         일단 써보세요.
         <br />
-        <span class={css({ color: 'dark.gray.400' })}>결제는 나중에.</span>
+        <span class={css({ color: 'text.muted' })}>결제는 나중에.</span>
       </h1>
 
       <p
         class={css({
           fontSize: { sm: '16px', lg: '18px' },
-          color: 'dark.gray.400',
+          color: 'text.muted',
           lineHeight: '[1.65]',
           maxWidth: '[400px]',
         })}
@@ -157,16 +157,16 @@
               fontWeight: 'medium',
               transition: '[all 0.2s ease-out]',
               backgroundColor: 'transparent',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               cursor: 'pointer',
               border: 'none',
               padding: '0',
               paddingBottom: '16px',
               _hover: {
-                color: 'dark.gray.300',
+                color: 'text.default',
               },
               _pressed: {
-                color: 'dark.gray.100',
+                color: 'text.default',
                 _after: {
                   content: '""',
                   position: 'absolute',
@@ -174,7 +174,7 @@
                   right: '0',
                   bottom: '-1px',
                   height: '2px',
-                  backgroundColor: 'dark.gray.100',
+                  backgroundColor: 'accent.default',
                 },
               },
             })}
@@ -191,7 +191,7 @@
               fontWeight: 'medium',
               transition: '[all 0.2s ease-out]',
               backgroundColor: 'transparent',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               cursor: 'pointer',
               border: 'none',
               padding: '0',
@@ -200,10 +200,10 @@
               alignItems: 'center',
               gap: '10px',
               _hover: {
-                color: 'dark.gray.300',
+                color: 'text.default',
               },
               _pressed: {
-                color: 'dark.gray.100',
+                color: 'text.default',
                 _after: {
                   content: '""',
                   position: 'absolute',
@@ -211,7 +211,7 @@
                   right: '0',
                   bottom: '-1px',
                   height: '2px',
-                  backgroundColor: 'dark.gray.100',
+                  backgroundColor: 'accent.default',
                 },
               },
             })}
@@ -225,7 +225,7 @@
                 fontSize: '11px',
                 fontFamily: 'mono',
                 fontWeight: 'medium',
-                color: 'dark.brand.300',
+                color: 'text.default',
                 letterSpacing: '[0.02em]',
               })}
             >
@@ -241,7 +241,7 @@
           gridTemplateColumns: { sm: '1fr', lg: '[1fr 400px]' },
           gap: '0',
           borderTopWidth: '1px',
-          borderTopColor: 'dark.gray.900',
+          borderTopColor: 'border.hairline',
           opacity: '0',
           transform: 'translate3d(0, 20px, 0)',
           transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s]',
@@ -258,9 +258,9 @@
             paddingX: { sm: '0', lg: '48px' },
             paddingLeft: { lg: '0' },
             borderBottomWidth: { sm: '1px', lg: '0' },
-            borderBottomColor: 'dark.gray.900',
+            borderBottomColor: 'border.hairline',
             borderRightWidth: { sm: '0', lg: '1px' },
-            borderRightColor: 'dark.gray.900',
+            borderRightColor: 'border.hairline',
             display: 'flex',
             flexDirection: 'column',
           })}
@@ -270,7 +270,7 @@
               display: 'block',
               fontSize: '11px',
               fontFamily: 'mono',
-              color: 'dark.brand.400',
+              color: 'text.muted',
               letterSpacing: '[0.1em]',
               textTransform: 'uppercase',
               marginBottom: '20px',
@@ -283,7 +283,7 @@
             class={css({
               fontSize: { sm: '[28px]', lg: '[36px]' },
               fontWeight: 'medium',
-              color: 'dark.gray.100',
+              color: 'text.default',
               lineHeight: '[1.25]',
               letterSpacing: '[-0.02em]',
               fontFamily: 'Paperlogy',
@@ -296,7 +296,7 @@
           <p
             class={css({
               fontSize: { sm: '15px', lg: '16px' },
-              color: 'dark.gray.400',
+              color: 'text.muted',
               lineHeight: '[1.65]',
               maxWidth: '[420px]',
             })}
@@ -320,7 +320,7 @@
                 display: 'block',
                 fontSize: '11px',
                 fontFamily: 'mono',
-                color: 'dark.brand.400',
+                color: 'text.muted',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
                 marginBottom: '6px',
@@ -333,7 +333,7 @@
                 fontSize: '14px',
                 fontFamily: 'mono',
                 fontWeight: 'medium',
-                color: 'dark.gray.400',
+                color: 'text.default',
                 letterSpacing: '[0.1em]',
                 textTransform: 'uppercase',
               })}
@@ -348,7 +348,7 @@
                 class={css({
                   fontSize: { sm: '[40px]', lg: '[48px]' },
                   fontWeight: 'medium',
-                  color: 'dark.gray.100',
+                  color: 'text.default',
                   lineHeight: '[1]',
                   fontVariantNumeric: 'tabular-nums',
                   fontFamily: 'Paperlogy',
@@ -360,7 +360,7 @@
                 class={css({
                   fontSize: { sm: '[40px]', lg: '[48px]' },
                   fontWeight: 'medium',
-                  color: 'dark.gray.100',
+                  color: 'text.default',
                   lineHeight: '[1]',
                   fontVariantNumeric: 'tabular-nums',
                   fontFamily: 'Paperlogy',
@@ -369,13 +369,13 @@
                 {selectedInterval === 'monthly' ? 2900 : Math.floor(29_000 / 12)}
               </span>
             {/if}
-            <span class={css({ fontSize: '15px', color: 'dark.gray.500' })}>원 / 월</span>
+            <span class={css({ fontSize: '15px', color: 'text.muted' })}>원 / 월</span>
           </div>
 
           <p
             class={css({
               fontSize: '14px',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               marginBottom: '24px',
               height: '20px',
             })}
@@ -388,7 +388,7 @@
           <p
             class={css({
               fontSize: '15px',
-              color: 'dark.gray.400',
+              color: 'text.muted',
               marginBottom: '32px',
               lineHeight: '[1.65]',
             })}
@@ -408,14 +408,14 @@
                 paddingY: '14px',
                 fontSize: '15px',
                 fontWeight: 'medium',
-                backgroundColor: 'dark.brand.300',
+                backgroundColor: 'accent.default',
                 borderWidth: '1px',
-                borderColor: 'dark.brand.300',
-                color: 'dark.gray.950',
+                borderColor: 'accent.default',
+                color: 'surface.default',
                 transition: '[all 0.2s ease-out]',
                 marginBottom: '32px',
                 _hover: {
-                  backgroundColor: 'dark.brand.200',
+                  backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
                 },
               }),
             )}
@@ -439,7 +439,7 @@
               class={css({
                 fontSize: '12px',
                 fontFamily: 'mono',
-                color: 'dark.gray.500',
+                color: 'text.muted',
                 letterSpacing: '[0.05em]',
                 textTransform: 'uppercase',
               })}
@@ -449,8 +449,8 @@
             <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
               {#each features as feature, index (index)}
                 <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
-                  <Icon style={css.raw({ color: 'dark.brand.400', marginTop: '4px' })} icon={CheckIcon} size={14} />
-                  <span class={css({ fontSize: '15px', color: 'dark.gray.300', lineHeight: '[1.65]' })}>{feature}</span>
+                  <Icon style={css.raw({ color: 'accent.default', marginTop: '4px' })} icon={CheckIcon} size={14} />
+                  <span class={css({ fontSize: '15px', color: 'text.muted', lineHeight: '[1.65]' })}>{feature}</span>
                 </li>
               {/each}
             </ul>
@@ -466,9 +466,9 @@
       paddingY: { sm: '80px', lg: '120px' },
       paddingX: { sm: '24px', lg: '80px' },
       borderTopWidth: '1px',
-      borderTopColor: 'dark.gray.900',
+      borderTopColor: 'border.hairline',
       borderBottomWidth: '1px',
-      borderBottomColor: 'dark.gray.900',
+      borderBottomColor: 'border.hairline',
     })}
   >
     <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
@@ -490,7 +490,7 @@
             display: 'block',
             fontSize: '[11px]',
             fontFamily: 'mono',
-            color: 'dark.gray.500',
+            color: 'text.muted',
             letterSpacing: '[0.1em]',
             textTransform: 'uppercase',
             marginBottom: '24px',
@@ -503,7 +503,7 @@
           class={css({
             fontSize: { sm: '[32px]', lg: '[48px]' },
             fontWeight: 'medium',
-            color: 'dark.gray.100',
+            color: 'text.default',
             fontFamily: 'Paperlogy',
             lineHeight: '[1.2]',
             letterSpacing: '[-0.02em]',
@@ -532,7 +532,7 @@
                 'group',
                 css({
                   borderBottomWidth: '1px',
-                  borderBottomColor: 'dark.gray.900',
+                  borderBottomColor: 'border.hairline',
                 }),
               )}
               aria-expanded={expandedIndex === index}
@@ -551,11 +551,11 @@
                   border: 'none',
                   fontSize: { sm: '16px', lg: '17px' },
                   fontWeight: 'medium',
-                  color: 'dark.gray.200',
+                  color: 'text.muted',
                   lineHeight: '[1.5]',
                   transition: '[color 0.2s ease-out]',
                   _hover: {
-                    color: 'dark.gray.100',
+                    color: 'text.default',
                   },
                 })}
                 onclick={() => toggleFaq(index)}
@@ -564,7 +564,7 @@
                 {faq.question}
                 <Icon
                   style={css.raw({
-                    color: 'dark.gray.500',
+                    color: 'text.muted',
                     flexShrink: 0,
                     transition: '[transform 0.2s ease-out]',
                     _groupExpanded: {
@@ -591,7 +591,7 @@
                     class={css({
                       paddingBottom: { sm: '20px', lg: '24px' },
                       fontSize: '15px',
-                      color: 'dark.gray.400',
+                      color: 'text.muted',
                       lineHeight: '[1.65]',
                     })}
                   >
@@ -636,7 +636,7 @@
               display: 'block',
               fontSize: '[11px]',
               fontFamily: 'mono',
-              color: 'dark.gray.500',
+              color: 'text.muted',
               letterSpacing: '[0.1em]',
               textTransform: 'uppercase',
               marginBottom: '24px',
@@ -649,7 +649,7 @@
             class={css({
               fontSize: { sm: '[32px]', lg: '[48px]' },
               fontWeight: 'medium',
-              color: 'dark.gray.100',
+              color: 'text.default',
               lineHeight: '[1.2]',
               letterSpacing: '[-0.02em]',
               fontFamily: 'Paperlogy',
@@ -662,7 +662,7 @@
           <p
             class={css({
               fontSize: { sm: '16px', lg: '18px' },
-              color: 'dark.gray.400',
+              color: 'text.muted',
               lineHeight: '[1.65]',
               maxWidth: '[400px]',
             })}
@@ -682,11 +682,11 @@
               paddingY: '16px',
               fontSize: '15px',
               fontWeight: 'semibold',
-              color: 'dark.gray.950',
-              backgroundColor: 'dark.brand.300',
+              color: 'surface.default',
+              backgroundColor: 'accent.default',
               transition: '[all 0.2s ease-out]',
               _hover: {
-                backgroundColor: 'dark.brand.200',
+                backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
               },
             }),
           )}

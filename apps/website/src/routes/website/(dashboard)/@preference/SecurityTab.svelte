@@ -91,7 +91,7 @@
                       borderWidth: '1px',
                       borderColor: '[#03C75A]',
                       borderRadius: '6px',
-                      color: 'text.bright',
+                      color: 'white',
                       backgroundColor: '[#03C75A]',
                       size: '24px',
                     })}

@@ -325,11 +325,11 @@
                       class={css({
                         padding: '12px',
                         borderRadius: '8px',
-                        backgroundColor: 'surface.subtle',
+                        backgroundColor: 'surface.canvas',
                         transition: 'background',
                         transitionDuration: '150ms',
                         _hover: {
-                          backgroundColor: 'surface.muted',
+                          backgroundColor: 'surface.hover',
                         },
                       })}
                       href="/{entity.slug}"
@@ -337,7 +337,7 @@
                       <div class={flex({ flexDirection: 'column', gap: '4px' })}>
                         <div class={flex({ alignItems: 'center', gap: '8px' })}>
                           <Icon
-                            style={css.raw({ size: '16px', color: 'text.subtle', flexShrink: '0' })}
+                            style={css.raw({ size: '16px', color: 'text.default', flexShrink: '0' })}
                             icon={entity.node.__typename === 'Document' && entity.node.documentType === DocumentType.TEMPLATE
                               ? LayoutTemplateIcon
                               : FileIcon}
@@ -347,7 +347,7 @@
                           </div>
                         </div>
                         {#if entity.node.__typename === 'Document' && entity.node.excerpt}
-                          <div class={css({ fontSize: '13px', color: 'text.subtle', paddingLeft: '24px', lineClamp: '1' })}>
+                          <div class={css({ fontSize: '13px', color: 'text.muted', paddingLeft: '24px', lineClamp: '1' })}>
                             {entity.node.excerpt}
                           </div>
                         {/if}
@@ -369,11 +369,11 @@
                 textAlign: 'center',
               })}
             >
-              <Icon style={css.raw({ size: '56px', color: 'text.subtle', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
+              <Icon style={css.raw({ size: '56px', color: 'text.muted', '& *': { strokeWidth: '[1.25px]' } })} icon={FilePenIcon} />
 
               <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '4px' })}>
-                <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.subtle' })}>첫 문서를 만들어보세요</h1>
-                <p class={css({ fontSize: '14px', color: 'text.faint' })}>아래 버튼을 눌러 문서를 만들 수 있어요</p>
+                <h1 class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.default' })}>첫 문서를 만들어보세요</h1>
+                <p class={css({ fontSize: '14px', color: 'text.hint' })}>아래 버튼을 눌러 문서를 만들 수 있어요</p>
               </div>
 
               <Button
@@ -423,13 +423,13 @@
                   size={24}
                   state={progress.achieved ? 'achieved' : 'under'}
                 />
-                <span class={css({ fontSize: '14px', color: 'text.subtle' })}>
+                <span class={css({ fontSize: '14px', color: 'text.muted' })}>
                   오늘 {comma(progress.additions)} / {comma(goal.targetCharacterCount)}자
                 </span>
               </button>
             {:else}
               <button
-                class={css({ fontSize: '14px', color: 'text.faint', cursor: 'pointer', _hover: { color: 'text.default' } })}
+                class={css({ fontSize: '14px', color: 'text.muted', cursor: 'pointer', _hover: { color: 'text.default' } })}
                 onclick={() => {
                   app.state.userGoalOpen = true;
                   mixpanel.track('open_user_goal_modal', { via: 'home_pane' });

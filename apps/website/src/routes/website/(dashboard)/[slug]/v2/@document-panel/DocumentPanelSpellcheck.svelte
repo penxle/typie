@@ -261,9 +261,9 @@
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',
-      color: 'text.subtle',
+      color: 'text.muted',
       borderBottomWidth: '1px',
-      borderColor: 'surface.muted',
+      borderColor: 'border.hairline',
     })}
   >
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
@@ -276,8 +276,8 @@
             paddingY: '2px',
             fontSize: '11px',
             fontWeight: 'semibold',
-            color: 'text.danger',
-            backgroundColor: 'accent.danger.subtle',
+            color: 'text.on.danger.subtle',
+            backgroundColor: 'danger.subtle',
           })}
         >
           {editor.spellcheckErrors.length}
@@ -290,9 +290,9 @@
         class={css({
           fontSize: '13px',
           fontWeight: 'medium',
-          color: 'text.faint',
+          color: 'text.hint',
           transition: 'common',
-          _hover: { color: 'text.subtle' },
+          _hover: { color: 'text.muted' },
         })}
         onclick={runSpellcheck}
         type="button"
@@ -316,15 +316,15 @@
         class={center({
           size: '64px',
           borderRadius: '16px',
-          backgroundColor: 'surface.muted',
-          color: 'text.faint',
+          backgroundColor: 'surface.canvas',
+          color: 'text.hint',
         })}
       >
         <Icon icon={SpellCheckIcon} size={28} />
       </div>
 
       <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px' })}>
-        <p class={css({ fontSize: '13px', color: 'text.faint', textAlign: 'center' })}>
+        <p class={css({ fontSize: '13px', color: 'text.hint', textAlign: 'center' })}>
           글의 맞춤법과 띄어쓰기를
           <br />
           검사해보세요
@@ -335,18 +335,18 @@
     </div>
   {:else if inflight}
     <div class={flex({ justifyContent: 'center', alignItems: 'center', paddingY: '40px' })}>
-      <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
+      <RingSpinner style={css.raw({ size: '24px', color: 'text.muted' })} />
     </div>
   {:else if checkFailed}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={CircleAlertIcon} size={32} />
-      <div class={css({ fontSize: '16px', color: 'text.faint' })}>맞춤법 검사에 실패했습니다</div>
-      <div class={css({ fontSize: '14px', color: 'text.faint' })}>잠시 후 다시 시도해주세요</div>
+      <Icon style={css.raw({ color: 'text.muted' })} icon={CircleAlertIcon} size={32} />
+      <div class={css({ fontSize: '16px', color: 'text.muted' })}>맞춤법 검사에 실패했습니다</div>
+      <div class={css({ fontSize: '14px', color: 'text.hint' })}>잠시 후 다시 시도해주세요</div>
     </div>
   {:else if editor && editor.spellcheckErrors.length === 0}
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', paddingY: '40px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={CircleCheckIcon} size={32} />
-      <div class={css({ fontSize: '16px', color: 'text.faint' })}>맞춤법 오류가 없습니다!</div>
+      <Icon style={css.raw({ color: 'text.muted' })} icon={CircleCheckIcon} size={32} />
+      <div class={css({ fontSize: '16px', color: 'text.muted' })}>맞춤법 오류가 없습니다!</div>
     </div>
   {:else if editor}
     <div
@@ -365,13 +365,13 @@
           class={css({
             position: 'relative',
             borderWidth: '1px',
-            borderColor: activeError?.id === error.id ? 'border.danger!' : 'border.default',
+            borderColor: activeError?.id === error.id ? 'accent.default!' : 'border.default',
             borderRadius: '8px',
             padding: '12px',
             cursor: 'pointer',
             transition: 'common',
-            _hover: { borderColor: 'border.strong', backgroundColor: 'surface.subtle' },
-            _focusVisible: { borderColor: 'border.strong', backgroundColor: 'surface.subtle' },
+            _hover: { borderColor: 'border.emphasis', backgroundColor: 'surface.hover' },
+            _focusVisible: { borderColor: 'border.emphasis', backgroundColor: 'surface.hover' },
           })}
           data-panel-spellcheck-error={error.id}
           onclick={(e) => {
@@ -388,10 +388,10 @@
                 class={css({
                   padding: '4px',
                   borderRadius: '4px',
-                  color: 'text.faint',
+                  color: 'text.muted',
                   transition: 'common',
-                  _hover: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
-                  _focusVisible: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+                  _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+                  _focusVisible: { backgroundColor: 'surface.hover', color: 'text.default' },
                 })}
                 onclick={(e) => {
                   e.stopPropagation();
@@ -407,10 +407,10 @@
               class={css({
                 padding: '4px',
                 borderRadius: '4px',
-                color: 'text.faint',
+                color: 'text.muted',
                 transition: 'common',
-                _hover: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
-                _focusVisible: { backgroundColor: 'interactive.hover', color: 'text.subtle' },
+                _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
+                _focusVisible: { backgroundColor: 'surface.hover', color: 'text.default' },
               })}
               onclick={(e) => {
                 e.stopPropagation();
@@ -429,7 +429,7 @@
               <div
                 class={css({
                   fontSize: '12px',
-                  color: 'text.faint',
+                  color: 'text.muted',
                   whiteSpace: 'pre-line',
                   lineClamp: activeError?.id === error.id ? 'none' : '1',
                 })}
@@ -443,17 +443,17 @@
                 <button
                   class={css({
                     borderWidth: '1px',
-                    borderColor: 'border.danger',
+                    borderColor: 'danger.default',
                     borderRadius: '4px',
                     paddingX: '8px',
                     paddingY: '4px',
                     fontSize: '13px',
                     fontWeight: 'semibold',
-                    color: 'text.danger',
-                    backgroundColor: 'accent.danger.subtle',
+                    color: 'text.on.danger.subtle',
+                    backgroundColor: 'danger.subtle',
                     transition: 'common',
-                    _hover: { backgroundColor: { base: 'red.100', _dark: 'dark.red.800' } },
-                    _focusVisible: { backgroundColor: { base: 'red.100', _dark: 'dark.red.800' } },
+                    _hover: { boxShadow: 'md' },
+                    _focusVisible: { boxShadow: 'md' },
                   })}
                   onclick={(e) => {
                     e.stopPropagation();
@@ -475,8 +475,8 @@
                   fontWeight: 'semibold',
                   transition: 'common',
                   backgroundColor: 'surface.default',
-                  _hover: { backgroundColor: 'surface.muted' },
-                  _focusVisible: { backgroundColor: 'surface.muted' },
+                  _hover: { backgroundColor: 'surface.hover' },
+                  _focusVisible: { backgroundColor: 'surface.hover' },
                 })}
                 onclick={(e) => {
                   e.stopPropagation();

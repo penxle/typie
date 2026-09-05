@@ -56,14 +56,14 @@
   {#if cancelled}
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold', wordBreak: 'keep-all' })}>요청을 취소했어요</h1>
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint', wordBreak: 'keep-all' })}>이 창은 닫아도 돼요.</div>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.muted', wordBreak: 'keep-all' })}>이 창은 닫아도 돼요.</div>
     </div>
   {:else}
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
       <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold', wordBreak: 'keep-all' })}>
         데스크톱 앱에 로그인하세요
       </h1>
-      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.faint', wordBreak: 'keep-all' })}>
+      <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.muted', wordBreak: 'keep-all' })}>
         직접 시작한 요청이 맞는지 확인해주세요.
       </div>
     </div>
@@ -76,14 +76,14 @@
         paddingY: '12px',
         borderRadius: '8px',
         borderWidth: '1px',
-        borderColor: 'border.subtle',
-        backgroundColor: 'surface.subtle',
+        borderColor: 'border.hairline',
+        backgroundColor: 'surface.canvas',
         minHeight: '[64px]',
       })}
     >
       {#if session}
         <img
-          class={css({ flexShrink: '0', size: '40px', borderRadius: 'full', objectFit: 'cover', backgroundColor: 'surface.muted' })}
+          class={css({ flexShrink: '0', size: '40px', borderRadius: 'full', objectFit: 'cover', backgroundColor: 'surface.inset' })}
           alt=""
           src={session.avatarUrl}
         />
@@ -93,12 +93,12 @@
           >
             {session.name}
           </div>
-          <div class={css({ fontSize: '13px', color: 'text.faint', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+          <div class={css({ fontSize: '13px', color: 'text.muted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
             {session.email}
           </div>
         </div>
       {:else}
-        <RingSpinner style={css.raw({ size: '20px', color: 'text.faint' })} />
+        <RingSpinner style={css.raw({ size: '20px', color: 'text.muted' })} />
       {/if}
     </div>
 
@@ -109,7 +109,7 @@
         class={css({
           alignSelf: 'center',
           fontSize: '13px',
-          color: 'text.faint',
+          color: 'text.muted',
           _hover: { textDecoration: 'underline', textUnderlineOffset: '2px' },
         })}
         onclick={() => (cancelled = true)}

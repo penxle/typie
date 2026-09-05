@@ -10,10 +10,10 @@
     <h1 class={css({ fontSize: '18px', fontWeight: 'extrabold' })}>Bootstrap Bypass</h1>
 
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-      <label class={css({ fontSize: '13px', color: 'text.subtle', userSelect: 'none' })} for="key">Bypass Key</label>
+      <label class={css({ fontSize: '13px', color: 'text.muted', userSelect: 'none' })} for="key">Bypass Key</label>
       <TextInput id="key" name="key" autocomplete="off" data-1p-ignore placeholder="Enter bypass key" type="password" />
       {#if page.form?.error}
-        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'text.danger' })}>{page.form.error}</div>
+        <div class={css({ paddingLeft: '4px', fontSize: '12px', color: 'danger.default' })}>{page.form.error}</div>
       {/if}
     </div>
 

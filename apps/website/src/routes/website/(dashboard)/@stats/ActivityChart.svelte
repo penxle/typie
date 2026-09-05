@@ -113,8 +113,8 @@
     offset: 8,
   });
 
-  const additionColor = css.raw({ backgroundColor: { base: 'green.400', _dark: 'dark.green.600' } });
-  const deletionColor = css.raw({ backgroundColor: { base: 'gray.400', _dark: 'dark.gray.600' } });
+  const additionColor = css.raw({ backgroundColor: 'palette.green' });
+  const deletionColor = css.raw({ backgroundColor: 'palette.gray' });
 
   const maxVal = $derived(Math.max(...daysData.map((d) => (showAdditions ? d.additions : 0) + (showDeletions ? d.deletions : 0)), 1));
 
@@ -257,10 +257,10 @@
 
 <div class={flex({ flexDirection: 'column', gap: '16px', width: 'full' })}>
   <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>지난 3개월간의 기록</div>
+    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>지난 3개월간의 기록</div>
     <div class={flex({ alignItems: 'center', gap: '12px' })}>
       {#if compressionRange.end > compressionRange.start && !isHoveringCompressedBar}
-        <span class={css({ fontSize: '11px', color: 'text.faint' })}>
+        <span class={css({ fontSize: '11px', color: 'text.hint' })}>
           생략: {comma(Math.round(compressionRange.start))}자 – {comma(Math.round(compressionRange.end))}자 구간
         </span>
       {/if}
@@ -279,8 +279,7 @@
               left: '0',
               right: '0',
               height: '1px',
-              backgroundColor: { base: 'gray.200', _dark: 'dark.gray.700' },
-              opacity: '50',
+              backgroundColor: 'border.hairline',
             })}
           ></div>
         {/each}
@@ -325,25 +324,25 @@
                 <svg height="8" preserveAspectRatio="none" width="100%">
                   <!-- Top black wave -->
                   <path
+                    class={css({ stroke: 'border.emphasis' })}
                     d="M 0,2 L 3,0 L 6,2 L 9,0 L 12,2 L 15,0 L 18,2 L 21,0 L 24,2 L 27,0 L 30,2 L 33,0 L 36,2 L 39,0 L 42,2 L 45,0 L 48,2 L 51,0 L 54,2 L 57,0 L 60,2 L 63,0 L 66,2 L 69,0 L 72,2 L 75,0 L 78,2 L 81,0 L 84,2 L 87,0 L 90,2 L 93,0 L 96,2 L 99,0"
                     fill="none"
                     opacity="1"
-                    stroke="black"
                     stroke-width="1"
                   />
                   <!-- Middle white wave -->
                   <path
+                    class={css({ stroke: 'surface.default' })}
                     d="M 0,4 L 3,2 L 6,4 L 9,2 L 12,4 L 15,2 L 18,4 L 21,2 L 24,4 L 27,2 L 30,4 L 33,2 L 36,4 L 39,2 L 42,4 L 45,2 L 48,4 L 51,2 L 54,4 L 57,2 L 60,4 L 63,2 L 66,4 L 69,2 L 72,4 L 75,2 L 78,4 L 81,2 L 84,4 L 87,2 L 90,4 L 93,2 L 96,4 L 99,2"
                     fill="none"
-                    stroke="white"
                     stroke-width="2"
                   />
                   <!-- Bottom black wave -->
                   <path
+                    class={css({ stroke: 'border.emphasis' })}
                     d="M 0,6 L 3,4 L 6,6 L 9,4 L 12,6 L 15,4 L 18,6 L 21,4 L 24,6 L 27,4 L 30,6 L 33,4 L 36,6 L 39,4 L 42,6 L 45,4 L 48,6 L 51,4 L 54,6 L 57,4 L 60,6 L 63,4 L 66,6 L 69,4 L 72,6 L 75,4 L 78,6 L 81,4 L 84,6 L 87,4 L 90,6 L 93,4 L 96,6 L 99,4"
                     fill="none"
                     opacity="1"
-                    stroke="black"
                     stroke-width="1"
                   />
                 </svg>
@@ -382,7 +381,7 @@
                 class={css({
                   width: 'full',
                   height: '1px',
-                  backgroundColor: { base: 'gray.200', _dark: 'dark.gray.700' },
+                  backgroundColor: 'border.default',
                   borderRadius: '1px',
                 })}
               ></div>
@@ -424,7 +423,7 @@
               class={css({
                 position: 'absolute',
                 fontSize: '12px',
-                color: 'text.faint',
+                color: 'text.hint',
                 transform: isFirstDay ? 'translateX(0)' : 'translateX(-50%)',
                 whiteSpace: 'nowrap',
               })}
@@ -452,7 +451,7 @@
         opacity: showAdditions ? '100' : '30',
       })}
     ></div>
-    <span class={css({ color: showAdditions ? 'text.muted' : 'text.faint' })}>입력한 글자</span>
+    <span class={css({ color: 'text.muted' })}>입력한 글자</span>
   </button>
   <button
     class={flex({ alignItems: 'center', gap: '6px', userSelect: 'none' })}
@@ -468,7 +467,7 @@
         opacity: showDeletions ? '100' : '30',
       })}
     ></div>
-    <span class={css({ color: showDeletions ? 'text.muted' : 'text.faint' })}>지운 글자</span>
+    <span class={css({ color: 'text.muted' })}>지운 글자</span>
   </button>
 </div>
 
@@ -479,8 +478,8 @@
       borderRadius: '6px',
       paddingX: '12px',
       paddingY: '8px',
-      color: 'text.bright',
-      backgroundColor: 'surface.dark',
+      color: 'text.on.inverse',
+      backgroundColor: 'surface.inverse',
       zIndex: 'modal',
     })}
     use:floating

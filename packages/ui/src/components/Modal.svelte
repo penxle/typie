@@ -107,7 +107,7 @@
           transition: 'common',
         },
         showBackdrop && {
-          backgroundColor: 'black/25',
+          backgroundColor: 'scrim',
           opacity: '95',
         },
       )}
@@ -119,7 +119,7 @@
     ></div>
 
     {#if loading}
-      <RingSpinner style={css.raw({ position: 'absolute', size: '40px', color: 'text.faint' })} />
+      <RingSpinner style={css.raw({ position: 'absolute', size: '40px', color: 'text.muted' })} />
     {:else}
       <div
         bind:this={dialogEl}
@@ -134,7 +134,7 @@
             height: 'fit',
             maxHeight: 'full',
             backgroundColor: 'surface.default',
-            boxShadow: 'modal',
+            boxShadow: 'xl',
             overflowY: 'auto',
             outlineWidth: '0',
             userSelect: 'text',

@@ -13,7 +13,7 @@
     backgroundColor: 'surface.default',
     borderRadius: '8px',
     borderWidth: '1px',
-    borderColor: 'border.subtle',
+    borderColor: 'border.hairline',
     overflow: 'hidden',
   })}
 >
