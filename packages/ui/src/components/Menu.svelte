@@ -283,6 +283,7 @@
           maxHeight: '[var(--floating-available-height)]',
           backgroundColor: 'surface.default',
           boxShadow: 'lg',
+          _dark: { borderWidth: '1px', borderColor: 'border.default' },
           overflowY: 'auto',
           scrollbarWidth: scrollbarLabel ? 'none' : undefined,
           pointerEvents: open ? 'auto' : 'none',
