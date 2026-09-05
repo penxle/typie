@@ -46,7 +46,7 @@ afterEach(async () => {
 describe('PRISM panel error boundary', () => {
   test('reports the failure and retries the panel in place', async () => {
     const target = document.createElement('div');
-    Object.assign(target.style, { display: 'flex', height: '640px', position: 'relative', width: '900px' });
+    Object.assign(target.style, { display: 'flex', height: '640px', position: 'relative', width: '432px' });
     document.body.append(target);
     component = mount(PrismPanelBoundaryTestHost, { target });
 
@@ -55,9 +55,37 @@ describe('PRISM panel error boundary', () => {
 
     const shell = target.querySelector<HTMLElement>('[data-prism-panel-shell]');
     const spacer = target.querySelector<HTMLElement>('[data-prism-panel-spacer]');
+    const reveal = target.querySelector<HTMLElement>('[data-prism-panel-reveal]');
+    const edge = target.querySelector<HTMLElement>('[data-prism-panel-edge]');
+    const resizeHandle = target.querySelector<HTMLElement>('[data-prism-panel-resize-handle]');
     const retry = target.querySelector<HTMLButtonElement>('button:not([aria-label])');
-    expect(shell).toBe(spacer);
-    expect(shell?.style.width).toBe('432px');
+    if (!shell) throw new Error('Expected the PRISM panel shell to render');
+    if (!reveal) throw new Error('Expected the PRISM panel reveal to render');
+    if (!edge) throw new Error('Expected the PRISM panel edge to render');
+    if (!resizeHandle) throw new Error('Expected the PRISM panel resize handle to render');
+    expect(shell).not.toBe(spacer);
+    expect(spacer?.style.width).toBe('432px');
+    expect(shell.style.width).toBe('432px');
+    expect(shell.style.getPropertyValue('--prism-panel-hidden')).toBe('0%');
+    expect(reveal.style.clipPath).toBe('inset(0 0 0 calc(var(--prism-panel-hidden) + 1px))');
+    expect(edge.style.width).toBe('432px');
+    expect(edge.style.transform).toBe('translateX(var(--prism-panel-hidden))');
+    expect(getComputedStyle(edge).borderLeftWidth).toBe('1px');
+    expect(resizeHandle.style.pointerEvents).toBe('auto');
+    expect(getComputedStyle(shell).transitionProperty).toContain('--prism-panel-hidden');
+    const edgeRect = edge.getBoundingClientRect();
+    const resizeHandleRect = resizeHandle.getBoundingClientRect();
+    expect(resizeHandleRect.left + resizeHandleRect.width / 2).toBeCloseTo(edgeRect.left);
+
+    for (const animation of shell.getAnimations()) animation.finish();
+    await tick();
+    resizeHandle.style.pointerEvents = 'none';
+    const shellRect = shell.getBoundingClientRect();
+    const borderCenterHit = document.elementFromPoint(shellRect.left + 0.5, shellRect.top + 10);
+    const panelInnerHit = document.elementFromPoint(shellRect.left + 1.5, shellRect.top + 10);
+    if (!borderCenterHit || !panelInnerHit) throw new Error('Expected the PRISM panel boundary to be inside the test viewport');
+    expect(reveal.contains(borderCenterHit)).toBe(false);
+    expect(reveal.contains(panelInnerHit)).toBe(true);
     expect(target.textContent).toContain('앗! 문제가 생겼어요');
     expect(target.textContent).toContain('잠시 후 다시 시도해 주세요.');
     expect(retry?.textContent).toContain('다시 시도');
@@ -71,5 +99,28 @@ describe('PRISM panel error boundary', () => {
     await vi.waitFor(() => expect(target.querySelector('[data-prism-panel-test-healthy]')).not.toBeNull());
     expect(app.preference.current.prismPanelOpen).toBe(true);
     expect(Sentry.captureException).toHaveBeenCalledOnce();
+  });
+
+  test('keeps the closed visual panel laid out behind a synchronized reveal edge', async () => {
+    app.preference.current.prismPanelOpen = false;
+    const target = document.createElement('div');
+    Object.assign(target.style, { display: 'flex', height: '640px', position: 'relative', width: '900px' });
+    document.body.append(target);
+    component = mount(PrismPanelBoundaryTestHost, { target });
+
+    await vi.waitFor(() => expect(target.querySelector('[role="alert"]')).not.toBeNull());
+    await tick();
+
+    const shell = target.querySelector<HTMLElement>('[data-prism-panel-shell]');
+    const spacer = target.querySelector<HTMLElement>('[data-prism-panel-spacer]');
+    const reveal = target.querySelector<HTMLElement>('[data-prism-panel-reveal]');
+    const resizeHandle = target.querySelector<HTMLElement>('[data-prism-panel-resize-handle]');
+
+    if (!shell) throw new Error('Expected the PRISM panel shell to render');
+    expect(spacer?.style.width).toBe('0px');
+    expect(shell.style.width).toBe('432px');
+    expect(shell.style.getPropertyValue('--prism-panel-hidden')).toBe('100%');
+    expect(reveal?.style.pointerEvents).toBe('none');
+    expect(resizeHandle?.style.pointerEvents).toBe('none');
   });
 });
