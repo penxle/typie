@@ -31,7 +31,7 @@ class TopBarExplicitKeyOwnerCleanupTest {
     val state = TopBarState()
     val sharedKey = Any()
     val firstOwner = Route.Folder("child")
-    val secondOwner = Route.Space
+    val secondOwner = Route.Studio
     val firstTrailing: @Composable () -> Unit = {}
     val secondTrailing: @Composable () -> Unit = {}
 
@@ -49,7 +49,7 @@ class TopBarExplicitKeyOwnerCleanupTest {
   fun clearRoute_removesSharedLeadingEntryOwnedByPoppedRoute() {
     val state = TopBarState()
     val sharedKey = Any()
-    val owner = Route.Space
+    val owner = Route.Studio
     val leading: @Composable () -> Unit = {}
 
     state.setLeading(sharedKey, leading, owner)
@@ -65,7 +65,7 @@ class TopBarExplicitKeyOwnerCleanupTest {
   fun setTrailing_rebindsSharedExplicitKeyToNewInstanceWithoutChangingKeyOrOwner() {
     val state = TopBarState()
     val sharedKey = Any()
-    val owner = Route.Space
+    val owner = Route.Studio
     val firstInstance = Any()
     val secondInstance = Any()
     val firstTrailing: @Composable () -> Unit = {}

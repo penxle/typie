@@ -639,13 +639,13 @@ private fun RecentDocumentsSection(docs: List<HomeScreen_RecentDocumentRow_docum
       Row(
         modifier =
           Modifier.fillMaxWidth()
-            .clickable(onClick = { tabState.onSelectTab(Tab.Space) })
+            .clickable(onClick = { tabState.onSelectTab(Tab.Studio) })
             .pressScale()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
       ) {
         Text(
-          "스페이스에서 모든 문서 보기",
+          "작업실에서 모든 문서 보기",
           style = AppTheme.typography.action,
           color = AppTheme.colors.textMuted,
         )

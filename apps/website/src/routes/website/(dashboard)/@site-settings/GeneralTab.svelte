@@ -118,7 +118,7 @@
 
   const form = createForm({
     schema: z.object({
-      name: z.string({ error: '스페이스 이름을 입력해주세요.' }).min(1, '스페이스 이름을 입력해주세요.'),
+      name: z.string({ error: '작업실 이름을 입력해주세요.' }).min(1, '작업실 이름을 입력해주세요.'),
       logoId: z.string(),
     }),
     onSubmit: async (data) => {
@@ -128,7 +128,7 @@
 
       await updateSite({ input: { siteId: site.data.id, name: data.name, logoId: data.logoId } });
       mixpanel.track('update_site');
-      Toast.success('스페이스 설정이 업데이트됐어요.');
+      Toast.success('작업실 설정이 업데이트됐어요.');
     },
     defaultValues: {
       name: site.data.name,
@@ -143,11 +143,11 @@
     onSubmit: async (data) => {
       await updateSiteSlug({ input: { siteId: site.data.id, slug: data.slug } });
       mixpanel.track('update_site_slug');
-      Toast.success('스페이스 주소가 변경됐어요.');
+      Toast.success('작업실 주소가 변경됐어요.');
     },
     onError: (error) => {
       if (error instanceof TypieError && error.code === 'site_slug_already_exists') {
-        throw new FormError('slug', '이미 존재하는 스페이스 주소예요.');
+        throw new FormError('slug', '이미 존재하는 작업실 주소예요.');
       }
     },
     defaultValues: {
@@ -288,7 +288,7 @@
                   backgroundColor: 'transparent',
                   border: 'none',
                 })}
-                aria-label="스페이스 주소 기능 업그레이드"
+                aria-label="작업실 주소 기능 업그레이드"
                 onclick={() => SubscribeModal.show('site_address')}
                 type="button"
               ></button>
@@ -305,18 +305,18 @@
   </SettingsCard>
 
   <div class={css({ marginTop: '40px' })}>
-    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>스페이스 삭제</h2>
+    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '24px' })}>작업실 삭제</h2>
 
     <SettingsCard>
       <SettingsRow>
         {#snippet label()}
-          스페이스 삭제
+          작업실 삭제
         {/snippet}
         {#snippet description()}
-          스페이스와 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없어요.
+          작업실과 모든 데이터가 영구적으로 삭제되며 되돌릴 수 없어요.
         {/snippet}
         {#snippet value()}
-          <div use:tooltip={{ message: canDeleteSite ? '' : '마지막 스페이스는 삭제할 수 없어요' }}>
+          <div use:tooltip={{ message: canDeleteSite ? '' : '마지막 작업실은 삭제할 수 없어요' }}>
             <Button
               disabled={!canDeleteSite}
               loading={deleteSiteMutationResult.loading}
@@ -327,7 +327,7 @@
 
                 Dialog.confirm({
                   title: '정말로 삭제하시겠어요?',
-                  message: '스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.',
+                  message: '작업실의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.',
                   children: deleteInfoView,
                   action: 'danger',
                   actionLabel: '삭제',
@@ -410,7 +410,7 @@
         })}
       >
         <Icon style={css.raw({ color: 'text.on.success.subtle' })} icon={CheckIcon} size={14} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.success.subtle' })}>비어있는 스페이스예요</span>
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.on.success.subtle' })}>비어있는 작업실이에요</span>
       </div>
     {/if}
 
@@ -418,7 +418,7 @@
       <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
       <div class={flex({ flexDirection: 'column', gap: '6px' })}>
         <label class={css({ fontSize: '13px', fontWeight: 'bold', color: 'text.default' })} for="delete-confirm">
-          삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수(
+          삭제를 진행하려면 작업실과 함께 삭제되는 문서 수(
           <span class={css({ fontWeight: 'bold', color: 'danger.default' })}>{documents}</span>
           )를 입력해주세요.
         </label>

@@ -167,7 +167,7 @@ const listEntities = async (ctx: PrismToolContext, input: unknown) => {
     const refs = folder === undefined ? new Map<string, EntityRef>() : await entityRefsOf(db, ctx.siteId, [folder.entityId]);
     const ref = folder === undefined ? undefined : refs.get(folder.entityId);
     if (ref?.kind !== 'folder') {
-      return toolFailure('error', '그 폴더를 찾지 못했어요 — list-entities를 인자 없이 불러 스페이스 전체 트리부터 확인하세요.');
+      return toolFailure('error', '그 폴더를 찾지 못했어요 — list-entities를 인자 없이 불러 작업실 전체 트리부터 확인하세요.');
     }
     scope = ref;
   }
@@ -855,8 +855,7 @@ const deleteEntities = async (ctx: PrismToolContext, input: unknown) => {
   if (!parsed.success) return toolFailure('error', ERROR_MESSAGE);
 
   const resolved = await resolveEntityIds(ctx, parsed.data.ids, ANY_ENTITY);
-  if (!resolved.ok)
-    return toolFailure('error', '그 대상을 지금 작업 중인 스페이스에서 찾지 못했어요 — list-entities로 지울 대상을 다시 확인하세요.');
+  if (!resolved.ok) return toolFailure('error', '그 대상을 지금 작업실에서 찾지 못했어요 — list-entities로 지울 대상을 다시 확인하세요.');
   const entityIds = resolved.entityIds;
 
   await deleteEntitiesCore(ctx.executor, { userId: ctx.userId, entityIds }, ctx.afterCommit);

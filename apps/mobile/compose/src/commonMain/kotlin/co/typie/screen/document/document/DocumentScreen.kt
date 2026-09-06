@@ -255,7 +255,7 @@ fun DocumentScreen(entityId: String) {
         }
       }
     }
-    val openInSpace: suspend () -> Unit = {
+    val openPublicPage: suspend () -> Unit = {
       if (!loading) {
         entity.url.takeIf(String::isNotBlank)?.let(uriHandler::openUri)
       }
@@ -524,9 +524,9 @@ fun DocumentScreen(entityId: String) {
       )
       DocumentActionRow(
         icon = Lucide.Globe,
-        label = "스페이스에서 열기",
+        label = "게시 페이지에서 열기",
         trailingIcon = Lucide.ExternalLink,
-        onClick = openInSpace,
+        onClick = openPublicPage,
       )
       DocumentActionRow(
         icon = Lucide.FileDown,

@@ -6,7 +6,7 @@ import co.typie.domain.entitytransfer.toTransferSource
 import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SearchScreen_Search_Query
-import co.typie.graphql.SpaceScreen_Query
+import co.typie.graphql.StudioScreen_Query
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
@@ -142,7 +142,7 @@ class EntityRowTest {
 }
 
 private fun rowEntity(block: co.typie.graphql.builder.EntityBuilder.() -> Unit): EntityRow_entity =
-  SpaceScreen_Query.Data(PlaceholderResolver) {
+  StudioScreen_Query.Data(PlaceholderResolver) {
       site = buildSite { entities = listOf(buildEntity(block)) }
     }
     .site

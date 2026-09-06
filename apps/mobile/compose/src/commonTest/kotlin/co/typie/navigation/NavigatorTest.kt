@@ -61,7 +61,7 @@ class NavigatorTest {
     val push = async { nav.navigate(Route.Folder("1")) }
     advanceUntilIdle()
 
-    val result = nav.navigate(Route.Space)
+    val result = nav.navigate(Route.Studio)
     nav.completeTransition()
     push.await()
 
@@ -136,7 +136,7 @@ class NavigatorTest {
   @Test
   fun differentRemovalDuringActiveRemovalDoesNotReportAStableStop() = runTest {
     val nav = Navigator(Route.Home)
-    val spaceRoute = Route.Space
+    val spaceRoute = Route.Studio
     val folderRoute = Route.Folder("1")
     navigateAndComplete(nav, spaceRoute)
     navigateAndComplete(nav, folderRoute)
@@ -154,11 +154,11 @@ class NavigatorTest {
   @Test
   fun popTo() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Space)
+    navigateAndComplete(nav, Route.Studio)
     navigateAndComplete(nav, Route.Folder("1"))
     navigateAndComplete(nav, Route.Folder("2"))
-    popToAndComplete(nav, Route.Space)
-    assertEquals(Route.Space, nav.current)
+    popToAndComplete(nav, Route.Studio)
+    assertEquals(Route.Studio, nav.current)
     assertEquals(2, nav.stack.size)
   }
 
@@ -174,7 +174,7 @@ class NavigatorTest {
   @Test
   fun popToRoot() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Space)
+    navigateAndComplete(nav, Route.Studio)
     navigateAndComplete(nav, Route.Folder("1"))
     val job = launch { nav.popToRoot() }
     advanceUntilIdle()
@@ -308,8 +308,8 @@ class NavigatorTest {
     assertEquals(editorRoute, nav.previous)
     assertEquals(1, interceptor.rollbacks)
     assertFalse(nav.isTransitioning)
-    navigateAndComplete(nav, Route.Space)
-    assertEquals(Route.Space, nav.current)
+    navigateAndComplete(nav, Route.Studio)
+    assertEquals(Route.Studio, nav.current)
   }
 
   @Test

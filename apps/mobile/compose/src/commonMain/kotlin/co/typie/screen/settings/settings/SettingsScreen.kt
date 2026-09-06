@@ -92,8 +92,8 @@ fun SettingsScreen() {
         SettingsCardRow("보안", onClick = { nav.navigate(Route.SecuritySettings) })
       }
 
-      SettingsSection("스페이스") {
-        SettingsCardRow("현재 스페이스 설정", onClick = { nav.navigate(Route.SpaceSettings) })
+      SettingsSection("작업실") {
+        SettingsCardRow("현재 작업실 설정", onClick = { nav.navigate(Route.StudioSettings) })
       }
 
       SettingsSection("환경") {

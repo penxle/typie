@@ -248,7 +248,7 @@ class MainDrawerGestureDesktopTest {
     }
     waitUntil(timeoutMillis = 5_000L) { mainTabState.motion == null }
 
-    assertEquals(Tab.Space, mainTabState.settledTab)
+    assertEquals(Tab.Studio, mainTabState.settledTab)
     assertEquals(0f, mainTabState.pagerState.currentPageOffsetFraction, absoluteTolerance = 0.001f)
   }
 

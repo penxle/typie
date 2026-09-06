@@ -1,4 +1,4 @@
-package co.typie.screen.space.folder
+package co.typie.screen.studio.folder
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -217,7 +217,7 @@ fun FolderDetailsScreen(entityId: String) {
         }
       }
     }
-    val openInSpace: suspend () -> Unit = {
+    val openPublicPage: suspend () -> Unit = {
       if (!loading) {
         row.url.takeIf(String::isNotBlank)?.let(uriHandler::openUri)
       }
@@ -340,9 +340,9 @@ fun FolderDetailsScreen(entityId: String) {
       )
       FolderActionRow(
         icon = Lucide.Globe,
-        label = "스페이스에서 열기",
+        label = "게시 페이지에서 열기",
         trailingIcon = Lucide.ExternalLink,
-        onClick = openInSpace,
+        onClick = openPublicPage,
       )
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)

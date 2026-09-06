@@ -25,12 +25,12 @@ import co.typie.screen.settings.updateemail.UpdateEmailScreen
 import co.typie.screen.settings.updatepassword.UpdatePasswordScreen
 import co.typie.screen.settings.updateprofile.UpdateProfileScreen
 import co.typie.screen.settings.widgetsettings.WidgetSettingsScreen
-import co.typie.screen.space.folder.FolderDetailsScreen
-import co.typie.screen.space.folder.FolderScreen
-import co.typie.screen.space.notes.NotesScreen
-import co.typie.screen.space.space.SpaceScreen
-import co.typie.screen.space.spacesettings.SpaceSettingsScreen
-import co.typie.screen.space.trash.TrashScreen
+import co.typie.screen.studio.folder.FolderDetailsScreen
+import co.typie.screen.studio.folder.FolderScreen
+import co.typie.screen.studio.notes.NotesScreen
+import co.typie.screen.studio.studio.StudioScreen
+import co.typie.screen.studio.studiosettings.StudioSettingsScreen
+import co.typie.screen.studio.trash.TrashScreen
 import co.typie.screen.subscription.cancelplan.CancelPlanScreen
 import co.typie.screen.subscription.currentplan.CurrentPlanScreen
 import co.typie.screen.subscription.enrollplan.EnrollPlanScreen
@@ -42,7 +42,7 @@ fun MainRoutes(route: Route) {
   when (route) {
     is Route.Home -> HomeScreen()
     is Route.Search -> SearchScreen()
-    is Route.Space -> SpaceScreen()
+    is Route.Studio -> StudioScreen()
     is Route.Notes -> NotesScreen()
     is Route.More -> MoreScreen()
     is Route.Stats -> StatsScreen()
@@ -66,7 +66,7 @@ fun MainRoutes(route: Route) {
     is Route.UpdateEmail -> UpdateEmailScreen()
     is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.UpdatePassword -> UpdatePasswordScreen()
-    is Route.SpaceSettings -> SpaceSettingsScreen()
+    is Route.StudioSettings -> StudioSettingsScreen()
     is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
     is Route.FolderDetails -> FolderDetailsScreen(entityId = route.entityId)

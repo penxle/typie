@@ -39,7 +39,7 @@ class MainDrawerViewModel : ViewModel() {
         val data =
           Apollo.executeMutation(
             MainDrawer_CreateSite_Mutation(
-              input = CreateSiteInput(name = name.trim().ifBlank { "새 스페이스" })
+              input = CreateSiteInput(name = name.trim().ifBlank { "새 작업실" })
             )
           )
 

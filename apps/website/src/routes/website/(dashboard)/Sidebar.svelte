@@ -34,7 +34,7 @@
   import { getDayClock } from './day-clock.svelte';
   import Profile from './Profile.svelte';
   import { resolveSidebarNavigationDrag, resolveSidebarNavigationGeometry } from './sidebar-navigation-resize';
-  import SpaceMenu from './SpaceMenu.svelte';
+  import StudioMenu from './StudioMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
   import type { SidebarNavigationResizeSession } from './sidebar-navigation-resize';
 
@@ -97,7 +97,7 @@
           achieved
         }
 
-        ...DashboardLayout_SpaceMenu_user
+        ...DashboardLayout_StudioMenu_user
         ...DashboardLayout_Profile_user
         ...DashboardLayout_TrialWidget_user
       }
@@ -355,7 +355,7 @@
     finishResizer(true);
   };
 
-  let spaceMenuOpen = $state(false);
+  let studioMenuOpen = $state(false);
   let profileOpen = $state(false);
 
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -422,7 +422,7 @@
 
   $effect(() => {
     if (sidebarState !== 'hidden') return;
-    spaceMenuOpen = false;
+    studioMenuOpen = false;
     profileOpen = false;
   });
 
@@ -578,7 +578,7 @@
       overflow: 'hidden',
     })}
   >
-    <!-- 사이트 스위쳐 -->
+    <!-- 작업실 스위쳐 -->
     <div
       class={flex({
         alignItems: 'center',
@@ -588,7 +588,7 @@
         paddingBottom: '4px',
       })}
     >
-      <SpaceMenu user$key={user.data} bind:open={spaceMenuOpen} />
+      <StudioMenu user$key={user.data} bind:open={studioMenuOpen} />
     </div>
 
     <div class={flex({ flexDirection: 'column', flexGrow: '1', minHeight: '0', overflow: 'hidden' })}>

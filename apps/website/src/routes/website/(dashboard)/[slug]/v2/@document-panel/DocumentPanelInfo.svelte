@@ -98,7 +98,7 @@
               href={document.data.entity.url}
               rel="noopener noreferrer"
               target="_blank"
-              use:tooltip={{ message: '스페이스에서 열기' }}
+              use:tooltip={{ message: '게시 페이지에서 열기' }}
             >
               <Icon style={css.raw({ color: 'text.muted', _groupHover: { color: 'text.default' } })} icon={ExternalLinkIcon} size={14} />
             </a>

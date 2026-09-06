@@ -425,7 +425,7 @@ const createUser = async (tx: Transaction, { email, name: _name, avatarId, logoI
 
   await createSite({
     userId: user.id,
-    name: `${name}의 스페이스`,
+    name: `${name}의 작업실`,
     slug: [
       faker.word.adjective({ length: { min: 3, max: 5 } }),
       faker.word.noun({ length: { min: 4, max: 6 } }),

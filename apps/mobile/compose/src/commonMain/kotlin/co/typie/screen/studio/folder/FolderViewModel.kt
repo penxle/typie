@@ -1,4 +1,4 @@
-package co.typie.screen.space.folder
+package co.typie.screen.studio.folder
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

@@ -39,7 +39,7 @@
 
   const handleSubmit = async () => {
     const resp = await createSiteMutation({
-      input: { name: name.trim() || '새 스페이스' },
+      input: { name: name.trim() || '새 작업실' },
     });
 
     app.state.nextCurrentSiteId = resp.createSite.id;
@@ -72,17 +72,17 @@
     }}
   >
     <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-      <div class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default' })}>새 스페이스 생성</div>
+      <div class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default' })}>새 작업실 생성</div>
       <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
-        스페이스는 독립된 글쓰기 공간이에요.
+        작업실은 독립된 글쓰기 공간이에요.
         <br />
         주제나 목적에 따라 글을 나누어 관리해보세요.
       </div>
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
-      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="create-site-name">스페이스 이름</label>
-      <TextInput id="create-site-name" autofocus placeholder="새 스페이스" size="md" bind:value={name} />
+      <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="create-site-name">작업실 이름</label>
+      <TextInput id="create-site-name" autofocus placeholder="새 작업실" size="md" bind:value={name} />
     </div>
 
     <div class={flex({ justifyContent: 'flex-end', gap: '10px' })}>

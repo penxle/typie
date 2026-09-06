@@ -1,4 +1,4 @@
-package co.typie.screen.space.trash
+package co.typie.screen.studio.trash
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -483,7 +483,7 @@ private fun rememberTrashItemActionsQuery(
 private fun trashContent(data: TrashScreen_Root_Query.Data): TrashContent =
   TrashContent(
     title = "휴지통",
-    subtitle = "${data.site.name} 스페이스의 삭제된 항목이에요",
+    subtitle = "${data.site.name} 작업실의 삭제된 항목이에요",
     currentItem = null,
     items = data.site.deletedEntities.map { it.entityRow_entity },
     isRootTrash = true,

@@ -1,4 +1,4 @@
-package co.typie.screen.space.entity
+package co.typie.screen.studio.entity
 
 import androidx.lifecycle.ViewModel
 import co.typie.domain.entity.EntityIconPickerSheetModel

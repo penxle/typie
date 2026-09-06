@@ -1,4 +1,4 @@
-package co.typie.screen.space.space
+package co.typie.screen.studio.studio
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -69,11 +69,11 @@ import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.screen.space.document.DocumentViewModel
-import co.typie.screen.space.entity.EntityCreateViewModel
-import co.typie.screen.space.entity.EntitySelectionViewModel
-import co.typie.screen.space.entity.rememberEntityCreateBottomBarAction
-import co.typie.screen.space.folder.FolderViewModel
+import co.typie.screen.studio.document.DocumentViewModel
+import co.typie.screen.studio.entity.EntityCreateViewModel
+import co.typie.screen.studio.entity.EntitySelectionViewModel
+import co.typie.screen.studio.entity.rememberEntityCreateBottomBarAction
+import co.typie.screen.studio.folder.FolderViewModel
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
 import co.typie.shell.MainDrawerTrigger
@@ -98,14 +98,14 @@ import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
 @Composable
-fun SpaceScreen() {
+fun StudioScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val sheet = LocalSheet.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
-  val model = viewModel { SpaceViewModel() }
+  val model = viewModel { StudioViewModel() }
   val createActionModel = viewModel { EntityCreateViewModel() }
   val folderActionModel = viewModel { FolderViewModel() }
   val documentActionModel = viewModel { DocumentViewModel() }
