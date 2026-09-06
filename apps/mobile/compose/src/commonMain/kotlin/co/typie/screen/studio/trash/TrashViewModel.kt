@@ -1,4 +1,4 @@
-package co.typie.screen.space.trash
+package co.typie.screen.studio.trash
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

@@ -36,8 +36,8 @@ export const toolCards: Record<string, Component<ToolCardProps> | undefined> = {
 
 export const toolCallLabels: Record<string, string | undefined> = {
   'list-open-documents': '열린 문서를 확인했어요',
-  'search-entities': '스페이스를 검색했어요',
-  'list-entities': '스페이스를 살펴봤어요',
+  'search-entities': '작업실을 검색했어요',
+  'list-entities': '작업실을 살펴봤어요',
   'read-document': '문서를 읽었어요',
   'list-notes': '노트를 살펴봤어요',
   'read-note': '노트를 읽었어요',

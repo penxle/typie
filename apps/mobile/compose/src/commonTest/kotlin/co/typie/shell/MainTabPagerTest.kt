@@ -9,23 +9,23 @@ class MainTabPagerTest {
   @Test
   fun `tab activation weights follow fractional pager position`() {
     assertEquals(
-      mapOf(Tab.Home to 1f, Tab.Space to 0f, Tab.Notes to 0f),
+      mapOf(Tab.Home to 1f, Tab.Studio to 0f, Tab.Notes to 0f),
       mainTabActivationWeights(0f),
     )
     assertEquals(
-      mapOf(Tab.Home to 0.75f, Tab.Space to 0.25f, Tab.Notes to 0f),
+      mapOf(Tab.Home to 0.75f, Tab.Studio to 0.25f, Tab.Notes to 0f),
       mainTabActivationWeights(0.25f),
     )
     assertEquals(
-      mapOf(Tab.Home to 0f, Tab.Space to 1f, Tab.Notes to 0f),
+      mapOf(Tab.Home to 0f, Tab.Studio to 1f, Tab.Notes to 0f),
       mainTabActivationWeights(1f),
     )
     assertEquals(
-      mapOf(Tab.Home to 0f, Tab.Space to 0.5f, Tab.Notes to 0.5f),
+      mapOf(Tab.Home to 0f, Tab.Studio to 0.5f, Tab.Notes to 0.5f),
       mainTabActivationWeights(1.5f),
     )
     assertEquals(
-      mapOf(Tab.Home to 0f, Tab.Space to 0f, Tab.Notes to 1f),
+      mapOf(Tab.Home to 0f, Tab.Studio to 0f, Tab.Notes to 1f),
       mainTabActivationWeights(2f),
     )
   }
@@ -39,19 +39,19 @@ class MainTabPagerTest {
         motion =
           MainTabMotion(
             origin = Tab.Home,
-            target = Tab.Space,
+            target = Tab.Studio,
             source = MainTabMotionSource.DirectDrag,
           ),
       ),
     )
     assertEquals(
-      Tab.Space,
+      Tab.Studio,
       mainTabChromeTab(
         settledTab = Tab.Home,
         motion =
           MainTabMotion(
             origin = Tab.Home,
-            target = Tab.Space,
+            target = Tab.Studio,
             source = MainTabMotionSource.Committed,
           ),
       ),
@@ -92,7 +92,7 @@ class MainTabPagerTest {
         motion =
           MainTabMotion(
             origin = Tab.Home,
-            target = Tab.Space,
+            target = Tab.Studio,
             source = MainTabMotionSource.Committed,
           ),
         drawerAtRest = true,

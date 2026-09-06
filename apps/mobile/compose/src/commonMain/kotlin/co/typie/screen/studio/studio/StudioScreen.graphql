@@ -1,4 +1,4 @@
-query SpaceScreen_Query($siteId: ID!) {
+query StudioScreen_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
     id
     name

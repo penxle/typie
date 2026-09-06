@@ -1,4 +1,4 @@
-query SpaceSettingsScreen_Query($siteId: ID!) {
+query StudioSettingsScreen_Query($siteId: ID!) {
   me @catch(to: THROW) {
     id
 
@@ -22,7 +22,7 @@ query SpaceSettingsScreen_Query($siteId: ID!) {
   }
 }
 
-mutation SpaceSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
+mutation StudioSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
   updateSite(input: $input) {
     id
     name
@@ -35,7 +35,7 @@ mutation SpaceSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
   }
 }
 
-mutation SpaceSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
+mutation StudioSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
   updateSiteSlug(input: $input) {
     id
     slug
@@ -43,13 +43,13 @@ mutation SpaceSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput
   }
 }
 
-mutation SpaceSettingsScreen_DeleteSite_Mutation($input: DeleteSiteInput!) {
+mutation StudioSettingsScreen_DeleteSite_Mutation($input: DeleteSiteInput!) {
   deleteSite(input: $input) {
     id
   }
 }
 
-mutation SpaceSettingsScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+mutation StudioSettingsScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
   persistBlobAsImage(input: $input) {
     id
     ...Img_image

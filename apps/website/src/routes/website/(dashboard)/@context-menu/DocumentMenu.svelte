@@ -541,7 +541,7 @@
 <MenuItem icon={Columns2Icon} onclick={() => handleAddPane('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddPane('vertical')}>아래에 열기</MenuItem>
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">스페이스에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">게시 페이지에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

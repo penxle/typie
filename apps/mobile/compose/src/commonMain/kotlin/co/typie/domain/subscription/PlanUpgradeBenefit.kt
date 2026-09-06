@@ -6,7 +6,7 @@ import co.typie.ui.icon.IconData
 enum class PlanUpgradeBenefit(val icon: IconData, val title: String, val description: String) {
   UnlimitedCharacters(Lucide.BookOpenText, "무제한 글자 수", "길어도 얼마든지 쓸 수 있어요"),
   UnlimitedFileUpload(Lucide.Images, "무제한 파일 업로드", "이미지와 첨부 용량 제한 없이"),
-  MultipleSpaces(Lucide.FolderPlus, "여러 스페이스 생성", "주제와 목적별로 공간을 분리해요"),
+  MultipleStudios(Lucide.FolderPlus, "여러 작업실 생성", "주제와 목적별로 공간을 분리해요"),
   SpellCheck(Lucide.SpellCheck, "맞춤법 검사", "실시간으로 맞춤법을 확인해요"),
   AiFeedback(Lucide.Lightbulb, "AI 피드백", "작품을 분석하고 피드백을 제안해요"),
   CustomSpaceAddress(Lucide.Globe, "커스텀 게시 주소", "기억하기 쉬운 주소로 공유해요"),

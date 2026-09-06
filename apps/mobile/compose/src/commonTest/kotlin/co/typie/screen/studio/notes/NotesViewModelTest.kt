@@ -1,4 +1,4 @@
-package co.typie.screen.space.notes
+package co.typie.screen.studio.notes
 
 import co.typie.domain.note.NoteSync
 import co.typie.domain.note.NoteUpdate

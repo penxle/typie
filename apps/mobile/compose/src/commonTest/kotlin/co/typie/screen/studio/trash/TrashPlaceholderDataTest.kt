@@ -1,4 +1,4 @@
-package co.typie.screen.space.trash
+package co.typie.screen.studio.trash
 
 import kotlin.test.Test
 import kotlin.test.assertTrue

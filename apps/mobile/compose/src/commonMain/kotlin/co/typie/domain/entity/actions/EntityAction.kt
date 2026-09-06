@@ -57,7 +57,7 @@ internal fun entityItemActionSections(): List<EntityActionSection> {
         listOf(
           EntityActionMenuItem(
             icon = Lucide.Globe,
-            label = "스페이스에서 열기",
+            label = "게시 페이지에서 열기",
             trailingIcon = Lucide.ExternalLink,
             action = EntityAction.OpenExternal,
           ),

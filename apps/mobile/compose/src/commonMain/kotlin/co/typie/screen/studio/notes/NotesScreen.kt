@@ -1,4 +1,4 @@
-package co.typie.screen.space.notes
+package co.typie.screen.studio.notes
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween

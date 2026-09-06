@@ -22,10 +22,10 @@
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';
   import CreateSiteModal from './CreateSiteModal.svelte';
-  import type { DashboardLayout_SpaceMenu_user$key } from '$mearie';
+  import type { DashboardLayout_StudioMenu_user$key } from '$mearie';
 
   type Props = {
-    user$key: DashboardLayout_SpaceMenu_user$key;
+    user$key: DashboardLayout_StudioMenu_user$key;
     open?: boolean;
   };
 
@@ -36,7 +36,7 @@
 
   const user = createFragment(
     graphql(`
-      fragment DashboardLayout_SpaceMenu_user on User {
+      fragment DashboardLayout_StudioMenu_user on User {
         id
 
         sites {
@@ -284,7 +284,7 @@
             type="button"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SettingsIcon} size={14} />
-            <span>스페이스 설정</span>
+            <span>작업실 설정</span>
           </button>
 
           <a
@@ -305,7 +305,7 @@
             target="_blank"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ExternalLinkIcon} size={14} />
-            <span>스페이스 열기</span>
+            <span>게시 페이지 열기</span>
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
           </a>
 
@@ -338,7 +338,7 @@
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
 
-          <!-- 스페이스 전환 서브메뉴 트리거 -->
+          <!-- 작업실 전환 서브메뉴 트리거 -->
           <div
             bind:this={submenuTriggerEl}
             class={flex({
@@ -367,7 +367,7 @@
             tabindex="0"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ChevronsUpDownIcon} size={14} />
-            <span>스페이스 전환</span>
+            <span>작업실 전환</span>
             <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.default' })} icon={ChevronRightIcon} size={12} />
           </div>
         </div>
@@ -379,7 +379,7 @@
   <div class={css({ height: '34px' })}></div>
 </div>
 
-<!-- 스페이스 전환 서브메뉴 (포탈) -->
+<!-- 작업실 전환 서브메뉴 (포탈) -->
 {#if submenuOpen}
   <div
     bind:this={submenuEl}
@@ -464,7 +464,7 @@
       type="button"
     >
       <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={PlusIcon} size={14} />
-      <span>새 스페이스 생성</span>
+      <span>새 작업실 생성</span>
     </button>
   </div>
 {/if}

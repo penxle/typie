@@ -26,8 +26,8 @@ const commonChips: StartChip[] = [
   { label: '글쓰기 기록 둘러보기', insert: '최근 30일 동안 얼마나 썼는지 알려 주세요.', icon: BarChart3Icon },
   { label: '노트 정리하기', insert: '제 노트들을 훑어보고 정리할 만한 게 있는지 알려 주세요.', icon: StickyNoteIcon },
   {
-    label: '스페이스 정리 제안 받기',
-    insert: '스페이스를 보고 폴더나 아이콘 등을 정리하면 좋을 점을 제안해 주세요.',
+    label: '작업실 정리 제안 받기',
+    insert: '작업실을 보고 폴더나 아이콘 등을 정리하면 좋을 점을 제안해 주세요.',
     icon: ListTreeIcon,
   },
   { label: '목표 세우기', insert: '하루 글쓰기 목표를 같이 정해 주세요.', icon: TargetIcon },

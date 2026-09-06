@@ -91,7 +91,7 @@ class MainShellAutofocusDesktopTest {
               LaunchedEffect(Unit) { focusRequester.requestFocus() }
             }
 
-            Route.Space -> {
+            Route.Studio -> {
               val focusRequester = remember { FocusRequester() }
               SideEffect { backgroundFocusRequester = focusRequester }
               Box(Modifier.fillMaxSize().focusRequester(focusRequester).focusable())
@@ -105,7 +105,7 @@ class MainShellAutofocusDesktopTest {
     waitUntil { sourceFocused && selectTab != null }
 
     mainClock.autoAdvance = false
-    runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
+    runOnIdle { requireNotNull(selectTab).invoke(Tab.Studio) }
     repeat(8) { mainClock.advanceTimeByFrame() }
     runOnIdle {
       assertTrue(isBodyMoving)
@@ -115,7 +115,7 @@ class MainShellAutofocusDesktopTest {
     }
 
     mainClock.autoAdvance = true
-    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
+    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Studio && !isBodyMoving }
     waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
     runOnIdle {
       assertTrue(sourceFocused)
@@ -170,11 +170,11 @@ class MainShellAutofocusDesktopTest {
       originNavigator?.let { it.current == Route.More && !it.isTransitioning } == true
     }
 
-    runOnIdle { requireNotNull(selectTab).invoke(Tab.Space) }
-    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Space && !isBodyMoving }
+    runOnIdle { requireNotNull(selectTab).invoke(Tab.Studio) }
+    waitUntil(timeoutMillis = 5_000L) { currentTab == Tab.Studio && !isBodyMoving }
 
     runOnIdle {
-      assertEquals(Tab.Space, currentTab)
+      assertEquals(Tab.Studio, currentTab)
       assertEquals(Route.More, requireNotNull(originNavigator).current)
     }
   }
@@ -316,7 +316,7 @@ class MainShellAutofocusDesktopTest {
             targetWasEverForegroundInactive || !foregroundInteractive
         }
         if (
-          isReady && navigator.current == targetRoute && route in setOf(Route.Space, Route.Notes)
+          isReady && navigator.current == targetRoute && route in setOf(Route.Studio, Route.Notes)
         ) {
           backgroundTabComposedWhileTargetActive = true
         }
@@ -339,7 +339,7 @@ class MainShellAutofocusDesktopTest {
             TextField(field = form.name, label = "닉네임")
           }
 
-          Route.Space,
+          Route.Studio,
           Route.Notes -> {
             val focusRequester = remember { FocusRequester() }
             SideEffect { backgroundFocusRequester = focusRequester }

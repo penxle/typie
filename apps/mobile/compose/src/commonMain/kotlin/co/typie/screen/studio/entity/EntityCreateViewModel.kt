@@ -1,4 +1,4 @@
-package co.typie.screen.space.entity
+package co.typie.screen.studio.entity
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

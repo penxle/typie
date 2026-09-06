@@ -182,7 +182,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
 enum class Tab(val route: Route) {
   Home(Route.Home),
-  Space(Route.Space),
+  Studio(Route.Studio),
   Notes(Route.Notes),
 }
 

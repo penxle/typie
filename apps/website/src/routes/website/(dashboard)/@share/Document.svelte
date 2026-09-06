@@ -393,7 +393,7 @@
             {
               icon: GlobeIcon,
               label: '공개',
-              description: '누구나 볼 수 있고 스페이스에 노출돼요.',
+              description: '누구나 볼 수 있고 게시 페이지에 노출돼요.',
               value: EntityVisibility.PUBLIC,
             },
             {

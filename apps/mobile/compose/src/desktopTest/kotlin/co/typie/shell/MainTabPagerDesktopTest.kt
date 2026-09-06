@@ -64,7 +64,7 @@ import kotlinx.coroutines.runBlocking
 class MainTabPagerDesktopTest {
   @Test
   fun `focused nested route pop restores pager gesture admission`() = runComposeUiTest {
-    val navigator = Navigator(listOf(Route.Home, Route.SpaceSettings))
+    val navigator = Navigator(listOf(Route.Home, Route.StudioSettings))
     val focusRequester = FocusRequester()
     lateinit var mainTabState: MainTabState
     lateinit var pop: () -> Unit
@@ -86,7 +86,7 @@ class MainTabPagerDesktopTest {
             topBarState = remember { TopBarState() },
             modifier = Modifier.fillMaxSize(),
           ) { route ->
-            if (route == Route.SpaceSettings) {
+            if (route == Route.StudioSettings) {
               DisposableEffect(route) {
                 outgoingAttached = true
                 onDispose { outgoingAttached = false }
@@ -117,7 +117,7 @@ class MainTabPagerDesktopTest {
       }
     }
     waitUntil(timeoutMillis = 5_000L) {
-      navigator.current == Route.SpaceSettings && !navigator.isTransitioning
+      navigator.current == Route.StudioSettings && !navigator.isTransitioning
     }
     waitUntil { inputFocused }
 
@@ -134,14 +134,14 @@ class MainTabPagerDesktopTest {
       up()
     }
     waitUntil(timeoutMillis = 5_000L) { mainTabState.motion == null }
-    assertEquals(Tab.Space, mainTabState.settledTab)
+    assertEquals(Tab.Studio, mainTabState.settledTab)
   }
 
   @Test
   fun `disposing navigation stack during scene handoff clears removed route store`() =
     runComposeUiTest {
-      val navigator = Navigator(listOf(Route.Home, Route.SpaceSettings))
-      val removedRouteStore = navigator.viewModelStoreFor(Route.SpaceSettings)
+      val navigator = Navigator(listOf(Route.Home, Route.StudioSettings))
+      val removedRouteStore = navigator.viewModelStoreFor(Route.StudioSettings)
       lateinit var pop: () -> Unit
       var showNavigationStack by mutableStateOf(true)
       var outgoingAttached = false
@@ -160,7 +160,7 @@ class MainTabPagerDesktopTest {
               topBarState = remember { TopBarState() },
               modifier = Modifier.fillMaxSize(),
             ) { route ->
-              if (route == Route.SpaceSettings) {
+              if (route == Route.StudioSettings) {
                 DisposableEffect(route) {
                   outgoingAttached = true
                   onDispose { outgoingAttached = false }
@@ -186,7 +186,7 @@ class MainTabPagerDesktopTest {
       waitUntil(timeoutMillis = 5_000L) { !navigator.isTransitioning }
 
       assertEquals(Route.Home, navigator.current)
-      assertNotSame(removedRouteStore, navigator.viewModelStoreFor(Route.SpaceSettings))
+      assertNotSame(removedRouteStore, navigator.viewModelStoreFor(Route.StudioSettings))
     }
 
   @Test
@@ -309,7 +309,7 @@ class MainTabPagerDesktopTest {
     }
 
     onNodeWithTag(PagerTag).performTouchInput { up() }
-    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Studio }
     waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
 
     runOnIdle {
@@ -339,8 +339,8 @@ class MainTabPagerDesktopTest {
     }
     waitForIdle()
 
-    runOnIdle { state.selectTab(Tab.Space) }
-    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    runOnIdle { state.selectTab(Tab.Studio) }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Studio }
     waitUntil { keyboardDriver.endpoints == listOf(SoftwareKeyboardPresentationEndpoint.Hidden) }
     runOnIdle { assertEquals(Tab.Home, state.focusEnabledTab) }
 
@@ -466,7 +466,7 @@ class MainTabPagerDesktopTest {
         (pageLefts[Tab.Home] ?: 0f) < -1f && state.motion?.source == MainTabMotionSource.DirectDrag
       }
       val homeLeft = pageLefts.getValue(Tab.Home)
-      val spaceLeft = pageLefts.getValue(Tab.Space)
+      val spaceLeft = pageLefts.getValue(Tab.Studio)
       assertTrue(homeLeft < -1f)
       assertTrue(spaceLeft in 1f..319f)
       assertEquals(320f, spaceLeft - homeLeft, absoluteTolerance = 1f)
@@ -576,7 +576,7 @@ class MainTabPagerDesktopTest {
       state = rememberMainTabState()
       val scope = rememberCoroutineScope()
       startScroll = {
-        scrollJob = scope.launch { state.pagerState.animateScrollToPage(Tab.Space.ordinal) }
+        scrollJob = scope.launch { state.pagerState.animateScrollToPage(Tab.Studio.ordinal) }
       }
       MainTabPager(
         state = state,
@@ -649,10 +649,10 @@ class MainTabPagerDesktopTest {
 
     runOnIdle { state.selectTab(Tab.Notes) }
     waitUntil { state.motion?.target == Tab.Notes }
-    runOnIdle { state.selectTab(Tab.Space) }
-    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Space }
+    runOnIdle { state.selectTab(Tab.Studio) }
+    waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab == Tab.Studio }
 
-    assertEquals(Tab.Space.ordinal, state.pagerState.settledPage)
+    assertEquals(Tab.Studio.ordinal, state.pagerState.settledPage)
   }
 
   @Test
@@ -704,7 +704,7 @@ class MainTabPagerDesktopTest {
     }
     waitUntil(timeoutMillis = 5_000L) { state.motion == null && state.settledTab != Tab.Home }
 
-    assertEquals(Tab.Space, state.settledTab)
+    assertEquals(Tab.Studio, state.settledTab)
   }
 
   @Test

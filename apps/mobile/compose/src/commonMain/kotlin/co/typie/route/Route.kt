@@ -8,7 +8,7 @@ sealed interface Route {
 
   @Serializable data object Search : Route
 
-  @Serializable data object Space : Route
+  @Serializable data object Studio : Route
 
   @Serializable data object Notes : Route
 
@@ -56,7 +56,7 @@ sealed interface Route {
 
   @Serializable data object AiSettings : Route
 
-  @Serializable data object SpaceSettings : Route
+  @Serializable data object StudioSettings : Route
 
   @Serializable data class Trash(val entityId: String? = null) : Route
 

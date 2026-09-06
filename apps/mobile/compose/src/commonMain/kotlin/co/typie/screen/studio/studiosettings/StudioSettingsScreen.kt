@@ -1,4 +1,4 @@
-package co.typie.screen.space.spacesettings
+package co.typie.screen.studio.studiosettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,8 +93,8 @@ private val SpaceDateDisplayOptions =
   )
 
 @Composable
-fun SpaceSettingsScreen() {
-  val model = viewModel { SpaceSettingsViewModel() }
+fun StudioSettingsScreen() {
+  val model = viewModel { StudioSettingsViewModel() }
 
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
@@ -129,7 +129,7 @@ fun SpaceSettingsScreen() {
   }
 
   ProvideTopBar(
-    center = { Text("스페이스 설정", style = AppTheme.typography.title) },
+    center = { Text("작업실 설정", style = AppTheme.typography.title) },
     trailing = { MoreMenu(model) },
   )
 
@@ -147,7 +147,7 @@ fun SpaceSettingsScreen() {
           onClick = {
             if (!SubscriptionService.gate(sheet, GatedAction.UpdateSpace)) return@Button
             model.submit().withDefaultExceptionHandler(toast).onOk {
-              toast.success("스페이스 설정이 변경되었어요.")
+              toast.success("작업실 설정이 변경되었어요.")
               nav.pop()
             }
           },
@@ -185,7 +185,7 @@ fun SpaceSettingsScreen() {
             field = model.form.name,
             label = "이름",
             labelPosition = LabelPosition.Internal,
-            placeholder = "스페이스 이름",
+            placeholder = "작업실 이름",
           )
 
           Box(
@@ -199,10 +199,10 @@ fun SpaceSettingsScreen() {
               label = "주소",
               help =
                 if (!SubscriptionService.entitlement.grantsAccess()) {
-                  "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                  "작업실 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                 } else null,
               labelPosition = LabelPosition.Internal,
-              placeholder = "스페이스 주소",
+              placeholder = "작업실 주소",
               enabled = SubscriptionService.entitlement.grantsAccess(),
               readOnly = !SubscriptionService.entitlement.grantsAccess(),
               suffix = {
@@ -227,7 +227,7 @@ fun SpaceSettingsScreen() {
 
           Spacer(Modifier.height(12.dp))
 
-          SpaceSettingsRow(
+          StudioSettingsRow(
             label = "글 목록에 표시할 날짜",
             trailing = {
               SelectField(
@@ -246,7 +246,7 @@ fun SpaceSettingsScreen() {
 }
 
 @Composable
-private fun SpaceSettingsRow(label: String, trailing: @Composable RowScope.() -> Unit) {
+private fun StudioSettingsRow(label: String, trailing: @Composable RowScope.() -> Unit) {
   Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Text(
       text = label,
@@ -261,7 +261,7 @@ private fun SpaceSettingsRow(label: String, trailing: @Composable RowScope.() ->
 }
 
 @Composable
-private fun MoreMenu(model: SpaceSettingsViewModel) {
+private fun MoreMenu(model: StudioSettingsViewModel) {
   val scope = rememberCoroutineScope()
 
   val nav = Nav.current
@@ -271,12 +271,12 @@ private fun MoreMenu(model: SpaceSettingsViewModel) {
   val colors = AppTheme.colors
 
   PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
-    item(icon = Lucide.Trash2, label = "스페이스 삭제", color = colors.danger) {
+    item(icon = Lucide.Trash2, label = "작업실 삭제", color = colors.danger) {
       if (model.query.data.me.sites.size <= 1) {
         scope.launch {
           dialog.alert(
-            title = "스페이스를 삭제할 수 없어요",
-            message = "계정에는 최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
+            title = "작업실을 삭제할 수 없어요",
+            message = "계정에는 최소 1개의 작업실이 필요해요.\n새 작업실을 만든 후 삭제할 수 있어요.",
           )
         }
       } else {
@@ -288,7 +288,7 @@ private fun MoreMenu(model: SpaceSettingsViewModel) {
               isDeleting = model.isDeleting,
               onDelete = {
                 model.deleteSite().withDefaultExceptionHandler(toast).onOk {
-                  toast.success("스페이스가 삭제되었어요.")
+                  toast.success("작업실이 삭제되었어요.")
                   complete(Unit)
                   nav.pop()
                 }
@@ -359,7 +359,7 @@ private fun DeleteSiteSheet(
       SheetBar(
         center = {
           Text(
-            text = "스페이스 삭제",
+            text = "작업실 삭제",
             style = AppTheme.typography.title,
             color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
@@ -389,7 +389,7 @@ private fun DeleteSiteSheet(
             "${folderCount}개의 폴더와 ${documentCount}개의 문서가 함께 삭제돼요."
           folderCount > 0 -> "${folderCount}개의 폴더가 함께 삭제돼요."
           documentCount > 0 -> "${documentCount}개의 문서가 함께 삭제돼요."
-          else -> "스페이스가 비어있어요."
+          else -> "작업실이 비어있어요."
         },
       variant =
         if (folderCount == 0 && documentCount == 0) AlertBannerVariant.Default
@@ -401,7 +401,7 @@ private fun DeleteSiteSheet(
         value = inputValue,
         onValueChange = { inputValue = it },
         label = "확인 숫자",
-        help = "삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($documentCount)를 입력해주세요.",
+        help = "삭제를 진행하려면 작업실과 함께 삭제되는 문서 수($documentCount)를 입력해주세요.",
         helpTextStyle = AppTheme.typography.caption,
         placeholder = confirmText,
         autoFocus = true,

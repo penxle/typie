@@ -1,7 +1,7 @@
 package co.typie.domain.entity
 
 import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.SpaceScreen_Query
+import co.typie.graphql.StudioScreen_Query
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildEntity
 import co.typie.graphql.builder.buildFolder
@@ -124,7 +124,7 @@ class EntityContainerHelpersTest {
   }
 
   private fun orderedItem(id: String, order: String) =
-    SpaceScreen_Query.Data(PlaceholderResolver) {
+    StudioScreen_Query.Data(PlaceholderResolver) {
         site = buildSite {
           entities =
             listOf(

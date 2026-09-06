@@ -1,4 +1,4 @@
-package co.typie.screen.space.notes
+package co.typie.screen.studio.notes
 
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshotFlow

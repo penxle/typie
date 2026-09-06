@@ -1,7 +1,7 @@
 package co.typie.domain.note
 
 import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.SpaceScreen_Query
+import co.typie.graphql.StudioScreen_Query
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
@@ -38,7 +38,7 @@ internal fun notesNote(
   )
 
 internal fun notesDocumentEntity(id: String, title: String = "문서") =
-  SpaceScreen_Query.Data(PlaceholderResolver) {
+  StudioScreen_Query.Data(PlaceholderResolver) {
       site = buildSite {
         entities =
           listOf(

@@ -56,7 +56,7 @@
       loop: true,
       heroFraction: 1,
       title: '글을 쓰는 모든 순간을 한곳에서',
-      subtitle: '작품과 설정을 스페이스로 정리하고,\n나에게 맞는 환경에서 쓰고 공유해 보세요.',
+      subtitle: '작품과 설정을 작업실로 정리하고,\n나에게 맞는 환경에서 쓰고 공유해 보세요.',
     },
     {
       asset: 'features',

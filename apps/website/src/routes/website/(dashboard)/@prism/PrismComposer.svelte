@@ -32,7 +32,7 @@
   let { generation, running, sendDisabled, blocked, commands, status, policy, onSend, onStop, text = $bindable('') }: Props = $props();
 
   const policyOptions: { value: ToolPolicy; label: string; description: string; icon: Component }[] = [
-    { value: 'READ_ONLY', label: '읽기 전용', description: '스페이스를 읽기만 하고 바꾸지 않아요.', icon: BookOpenIcon },
+    { value: 'READ_ONLY', label: '읽기 전용', description: '작업실을 읽기만 하고 바꾸지 않아요.', icon: BookOpenIcon },
     { value: 'STANDARD', label: '중요한 일만 확인', description: '지우거나 공개 범위를 바꿀 때만 먼저 물어봐요.', icon: ShieldCheckIcon },
     { value: 'FULL', label: '자동 실행', description: '묻지 않고 바로 실행해요.', icon: ZapIcon },
   ];

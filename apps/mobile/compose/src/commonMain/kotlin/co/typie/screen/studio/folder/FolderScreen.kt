@@ -1,4 +1,4 @@
-package co.typie.screen.space.folder
+package co.typie.screen.studio.folder
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,9 +80,9 @@ import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.screen.space.entity.EntityCreateViewModel
-import co.typie.screen.space.entity.EntitySelectionViewModel
-import co.typie.screen.space.entity.rememberEntityCreateBottomBarAction
+import co.typie.screen.studio.entity.EntityCreateViewModel
+import co.typie.screen.studio.entity.EntitySelectionViewModel
+import co.typie.screen.studio.entity.rememberEntityCreateBottomBarAction
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
 import co.typie.storage.Preference

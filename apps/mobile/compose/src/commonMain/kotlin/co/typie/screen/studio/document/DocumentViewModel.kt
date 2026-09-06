@@ -1,4 +1,4 @@
-package co.typie.screen.space.document
+package co.typie.screen.studio.document
 
 import androidx.lifecycle.ViewModel
 import co.typie.domain.entity.DocumentRenameSheetModel
