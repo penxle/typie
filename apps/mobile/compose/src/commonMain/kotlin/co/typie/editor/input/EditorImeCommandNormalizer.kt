@@ -5,32 +5,44 @@ import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.EditingBuffer
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.MoveCursorCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
-import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SelectionOp
-import kotlin.math.abs
 
 internal object EditorImeCommandNormalizer {
-  fun normalize(commands: List<EditCommand>, ime: Ime?): List<Message> {
+  fun normalize(
+    commands: List<EditCommand>,
+    ime: Ime?,
+    documentNavigation: NavigationOp.Move? = null,
+  ): List<Message> {
     val selectionMessages = commands.resolveSelectionOnlyMessages(ime)
     if (selectionMessages != null) {
-      return selectionMessages
+      return if (ime != null && ime.composing == null && documentNavigation != null) {
+        listOf(Message.Navigation(documentNavigation))
+      } else {
+        selectionMessages
+      }
     }
 
     val messages = mutableListOf<Message>()
     val ops = mutableListOf<FlatImeOp>()
     var hasActiveComposition = ime?.composing != null
+    val buffer =
+      ime?.toTextFieldValue()?.let { value ->
+        EditingBuffer(value.annotatedString, value.selection).also { buffer ->
+          value.composition?.let { SetComposingRegionCommand(it.min, it.max).applyTo(buffer) }
+        }
+      }
     fun flushOps() {
       if (ops.isEmpty()) return
       messages += Message.TextInput(ops.toList())
@@ -38,6 +50,9 @@ internal object EditorImeCommandNormalizer {
     }
 
     for (command in commands) {
+      // Coordinates refer to the text after preceding commands, not the initial IME snapshot.
+      val windowText = buffer?.toString().orEmpty()
+      buffer?.let(command::applyTo)
       if (command is CommitTextCommand) {
         val text = command.text.replace("\r\n", "\n").replace('\r', '\n')
         if (text == "\n") {
@@ -76,7 +91,7 @@ internal object EditorImeCommandNormalizer {
             FlatImeOp.ClearComposition
           }
         } else {
-          command.toFlatImeOp(ime)
+          command.toFlatImeOp(ime, windowText)
         } ?: continue
       ops += op
       hasActiveComposition =
@@ -105,27 +120,23 @@ internal object EditorImeCommandNormalizer {
     val start = target.start
     val end = target.end
 
-    return if (selection.start == selection.end && start == end) {
-      val delta = start - selection.start
-      if (delta == 0) {
-        emptyList()
-      } else {
-        val direction = if (delta > 0) Direction.Forward else Direction.Backward
-        List(abs(delta)) {
-          Message.Navigation(NavigationOp.Move(Movement.Grapheme(direction), false))
-        }
-      }
+    return if (start == end && selection.start == start && selection.end == end) {
+      emptyList()
     } else {
+      // This is an explicit position, not an instruction to navigate the document.
       listOf(Message.Selection(SelectionOp.SetFlat(start = start, end = end)))
     }
   }
 
-  private fun EditCommand.toFlatImeOp(ime: Ime?): FlatImeOp? =
+  private fun EditCommand.toFlatImeOp(ime: Ime?, windowText: String): FlatImeOp? =
     when (this) {
       is SetComposingTextCommand -> FlatImeOp.Compose(text)
       is SetSelectionCommand ->
         ime?.let {
-          FlatImeOp.SetSelection(it.projectWindowUtf16Index(start), it.projectWindowUtf16Index(end))
+          FlatImeOp.SetSelection(
+            it.windowStart + windowText.codePointOffsetAtUtf16Index(start),
+            it.windowStart + windowText.codePointOffsetAtUtf16Index(end),
+          )
         }
       is SetComposingRegionCommand ->
         // InputConnection.setComposingRegion semantics: reversed ranges swap
@@ -135,8 +146,8 @@ internal object EditorImeCommandNormalizer {
         } else {
           ime?.let {
             FlatImeOp.SetComposition(
-              it.projectWindowUtf16Index(minOf(start, end)),
-              it.projectWindowUtf16Index(maxOf(start, end)),
+              it.windowStart + windowText.codePointOffsetAtUtf16Index(minOf(start, end)),
+              it.windowStart + windowText.codePointOffsetAtUtf16Index(maxOf(start, end)),
             )
           }
         }

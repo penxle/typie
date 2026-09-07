@@ -51,7 +51,6 @@ import co.typie.platform.Clipboard
 import co.typie.platform.IncomingContentCandidates
 import co.typie.platform.Platform
 import kotlin.coroutines.CoroutineContext
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -323,51 +322,6 @@ internal class EditorInputNode(
     return true
   }
 
-  private fun dispatchPreKeyBinding(binding: KeyBinding, clipboard: Clipboard) {
-    val coalescer = bindingCoalescer ?: return
-    when (val action = binding.action) {
-      is EditorKeyBindingAction.Paste -> dispatchBinding(binding, clipboard)
-      is EditorKeyBindingAction.Messages -> {
-        val preState = editor.appliedState
-        // iOS can echo a native selection before this key's queued commit. Constant message
-        // actions are safe to resolve and register immediately; stateful or clipboard actions
-        // resolve inside the ordered queue so their side effects cannot overtake paste.
-        if (action.coalescible) {
-          editor.launchEffect(
-            coroutineScope = coroutineScope,
-            start = CoroutineStart.UNDISPATCHED,
-          ) {
-            val messages = action.messages(editor, clipboard)
-            platformInputBridge.dispatchAppOwnedKeyMessages(messages, preState) {
-              var postState: EditorState? = null
-              coalescer
-                .submitOrdered {
-                  postState =
-                    dispatchBindingMessages(
-                      messages = messages,
-                      bringIntoViewTarget = binding.bringIntoViewTarget,
-                    )
-                }
-                .await()
-              postState
-            }
-          }
-        } else {
-          val completion = coalescer.submitOrdered {
-            val messages = action.messages(editor, clipboard)
-            platformInputBridge.dispatchAppOwnedKeyMessages(messages, preState) {
-              dispatchBindingMessages(
-                messages = messages,
-                bringIntoViewTarget = binding.bringIntoViewTarget,
-              )
-            }
-          }
-          editor.launchEffect(coroutineScope = coroutineScope) { completion.await() }
-        }
-      }
-    }
-  }
-
   private suspend fun dispatchBindingMessages(
     messages: List<Message>,
     bringIntoViewTarget: EditorBringIntoViewTarget?,
@@ -612,7 +566,7 @@ internal class EditorInputNode(
           if (binding.commitCompositionBeforeDispatch) {
             commitCompositionBeforeBindingDispatch(binding.resetPlatformInputBeforeDispatch)
           }
-          dispatchPreKeyBinding(binding, clipboard)
+          dispatchBinding(binding, clipboard)
         },
       )
     recordHardwareKey(
@@ -683,17 +637,12 @@ internal class EditorInputNode(
                   bringIntoViewRequests = bringIntoViewRequests,
                   onEditCommand = { commands ->
                     val preState = editor.appliedState
-                    val intercepted =
-                      platformInputBridge.interceptEditCommands(
-                        commands = commands,
-                        state = preState,
-                      )
                     val messages =
-                      intercepted
-                        ?: EditorImeCommandNormalizer.normalize(
-                          commands = commands,
-                          ime = preState.ime,
-                        )
+                      EditorImeCommandNormalizer.normalize(
+                        commands = commands,
+                        ime = preState.ime,
+                        documentNavigation = platformInputBridge.takeDocumentNavigation(),
+                      )
                     val postState = dispatchSync(messages)
                     if (postState != null) {
                       platformInputBridge.onImeMessagesApplied(
@@ -707,7 +656,7 @@ internal class EditorInputNode(
                         seq = seq,
                         t = t,
                         commands = commands.map { it.describe() },
-                        decision = classifyBridgeRoute(intercepted),
+                        decision = RecordedBridgeDecision.Normalize,
                         messages = messages,
                         imeBefore = preState.ime,
                         imeAfter = postState?.ime,

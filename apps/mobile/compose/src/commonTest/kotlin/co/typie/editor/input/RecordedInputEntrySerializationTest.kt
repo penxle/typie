@@ -82,26 +82,6 @@ class RecordedInputEntrySerializationTest {
   }
 
   @Test
-  fun `null intercept classifies as normalize`() {
-    assertEquals(RecordedBridgeDecision.Normalize, classifyBridgeRoute(null))
-  }
-
-  @Test
-  fun `empty intercept classifies as drop`() {
-    assertEquals(RecordedBridgeDecision.Drop, classifyBridgeRoute(emptyList()))
-  }
-
-  @Test
-  fun `non-empty intercept classifies as replay`() {
-    assertEquals(
-      RecordedBridgeDecision.Replay,
-      classifyBridgeRoute(
-        listOf(Message.Key(co.typie.editor.ffi.KeyEvent(co.typie.editor.ffi.Key.Enter)))
-      ),
-    )
-  }
-
-  @Test
   fun `editCommands entry carries normalizer output verbatim`() {
     val commands = listOf(CommitTextCommand("a", 1))
     val messages = EditorImeCommandNormalizer.normalize(commands = commands, ime = null)
@@ -110,7 +90,7 @@ class RecordedInputEntrySerializationTest {
         seq = 5,
         t = 50,
         commands = commands.map { it.describe() },
-        decision = classifyBridgeRoute(null),
+        decision = RecordedBridgeDecision.Normalize,
         messages = messages,
         imeBefore = null,
         imeAfter = null,

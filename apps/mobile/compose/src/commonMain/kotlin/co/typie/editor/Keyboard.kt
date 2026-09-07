@@ -105,22 +105,28 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
 
   return listOf(
     *withCompositionCommitBeforeDispatch(
+      // UIKit handles horizontal movement and selection together, including key repeat and
+      // collapsing the selection after Shift is released. Vertical movement needs our layout.
       KeyBinding(
         ComposeKey.DirectionLeft,
+        predicate = { platform != Platform.iOS },
         action = { listOf(move(Movement.Grapheme(Direction.Backward), false)) },
       ),
       KeyBinding(
         ComposeKey.DirectionLeft,
         setOf(KeyModifier.Shift),
+        predicate = { platform != Platform.iOS },
         action = { listOf(move(Movement.Grapheme(Direction.Backward), true)) },
       ),
       KeyBinding(
         ComposeKey.DirectionRight,
+        predicate = { platform != Platform.iOS },
         action = { listOf(move(Movement.Grapheme(Direction.Forward), false)) },
       ),
       KeyBinding(
         ComposeKey.DirectionRight,
         setOf(KeyModifier.Shift),
+        predicate = { platform != Platform.iOS },
         action = { listOf(move(Movement.Grapheme(Direction.Forward), true)) },
       ),
       KeyBinding(

@@ -687,6 +687,95 @@ mod tests {
         );
     }
 
+    #[test]
+    fn document_arrow_at_end_keeps_following_text_insertable() {
+        let (state, p) = state! {
+            doc { root { p: paragraph { text("ab") } } }
+            selection: (p, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Navigation {
+            op: NavigationOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                extend: false,
+            },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: "x".into() }],
+        });
+        let actual = editor.state().selection.unwrap();
+        assert_eq!((actual.head.node, actual.head.offset), (p, 3));
+        assert_eq!(editor.ime(64, 64).unwrap().unwrap().text.trim(), "abx");
+    }
+
+    #[test]
+    fn document_arrows_enter_fold_title_and_skip_collapsed_content() {
+        let (state, before, f, title, inner, after) = state! {
+            doc { root {
+                before: paragraph { text("ab") }
+                f: fold {
+                    title: fold_title { text("title") }
+                    fold_content { inner: paragraph { text("hidden") } }
+                }
+                after: paragraph { text("cd") }
+            } }
+            selection: (before, 2)
+        };
+        for (collapsed, start, direction, expected) in [
+            (
+                false,
+                Position::new(before, 2),
+                Direction::Forward,
+                Position::new(title, 0),
+            ),
+            (
+                true,
+                Position::new(before, 2),
+                Direction::Forward,
+                Position::new(title, 0),
+            ),
+            (
+                true,
+                Position::new(title, 5),
+                Direction::Forward,
+                Position::new(after, 0),
+            ),
+            (
+                true,
+                Position::new(after, 0),
+                Direction::Backward,
+                Position::new(title, 5),
+            ),
+            (
+                false,
+                Position::new(inner, 6),
+                Direction::Forward,
+                Position::new(after, 0),
+            ),
+        ] {
+            let mut initial = state.clone();
+            initial.selection = Some(Selection::collapsed(start));
+            let mut editor = Editor::new_test(initial);
+            editor.view.set_fold_state(&editor.state, f, !collapsed);
+            editor.view.layout(&editor.state);
+            editor.apply(Message::Navigation {
+                op: NavigationOp::Move {
+                    movement: Movement::Grapheme { direction },
+                    extend: false,
+                },
+            });
+            let actual = editor.state().selection.unwrap();
+            assert!(actual.is_collapsed());
+            assert_eq!(
+                (actual.head.node, actual.head.offset),
+                (expected.node, expected.offset),
+                "from {start:?}, collapsed={collapsed}, direction={direction:?}"
+            );
+        }
+    }
+
     fn shift_up(editor: &mut Editor) {
         editor.apply(Message::Navigation {
             op: NavigationOp::Move {

@@ -3,12 +3,12 @@ package co.typie.editor.input
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
-import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.NavigationOp
 import kotlinx.coroutines.CoroutineScope
 
 internal expect class EditorPlatformInputBridge() {
@@ -20,21 +20,15 @@ internal expect class EditorPlatformInputBridge() {
 
   fun resetPlatformInputBeforeBindingDispatch()
 
+  fun takeDocumentNavigation(): NavigationOp.Move?
+
   fun onPreKeyEvent(
     event: KeyEvent,
     inputCoroutineScope: CoroutineScope,
     onAccepted: () -> Unit,
   ): Boolean
 
-  suspend fun dispatchAppOwnedKeyMessages(
-    messages: List<Message>,
-    preState: EditorState,
-    dispatch: suspend () -> EditorState?,
-  )
-
   fun shouldConsumeKeyEvent(event: KeyEvent): Boolean
-
-  fun interceptEditCommands(commands: List<EditCommand>, state: EditorState): List<Message>?
 
   fun onImeMessagesApplied(messages: List<Message>, preState: EditorState, postState: EditorState)
 
