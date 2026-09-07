@@ -185,12 +185,15 @@ onaddentity
 onapply
 onchevronhover
 oncollapse
+oncreated
 ondelete
 ondirty
 onexpand
 oniconhover
 onissueclick
+onmove
 onrowhover
+onsave
 onsaved
 onstatuschange
 onsubscribe
@@ -234,6 +237,7 @@ saeeum
 safi
 sakura
 scard
+schedulable
 serde
 setex
 sfnt

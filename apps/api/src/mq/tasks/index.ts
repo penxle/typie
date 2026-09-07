@@ -13,6 +13,7 @@ import {
 } from './email.ts';
 import { PrismWorkflowsPollCron } from './prism.ts';
 import { PrismCreditExpireCron, PrismCreditInvariantsCron, PrismCreditPurchaseReconcileCron } from './prism-credit.ts';
+import { PublicationPublishScheduledCron } from './publication.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import { StatsLandingCron } from './stats.ts';
 import {
@@ -61,6 +62,7 @@ export const crons = [
   PrismCreditInvariantsCron,
   PrismCreditPurchaseReconcileCron,
   PrismCreditExpireCron,
+  PublicationPublishScheduledCron,
   StatsLandingCron,
 ];
 

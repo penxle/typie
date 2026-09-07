@@ -488,7 +488,7 @@
   <HorizontalDivider color="secondary" />
 {/if}
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">게시 페이지에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">조회 페이지에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 
@@ -499,7 +499,7 @@
     mixpanel.track('open_folder_share_modal', { via });
   }}
 >
-  공유 및 게시
+  공유 및 발행
 </MenuItem>
 
 <MenuItem

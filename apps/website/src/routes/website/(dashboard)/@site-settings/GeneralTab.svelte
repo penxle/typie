@@ -1,19 +1,16 @@
 <script lang="ts">
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
-  import { TypieError } from '@typie/lib/errors';
-  import { siteSchema } from '@typie/lib/validation';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, HorizontalDivider, Icon, RingSpinner, TextInput } from '@typie/ui/components';
-  import { createForm, FormError } from '@typie/ui/form';
+  import { createForm } from '@typie/ui/form';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import CheckIcon from '~icons/lucide/check';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import UploadIcon from '~icons/lucide/upload';
-  import { env } from '$env/dynamic/public';
   import { LoadableImg, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
@@ -36,7 +33,6 @@
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_site on Site {
         id
         name
-        slug
 
         logo {
           id
@@ -51,7 +47,6 @@
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_user on User {
         id
-        entitled
 
         sites {
           id
@@ -72,17 +67,6 @@
             id
             ...Img_image
           }
-        }
-      }
-    `),
-  );
-
-  const [updateSiteSlug] = createMutation(
-    graphql(`
-      mutation DashboardLayout_SiteSettingsModal_GeneralTab_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
-        updateSiteSlug(input: $input) {
-          id
-          slug
         }
       }
     `),
@@ -136,28 +120,8 @@
     },
   });
 
-  const slugForm = createForm({
-    schema: z.object({
-      slug: siteSchema.slug,
-    }),
-    onSubmit: async (data) => {
-      await updateSiteSlug({ input: { siteId: site.data.id, slug: data.slug } });
-      mixpanel.track('update_site_slug');
-      Toast.success('작업실 주소가 변경됐어요.');
-    },
-    onError: (error) => {
-      if (error instanceof TypieError && error.code === 'site_slug_already_exists') {
-        throw new FormError('slug', '이미 존재하는 작업실 주소예요.');
-      }
-    },
-    defaultValues: {
-      slug: site.data.slug,
-    },
-  });
-
   $effect(() => {
     void form;
-    void slugForm;
   });
 
   let deleteConfirmInput = $state('');
@@ -240,64 +204,6 @@
         {#snippet error()}
           {#if form.errors.name}
             <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{form.errors.name}</p>
-          {/if}
-        {/snippet}
-      </SettingsRow>
-
-      <SettingsDivider />
-
-      <SettingsRow>
-        {#snippet label()}
-          주소
-        {/snippet}
-        {#snippet value()}
-          <div class={css({ position: 'relative' })}>
-            <TextInput
-              style={css.raw({ width: '[280px]', height: '32px', fontSize: '13px' })}
-              disabled={!user.data.entitled}
-              onblur={() => {
-                if (user.data.entitled && slugForm.state.isDirty) {
-                  slugForm.handleSubmit();
-                }
-              }}
-              rightItemAttached
-              bind:value={slugForm.fields.slug}
-            >
-              {#snippet rightItem()}
-                <span
-                  class={css({
-                    fontSize: '13px',
-                    color: 'text.muted',
-                    backgroundColor: 'surface.inset',
-                    paddingX: '12px',
-                    height: 'full',
-                    display: 'flex',
-                    alignItems: 'center',
-                  })}
-                >
-                  .{env.PUBLIC_USERSITE_HOST}
-                </span>
-              {/snippet}
-            </TextInput>
-            {#if !user.data.entitled}
-              <button
-                class={css({
-                  position: 'absolute',
-                  inset: '0',
-                  cursor: 'pointer',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                })}
-                aria-label="작업실 주소 기능 업그레이드"
-                onclick={() => SubscribeModal.show('site_address')}
-                type="button"
-              ></button>
-            {/if}
-          </div>
-        {/snippet}
-        {#snippet error()}
-          {#if slugForm.errors.slug}
-            <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{slugForm.errors.slug}</p>
           {/if}
         {/snippet}
       </SettingsRow>

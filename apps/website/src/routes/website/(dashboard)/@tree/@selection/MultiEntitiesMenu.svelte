@@ -224,7 +224,7 @@
       mixpanel.track('open_folder_share_modal', { via: 'multi_entities_menu', count: folderIds.length });
     }}
   >
-    폴더 {folderIds.length}개 공유 및 게시
+    폴더 {folderIds.length}개 공유 및 발행
   </MenuItem>
 {/if}
 
@@ -236,7 +236,7 @@
       mixpanel.track('open_document_share_modal', { via: 'multi_entities_menu', count: documentIds.length });
     }}
   >
-    문서 {documentIds.length}개 공유 및 게시
+    문서 {documentIds.length}개 공유 및 발행
   </MenuItem>
 {/if}
 

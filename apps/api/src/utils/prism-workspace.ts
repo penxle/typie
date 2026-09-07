@@ -86,6 +86,7 @@ import { decompose } from './text.ts';
 import { currentUserGoal, dailyCharacterChanges, dailyGoalHistory } from './user-stats.ts';
 import type { Dayjs } from 'dayjs';
 import type { SQL } from 'drizzle-orm';
+import type { PostCommitEffect, PostCommitRegistrar } from './post-commit.ts';
 import type { PrismToolContext, PrismToolHandler } from './prism-tools.ts';
 import type { EntityRef, EntityRefKind } from './prism-workspace-core.ts';
 
@@ -531,6 +532,8 @@ const NOT_FOUND_FOLDER = '그 폴더를 찾지 못했어요 — list-entities로
 export const NOT_FOUND_DOCUMENT = '그 문서를 찾지 못했어요 — search-entities나 list-entities로 문서를 다시 찾아보세요.';
 const NOT_FOUND_TARGETS = '일부 대상을 찾지 못했어요 — list-entities로 id를 다시 확인하세요.';
 const DIVIDER_NOT_ALLOWED = '구분선에는 할 수 없는 일이에요 — 문서나 폴더를 주세요.';
+const PUBLISHED_SHARING_BLOCKED = '발행 중인 글이 있어요 — 공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.';
+const PUBLISHED_SHARING_CODES = new Set(['publication_unpublish_required', 'publication_link_share_blocked']);
 const NOT_FOUND_NOTE = '그 노트를 찾지 못했어요 — list-notes로 다시 확인하세요.';
 const INVALID_COLOR = '그 색은 없어요 — 목록에 있는 색만 쓸 수 있어요.';
 const DOCUMENT_ONLY = [EntityType.DOCUMENT] as const;
@@ -1266,22 +1269,34 @@ const updateSharing = async (ctx: PrismToolContext, input: unknown) => {
   const visibilityByEntity = new Map(rows.map((row) => [row.entityId, row.visibility]));
 
   const documentIds = refs.flatMap((ref) => (ref.kind === 'document' ? [ref.documentId] : []));
-  if (documentIds.length > 0) {
-    await updateDocumentsOptionCore(ctx.executor, { userId: ctx.userId, documentIds, visibility: parsed.data.visibility }, ctx.afterCommit);
+  const effects: PostCommitEffect[] = [];
+  const afterCommit: PostCommitRegistrar = (effect) => {
+    effects.push(effect);
+  };
+  try {
+    await ctx.executor.transaction(async (tx) => {
+      if (documentIds.length > 0) {
+        await updateDocumentsOptionCore(tx, { userId: ctx.userId, documentIds, visibility: parsed.data.visibility }, afterCommit);
+      }
+      for (const ref of refs) {
+        if (ref.kind !== 'folder') continue;
+        await updateFolderOptionCore(
+          tx,
+          {
+            userId: ctx.userId,
+            folderId: ref.folderId,
+            visibility: parsed.data.visibility,
+            recursive: parsed.data.recursive ?? false,
+          },
+          afterCommit,
+        );
+      }
+    });
+  } catch (err) {
+    if (err instanceof TypieError && PUBLISHED_SHARING_CODES.has(err.code)) return toolFailure('error', PUBLISHED_SHARING_BLOCKED);
+    throw err;
   }
-  for (const ref of refs) {
-    if (ref.kind !== 'folder') continue;
-    await updateFolderOptionCore(
-      ctx.executor,
-      {
-        userId: ctx.userId,
-        folderId: ref.folderId,
-        visibility: parsed.data.visibility,
-        recursive: parsed.data.recursive ?? false,
-      },
-      ctx.afterCommit,
-    );
-  }
+  for (const effect of effects) ctx.afterCommit?.(effect);
 
   return {
     ok: true,

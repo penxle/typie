@@ -1,0 +1,1 @@
+ALTER TABLE "publication_versions" ADD COLUMN "asset_ids" text[] DEFAULT '{}'::text[] NOT NULL;

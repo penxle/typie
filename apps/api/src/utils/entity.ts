@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { defaultValues } from '@typie/lib/const';
-import { EntityState, EntityType, NoteState } from '@typie/lib/enums';
+import { EntityState, EntityType, EntityVisibility, NoteState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
@@ -433,7 +433,7 @@ export const copyEntityRecursive = async (
       order,
       depth: targetDepth,
       state: sourceEntity.state,
-      visibility: sourceEntity.visibility,
+      visibility: sourceEntity.visibility === EntityVisibility.PUBLIC ? EntityVisibility.PRIVATE : sourceEntity.visibility,
       availability: sourceEntity.availability,
       icon: sourceEntity.icon,
       iconColor: sourceEntity.iconColor,
