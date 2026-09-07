@@ -12,6 +12,23 @@ export const updateFocusTrapContainers = (element: HTMLElement, containers: HTML
   focusTrapMap.get(element)?.updateContainerElements(containers);
 };
 
+const extraContainerMap = new WeakMap<HTMLElement, HTMLElement[]>();
+
+export const registerFocusTrapContainer = (element: HTMLElement, container: HTMLElement) => {
+  const containers = extraContainerMap.get(element) ?? [];
+  if (!containers.includes(container)) {
+    containers.push(container);
+  }
+  extraContainerMap.set(element, containers);
+  updateFocusTrapContainers(element, [element, ...containers]);
+
+  return () => {
+    const next = (extraContainerMap.get(element) ?? []).filter((el) => el !== container);
+    extraContainerMap.set(element, next);
+    updateFocusTrapContainers(element, [element, ...next]);
+  };
+};
+
 export const focusTrap: Action<HTMLElement, Options | undefined> = (element, options) => {
   $effect(() => {
     const trap = createFocusTrap(element, options);

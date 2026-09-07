@@ -74,6 +74,7 @@ import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
 import { notDismissedFromRecent } from '#/utils/recent-documents.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
+import { deleteSpacesBySiteIdsCore } from '#/utils/space.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage } from '#/utils/user.ts';
@@ -777,6 +778,14 @@ builder.mutationFields((t) => ({
         if (overdueInvoices.length > 0) {
           throw new TypieError({ code: 'overdue_invoices_exist' });
         }
+
+        const siteIds = await tx
+          .select({ id: Sites.id })
+          .from(Sites)
+          .where(eq(Sites.userId, ctx.session.userId))
+          .then((sites) => sites.map((site) => site.id));
+
+        await deleteSpacesBySiteIdsCore(tx, { siteIds, now: dayjs() });
 
         const purgedEntities = await tx
           .update(Entities)

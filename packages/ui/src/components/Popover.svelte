@@ -1,7 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { untrack } from 'svelte';
   import { scale } from 'svelte/transition';
-  import { createFloatingActions } from '../actions';
+  import { createFloatingActions, portal, registerFocusTrapContainer } from '../actions';
   import { pushEscapeHandler } from '../utils';
   import type { OffsetOptions, Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -39,12 +40,20 @@
   let contentEl = $state<HTMLDivElement>();
   let hasBeenOpened = $state(false);
 
+  $effect(() => {
+    const trigger = triggerEl;
+    const content = contentEl;
+    if (!open || !trigger || !content) return;
+
+    const host = trigger.closest<HTMLElement>('[data-focus-trap]');
+    if (!host) return;
+
+    return untrack(() => registerFocusTrapContainer(host, content));
+  });
+
   const { anchor, floating } = createFloatingActions({
     placement,
     offset,
-    onClickOutside: () => {
-      open = false;
-    },
   });
 
   const close = () => {
@@ -101,6 +110,13 @@
 </button>
 
 {#if open}
+  <div
+    class={css({ position: 'fixed', inset: '0', zIndex: 'tooltip', pointerEvents: 'auto' })}
+    onclick={() => (open = false)}
+    role="none"
+    use:portal={(document.querySelector('.tooltip-container') as HTMLElement) ?? undefined}
+  ></div>
+
   <div
     bind:this={contentEl}
     style:min-width={matchTriggerWidth && triggerEl ? `${triggerEl.offsetWidth}px` : undefined}

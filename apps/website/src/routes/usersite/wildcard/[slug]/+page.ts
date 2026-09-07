@@ -1,40 +1,15 @@
 import { redirect } from '@sveltejs/kit';
-import { loadQuery } from '$lib/graphql';
-import { graphql } from '$mearie';
+import { env } from '$env/dynamic/public';
+import { legacyEntityRedirect } from '$lib/usersite/legacy-redirect';
 
 export const load = async (event) => {
-  const query = await loadQuery(
-    event,
-    graphql(`
-      query UsersiteWildcardSlugPage_Query($origin: String!, $slug: String!) {
-        me {
-          id
-
-          ...UsersiteWildcardSlugPage_DocumentViewV2_user
-        }
-
-        entityView(origin: $origin, slug: $slug) {
-          id
-          slug
-
-          node {
-            __typename
-          }
-
-          ...UsersiteWildcardSlugPage_DocumentViewV2_entityView
-          ...UsersiteWildcardSlugPage_FolderView_entityView
-        }
-      }
-    `),
-    {
-      origin: event.url.origin,
+  redirect(
+    302,
+    legacyEntityRedirect({
+      protocol: event.url.protocol,
+      usersiteHost: env.PUBLIC_USERSITE_HOST,
       slug: event.params.slug,
-    },
+      search: event.url.search,
+    }),
   );
-
-  if (query.data.entityView.slug !== event.params.slug) {
-    redirect(302, `/${query.data.entityView.slug}`);
-  }
-
-  return { query };
 };

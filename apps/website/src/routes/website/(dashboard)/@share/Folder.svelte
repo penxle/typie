@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { EntityVisibility } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '@typie/ui/components';
-  import { createForm } from '@typie/ui/form';
+  import { createForm, FormError } from '@typie/ui/form';
+  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
   import BlendIcon from '~icons/lucide/blend';
@@ -17,6 +19,8 @@
   import LockIcon from '~icons/lucide/lock';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { Img } from '$lib/components';
+  import { publicationErrorCode } from '$lib/publication/error';
+  import { publicationErrorMessage } from '$lib/publication/publish-form';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
@@ -51,6 +55,8 @@
 
   const isSingleFolder = $derived(folders.data.length === 1);
   const folderIds = $derived(folders.data.map((f) => f.id));
+
+  const isPublic = $derived(folders.data.some((f) => f.entity.visibility === EntityVisibility.PUBLIC));
 
   const [updateFoldersOption] = createMutation(
     graphql(`
@@ -119,6 +125,13 @@
       if (Object.keys(updateData).length > 1) {
         await updateFoldersOption({ input: updateData });
         mixpanel.track('update_folder_option', { visibility: data.visibility, count: folderIds.length });
+      }
+    },
+    onError: (error) => {
+      if (error instanceof TypieError) {
+        const message = publicationErrorMessage(error.code);
+        Toast.error(message);
+        throw new FormError('visibility', message);
       }
     },
     defaultValues: {
@@ -201,7 +214,7 @@
     <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
       {isSingleFolder ? folders.data[0].name : `${folders.data.length}개의 폴더`}
     </span>
-    <span class={css({ flexShrink: '0' })}>공유 및 게시하기</span>
+    <span class={css({ flexShrink: '0' })}>공유 및 발행</span>
   </div>
 
   <button
@@ -224,7 +237,7 @@
     {:else}
       <Icon style={css.raw({ color: 'text.default' })} icon={LinkIcon} size={12} />
       <div class={css({ fontSize: '12px', color: 'text.default' })}>
-        {isSingleFolder ? '게시 링크 복사' : '게시 링크 모두 복사'}
+        {isSingleFolder ? '조회 링크 복사' : '조회 링크 모두 복사'}
       </div>
     {/if}
   </button>
@@ -244,12 +257,7 @@
 
       <Select
         items={[
-          {
-            icon: GlobeIcon,
-            label: '공개',
-            description: '누구나 폴더와 폴더 내의 공개 문서를 볼 수 있어요.',
-            value: EntityVisibility.PUBLIC,
-          },
+          ...(isPublic ? [{ icon: GlobeIcon, label: '공개', value: EntityVisibility.PUBLIC }] : []),
           {
             icon: LinkIcon,
             label: '링크가 있는 사람',
@@ -272,6 +280,7 @@
 
     <Button
       style={css.raw({ marginLeft: 'auto', minWidth: '200px', height: '26px', gap: '4px', fontSize: '12px' })}
+      disabled={form.fields.visibility === EntityVisibility.PUBLIC}
       onclick={async () => {
         if (recursiveState === 'inflight') {
           return;
@@ -287,10 +296,16 @@
 
         recursiveState = 'inflight';
 
-        await updateFoldersOption({ input: { folderIds, visibility: form.fields.visibility, recursive: true } });
+        try {
+          await updateFoldersOption({ input: { folderIds, visibility: form.fields.visibility, recursive: true } });
 
-        recursiveState = 'success';
-        mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });
+          recursiveState = 'success';
+          mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });
+        } catch (err) {
+          recursiveState = 'idle';
+          Toast.error(publicationErrorMessage(publicationErrorCode(err)));
+          return;
+        }
 
         recursiveTimer = setTimeout(() => {
           recursiveState = 'idle';

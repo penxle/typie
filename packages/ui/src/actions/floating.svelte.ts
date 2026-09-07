@@ -17,6 +17,8 @@ import type { Action } from 'svelte/action';
 
 export type ReferenceAction = Action<ReferenceElement>;
 export type FloatingAction = Action<FloatingElement, { appendTo?: Element | null } | undefined>;
+
+// NOTE: 바깥 클릭으로 닫히는 플로팅을 열린 순서대로 쌓아, 맨 위 하나만 먼저 닫히게 한다
 export type ArrowAction = Action<HTMLElement>;
 export type UpdatePosition = () => Promise<void>;
 export type SetFloatingReference = (element: ReferenceElement | null) => void;
@@ -292,10 +294,10 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
     });
   };
 
-  const floatingAction: FloatingAction = (element, options = {}) => {
+  const floatingAction: FloatingAction = (element, actionOptions = {}) => {
     $effect(() => {
-      if (options.appendTo) {
-        options.appendTo.append(element);
+      if (actionOptions.appendTo) {
+        actionOptions.appendTo.append(element);
       } else {
         // NOTE: top layer에 표시되는 조상 요소가 있다면 그 요소에 추가해서 floating element와 상호작용이 되도록 함
         const topLayerElem = element.closest('dialog, [popover]');
@@ -313,6 +315,7 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
       });
 
       floatingElement = element;
+
       mount();
 
       return () => {

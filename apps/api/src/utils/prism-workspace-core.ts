@@ -122,7 +122,7 @@ export const DeleteNotesInput = z.object({ noteIds: batch(z.string()) });
 export const DeleteGoalsInput = z.object({ items: batch(z.object({ id: z.string().optional() })) });
 export const UpdateSharingInput = z.object({
   ids: z.array(z.string()).min(1).max(20),
-  visibility: z.enum(['PUBLIC', 'UNLISTED', 'PRIVATE']),
+  visibility: z.enum(['UNLISTED', 'PRIVATE']),
   recursive: z.boolean().optional(),
 });
 

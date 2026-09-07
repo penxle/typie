@@ -1,4 +1,4 @@
-import { EntityAvailability, EntityState, EntityType, NoteState } from '@typie/lib/enums';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
@@ -32,9 +32,11 @@ import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from './plan.ts';
 import { runAfterCommit } from './post-commit.ts';
+import { assertNoPublishedPublication, assertVisibilityRequestable } from './publication.ts';
+import { unpublishByEntityIdsCore } from './publication-unpublish.ts';
 import { enqueueSearchSyncForEntityIds } from './search-index.ts';
 import { wasm as wasmFfi } from './wasm-ffi.ts';
-import type { DocumentContentRating, EntityVisibility } from '@typie/lib/enums';
+import type { DocumentContentRating } from '@typie/lib/enums';
 import type { Database, Transaction } from '#/db/index.ts';
 import type { TemplatePreset } from './entity.ts';
 import type { PostCommitRegistrar } from './post-commit.ts';
@@ -266,6 +268,8 @@ export const deleteEntitiesCore = async (
   }
 
   const deletedEntities = await executor.transaction(async (tx) => {
+    await unpublishByEntityIdsCore(tx, { entityIds: entities.map(({ id }) => id), now: dayjs() });
+
     const deletedEntities = await tx
       .update(Entities)
       .set({
@@ -810,6 +814,30 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
     const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
     let lastOrder = args.lowerOrder ?? null;
 
+    if (isCrossSite) {
+      const movedEntityIds = await tx
+        .execute<{ id: string }>(
+          sql`
+            WITH RECURSIVE sq AS (
+              SELECT ${Entities.id}
+              FROM ${Entities}
+              WHERE ${inArray(
+                Entities.id,
+                entities.map(({ id }) => id),
+              )}
+              UNION ALL
+              SELECT ${Entities.id}
+              FROM ${Entities}
+              JOIN sq ON ${Entities.parentId} = sq.id
+            )
+            SELECT id FROM sq
+          `,
+        )
+        .then((rows) => rows.map(({ id }) => id));
+
+      await unpublishByEntityIdsCore(tx, { entityIds: movedEntityIds, now: dayjs() });
+    }
+
     for (const entity of entities) {
       const depthDelta = targetDepth - entity.depth;
 
@@ -1121,6 +1149,14 @@ export const updateDocumentsOptionCore = async (
     throw new TypieError({ code: 'site_mismatch' });
   }
 
+  if (args.visibility) {
+    assertVisibilityRequestable(args.visibility);
+    await assertNoPublishedPublication(executor, {
+      documentIds: documents.map((doc) => doc.id),
+      visibility: args.visibility,
+    });
+  }
+
   if (!isPrivateVisibilityOnlyInput(args) && !(await hasActiveSubscription({ userId: args.userId }))) {
     throw new TypieError({ code: 'subscription_required', status: 403 });
   }
@@ -1203,6 +1239,7 @@ export const updateFolderOptionCore = async (
   });
 
   await assertActiveSubscription({ userId: args.userId });
+  assertVisibilityRequestable(args.visibility);
 
   const changedFolderEntityIds = await executor.transaction(async (tx) => {
     const changedFolderEntityIds = [folder.entityId];
@@ -1232,6 +1269,16 @@ export const updateFolderOptionCore = async (
       const descendantEntityIds = descendantEntities.map(({ id }) => id);
 
       if (descendantEntityIds.length > 0) {
+        const descendantDocuments = await tx
+          .select({ id: Documents.id })
+          .from(Documents)
+          .where(inArray(Documents.entityId, descendantEntityIds));
+
+        await assertNoPublishedPublication(tx, {
+          documentIds: descendantDocuments.map(({ id }) => id),
+          visibility: args.visibility,
+        });
+
         await tx.update(Entities).set({ visibility: args.visibility }).where(inArray(Entities.id, descendantEntityIds));
       }
 

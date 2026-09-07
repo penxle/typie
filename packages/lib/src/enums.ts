@@ -184,6 +184,13 @@ export const DocumentViewBodyUnavailableReason = {
   REQUIRE_MINIMUM_AGE: 'REQUIRE_MINIMUM_AGE',
 } as const;
 
+export type PublicationState = keyof typeof PublicationState;
+export const PublicationState = {
+  SCHEDULED: 'SCHEDULED',
+  PUBLISHED: 'PUBLISHED',
+  UNPUBLISHED: 'UNPUBLISHED',
+} as const;
+
 export type RedirectType = keyof typeof RedirectType;
 export const RedirectType = {
   SLUG: 'SLUG',
@@ -209,6 +216,24 @@ export const SingleSignOnProvider = {
   GOOGLE: 'GOOGLE',
   KAKAO: 'KAKAO',
   NAVER: 'NAVER',
+} as const;
+
+export type SpaceAvailableAction = keyof typeof SpaceAvailableAction;
+export const SpaceAvailableAction = {
+  SETTINGS: 'SETTINGS',
+} as const;
+
+export type SpaceDateDisplay = keyof typeof SpaceDateDisplay;
+export const SpaceDateDisplay = {
+  NONE: 'NONE',
+  PUBLISHED_AT: 'PUBLISHED_AT',
+  UPDATED_AT: 'UPDATED_AT',
+} as const;
+
+export type SpaceState = keyof typeof SpaceState;
+export const SpaceState = {
+  ACTIVE: 'ACTIVE',
+  DELETED: 'DELETED',
 } as const;
 
 export type SiteDateDisplay = keyof typeof SiteDateDisplay;

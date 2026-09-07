@@ -34,6 +34,7 @@
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';
   import DocumentMenu from '../../@context-menu/DocumentMenu.svelte';
+  import ShareButton from '../../@share/ShareButton.svelte';
   import { SubscribeModal } from '../../@subscription/subscribe-modal.svelte';
   import FontUploadModal from '../../FontUploadModal.svelte';
   import { getZenMode } from '../../zen-mode.svelte';
@@ -203,6 +204,7 @@
                 }
               }
 
+              ...DashboardLayout_Share_ShareButton_document
               ...DocumentPanelV2_document
               ...Editor_document
             }
@@ -1157,6 +1159,10 @@
             {/if}
 
             {#snippet scrollableActions()}
+              {#if document && isOwner}
+                <ShareButton document$key={document} />
+              {/if}
+
               {#if !entity.user.subscription}
                 <button
                   class={flex({
