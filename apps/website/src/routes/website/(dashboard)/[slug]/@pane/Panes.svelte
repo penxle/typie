@@ -176,7 +176,7 @@
           class={css({
             position: 'absolute',
             pointerEvents: 'none',
-            boxShadow: '[0 0 0 1px token(colors.accent.default)]',
+            boxShadow: '[0 0 0 1px token(colors.border.emphasis)]',
             zIndex: 'overEditor',
           })}
           out:fade|global={{
