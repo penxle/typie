@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class, ExperimentalTime::class)
+@file:OptIn(ExperimentalForeignApi::class)
 
 package co.typie.editor.input
 
@@ -11,29 +11,27 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
-import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.Message
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
+import co.typie.editor.ffi.Movement
+import co.typie.editor.ffi.NavigationOp
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import swiftPMImport.co.typie.compose.EditorFloatingCursorBridge
 import swiftPMImport.co.typie.compose.EditorKeyboardBridge
-import swiftPMImport.co.typie.compose.EditorTextInputTraitsBridge
+import swiftPMImport.co.typie.compose.EditorTextInputBridge
 
 internal actual class EditorPlatformInputBridge actual constructor() {
   private val physicalKeyGate = EditorPhysicalKeyFrameGate()
-  private val selectionIntentTracker = EditorSelectionInputIntentTracker()
   private val floatingCursorSession = EditorFloatingCursorSession()
 
   actual fun reset() {
     physicalKeyGate.reset()
-    selectionIntentTracker.reset()
     floatingCursorSession.end()
   }
 
@@ -43,6 +41,18 @@ internal actual class EditorPlatformInputBridge actual constructor() {
 
   actual fun resetPlatformInputBeforeBindingDispatch() {
     EditorKeyboardBridge.endInputMethodComposition()
+  }
+
+  actual fun takeDocumentNavigation(): NavigationOp.Move? {
+    var movement: NavigationOp.Move? = null
+    EditorTextInputBridge.takeDocumentNavigation { backward, extending ->
+      movement =
+        NavigationOp.Move(
+          Movement.Grapheme(if (backward) Direction.Backward else Direction.Forward),
+          extending,
+        )
+    }
+    return movement
   }
 
   actual fun onPreKeyEvent(
@@ -64,70 +74,13 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     return true
   }
 
-  actual suspend fun dispatchAppOwnedKeyMessages(
-    messages: List<Message>,
-    preState: EditorState,
-    dispatch: suspend () -> EditorState?,
-  ) {
-    val dispatchToken =
-      selectionIntentTracker.recordAppOwnedDispatch(
-        messages = messages,
-        preState = preState,
-        nowMillis = nowMillis(),
-      )
-    if (messages.isEmpty()) return
-
-    try {
-      val postState = dispatch()
-      if (postState == null) {
-        dispatchToken?.let(selectionIntentTracker::cancelAppOwnedDispatch)
-      } else if (dispatchToken != null) {
-        selectionIntentTracker.recordAppOwnedCommit(
-          token = dispatchToken,
-          messages = messages,
-          preState = preState,
-          postState = postState,
-          nowMillis = nowMillis(),
-        )
-      }
-    } catch (error: Throwable) {
-      dispatchToken?.let(selectionIntentTracker::cancelAppOwnedDispatch)
-      throw error
-    }
-  }
-
   actual fun shouldConsumeKeyEvent(event: KeyEvent): Boolean = true
-
-  actual fun interceptEditCommands(
-    commands: List<EditCommand>,
-    state: EditorState,
-  ): List<Message>? {
-    return when (
-      val decision =
-        selectionIntentTracker.classifyNativeSelectionCommands(
-          commands = commands,
-          state = state,
-          nowMillis = nowMillis(),
-        )
-    ) {
-      EditorSelectionInputDecision.DropNativeSelectionCommand -> emptyList()
-      is EditorSelectionInputDecision.ReplayNativeCommandAsAppOwnedNavigation -> decision.messages
-      null -> null
-    }
-  }
 
   actual fun onImeMessagesApplied(
     messages: List<Message>,
     preState: EditorState,
     postState: EditorState,
-  ) {
-    selectionIntentTracker.recordImeMessagesApplied(
-      messages = messages,
-      preState = preState,
-      postState = postState,
-      nowMillis = nowMillis(),
-    )
-  }
+  ) = Unit
 
   actual fun installSessionEffects(
     cursor: () -> CursorMetrics?,
@@ -135,7 +88,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     dispatch: (List<Message>) -> Unit,
     dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
   ): () -> Unit {
-    val traitsGeneration = EditorTextInputTraitsBridge.install()
+    val textInputGeneration = EditorTextInputBridge.install()
     val uninstall =
       installFloatingCursorBridge(
         onBegin = { floatingCursorSession.begin(cursor()) },
@@ -150,12 +103,10 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     return {
       uninstall()
       floatingCursorSession.end()
-      EditorTextInputTraitsBridge.uninstallWithGeneration(traitsGeneration)
+      EditorTextInputBridge.uninstallWithGeneration(textInputGeneration)
     }
   }
 }
-
-private fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
 private class EditorPhysicalKeyFrameGate {
   private val pending = mutableSetOf<PhysicalKeyStroke>()

@@ -2,7 +2,7 @@ use editor_commands::{self as commands};
 use editor_crdt::Dot;
 use editor_model::DocView;
 use editor_state::{
-    Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
+    Affinity, Position, ResolvedPosition, ResolvedPositionFlatExt, Selection, StableResolveCtx,
     cell_rect_selection, enclosing_table, enclosing_table_cell, expand_unit_at, remap_selection,
     resolve_paragraph_selection_expansion, resolve_sentence_selection_expansion,
     resolve_word_selection_expansion,
@@ -132,8 +132,58 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                     Some(p) => p,
                     None => return Ok(()),
                 };
-                let selection =
-                    Selection::new(Position::from(&start_pos), Position::from(&end_pos));
+                let mut anchor = Position::from(&start_pos);
+                let mut head = Position::from(&end_pos);
+                if start != end
+                    && let Some(current) = tr.selection().and_then(|s| s.resolve(&view))
+                {
+                    let previous_end = current.to().to_flat();
+                    let previous_anchor = current.anchor().to_flat();
+                    let previous_head = current.head().to_flat();
+                    // Restore anchor/head before interpreting movement: crossing the anchor
+                    // swaps the ordered endpoints, including at a paragraph separator.
+                    let (anchor_flat, head_flat) = if start < end
+                        && (previous_anchor == end
+                            || (previous_anchor != start && end == previous_end))
+                    {
+                        std::mem::swap(&mut anchor, &mut head);
+                        (end, start)
+                    } else {
+                        (start, end)
+                    };
+                    let previous_head = if anchor_flat == previous_anchor {
+                        Some(previous_head)
+                    } else if anchor_flat == previous_head {
+                        Some(previous_anchor)
+                    } else {
+                        None
+                    };
+                    // Flat text has two tokens between paragraphs. Resolve a moved
+                    // endpoint between them in its direction of travel, including
+                    // when shrinking a range. Normalizing the whole partial range
+                    // instead can collapse it and trap native selection at the seam.
+                    if let Some(previous_head) = previous_head
+                        && head_flat != previous_head
+                        && view
+                            .node(head.node)
+                            .is_some_and(|node| !node.spec().is_textblock())
+                    {
+                        let cursor = Selection::collapsed(Position {
+                            affinity: if head_flat > previous_head {
+                                Affinity::Downstream
+                            } else {
+                                Affinity::Upstream
+                            },
+                            ..head
+                        })
+                        .normalize(&view);
+                        // Unit and gap selections retain their structural positions.
+                        if let Some(cursor) = cursor.filter(Selection::is_collapsed) {
+                            head = cursor.head;
+                        }
+                    }
+                }
+                let selection = Selection::new(anchor, head);
                 let Some(selection) = canonicalize_set_selection(&view, tr.selection(), selection)
                 else {
                     return Ok(());
@@ -583,6 +633,242 @@ mod tests {
             let mut editor = Editor::new_test(state.clone());
             editor.apply(Message::Selection { op });
             assert_eq!(editor.state().selection, Some(expected));
+        }
+    }
+
+    #[test]
+    fn set_flat_backward_selection_keeps_anchor_for_application_navigation() {
+        let (state, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("abcdefghij") }
+                p2: paragraph { text("ab cd efgh") }
+            } }
+            selection: (p2, 7)
+        };
+        for (movement, expected_head) in [
+            (
+                Movement::Line {
+                    direction: Direction::Backward,
+                    axis: Axis::Vertical,
+                },
+                Position::new(p1, 6),
+            ),
+            (
+                Movement::Word {
+                    direction: Direction::Backward,
+                },
+                Position::new(p2, 3),
+            ),
+        ] {
+            let mut editor = Editor::new_test(state.clone());
+            // UIKit reports an ordered range for Shift+Left, not anchor/head.
+            editor.apply(Message::Selection {
+                op: SelectionOp::SetFlat { start: 19, end: 20 },
+            });
+            editor.apply(Message::Navigation {
+                op: NavigationOp::Move {
+                    movement,
+                    extend: true,
+                },
+            });
+            let selection = editor.state().selection.unwrap();
+            assert_eq!(selection.anchor, Position::new(p2, 7));
+            assert_eq!(selection.head, expected_head);
+        }
+    }
+
+    #[test]
+    fn set_flat_selection_preserves_direction_across_echo_and_anchor_crossing() {
+        let (state, p) = state! {
+            doc { root { p: paragraph { text("abcdef") } } }
+            selection: (p, 3)
+        };
+        let mut editor = Editor::new_test(state);
+        for (start, end, anchor, head) in [
+            (3, 4, 3, 2), // Extend left from the caret.
+            (3, 4, 3, 2), // An unchanged native range must not reverse it.
+            (4, 5, 3, 4), // Cross the anchor without an intermediate collapsed range.
+            (3, 4, 3, 2), // Cross back in the other direction.
+            (1, 2, 0, 1), // A new unrelated range uses its supplied direction.
+            (6, 5, 5, 4), // Explicitly reversed endpoints remain directed.
+        ] {
+            editor.apply(Message::Selection {
+                op: SelectionOp::SetFlat { start, end },
+            });
+            assert_eq!(
+                editor.state().selection,
+                Some(Selection::new(
+                    Position::new(p, anchor),
+                    Position::new(p, head)
+                )),
+                "native range {start}..{end}",
+            );
+        }
+    }
+
+    #[test]
+    fn set_flat_caret_preserves_unicode_target() {
+        let (state, p) = state! {
+            doc { root { p: paragraph { text("a👩‍💻bc") } } }
+            selection: (p, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        for (target, offset) in [(5, 4), (2, 1)] {
+            editor.apply(Message::Selection {
+                op: SelectionOp::SetFlat {
+                    start: target,
+                    end: target,
+                },
+            });
+            let selection = editor.state().selection.unwrap();
+            assert!(selection.is_collapsed());
+            assert_eq!((selection.head.node, selection.head.offset), (p, offset));
+        }
+    }
+
+    #[test]
+    fn set_flat_caret_from_unit_or_gap_preserves_the_requested_text_position() {
+        let (state, r, p) = state! {
+            doc { r: root { image image p: paragraph { text("abcd") } } }
+            selection: (p, 0)
+        };
+        for initial in [
+            Selection::new(Position::new(r, 0), Position::new(r, 1)),
+            Selection::collapsed(Position::new(r, 1)),
+        ] {
+            let mut state = state.clone();
+            state.selection = Some(initial);
+            let mut editor = Editor::new_test(state);
+            let target = Position::new(p, 2)
+                .resolve(&editor.state().view())
+                .unwrap()
+                .to_flat();
+            editor.apply(Message::Selection {
+                op: SelectionOp::SetFlat {
+                    start: target,
+                    end: target,
+                },
+            });
+            let actual = editor.state().selection.unwrap();
+            assert!(actual.is_collapsed());
+            assert_eq!((actual.head.node, actual.head.offset), (p, 2));
+        }
+    }
+
+    #[test]
+    fn set_flat_selection_crosses_anchor_at_paragraph_boundary() {
+        let (state, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+            } }
+            selection: (p1, 2)
+        };
+        for (anchor, first, crossed, head) in [
+            (Position::new(p1, 2), (2, 3), (3, 4), Position::new(p2, 0)),
+            (Position::new(p2, 0), (5, 6), (4, 5), Position::new(p1, 2)),
+        ] {
+            let mut editor = Editor::new_test(state.clone());
+            editor.apply(Message::Selection {
+                op: SelectionOp::Set {
+                    selection: Selection::collapsed(anchor),
+                },
+            });
+            for (start, end) in [first, crossed] {
+                editor.apply(Message::Selection {
+                    op: SelectionOp::SetFlat { start, end },
+                });
+            }
+            let actual = editor.state().selection.unwrap();
+            assert_eq!(
+                (actual.anchor.node, actual.anchor.offset),
+                (anchor.node, anchor.offset)
+            );
+            assert_eq!(
+                (actual.head.node, actual.head.offset),
+                (head.node, head.offset)
+            );
+        }
+    }
+
+    #[test]
+    fn set_flat_selection_crosses_paragraph_boundary() {
+        let (state, _p1, _p2) = state! {
+            doc { root {
+                p1: paragraph { text("ab") }
+                p2: paragraph { text("cd") }
+            } }
+            selection: (p1, 2)
+        };
+        let mut editor = Editor::new_test(state);
+        let before = editor.ime(64, 64).unwrap().unwrap();
+        assert_eq!((before.selection.start, before.selection.end), (3, 3));
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFlat { start: 3, end: 4 },
+        });
+
+        let after = editor.ime(64, 64).unwrap().unwrap();
+        assert_eq!((after.selection.start, after.selection.end), (3, 5));
+    }
+
+    #[test]
+    fn set_flat_selection_extends_and_shrinks_across_empty_paragraphs() {
+        let (state, p1, _empty, p2) = state! {
+            doc { root {
+                p1: paragraph { text("ab") }
+                empty: paragraph {}
+                p2: paragraph { text("cd") }
+            } }
+            selection: (p1, 1)
+        };
+        // The native range is ordered even when its moving endpoint is on the left.
+        for (caret, steps) in [
+            (
+                Position::new(p1, 1),
+                [
+                    ((2, 3), (2, 3)),
+                    ((2, 4), (2, 5)),
+                    ((2, 6), (2, 7)),
+                    ((2, 8), (2, 8)),
+                    ((2, 7), (2, 7)),
+                    ((2, 6), (2, 5)),
+                    ((2, 4), (2, 3)),
+                    ((2, 2), (2, 2)),
+                ],
+            ),
+            (
+                Position::new(p2, 1),
+                [
+                    ((7, 8), (7, 8)),
+                    ((6, 8), (5, 8)),
+                    ((4, 8), (3, 8)),
+                    ((2, 8), (2, 8)),
+                    ((3, 8), (3, 8)),
+                    ((4, 8), (5, 8)),
+                    ((6, 8), (7, 8)),
+                    ((8, 8), (8, 8)),
+                ],
+            ),
+        ] {
+            let mut editor = Editor::new_test(state.clone());
+            editor.apply(Message::Selection {
+                op: SelectionOp::Set {
+                    selection: Selection::collapsed(caret),
+                },
+            });
+            for ((start, end), expected) in steps {
+                editor.apply(Message::Selection {
+                    op: SelectionOp::SetFlat { start, end },
+                });
+                let ime = editor.ime(64, 64).unwrap().unwrap();
+                assert_eq!(
+                    (ime.selection.start, ime.selection.end),
+                    expected,
+                    "native range {start}..{end} from {caret:?}",
+                );
+                assert_eq!(editor.state().selection.unwrap().anchor, caret);
+            }
         }
     }
 

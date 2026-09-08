@@ -267,8 +267,8 @@ class EditorInputEnabledDesktopTest {
       )
 
       bringIntoViewRequests.cancel()
-      editor.refreshImeSnapshot()
       currentIme = composingIme
+      editor.refreshImeSnapshot()
       fake.enqueued.clear()
       observedRevealPolicy = null
       onNodeWithTag(InputTag).performKeyInput {
@@ -287,8 +287,8 @@ class EditorInputEnabledDesktopTest {
       )
 
       bringIntoViewRequests.cancel()
-      editor.refreshImeSnapshot()
       currentIme = composingIme
+      editor.refreshImeSnapshot()
       fake.enqueued.clear()
       onNodeWithTag(InputTag).performKeyInput {
         keyDown(Key.MetaLeft)

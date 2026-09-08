@@ -1206,7 +1206,11 @@ impl Editor {
             }
             None => natural_start,
         };
-        let window_end = sel_end.saturating_add(after_limit).min(doc_size);
+        // Keep trailing context relative to the whole composition, not its
+        // internal caret. Otherwise moving inside marked text changes the
+        // window's text and looks like an external edit to the IME.
+        let context_end = state.composition.map_or(sel_end, |c| sel_end.max(c.end));
+        let window_end = context_end.saturating_add(after_limit).min(doc_size);
 
         let text = editor_state::flat_text(&doc, window_start..window_end);
         let composing = state.composition.map(|c| ImeRange {
@@ -4436,6 +4440,112 @@ mod tests {
     }
 
     #[test]
+    fn ime_window_text_stays_unchanged_when_moving_within_composition() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.ime(3, 3).unwrap().unwrap();
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose {
+                text: "にほんご".into(),
+            }],
+        });
+        let before = editor.ime(3, 3).unwrap().unwrap();
+        assert_eq!(before.text, "lo にほんごwor");
+
+        // UIKit resends the same marked text with a different relative caret.
+        for caret in [10, 9, 10, 11] {
+            editor.apply(Message::TextInput {
+                ops: vec![
+                    FlatImeOp::Compose {
+                        text: "にほんご".into(),
+                    },
+                    FlatImeOp::SetSelection {
+                        start: caret,
+                        end: caret,
+                    },
+                ],
+            });
+            let after = editor.ime(3, 3).unwrap().unwrap();
+            assert_eq!(after.text, before.text, "caret at {caret}");
+            assert_eq!(after.window_start, before.window_start);
+            assert_eq!(
+                after.selection,
+                ImeRange {
+                    start: caret,
+                    end: caret
+                }
+            );
+            assert_eq!(after.composing, before.composing);
+        }
+    }
+
+    #[test]
+    fn ime_window_follows_composition_replacements_with_an_internal_caret() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.ime(3, 3).unwrap().unwrap();
+
+        // Growing and shrinking the preedit must change only the preedit, even
+        // when its caret is not at the end. Flat offsets count Unicode scalars.
+        for (text, caret, end, expected) in [
+            ("にほんご", 8, 11, "lo にほんごwor"),
+            ("語😀", 8, 9, "lo 語😀wor"),
+            ("にほんごx", 9, 12, "lo にほんごxwor"),
+        ] {
+            editor.apply(Message::TextInput {
+                ops: vec![
+                    FlatImeOp::Compose { text: text.into() },
+                    FlatImeOp::SetSelection {
+                        start: caret,
+                        end: caret,
+                    },
+                ],
+            });
+            let ctx = editor.ime(3, 3).unwrap().unwrap();
+            assert_eq!(ctx.window_start, 4);
+            assert_eq!(ctx.text, expected);
+            assert_eq!(
+                ctx.selection,
+                ImeRange {
+                    start: caret,
+                    end: caret
+                }
+            );
+            assert_eq!(ctx.composing, Some(ImeRange { start: 7, end }));
+        }
+    }
+
+    #[test]
+    fn ime_window_includes_composition_without_trailing_context() {
+        let (state, _p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 6)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.ime(3, 0).unwrap().unwrap();
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose {
+                    text: "abcd".into(),
+                },
+                FlatImeOp::SetSelection { start: 7, end: 7 },
+            ],
+        });
+
+        let ctx = editor.ime(3, 0).unwrap().unwrap();
+        assert_eq!(ctx.window_start, 4);
+        assert_eq!(ctx.text, "lo abcd");
+        assert_eq!(ctx.selection, ImeRange { start: 7, end: 7 });
+        assert_eq!(ctx.composing, Some(ImeRange { start: 7, end: 11 }));
+    }
+
+    #[test]
     fn ime_window_start_stays_anchored_while_typing() {
         let (state, _p1) = state! {
             doc { root { p1: paragraph { text("hello world") } } }
@@ -4464,9 +4574,7 @@ mod tests {
                 .map_or(predicted.len(), |(i, _)| i),
             'X',
         );
-        // Window end extends past the new cursor by the after-limit, pulling in
-        // one more trailing char than the previous window exposed.
-        assert!(after.text.starts_with(&predicted));
+        assert_eq!(after.text, predicted);
         assert_eq!(after.selection.start, before.selection.start + 1);
     }
 

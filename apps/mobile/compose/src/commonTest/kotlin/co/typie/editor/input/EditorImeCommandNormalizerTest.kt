@@ -21,6 +21,62 @@ import kotlin.test.assertEquals
 
 class EditorImeCommandNormalizerTest {
   @Test
+  fun `selection after marked text uses the new text length`() {
+    val ime = Ime(text = "", windowStart = 10, selection = ImeRange(10, 10), composing = null)
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingTextCommand("にほん", 1), SetSelectionCommand(2, 2)),
+        ime,
+      )
+
+    assertEquals(
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("にほん"), FlatImeOp.SetSelection(12, 12)))),
+      messages,
+    )
+  }
+
+  @Test
+  fun `selection and composing region follow changed surrogate pairs within a batch`() {
+    val ime =
+      Ime(
+        text = "a😀Z",
+        windowStart = 10,
+        selection = ImeRange(12, 12),
+        composing = ImeRange(11, 12),
+      )
+
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(
+          SetComposingTextCommand("にほん", 1),
+          SetSelectionCommand(2, 3),
+          SetComposingTextCommand("😀ほ", 1),
+          SetSelectionCommand(3, 4),
+          FinishComposingTextCommand(),
+          SetComposingRegionCommand(1, 3),
+        ),
+        ime,
+      )
+
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(
+            FlatImeOp.Compose("にほん"),
+            FlatImeOp.SetSelection(12, 13),
+            FlatImeOp.Compose("😀ほ"),
+            FlatImeOp.SetSelection(12, 13),
+            FlatImeOp.CommitAsIs,
+            FlatImeOp.SetComposition(11, 12),
+          )
+        )
+      ),
+      messages,
+    )
+  }
+
+  @Test
   fun `commit text without active preedit replaces selection`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a", 1)), ime = null)
@@ -189,19 +245,94 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
-  fun `collapsed selection command normalizes to navigation delta`() {
+  fun `collapsed selection command preserves its absolute target`() {
     val ime = Ime(text = "hello", windowStart = 10, selection = ImeRange(12, 12), composing = null)
 
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(SetSelectionCommand(4, 4)), ime = ime)
 
+    assertEquals(listOf(Message.Selection(SelectionOp.SetFlat(start = 14, end = 14))), messages)
+  }
+
+  @Test
+  fun `document navigation produces one grapheme movement regardless of native offset distance`() {
+    val ime =
+      Ime(text = "a👩‍💻bc", windowStart = 10, selection = ImeRange(11, 11), composing = null)
+    val movement = NavigationOp.Move(Movement.Grapheme(Direction.Forward), false)
+
+    assertEquals(
+      listOf(Message.Navigation(movement)),
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(6, 6)),
+        ime,
+        documentNavigation = movement,
+      ),
+    )
+  }
+
+  @Test
+  fun `document navigation preserves shift direction instead of replacing ordered endpoints`() {
+    val ime = Ime(text = "ab\n\ncd", windowStart = 0, selection = ImeRange(2, 6), composing = null)
+    for (extend in listOf(true, false)) {
+      val movement = NavigationOp.Move(Movement.Grapheme(Direction.Forward), extend)
+      assertEquals(
+        listOf(Message.Navigation(movement)),
+        EditorImeCommandNormalizer.normalize(
+          listOf(SetSelectionCommand(3, 6)),
+          ime,
+          documentNavigation = movement,
+        ),
+      )
+    }
+  }
+
+  @Test
+  fun `marked and mixed edits do not become document navigation`() {
+    val movement = NavigationOp.Move(Movement.Grapheme(Direction.Backward), false)
+    val ime =
+      Ime(
+        text = "にほん",
+        windowStart = 10,
+        selection = ImeRange(13, 13),
+        composing = ImeRange(10, 13),
+      )
+    assertEquals(
+      listOf(Message.Selection(SelectionOp.SetFlat(12, 12))),
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetSelectionCommand(2, 2)),
+        ime,
+        documentNavigation = movement,
+      ),
+    )
     assertEquals(
       listOf(
-        Message.Navigation(NavigationOp.Move(Movement.Grapheme(Direction.Forward), false)),
-        Message.Navigation(NavigationOp.Move(Movement.Grapheme(Direction.Forward), false)),
+        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a"), FlatImeOp.SetSelection(0, 0)))
       ),
-      messages,
+      EditorImeCommandNormalizer.normalize(
+        listOf(CommitTextCommand("a", 1), SetSelectionCommand(0, 0)),
+        Ime(text = "", windowStart = 0, selection = ImeRange(0, 0), composing = null),
+        documentNavigation = movement,
+      ),
     )
+  }
+
+  @Test
+  fun `native caret crossing a multi code point grapheme preserves its target`() {
+    data class Case(val text: String, val fromFlat: Int, val toUtf16: Int, val toFlat: Int)
+
+    for ((text, from, to, expected) in
+      listOf(
+        Case("a👩‍💻bc", 11, 6, 14),
+        Case("a👩‍💻bc", 14, 1, 11),
+        Case("ae\u0301bc", 11, 3, 13),
+      )) {
+      val ime =
+        Ime(text = text, windowStart = 10, selection = ImeRange(from, from), composing = null)
+      assertEquals(
+        listOf(Message.Selection(SelectionOp.SetFlat(expected, expected))),
+        EditorImeCommandNormalizer.normalize(listOf(SetSelectionCommand(to, to)), ime),
+      )
+    }
   }
 
   @Test

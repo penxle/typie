@@ -117,26 +117,17 @@ internal sealed interface RecordedInputEntry {
 
   @Serializable
   @SerialName("session")
-  data class Session(
-    override val seq: Long,
-    override val t: Long,
-    val event: String,
-  ) : RecordedInputEntry
+  data class Session(override val seq: Long, override val t: Long, val event: String) :
+    RecordedInputEntry
 }
 
 @Serializable
 internal enum class RecordedBridgeDecision {
+  // Retained for recordings made before native key ownership moved to Compose.
   @SerialName("drop") Drop,
   @SerialName("replay") Replay,
   @SerialName("normalize") Normalize,
 }
-
-internal fun classifyBridgeRoute(intercepted: List<Message>?): RecordedBridgeDecision =
-  when {
-    intercepted == null -> RecordedBridgeDecision.Normalize
-    intercepted.isEmpty() -> RecordedBridgeDecision.Drop
-    else -> RecordedBridgeDecision.Replay
-  }
 
 internal fun EditCommand.describe(): String =
   when (this) {

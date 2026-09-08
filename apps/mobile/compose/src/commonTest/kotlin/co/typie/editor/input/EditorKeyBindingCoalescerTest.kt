@@ -1,8 +1,9 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.input.key.Key as ComposeKey
-import co.typie.editor.EditorKeyBindingAction
+import co.typie.editor.Editor
 import co.typie.editor.EditorLocalEditCoordinator
+import co.typie.editor.FakeFfiEditor
 import co.typie.editor.KeyBinding
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.Message
@@ -22,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
@@ -48,11 +50,11 @@ class EditorKeyBindingCoalescerTest {
     var dispatchGate: CompletableDeferred<Unit>? = null
     var dispatchFailure: Throwable? = null
     private val clipboard = FakeClipboard()
-    private val messagesByAction = mutableMapOf<EditorKeyBindingAction.Messages, List<Message>>()
+    private val editor = Editor(FakeFfiEditor(), scope, Dispatchers.Unconfined)
     private val coalescer =
       EditorKeyBindingCoalescer(
         scope = scope,
-        resolveMessages = { action, _ -> messagesByAction.getValue(action) },
+        resolveMessages = { action, clipboard -> action.messages(editor, clipboard) },
         dispatch = { messages, target ->
           onDispatch()
           dispatched += Dispatched(messages, target)
@@ -85,9 +87,8 @@ class EditorKeyBindingCoalescerTest {
           key = ComposeKey.DirectionRight,
           bringIntoViewTarget = target,
           coalescible = coalescible,
-          action = { emptyList() },
+          action = { messages },
         )
-      messagesByAction[binding.action as EditorKeyBindingAction.Messages] = messages
       return coalescer.submit(binding, clipboard, localEditContext)
     }
 
