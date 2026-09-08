@@ -226,15 +226,15 @@
         class={flex({
           alignItems: 'center',
           width: 'full',
-          paddingLeft: '50px',
+          paddingLeft: '28px',
           paddingRight: '8px',
           paddingY: '6px',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.muted',
+          color: 'text.hint',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.default' },
+          _supportHover: { color: 'text.muted' },
         })}
         disabled={query.loading}
         onclick={showMore}

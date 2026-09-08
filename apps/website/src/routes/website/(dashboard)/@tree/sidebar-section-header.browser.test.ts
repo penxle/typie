@@ -80,6 +80,20 @@ describe('sidebar section header tabs', () => {
     expect(output('toggles')).toBe('2');
   });
 
+  it('extends the collapse toggle across the empty header area', async () => {
+    await mountFixture();
+
+    const toggle = chevron();
+    expect(toggle?.getBoundingClientRect().width).toBeGreaterThan(20);
+
+    toggle?.click();
+    await tick();
+
+    expect(output('open')).toBe('false');
+    expect(output('toggles')).toBe('1');
+    expect(output('active-tab')).toBe('RECENT');
+  });
+
   it('renders the actions snippet only while the parent shows it and marks the drop target tab', async () => {
     await mountFixture();
 
