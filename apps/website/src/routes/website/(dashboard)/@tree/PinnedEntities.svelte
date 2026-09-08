@@ -189,7 +189,7 @@
 
 <ul
   bind:this={listElement}
-  class={flex({ flexDirection: 'column', flexShrink: '0', paddingX: '12px', paddingY: '4px', userSelect: 'none' })}
+  class={flex({ flexDirection: 'column', flexShrink: '0', marginX: '12px', paddingY: '4px', userSelect: 'none' })}
   aria-label="고정한 항목"
   data-drop-target="pin"
 >
@@ -215,15 +215,15 @@
         class={flex({
           alignItems: 'center',
           width: 'full',
-          paddingLeft: '50px',
+          paddingLeft: '28px',
           paddingRight: '8px',
           paddingY: '6px',
           fontSize: '14px',
           fontWeight: 'medium',
-          color: 'text.muted',
+          color: 'text.hint',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.default' },
+          _supportHover: { color: 'text.muted' },
         })}
         onclick={() => (visibleCount += PAGE_SIZE)}
         type="button"

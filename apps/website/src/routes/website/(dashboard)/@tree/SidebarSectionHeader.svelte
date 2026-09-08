@@ -124,11 +124,14 @@
 
       <button
         class={flex({
+          flexGrow: '1',
           flexShrink: '0',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
+          height: 'full',
+          minWidth: '20px',
+          paddingLeft: '4px',
           borderRadius: '4px',
-          size: '20px',
           color: 'text.muted',
           transition: 'common',
           _supportHover: { color: 'text.default' },
