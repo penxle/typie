@@ -33,6 +33,7 @@
   import { getEntityTreeElement } from './@tree/utils';
   import { getDayClock } from './day-clock.svelte';
   import Profile from './Profile.svelte';
+  import { resizeHandle } from './resize-handle';
   import { resolveSidebarNavigationDrag, resolveSidebarNavigationGeometry } from './sidebar-navigation-resize';
   import StudioMenu from './StudioMenu.svelte';
   import type { DashboardLayout_Sidebar_user$key } from '$mearie';
@@ -374,7 +375,7 @@
   };
 
   const transform = $derived.by(() => {
-    if (!app.preference.current.sidebarHidden) return 'translateX(0)';
+    if (!app.preference.current.sidebarHidden) return 'none';
     return sidebarState === 'visible' ? 'translateX(0)' : 'translateX(-100%)';
   });
 
@@ -735,16 +736,14 @@
       </div>
 
       <div
-        class={css({
+        class={css(resizeHandle.raw({ direction: 'vertical' }), {
           position: 'relative',
           flexShrink: '0',
           height: '9px',
           marginX: '12px',
-          cursor: 'row-resize',
-          touchAction: 'none',
-          userSelect: 'none',
-          '&:hover > div': { height: '2px', backgroundColor: 'border.emphasis' },
+          _after: { left: '8px', right: '8px' },
         })}
+        data-resizing={navigationClipPreview !== null || undefined}
         use:pointerCapture={{
           start: startNavigationResizer,
           move: moveNavigationResizer,
@@ -758,12 +757,11 @@
             top: '1/2',
             left: '8px',
             right: '8px',
-            height: navigationClipPreview === null ? '1px' : '2px',
+            height: '1px',
             borderRadius: 'full',
-            backgroundColor: navigationClipPreview === null ? 'border.default' : 'border.emphasis',
+            backgroundColor: 'border.default',
             pointerEvents: 'none',
             transform: 'translateY(-50%)',
-            transition: '[background-color 150ms ease, height 150ms ease]',
           })}
         ></div>
       </div>
@@ -900,7 +898,7 @@
   <ChangelogPopover />
 
   <div
-    class={css({
+    class={css(resizeHandle.raw(), {
       position: 'absolute',
       top: '0',
       right: '-4px',
@@ -908,18 +906,8 @@
       width: '8px',
       height: 'full',
       pointerEvents: sidebarState === 'hidden' && app.preference.current.sidebarHidden ? 'none' : undefined,
-      cursor: 'col-resize',
-      _hoverAfter: {
-        content: '""',
-        display: 'block',
-        borderRightRadius: '4px',
-        marginLeft: '4px',
-        height: 'full',
-        width: '2px',
-        backgroundColor: 'border.emphasis',
-        opacity: '50',
-      },
     })}
+    data-resizing={resizer !== null || undefined}
     use:pointerCapture={{ start: startResizer, move: moveResizer, end: endResizer, cancel: () => finishResizer(false) }}
   ></div>
 </div>

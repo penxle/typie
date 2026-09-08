@@ -13,6 +13,7 @@
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../../../@subscription/subscribe-modal.svelte';
+  import { resizeHandle } from '../../../resize-handle';
   import { getZenMode } from '../../../zen-mode.svelte';
   import { getPane, getPaneGroup } from '../../@pane/context.svelte';
   import DocumentPanelComment from './DocumentPanelComment.svelte';
@@ -232,27 +233,16 @@
 
     <div
       style:transform="translateX(-50%)"
-      class={css({
+      class={css(resizeHandle.raw(), {
         position: 'absolute',
         zIndex: 'editorOverlay',
         top: '0',
         left: '0',
-        display: 'flex',
-        justifyContent: 'center',
         width: '8px',
         height: 'full',
-        cursor: 'col-resize',
-        _hoverAfter: {
-          content: '""',
-          display: 'block',
-          borderRadius: '4px',
-          height: 'full',
-          width: '2px',
-          backgroundColor: 'border.emphasis',
-          opacity: '50',
-        },
       })}
       data-pane-chrome-reveal-exclusion
+      data-resizing={previewWidth !== null || undefined}
       use:pointerCapture={{
         start: (event): ResizeSession | null => {
           if (!event.isPrimary || event.button !== 0) return null;

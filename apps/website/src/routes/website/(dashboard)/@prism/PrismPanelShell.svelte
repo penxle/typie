@@ -5,6 +5,7 @@
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import { untrack } from 'svelte';
+  import { resizeHandle } from '../resize-handle';
   import { PRISM_VISIBILITY_MOTION, reducedMotion } from './lib/motion.ts';
   import { PRISM_PANEL_MAX, PRISM_PANEL_MIN } from './prism-panel.ts';
   import type { Snippet } from 'svelte';
@@ -139,27 +140,16 @@
     <div
       style:pointer-events={panelInteractive ? 'auto' : 'none'}
       style:transform="translateX(-50%)"
-      class={css({
+      class={css(resizeHandle.raw(), {
         position: 'absolute',
         top: '0',
         bottom: '0',
         left: '[-1px]',
-        display: 'flex',
-        justifyContent: 'center',
         width: '8px',
-        cursor: 'col-resize',
         zIndex: '4',
-        _hoverAfter: {
-          content: '""',
-          display: 'block',
-          borderRadius: '4px',
-          height: 'full',
-          width: '2px',
-          backgroundColor: 'border.emphasis',
-          opacity: '50',
-        },
       })}
       data-prism-panel-resize-handle
+      data-resizing={previewWidth !== null || undefined}
       use:pointerCapture={{
         start: (event): ResizeSession | null => {
           if (!event.isPrimary || event.button !== 0) return null;
