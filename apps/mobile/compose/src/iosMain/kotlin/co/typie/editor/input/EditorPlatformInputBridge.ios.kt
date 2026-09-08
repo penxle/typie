@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 
 package co.typie.editor.input
 
@@ -10,7 +10,9 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.platform.UIKitTextInputMethodRequest
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
@@ -22,22 +24,62 @@ import co.typie.editor.ffi.NavigationOp
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import platform.UIKit.UIView
 import swiftPMImport.co.typie.compose.EditorFloatingCursorBridge
 import swiftPMImport.co.typie.compose.EditorKeyboardBridge
 import swiftPMImport.co.typie.compose.EditorTextInputBridge
 
 internal actual class EditorPlatformInputBridge actual constructor() {
   private val physicalKeyGate = EditorPhysicalKeyFrameGate()
-  private val floatingCursorSession = EditorFloatingCursorSession()
 
   actual fun reset() {
     physicalKeyGate.reset()
-    floatingCursorSession.end()
   }
 
   actual fun setInputSessionActive(active: Boolean) = Unit
 
-  actual fun bindInputSession(session: PlatformTextInputSessionScope) = Unit
+  actual fun bindInputSession(
+    session: PlatformTextInputSessionScope,
+    request: PlatformTextInputMethodRequest,
+    cursor: () -> CursorMetrics?,
+    viewportTransform: () -> EditorViewportTransform,
+    dispatch: (List<Message>) -> Unit,
+  ): PlatformTextInputMethodRequest =
+    object : PlatformTextInputMethodRequest by request, UIKitTextInputMethodRequest {
+      private var attachedView: UIView? = null
+      private var uninstall: (() -> Unit)? = null
+
+      override fun onTextInputViewAttached(view: UIView) {
+        uninstall?.invoke()
+        val floatingCursorSession = EditorFloatingCursorSession()
+        val textInputGeneration = EditorTextInputBridge.installOn(view)
+        val floatingCursorGeneration =
+          EditorFloatingCursorBridge.installOn(
+            view,
+            onBegin = { floatingCursorSession.begin(cursor()) },
+            onUpdate = { dx, dy ->
+              floatingCursorSession
+                .update(dx.toFloat(), dy.toFloat(), viewportTransform())
+                ?.let(dispatch)
+            },
+            onEnd = { floatingCursorSession.end() },
+          )
+        attachedView = view
+        uninstall = {
+          EditorFloatingCursorBridge.clearHandlersForInstallWithGeneration(floatingCursorGeneration)
+          floatingCursorSession.end()
+          EditorTextInputBridge.uninstallWithGeneration(textInputGeneration)
+        }
+      }
+
+      override fun onTextInputViewDetached(view: UIView) {
+        if (attachedView !== view) return
+        attachedView = null
+        val cleanup = uninstall
+        uninstall = null
+        cleanup?.invoke()
+      }
+    }
 
   actual fun resetPlatformInputBeforeBindingDispatch() {
     EditorKeyboardBridge.endInputMethodComposition()
@@ -83,29 +125,8 @@ internal actual class EditorPlatformInputBridge actual constructor() {
   ) = Unit
 
   actual fun installSessionEffects(
-    cursor: () -> CursorMetrics?,
-    viewportTransform: () -> EditorViewportTransform,
-    dispatch: (List<Message>) -> Unit,
-    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
-  ): () -> Unit {
-    val textInputGeneration = EditorTextInputBridge.install()
-    val uninstall =
-      installFloatingCursorBridge(
-        onBegin = { floatingCursorSession.begin(cursor()) },
-        onUpdate = { dx, dy ->
-          floatingCursorSession
-            .update(dx = dx, dy = dy, transform = viewportTransform())
-            ?.let(dispatch)
-        },
-        onEnd = { floatingCursorSession.end() },
-      )
-
-    return {
-      uninstall()
-      floatingCursorSession.end()
-      EditorTextInputBridge.uninstallWithGeneration(textInputGeneration)
-    }
-  }
+    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean
+  ): () -> Unit = {}
 }
 
 private class EditorPhysicalKeyFrameGate {
@@ -138,16 +159,3 @@ private fun KeyEvent.toPhysicalKeyStroke(): PhysicalKeyStroke =
     ctrl = isCtrlPressed,
     alt = isAltPressed,
   )
-
-private fun installFloatingCursorBridge(
-  onBegin: () -> Unit,
-  onUpdate: (dx: Float, dy: Float) -> Unit,
-  onEnd: () -> Unit,
-): () -> Unit {
-  EditorFloatingCursorBridge.onBegin = onBegin
-  EditorFloatingCursorBridge.onUpdate = { dx, dy -> onUpdate(dx.toFloat(), dy.toFloat()) }
-  EditorFloatingCursorBridge.onEnd = onEnd
-  val generation = EditorFloatingCursorBridge.install()
-
-  return { EditorFloatingCursorBridge.clearHandlersForInstallWithGeneration(generation) }
-}

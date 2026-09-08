@@ -3,31 +3,30 @@ import ObjectiveC.runtime
 import UIKit
 
 @MainActor @objcMembers public final class EditorFloatingCursorBridge: NSObject {
-  public static var onBegin: (() -> Void)?
-  public static var onUpdate: ((Double, Double) -> Void)?
-  public static var onEnd: (() -> Void)?
+  private static var onBegin: (() -> Void)?
+  private static var onUpdate: ((Double, Double) -> Void)?
+  private static var onEnd: (() -> Void)?
 
   private static var activeBeginPoint: CGPoint?
   private static weak var activeResponder: AnyObject?
   private static var installGeneration = 0
   private static var installedClasses: [ObjectIdentifier: InstalledClass] = [:]
 
-  public static func install() -> Int {
+  public static func install(
+    on view: UIView,
+    onBegin: @escaping () -> Void,
+    onUpdate: @escaping (Double, Double) -> Void,
+    onEnd: @escaping () -> Void
+  ) -> Int {
     installGeneration += 1
-    let generation = installGeneration
-    installOnCurrentFirstResponder(generation: generation)
-
-    DispatchQueue.main.async {
-      installOnCurrentFirstResponder(generation: generation)
+    clearActiveHandlers()
+    self.onBegin = onBegin
+    self.onUpdate = onUpdate
+    self.onEnd = onEnd
+    if let cls = object_getClass(view), installIfNeeded(on: cls) {
+      activeResponder = view
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-      installOnCurrentFirstResponder(generation: generation)
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
-      installOnCurrentFirstResponder(generation: generation)
-    }
-
-    return generation
+    return installGeneration
   }
 
   public static func clearHandlersForInstall(generation: Int) {
@@ -44,23 +43,6 @@ import UIKit
     onEnd = nil
     activeBeginPoint = nil
     activeResponder = nil
-  }
-
-  private static func installOnCurrentFirstResponder(generation: Int) {
-    guard generation == installGeneration else {
-      return
-    }
-
-    guard
-      let responder = UIApplication.shared.activeWindow?.typieFirstResponder(),
-      let cls: AnyClass = object_getClass(responder)
-    else {
-      return
-    }
-
-    if installIfNeeded(on: cls) {
-      activeResponder = responder
-    }
   }
 
   private static func installIfNeeded(on cls: AnyClass) -> Bool {
@@ -138,12 +120,13 @@ import UIKit
     selector: Selector,
     method: Method,
     original: IMP,
-    handler: @escaping (
-      _ object: AnyObject,
-      _ selector: Selector,
-      _ point: CGPoint,
-      _ original: @escaping PointMethod
-    ) -> Void
+    handler:
+      @escaping (
+        _ object: AnyObject,
+        _ selector: Selector,
+        _ point: CGPoint,
+        _ original: @escaping PointMethod
+      ) -> Void
   ) {
     let originalMethod = unsafeBitCast(original, to: PointMethod.self)
     let block: @convention(block) (AnyObject, CGPoint) -> Void = {
@@ -164,11 +147,12 @@ import UIKit
     selector: Selector,
     method: Method,
     original: IMP,
-    handler: @escaping (
-      _ object: AnyObject,
-      _ selector: Selector,
-      _ original: @escaping VoidMethod
-    ) -> Void
+    handler:
+      @escaping (
+        _ object: AnyObject,
+        _ selector: Selector,
+        _ original: @escaping VoidMethod
+      ) -> Void
   ) {
     let originalMethod = unsafeBitCast(original, to: VoidMethod.self)
     let block: @convention(block) (AnyObject) -> Void = { object in
@@ -194,27 +178,11 @@ import UIKit
     let end: IMP
   }
 
-  private typealias PointMethod = @convention(c) (
-    AnyObject,
-    Selector,
-    CGPoint
-  ) -> Void
+  private typealias PointMethod =
+    @convention(c) (
+      AnyObject,
+      Selector,
+      CGPoint
+    ) -> Void
   private typealias VoidMethod = @convention(c) (AnyObject, Selector) -> Void
-}
-
-private extension UIView {
-  @MainActor
-  func typieFirstResponder() -> UIResponder? {
-    if isFirstResponder {
-      return self
-    }
-
-    for subview in subviews {
-      if let responder = subview.typieFirstResponder() {
-        return responder
-      }
-    }
-
-    return nil
-  }
 }

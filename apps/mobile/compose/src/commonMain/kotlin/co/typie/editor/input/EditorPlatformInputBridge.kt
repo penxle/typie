@@ -2,6 +2,7 @@ package co.typie.editor.input
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
@@ -16,7 +17,13 @@ internal expect class EditorPlatformInputBridge() {
 
   fun setInputSessionActive(active: Boolean)
 
-  fun bindInputSession(session: PlatformTextInputSessionScope)
+  fun bindInputSession(
+    session: PlatformTextInputSessionScope,
+    request: PlatformTextInputMethodRequest,
+    cursor: () -> CursorMetrics?,
+    viewportTransform: () -> EditorViewportTransform,
+    dispatch: (List<Message>) -> Unit,
+  ): PlatformTextInputMethodRequest
 
   fun resetPlatformInputBeforeBindingDispatch()
 
@@ -33,9 +40,6 @@ internal expect class EditorPlatformInputBridge() {
   fun onImeMessagesApplied(messages: List<Message>, preState: EditorState, postState: EditorState)
 
   fun installSessionEffects(
-    cursor: () -> CursorMetrics?,
-    viewportTransform: () -> EditorViewportTransform,
-    dispatch: (List<Message>) -> Unit,
-    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
+    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean
   ): () -> Unit
 }
