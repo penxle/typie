@@ -10,6 +10,7 @@ internal enum class EditorInteractionMode {
   LongPressSelecting,
   LongPressWordSelecting,
   DoubleTapSelecting,
+  MouseSelecting,
   DndLocal,
   DndExternal,
 }
@@ -29,7 +30,8 @@ internal val EditorInteractionMode.isSelecting: Boolean
       this == EditorInteractionMode.TableCellHandleDragging ||
       this == EditorInteractionMode.LongPressSelecting ||
       this == EditorInteractionMode.LongPressWordSelecting ||
-      this == EditorInteractionMode.DoubleTapSelecting
+      this == EditorInteractionMode.DoubleTapSelecting ||
+      this == EditorInteractionMode.MouseSelecting
 
 internal val EditorInteractionMode.isLongPressing: Boolean
   get() =
@@ -67,6 +69,10 @@ internal sealed interface EditorInteractionEvent {
   data object DoubleTapDragStart : EditorInteractionEvent
 
   data object DoubleTapDragEnd : EditorInteractionEvent
+
+  data object MouseSelectionStart : EditorInteractionEvent
+
+  data object MouseSelectionEnd : EditorInteractionEvent
 
   data object TableHandleDragStart : EditorInteractionEvent
 
@@ -110,6 +116,8 @@ internal fun EditorInteractionMode.canApply(event: EditorInteractionEvent): Bool
       this == EditorInteractionMode.SelectionHandleDragging
     EditorInteractionEvent.DoubleTapDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.DoubleTapDragEnd -> this == EditorInteractionMode.DoubleTapSelecting
+    EditorInteractionEvent.MouseSelectionStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.MouseSelectionEnd -> this == EditorInteractionMode.MouseSelecting
     EditorInteractionEvent.TableHandleDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.TableHandleDragEnd ->
       this == EditorInteractionMode.TableCellHandleDragging
@@ -193,6 +201,9 @@ private fun reduceSelection(
     event == EditorInteractionEvent.LongPressWordEnd &&
       mode == EditorInteractionMode.LongPressWordSelecting -> EditorInteractionMode.Idle
     event == EditorInteractionEvent.DoubleTapDragStart -> EditorInteractionMode.DoubleTapSelecting
+    event == EditorInteractionEvent.MouseSelectionStart -> EditorInteractionMode.MouseSelecting
+    event == EditorInteractionEvent.MouseSelectionEnd &&
+      mode == EditorInteractionMode.MouseSelecting -> EditorInteractionMode.Idle
     event == EditorInteractionEvent.DoubleTapDragEnd &&
       mode == EditorInteractionMode.DoubleTapSelecting -> EditorInteractionMode.Idle
     else -> mode

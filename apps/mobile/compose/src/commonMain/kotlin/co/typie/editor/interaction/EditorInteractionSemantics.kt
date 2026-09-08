@@ -36,12 +36,22 @@ internal class EditorInteractionSemantics(
   val selectionHaptic: EditorSelectionHapticSemantic =
     EditorSelectionHapticSemantic(effects = effects),
 ) {
-  fun onEditorStateChanged(editor: Editor, state: EditorState, mode: EditorInteractionMode) {
+  fun onEditorStateChanged(
+    editor: Editor,
+    state: EditorState,
+    mode: EditorInteractionMode,
+    directTouchInteraction: Boolean = true,
+  ) {
     contextMenu.onEditorStateChanged(editor = editor, state = state)
-    selectionHaptic.onEditorStateChanged(editor = editor, state = state, mode = mode)
+    if (directTouchInteraction) {
+      selectionHaptic.onEditorStateChanged(editor = editor, state = state, mode = mode)
+    } else {
+      selectionHaptic.reset()
+    }
   }
 
   fun reset() {
+    pointSelection.cancelPendingSelection()
     contextMenu.reset()
     selectionHandle.reset()
     selectionExpansion.reset()

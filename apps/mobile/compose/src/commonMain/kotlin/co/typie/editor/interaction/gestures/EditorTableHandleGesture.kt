@@ -13,6 +13,7 @@ import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.resolveActiveTableCellSelection
 import co.typie.editor.interaction.sessions.EditorTableHandleDragContext
 import co.typie.editor.interaction.sessions.EditorTableHandleDragSession
+import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorTableHandleGesture(
   private val contextProvider: () -> EditorGestureContext,
@@ -168,7 +169,8 @@ internal class EditorTableHandleGesture(
       session.selectionPosition(touchPosition = position)
         ?: return EditorTableHandleDragUpdate.NotConsumed
 
-    context.semantics.magnifier.show(selectionPosition)
+    if (context.pointerType.isDirectTouchInteraction())
+      context.semantics.magnifier.show(selectionPosition)
     context.semantics.edgeAutoScroll.trackSelectionHandle(
       edgePosition = position,
       dispatchPosition = selectionPosition,
@@ -216,9 +218,10 @@ internal class EditorTableHandleGesture(
       context.reduceMode(EditorInteractionEvent.TableHandleDragEnd)
     }
     if (wasDragging) {
-      context.semantics.selectionHandle.requestContextMenuAfterSelection(
+      context.semantics.selectionHandle.finishSelection(
         editor = context.editor,
         terminalExtension = terminalExtension,
+        showContextMenu = context.pointerType.isDirectTouchInteraction(),
       )
     }
     return wasActive

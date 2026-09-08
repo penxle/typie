@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Selection
 
@@ -13,10 +14,14 @@ internal class EditorContextMenuState {
     private set
 
   private var shownForSelection: Selection? = null
+  var pointerPosition: PagePoint? by mutableStateOf(null)
+    private set
+
   private var pendingPublicationTarget: PendingPublicationTarget? = null
 
   fun show(state: EditorState) {
     pendingPublicationTarget = null
+    pointerPosition = null
     shownForSelection = state.selection
     visible = true
   }
@@ -30,6 +35,7 @@ internal class EditorContextMenuState {
       pendingPublicationTarget = null
     }
     shownForSelection = null
+    pointerPosition = null
     visible = false
   }
 
@@ -43,14 +49,23 @@ internal class EditorContextMenuState {
 
   fun isVisibleFor(state: EditorState): Boolean = visible && state.selection == shownForSelection
 
-  fun requestShowForAppliedSelection(editor: Editor, state: EditorState) {
+  fun requestShowForAppliedSelection(
+    editor: Editor,
+    state: EditorState,
+    pointerPosition: PagePoint? = null,
+  ) {
     val selection = state.selection
-    if (selection == null || selection.isCollapsed()) {
+    if (selection == null || (selection.isCollapsed() && pointerPosition == null)) {
       pendingPublicationTarget = null
       return
     }
     pendingPublicationTarget =
-      PendingPublicationTarget(editor = editor, version = state.version, selection = selection)
+      PendingPublicationTarget(
+        editor = editor,
+        version = state.version,
+        selection = selection,
+        pointerPosition = pointerPosition,
+      )
     onEditorStateChanged(editor = editor, state = editor.publishedState)
   }
 
@@ -69,8 +84,12 @@ internal class EditorContextMenuState {
       return
     }
     pendingPublicationTarget = null
-    if (state.selection == target.selection && !state.selection.isCollapsed()) {
+    if (
+      state.selection == target.selection &&
+        (!state.selection.isCollapsed() || target.pointerPosition != null)
+    ) {
       show(state)
+      pointerPosition = target.pointerPosition
     }
   }
 
@@ -82,5 +101,6 @@ internal class EditorContextMenuState {
     val editor: Editor,
     val version: Long,
     val selection: Selection,
+    val pointerPosition: PagePoint?,
   )
 }

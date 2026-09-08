@@ -1,5 +1,6 @@
 package co.typie.editor.interaction
 
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.Editor
 import co.typie.platform.Platform
 
@@ -9,6 +10,7 @@ internal interface EditorGestureContext {
   val effects: EditorInteractionEffects
   val geometry: EditorInteractionGeometry
   val mode: EditorInteractionMode
+  val pointerType: PointerType
   val isFocused: Boolean
   val readOnly: Boolean
   val editing: Boolean

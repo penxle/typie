@@ -10,6 +10,7 @@ import co.typie.editor.interaction.EditorGestureContext
 import co.typie.ext.EdgeAutoScrollMaximumFrameDeltaNanos
 import co.typie.ext.EdgeAutoScrollThresholdDp
 import co.typie.ext.computeEdgeAutoScrollPlan
+import co.typie.ui.input.isDirectTouchInteraction
 import kotlin.math.abs
 import kotlin.math.sign
 
@@ -25,7 +26,7 @@ internal class EditorEdgeAutoScrollSemantic {
     baseSelection: Selection? = null,
     context: EditorGestureContext,
   ) {
-    track(
+    trackTouchSelection(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
@@ -46,7 +47,7 @@ internal class EditorEdgeAutoScrollSemantic {
     context: EditorGestureContext,
     dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
   ) {
-    track(
+    trackTouchSelection(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
@@ -59,7 +60,7 @@ internal class EditorEdgeAutoScrollSemantic {
     dispatchPosition: Offset,
     context: EditorGestureContext,
   ) {
-    track(
+    trackTouchSelection(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
@@ -79,7 +80,7 @@ internal class EditorEdgeAutoScrollSemantic {
     dispatchPosition: Offset,
     context: EditorGestureContext,
   ) {
-    track(
+    trackTouchSelection(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
@@ -117,7 +118,21 @@ internal class EditorEdgeAutoScrollSemantic {
     }
   }
 
-  private fun track(
+  private fun trackTouchSelection(
+    edgePosition: Offset,
+    dispatchPosition: Offset,
+    context: EditorGestureContext,
+    dispatch: (EditorEdgeAutoScrollDispatch) -> Boolean,
+  ) {
+    trackSelection(edgePosition, dispatchPosition, context) { scrolled ->
+      dispatch(scrolled).also { applied ->
+        if (applied && context.pointerType.isDirectTouchInteraction())
+          context.semantics.magnifier.show(scrolled.dispatchPosition)
+      }
+    }
+  }
+
+  fun trackSelection(
     edgePosition: Offset,
     dispatchPosition: Offset,
     context: EditorGestureContext,
@@ -230,17 +245,13 @@ internal class EditorEdgeAutoScrollSemantic {
       return
     }
     lastDispatchedPoint = point
-    if (
-      dispatch(
-        EditorEdgeAutoScrollDispatch(
-          edgePosition = edgePosition,
-          dispatchPosition = position,
-          point = point,
-        )
+    dispatch(
+      EditorEdgeAutoScrollDispatch(
+        edgePosition = edgePosition,
+        dispatchPosition = position,
+        point = point,
       )
-    ) {
-      context.semantics.magnifier.show(position)
-    }
+    )
   }
 
   private fun planFor(edgePosition: Offset, viewport: EditorEdgeAutoScrollViewport) =

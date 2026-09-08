@@ -14,21 +14,26 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.node.SemanticsModifierNode
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.node.requireLayoutCoordinates
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.scrollByOffset
 import androidx.compose.ui.unit.IntSize
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.interaction.gestures.EditorMouseButton
 import co.typie.editor.viewport.normalizeEditorViewportWheelZoomDelta
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.ScrollGestureLockState
 import co.typie.platform.isDirectMousePress
-import co.typie.platform.isTouchDragPointer
 import kotlin.math.abs
 import kotlin.math.min
 import kotlinx.coroutines.Job
@@ -46,6 +51,7 @@ private enum class EditorDirectPointerAdmission {
 private data class EditorDirectPointer(
   val type: PointerType,
   val admission: EditorDirectPointerAdmission,
+  val button: EditorMouseButton,
 )
 
 internal fun Modifier.editorInteractions(
@@ -154,6 +160,7 @@ private class EditorInteractionsNode(
 ) :
   Modifier.Node(),
   PointerInputModifierNode,
+  CompositionLocalConsumerModifierNode,
   SemanticsModifierNode,
   EditorScreenPointerListener,
   EditorPlatformIndirectScaleOwner {
@@ -243,6 +250,10 @@ private class EditorInteractionsNode(
       cancelInteraction(clearSuppression = true)
       return
     }
+    interactionController.updateMouseConfiguration(
+      doubleClickTimeoutMillis = currentValueOf(LocalViewConfiguration).doubleTapTimeoutMillis,
+      dragSlopPx = 5f * density,
+    )
     interactionController.updateTapSlop(tapSlopPx = EditorTapSlopDp * density)
     interactionController.updateColumnResizeSlop(
       dragSlopPx = min(touchSlop, EditorTapSlopDp * density)
@@ -387,12 +398,18 @@ private class EditorInteractionsNode(
           } else {
             EditorDirectPointerAdmission.HeaderViewportOnly
           }
-        pointers[change.id.value] = EditorDirectPointer(type = change.type, admission = admission)
-        if (
-          physicalDragLockHandle == null &&
-            change.type == PointerType.Mouse &&
-            change.type.isTouchDragPointer()
-        ) {
+        pointers[change.id.value] =
+          EditorDirectPointer(
+            type = change.type,
+            admission = admission,
+            button =
+              when {
+                pointerEvent.buttons.isPrimaryPressed -> EditorMouseButton.Primary
+                pointerEvent.buttons.isSecondaryPressed -> EditorMouseButton.Secondary
+                else -> EditorMouseButton.Other
+              },
+          )
+        if (physicalDragLockHandle == null && change.type == PointerType.Mouse) {
           physicalDragLockHandle = scrollGestureLockState.acquire()
         }
       }
@@ -458,8 +475,9 @@ private class EditorInteractionsNode(
             position = editorPosition,
             tapEnabled = tapEnabled,
             inputModifiers = pointerEvent.inputModifiers(),
+            button = pointer.button,
             positionInRoot = rootPosition,
-            touchPanDriver = if (change.type.isTouchDragPointer()) scrollDriver else null,
+            touchPanDriver = if (change.type == PointerType.Touch) scrollDriver else null,
           )
         ) {
           change.consume()
@@ -468,7 +486,10 @@ private class EditorInteractionsNode(
 
     pointerEvent.changes
       .filter { change ->
-        change.pressed && change.previousPressed && change.id.value in singlePointerStreams
+        change.pressed &&
+          change.previousPressed &&
+          change.id.value in singlePointerStreams &&
+          pointerEvent.type != PointerEventType.Release
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
@@ -492,7 +513,15 @@ private class EditorInteractionsNode(
 
     pointerEvent.changes
       .filter { change ->
-        change.changedToUpIgnoreConsumed() && change.id.value in singlePointerStreams
+        change.id.value in singlePointerStreams &&
+          (change.changedToUpIgnoreConsumed() ||
+            (change.type == PointerType.Mouse &&
+              pointerEvent.type == PointerEventType.Release &&
+              when (pointers[change.id.value]?.button) {
+                EditorMouseButton.Primary -> !pointerEvent.buttons.isPrimaryPressed
+                EditorMouseButton.Secondary -> !pointerEvent.buttons.isSecondaryPressed
+                else -> !change.pressed
+              }))
       }
       .forEach { change ->
         val rootPosition = positionInRoot(change.position)
@@ -551,9 +580,7 @@ private class EditorInteractionsNode(
   }
 
   private fun hasPhysicalDragPointer(): Boolean =
-    pointers.values.any { pointer ->
-      pointer.type == PointerType.Mouse && pointer.type.isTouchDragPointer()
-    }
+    pointers.values.any { pointer -> pointer.type == PointerType.Mouse }
 
   private fun cancelAndSuppress(pointerEvent: PointerEvent) {
     physicalSequenceYieldedToIndirectInput = false

@@ -46,17 +46,21 @@ import co.typie.editor.ffi.TableOverlayColumn
 import co.typie.editor.ffi.TableOverlayRow
 import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
+import co.typie.editor.interaction.gestures.EditorMouseButton
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.platform.Platform
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,6 +81,7 @@ private fun EditorInteractionController.onPointerDown(
   positionInRoot: Offset = requireNotNull(position),
   touchPanDriver: EditorPanGestureDriver? = null,
   type: PointerType = PointerType.Touch,
+  button: EditorMouseButton = EditorMouseButton.Primary,
 ): Boolean =
   onPointerDown(
     change =
@@ -90,6 +95,7 @@ private fun EditorInteractionController.onPointerDown(
     position = position,
     tapEnabled = tapEnabled,
     inputModifiers = inputModifiers,
+    button = button,
     positionInRoot = positionInRoot,
     touchPanDriver = touchPanDriver,
   )
@@ -173,6 +179,406 @@ private fun EditorInteractionController.presentAppliedState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
+  @Test
+  fun `mouse click supersedes touch selection waiting to launch or enter the editor`() = runTest {
+    for (start in listOf(CoroutineStart.DEFAULT, CoroutineStart.UNDISPATCHED)) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val effects =
+        object : EditorInteractionEffects by host {
+          override fun launchInteraction(block: suspend () -> Unit) {
+            launch(start = start) { block() }
+          }
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = effects,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.onPointerDown(1L, Offset(10f, 20f), 0L)
+      controller.onPointerUp(1L, Offset(10f, 20f), 10L)
+      controller.onPointerDown(2L, Offset(80f, 20f), 20L, type = PointerType.Mouse)
+      controller.onPointerUp(2L, Offset(80f, 20f), 30L)
+      runCurrent()
+      val selections = fake.enqueued.filterIsInstance<Message.Selection>().map { it.op }
+      controller.cancel()
+      assertEquals(listOf(SelectionOp.SetAt(0, 80f, 20f)), selections, "start=$start")
+    }
+  }
+
+  @Test
+  fun `secondary click preserves selection despite a pending touch cursor move`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.selection =
+      Selection(Position("text", 0, Affinity.Downstream), Position("text", 4, Affinity.Downstream))
+    fixture.fake.selectionHitRectsProvider = { listOf(PageRect(0, Rect(0f, 0f, 50f, 50f))) }
+    fixture.fake.publishSnapshot(fixture.editor)
+    fixture.controller.onPointerDown(2L, Offset(80f, 20f), 0L)
+    fixture.controller.onPointerUp(2L, Offset(80f, 20f), 10L)
+    fixture.down(time = 20L, button = EditorMouseButton.Secondary)
+    runCurrent()
+    fixture.controller.presentAppliedState(fixture.editor)
+    assertEquals(listOf(SelectionOp.Set(fixture.selection)), fixture.selections())
+    assertTrue(fixture.host.uiState.contextMenu.visible)
+    fixture.controller.cancel()
+  }
+
+  @Test
+  fun `secondary click preserves selection after a touch command has entered the editor queue`() =
+    runTest {
+      val selection =
+        Selection(
+          Position("text", 0, Affinity.Downstream),
+          Position("text", 4, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionHitRectsProvider = { listOf(PageRect(0, Rect(0f, 0f, 50f, 50f))) },
+        )
+      val queued = ArrayDeque<Runnable>()
+      val dispatcher =
+        object : CoroutineDispatcher() {
+          override fun dispatch(context: CoroutineContext, block: Runnable) {
+            queued.addLast(block)
+          }
+        }
+      val editor = Editor(fake, this, dispatcher)
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val effects =
+        object : EditorInteractionEffects by host {
+          override fun launchInteraction(block: suspend () -> Unit) {
+            launch(start = CoroutineStart.UNDISPATCHED) { block() }
+          }
+        }
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = effects,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.onPointerDown(1L, Offset(80f, 20f), 0L)
+      controller.onPointerUp(1L, Offset(80f, 20f), 10L)
+      // Admit the touch command, but leave its scheduled tick waiting behind the next UI event.
+      queued.removeFirst().run()
+      assertEquals(SelectionOp.SetAt(0, 80f, 20f), (fake.enqueued.last() as Message.Selection).op)
+      controller.onPointerDown(
+        2L,
+        Offset(10f, 20f),
+        20L,
+        type = PointerType.Mouse,
+        button = EditorMouseButton.Secondary,
+      )
+      while (queued.isNotEmpty()) queued.removeFirst().run()
+      runCurrent()
+      controller.cancel()
+      assertEquals(SelectionOp.Set(selection), (fake.enqueued.last() as Message.Selection).op)
+    }
+
+  @Test
+  fun `second pointer cancels pending and active mouse table handle drags`() = runTest {
+    for (startDrag in listOf(false, true)) {
+      val selection =
+        Selection(
+          Position("cell-text", 0, Affinity.Downstream),
+          Position("cell-text", 0, Affinity.Downstream),
+        )
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          tableOverlaysProvider = {
+            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+      controller.updateTapSlop(8f)
+      controller.onPointerDown(1L, Offset(60f, 60f), 0L, type = PointerType.Mouse)
+      if (startDrag) {
+        controller.onPointerMove(1L, Offset(100f, 90f), 20L)
+        assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+      }
+      val beforeTouch = fake.enqueued.filterIsInstance<Message.Selection>().toList()
+      controller.onPointerDown(2L, Offset(200f, 200f), 30L)
+      controller.onPointerMove(2L, Offset(220f, 210f), 40L)
+      controller.onPointerUp(2L, Offset(220f, 210f), 50L)
+      controller.onPointerMove(1L, Offset(120f, 100f), 60L)
+      controller.onPointerUp(1L, Offset(120f, 100f), 70L)
+      runCurrent()
+      val afterTouch = fake.enqueued.filterIsInstance<Message.Selection>().toList()
+      controller.cancel()
+      assertEquals(beforeTouch, afterTouch, "startDrag=$startDrag")
+      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+    }
+  }
+
+  @Test
+  fun `mouse moves coalesce per frame and release flushes the terminal point`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.down()
+    fixture.controller.onPointerMove(1L, Offset(40f, 20f), 10L)
+    fixture.controller.onPointerMove(1L, Offset(60f, 20f), 20L)
+    assertTrue(fixture.selections().filterIsInstance<SelectionOp.ExtendTo>().isEmpty())
+    runCurrent()
+    fixture.host.sendFrame()
+    runCurrent()
+    assertEquals(
+      listOf(60f),
+      fixture.selections().filterIsInstance<SelectionOp.ExtendTo>().map { it.headX },
+    )
+    fixture.controller.onPointerMove(1L, Offset(80f, 20f), 30L)
+    runCurrent()
+    fixture.controller.onPointerUp(1L, Offset(90f, 20f), 40L)
+    fixture.host.sendFrame()
+    runCurrent()
+    assertEquals(
+      listOf(60f, 90f),
+      fixture.selections().filterIsInstance<SelectionOp.ExtendTo>().map { it.headX },
+    )
+  }
+
+  @Test
+  fun `mouse edge auto scroll extends selection without a magnifier and stops on release`() =
+    runTest {
+      val fixture = MouseFixture(this)
+      fixture.host.edgeAutoScrollViewport =
+        testEdgeAutoScrollViewport(ComposeRect(0f, 0f, 100f, 100f))
+      fixture.host.edgeAutoScrollConsumedDelta = Offset(0f, 6f)
+      fixture.down()
+      fixture.controller.onPointerMove(1L, Offset(40f, 110f), 10L)
+      runCurrent()
+      repeat(4) {
+        fixture.host.sendFrame()
+        runCurrent()
+      }
+      assertTrue(fixture.host.edgeAutoScrollDispatchCount > 0)
+      assertTrue(fixture.selections().filterIsInstance<SelectionOp.ExtendTo>().size > 1)
+      assertNull(fixture.controller.magnifierPosition)
+      fixture.controller.onPointerUp(1L, Offset(40f, 110f), 50L)
+      val completed = fixture.selections()
+      repeat(2) {
+        fixture.host.sendFrame()
+        runCurrent()
+      }
+      assertEquals(completed, fixture.selections())
+    }
+
+  @Test
+  fun `mouse drag keeps its initial anchor and cancellation stops further selection`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.down()
+    fixture.controller.onPointerMove(1L, Offset(70f, 20f), 30L)
+    runCurrent()
+    fixture.host.sendFrame()
+    runCurrent()
+    fixture.controller.onPointerMove(1L, Offset(10f, 20f), 50L)
+    runCurrent()
+    fixture.host.sendFrame()
+    runCurrent()
+    val extensions = fixture.selections().filterIsInstance<SelectionOp.ExtendTo>()
+    assertEquals(listOf(70f, 10f), extensions.map { it.headX })
+    assertTrue(
+      extensions.all {
+        it.anchor == Position("text", 2, Affinity.Downstream) &&
+          it.allowCollapse &&
+          it.baseSelection == null
+      }
+    )
+    assertFalse(fixture.controller.interactionMode.allowsViewportScrollReconcile)
+    assertNull(fixture.controller.magnifierPosition)
+    fixture.controller.cancel()
+    val completed = fixture.selections()
+    fixture.controller.onPointerMove(1L, Offset(90f, 20f), 70L)
+    assertEquals(completed, fixture.selections())
+    assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+  }
+
+  @Test
+  fun `shift click and drag preserve the original selection anchor`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.selection =
+      Selection(Position("text", 1, Affinity.Downstream), Position("text", 7, Affinity.Downstream))
+    fixture.fake.applySnapshot(fixture.editor)
+    fixture.down(modifiers = InputModifiers(shift = true))
+    fixture.controller.onPointerMove(1L, Offset(80f, 20f), 30L)
+    runCurrent()
+    fixture.host.sendFrame()
+    runCurrent()
+    val extensions = fixture.selections().filterIsInstance<SelectionOp.ExtendTo>()
+    assertEquals(2, extensions.size)
+    assertTrue(
+      extensions.all {
+        it.anchor == Position("text", 1, Affinity.Downstream) &&
+          it.baseSelection == null &&
+          it.allowCollapse
+      }
+    )
+    fixture.controller.onPointerUp(1L, Offset(80f, 20f), 40L)
+    assertFalse(fixture.host.uiState.contextMenu.visible)
+  }
+
+  @Test
+  fun `mouse double and triple click select units and drag retains the selected unit`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.down()
+    fixture.controller.onPointerUp(1L, Offset(10f, 20f), 10L)
+    fixture.selection =
+      Selection(Position("text", 0, Affinity.Downstream), Position("text", 4, Affinity.Downstream))
+    fixture.down(time = 100L)
+    assertEquals(
+      SelectionPointUnit.Word,
+      (fixture.selections().last() as SelectionOp.SelectUnitAt).unit,
+    )
+    fixture.controller.onPointerUp(1L, Offset(10f, 20f), 110L)
+    fixture.down(time = 200L)
+    assertEquals(
+      SelectionPointUnit.Paragraph,
+      (fixture.selections().last() as SelectionOp.SelectUnitAt).unit,
+    )
+    fixture.controller.onPointerMove(1L, Offset(70f, 20f), 220L)
+    runCurrent()
+    fixture.host.sendFrame()
+    runCurrent()
+    val extension = fixture.selections().last() as SelectionOp.ExtendTo
+    assertEquals(fixture.selection, extension.baseSelection)
+    assertFalse(extension.allowCollapse)
+    fixture.controller.onPointerUp(1L, Offset(70f, 20f), 230L)
+    fixture.down(time = 250L)
+    assertTrue(fixture.selections().last() is SelectionOp.SetAt)
+    fixture.controller.cancel()
+  }
+
+  @Test
+  fun `secondary click preserves a hit selection and otherwise opens at the new cursor after publication`() =
+    runTest {
+      val fixture = MouseFixture(this)
+      fixture.selection =
+        Selection(
+          Position("text", 0, Affinity.Downstream),
+          Position("text", 4, Affinity.Downstream),
+        )
+      fixture.fake.selectionHitRectsProvider = { listOf(PageRect(0, Rect(0f, 0f, 50f, 50f))) }
+      fixture.fake.publishSnapshot(fixture.editor)
+      fixture.fake.selectionHitRectsProvider = { listOf(PageRect(0, Rect(100f, 0f, 50f, 50f))) }
+      fixture.fake.applySnapshot(fixture.editor)
+      fixture.down(button = EditorMouseButton.Secondary)
+      assertEquals(listOf(SelectionOp.Set(fixture.selection)), fixture.selections())
+      fixture.controller.presentAppliedState(fixture.editor)
+      assertTrue(fixture.host.uiState.contextMenu.visible)
+      assertEquals(PagePoint(0, 10f, 20f), fixture.host.uiState.contextMenu.pointerPosition)
+      fixture.host.uiState.contextMenu.hide()
+      fixture.controller.onPointerDown(
+        1L,
+        Offset(80f, 20f),
+        100L,
+        type = PointerType.Mouse,
+        button = EditorMouseButton.Secondary,
+      )
+      assertEquals(SelectionOp.SetAt(0, 80f, 20f), fixture.selections().last())
+      assertFalse(fixture.host.uiState.contextMenu.visible)
+      fixture.controller.presentAppliedState(fixture.editor)
+      assertTrue(fixture.host.uiState.contextMenu.visible)
+      assertEquals(PagePoint(0, 80f, 20f), fixture.host.uiState.contextMenu.pointerPosition)
+      assertEquals(0, fixture.host.softwareKeyboardRequestCount)
+    }
+
+  @Test
+  fun `mouse range selection works in read only documents without requesting editing focus`() =
+    runTest {
+      val fixture = MouseFixture(this, readOnly = true)
+      fixture.down()
+      fixture.controller.onPointerMove(1L, Offset(70f, 20f), 30L)
+      fixture.controller.onPointerUp(1L, Offset(70f, 20f), 40L)
+      assertTrue(fixture.selections().first() is SelectionOp.SetAt)
+      assertTrue(fixture.selections().last() is SelectionOp.ExtendTo)
+      assertFalse(fixture.host.focused)
+      assertNull(fixture.host.scheduledLongPressDispatchAtMillis)
+    }
+
+  private class MouseFixture(scope: TestScope, readOnly: Boolean = false) {
+    var selection =
+      Selection(Position("text", 2, Affinity.Downstream), Position("text", 2, Affinity.Downstream))
+    val fake =
+      FakeFfiEditor(
+        selectionProvider = { selection },
+        onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+      )
+    val editor = Editor(fake, scope, StandardTestDispatcher(scope.testScheduler))
+    val host = TestHost(scope)
+    val controller =
+      EditorInteractionController(
+        editorProvider = { editor },
+        effects = host,
+        geometry = host,
+        uiStateProvider = { host.uiState },
+        readOnlyProvider = { readOnly },
+      )
+
+    fun down(
+      time: Long = 0L,
+      modifiers: InputModifiers = InputModifiers(),
+      button: EditorMouseButton = EditorMouseButton.Primary,
+    ) {
+      controller.onPointerDown(
+        1L,
+        Offset(10f, 20f),
+        time,
+        inputModifiers = modifiers,
+        type = PointerType.Mouse,
+        button = button,
+      )
+    }
+
+    fun selections() = fake.enqueued.filterIsInstance<Message.Selection>().map { it.op }
+  }
+
+  @Test
+  fun `mouse press places the cursor without touch timers or software keyboard`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = Offset(10f, 20f),
+        nowMillis = 0L,
+        type = PointerType.Mouse,
+      )
+      runCurrent()
+
+      assertEquals(
+        listOf(Message.Selection(SelectionOp.SetAt(page = 0, x = 10f, y = 20f))),
+        fake.enqueued.filterIsInstance<Message.Selection>(),
+      )
+      assertNull(host.scheduledTapDispatchAtMillis)
+      assertNull(host.scheduledLongPressDispatchAtMillis)
+      assertEquals(0, host.softwareKeyboardRequestCount)
+      assertTrue(host.focused)
+      controller.cancel()
+    }
+
   @Test
   fun `direct pointer type controls touch selection presentation`() =
     runTest(StandardTestDispatcher()) {
@@ -1971,6 +2377,7 @@ class EditorInteractionControllerTest {
         )
       val context =
         object : EditorGestureContext {
+          override val pointerType = PointerType.Touch
           override val editor = testEditor
           override val semantics = semantics
           override val effects = host
@@ -2273,12 +2680,16 @@ class EditorInteractionControllerTest {
         controller.onPointerMove(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 20L)
 
         if (type == PointerType.Mouse) {
+          runCurrent()
+          host.sendFrame()
+          runCurrent()
           assertTrue(controller.interactionMode != EditorInteractionMode.SelectionHandleDragging)
-          assertTrue(
-            fake.enqueued.filterIsInstance<Message.Selection>().none {
-              it.op is SelectionOp.ExtendTo
-            }
-          )
+          val extension =
+            fake.enqueued.filterIsInstance<Message.Selection>().last().op as SelectionOp.ExtendTo
+          assertEquals(52f, extension.headX)
+          assertEquals(50f, extension.headY)
+          assertTrue(extension.allowCollapse)
+          assertNull(controller.magnifierPosition)
           controller.cancel()
           continue
         }
@@ -2443,55 +2854,82 @@ class EditorInteractionControllerTest {
   @Test
   fun `editor pointer stream starts table cell handle drag from table handle hit target`() =
     runTest(StandardTestDispatcher()) {
-      val selection =
-        Selection(
-          anchor = Position("cell-text", 0, Affinity.Downstream),
-          head = Position("cell-text", 0, Affinity.Downstream),
-        )
-      val fake =
-        FakeFfiEditor(
-          selectionProvider = { selection },
-          tableOverlaysProvider = {
-            listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
-          },
-        )
-      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      fake.publishSnapshot(editor)
-      val host = TestHost(this)
-      val controller =
-        EditorInteractionController(
-          editorProvider = { editor },
-          effects = host,
-          geometry = host,
-          uiStateProvider = { host.uiState },
-        )
-      controller.updateTapSlop(8f)
-      val down = Offset(60f, 60f)
+      for (pointerType in listOf(PointerType.Touch, PointerType.Mouse)) {
+        val selection =
+          Selection(
+            anchor = Position("cell-text", 0, Affinity.Downstream),
+            head = Position("cell-text", 0, Affinity.Downstream),
+          )
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { selection },
+            tableOverlaysProvider = {
+              listOf(tableOverlay(isFocused = true, focusedRowIndex = 0, focusedColIndex = 0))
+            },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+          )
+        controller.updateTapSlop(8f)
+        val down = Offset(60f, 60f)
 
-      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
-      assertFalse(controller.tryClaimScrollbarDirectDrag())
-      assertTrue(
-        controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 20L)
-      )
-      assertFalse(controller.tryClaimScrollbarDirectDrag())
+        assertTrue(
+          controller.onPointerDown(
+            pointerId = 1L,
+            position = down,
+            nowMillis = 0L,
+            type = pointerType,
+          )
+        )
+        assertFalse(controller.tryClaimScrollbarDirectDrag())
+        assertTrue(
+          controller.onPointerMove(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 20L)
+        )
+        assertFalse(controller.tryClaimScrollbarDirectDrag())
 
-      val extend =
-        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
-      assertEquals(selection.anchor, extend.anchor)
-      assertEquals(0, extend.headPage)
-      assertEquals(100f, extend.headX)
-      assertEquals(90f, extend.headY)
-      assertEquals(selection, extend.baseSelection)
-      assertFalse(extend.allowCollapse)
-      assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
-      assertEquals(Offset(100f, 90f), controller.magnifierPosition)
+        val extend =
+          fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+        assertEquals(selection.anchor, extend.anchor)
+        assertEquals(0, extend.headPage)
+        assertEquals(100f, extend.headX)
+        assertEquals(90f, extend.headY)
+        assertEquals(selection, extend.baseSelection)
+        assertFalse(extend.allowCollapse)
+        assertEquals(EditorInteractionMode.TableCellHandleDragging, controller.interactionMode)
+        assertEquals(
+          if (pointerType == PointerType.Touch) Offset(100f, 90f) else null,
+          controller.magnifierPosition,
+        )
 
-      assertTrue(
-        controller.onPointerUp(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 40L)
-      )
-      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
-      assertTrue(controller.tryClaimScrollbarDirectDrag())
-      assertFalse(host.scrollGestureLockActive)
+        assertTrue(
+          controller.onPointerUp(pointerId = 1L, position = Offset(100f, 90f), nowMillis = 40L)
+        )
+        assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+        if (pointerType == PointerType.Mouse) {
+          val selectionCount = fake.enqueued.filterIsInstance<Message.Selection>().size
+          assertTrue(
+            controller.onPointerDown(
+              pointerId = 1L,
+              position = down,
+              nowMillis = 100L,
+              type = PointerType.Mouse,
+              inputModifiers = InputModifiers(ctrl = true),
+            )
+          )
+          val commands = fake.enqueued.filterIsInstance<Message.Selection>().drop(selectionCount)
+          assertEquals(listOf(SelectionOp.SetAt(0, down.x, down.y)), commands.map { it.op })
+          assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+        }
+        assertTrue(controller.tryClaimScrollbarDirectDrag())
+        assertFalse(host.scrollGestureLockActive)
+      }
     }
 
   @Test

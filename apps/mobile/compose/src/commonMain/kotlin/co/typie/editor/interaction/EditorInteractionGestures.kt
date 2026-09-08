@@ -2,11 +2,14 @@ package co.typie.editor.interaction
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.interaction.gestures.EditorDndGesture
 import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorLongPressGesture
+import co.typie.editor.interaction.gestures.EditorMouseButton
+import co.typie.editor.interaction.gestures.EditorMouseGesture
 import co.typie.editor.interaction.gestures.EditorPanGesture
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.gestures.EditorPinchGesture
@@ -46,6 +49,13 @@ internal class EditorInteractionGestures(
       onHandoffToSelectionHandle = ::handoffTableDragToSelectionHandle,
     )
 
+  private val mouse = EditorMouseGesture()
+
+  fun updateMouseConfiguration(doubleClickTimeoutMillis: Long, dragSlopPx: Float) {
+    mouse.doubleClickTimeoutMillis = doubleClickTimeoutMillis
+    mouse.dragSlopPx = dragSlopPx
+  }
+
   val hasPendingHandleGesture: Boolean
     get() = tableColumnResize.pending || tableHandle.pendingDrag || selectionHandle.pendingDrag
 
@@ -69,12 +79,21 @@ internal class EditorInteractionGestures(
     positionInRoot: Offset,
     tapEnabled: Boolean,
     inputModifiers: InputModifiers,
+    button: EditorMouseButton = EditorMouseButton.Primary,
     touchPanDriver: EditorPanGestureDriver? = null,
     context: EditorGestureContext,
   ): Boolean {
     val pointerId = change.id.value
     val nowMillis = change.uptimeMillis
-    if (tap.hasActivePointer) {
+    if (change.type == PointerType.Mouse) context.semantics.pointSelection.cancelPendingSelection()
+    if (
+      tap.hasActivePointer ||
+        mouse.hasActivePointer ||
+        hasPendingHandleGesture ||
+        tableColumnResize.active ||
+        tableHandle.activeDrag ||
+        selectionHandle.activeDrag
+    ) {
       tap.cancelActivePointerStream()
       context.reduceMode(EditorInteractionEvent.PointerCancel)
       pinch.reset()
@@ -85,6 +104,7 @@ internal class EditorInteractionGestures(
       return false
     }
 
+    if (change.type != PointerType.Mouse) mouse.cancel(context)
     longPress.reset()
     doubleTapDrag.resetPointerOwnedState(context = context)
     context.semantics.selectionHandle.cancelPendingContextMenuRequest()
@@ -106,6 +126,14 @@ internal class EditorInteractionGestures(
     }
     val position = positionInEditor
 
+    if (
+      change.type == PointerType.Mouse &&
+        (button != EditorMouseButton.Primary ||
+          mouse.isSecondaryClick(button, inputModifiers, context.platform))
+    ) {
+      return tapEnabled &&
+        mouse.handlePointerDown(change, position, button, inputModifiers, context)
+    }
     val columnResizePlacement = tableColumnResize.hitTest(position = position, context = context)
     val tableHandleHit = columnResizePlacement == null && tableHandle.hitTest(position)
     val selectionHandleType =
@@ -116,6 +144,10 @@ internal class EditorInteractionGestures(
       } else {
         null
       }
+    if (change.type == PointerType.Mouse && columnResizePlacement == null && !tableHandleHit) {
+      return tapEnabled &&
+        mouse.handlePointerDown(change, position, button, inputModifiers, context)
+    }
     val tripleTapOnSelectionHandle =
       tapEnabled &&
         selectionHandleType != null &&
@@ -140,7 +172,7 @@ internal class EditorInteractionGestures(
         pointerId = pointerId,
         position = position,
         nowMillis = nowMillis,
-        tapEnabled = tapEnabled,
+        tapEnabled = tapEnabled && change.type != PointerType.Mouse,
         inputModifiers = inputModifiers,
         doubleTapDrag = doubleTapDrag,
         context = context,
@@ -193,6 +225,7 @@ internal class EditorInteractionGestures(
     positionInRoot: Offset,
     context: EditorGestureContext,
   ): Boolean {
+    if (mouse.hasActivePointer) return mouse.handlePointerMove(change, positionInEditor, context)
     val pointerId = change.id.value
     if (doubleTapDrag.active) {
       val position = positionInEditor ?: return true
@@ -270,6 +303,7 @@ internal class EditorInteractionGestures(
     positionInRoot: Offset,
     context: EditorGestureContext,
   ): Boolean {
+    if (mouse.hasActivePointer) return mouse.handlePointerUp(change, positionInEditor, context)
     val pointerId = change.id.value
     val nowMillis = change.uptimeMillis
     if (positionInEditor == null) {
@@ -393,10 +427,12 @@ internal class EditorInteractionGestures(
   }
 
   fun cancelPendingPointerForIndirectInput(context: EditorGestureContext): Boolean {
-    if (
-      context.mode != EditorInteractionMode.Idle ||
-        (!tap.hasActivePointer && !pan.hasPendingPointer)
-    ) {
+    if (mouse.hasActivePointer) {
+      if (mouse.dragging) return false
+      mouse.cancel(context)
+      return true
+    }
+    if (context.mode != EditorInteractionMode.Idle || hasPendingHandleGesture) {
       return false
     }
     cancel(context = context)
@@ -495,6 +531,7 @@ internal class EditorInteractionGestures(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
+    mouse.cancel(context)
     context.semantics.selectionHandle.cancelPendingContextMenuRequest()
     tableColumnResize.cancel(context = context)
     tableHandle.resetPointerOwnedState(context = context)
@@ -585,6 +622,7 @@ internal class EditorInteractionGestures(
   }
 
   fun reset() {
+    mouse.reset()
     tap.reset()
     doubleTapDrag.reset()
     longPress.reset()

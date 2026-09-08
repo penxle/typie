@@ -12,6 +12,7 @@ import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.hasActiveTableCellSelection
 import co.typie.editor.interaction.sessions.EditorSelectionHandleDragSession
+import co.typie.ui.input.isDirectTouchInteraction
 import kotlin.math.max
 
 internal enum class EditorSelectionHandleType {
@@ -302,9 +303,10 @@ internal class EditorSelectionHandleGesture(
       context.reduceMode(EditorInteractionEvent.SelectionHandleDragEnd)
     }
     if (wasDragging) {
-      context.semantics.selectionHandle.requestContextMenuAfterSelection(
+      context.semantics.selectionHandle.finishSelection(
         editor = context.editor,
         terminalExtension = terminalExtension,
+        showContextMenu = context.pointerType.isDirectTouchInteraction(),
       )
     }
     return wasActive

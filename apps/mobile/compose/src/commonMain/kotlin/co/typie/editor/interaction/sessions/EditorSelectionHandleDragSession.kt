@@ -10,6 +10,7 @@ import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.resolveActiveTableCellSelection
+import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorSelectionHandleDragSession {
   private var pendingContext: EditorPendingSelectionHandleDrag? = null
@@ -166,7 +167,8 @@ internal class EditorSelectionHandleDragSession {
     }
 
     val selectionPosition = drag.selectionPosition(touchPosition = touchPosition)
-    context.semantics.magnifier.show(selectionPosition)
+    if (context.pointerType.isDirectTouchInteraction())
+      context.semantics.magnifier.show(selectionPosition)
     context.semantics.edgeAutoScroll.trackSelectionHandle(
       edgePosition = touchPosition,
       dispatchPosition = selectionPosition,

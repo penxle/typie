@@ -2,6 +2,7 @@ package co.typie.editor.interaction.semantics
 
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
+import co.typie.editor.PagePoint
 import co.typie.editor.runtime.EditorContextMenuState
 
 internal class EditorContextMenuSemantic(private val stateProvider: () -> EditorContextMenuState) {
@@ -16,8 +17,17 @@ internal class EditorContextMenuSemantic(private val stateProvider: () -> Editor
     stateProvider().hide()
   }
 
-  fun requestShowForAppliedSelection(editor: Editor, state: EditorState) {
-    stateProvider().requestShowForAppliedSelection(editor = editor, state = state)
+  fun requestShowForAppliedSelection(
+    editor: Editor,
+    state: EditorState,
+    pointerPosition: PagePoint? = null,
+  ) {
+    stateProvider()
+      .requestShowForAppliedSelection(
+        editor = editor,
+        state = state,
+        pointerPosition = pointerPosition,
+      )
   }
 
   fun onEditorStateChanged(editor: Editor, state: EditorState) {

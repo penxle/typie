@@ -26,8 +26,16 @@ internal class EditorSelectionHandleSemantic(
     return op
   }
 
-  fun requestContextMenuAfterSelection(editor: Editor, terminalExtension: SelectionOp.ExtendTo?) {
+  fun finishSelection(
+    editor: Editor,
+    terminalExtension: SelectionOp.ExtendTo?,
+    showContextMenu: Boolean,
+  ) {
     cancelPendingContextMenuRequest()
+    if (!showContextMenu) {
+      terminalExtension?.let { pointSelection.applySelection(editor, it) }
+      return
+    }
     if (terminalExtension == null) {
       contextMenu.requestShowForAppliedSelection(editor = editor, state = editor.appliedState)
       return

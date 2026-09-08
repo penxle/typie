@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -50,6 +51,8 @@ import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
@@ -80,8 +83,64 @@ import kotlinx.coroutines.yield
 @OptIn(ExperimentalTestApi::class)
 class EditorInteractionsDesktopTest {
   @Test
-  fun `desktop trackpad click drag scrolls the viewport like touch`() = runComposeUiTest {
-    val fixture = Fixture()
+  fun `secondary button opens a context menu without starting a selection drag`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      fixture.fake.publishSnapshot(fixture.editor)
+      setEditorContent(fixture)
+      onNodeWithTag(EditorTag).performMouseInput {
+        moveTo(Offset(100f, 100f))
+        press(MouseButton.Secondary)
+        moveTo(Offset(160f, 100f))
+        release(MouseButton.Secondary)
+      }
+      waitForIdle()
+      assertEquals(
+        listOf(SelectionOp.SetAt(0, 100f, 100f)),
+        fixture.fake.enqueued.filterIsInstance<Message.Selection>().map { it.op },
+      )
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertEquals(0, fixture.host.longPressDispatchScheduleCount)
+      assertFalse(fixture.scrollGestureLockState.isLocked)
+      val publication = requireNotNull(fixture.editor.publishIfReady(emptySet()))
+      assertTrue(fixture.editor.acceptPublication(publication))
+      fixture.controller.onEditorStateChanged(publication.snapshot)
+      assertTrue(fixture.uiState.contextMenu.visible)
+      assertEquals(PagePoint(0, 100f, 100f), fixture.uiState.contextMenu.pointerPosition)
+    }
+
+  @Test
+  fun `selection drag ends when its starting button is released with another button held`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      setEditorContent(fixture)
+      val node = onNodeWithTag(EditorTag)
+      node.performMouseInput {
+        moveTo(Offset(100f, 100f))
+        press(MouseButton.Primary)
+        moveTo(Offset(140f, 100f))
+        press(MouseButton.Secondary)
+        release(MouseButton.Secondary)
+      }
+      assertEquals(EditorInteractionMode.MouseSelecting, fixture.controller.interactionMode)
+      node.performMouseInput {
+        press(MouseButton.Secondary)
+        release(MouseButton.Primary)
+      }
+      assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
+      assertTrue(fixture.scrollGestureLockState.isLocked)
+      val selections = fixture.fake.enqueued.filterIsInstance<Message.Selection>().toList()
+      node.performMouseInput {
+        moveTo(Offset(180f, 100f))
+        release(MouseButton.Secondary)
+      }
+      assertEquals(selections, fixture.fake.enqueued.filterIsInstance<Message.Selection>())
+      assertFalse(fixture.scrollGestureLockState.isLocked)
+    }
+
+  @Test
+  fun `trackpad click drag selects text without touch scrolling`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
     setEditorContent(fixture)
 
     onNodeWithTag(EditorTag).performTrackpadInput {
@@ -93,7 +152,16 @@ class EditorInteractionsDesktopTest {
     }
     waitForIdle()
 
-    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertTrue(
+      fixture.fake.enqueued.filterIsInstance<Message.Selection>().any { it.op is SelectionOp.SetAt }
+    )
+    assertTrue(
+      fixture.fake.enqueued.filterIsInstance<Message.Selection>().any {
+        it.op is SelectionOp.ExtendTo
+      }
+    )
+    assertEquals(0, fixture.host.longPressDispatchScheduleCount)
   }
 
   @Test
@@ -141,7 +209,7 @@ class EditorInteractionsDesktopTest {
   @Test
   fun `editor physical click drag owns desktop scroll translation until release`() =
     runComposeUiTest {
-      val fixture = Fixture()
+      val fixture = Fixture(tapEligible = true)
       setEditorContent(fixture)
 
       onNodeWithTag(EditorTag).performTrackpadInput {
@@ -158,7 +226,7 @@ class EditorInteractionsDesktopTest {
       waitForIdle()
 
       assertFalse(fixture.scrollGestureLockState.isLocked)
-      assertTrue(fixture.touchPanDeltas.isNotEmpty())
+      assertTrue(fixture.touchPanDeltas.isEmpty())
     }
 
   @Test
@@ -269,7 +337,7 @@ class EditorInteractionsDesktopTest {
       press()
     }
     waitForIdle()
-    assertEquals(1, fixture.host.longPressDispatchScheduleCount)
+    assertEquals(0, fixture.host.longPressDispatchScheduleCount)
 
     editor.performKeyInput { keyDown(Key.MetaLeft) }
     editor.performMouseInput { scroll(Offset(x = 0f, y = -24f)) }
@@ -497,7 +565,7 @@ class EditorInteractionsDesktopTest {
     }
 
   @Test
-  fun `platform indirect scale cannot take over an active physical pan`() = runComposeUiTest {
+  fun `platform indirect scale cannot take over an active mouse selection`() = runComposeUiTest {
     val fixture = Fixture(tapEligible = true)
     setEditorContent(fixture)
     val editor = onNodeWithTag(EditorTag)
@@ -509,7 +577,7 @@ class EditorInteractionsDesktopTest {
       moveTo(Offset(x = 120f, y = 100f))
     }
     waitForIdle()
-    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
+    assertEquals(EditorInteractionMode.MouseSelecting, fixture.controller.interactionMode)
     val panDeltaCountBeforeIndirectInput = fixture.touchPanDeltas.size
 
     editor.performKeyInput { keyDown(Key.MetaLeft) }
@@ -519,7 +587,7 @@ class EditorInteractionsDesktopTest {
       updatePointerTo(Offset(x = 120f, y = 100f))
       pan(Offset(x = -40f, y = 60f))
     }
-    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
+    assertEquals(EditorInteractionMode.MouseSelecting, fixture.controller.interactionMode)
     assertEquals(panDeltaCountBeforeIndirectInput, fixture.touchPanDeltas.size)
     runOnIdle { assertFalse(fixture.platformIndirectScaleBridge.begin()) }
 
@@ -613,8 +681,8 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `modified physical click drag remains pan and never zooms`() = runComposeUiTest {
-    val fixture = Fixture()
+  fun `modified physical click drag selects text and never zooms`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
     setEditorContent(fixture)
     val editor = onNodeWithTag(EditorTag)
     val initialZoom = fixture.zoomController.displayZoom
@@ -629,7 +697,12 @@ class EditorInteractionsDesktopTest {
     editor.performKeyInput { keyUp(Key.MetaLeft) }
     waitForIdle()
 
-    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertTrue(
+      fixture.fake.enqueued.filterIsInstance<Message.Selection>().any {
+        it.op is SelectionOp.ExtendTo
+      }
+    )
     assertEquals(initialZoom, fixture.zoomController.displayZoom, 0.0001f)
     assertEquals(initialZoom, fixture.zoomController.renderZoom, 0.0001f)
     assertFalse(fixture.scrollGestureLockState.isLocked)
@@ -654,8 +727,8 @@ class EditorInteractionsDesktopTest {
   }
 
   @Test
-  fun `desktop editor scroll owns drag before full-area back swipe`() = runComposeUiTest {
-    val fixture = Fixture()
+  fun `editor text selection owns mouse drag before full-area back swipe`() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
     val navigator = Navigator(Route.Home)
     val touchSlop =
       setNavigationEditorContent(
@@ -681,7 +754,12 @@ class EditorInteractionsDesktopTest {
     editor.performTrackpadInput { moveBy(Offset(x = touchSlop * 3f, y = 0f), delayMillis = 100L) }
     waitForIdle()
 
-    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertTrue(
+      fixture.fake.enqueued.filterIsInstance<Message.Selection>().any {
+        it.op is SelectionOp.ExtendTo
+      }
+    )
     assertEquals(
       expected = 0f,
       actual = editor.fetchSemanticsNode().boundsInRoot.left,
@@ -730,7 +808,7 @@ class EditorInteractionsDesktopTest {
 
   @Test
   fun `desktop trackpad click drag ignores overlapping scroll signals`() = runComposeUiTest {
-    val fixture = Fixture(scrollConsumer = { Offset.Zero })
+    val fixture = Fixture(scrollConsumer = { Offset.Zero }, tapEligible = true)
     val navigator = Navigator(Route.Home)
     setNavigationEditorContent(fixture = fixture, navigator = navigator)
 
@@ -750,8 +828,13 @@ class EditorInteractionsDesktopTest {
     onNodeWithTag(NavigationEditorTag).performMouseInput { release() }
     waitForIdle()
 
-    assertEquals(Route.Home, navigator.current)
-    onAllNodes(hasTestTag(NavigationEditorTag)).assertCountEquals(0)
+    assertEquals(NavigationEditorRoute, navigator.current)
+    assertTrue(fixture.touchPanDeltas.isEmpty())
+    assertTrue(
+      fixture.fake.enqueued.filterIsInstance<Message.Selection>().any {
+        it.op is SelectionOp.ExtendTo
+      }
+    )
   }
 
   @Test
@@ -1761,7 +1844,9 @@ class EditorInteractionsDesktopTest {
     setContent {
       val nestedScrollDispatcher = remember { NestedScrollDispatcher() }
       val screenPointerSequence = remember { EditorScreenPointerSequence() }
-      onCoroutineScope(rememberCoroutineScope())
+      val interactionScope = rememberCoroutineScope()
+      fixture.host.interactionScope = interactionScope
+      onCoroutineScope(interactionScope)
       Box(
         Modifier.size(400.dp)
           .testTag(RootTag)
@@ -1831,6 +1916,7 @@ class EditorInteractionsDesktopTest {
   ): Float {
     var effectiveTouchSlop = 0f
     setContent {
+      fixture.host.interactionScope = rememberCoroutineScope()
       effectiveTouchSlop =
         if (usePlatformTouchSlop) LocalViewConfiguration.current.touchSlop else 8f
       NavigationStackTestHost(
@@ -1953,14 +2039,15 @@ class EditorInteractionsDesktopTest {
     val zoomController = EditorZoomController()
     val platformIndirectScaleBridge = EditorPlatformIndirectScaleBridge()
     val scrollGestureLockState = ScrollGestureLockState()
-    private val uiState =
+    val uiState =
       EditorUiState().apply {
         updateDisplayZoom(1f)
         updatePageOffset(page = 0, offset = Offset.Zero)
         updateEditorBounds(boundsInRoot = editorBoundsInRoot, density = 1f)
       }
     val host = TestHost(tapEligible = tapEligible, documentDownEligible = documentDownEligible)
-    private val editor = Editor(FakeFfiEditor(), CoroutineScope(Job()), Dispatchers.Unconfined)
+    val fake = FakeFfiEditor()
+    val editor = Editor(fake, CoroutineScope(Job()), Dispatchers.Unconfined)
     private val semantics =
       EditorInteractionSemantics(effects = host, contextMenuStateProvider = { uiState.contextMenu })
         .apply {
@@ -1990,6 +2077,7 @@ class EditorInteractionsDesktopTest {
 
   private class TestHost(private val tapEligible: Boolean, val documentDownEligible: Boolean) :
     EditorInteractionEffects, EditorInteractionGeometry {
+    var interactionScope: CoroutineScope? = null
     var interactionMappingAvailable = tapEligible
     var pointerStreamCancelCount = 0
     var tapDispatchScheduleCount = 0
@@ -2040,7 +2128,9 @@ class EditorInteractionsDesktopTest {
       longPressDispatchCancelCount += 1
     }
 
-    override fun launchInteraction(block: suspend () -> Unit) = Unit
+    override fun launchInteraction(block: suspend () -> Unit) {
+      checkNotNull(interactionScope).launch { block() }
+    }
 
     override fun requestEditing(editor: Editor): Boolean = false
 
