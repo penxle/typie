@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { pointerCapture } from '@typie/ui/actions';
+  import { resizeHandle } from '../../resize-handle';
   import { getPaneGroup } from './context.svelte';
   import { getMinSizeForMember } from './geometry';
   import { findMemberById } from './tree';
@@ -161,17 +162,13 @@
   style:top="{resizer.rect.top}px"
   style:width="{resizer.rect.width}px"
   style:height="{resizer.rect.height}px"
-  class={css({
+  class={css(resizeHandle.raw({ direction: resizer.direction }), {
     backgroundColor: 'border.hairline',
-    cursor: resizer.direction === 'horizontal' ? 'col-resize' : 'row-resize',
-    userSelect: 'none',
     border: 'none',
     padding: '0',
-    _hover: {
-      backgroundColor: 'border.emphasis',
-    },
   })}
   aria-label="크기 조절"
+  data-resizing={isDragging || undefined}
   type="button"
   use:pointerCapture={{ start: handlePointerDown, move: handlePointerMove, end: finishDrag, cancel: cleanupDrag }}
 >
