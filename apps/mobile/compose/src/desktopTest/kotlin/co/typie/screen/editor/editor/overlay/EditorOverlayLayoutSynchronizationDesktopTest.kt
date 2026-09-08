@@ -438,6 +438,7 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
               uiState = uiState,
               density = 1f,
               pagePresented = { true },
+              directTouchInteraction = true,
             )
           }
         }

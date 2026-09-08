@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import co.typie.editor.Editor
@@ -75,9 +76,17 @@ private fun EditorInteractionController.onPointerDown(
   inputModifiers: InputModifiers = InputModifiers(),
   positionInRoot: Offset = requireNotNull(position),
   touchPanDriver: EditorPanGestureDriver? = null,
+  type: PointerType = PointerType.Touch,
 ): Boolean =
   onPointerDown(
-    change = testPointerInputChange(pointerId, nowMillis, pressed = true, previousPressed = false),
+    change =
+      testPointerInputChange(
+        pointerId,
+        nowMillis,
+        pressed = true,
+        previousPressed = false,
+        type = type,
+      ),
     position = position,
     tapEnabled = tapEnabled,
     inputModifiers = inputModifiers,
@@ -124,6 +133,7 @@ private fun testPointerInputChange(
   pressed: Boolean,
   previousPressed: Boolean,
   consumed: Boolean = false,
+  type: PointerType = PointerType.Touch,
 ): PointerInputChange =
   // The public test constructor does not expose originalEventPosition. Keeping its local position
   // at the origin lets the production root-space offset carry the synthetic test position.
@@ -136,6 +146,7 @@ private fun testPointerInputChange(
     previousPosition = Offset.Zero,
     previousPressed = previousPressed,
     isInitiallyConsumed = consumed,
+    type = type,
   )
 
 private fun Editor.deliverLatestFrame(fake: FakeFfiEditor, surface: SurfaceSessionHandle) {
@@ -162,6 +173,86 @@ private fun EditorInteractionController.presentAppliedState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
+  @Test
+  fun `direct pointer type controls touch selection presentation`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+
+      controller.syncDirectTouchInteraction(direct = false)
+      fake.enqueued.clear()
+      controller.onPointerDown(
+        pointerId = 1L,
+        position = Offset(10f, 20f),
+        nowMillis = 0L,
+        type = PointerType.Touch,
+      )
+
+      assertEquals(
+        listOf<Message>(Message.View(ViewOp.SetDirectTouchInteraction(direct = true))),
+        fake.enqueued.filterIsInstance<Message.View>(),
+      )
+
+      controller.cancel()
+      fake.enqueued.clear()
+      controller.onPointerDown(
+        pointerId = 2L,
+        position = Offset(10f, 20f),
+        nowMillis = 100L,
+        type = PointerType.Mouse,
+      )
+
+      assertEquals(
+        listOf<Message>(Message.View(ViewOp.SetDirectTouchInteraction(direct = false))),
+        fake.enqueued.filterIsInstance<Message.View>(),
+      )
+    }
+
+  @Test
+  fun `app direct touch changes continue to update the attached editor`() =
+    runTest(StandardTestDispatcher()) {
+      val firstFake = FakeFfiEditor()
+      val firstEditor = Editor(firstFake, this, StandardTestDispatcher(testScheduler))
+      val secondFake = FakeFfiEditor()
+      val secondEditor = Editor(secondFake, this, StandardTestDispatcher(testScheduler))
+      var currentEditor: Editor? = firstEditor
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { currentEditor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+        )
+
+      controller.syncDirectTouchInteraction(direct = true)
+      controller.syncDirectTouchInteraction(direct = false)
+
+      assertEquals(
+        listOf<Message>(
+          Message.View(ViewOp.SetDirectTouchInteraction(direct = true)),
+          Message.View(ViewOp.SetDirectTouchInteraction(direct = false)),
+        ),
+        firstFake.enqueued,
+      )
+
+      currentEditor = secondEditor
+      controller.syncDirectTouchInteraction(direct = false)
+
+      assertEquals(
+        listOf<Message>(Message.View(ViewOp.SetDirectTouchInteraction(direct = false))),
+        secondFake.enqueued,
+      )
+    }
+
   @Test
   fun `pinch sample uses the complete pair of physical root positions`() {
     val sample = resolveEditorPinchSample(listOf(Offset(100f, 200f), Offset(500f, 500f)))
@@ -2151,49 +2242,63 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `editor pointer stream starts selection handle drag from handle hit target`() =
+  fun `selection handle hit target accepts touch drags but ignores mouse drags`() =
     runTest(StandardTestDispatcher()) {
-      val selection =
-        Selection(
-          anchor = Position("text", 0, Affinity.Downstream),
-          head = Position("text", 5, Affinity.Downstream),
-        )
-      val endpoints = selectionEndpoints()
-      val fake =
-        FakeFfiEditor(selectionProvider = { selection }, selectionEndpointsProvider = { endpoints })
-      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      fake.publishSnapshot(editor)
-      val host = TestHost(this)
-      val controller =
-        EditorInteractionController(
-          editorProvider = { editor },
-          effects = host,
-          geometry = host,
-          uiStateProvider = { host.uiState },
-        )
-      controller.updateTapSlop(8f)
-      val down = Offset(42f, 30f)
+      for (type in listOf(PointerType.Touch, PointerType.Mouse)) {
+        val selection =
+          Selection(
+            anchor = Position("text", 0, Affinity.Downstream),
+            head = Position("text", 5, Affinity.Downstream),
+          )
+        val endpoints = selectionEndpoints()
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { selection },
+            selectionEndpointsProvider = { endpoints },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+          )
+        controller.updateTapSlop(8f)
+        val down = Offset(42f, 30f)
 
-      assertTrue(controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L))
-      assertTrue(
+        controller.onPointerDown(pointerId = 1L, position = down, nowMillis = 0L, type = type)
         controller.onPointerMove(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 20L)
-      )
 
-      val extend =
-        fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
-      assertEquals(endpoints.fromPosition, extend.anchor)
-      assertEquals(50f, extend.headX)
-      assertEquals(44f, extend.headY)
-      assertNull(extend.baseSelection)
-      assertFalse(extend.allowCollapse)
-      assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
-      assertEquals(Offset(50f, 44f), controller.magnifierPosition)
+        if (type == PointerType.Mouse) {
+          assertTrue(controller.interactionMode != EditorInteractionMode.SelectionHandleDragging)
+          assertTrue(
+            fake.enqueued.filterIsInstance<Message.Selection>().none {
+              it.op is SelectionOp.ExtendTo
+            }
+          )
+          controller.cancel()
+          continue
+        }
 
-      assertTrue(
-        controller.onPointerUp(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 40L)
-      )
-      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
-      assertFalse(host.scrollGestureLockActive)
+        val extend =
+          fake.enqueued.filterIsInstance<Message.Selection>().single().op as SelectionOp.ExtendTo
+        assertEquals(endpoints.fromPosition, extend.anchor)
+        assertEquals(50f, extend.headX)
+        assertEquals(44f, extend.headY)
+        assertNull(extend.baseSelection)
+        assertFalse(extend.allowCollapse)
+        assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+        assertEquals(Offset(50f, 44f), controller.magnifierPosition)
+
+        assertTrue(
+          controller.onPointerUp(pointerId = 1L, position = Offset(52f, 50f), nowMillis = 40L)
+        )
+        assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+        assertFalse(host.scrollGestureLockActive)
+      }
     }
 
   @Test

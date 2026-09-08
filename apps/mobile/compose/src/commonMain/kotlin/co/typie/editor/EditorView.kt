@@ -30,6 +30,7 @@ import co.typie.editor.ffi.ThemeVariant
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.LocalEditorIncomingContentHandler
 import co.typie.editor.input.editorInput
+import co.typie.editor.interaction.LocalEditorInteractionScope
 import co.typie.editor.overlay.EditorCursorOverlay
 import co.typie.editor.overlay.EditorPageLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -40,6 +41,7 @@ import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.editor.sync.DocumentEditorLoad
 import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
+import co.typie.ui.input.LocalDirectTouchInteractionState
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -59,6 +61,8 @@ internal fun EditorView(
   val uiState = LocalEditorUiState.current
   val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
   val incomingContentHandler = LocalEditorIncomingContentHandler.current
+  val interactionScope = LocalEditorInteractionScope.current
+  val directTouchInteractionState = LocalDirectTouchInteractionState.current
   val zoomController = LocalEditorZoomController.current
   val displayZoom = zoomController.displayZoom
   val themeVariant = currentEditorThemeVariant()
@@ -180,6 +184,10 @@ internal fun EditorView(
             suppressSoftwareKeyboard = suppressSoftwareKeyboard,
             clipboard = PlatformModule.clipboard,
             incomingContentHandler = incomingContentHandler,
+            onHardwareKeyInteraction = {
+              directTouchInteractionState.recordKeyboardInteraction()
+              interactionScope.controller.updateDirectTouchInteraction(false)
+            },
           )
           .focusable()
       } else {

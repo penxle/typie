@@ -75,6 +75,7 @@ pub use normalize::{
 };
 pub use paragraph_break::{
     before_or_same, closest_empty_paragraph_break_end_between, paragraph_break_at_end,
+    paragraph_break_ending_at,
 };
 pub use pending_modifier::*;
 pub use plain_text::doc_plain_text;

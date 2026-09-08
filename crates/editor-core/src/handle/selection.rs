@@ -1391,6 +1391,172 @@ mod tests {
     }
 
     #[test]
+    fn direct_touch_extend_selects_paragraph_break_only_after_crossing_line_bottom() {
+        for layout_mode in [
+            editor_model::LayoutMode::Continuous { max_width: 400 },
+            editor_model::LayoutMode::Paginated {
+                page_width: 400,
+                page_height: 80,
+                page_margin_top: 20,
+                page_margin_bottom: 20,
+                page_margin_left: 20,
+                page_margin_right: 20,
+            },
+        ] {
+            let (state, p1, _p2) = state! {
+                doc {
+                    root (layout_mode: layout_mode) [block_gap(200)] {
+                        p1: paragraph { text("aa") }
+                        p2: paragraph { text("bb") }
+                    }
+                }
+                selection: (p1, 0)
+            };
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            editor.apply(Message::View {
+                op: ViewOp::SetDirectTouchInteraction { direct: true },
+            });
+            let (paragraph_break, rect) = {
+                let view = editor.state.view();
+                let paragraph_break =
+                    editor_state::paragraph_break_at_end(&Position::new(p1, 2), &view)
+                        .expect("P -> P has PB");
+                let resolved = paragraph_break
+                    .resolve(&view)
+                    .expect("paragraph break resolves");
+                let rect = editor
+                    .view
+                    .selection_rects(&resolved)
+                    .into_iter()
+                    .find(|rect| rect.meta == editor_view::SelectionRectKind::ParagraphBreak)
+                    .expect("paragraph break rect exists");
+                (paragraph_break, rect)
+            };
+
+            let extend = |editor: &mut Editor, head_x: f32, head_y: f32| {
+                editor.apply(Message::Selection {
+                    op: SelectionOp::ExtendTo {
+                        anchor: Position::new(p1, 0),
+                        head_page: rect.page_idx,
+                        head_x,
+                        head_y,
+                        base_selection: None,
+                        allow_collapse: false,
+                    },
+                });
+            };
+
+            extend(
+                &mut editor,
+                rect.rect.right() + 20.0,
+                rect.rect.y + rect.rect.height / 2.0,
+            );
+            {
+                let view = editor.state().view();
+                let resolved = editor.state().selection.unwrap().resolve(&view).unwrap();
+                assert!(!resolved.contains_range(paragraph_break));
+            }
+
+            for head_x in [rect.rect.right() + 20.0, 500.0] {
+                editor.apply(Message::Selection {
+                    op: SelectionOp::Set {
+                        selection: Selection::collapsed(Position::new(p1, 0)),
+                    },
+                });
+                extend(&mut editor, head_x, rect.rect.bottom() + 1.0);
+                {
+                    let view = editor.state().view();
+                    let resolved = editor.state().selection.unwrap().resolve(&view).unwrap();
+                    assert!(resolved.contains_range(paragraph_break));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn reverse_direct_touch_extend_selects_paragraph_break_at_left_or_top_line_edge() {
+        let (state, p1, p2) = state! {
+            doc {
+                root [block_gap(200)] {
+                    p1: paragraph { text("aa") }
+                    p2: paragraph { text("bb") }
+                }
+            }
+            selection: (p2, 1)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.view.layout(&editor.state);
+        editor.apply(Message::View {
+            op: ViewOp::SetDirectTouchInteraction { direct: true },
+        });
+        let (paragraph_break, rect) = {
+            let view = editor.state.view();
+            let paragraph_break =
+                editor_state::paragraph_break_at_end(&Position::new(p1, 2), &view)
+                    .expect("P -> P has PB");
+            let resolved = paragraph_break
+                .resolve(&view)
+                .expect("paragraph break resolves");
+            let rect = editor
+                .view
+                .selection_rects(&resolved)
+                .into_iter()
+                .find(|rect| rect.meta == editor_view::SelectionRectKind::ParagraphBreak)
+                .expect("paragraph break rect exists");
+            (paragraph_break, rect)
+        };
+
+        let extend = |editor: &mut Editor, head_x: f32, head_y: f32| {
+            editor.apply(Message::Selection {
+                op: SelectionOp::ExtendTo {
+                    anchor: Position::new(p2, 1),
+                    head_page: rect.page_idx,
+                    head_x,
+                    head_y,
+                    base_selection: None,
+                    allow_collapse: false,
+                },
+            });
+        };
+        let includes_paragraph_break = |editor: &Editor| {
+            let view = editor.state().view();
+            editor
+                .state()
+                .selection
+                .unwrap()
+                .resolve(&view)
+                .unwrap()
+                .contains_range(paragraph_break)
+        };
+
+        for head_x in [rect.rect.x, 900.0] {
+            extend(&mut editor, head_x, rect.rect.y + rect.rect.height / 2.0);
+            assert!(!includes_paragraph_break(&editor));
+        }
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p2, 1)),
+            },
+        });
+        extend(
+            &mut editor,
+            rect.rect.x - 1.0,
+            rect.rect.y + rect.rect.height / 2.0,
+        );
+        assert!(includes_paragraph_break(&editor));
+
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p2, 1)),
+            },
+        });
+        extend(&mut editor, rect.rect.right() + 20.0, rect.rect.y - 1.0);
+        assert!(includes_paragraph_break(&editor));
+    }
+
+    #[test]
     fn extend_to_visual_removable_empty_paragraph_break_stops_before_next_block() {
         let (state, p1, empty) = state! {
             doc {

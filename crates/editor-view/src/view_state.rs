@@ -35,6 +35,7 @@ pub struct ViewState {
     pub pending_overlay: Option<PendingOverlay>,
     pub gap_phantom: Option<GapPhantom>,
     pub tracked_decoration_groups: HashMap<String, GroupDecoration>,
+    pub direct_touch_interaction: bool,
 }
 
 impl ViewState {

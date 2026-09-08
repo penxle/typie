@@ -88,6 +88,7 @@ class EditorSelectionHandleOverlayTest {
           editorRectInOverlay = ComposeRect.Zero,
           density = 1f,
           pagePresented = { true },
+          directTouchInteraction = true,
         )
         ?.size,
     )
@@ -99,6 +100,7 @@ class EditorSelectionHandleOverlayTest {
           editorRectInOverlay = ComposeRect.Zero,
           density = 1f,
           pagePresented = { page -> page == 0 },
+          directTouchInteraction = true,
         )
       )
     assertEquals(listOf(EditorSelectionHandleType.From), firstPageOnly.map { it.type })
@@ -109,6 +111,38 @@ class EditorSelectionHandleOverlayTest {
         editorRectInOverlay = ComposeRect.Zero,
         density = 1f,
         pagePresented = { false },
+        directTouchInteraction = true,
+      )
+    )
+  }
+
+  @Test
+  fun `selection handles are hidden outside direct touch interaction`() {
+    val selection =
+      Selection(
+        anchor = Position("text", 0, Affinity.Downstream),
+        head = Position("text", 5, Affinity.Downstream),
+      )
+    val state =
+      EditorState.Initial.copy(
+        selection = selection,
+        selectionEndpoints =
+          SelectionEndpoints(
+            from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+            to = PageRect(pageIdx = 0, rect = Rect(x = 40f, y = 20f, width = 0f, height = 8f)),
+            fromPosition = selection.anchor,
+            toPosition = selection.head,
+          ),
+        pageSizes = listOf(Size(width = 100f, height = 100f)),
+      )
+
+    assertNull(
+      resolveSelectionHandleOverlayPlacements(
+        state = state,
+        uiState = EditorUiState(),
+        editorRectInOverlay = ComposeRect.Zero,
+        density = 1f,
+        directTouchInteraction = false,
       )
     )
   }

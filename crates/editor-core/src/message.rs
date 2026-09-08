@@ -305,6 +305,7 @@ pub enum ViewOp {
     ToggleFold { id: Dot },
     ExpandFoldsForSelection,
     ExpandFoldsForTrackedRange { id: String },
+    SetDirectTouchInteraction { direct: bool },
 }
 
 #[ffi]

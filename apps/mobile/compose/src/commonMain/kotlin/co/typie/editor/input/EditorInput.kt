@@ -67,6 +67,7 @@ internal fun Modifier.editorInput(
   suppressSoftwareKeyboard: Boolean,
   clipboard: Clipboard,
   incomingContentHandler: EditorIncomingContentHandler = NoopEditorIncomingContentHandler,
+  onHardwareKeyInteraction: () -> Unit = {},
 ): Modifier =
   this then
     EditorInputElement(
@@ -78,6 +79,7 @@ internal fun Modifier.editorInput(
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
       clipboard = clipboard,
       incomingContentHandler = incomingContentHandler,
+      onHardwareKeyInteraction = onHardwareKeyInteraction,
     )
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -153,6 +155,7 @@ private data class EditorInputElement(
   private val suppressSoftwareKeyboard: Boolean,
   private val clipboard: Clipboard,
   private val incomingContentHandler: EditorIncomingContentHandler,
+  private val onHardwareKeyInteraction: () -> Unit,
 ) : ModifierNodeElement<EditorInputNode>() {
   override fun create(): EditorInputNode =
     EditorInputNode(
@@ -164,6 +167,7 @@ private data class EditorInputElement(
       suppressSoftwareKeyboard = suppressSoftwareKeyboard,
       clipboard = clipboard,
       incomingContentHandler = incomingContentHandler,
+      onHardwareKeyInteraction = onHardwareKeyInteraction,
     )
 
   override fun update(node: EditorInputNode) {
@@ -174,6 +178,7 @@ private data class EditorInputElement(
     node.bringIntoViewRequests = bringIntoViewRequests
     node.clipboard = clipboard
     node.incomingContentHandler = incomingContentHandler
+    node.onHardwareKeyInteraction = onHardwareKeyInteraction
     node.updateInputPolicy(enabled = enabled, suppressSoftwareKeyboard = suppressSoftwareKeyboard)
     if (node.session.editor !== previousEditor) {
       node.bindImeResync()
@@ -191,6 +196,7 @@ internal class EditorInputNode(
   suppressSoftwareKeyboard: Boolean,
   var clipboard: Clipboard,
   var incomingContentHandler: EditorIncomingContentHandler,
+  var onHardwareKeyInteraction: () -> Unit = {},
 ) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private var focused = false
@@ -448,6 +454,7 @@ internal class EditorInputNode(
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (!enabled || event.type != KeyEventType.KeyDown) return false
+    onHardwareKeyInteraction()
     val binding = bindings.find { matchesKeyBinding(it, platform, event) }
     if (binding != null) {
       val composing = editor.appliedState.ime?.composing != null
@@ -547,6 +554,7 @@ internal class EditorInputNode(
 
   override fun onPreKeyEvent(event: KeyEvent): Boolean {
     if (!enabled || event.type != KeyEventType.KeyDown) return false
+    onHardwareKeyInteraction()
     val binding = bindings.find { matchesKeyBinding(it, platform, event) } ?: return false
     if (editor.appliedState.ime?.composing != null && !binding.commitCompositionBeforeDispatch) {
       recordHardwareKey(

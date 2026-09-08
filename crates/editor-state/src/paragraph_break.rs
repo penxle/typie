@@ -96,6 +96,27 @@ pub fn paragraph_break_at_end(pos: &Position, view: &DocView) -> Option<Selectio
     trailing_break_for_paragraph(&para, view)
 }
 
+pub fn paragraph_break_ending_at(pos: &Position, view: &DocView) -> Option<Selection> {
+    let previous = if let Some(paragraph) = paragraph_owner(pos, view)
+        && same_boundary(pos, &paragraph_start_boundary(&paragraph)?, view)
+    {
+        paragraph
+            .index()?
+            .checked_sub(1)
+            .and_then(|index| paragraph.parent()?.child_at(index))?
+    } else {
+        let parent = view.node(pos.node)?;
+        pos.offset
+            .checked_sub(1)
+            .and_then(|index| parent.child_at(index))?
+    };
+    let ChildView::Block(previous) = previous else {
+        return None;
+    };
+    let paragraph_break = trailing_break_for_paragraph(&previous, view)?;
+    same_boundary(pos, &paragraph_break.head, view).then_some(paragraph_break)
+}
+
 fn same_boundary(a: &Position, b: &Position, view: &DocView) -> bool {
     matches!((a.resolve(view), b.resolve(view)), (Some(ra), Some(rb)) if ra.path() == rb.path())
 }
@@ -500,6 +521,19 @@ mod tests {
         assert_eq!(result, sel, "paragraph-break span preserved (reversed)");
     }
 
+    #[test]
+    fn test_paragraph_break_ending_at_next_paragraph_start() {
+        let (pd, _root, p1, _p2) = two_paras();
+        let view = DocView::new(&pd);
+        let paragraph_break = paragraph_break_at_end(&pos_aff(p1, 2, Affinity::Downstream), &view)
+            .expect("paragraph break");
+
+        assert_eq!(
+            paragraph_break_ending_at(&paragraph_break.head, &view),
+            Some(paragraph_break),
+        );
+    }
+
     // ── §4.2b paragraph→non-paragraph (callout) — NOT a break ────────────────
 
     #[test]
@@ -554,6 +588,7 @@ mod tests {
         assert_eq!(anchor.offset, 0);
         assert_eq!(anchor.affinity, Affinity::Downstream);
         assert_eq!(head.affinity, Affinity::Upstream);
+        assert_eq!(paragraph_break_ending_at(head, &view), Some(pb));
     }
 
     // ── §4.3 removable empty paragraph with NO next sibling → NO break ────────

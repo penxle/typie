@@ -18,6 +18,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
+import co.typie.editor.ffi.ViewOp
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorBringIntoViewRequests
 import co.typie.editor.scroll.EditorVisibleArea
@@ -38,6 +39,29 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionScopeTest {
+  @Test
+  fun `app direct touch changes sync with the attached editor`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      val scope = EditorInteractionScope(coroutineScope = this)
+
+      updateScope(scope = scope, editor = editor, editing = { true }, directTouchInteraction = true)
+      fake.enqueued.clear()
+
+      updateScope(
+        scope = scope,
+        editor = editor,
+        editing = { true },
+        directTouchInteraction = false,
+      )
+
+      assertEquals(
+        listOf<Message>(Message.View(ViewOp.SetDirectTouchInteraction(false))),
+        fake.enqueued,
+      )
+    }
+
   @Test
   fun `interaction effect contains an editor-owned failure`() =
     runTest(StandardTestDispatcher()) {
@@ -212,14 +236,22 @@ class EditorInteractionScopeTest {
         EditorInteractionScope(coroutineScope = this, platformProvider = { Platform.Desktop })
       var editing = false
       updateScope(scope = scope, editor = editor, editing = { editing }, uiState = uiState)
+      fake.enqueued.clear()
 
       scope.controller.onPointerDown(
         change = pointerDown(id = 1L, uptimeMillis = 0L),
         position = Offset(10f, 20f),
       )
+      fake.enqueued.clear()
 
       editing = true
-      updateScope(scope = scope, editor = editor, editing = { editing }, uiState = uiState)
+      updateScope(
+        scope = scope,
+        editor = editor,
+        editing = { editing },
+        directTouchInteraction = true,
+        uiState = uiState,
+      )
 
       assertTrue(
         scope.controller.onPointerUp(
@@ -398,6 +430,7 @@ class EditorInteractionScopeTest {
 
       scope.update(
         editor = null,
+        directTouchInteraction = false,
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         uiState = EditorUiState(),
         density = 1f,
@@ -419,6 +452,7 @@ class EditorInteractionScopeTest {
 
       scope.update(
         editor = null,
+        directTouchInteraction = false,
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         uiState = EditorUiState(),
         density = 1f,
@@ -450,6 +484,7 @@ class EditorInteractionScopeTest {
       val scope = EditorInteractionScope(coroutineScope = this)
       scope.update(
         editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler)),
+        directTouchInteraction = false,
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         uiState = uiState,
         density = 1f,
@@ -511,6 +546,7 @@ class EditorInteractionScopeTest {
 
       scope.update(
         editor = editor,
+        directTouchInteraction = false,
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         uiState = uiState,
         density = 1f,
@@ -526,6 +562,7 @@ class EditorInteractionScopeTest {
 
       scope.update(
         editor = editor,
+        directTouchInteraction = false,
         bringIntoViewRequests = EditorBringIntoViewRequests(),
         uiState = uiState,
         density = 1f,
@@ -552,11 +589,13 @@ class EditorInteractionScopeTest {
     scope: EditorInteractionScope,
     editor: Editor,
     editing: () -> Boolean,
+    directTouchInteraction: Boolean = false,
     uiState: EditorUiState = EditorUiState(),
     onRequestEditing: (Editor) -> Boolean = { false },
   ) {
     scope.update(
       editor = editor,
+      directTouchInteraction = directTouchInteraction,
       bringIntoViewRequests = EditorBringIntoViewRequests(),
       uiState = uiState,
       density = 1f,

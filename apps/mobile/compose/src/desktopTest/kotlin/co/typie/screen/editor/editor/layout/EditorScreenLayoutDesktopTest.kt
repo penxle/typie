@@ -1504,6 +1504,7 @@ class EditorScreenLayoutDesktopTest {
       SideEffect {
         interactionScope.update(
           editor = fixture.editor,
+          directTouchInteraction = false,
           bringIntoViewRequests = bringIntoViewRequests,
           uiState = fixture.uiState,
           visibleArea = fixture.visibleArea,
