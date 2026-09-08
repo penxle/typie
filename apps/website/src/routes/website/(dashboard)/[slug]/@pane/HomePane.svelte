@@ -262,6 +262,7 @@
       <EditorBreadcrumbNavigation
         ancestors={[]}
         current={{ kind: 'home' }}
+        {focused}
         isOwner
         onNavigate={(target) => {
           if (target.kind === 'entity') paneGroup.replacePane(pane.id, { kind: 'entity', slug: target.slug });

@@ -7,9 +7,9 @@
   import { setupZenModePaneChrome } from './zen-mode-pane-chrome.svelte';
   import type { Pane } from './types';
 
-  type Props = { headerWidth?: number; zenModeEnabled?: boolean };
+  type Props = { focused?: boolean; headerWidth?: number; zenModeEnabled?: boolean };
 
-  let { headerWidth = 420, zenModeEnabled = false }: Props = $props();
+  let { focused = true, headerWidth = 420, zenModeEnabled = false }: Props = $props();
 
   const app = setupAppContext('pane-header-priority-test');
   app.preference.current.sidebarHidden = false;
@@ -27,7 +27,7 @@
     },
   });
   paneGroup.state.current.root = pane;
-  paneGroup.state.current.focusedPaneId = pane.id;
+  paneGroup.state.current.focusedPaneId = focused ? pane.id : null;
   setupPane(pane);
   setupZenModePaneChrome({ active: () => zenModeEnabled, focused: () => true });
 </script>

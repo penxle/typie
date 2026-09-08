@@ -31,6 +31,7 @@
   const paneGroup = getPaneGroup();
   const paneChrome = getZenModePaneChrome();
   const dragPaneProps = $derived({ paneGroup, paneId: pane.id });
+  const focused = $derived(paneGroup.state.current.focusedPaneId === pane.id);
   const prismPanelOpen = $derived(app.preference.current.prismPanelOpen);
   const sidebarHidden = $derived(app.preference.current.sidebarHidden);
   const zenModeEnabled = $derived(app.preference.current.zenModeEnabled);
@@ -125,8 +126,8 @@
           position: 'relative',
           alignItems: 'center',
           gap: '4px',
-          flexBasis: zenModeEnabled ? undefined : '0',
-          flexGrow: zenModeEnabled ? undefined : '1',
+          flexBasis: zenModeEnabled ? undefined : focused ? '0' : '[auto]',
+          flexGrow: zenModeEnabled ? undefined : focused ? '1' : '0',
           flexShrink: '1',
           minWidth: placement.topLeft ? '[32px]' : '0',
           height: 'full',
@@ -181,10 +182,13 @@
         position: 'relative',
         alignItems: 'center',
         gap: '4px',
+        flexBasis: !zenModeEnabled && !focused ? '0' : undefined,
+        flexGrow: !zenModeEnabled && !focused ? '1' : undefined,
         flexShrink: '1',
-        minWidth: '0',
+        minWidth: !zenModeEnabled && !focused ? '[min-content]' : '0',
         height: 'full',
         overflowX: 'hidden',
+        paddingLeft: '8px',
         paddingRight: '8px',
       })}
       active={zenModeEnabled}
@@ -193,19 +197,37 @@
       register={registerActions}
       segment="actions"
     >
-      <div class={flex({ position: 'relative', alignItems: 'center', gap: '4px', minWidth: '0', height: 'full' })}>
+      <div
+        class={flex({
+          position: 'relative',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: '4px',
+          flexGrow: '1',
+          minWidth: '0',
+          height: 'full',
+        })}
+      >
         {#if scrollableActions}
-          <HorizontalScrollLane
-            alignment="start"
-            contentIdentity={pane.id}
-            label="문서 헤더 도구 가로 스크롤"
-            viewportId={scrollableActionsViewportId}
-            viewportName="pane-header-actions"
+          <div
+            class={css(
+              !zenModeEnabled && !focused
+                ? { display: 'flex', justifyContent: 'flex-end', contain: '[inline-size]', flexGrow: '1', minWidth: '0', height: 'full' }
+                : { display: 'contents' },
+            )}
           >
-            <div class={flex({ alignItems: 'center', gap: '4px', minWidth: '[max-content]' })}>
-              {@render scrollableActions()}
-            </div>
-          </HorizontalScrollLane>
+            <HorizontalScrollLane
+              alignment="start"
+              contentIdentity={pane.id}
+              label="문서 헤더 도구 가로 스크롤"
+              viewportId={scrollableActionsViewportId}
+              viewportName="pane-header-actions"
+            >
+              <div class={flex({ alignItems: 'center', gap: '4px', minWidth: '[max-content]' })}>
+                {@render scrollableActions()}
+              </div>
+            </HorizontalScrollLane>
+          </div>
         {/if}
 
         {#if fixedActions}

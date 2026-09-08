@@ -8,17 +8,32 @@
   import type { EntityIcon_entity$key } from '$mearie';
 
   type Props = {
+    focused?: boolean;
     isCurrent: boolean;
     item: { kind: 'home' } | { kind: 'entity'; name: string; entity$key: EntityIcon_entity$key };
   };
 
-  let { isCurrent, item }: Props = $props();
+  let { focused, isCurrent, item }: Props = $props();
 </script>
 
 {#if item.kind === 'home'}
   <Icon icon={HomeIcon} size={14} />
 {:else}
-  <EntityIcon entity$key={item.entity$key} fallback={isCurrent ? undefined : FolderIcon} size={14} />
+  <span class={css({ display: 'contents', color: 'text.default' })}>
+    <EntityIcon
+      style={focused === false
+        ? css.raw({
+            color: {
+              base: '[color-mix(in oklab, currentColor 73%, token(colors.surface.default))]',
+              _dark: '[color-mix(in oklab, currentColor 82%, token(colors.surface.default))]',
+            },
+          })
+        : undefined}
+      entity$key={item.entity$key}
+      fallback={isCurrent ? undefined : FolderIcon}
+      size={14}
+    />
+  </span>
 {/if}
 <span>{item.kind === 'home' ? '홈' : item.name}</span>
 {#if !isCurrent}
