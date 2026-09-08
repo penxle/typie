@@ -1133,6 +1133,7 @@
                 <EditorBreadcrumbNavigation
                   ancestors={breadcrumbAncestors}
                   current={{ kind: 'entity', id: entity.id, slug: entity.slug, name: localTitle || '(제목 없음)', entity$key: entity }}
+                  {focused}
                   {isOwner}
                   onNavigate={(target) => {
                     paneGroup.replacePane(pane.id, target.kind === 'home' ? { kind: 'home' } : { kind: 'entity', slug: target.slug });
@@ -1145,7 +1146,7 @@
             </EditorBreadcrumb>
             {#if document.locked}
               <span
-                class={center({ flexShrink: '0', color: 'text.muted' })}
+                class={center({ flexShrink: '0', color: focused ? 'text.default' : 'text.muted' })}
                 aria-label="편집이 잠겨있는 문서예요."
                 role="img"
                 use:tooltip={{ message: '편집이 잠겨있는 문서예요.' }}

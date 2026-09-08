@@ -17,6 +17,40 @@ afterEach(async () => {
 });
 
 describe('PaneHeader priority lanes', () => {
+  it('gives inactive breadcrumbs space while keeping fixed actions visible and allowing other actions to fit', async () => {
+    const widths: number[] = [];
+    for (const focused of [true, false]) {
+      component = mount(PaneHeaderTestRoot, { target: document.body, props: { focused } });
+      await tick();
+      const breadcrumb = document.querySelector<HTMLElement>('#pane-header-breadcrumb-test');
+      const actions = document.querySelector<HTMLElement>('#pane-header-actions-pane-header-test');
+      const region = document.querySelector<HTMLElement>('[data-pane-header-test-host] [role="region"]');
+      if (!breadcrumb || !actions || !region) throw new Error('Missing pane header test fixture');
+      widths.push(breadcrumb.clientWidth);
+      expect(actions).not.toBeNull();
+      for (const control of region.querySelectorAll<HTMLElement>('[data-pane-header-fixed-action], [aria-label^="PRISM"]')) {
+        expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(actions.getBoundingClientRect().right);
+        expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(region.getBoundingClientRect().right);
+      }
+      await unmount(component);
+      component = undefined;
+      document.body.replaceChildren();
+    }
+    expect(widths[1]).toBeGreaterThan(widths[0]);
+    component = mount(PaneHeaderTestRoot, { target: document.body, props: { focused: false, headerWidth: 1000 } });
+    await tick();
+    const actions = document.querySelector<HTMLElement>('#pane-header-actions-pane-header-test');
+    if (!actions) throw new Error('Missing pane header actions');
+    expect(actions.clientWidth).toBeGreaterThan(0);
+    expect(actions.scrollWidth).toBe(actions.clientWidth);
+    const firstFixed = document.querySelector<HTMLElement>('[data-pane-header-test-host] [data-pane-header-fixed-action]');
+    const prism = document.querySelector<HTMLElement>('[data-pane-header-test-host] [aria-label^="PRISM"]');
+    const region = document.querySelector<HTMLElement>('[data-pane-header-test-host] [role="region"]');
+    if (!firstFixed || !prism || !region) throw new Error('Missing pane header fixed controls');
+    expect(firstFixed.getBoundingClientRect().left - actions.getBoundingClientRect().right).toBeCloseTo(4, 1);
+    expect(region.getBoundingClientRect().right - prism.getBoundingClientRect().right).toBeCloseTo(8, 1);
+  });
+
   it('signals a transient sidebar peek while the top-left control is hovered', async () => {
     component = mount(PaneHeaderTestRoot, { target: document.body });
     await tick();

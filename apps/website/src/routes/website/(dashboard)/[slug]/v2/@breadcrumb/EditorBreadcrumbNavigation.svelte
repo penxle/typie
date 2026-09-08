@@ -42,6 +42,7 @@
   type Props = {
     ancestors: readonly EditorBreadcrumbPathEntity[];
     current: EditorBreadcrumbCurrent;
+    focused?: boolean;
     isOwner: boolean;
     onNavigate: (target: EditorBreadcrumbTarget) => void;
     popupId: string;
@@ -49,7 +50,7 @@
     siteId: string | null;
   };
 
-  let { ancestors, current, isOwner, onNavigate, popupId, segment, siteId }: Props = $props();
+  let { ancestors, current, focused, isOwner, onNavigate, popupId, segment, siteId }: Props = $props();
 
   const POPUP_HOLD_REASON = 'breadcrumb-popup';
   const HOME_SEGMENT_ID = 'home';
@@ -67,7 +68,7 @@
   const pathItems = $derived<BreadcrumbPathItem[]>(
     current.kind === 'home' ? [current] : [...ancestors.map((entity) => ({ kind: 'entity' as const, ...entity })), current],
   );
-  const interactive = $derived(isOwner && siteId !== null);
+  const interactive = $derived(focused !== false && isOwner && siteId !== null);
   const segments = $derived.by<BreadcrumbNavigationSegment[]>(() => {
     if (siteId === null) return [];
 
@@ -191,7 +192,7 @@
     paddingRight: '4px',
     fontSize: '12px',
     fontWeight: 'medium',
-    color: 'text.muted',
+    color: focused ? 'text.default' : 'text.muted',
   })}
   aria-label="문서 경로"
 >
@@ -218,11 +219,11 @@
             onclick={(event) => activate(event, itemId)}
             type="button"
           >
-            <EditorBreadcrumbSegment {isCurrent} item={pathItem} />
+            <EditorBreadcrumbSegment {focused} {isCurrent} item={pathItem} />
           </button>
         {:else}
           <span class={segmentClass}>
-            <EditorBreadcrumbSegment {isCurrent} item={pathItem} />
+            <EditorBreadcrumbSegment {focused} {isCurrent} item={pathItem} />
           </span>
         {/if}
       </li>

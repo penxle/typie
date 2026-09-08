@@ -163,30 +163,6 @@
     {/each}
   {/if}
 
-  {#if context.enabled && !context.draggingPaneId && layout}
-    {@const focusedPaneId = context.state.current.focusedPaneId}
-    {@const focusedRect = layout.panes.get(focusedPaneId ?? '')}
-    {#if focusedRect}
-      {#key focusedPaneId}
-        <div
-          style:left="{focusedRect.left}px"
-          style:top="{focusedRect.top}px"
-          style:width="{focusedRect.width}px"
-          style:height="{focusedRect.height}px"
-          class={css({
-            position: 'absolute',
-            pointerEvents: 'none',
-            boxShadow: '[0 0 0 1px token(colors.border.emphasis)]',
-            zIndex: 'overEditor',
-          })}
-          out:fade|global={{
-            duration: context.enabled && !context.draggingPaneId && context.panes.some((pane) => pane.id === focusedPaneId) ? 150 : 0,
-          }}
-        ></div>
-      {/key}
-    {/if}
-  {/if}
-
   {#if context.draggingPaneId}
     <div class={css({ position: 'absolute', inset: '0', zIndex: 'ghost' })}></div>
   {/if}
