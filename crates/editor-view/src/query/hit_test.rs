@@ -67,17 +67,32 @@ pub(crate) fn hit_test_extending(
     page_idx: usize,
     x: f32,
     y: f32,
+    direct_touch_interaction: bool,
 ) -> Option<ExtendingHit> {
     let point = layout_index.point(page_idx, x, y)?;
     let anchor = anchor.resolve(view)?;
     let scope = layout_index.container_scope(point);
 
-    drag_exact_selection_at(layout_index, view, &anchor, point, scope)
-        .map(ExtendingHit::exact)
-        .or_else(|| {
-            drag_boundary_fallback(layout_index, view, &anchor, point, scope)
-                .map(ExtendingHit::fallback)
-        })
+    drag_exact_selection_at(
+        layout_index,
+        view,
+        &anchor,
+        point,
+        scope,
+        direct_touch_interaction,
+    )
+    .map(ExtendingHit::exact)
+    .or_else(|| {
+        drag_boundary_fallback(
+            layout_index,
+            view,
+            &anchor,
+            point,
+            scope,
+            direct_touch_interaction,
+        )
+        .map(ExtendingHit::fallback)
+    })
 }
 
 fn drag_exact_selection_at(
@@ -86,6 +101,7 @@ fn drag_exact_selection_at(
     anchor: &ResolvedPosition,
     point: LayoutPoint,
     scope: Option<&LayoutEntry>,
+    direct_touch_interaction: bool,
 ) -> Option<Selection> {
     let is_scoped_drag_exact_hit_entry = |entry: &LayoutEntry, node: &LayoutNode| {
         is_drag_exact_hit_entry(entry, node)
@@ -93,7 +109,14 @@ fn drag_exact_selection_at(
     };
 
     let entry = layout_index.exact_entry(point, is_scoped_drag_exact_hit_entry)?;
-    drag_exact_selection_for_entry(layout_index, view, anchor, entry, point)
+    drag_exact_selection_for_entry(
+        layout_index,
+        view,
+        anchor,
+        entry,
+        point,
+        direct_touch_interaction,
+    )
 }
 
 fn drag_exact_selection_for_entry(
@@ -102,10 +125,18 @@ fn drag_exact_selection_for_entry(
     anchor: &ResolvedPosition,
     entry: &LayoutEntry,
     point: LayoutPoint,
+    direct_touch_interaction: bool,
 ) -> Option<Selection> {
     hard_break::drag_selection_for_entry(layout_index, view, entry, point)
         .or_else(|| {
-            paragraph_break::drag_selection_for_entry(layout_index, view, anchor, entry, point)
+            paragraph_break::drag_selection_for_entry(
+                layout_index,
+                view,
+                anchor,
+                entry,
+                point,
+                direct_touch_interaction,
+            )
         })
         .or_else(|| match entry.content(layout_index)? {
             LayoutContent::Line(_) | LayoutContent::Atom(_) => {
@@ -153,6 +184,7 @@ fn drag_boundary_fallback(
     anchor: &ResolvedPosition,
     point: LayoutPoint,
     scope: Option<&LayoutEntry>,
+    direct_touch_interaction: bool,
 ) -> Option<Selection> {
     let mut inside: Option<DragFallbackCandidate> = None;
     let mut before: Option<DragFallbackCandidate> = None;
@@ -179,31 +211,48 @@ fn drag_boundary_fallback(
         }
     }
 
-    if let Some(candidate) = inside {
-        return Some(candidate.selection);
+    let candidate = inside.or_else(|| {
+        let prefer_before = after
+            .as_ref()
+            .and_then(|candidate| candidate.start.resolve(view))
+            .is_none_or(|after_start| anchor < &after_start);
+        if prefer_before {
+            before.or(after)
+        } else {
+            after.or(before)
+        }
+    })?;
+    if direct_touch_interaction
+        && let Some(selection) = paragraph_break::drag_selection_for_entry(
+            layout_index,
+            view,
+            anchor,
+            candidate.entry,
+            point,
+            true,
+        )
+    {
+        return Some(selection);
     }
-
-    let prefer_before = after
-        .as_ref()
-        .and_then(|candidate| candidate.start.resolve(view))
-        .is_none_or(|after_start| anchor < &after_start);
-    let candidate = if prefer_before {
-        before.or(after)
-    } else {
-        after.or(before)
-    };
-    candidate.map(|candidate| candidate.selection)
+    Some(candidate.selection)
 }
 
-struct DragFallbackCandidate {
+struct DragFallbackCandidate<'a> {
+    entry: &'a LayoutEntry,
     distance: (f32, f32),
     start: Position,
     selection: Selection,
 }
 
-impl DragFallbackCandidate {
-    fn new(entry: &LayoutEntry, point: LayoutPoint, start: Position, selection: Selection) -> Self {
+impl<'a> DragFallbackCandidate<'a> {
+    fn new(
+        entry: &'a LayoutEntry,
+        point: LayoutPoint,
+        start: Position,
+        selection: Selection,
+    ) -> Self {
         Self {
+            entry,
             distance: distance_key(&entry.rect, point.x, point.y),
             start,
             selection,
@@ -215,11 +264,11 @@ impl DragFallbackCandidate {
     }
 }
 
-fn drag_fallback_candidate(
+fn drag_fallback_candidate<'a>(
     layout_index: &LayoutIndex,
-    entry: &LayoutEntry,
+    entry: &'a LayoutEntry,
     point: LayoutPoint,
-) -> Option<DragFallbackCandidate> {
+) -> Option<DragFallbackCandidate<'a>> {
     match entry.content(layout_index)? {
         LayoutContent::Line(line) => {
             let start = position_in_line(line, &entry.rect, entry.rect.x);
@@ -930,7 +979,7 @@ mod tests {
             offset: 0,
             affinity: Affinity::Downstream,
         };
-        let result = hit_test_extending(&index, &view, &drag_anchor, 0, click_x, page_y);
+        let result = hit_test_extending(&index, &view, &drag_anchor, 0, click_x, page_y, false);
 
         assert!(
             result.is_some(),
@@ -972,7 +1021,7 @@ mod tests {
         let x = cell_rect.x + cell_rect.width / 2.0;
         let page_y = (cell_rect.y + line_entry.rect.y) / 2.0 - index.pages()[0].y_start;
 
-        let hit = hit_test_extending(&index, &view, &anchor, 0, x, page_y)
+        let hit = hit_test_extending(&index, &view, &anchor, 0, x, page_y, false)
             .expect("cell padding must still produce an extending hit");
 
         assert_eq!(hit.source, ExtendingHitSource::Fallback);
@@ -1018,9 +1067,9 @@ mod tests {
         };
 
         let sel_with_before_anchor =
-            hit_test_extending(&index, &view, &anchor_before, 0, x, gap_mid_y_page);
+            hit_test_extending(&index, &view, &anchor_before, 0, x, gap_mid_y_page, false);
         let sel_with_after_anchor =
-            hit_test_extending(&index, &view, &anchor_after, 0, x, gap_mid_y_page);
+            hit_test_extending(&index, &view, &anchor_after, 0, x, gap_mid_y_page, false);
 
         assert!(
             sel_with_before_anchor.is_some(),

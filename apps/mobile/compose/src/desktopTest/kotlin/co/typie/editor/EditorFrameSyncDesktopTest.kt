@@ -63,6 +63,8 @@ import co.typie.screen.editor.editor.layout.rememberCommittedEditorRenderZoom
 import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayGeometry
 import co.typie.screen.editor.editor.overlay.resolveSelectionHandleOverlayPlacements
 import co.typie.screen.editor.editor.state.EditorScreenState
+import co.typie.ui.input.DirectTouchInteractionState
+import co.typie.ui.input.LocalDirectTouchInteractionState
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
 import co.typie.ui.theme.LocalAppColors
@@ -434,6 +436,7 @@ class EditorFrameSyncDesktopTest {
             uiState = fixture.uiState,
             editorRectInOverlay = editorRect,
             density = 1f,
+            directTouchInteraction = true,
           )
         )
       val pixels = onNodeWithTag(RootTag).captureToImage().toPixelMap()
@@ -1526,10 +1529,14 @@ class EditorFrameSyncDesktopTest {
           val consumed = fixture.viewportState.consumePan(Offset(x = -delta.x, y = -delta.y))
           Offset(x = -consumed.x, y = -consumed.y)
         }
+        val directTouchInteractionState = remember {
+          DirectTouchInteractionState(initialDirectTouchInteraction = false)
+        }
 
         SideEffect {
           interactionScope.update(
             editor = fixture.editor,
+            directTouchInteraction = false,
             bringIntoViewRequests = fixture.bringIntoViewRequests,
             uiState = fixture.uiState,
             visibleArea = fixture.visibleArea,
@@ -1553,6 +1560,7 @@ class EditorFrameSyncDesktopTest {
           LocalEditorZoomController provides zoomController,
           LocalEditorBringIntoViewRequests provides fixture.bringIntoViewRequests,
           LocalEditorInteractionScope provides interactionScope,
+          LocalDirectTouchInteractionState provides directTouchInteractionState,
         ) {
           EditorSurfaceHost(
             editor = fixture.editor,

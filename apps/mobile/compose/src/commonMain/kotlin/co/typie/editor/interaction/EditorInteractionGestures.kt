@@ -25,6 +25,7 @@ import co.typie.editor.interaction.gestures.start
 import co.typie.editor.interaction.gestures.trackPointerMove
 import co.typie.editor.interaction.gestures.update
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
+import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorInteractionGestures(
   contextProvider: () -> EditorGestureContext,
@@ -108,7 +109,9 @@ internal class EditorInteractionGestures(
     val columnResizePlacement = tableColumnResize.hitTest(position = position, context = context)
     val tableHandleHit = columnResizePlacement == null && tableHandle.hitTest(position)
     val selectionHandleType =
-      if (columnResizePlacement == null && !tableHandleHit) {
+      if (
+        change.type.isDirectTouchInteraction() && columnResizePlacement == null && !tableHandleHit
+      ) {
         selectionHandle.hitTest(position)
       } else {
         null

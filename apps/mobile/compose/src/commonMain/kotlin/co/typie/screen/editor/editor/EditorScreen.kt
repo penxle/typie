@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -222,6 +223,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarCenterAppearance
+import co.typie.ui.input.LocalDirectTouchInteractionState
 import co.typie.ui.input.PointerInputModeState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
@@ -273,6 +275,8 @@ fun EditorScreen(entityId: String) {
   val sheet = LocalSheet.current
   val popoverOverlayState = LocalPopoverOverlayState.current
   val toast = LocalToast.current
+  val directTouchInteractionState = LocalDirectTouchInteractionState.current
+  val directTouchInteraction = directTouchInteractionState.isDirectTouchInteraction
   val model = viewModel { EditorViewModel(entityId) }
   val scope = rememberCoroutineScope()
   val focusReturnSession = remember(entityId) { EditorFocusReturnSession(scope = scope) }
@@ -1776,6 +1780,7 @@ fun EditorScreen(entityId: String) {
         )
       interactionScope.update(
         editor = editor,
+        directTouchInteraction = directTouchInteraction,
         bringIntoViewRequests = bringIntoViewRequests,
         uiState = uiState,
         visibleArea = visibleArea,
@@ -1863,7 +1868,11 @@ fun EditorScreen(entityId: String) {
         viewportAnchorState = viewportAnchorState,
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         pointerInputModeState = pointerInputModeState,
-        onViewportIndirectInput = { uiState.contextMenu.hide() },
+        onViewportIndirectInput = {
+          directTouchInteractionState.recordPointerInteraction(PointerType.Mouse)
+          interactionScope.controller.updateDirectTouchInteraction(false)
+          uiState.contextMenu.hide()
+        },
         onViewportPointerEnter = {
           zoomIndicatorState.onPanePointerEnter(zoomController.resolveLandmark())
         },

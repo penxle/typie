@@ -1285,6 +1285,7 @@ class EditorDocumentManipulationDesktopTest {
         onInteractionScope(interactionScope)
         interactionScope.update(
           editor = editor,
+          directTouchInteraction = false,
           bringIntoViewRequests = bringIntoViewRequests,
           uiState = uiState,
           visibleArea = visibleArea,
@@ -1347,6 +1348,7 @@ class EditorDocumentManipulationDesktopTest {
               uiState = uiState,
               density = 1f,
               pagePresented = { page -> editor.publishedBundle?.frames?.containsKey(page) == true },
+              directTouchInteraction = true,
             )
           }
         }

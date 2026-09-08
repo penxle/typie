@@ -13,6 +13,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.preferredFrameRate
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -61,6 +63,9 @@ import co.typie.ui.component.sheet.SheetOverlay
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.Toast
 import co.typie.ui.component.toast.ToastOverlay
+import co.typie.ui.input.DirectTouchInteractionState
+import co.typie.ui.input.LocalDirectTouchInteractionState
+import co.typie.ui.input.trackDirectTouchInteraction
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
@@ -158,6 +163,12 @@ fun RootShell() {
   val dialog = remember { Dialog() }
   val popover = remember { PopoverOverlayState() }
   val statusBarAppearanceState = remember { NavigationStatusBarAppearanceState() }
+  val inputModeManager = LocalInputModeManager.current
+  val directTouchInteractionState = remember {
+    DirectTouchInteractionState(
+      initialDirectTouchInteraction = inputModeManager.inputMode == InputMode.Touch
+    )
+  }
 
   // 등록 실패 안내는 루트에서 수집한다 — 미완료 트랜잭션 재시도는 화면 밖(앱 실행 시 복구)에서도 일어나므로
   // 구매 화면에서만 들으면 조용히 버려진다.
@@ -196,10 +207,12 @@ fun RootShell() {
     LocalToast provides toast,
     LocalLoader provides loader,
     LocalPopoverOverlayState provides popover,
+    LocalDirectTouchInteractionState provides directTouchInteractionState,
   ) {
     Box(
       Modifier.fillMaxSize()
         .preferredFrameRate(FrameRateCategory.High)
+        .trackDirectTouchInteraction(directTouchInteractionState)
         .popoverOutsideTapHost(state = popover)
     ) {
       Crossfade(

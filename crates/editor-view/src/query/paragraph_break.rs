@@ -9,7 +9,7 @@ use editor_model::{ChildView, DocView, NodeType};
 use editor_state::Affinity;
 use editor_state::{
     Position, ResolvedPosition, Selection, before_or_same, last_cursor_position,
-    paragraph_break_at_end,
+    paragraph_break_at_end, paragraph_break_ending_at,
 };
 
 use crate::page::{LayoutPage, PageRect};
@@ -37,6 +37,16 @@ pub(crate) fn paragraph_break_occurrence_for_node(
     Some(ParagraphBreakOccurrence { range, geometry })
 }
 
+pub(crate) fn paragraph_break_occurrence_ending_at(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    position: &Position,
+) -> Option<ParagraphBreakOccurrence> {
+    let range = paragraph_break_ending_at(position, view)?;
+    let geometry = geometry(layout_index, range, layout_index.pages())?;
+    Some(ParagraphBreakOccurrence { range, geometry })
+}
+
 fn geometry(
     layout_index: &LayoutIndex,
     paragraph_break_range: Selection,
@@ -56,12 +66,25 @@ pub(crate) fn drag_selection_for_entry(
     anchor: &ResolvedPosition<'_>,
     entry: &LayoutEntry,
     point: LayoutPoint,
+    direct_touch_interaction: bool,
 ) -> Option<Selection> {
     let paragraph_break = paragraph_break_occurrence_for_entry(layout_index, view, entry)?;
     match entry.content(layout_index)? {
         LayoutContent::Line(_) => {
             let rect = paragraph_break.geometry.rect.rect;
             let page_y = point.y - point.page_y_start;
+            if direct_touch_interaction {
+                let resolved = paragraph_break.range.resolve(view)?;
+                let dragging_forward =
+                    before_or_same(&anchor.position(), &resolved.from().position(), view);
+                if dragging_forward {
+                    return (page_y >= rect.bottom()).then_some(paragraph_break.range);
+                }
+                if point.x < rect.x || page_y < rect.y {
+                    return None;
+                }
+                return Some(Selection::collapsed(paragraph_break.range.head));
+            }
             let x_mid = rect.x + rect.width / 2.0;
             if paragraph_break.geometry.rect.page_idx == point.page_idx
                 && page_y >= rect.y
@@ -471,7 +494,8 @@ mod tests {
                 page_y_start: 0.0,
             };
 
-            let result = drag_selection_for_entry(&index, &view, &anchor_rp, gap_entry, point);
+            let result =
+                drag_selection_for_entry(&index, &view, &anchor_rp, gap_entry, point, false);
             assert!(
                 result.is_some(),
                 "drag_selection_for_entry must return Some for gap entry"
@@ -494,7 +518,7 @@ mod tests {
                 .expect("after-anchor must resolve");
 
             let result2 =
-                drag_selection_for_entry(&index, &view, &after_anchor_rp, gap_entry, point);
+                drag_selection_for_entry(&index, &view, &after_anchor_rp, gap_entry, point, false);
             assert!(
                 result2.is_some(),
                 "drag_selection_for_entry after gap must return Some"

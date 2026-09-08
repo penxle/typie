@@ -77,6 +77,7 @@ internal class EditorInteractionScope(
 
   fun update(
     editor: Editor?,
+    directTouchInteraction: Boolean,
     bringIntoViewRequests: EditorBringIntoViewRequests,
     uiState: EditorUiState,
     visibleArea: EditorVisibleArea,
@@ -110,6 +111,7 @@ internal class EditorInteractionScope(
       }
     }
     this.editor = editor
+    controller.syncDirectTouchInteraction(directTouchInteraction)
     this.bringIntoViewRequests = bringIntoViewRequests
     this.uiState = uiState
     this.visibleArea = visibleArea

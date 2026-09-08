@@ -45,6 +45,10 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             editor.expand_folds(folds);
             Ok(())
         }
+        ViewOp::SetDirectTouchInteraction { direct } => {
+            editor.set_direct_touch_interaction(direct);
+            Ok(())
+        }
     }
 }
 
@@ -176,6 +180,63 @@ mod tests {
         });
 
         assert!(!editor.fold_expanded(f1), "folds load collapsed by default");
+    }
+
+    #[test]
+    fn direct_touch_changes_only_active_selection_presentation() {
+        let (initial, p1, p2) = state! {
+            doc { root {
+                p1: paragraph { text("abc") }
+                p2: paragraph { text("def") }
+            } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.view.layout(&editor.state);
+        let paragraph_break =
+            editor_state::paragraph_break_at_end(&Position::new(p1, 3), &editor.state().view())
+                .expect("paragraph break");
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::new(Position::new(p1, 0), paragraph_break.head),
+            },
+        });
+
+        let general_before = {
+            let doc = editor.state().view();
+            let resolved = editor.state().selection.unwrap().resolve(&doc).unwrap();
+            editor.view.selection_rects(&resolved)
+        };
+        let compact_marks = editor.cell_selection_rects_for_test();
+
+        let events = editor.apply(Message::View {
+            op: ViewOp::SetDirectTouchInteraction { direct: true },
+        });
+
+        let general_after = {
+            let doc = editor.state().view();
+            let resolved = editor.state().selection.unwrap().resolve(&doc).unwrap();
+            editor.view.selection_rects(&resolved)
+        };
+        let touch_marks = editor.cell_selection_rects_for_test();
+        let endpoints = editor.selection_endpoints().expect("selection endpoints");
+
+        assert_eq!(general_after, general_before);
+        assert_eq!(compact_marks.len(), 1);
+        assert_eq!(touch_marks.len(), 1);
+        assert!(touch_marks[0].rect.right() > compact_marks[0].rect.right());
+        assert_eq!(endpoints.to.rect.x, touch_marks[0].rect.right());
+        assert!(events.iter().any(|event| matches!(
+            event,
+            EditorEvent::StateChanged { fields } if fields == &[StateField::Cursor]
+        )));
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EditorEvent::RenderInvalidated))
+        );
+        assert_eq!(editor.state().selection.unwrap().head, paragraph_break.head);
+        assert_eq!(p2, paragraph_break.head.node);
     }
 
     #[test]

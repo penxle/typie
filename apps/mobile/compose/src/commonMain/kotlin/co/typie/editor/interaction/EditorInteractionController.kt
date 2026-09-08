@@ -9,11 +9,14 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.EditorZoomLandmark
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
 import co.typie.editor.runtime.EditorUiState
 import co.typie.platform.Platform
+import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorInteractionController(
   private val editorProvider: () -> Editor?,
@@ -36,6 +39,9 @@ internal class EditorInteractionController(
 
   override var mode by mutableStateOf(EditorInteractionMode.Idle)
     private set
+
+  private var syncedDirectTouchInteractionEditor: Editor? = null
+  private var syncedDirectTouchInteraction: Boolean? = null
 
   override val isFocused: Boolean
     get() = uiStateProvider().focused
@@ -85,6 +91,9 @@ internal class EditorInteractionController(
     touchPanDriver: EditorPanGestureDriver? = null,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
+      if (position != null) {
+        updateDirectTouchInteraction(change.type.isDirectTouchInteraction())
+      }
       gestures.handlePointerDown(
         change = change,
         positionInEditor = position,
@@ -97,6 +106,26 @@ internal class EditorInteractionController(
     } else {
       false
     }
+
+  fun syncDirectTouchInteraction(direct: Boolean) {
+    val editor = editorProvider()
+    if (syncedDirectTouchInteractionEditor === editor && syncedDirectTouchInteraction == direct) {
+      return
+    }
+    syncedDirectTouchInteractionEditor = editor
+    syncedDirectTouchInteraction = direct
+    editor?.runCallback {
+      editor.enqueue(Message.View(ViewOp.SetDirectTouchInteraction(direct = direct)))
+    }
+  }
+
+  fun updateDirectTouchInteraction(direct: Boolean) {
+    val editor = editorProvider()
+    if (syncedDirectTouchInteractionEditor !== editor || syncedDirectTouchInteraction == null) {
+      return
+    }
+    syncDirectTouchInteraction(direct)
+  }
 
   fun onPointerMove(
     change: PointerInputChange,

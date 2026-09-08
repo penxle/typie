@@ -27,8 +27,13 @@ internal fun EditorSelectionHandleOverlay(
   uiState: EditorUiState,
   density: Float,
   pagePresented: (Int) -> Boolean,
+  directTouchInteraction: Boolean,
 ) {
-  if (state.selection.isCollapsed() || resolveTableCellSelections(state).isNotEmpty()) {
+  if (
+    !directTouchInteraction ||
+      state.selection.isCollapsed() ||
+      resolveTableCellSelections(state).isNotEmpty()
+  ) {
     return
   }
 
@@ -47,6 +52,7 @@ internal fun EditorSelectionHandleOverlay(
         editorRectInOverlay = editorRect,
         density = density,
         pagePresented = pagePresented,
+        directTouchInteraction = directTouchInteraction,
       ) ?: return@Canvas
     placements.forEach { placement ->
       val geometry = resolveSelectionHandleOverlayGeometry(placement, density)
@@ -89,9 +95,13 @@ internal fun resolveSelectionHandleOverlayPlacements(
   editorRectInOverlay: Rect,
   density: Float,
   pagePresented: (Int) -> Boolean = { true },
+  directTouchInteraction: Boolean,
 ): List<EditorSelectionHandleOverlayPlacement>? {
   if (
-    density <= 0f || state.selection.isCollapsed() || resolveTableCellSelections(state).isNotEmpty()
+    !directTouchInteraction ||
+      density <= 0f ||
+      state.selection.isCollapsed() ||
+      resolveTableCellSelections(state).isNotEmpty()
   ) {
     return null
   }

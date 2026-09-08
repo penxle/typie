@@ -41,6 +41,7 @@ import co.typie.screen.editor.editor.overlay.EditorSelectionHandleOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableCellSelectionOverlay
 import co.typie.screen.editor.editor.overlay.EditorTableColumnResizeOverlay
 import co.typie.storage.Preference
+import co.typie.ui.input.LocalDirectTouchInteractionState
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -66,6 +67,7 @@ internal fun EditorBody(
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
   val interactionScope = LocalEditorInteractionScope.current
+  val directTouchInteractionState = LocalDirectTouchInteractionState.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
   val presentedBundle = publishedBundle
   val presentedState = presentedBundle?.snapshot ?: EditorState.Initial
@@ -193,6 +195,7 @@ internal fun EditorBody(
           uiState = uiState,
           density = density.density,
           pagePresented = { page -> presentedBundle?.frames?.containsKey(page) == true },
+          directTouchInteraction = directTouchInteractionState.isDirectTouchInteraction,
         )
       }
     }

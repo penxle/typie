@@ -631,6 +631,7 @@ impl View {
             page_idx,
             x,
             y,
+            self.view_state.direct_touch_interaction,
         )
     }
 
@@ -826,7 +827,14 @@ impl View {
         let Some(result) = self.layout.as_ref() else {
             return Vec::new();
         };
-        crate::query::selection::selection_mark_rects(&result.layout_index, selection)
+        if self.view_state.direct_touch_interaction {
+            crate::query::selection::selection_mark_rects_for_direct_touch(
+                &result.layout_index,
+                selection,
+            )
+        } else {
+            crate::query::selection::selection_mark_rects(&result.layout_index, selection)
+        }
     }
 
     pub fn selection_text_rects(
@@ -844,7 +852,14 @@ impl View {
         selection: &ResolvedSelection,
     ) -> Option<crate::query::selection::SelectionEndpoints> {
         let result = self.layout.as_ref()?;
-        crate::query::selection::selection_endpoints(&result.layout_index, selection)
+        if self.view_state.direct_touch_interaction {
+            crate::query::selection::selection_endpoints_for_direct_touch(
+                &result.layout_index,
+                selection,
+            )
+        } else {
+            crate::query::selection::selection_endpoints(&result.layout_index, selection)
+        }
     }
 
     pub fn selection_hit_test(
@@ -1070,6 +1085,14 @@ impl View {
 
     pub fn fold_expanded(&self, node: Dot) -> bool {
         self.view_state.fold_expanded(node)
+    }
+
+    pub fn set_direct_touch_interaction(&mut self, direct: bool) -> bool {
+        if self.view_state.direct_touch_interaction == direct {
+            return false;
+        }
+        self.view_state.direct_touch_interaction = direct;
+        true
     }
 
     pub fn toggle_fold(&mut self, state: &State, node: Dot) -> bool {

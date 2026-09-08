@@ -66,7 +66,13 @@ impl SelectionRectSets {
         self.text_rects.push(rect);
     }
 
-    fn push_paragraph_break(&mut self, rect: SelectionRect, paragraph_rects_start: usize) {
+    fn push_paragraph_break(
+        &mut self,
+        geometry: super::paragraph_break::ParagraphBreakGeometry,
+        paragraph_rects_start: usize,
+        direct_touch_interaction: bool,
+    ) {
+        let rect = paragraph_break_rect(&geometry);
         let extends_text = self.line_box_rects.len() > paragraph_rects_start
             && self.line_box_rects.last().is_some_and(|previous| {
                 previous.meta == SelectionRectKind::Text
@@ -84,10 +90,18 @@ impl SelectionRectSets {
                 .expect("a text line box must have an engine-painted mark");
             debug_assert_eq!(line_box, mark);
             line_box.rect.width += rect.rect.width;
-            mark.rect.width += rect.rect.width;
+            mark.rect.width = if direct_touch_interaction {
+                (geometry.line_right - mark.rect.x).max(0.0)
+            } else {
+                mark.rect.width + rect.rect.width
+            };
         } else {
             self.line_box_rects.push(rect.clone());
-            self.mark_rects.push(rect.clone());
+            let mut mark = rect.clone();
+            if direct_touch_interaction {
+                mark.rect.width = (geometry.line_right - mark.rect.x).max(0.0);
+            }
+            self.mark_rects.push(mark);
         }
         self.text_rects.push(rect);
     }
@@ -129,6 +143,7 @@ struct SelectionWalk<'a, 'doc> {
     to_owner: Option<&'a LayoutEntry>,
     pages: &'a [LayoutPage],
     selection: &'a ResolvedSelection<'doc>,
+    direct_touch_interaction: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,26 +156,34 @@ pub(crate) fn selection_rects(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
-    selection_rect_sets(layout_index, selection).line_box_rects
+    selection_rect_sets(layout_index, selection, false).line_box_rects
 }
 
 pub(crate) fn selection_mark_rects(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
-    selection_rect_sets(layout_index, selection).mark_rects
+    selection_rect_sets(layout_index, selection, false).mark_rects
+}
+
+pub(crate) fn selection_mark_rects_for_direct_touch(
+    layout_index: &LayoutIndex,
+    selection: &ResolvedSelection<'_>,
+) -> Vec<SelectionRect> {
+    selection_rect_sets(layout_index, selection, true).mark_rects
 }
 
 pub(crate) fn selection_text_rects(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
 ) -> Vec<SelectionRect> {
-    selection_rect_sets(layout_index, selection).text_rects
+    selection_rect_sets(layout_index, selection, false).text_rects
 }
 
 fn selection_rect_sets(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
+    direct_touch_interaction: bool,
 ) -> SelectionRectSets {
     if selection.is_collapsed() {
         return SelectionRectSets::empty();
@@ -198,6 +221,7 @@ fn selection_rect_sets(
         to_owner,
         pages,
         selection,
+        direct_touch_interaction,
     };
 
     visit_node(&layout_index.tree().root, &walk, &mut phase, &mut rects);
@@ -212,9 +236,14 @@ fn hard_break_rect(geometry: super::hard_break::HardBreakGeometry) -> SelectionR
     PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::Text)
 }
 
-fn paragraph_break_rect(geometry: super::paragraph_break::ParagraphBreakGeometry) -> SelectionRect {
-    let rect = geometry.rect;
-    PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::ParagraphBreak)
+fn paragraph_break_rect(
+    geometry: &super::paragraph_break::ParagraphBreakGeometry,
+) -> SelectionRect {
+    PageRect::with_meta(
+        geometry.rect.page_idx,
+        geometry.rect.rect,
+        SelectionRectKind::ParagraphBreak,
+    )
 }
 
 pub(crate) fn block_selection_rects(
@@ -243,6 +272,21 @@ pub(crate) fn selection_endpoints(
     layout_index: &LayoutIndex,
     selection: &ResolvedSelection<'_>,
 ) -> Option<SelectionEndpoints> {
+    selection_endpoints_with_direct_touch(layout_index, selection, false)
+}
+
+pub(crate) fn selection_endpoints_for_direct_touch(
+    layout_index: &LayoutIndex,
+    selection: &ResolvedSelection<'_>,
+) -> Option<SelectionEndpoints> {
+    selection_endpoints_with_direct_touch(layout_index, selection, true)
+}
+
+fn selection_endpoints_with_direct_touch(
+    layout_index: &LayoutIndex,
+    selection: &ResolvedSelection<'_>,
+    direct_touch_interaction: bool,
+) -> Option<SelectionEndpoints> {
     if selection.is_collapsed() {
         return None;
     }
@@ -250,7 +294,12 @@ pub(crate) fn selection_endpoints(
     let from_position = selection.from().position();
     let to_position = selection.to().position();
     let direct_from = selection_endpoint_for_position(layout_index, &from_position);
-    let direct_to = selection_endpoint_for_position(layout_index, &to_position);
+    let direct_to = if direct_touch_interaction {
+        direct_touch_paragraph_break_endpoint(layout_index, selection.view(), &to_position)
+            .or_else(|| selection_endpoint_for_position(layout_index, &to_position))
+    } else {
+        selection_endpoint_for_position(layout_index, &to_position)
+    };
     let (from, to) = match (direct_from, direct_to) {
         (Some(from), Some(to)) if selection.as_cell_rect().is_none() => (from, to),
         (direct_from, direct_to) => {
@@ -267,6 +316,25 @@ pub(crate) fn selection_endpoints(
         from_position,
         to_position,
     })
+}
+
+fn direct_touch_paragraph_break_endpoint(
+    layout_index: &LayoutIndex,
+    view: &DocView,
+    position: &Position,
+) -> Option<PageRect> {
+    let paragraph_break =
+        super::paragraph_break::paragraph_break_occurrence_ending_at(layout_index, view, position)?;
+    let rect = paragraph_break.geometry.rect;
+    Some(PageRect::new(
+        rect.page_idx,
+        Rect::from_xywh(
+            paragraph_break.geometry.line_right.max(rect.rect.x),
+            rect.rect.y,
+            0.0,
+            rect.rect.height,
+        ),
+    ))
 }
 
 fn selection_rect_endpoints(rects: &[SelectionRect]) -> Option<(PageRect, PageRect)> {
@@ -626,6 +694,7 @@ fn visit_line(
         to_owner,
         pages,
         selection,
+        ..
     } = *walk;
     let contains_from = from_owner.is_some_and(|entry| entry.is_node(layout_index, node));
     let contains_to = to_owner.is_some_and(|entry| entry.is_node(layout_index, node));
@@ -754,6 +823,7 @@ fn visit_box(
         to_owner,
         pages,
         selection,
+        ..
     } = *walk;
     let from_at_box_level = from.node == bx.node && from_owner.is_none();
     let to_at_box_level = to.node == bx.node && to_owner.is_none();
@@ -798,8 +868,9 @@ fn visit_box(
         && selection.contains_range(paragraph_break.range)
     {
         rects.push_paragraph_break(
-            paragraph_break_rect(paragraph_break.geometry),
+            paragraph_break.geometry,
             line_box_rects_before,
+            walk.direct_touch_interaction,
         );
     }
 
@@ -1219,6 +1290,39 @@ mod tests {
             );
             assert_eq!(rects[1].meta, SelectionRectKind::Text);
         }
+    }
+
+    #[test]
+    fn direct_touch_extends_only_active_paragraph_break_presentation_to_line_end() {
+        let (doc, _root, first_para, _second_para) = two_para_doc("abc", "def");
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let paragraph_break =
+            editor_state::paragraph_break_at_end(&Position::new(first_para, 3), &view)
+                .expect("paragraph break");
+        let selection = Selection::new(Position::new(first_para, 0), paragraph_break.head);
+        let resolved = selection.resolve(&view).expect("must resolve");
+        let (first_entry, _) =
+            first_line_for_para(&index, &first_para).expect("must find first line");
+
+        let general = selection_rects(&index, &resolved);
+        let compact_mark = selection_mark_rects(&index, &resolved);
+        let direct_touch_mark = selection_mark_rects_for_direct_touch(&index, &resolved);
+        let direct_touch_endpoints =
+            selection_endpoints_for_direct_touch(&index, &resolved).expect("must have endpoints");
+
+        assert_eq!(general, compact_mark, "general geometry stays compact");
+        assert_eq!(direct_touch_mark.len(), 1);
+        assert_close(
+            direct_touch_mark[0].rect.right(),
+            first_entry.rect.right(),
+            "direct-touch mark right",
+        );
+        assert_close(
+            direct_touch_endpoints.to.rect.x,
+            first_entry.rect.right(),
+            "direct-touch trailing handle x",
+        );
     }
 
     #[test]

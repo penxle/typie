@@ -2292,6 +2292,18 @@ impl Editor {
         self.toggle_fold(id)
     }
 
+    pub(crate) fn set_direct_touch_interaction(&mut self, direct: bool) -> bool {
+        if !self.view.set_direct_touch_interaction(direct) {
+            return false;
+        }
+        *self.selection_mark_rects_cache.lock().unwrap() = None;
+        self.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Cursor],
+        });
+        self.push_event(EditorEvent::RenderInvalidated);
+        true
+    }
+
     pub(crate) fn fold_expanded(&self, id: Dot) -> bool {
         self.view.fold_expanded(id)
     }
