@@ -126,7 +126,15 @@ export const emitNotices = (source: ThemeSource): string => {
       '',
     );
   }
-  lines.push('## MIT License', '', ...MIT_TEXT, '');
+  if (ported.some((preset) => preset.source?.license === 'MIT')) lines.push('## MIT License', '', ...MIT_TEXT, '');
+  if (ported.some((preset) => preset.source?.license === 'CC0-1.0')) {
+    lines.push(
+      '## CC0 1.0 Universal',
+      '',
+      'The palettes marked CC0-1.0 are dedicated to the public domain under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/). This applies to the color palettes, not the upstream theme source code.',
+      '',
+    );
+  }
   return lines.join('\n');
 };
 

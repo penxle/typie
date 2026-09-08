@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { converter, differenceEuclidean } from 'culori';
 import { describe, expect, it } from 'vitest';
-import { CONTRAST_GATE, failingPairs } from './contrast.ts';
+import { CONTRAST_GATE, failingPairs, FLOORS, measurePreset } from './contrast.ts';
 import { generate, OUTPUT_PATHS, REPO_ROOT } from './index.ts';
 import { loadThemes } from './load.ts';
 import { EDITOR_KEYS } from './schema.ts';
@@ -18,6 +18,28 @@ describe('generated outputs', () => {
   it.skipIf(!CONTRAST_GATE)('meet the contrast floors', () => {
     const { presets } = loadThemes(path.join(REPO_ROOT, 'assets/themes'));
     expect(failingPairs(presets)).toEqual([]);
+  });
+
+  it.each(['light-one', 'dark-one', 'light-monokai', 'light-modus-operandi', 'dark-modus-vivendi'])(
+    '%s meets the WCAG contrast floors',
+    (id) => {
+      const { presets } = loadThemes(path.join(REPO_ROOT, 'assets/themes'));
+      const preset = presets.find((preset) => preset.id === id);
+      if (!preset) throw new Error(`Missing preset: ${id}`);
+      for (const row of measurePreset(preset)) {
+        expect(row.wcag, `${row.pair.fg.key} on ${row.pair.bg.key}`).toBeGreaterThanOrEqual(FLOORS[row.pair.kind].wcag);
+      }
+    },
+  );
+
+  it.each(['light-modus-operandi', 'dark-modus-vivendi'])('%s keeps reading and editor colors at 7:1', (id) => {
+    const { presets } = loadThemes(path.join(REPO_ROOT, 'assets/themes'));
+    const preset = presets.find((preset) => preset.id === id);
+    if (!preset) throw new Error(`Missing preset: ${id}`);
+    for (const row of measurePreset(preset)) {
+      if (!['body', 'state', 'editor-text', 'editor-bg'].includes(row.pair.kind)) continue;
+      expect(row.wcag, `${row.pair.fg.key} on ${row.pair.bg.key}`).toBeGreaterThanOrEqual(7);
+    }
   });
 
   it('keeps the colour menu hues distinct in every preset', () => {

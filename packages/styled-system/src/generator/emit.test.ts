@@ -106,4 +106,13 @@ describe('emitNotices', () => {
     expect(output).toContain('No third-party palettes are in use.');
     expect(output).not.toContain('Permission is hereby granted');
   });
+
+  it.each([false, true])('includes only the licenses used by the palettes (MIT present: %s)', (includeMit) => {
+    const cc0 = { ...make('light-modus-operandi'), source: { ...source, license: 'CC0-1.0' } };
+    const output = emitNotices({ roster, presets: [cc0, ...(includeMit ? presets : [])] });
+    expect(output).toContain('## CC0 1.0 Universal');
+    expect(output).toContain('https://creativecommons.org/publicdomain/zero/1.0/');
+    expect(output.includes('## MIT License')).toBe(includeMit);
+    expect(output.includes('Permission is hereby granted')).toBe(includeMit);
+  });
 });

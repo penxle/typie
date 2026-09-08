@@ -88,8 +88,11 @@ describe('parsePreset', () => {
     expect(parsePreset(raw('light-snow', { source }), 'light-snow.json').source).toEqual(source);
     expect(parsePreset(raw('light-snow', { source: { ...source, notes: 'x' } }), 'light-snow.json').source?.notes).toBe('x');
     expect(() => parsePreset(raw('light-snow', { source: undefined }), 'light-snow.json')).toThrow(/source: required for ported presets/);
+    expect(parsePreset(raw('light-snow', { source: { ...source, license: 'CC0-1.0' } }), 'light-snow.json').source?.license).toBe(
+      'CC0-1.0',
+    );
     expect(() => parsePreset(raw('light-snow', { source: { ...source, license: 'Apache-2.0' } }), 'light-snow.json')).toThrow(
-      /source\.license: MIT expected/,
+      /source\.license: MIT or CC0-1\.0 expected/,
     );
     expect(() => parsePreset(raw('light-snow', { source: { ...source, copyright: ' ' } }), 'light-snow.json')).toThrow(/source\.copyright/);
     expect(() => parsePreset(raw('light-snow', { source: { ...source, extra: 1 } }), 'light-snow.json')).toThrow(

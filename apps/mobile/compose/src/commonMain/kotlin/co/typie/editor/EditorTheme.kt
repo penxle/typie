@@ -19,33 +19,7 @@ data class EditorThemeData(
 )
 
 val ThemeVariant.key: String
-  get() =
-    when (this) {
-      ThemeVariant.LightWhite -> "light-white"
-      ThemeVariant.LightFlexoki -> "light-flexoki"
-      ThemeVariant.LightRosePineDawn -> "light-rose-pine-dawn"
-      ThemeVariant.LightCatppuccinLatte -> "light-catppuccin-latte"
-      ThemeVariant.LightEverforest -> "light-everforest"
-      ThemeVariant.LightSakura -> "light-sakura"
-      ThemeVariant.LightSilk -> "light-silk"
-      ThemeVariant.LightCupcake -> "light-cupcake"
-      ThemeVariant.LightNoctisLilac -> "light-noctis-lilac"
-      ThemeVariant.LightAtelierLakeside -> "light-atelier-lakeside"
-      ThemeVariant.LightAtelierSeaside -> "light-atelier-seaside"
-      ThemeVariant.LightGruvboxMaterial -> "light-gruvbox-material"
-      ThemeVariant.DarkBlack -> "dark-black"
-      ThemeVariant.DarkNord -> "dark-nord"
-      ThemeVariant.DarkDracula -> "dark-dracula"
-      ThemeVariant.DarkCatppuccinMocha -> "dark-catppuccin-mocha"
-      ThemeVariant.DarkRosePine -> "dark-rose-pine"
-      ThemeVariant.DarkFlexoki -> "dark-flexoki"
-      ThemeVariant.DarkNightfox -> "dark-nightfox"
-      ThemeVariant.DarkEverforest -> "dark-everforest"
-      ThemeVariant.DarkGruvboxMaterial -> "dark-gruvbox-material"
-      ThemeVariant.DarkMelange -> "dark-melange"
-      ThemeVariant.DarkGithub -> "dark-github"
-      ThemeVariant.DarkMonokai -> "dark-monokai"
-    }
+  get() = ThemeVariant.serializer().descriptor.getElementName(ordinal)
 
 private val ThemeVariant.isLight: Boolean
   get() = key.startsWith("light-")
