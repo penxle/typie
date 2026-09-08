@@ -447,10 +447,55 @@ describe('pointer native drag admission', () => {
         head_x: 30,
         head_y: 20,
         base_selection: undefined,
+        unit: undefined,
         allow_collapse: true,
       },
     });
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [2, 'word'],
+    [3, 'paragraph'],
+  ] as const)('keeps click count %i selection at %s granularity through drag and release', (count, unit) => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    try {
+      const editor = createEditor({ selection: rangeSelection, isSelectionCollapsed: false });
+      const target = createPointerTarget({ captured: true });
+      editor.clientToLocal = vi.fn((x: number, y: number) => ({ page: 0, x, y }));
+      for (let index = 0; index < count; index++) {
+        handlePointerDown(editor, createPointerEvent({ target, timeStamp: 1000 + index * 100 }));
+        if (index < count - 1) handlePointerUp(editor, createPointerEvent({ target }));
+      }
+      expect(editor.enqueue).toHaveBeenLastCalledWith({
+        type: 'selection',
+        op: { type: 'select_unit_at', page: 0, x: 110, y: 220, unit },
+      });
+      editor.enqueue.mockClear();
+      handlePointerMove(editor, createPointerEvent({ target, clientX: 150 }));
+      frames.shift()?.(0);
+      handlePointerMove(editor, createPointerEvent({ target, clientX: 90 }));
+      handlePointerUp(editor, createPointerEvent({ target, clientX: 110 }));
+      const extensions = editor.enqueue.mock.calls.map(([message]) => message.op);
+      expect(extensions.map((op) => op.head_x)).toEqual([150, 90, 110]);
+      for (const op of extensions) {
+        expect(op).toMatchObject({ type: 'extend_to', unit, base_selection: rangeSelection, allow_collapse: false });
+      }
+      expect(editor.beginNativeDragAdmission).not.toHaveBeenCalled();
+      handlePointerDown(editor, createPointerEvent({ target, timeStamp: 1000 + count * 100 }));
+      expect(editor.enqueue).toHaveBeenLastCalledWith({
+        type: 'selection',
+        op: { type: 'set_at', page: 0, x: 110, y: 220 },
+      });
+      handlePointerUp(editor, createPointerEvent({ target }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('bases a new drag on the exact applied selection when publication is still stale', () => {
@@ -520,6 +565,7 @@ describe('pointer native drag admission', () => {
           head_x: 30,
           head_y: 40,
           base_selection: undefined,
+          unit: undefined,
           allow_collapse: true,
         },
       });

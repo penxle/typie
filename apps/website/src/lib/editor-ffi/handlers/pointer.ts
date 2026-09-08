@@ -1,6 +1,6 @@
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import { isSelectionCollapsed } from '../geometry';
-import type { InputModifiers, InteractiveHit, Position, Rect, Selection } from '@typie/editor-ffi/browser';
+import type { InputModifiers, InteractiveHit, Position, Rect, Selection, SelectionPointUnit } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
 import type { SelectionHandleKind } from '../gesture.svelte';
 import type { EditorEventHandler } from '../types';
@@ -121,7 +121,16 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'pointer_cursor_guard' });
     }
   }
-  state.markPointerDown(e.pointerId, !nativeDragCandidate, { page, x, y }, count, modifiers, nativeDragCandidate, interactionSelection);
+  state.markPointerDown(
+    e.pointerId,
+    !nativeDragCandidate,
+    { page, x, y },
+    count,
+    modifiers,
+    nativeDragCandidate,
+    interactionSelection,
+    e.pointerType === 'mouse' && count > 1 ? (count === 2 ? 'word' : 'paragraph') : undefined,
+  );
   if (!nativeDragCandidate) {
     editor.suspendToolbarSync();
   }
@@ -239,6 +248,7 @@ class PointerState {
     down: LocalPoint;
     anchor: Position | null;
     baseSelection: Selection | undefined;
+    unit: SelectionPointUnit | undefined;
     nativeDragCandidate: boolean;
     nativeDragStarted: boolean;
     dragging: boolean;
@@ -279,6 +289,7 @@ class PointerState {
     }
 
     this.#session.dragging = true;
+    this.#clickCount = 0;
     editor.enqueue({
       type: 'selection',
       op: {
@@ -288,6 +299,7 @@ class PointerState {
         head_x: point.x,
         head_y: point.y,
         base_selection: this.#session.baseSelection,
+        unit: this.#session.unit,
         allow_collapse: this.#session.baseSelection === undefined,
       },
     });
@@ -332,6 +344,7 @@ class PointerState {
     modifiers: InputModifiers,
     nativeDragCandidate: boolean,
     selection: Selection | undefined,
+    unit: SelectionPointUnit | undefined,
   ) {
     const selectionCollapsed = isSelectionCollapsed(selection);
     const canExtend = !nativeDragCandidate && (count > 1 ? selection !== undefined : modifiers.shift || selectionCollapsed);
@@ -341,6 +354,7 @@ class PointerState {
       down,
       anchor: canExtend ? (selection?.anchor ?? null) : null,
       baseSelection: selection && !selectionCollapsed && count > 1 ? selection : undefined,
+      unit,
       nativeDragCandidate,
       nativeDragStarted: false,
       dragging: false,

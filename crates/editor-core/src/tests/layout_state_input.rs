@@ -137,6 +137,7 @@ fn extend_to_same_tick_as_remote_structure_tracks_visible_atom_identity() {
             head_x: external.bounds.x + external.bounds.width / 2.0,
             head_y: external.bounds.y + external.bounds.height / 2.0,
             base_selection: None,
+            unit: None,
             allow_collapse: true,
         },
     }]);

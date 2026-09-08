@@ -186,6 +186,9 @@ pub enum SelectionOp {
         head_x: f32,
         head_y: f32,
         base_selection: Option<Selection>,
+        /// Expand the moving hit to this unit before extending the base range.
+        #[serde(default)]
+        unit: Option<SelectionPointUnit>,
         #[serde(default)]
         allow_collapse: bool,
     },

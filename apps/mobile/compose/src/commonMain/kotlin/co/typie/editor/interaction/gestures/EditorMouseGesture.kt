@@ -110,16 +110,16 @@ internal class EditorMouseGesture {
     if (!context.readOnly && (context.editing || context.effects.requestEditing(editor))) {
       context.effects.requestFocus(editor)
     }
+    val unit =
+      when (count) {
+        2 -> SelectionPointUnit.Word
+        3 -> SelectionPointUnit.Paragraph
+        else -> null
+      }
     val original = editor.appliedState.selection
     val op =
       when {
-        count > 1 ->
-          SelectionOp.SelectUnitAt(
-            point.page,
-            point.x,
-            point.y,
-            if (count == 2) SelectionPointUnit.Word else SelectionPointUnit.Paragraph,
-          )
+        unit != null -> SelectionOp.SelectUnitAt(point.page, point.x, point.y, unit)
         modifiers.shift && original != null ->
           SelectionOp.ExtendTo(
             anchor = original.anchor,
@@ -140,7 +140,8 @@ internal class EditorMouseGesture {
         anchor =
           if (count == 1 && modifiers.shift && original != null) original.anchor
           else selected.anchor,
-        baseSelection = selected.takeIf { count > 1 && !it.isCollapsed() },
+        baseSelection = selected.takeIf { unit != null && !it.isCollapsed() },
+        unit = unit,
       )
     context.reduceMode(EditorInteractionEvent.MouseSelectionStart)
     if (!context.readOnly) context.effects.requestPointerSelectionHead(applied.version)
@@ -231,6 +232,7 @@ internal class EditorMouseGesture {
         headX = point.x,
         headY = point.y,
         baseSelection = current.baseSelection,
+        unit = current.unit,
         allowCollapse = current.baseSelection == null,
       ),
     ) != null
@@ -241,6 +243,7 @@ internal class EditorMouseGesture {
     val down: Offset,
     val anchor: Position,
     val baseSelection: Selection?,
+    val unit: SelectionPointUnit?,
     var moved: Boolean = false,
     var pendingPosition: Offset? = null,
     var framePending: Boolean = false,

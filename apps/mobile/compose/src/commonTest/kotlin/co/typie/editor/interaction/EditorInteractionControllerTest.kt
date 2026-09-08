@@ -432,6 +432,40 @@ class EditorInteractionControllerTest {
   }
 
   @Test
+  fun `mouse unit drag keeps its unit through movement release and the next single click`() =
+    runTest {
+      for ((count, unit) in
+        listOf(2 to SelectionPointUnit.Word, 3 to SelectionPointUnit.Paragraph)) {
+        val fixture = MouseFixture(this)
+        repeat(count - 1) { index ->
+          fixture.down(time = index * 100L)
+          fixture.controller.onPointerUp(1L, Offset(10f, 20f), index * 100L + 10L)
+        }
+        val base =
+          Selection(
+            Position("text", 0, Affinity.Downstream),
+            Position("text", 4, Affinity.Downstream),
+          )
+        fixture.selection = base
+        fixture.down(time = (count - 1) * 100L)
+        fixture.controller.onPointerMove(1L, Offset(70f, 20f), count * 100L)
+        runCurrent()
+        fixture.host.sendFrame()
+        runCurrent()
+        fixture.controller.onPointerUp(1L, Offset(90f, 20f), count * 100L + 10L)
+        val extensions = fixture.selections().filterIsInstance<SelectionOp.ExtendTo>()
+        assertEquals(listOf(70f, 90f), extensions.map { it.headX })
+        assertTrue(
+          extensions.all { it.unit == unit && it.baseSelection == base && !it.allowCollapse }
+        )
+        fixture.selection = Selection(base.anchor, base.anchor)
+        fixture.down(time = count * 100L + 20L)
+        fixture.controller.onPointerUp(1L, Offset(70f, 20f), count * 100L + 30L)
+        assertNull((fixture.selections().last() as SelectionOp.ExtendTo).unit)
+      }
+    }
+
+  @Test
   fun `mouse double and triple click select units and drag retains the selected unit`() = runTest {
     val fixture = MouseFixture(this)
     fixture.down()
@@ -455,6 +489,7 @@ class EditorInteractionControllerTest {
     runCurrent()
     val extension = fixture.selections().last() as SelectionOp.ExtendTo
     assertEquals(fixture.selection, extension.baseSelection)
+    assertEquals(SelectionPointUnit.Paragraph, extension.unit)
     assertFalse(extension.allowCollapse)
     fixture.controller.onPointerUp(1L, Offset(70f, 20f), 230L)
     fixture.down(time = 250L)
