@@ -2,7 +2,7 @@
   import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button, Calendar, Modal, Popover, ProgressRing, TextInput } from '@typie/ui/components';
+  import { Button, Calendar, Marquee, Modal, Popover, ProgressRing, TextInput } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
@@ -292,10 +292,10 @@
   }}
   open={app.state.goalOpen.length > 0}
 >
-  <div class={flex({ alignItems: 'center', gap: '8px' })}>
-    <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>목표</div>
+  <div class={flex({ alignItems: 'center', gap: '8px', minWidth: '0' })}>
+    <div class={css({ flexShrink: '0', fontSize: '17px', fontWeight: 'semibold', color: 'text.default', whiteSpace: 'nowrap' })}>목표</div>
     {#if targetName}
-      <div class={css({ fontSize: '13px', color: 'text.muted', minWidth: '0', truncate: true })}>{targetName}</div>
+      <Marquee class={css({ flex: '1', minWidth: '0', fontSize: '13px', color: 'text.muted' })} fogSize={16} text={targetName} />
     {/if}
   </div>
 
