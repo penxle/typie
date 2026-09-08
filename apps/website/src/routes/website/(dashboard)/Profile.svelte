@@ -398,27 +398,49 @@
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
 
-          <div
-            class={flex({
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingTop: '6px',
-              paddingBottom: '4px',
-            })}
-          >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={EclipseIcon} size={14} />
-            <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })}>테마</span>
+          <div class={css({ position: 'relative' })}>
+            <button
+              class={flex({
+                alignItems: 'center',
+                gap: '8px',
+                width: 'full',
+                minHeight: '34px',
+                paddingLeft: '8px',
+                paddingRight: '80px',
+                paddingTop: '6px',
+                paddingBottom: '4px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 'medium',
+                color: 'text.default',
+                transition: 'common',
+                cursor: 'pointer',
+                _hover: { backgroundColor: 'surface.hover' },
+              })}
+              aria-label="테마 설정"
+              onclick={() => {
+                close();
+                pushState('', { shallowRoute: '/preference/theme' });
+                mixpanel.track('open_preference_modal', { via: 'sidebar', tab: 'theme' });
+              }}
+              type="button"
+            >
+              <Icon style={css.raw({ flexShrink: '0' })} icon={EclipseIcon} size={14} />
+              <span>테마</span>
+            </button>
             <div
               class={flex({
-                marginLeft: 'auto',
+                position: 'absolute',
+                right: '8px',
+                top: '[50%]',
+                transform: 'translateY(-50%)',
                 alignItems: 'center',
                 borderRadius: '6px',
                 padding: '2px',
                 backgroundColor: 'surface.inset',
               })}
             >
-              {#each [{ value: 'auto' as const, icon: MonitorIcon }, { value: 'light' as const, icon: SunIcon }, { value: 'dark' as const, icon: MoonIcon }] as t (t.value)}
+              {#each [{ value: 'light' as const, icon: SunIcon, label: '라이트' }, { value: 'dark' as const, icon: MoonIcon, label: '다크' }, { value: 'auto' as const, icon: MonitorIcon, label: '시스템 설정' }] as t (t.value)}
                 <button
                   class={center({
                     borderRadius: '4px',
@@ -430,6 +452,8 @@
                     cursor: 'pointer',
                     _hover: theme.currentTheme === t.value ? {} : { color: 'text.default' },
                   })}
+                  aria-label={t.label}
+                  aria-pressed={theme.currentTheme === t.value}
                   onclick={() => {
                     mixpanel.track('switch_theme', { old: theme.currentTheme, new: t.value, via: 'sidebar' });
                     theme.currentTheme = t.value;
