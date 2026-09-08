@@ -61,7 +61,7 @@ describe('resolveThemeAttributes', () => {
   });
 
   it('forces dark black on legal routes regardless of cookies', () => {
-    for (const routeId of ['/website/legal/terms', '/website/legal/privacy']) {
+    for (const routeId of ['/website/(landing)/legal/[slug]']) {
       expect(resolveThemeAttributes({ routeId, pathname: '/', cookies: { theme: 'light', light: 'flexoki', dark: 'nord' } })).toEqual({
         theme: 'dark',
         variantLight: 'white',

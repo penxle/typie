@@ -7,9 +7,9 @@
   import { untrack } from 'svelte';
   import NewspaperIcon from '~icons/lucide/newspaper';
   import XIcon from '~icons/lucide/x';
+  import Markdown from '$lib/markdown/Markdown.svelte';
   import { parseMarkdown } from '$lib/markdown/parse';
   import { fetchPage } from './changelog-state.svelte';
-  import ChangelogMarkdown from './ChangelogMarkdown.svelte';
   import type { ChangelogEntry } from './changelog-state.svelte';
 
   const app = getAppContext();
@@ -231,7 +231,7 @@
             {/if}
 
             <div class={css({ fontSize: '15px', color: 'text.default' })}>
-              <ChangelogMarkdown blocks={parseMarkdown(entry.body)} />
+              <Markdown blocks={parseMarkdown(entry.body)} />
             </div>
           </div>
         </article>

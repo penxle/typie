@@ -105,4 +105,22 @@ describe('Prism runtime lifecycle', () => {
     expect(console.error).toHaveBeenCalledWith('Failed to destroy a Prism mount.', error);
     destroyFirstMount();
   });
+
+  it('sizes the mount root from the requested prism size', async () => {
+    const { rendererRuntime, runtime } = createRuntimeFixture();
+    const defaultHost = document.createElement('div');
+    const largeHost = document.createElement('div');
+    document.body.append(defaultHost, largeHost);
+
+    runtime.mountObject(defaultHost, { target: 'prism' });
+    runtime.mountObject(largeHost, { prismSize: 108, target: 'prism' });
+    await vi.waitFor(() => expect(rendererRuntime.createRenderer).toHaveBeenCalledTimes(2));
+
+    expect(defaultHost.querySelector<HTMLElement>('.prism-object')?.style.width).toBe('160px');
+    expect(largeHost.querySelector<HTMLElement>('.prism-object')?.style.width).toBe('240px');
+    expect(largeHost.querySelector<HTMLElement>('.prism-object')?.style.height).toBe('240px');
+    expect(() => runtime.mountObject(document.createElement('div'), { prismSize: 0, target: 'prism' })).toThrow(RangeError);
+    expect(() => runtime.mountObject(document.createElement('div'), { prismSize: 500, target: 'prism' })).toThrow(RangeError);
+    runtime.destroy();
+  });
 });

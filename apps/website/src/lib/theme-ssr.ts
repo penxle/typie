@@ -7,7 +7,6 @@ const DARK_BLACK: ThemeAttributes = { theme: 'dark', variantLight: DEFAULT_LIGHT
 export const FORCED_ROUTES: { prefix: string; attributes: ThemeAttributes }[] = [
   { prefix: '/website/(landing)', attributes: DARK_BLACK },
   { prefix: '/website/admin', attributes: DARK_BLACK },
-  { prefix: '/website/legal', attributes: DARK_BLACK },
 ];
 
 const THEMES = new Set(['auto', 'light', 'dark']);

@@ -1,710 +1,113 @@
 <script lang="ts">
-  import NumberFlow from '@number-flow/svelte';
-  import { css, cx } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
-  import { Helmet, Icon } from '@typie/ui/components';
-  import { PLAN_FEATURES } from '@typie/ui/constants';
-  import { comma } from '@typie/ui/utils';
-  import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import CheckIcon from '~icons/lucide/check';
-  import ChevronDownIcon from '~icons/lucide/chevron-down';
-  import { browser } from '$app/environment';
-  import { inview } from '../(index)/inview';
+  import { css } from '@typie/styled-system/css';
+  import { Helmet } from '@typie/ui/components';
+  import Page from '$lib/landing/components/Page.svelte';
+  import StartButton from '$lib/landing/components/StartButton.svelte';
+  import Faq from './Faq.svelte';
+  import IntervalToggle from './IntervalToggle.svelte';
+  import PlanFeatures from './PlanFeatures.svelte';
+  import Price from './Price.svelte';
+  import { COPY, PLAN, priceFor } from './pricing';
+  import Trusts from './Trusts.svelte';
+  import type { Interval } from './pricing';
 
-  let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
-  let expandedIndex = $state<number | null>(null);
+  let interval = $state<Interval>('monthly');
 
-  const features = PLAN_FEATURES.full.map((feature) => feature.label);
+  const price = $derived(priceFor(interval));
 
-  const faqs = [
-    {
-      question: '구독을 해지하면 기존 글은 어떻게 되나요?',
-      answer: '모든 글이 읽기 전용 상태로 안전하게 보존돼요. 열람과 공유는 계속 가능하지만, 새 글 작성과 편집은 구독이 필요해요.',
-    },
-    {
-      question: '언제든지 플랜을 변경할 수 있나요?',
-      answer: '네, 언제든지 플랜을 변경할 수 있어요. 변경된 플랜은 다음 결제 주기부터 자동으로 적용돼요.',
-    },
-    {
-      question: '결제 수단은 무엇을 지원하나요?',
-      answer: '지금은 국내 신용카드, 체크카드와 카카오페이를 지원하고 있어요.',
-    },
-    {
-      question: '환불 정책은 어떻게 되나요?',
-      answer: '결제 후 7일 이내에는 전액 환불이 가능해요. 이후에는 남은 기간에 대해 일할 계산해 환불해드려요.',
-    },
-  ];
-
-  const toggleFaq = (index: number) => {
-    expandedIndex = expandedIndex === index ? null : index;
-  };
+  const cardClass = css({
+    width: 'full',
+    maxWidth: '[440px]',
+    marginX: 'auto',
+    marginTop: { base: '40px', md: '56px' },
+    padding: { base: '28px', md: '36px' },
+    borderRadius: '[20px]',
+    borderWidth: '1px',
+    borderColor: 'border.hairline',
+    backgroundColor: 'surface.canvas',
+    boxShadow: '[inset 0 1px 0 color-mix(in srgb, token(colors.text.default) 6%, transparent)]',
+  });
+  const planClass = css({
+    fontFamily: 'mono',
+    fontSize: '[12px]',
+    fontWeight: 'medium',
+    letterSpacing: '[0.1em]',
+    textTransform: 'uppercase',
+    color: 'text.muted',
+  });
+  const priceRowClass = css({ display: 'flex', alignItems: 'baseline', marginTop: '20px' });
+  const noteClass = css({ marginTop: '10px', minHeight: '[20px]', fontSize: '14px', color: 'text.muted' });
+  const taglineClass = css({ marginTop: '20px', fontSize: '15px', lineHeight: '[1.6]', color: 'text.default' });
+  const ctaClass = css({
+    display: 'grid',
+    marginTop: '24px',
+    '& a': { justifyContent: 'center', width: 'full' },
+    '& > span': { display: 'block' },
+  });
+  const assuranceClass = css({ marginTop: '12px', textAlign: 'center', fontSize: '13px', color: 'text.hint' });
+  const includesClass = css({ marginTop: '28px', paddingTop: '24px', borderTopWidth: '1px', borderTopColor: 'border.hairline' });
+  const includesLabelClass = css({
+    marginBottom: '14px',
+    fontFamily: 'mono',
+    fontSize: '[11px]',
+    letterSpacing: '[0.1em]',
+    textTransform: 'uppercase',
+    color: 'text.muted',
+  });
+  const trustsClass = css({ maxWidth: '[960px]', marginX: 'auto', paddingTop: { base: '80px', lg: '112px' } });
+  const faqClass = css({ maxWidth: '[760px]', marginX: 'auto', paddingTop: { base: '96px', lg: '128px' } });
+  const faqTitleClass = css({
+    fontSize: { base: '[26px]', md: '[32px]' },
+    fontWeight: 'bold',
+    letterSpacing: '[-0.02em]',
+    lineHeight: '[1.3]',
+  });
+  const closingClass = css({ display: 'grid', justifyItems: 'center', paddingTop: { base: '112px', lg: '160px' }, textAlign: 'center' });
+  const closingTitleClass = css({
+    fontSize: { base: '[36px]', md: '[56px]' },
+    fontWeight: 'bold',
+    letterSpacing: '[-0.025em]',
+    lineHeight: '[1.15]',
+  });
+  const closingSubClass = css({ marginTop: '16px', fontSize: { base: '15px', md: '17px' }, color: 'text.muted' });
 </script>
 
-<Helmet description="2주 무료 체험 후, 월 2,900원으로 모든 기능을 제한 없이 쓸 수 있어요." title="구독 안내" />
+<Helmet description={COPY.description} title={COPY.pageTitle} />
 
-<div
-  class={css({
-    position: 'relative',
-    minHeight: '[100vh]',
-    backgroundColor: 'surface.canvas',
-  })}
->
-  <div
-    class={css({
-      position: 'absolute',
-      left: { sm: '16px', lg: '48px' },
-      top: '0',
-      bottom: '0',
-      width: '1px',
-      backgroundColor: 'border.hairline',
-      display: { sm: 'none', lg: 'block' },
-    })}
-  ></div>
+<Page sub={COPY.sub}>
+  {#snippet title()}
+    {COPY.title[0]}
+    <br />
+    <span class={css({ color: 'text.muted' })}>{COPY.title[1]}</span>
+  {/snippet}
+  {#snippet hero()}
+    <div class={css({ marginTop: '36px' })}><IntervalToggle bind:interval /></div>
+  {/snippet}
 
-  <section
-    class={css({
-      position: 'relative',
-      paddingTop: { sm: '100px', lg: '140px' },
-      paddingBottom: { sm: '60px', lg: '80px' },
-      paddingX: { sm: '24px', lg: '80px' },
-      opacity: '0',
-      transform: 'translate3d(0, 28px, 0)',
-      transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
-      '&.in-view': {
-        opacity: '100',
-        transform: 'translate3d(0, 0, 0)',
-      },
-    })}
-    {@attach inview}
-  >
-    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
-      <span
-        class={css({
-          display: 'block',
-          fontSize: '[11px]',
-          fontFamily: 'mono',
-          color: 'text.muted',
-          letterSpacing: '[0.1em]',
-          textTransform: 'uppercase',
-          marginBottom: '24px',
-        })}
-      >
-        Pricing
-      </span>
-
-      <h1
-        class={css({
-          fontSize: { sm: '[36px]', lg: '[56px]' },
-          fontWeight: 'medium',
-          color: 'text.default',
-          lineHeight: '[1.2]',
-          letterSpacing: '[-0.02em]',
-          fontFamily: 'Paperlogy',
-          marginBottom: '20px',
-        })}
-      >
-        일단 써보세요.
-        <br />
-        <span class={css({ color: 'text.muted' })}>결제는 나중에.</span>
-      </h1>
-
-      <p
-        class={css({
-          fontSize: { sm: '16px', lg: '18px' },
-          color: 'text.muted',
-          lineHeight: '[1.65]',
-          maxWidth: '[400px]',
-        })}
-      >
-        2주간 충분히 써보고, 마음에 들면 구독하세요.
-      </p>
+  <div class={cardClass}>
+    <span class={planClass}>{PLAN.name}</span>
+    <div class={priceRowClass}><Price unit={COPY.perMonth} value={price} /></div>
+    <p class={noteClass}>{interval === 'yearly' ? COPY.yearlyNote : COPY.monthlyNote}</p>
+    <p class={taglineClass}>{COPY.tagline}</p>
+    <div class={ctaClass}><StartButton badge="2주 무료" /></div>
+    <p class={assuranceClass}>카드 등록 없이 시작할 수 있어요</p>
+    <div class={includesClass}>
+      <p class={includesLabelClass}>{COPY.includes}</p>
+      <PlanFeatures />
     </div>
+  </div>
+
+  <div class={trustsClass}><Trusts /></div>
+
+  <section class={faqClass}>
+    <h2 class={faqTitleClass}>{COPY.faqTitle}</h2>
+    <div class={css({ marginTop: '24px' })}><Faq /></div>
   </section>
 
-  <section
-    class={css({
-      position: 'relative',
-      paddingBottom: { sm: '80px', lg: '120px' },
-      paddingX: { sm: '24px', lg: '80px' },
-    })}
-  >
-    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
-      <div
-        class={css({
-          display: 'flex',
-          justifyContent: 'flex-end',
-          opacity: '0',
-          transform: 'translate3d(0, 20px, 0)',
-          transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s]',
-          '&.in-view': {
-            opacity: '100',
-            transform: 'translate3d(0, 0, 0)',
-          },
-        })}
-        {@attach inview}
-      >
-        <div
-          class={css({
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '24px',
-          })}
-        >
-          <button
-            class={css({
-              position: 'relative',
-              fontSize: '15px',
-              fontWeight: 'medium',
-              transition: '[all 0.2s ease-out]',
-              backgroundColor: 'transparent',
-              color: 'text.muted',
-              cursor: 'pointer',
-              border: 'none',
-              padding: '0',
-              paddingBottom: '16px',
-              _hover: {
-                color: 'text.default',
-              },
-              _pressed: {
-                color: 'text.default',
-                _after: {
-                  content: '""',
-                  position: 'absolute',
-                  left: '0',
-                  right: '0',
-                  bottom: '-1px',
-                  height: '2px',
-                  backgroundColor: 'accent.default',
-                },
-              },
-            })}
-            aria-pressed={selectedInterval === 'monthly'}
-            onclick={() => (selectedInterval = 'monthly')}
-            type="button"
-          >
-            월간 결제
-          </button>
-          <button
-            class={css({
-              position: 'relative',
-              fontSize: '15px',
-              fontWeight: 'medium',
-              transition: '[all 0.2s ease-out]',
-              backgroundColor: 'transparent',
-              color: 'text.muted',
-              cursor: 'pointer',
-              border: 'none',
-              padding: '0',
-              paddingBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              _hover: {
-                color: 'text.default',
-              },
-              _pressed: {
-                color: 'text.default',
-                _after: {
-                  content: '""',
-                  position: 'absolute',
-                  left: '0',
-                  right: '0',
-                  bottom: '-1px',
-                  height: '2px',
-                  backgroundColor: 'accent.default',
-                },
-              },
-            })}
-            aria-pressed={selectedInterval === 'yearly'}
-            onclick={() => (selectedInterval = 'yearly')}
-            type="button"
-          >
-            연간 결제
-            <span
-              class={css({
-                fontSize: '11px',
-                fontFamily: 'mono',
-                fontWeight: 'medium',
-                color: 'text.default',
-                letterSpacing: '[0.02em]',
-              })}
-            >
-              −17%
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div
-        class={css({
-          display: 'grid',
-          gridTemplateColumns: { sm: '1fr', lg: '[1fr 400px]' },
-          gap: '0',
-          borderTopWidth: '1px',
-          borderTopColor: 'border.hairline',
-          opacity: '0',
-          transform: 'translate3d(0, 20px, 0)',
-          transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s]',
-          '&.in-view': {
-            opacity: '100',
-            transform: 'translate3d(0, 0, 0)',
-          },
-        })}
-        {@attach inview}
-      >
-        <div
-          class={css({
-            paddingY: { sm: '32px', lg: '48px' },
-            paddingX: { sm: '0', lg: '48px' },
-            paddingLeft: { lg: '0' },
-            borderBottomWidth: { sm: '1px', lg: '0' },
-            borderBottomColor: 'border.hairline',
-            borderRightWidth: { sm: '0', lg: '1px' },
-            borderRightColor: 'border.hairline',
-            display: 'flex',
-            flexDirection: 'column',
-          })}
-        >
-          <span
-            class={css({
-              display: 'block',
-              fontSize: '11px',
-              fontFamily: 'mono',
-              color: 'text.muted',
-              letterSpacing: '[0.1em]',
-              textTransform: 'uppercase',
-              marginBottom: '20px',
-            })}
-          >
-            Free Trial
-          </span>
-
-          <h2
-            class={css({
-              fontSize: { sm: '[28px]', lg: '[36px]' },
-              fontWeight: 'medium',
-              color: 'text.default',
-              lineHeight: '[1.25]',
-              letterSpacing: '[-0.02em]',
-              fontFamily: 'Paperlogy',
-              marginBottom: '16px',
-            })}
-          >
-            2주 무료 체험 후 시작
-          </h2>
-
-          <p
-            class={css({
-              fontSize: { sm: '15px', lg: '16px' },
-              color: 'text.muted',
-              lineHeight: '[1.65]',
-              maxWidth: '[420px]',
-            })}
-          >
-            2주 동안 모든 기능을 제한 없이 써보고, 마음에 들면 이어서 구독하세요.
-          </p>
-        </div>
-
-        <div
-          class={css({
-            paddingY: { sm: '32px', lg: '48px' },
-            paddingX: { sm: '0', lg: '48px' },
-            paddingRight: { lg: '0' },
-            display: 'flex',
-            flexDirection: 'column',
-          })}
-        >
-          <div class={css({ marginBottom: '20px' })}>
-            <span
-              class={css({
-                display: 'block',
-                fontSize: '11px',
-                fontFamily: 'mono',
-                color: 'text.muted',
-                letterSpacing: '[0.1em]',
-                textTransform: 'uppercase',
-                marginBottom: '6px',
-              })}
-            >
-              Recommended
-            </span>
-            <span
-              class={css({
-                fontSize: '14px',
-                fontFamily: 'mono',
-                fontWeight: 'medium',
-                color: 'text.default',
-                letterSpacing: '[0.1em]',
-                textTransform: 'uppercase',
-              })}
-            >
-              Full Access
-            </span>
-          </div>
-
-          <div class={flex({ alignItems: 'baseline', gap: '8px', marginBottom: '8px', height: { sm: '[56px]', lg: '[64px]' } })}>
-            {#if browser}
-              <NumberFlow
-                class={css({
-                  fontSize: { sm: '[40px]', lg: '[48px]' },
-                  fontWeight: 'medium',
-                  color: 'text.default',
-                  lineHeight: '[1]',
-                  fontVariantNumeric: 'tabular-nums',
-                  fontFamily: 'Paperlogy',
-                })}
-                value={selectedInterval === 'monthly' ? 2900 : Math.floor(29_000 / 12)}
-              />
-            {:else}
-              <span
-                class={css({
-                  fontSize: { sm: '[40px]', lg: '[48px]' },
-                  fontWeight: 'medium',
-                  color: 'text.default',
-                  lineHeight: '[1]',
-                  fontVariantNumeric: 'tabular-nums',
-                  fontFamily: 'Paperlogy',
-                })}
-              >
-                {selectedInterval === 'monthly' ? 2900 : Math.floor(29_000 / 12)}
-              </span>
-            {/if}
-            <span class={css({ fontSize: '15px', color: 'text.muted' })}>원 / 월</span>
-          </div>
-
-          <p
-            class={css({
-              fontSize: '14px',
-              color: 'text.muted',
-              marginBottom: '24px',
-              height: '20px',
-            })}
-          >
-            {#if selectedInterval === 'yearly'}
-              연 {comma(29_000)}원 결제
-            {/if}
-          </p>
-
-          <p
-            class={css({
-              fontSize: '15px',
-              color: 'text.muted',
-              marginBottom: '32px',
-              lineHeight: '[1.65]',
-            })}
-          >
-            제한 없이 모든 기능을 사용하세요
-          </p>
-
-          <a
-            class={cx(
-              'group',
-              css({
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                paddingX: '24px',
-                paddingY: '14px',
-                fontSize: '15px',
-                fontWeight: 'medium',
-                backgroundColor: 'accent.default',
-                borderWidth: '1px',
-                borderColor: 'accent.default',
-                color: 'surface.default',
-                transition: '[all 0.2s ease-out]',
-                marginBottom: '32px',
-                _hover: {
-                  backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
-                },
-              }),
-            )}
-            href="/start"
-          >
-            지금 시작하기
-            <Icon
-              style={css.raw({
-                transition: '[transform 0.2s ease-out]',
-                _groupHover: {
-                  transform: 'translateX(4px)',
-                },
-              })}
-              icon={ArrowRightIcon}
-              size={16}
-            />
-          </a>
-
-          <div class={flex({ flexDirection: 'column', gap: '16px', flex: '1' })}>
-            <p
-              class={css({
-                fontSize: '12px',
-                fontFamily: 'mono',
-                color: 'text.muted',
-                letterSpacing: '[0.05em]',
-                textTransform: 'uppercase',
-              })}
-            >
-              Includes
-            </p>
-            <ul class={flex({ flexDirection: 'column', gap: '12px' })}>
-              {#each features as feature, index (index)}
-                <li class={flex({ alignItems: 'flex-start', gap: '12px' })}>
-                  <Icon style={css.raw({ color: 'accent.default', marginTop: '4px' })} icon={CheckIcon} size={14} />
-                  <span class={css({ fontSize: '15px', color: 'text.muted', lineHeight: '[1.65]' })}>{feature}</span>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
+  <section class={closingClass}>
+    <h2 class={closingTitleClass}>{COPY.closingTitle}</h2>
+    <p class={closingSubClass}>{COPY.closingSub}</p>
+    <div class={css({ marginTop: '36px' })}><StartButton badge="2주 무료" /></div>
+    <p class={assuranceClass}>카드 등록 없이 시작할 수 있어요</p>
   </section>
-
-  <section
-    class={css({
-      position: 'relative',
-      paddingY: { sm: '80px', lg: '120px' },
-      paddingX: { sm: '24px', lg: '80px' },
-      borderTopWidth: '1px',
-      borderTopColor: 'border.hairline',
-      borderBottomWidth: '1px',
-      borderBottomColor: 'border.hairline',
-    })}
-  >
-    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
-      <div
-        class={css({
-          marginBottom: { sm: '48px', lg: '64px' },
-          opacity: '0',
-          transform: 'translate3d(0, 28px, 0)',
-          transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
-          '&.in-view': {
-            opacity: '100',
-            transform: 'translate3d(0, 0, 0)',
-          },
-        })}
-        {@attach inview}
-      >
-        <span
-          class={css({
-            display: 'block',
-            fontSize: '[11px]',
-            fontFamily: 'mono',
-            color: 'text.muted',
-            letterSpacing: '[0.1em]',
-            textTransform: 'uppercase',
-            marginBottom: '24px',
-          })}
-        >
-          FAQ
-        </span>
-
-        <h2
-          class={css({
-            fontSize: { sm: '[32px]', lg: '[48px]' },
-            fontWeight: 'medium',
-            color: 'text.default',
-            fontFamily: 'Paperlogy',
-            lineHeight: '[1.2]',
-            letterSpacing: '[-0.02em]',
-          })}
-        >
-          자주 묻는 질문
-        </h2>
-      </div>
-
-      <div
-        class={css({
-          opacity: '0',
-          transform: 'translate3d(0, 20px, 0)',
-          transition: '[opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s]',
-          '&.in-view': {
-            opacity: '100',
-            transform: 'translate3d(0, 0, 0)',
-          },
-        })}
-        {@attach inview}
-      >
-        <div class={flex({ flexDirection: 'column', gap: '0' })}>
-          {#each faqs as faq, index (index)}
-            <div
-              class={cx(
-                'group',
-                css({
-                  borderBottomWidth: '1px',
-                  borderBottomColor: 'border.hairline',
-                }),
-              )}
-              aria-expanded={expandedIndex === index}
-            >
-              <button
-                class={css({
-                  width: 'full',
-                  paddingY: { sm: '20px', lg: '24px' },
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  fontSize: { sm: '16px', lg: '17px' },
-                  fontWeight: 'medium',
-                  color: 'text.muted',
-                  lineHeight: '[1.5]',
-                  transition: '[color 0.2s ease-out]',
-                  _hover: {
-                    color: 'text.default',
-                  },
-                })}
-                onclick={() => toggleFaq(index)}
-                type="button"
-              >
-                {faq.question}
-                <Icon
-                  style={css.raw({
-                    color: 'text.muted',
-                    flexShrink: 0,
-                    transition: '[transform 0.2s ease-out]',
-                    _groupExpanded: {
-                      transform: 'rotate(180deg)',
-                    },
-                  })}
-                  icon={ChevronDownIcon}
-                  size={18}
-                />
-              </button>
-
-              <div
-                class={css({
-                  display: 'grid',
-                  gridTemplateRows: '0fr',
-                  transition: '[grid-template-rows 0.2s ease-out]',
-                  _groupExpanded: {
-                    gridTemplateRows: '1fr',
-                  },
-                })}
-              >
-                <div class={css({ overflow: 'hidden' })}>
-                  <p
-                    class={css({
-                      paddingBottom: { sm: '20px', lg: '24px' },
-                      fontSize: '15px',
-                      color: 'text.muted',
-                      lineHeight: '[1.65]',
-                    })}
-                  >
-                    {faq.answer}
-                  </p>
-                </div>
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section
-    class={css({
-      position: 'relative',
-      paddingY: { sm: '80px', lg: '120px' },
-      paddingX: { sm: '24px', lg: '80px' },
-    })}
-  >
-    <div class={css({ maxWidth: '[1200px]', marginX: 'auto' })}>
-      <div
-        class={css({
-          display: 'grid',
-          gridTemplateColumns: { sm: '1fr', lg: '[1fr auto]' },
-          gap: { sm: '32px', lg: '80px' },
-          alignItems: 'end',
-          opacity: '0',
-          transform: 'translate3d(0, 28px, 0)',
-          transition: '[opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)]',
-          '&.in-view': {
-            opacity: '100',
-            transform: 'translate3d(0, 0, 0)',
-          },
-        })}
-        {@attach inview}
-      >
-        <div>
-          <span
-            class={css({
-              display: 'block',
-              fontSize: '[11px]',
-              fontFamily: 'mono',
-              color: 'text.muted',
-              letterSpacing: '[0.1em]',
-              textTransform: 'uppercase',
-              marginBottom: '24px',
-            })}
-          >
-            Get Started
-          </span>
-
-          <h2
-            class={css({
-              fontSize: { sm: '[32px]', lg: '[48px]' },
-              fontWeight: 'medium',
-              color: 'text.default',
-              lineHeight: '[1.2]',
-              letterSpacing: '[-0.02em]',
-              fontFamily: 'Paperlogy',
-              marginBottom: '20px',
-            })}
-          >
-            오늘부터 시작하세요.
-          </h2>
-
-          <p
-            class={css({
-              fontSize: { sm: '16px', lg: '18px' },
-              color: 'text.muted',
-              lineHeight: '[1.65]',
-              maxWidth: '[400px]',
-            })}
-          >
-            2주 무료 체험으로 먼저 경험해보세요.
-          </p>
-        </div>
-
-        <a
-          class={cx(
-            'group',
-            css({
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '12px',
-              paddingX: '28px',
-              paddingY: '16px',
-              fontSize: '15px',
-              fontWeight: 'semibold',
-              color: 'surface.default',
-              backgroundColor: 'accent.default',
-              transition: '[all 0.2s ease-out]',
-              _hover: {
-                backgroundColor: '[color-mix(in oklch, token(colors.accent.default) 88%, black)]',
-              },
-            }),
-          )}
-          href="/start"
-        >
-          2주 무료로 시작하기
-          <Icon
-            style={css.raw({
-              transition: '[transform 0.2s ease-out]',
-              _groupHover: {
-                transform: 'translateX(4px)',
-              },
-            })}
-            icon={ArrowRightIcon}
-            size={16}
-          />
-        </a>
-      </div>
-    </div>
-  </section>
-</div>
+</Page>
