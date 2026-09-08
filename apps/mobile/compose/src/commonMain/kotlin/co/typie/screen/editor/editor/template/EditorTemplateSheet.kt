@@ -127,7 +127,7 @@ private fun TemplateSheetEmpty() {
     contentAlignment = Alignment.Center,
   ) {
     Text(
-      text = "아직 템플릿이 없어요.\n에디터 상단 더보기 메뉴에서\n기존 문서를 템플릿으로 전환해보세요.",
+      text = "아직 템플릿이 없어요.\n에디터 상단 더 보기 메뉴에서\n기존 문서를 템플릿으로 전환해보세요.",
       style = AppTheme.typography.body,
       color = AppTheme.colors.textMuted,
       textAlign = TextAlign.Center,
