@@ -150,7 +150,7 @@ describe('breadcrumb navigation keyboard interaction', () => {
     const row = nextItem?.querySelector<HTMLElement>('[data-breadcrumb-tree-row]');
     const ordinaryRow = treeItem('document-extra-0')?.querySelector<HTMLElement>('[data-breadcrumb-tree-row]');
     if (!nextItem || !row || !ordinaryRow) throw new Error('Missing breadcrumb rows');
-    expect(getComputedStyle(row).backgroundColor).not.toBe(getComputedStyle(ordinaryRow).backgroundColor);
+    await expect.poll(() => getComputedStyle(row).backgroundColor).not.toBe(getComputedStyle(ordinaryRow).backgroundColor);
   });
 
   it('closes on Tab without restoring focus to the segment trigger', async () => {
