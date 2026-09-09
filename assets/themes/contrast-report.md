@@ -17,6 +17,9 @@ Gate: off. Floors are reported, not enforced.
 | light-gruvbox-material | 82    | 15      |
 | light-catppuccin-latte | 82    | 31      |
 | light-rose-pine-dawn   | 82    | 29      |
+| light-horizon          | 82    | 17      |
+| light-kanagawa         | 82    | 22      |
+| light-harbor           | 82    | 0       |
 | light-noctis-lilac     | 82    | 34      |
 | light-sakura           | 82    | 26      |
 | light-silk             | 82    | 37      |
@@ -33,6 +36,10 @@ Gate: off. Floors are reported, not enforced.
 | dark-gruvbox-material  | 82    | 27      |
 | dark-catppuccin-mocha  | 82    | 5       |
 | dark-rose-pine         | 82    | 10      |
+| dark-horizon           | 82    | 25      |
+| dark-kanagawa          | 82    | 22      |
+| dark-nigecha-dame      | 82    | 16      |
+| dark-beacon            | 82    | 14      |
 | dark-nord              | 82    | 25      |
 | dark-dracula           | 82    | 11      |
 | dark-melange           | 82    | 22      |
@@ -821,6 +828,267 @@ Gate: off. Floors are reported, not enforced.
 | text.default on ui.comment-highlight        | editor-bg   | #1b1814    | #f6debf    | 13.58 | 87.1  | pass   |
 | text.default on ui.comment-highlight-active | editor-bg   | #1b1814    | #f4d1a3    | 12.21 | 80.8  | pass   |
 | text.default on selection                   | editor-bg   | #1b1814    | #eee3ed    | 14.19 | 89.8  | pass   |
+
+## light-horizon
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #06060c    | #fdf0ed    | 18.15 | 98.6 | pass   |
+| text.default on surface.default             | body        | #06060c    | #fdf0ed    | 18.15 | 98.6 | pass   |
+| text.default on surface.inset               | body        | #06060c    | #fadad1    | 15.41 | 88.2 | pass   |
+| text.default on surface.hover               | state       | #06060c    | #fbddd5    | 15.79 | 89.6 | pass   |
+| text.default on surface.active              | state       | #06060c    | #fbddd5    | 15.79 | 89.6 | pass   |
+| text.muted on surface.hover                 | state-muted | #504c4f    | #fbddd5    | 6.59  | 72.8 | pass   |
+| text.muted on surface.active                | state-muted | #504c4f    | #fbddd5    | 6.59  | 72.8 | pass   |
+| text.muted on surface.canvas                | muted       | #504c4f    | #fdf0ed    | 7.58  | 81.7 | pass   |
+| text.muted on surface.default               | muted       | #504c4f    | #fdf0ed    | 7.58  | 81.7 | pass   |
+| text.muted on surface.inset                 | muted       | #504c4f    | #fadad1    | 6.44  | 71.3 | pass   |
+| text.hint on surface.canvas                 | hint        | #857e7d    | #fdf0ed    | 3.57  | 59.8 | pass   |
+| text.hint on surface.default                | hint        | #857e7d    | #fdf0ed    | 3.57  | 59.8 | pass   |
+| text.hint on surface.inset                  | hint        | #857e7d    | #fadad1    | 3.03  | 49.4 | pass   |
+| text.on.inverse on surface.inverse          | inverse     | #fdf0ed    | #06060c    | 18.15 | 99.7 | pass   |
+| accent.default on surface.canvas            | signal      | #e84a72    | #fdf0ed    | 3.34  | 56.3 | fail   |
+| accent.default on surface.default           | signal      | #e84a72    | #fdf0ed    | 3.34  | 56.3 | fail   |
+| accent.default on surface.inset             | signal      | #e84a72    | #fadad1    | 2.83  | 45.8 | fail   |
+| danger.default on surface.canvas            | status      | #da103f    | #fdf0ed    | 4.57  | 65.4 | pass   |
+| danger.default on surface.default           | status      | #da103f    | #fdf0ed    | 4.57  | 65.4 | pass   |
+| success.default on surface.canvas           | status      | #1eb980    | #fdf0ed    | 2.27  | 41.7 | fail   |
+| success.default on surface.default          | status      | #1eb980    | #fdf0ed    | 2.27  | 41.7 | fail   |
+| warning.default on surface.canvas           | status      | #af7427    | #fdf0ed    | 3.53  | 59.0 | fail   |
+| warning.default on surface.default          | status      | #af7427    | #fdf0ed    | 3.53  | 59.0 | fail   |
+| text.on.danger on danger.default            | on          | #ffffff    | #da103f    | 5.09  | 78.2 | pass   |
+| text.on.success on success.default          | on          | #000000    | #1eb980    | 8.31  | 55.0 | fail   |
+| text.on.warning on warning.default          | on          | #000000    | #af7427    | 5.35  | 37.7 | fail   |
+| text.on.danger.subtle on danger.subtle      | on          | #c80b39    | #fadadc    | 4.53  | 59.7 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #007951    | #e7ebe2    | 4.51  | 63.9 | pass   |
+| text.on.warning.subtle on warning.subtle    | on          | #8f5908    | #f3e0d3    | 4.56  | 62.6 | pass   |
+| text.default on accent.subtle               | on          | #06060c    | #fbdedf    | 15.99 | 90.4 | pass   |
+| surface.default on accent.default           | on          | #fdf0ed    | #e84a72    | 3.34  | 61.0 | fail   |
+| review.issue on surface.default             | review      | #8a31b9    | #fdf0ed    | 5.86  | 74.0 | pass   |
+| review.strength on surface.default          | review      | #1d8991    | #fdf0ed    | 3.74  | 60.9 | fail   |
+| accent.default on surface.canvas            | boundary    | #e84a72    | #fdf0ed    | 3.34  | 56.3 | pass   |
+| accent.default on surface.default           | boundary    | #e84a72    | #fdf0ed    | 3.34  | 56.3 | pass   |
+| accent.default on surface.inset             | boundary    | #e84a72    | #fadad1    | 2.83  | 45.8 | fail   |
+| danger.default on surface.canvas            | boundary    | #da103f    | #fdf0ed    | 4.57  | 65.4 | pass   |
+| danger.default on surface.default           | boundary    | #da103f    | #fdf0ed    | 4.57  | 65.4 | pass   |
+| danger.default on surface.inset             | boundary    | #da103f    | #fadad1    | 3.88  | 54.9 | pass   |
+| success.default on surface.canvas           | boundary    | #1eb980    | #fdf0ed    | 2.27  | 41.7 | fail   |
+| success.default on surface.default          | boundary    | #1eb980    | #fdf0ed    | 2.27  | 41.7 | fail   |
+| success.default on surface.inset            | boundary    | #1eb980    | #fadad1    | 1.93  | 31.2 | fail   |
+| warning.default on surface.canvas           | boundary    | #af7427    | #fdf0ed    | 3.53  | 59.0 | pass   |
+| warning.default on surface.default          | boundary    | #af7427    | #fdf0ed    | 3.53  | 59.0 | pass   |
+| warning.default on surface.inset            | boundary    | #af7427    | #fadad1    | 2.99  | 48.6 | fail   |
+| surface.default on accent.default           | boundary    | #fdf0ed    | #e84a72    | 3.34  | 61.0 | pass   |
+| palette.gray on surface.default             | boundary    | #857e7d    | #fdf0ed    | 3.57  | 59.8 | pass   |
+| palette.red on surface.default              | boundary    | #db1529    | #fdf0ed    | 4.54  | 65.2 | pass   |
+| palette.orange on surface.default           | boundary    | #b35302    | #fdf0ed    | 4.54  | 66.9 | pass   |
+| palette.yellow on surface.default           | boundary    | #836d05    | #fdf0ed    | 4.54  | 67.4 | pass   |
+| palette.green on surface.default            | boundary    | #21802e    | #fdf0ed    | 4.50  | 66.8 | pass   |
+| palette.blue on surface.default             | boundary    | #3970b5    | #fdf0ed    | 4.54  | 67.2 | pass   |
+| palette.purple on surface.default           | boundary    | #8932ba    | #fdf0ed    | 5.84  | 73.9 | pass   |
+| text.red on surface.default                 | editor-text | #db1529    | #fdf0ed    | 4.54  | 65.2 | pass   |
+| text.orange on surface.default              | editor-text | #b35302    | #fdf0ed    | 4.54  | 66.9 | pass   |
+| text.amber on surface.default               | editor-text | #966505    | #fdf0ed    | 4.53  | 67.2 | pass   |
+| text.yellow on surface.default              | editor-text | #836d05    | #fdf0ed    | 4.54  | 67.4 | pass   |
+| text.lime on surface.default                | editor-text | #5b7808    | #fdf0ed    | 4.56  | 67.5 | pass   |
+| text.green on surface.default               | editor-text | #21802e    | #fdf0ed    | 4.50  | 66.8 | pass   |
+| text.emerald on surface.default             | editor-text | #087e5b    | #fdf0ed    | 4.55  | 67.1 | pass   |
+| text.teal on surface.default                | editor-text | #0a7c72    | #fdf0ed    | 4.56  | 67.2 | pass   |
+| text.cyan on surface.default                | editor-text | #0c7b85    | #fdf0ed    | 4.50  | 66.8 | pass   |
+| text.sky on surface.default                 | editor-text | #05789e    | #fdf0ed    | 4.51  | 66.8 | pass   |
+| text.blue on surface.default                | editor-text | #3970b5    | #fdf0ed    | 4.54  | 67.2 | pass   |
+| text.indigo on surface.default              | editor-text | #4a4ed7    | #fdf0ed    | 5.61  | 73.2 | pass   |
+| text.violet on surface.default              | editor-text | #723dcb    | #fdf0ed    | 5.81  | 74.0 | pass   |
+| text.purple on surface.default              | editor-text | #8932ba    | #fdf0ed    | 5.84  | 73.9 | pass   |
+| text.fuchsia on surface.default             | editor-text | #9b26a4    | #fdf0ed    | 5.88  | 73.8 | pass   |
+| text.pink on surface.default                | editor-text | #c82293    | #fdf0ed    | 4.59  | 66.2 | pass   |
+| text.rose on surface.default                | editor-text | #d61165    | #fdf0ed    | 4.57  | 65.5 | pass   |
+| text.default on bg.gray                     | editor-bg   | #06060c    | #fadad1    | 15.41 | 88.2 | pass   |
+| text.default on bg.red                      | editor-bg   | #06060c    | #f9d4d4    | 14.82 | 85.8 | pass   |
+| text.default on bg.orange                   | editor-bg   | #06060c    | #f3dcce    | 15.34 | 87.9 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #06060c    | #eddfcf    | 15.45 | 88.3 | pass   |
+| text.default on bg.green                    | editor-bg   | #06060c    | #e0e1d4    | 15.29 | 87.7 | pass   |
+| text.default on bg.blue                     | editor-bg   | #06060c    | #e4dfe6    | 15.39 | 88.1 | pass   |
+| text.default on bg.purple                   | editor-bg   | #06060c    | #eed7e6    | 14.92 | 86.2 | pass   |
+| text.default on ui.search-match             | editor-bg   | #06060c    | #ead8ba    | 14.46 | 84.4 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #06060c    | #e2c79b    | 12.39 | 75.6 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #06060c    | #efe2cc    | 15.80 | 89.7 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #06060c    | #e8d3b1    | 13.84 | 81.8 | pass   |
+| text.default on selection                   | editor-bg   | #06060c    | #fbddd5    | 15.79 | 89.6 | pass   |
+
+## light-kanagawa
+
+| Pair                                        | Class       | Foreground | Background | WCAG | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ---- | ---- | ------ |
+| text.default on surface.canvas              | body        | #545464    | #dcd5ac    | 5.00 | 60.7 | fail   |
+| text.default on surface.default             | body        | #545464    | #f2ecbc    | 6.19 | 73.6 | fail   |
+| text.default on surface.inset               | body        | #545464    | #e7dba0    | 5.32 | 64.3 | fail   |
+| text.default on surface.hover               | state       | #545464    | #e7dba0    | 5.32 | 64.3 | pass   |
+| text.default on surface.active              | state       | #545464    | #e4d794    | 5.11 | 61.9 | pass   |
+| text.muted on surface.hover                 | state-muted | #43436c    | #e7dba0    | 6.66 | 69.9 | pass   |
+| text.muted on surface.active                | state-muted | #43436c    | #e4d794    | 6.40 | 67.5 | pass   |
+| text.muted on surface.canvas                | muted       | #43436c    | #dcd5ac    | 6.27 | 66.3 | pass   |
+| text.muted on surface.default               | muted       | #43436c    | #f2ecbc    | 7.75 | 79.2 | pass   |
+| text.muted on surface.inset                 | muted       | #43436c    | #e7dba0    | 6.66 | 69.9 | pass   |
+| text.hint on surface.canvas                 | hint        | #716e61    | #dcd5ac    | 3.45 | 50.2 | pass   |
+| text.hint on surface.default                | hint        | #716e61    | #f2ecbc    | 4.26 | 63.0 | pass   |
+| text.hint on surface.inset                  | hint        | #716e61    | #e7dba0    | 3.66 | 53.7 | pass   |
+| text.on.inverse on surface.inverse          | inverse     | #f2ecbc    | #545464    | 6.19 | 77.2 | pass   |
+| accent.default on surface.canvas            | signal      | #4d699b    | #dcd5ac    | 3.72 | 52.3 | fail   |
+| accent.default on surface.default           | signal      | #4d699b    | #f2ecbc    | 4.59 | 65.2 | pass   |
+| accent.default on surface.inset             | signal      | #4d699b    | #e7dba0    | 3.95 | 55.9 | fail   |
+| danger.default on surface.canvas            | status      | #c84053    | #dcd5ac    | 3.28 | 47.6 | fail   |
+| danger.default on surface.default           | status      | #c84053    | #f2ecbc    | 4.06 | 60.5 | fail   |
+| success.default on surface.canvas           | status      | #6f894e    | #dcd5ac    | 2.64 | 41.4 | fail   |
+| success.default on surface.default          | status      | #6f894e    | #f2ecbc    | 3.26 | 54.3 | fail   |
+| warning.default on surface.canvas           | status      | #cc6d00    | #dcd5ac    | 2.46 | 38.4 | fail   |
+| warning.default on surface.default          | status      | #cc6d00    | #f2ecbc    | 3.04 | 51.3 | fail   |
+| text.on.danger on danger.default            | on          | #ffffff    | #c84053    | 4.87 | 78.2 | pass   |
+| text.on.success on success.default          | on          | #000000    | #6f894e    | 5.36 | 37.6 | fail   |
+| text.on.warning on warning.default          | on          | #000000    | #cc6d00    | 5.75 | 40.6 | fail   |
+| text.on.danger.subtle on danger.subtle      | on          | #b52d44    | #eedbb2    | 4.50 | 59.2 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #536b31    | #e5e2b1    | 4.51 | 61.3 | pass   |
+| text.on.warning.subtle on warning.subtle    | on          | #944e03    | #eddba4    | 4.56 | 60.1 | pass   |
+| text.default on accent.subtle               | on          | #545464    | #e0deb8    | 5.41 | 65.3 | pass   |
+| surface.default on accent.default           | on          | #f2ecbc    | #4d699b    | 4.59 | 69.3 | pass   |
+| review.issue on surface.default             | review      | #624c83    | #f2ecbc    | 6.07 | 73.0 | pass   |
+| review.strength on surface.default          | review      | #597b75    | #f2ecbc    | 3.88 | 60.0 | fail   |
+| accent.default on surface.canvas            | boundary    | #4d699b    | #dcd5ac    | 3.72 | 52.3 | pass   |
+| accent.default on surface.default           | boundary    | #4d699b    | #f2ecbc    | 4.59 | 65.2 | pass   |
+| accent.default on surface.inset             | boundary    | #4d699b    | #e7dba0    | 3.95 | 55.9 | pass   |
+| danger.default on surface.canvas            | boundary    | #c84053    | #dcd5ac    | 3.28 | 47.6 | pass   |
+| danger.default on surface.default           | boundary    | #c84053    | #f2ecbc    | 4.06 | 60.5 | pass   |
+| danger.default on surface.inset             | boundary    | #c84053    | #e7dba0    | 3.49 | 51.1 | pass   |
+| success.default on surface.canvas           | boundary    | #6f894e    | #dcd5ac    | 2.64 | 41.4 | fail   |
+| success.default on surface.default          | boundary    | #6f894e    | #f2ecbc    | 3.26 | 54.3 | pass   |
+| success.default on surface.inset            | boundary    | #6f894e    | #e7dba0    | 2.80 | 45.0 | fail   |
+| warning.default on surface.canvas           | boundary    | #cc6d00    | #dcd5ac    | 2.46 | 38.4 | fail   |
+| warning.default on surface.default          | boundary    | #cc6d00    | #f2ecbc    | 3.04 | 51.3 | pass   |
+| warning.default on surface.inset            | boundary    | #cc6d00    | #e7dba0    | 2.61 | 42.0 | fail   |
+| surface.default on accent.default           | boundary    | #f2ecbc    | #4d699b    | 4.59 | 69.3 | pass   |
+| palette.gray on surface.default             | boundary    | #716e61    | #f2ecbc    | 4.26 | 63.0 | pass   |
+| palette.red on surface.default              | boundary    | #c03939    | #f2ecbc    | 4.50 | 63.5 | pass   |
+| palette.orange on surface.default           | boundary    | #ab5007    | #f2ecbc    | 4.51 | 64.1 | pass   |
+| palette.yellow on surface.default           | boundary    | #7c6813    | #f2ecbc    | 4.55 | 64.8 | pass   |
+| palette.green on surface.default            | boundary    | #407642    | #f2ecbc    | 4.50 | 64.5 | pass   |
+| palette.blue on surface.default             | boundary    | #3f6ba2    | #f2ecbc    | 4.56 | 64.9 | pass   |
+| palette.purple on surface.default           | boundary    | #6a4882    | #f2ecbc    | 6.11 | 73.1 | pass   |
+| text.red on surface.default                 | editor-text | #c03939    | #f2ecbc    | 4.50 | 63.5 | pass   |
+| text.orange on surface.default              | editor-text | #ab5007    | #f2ecbc    | 4.51 | 64.1 | pass   |
+| text.amber on surface.default               | editor-text | #8f6007    | #f2ecbc    | 4.55 | 64.7 | pass   |
+| text.yellow on surface.default              | editor-text | #7c6813    | #f2ecbc    | 4.55 | 64.8 | pass   |
+| text.lime on surface.default                | editor-text | #5b722c    | #f2ecbc    | 4.50 | 64.6 | pass   |
+| text.green on surface.default               | editor-text | #407642    | #f2ecbc    | 4.50 | 64.5 | pass   |
+| text.emerald on surface.default             | editor-text | #187858    | #f2ecbc    | 4.53 | 64.4 | pass   |
+| text.teal on surface.default                | editor-text | #08776d    | #f2ecbc    | 4.52 | 64.3 | pass   |
+| text.cyan on surface.default                | editor-text | #0a757f    | #f2ecbc    | 4.53 | 64.4 | pass   |
+| text.sky on surface.default                 | editor-text | #0e7296    | #f2ecbc    | 4.53 | 64.4 | pass   |
+| text.blue on surface.default                | editor-text | #3f6ba2    | #f2ecbc    | 4.56 | 64.9 | pass   |
+| text.indigo on surface.default              | editor-text | #5964a2    | #f2ecbc    | 4.64 | 65.5 | pass   |
+| text.violet on surface.default              | editor-text | #5d4c8b    | #f2ecbc    | 6.09 | 73.0 | pass   |
+| text.purple on surface.default              | editor-text | #6a4882    | #f2ecbc    | 6.11 | 73.1 | pass   |
+| text.fuchsia on surface.default             | editor-text | #754478    | #f2ecbc    | 6.13 | 73.1 | pass   |
+| text.pink on surface.default                | editor-text | #9d507e    | #f2ecbc    | 4.51 | 64.4 | pass   |
+| text.rose on surface.default                | editor-text | #a64d65    | #f2ecbc    | 4.52 | 64.3 | pass   |
+| text.default on bg.gray                     | editor-bg   | #545464    | #e7dba0    | 5.32 | 64.3 | pass   |
+| text.default on bg.red                      | editor-bg   | #545464    | #ecd5ab    | 5.19 | 62.8 | pass   |
+| text.default on bg.orange                   | editor-bg   | #545464    | #e9d8a4    | 5.24 | 63.4 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #545464    | #e3dba6    | 5.28 | 63.9 | pass   |
+| text.default on bg.green                    | editor-bg   | #545464    | #dbddac    | 5.28 | 63.9 | pass   |
+| text.default on bg.blue                     | editor-bg   | #545464    | #dbdbb9    | 5.25 | 63.5 | pass   |
+| text.default on bg.purple                   | editor-bg   | #545464    | #e0d7b4    | 5.14 | 62.3 | pass   |
+| text.default on ui.search-match             | editor-bg   | #545464    | #f0d09a    | 5.02 | 60.9 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #545464    | #e6c68b    | 4.53 | 55.2 | fail   |
+| text.default on ui.comment-highlight        | editor-bg   | #545464    | #f6d8a7    | 5.41 | 65.3 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #545464    | #eccb94    | 4.78 | 58.2 | fail   |
+| text.default on selection                   | editor-bg   | #545464    | #c9cbd0    | 4.57 | 55.7 | fail   |
+
+## light-harbor
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #253850    | #d8e4f4    | 9.27  | 80.6 | pass   |
+| text.default on surface.default             | body        | #253850    | #fffdf8    | 11.74 | 96.1 | pass   |
+| text.default on surface.inset               | body        | #253850    | #e6eef7    | 10.19 | 86.6 | pass   |
+| text.default on surface.hover               | state       | #253850    | #cddbed    | 8.49  | 75.3 | pass   |
+| text.default on surface.active              | state       | #253850    | #f4d9c0    | 8.82  | 77.6 | pass   |
+| text.muted on surface.hover                 | state-muted | #4a5b70    | #cddbed    | 4.95  | 62.1 | pass   |
+| text.muted on surface.active                | state-muted | #4a5b70    | #f4d9c0    | 5.14  | 64.4 | pass   |
+| text.muted on surface.canvas                | muted       | #4a5b70    | #d8e4f4    | 5.40  | 67.4 | pass   |
+| text.muted on surface.default               | muted       | #4a5b70    | #fffdf8    | 6.84  | 82.9 | pass   |
+| text.muted on surface.inset                 | muted       | #4a5b70    | #e6eef7    | 5.94  | 73.4 | pass   |
+| text.hint on surface.canvas                 | hint        | #65768c    | #d8e4f4    | 3.61  | 55.6 | pass   |
+| text.hint on surface.default                | hint        | #65768c    | #fffdf8    | 4.57  | 71.1 | pass   |
+| text.hint on surface.inset                  | hint        | #65768c    | #e6eef7    | 3.97  | 61.6 | pass   |
+| text.on.inverse on surface.inverse          | inverse     | #fffdf8    | #253850    | 11.74 | 99.6 | pass   |
+| accent.default on surface.canvas            | signal      | #905501    | #d8e4f4    | 4.68  | 63.1 | pass   |
+| accent.default on surface.default           | signal      | #905501    | #fffdf8    | 5.93  | 78.6 | pass   |
+| accent.default on surface.inset             | signal      | #905501    | #e6eef7    | 5.15  | 69.0 | pass   |
+| danger.default on surface.canvas            | status      | #ad3848    | #d8e4f4    | 4.75  | 62.9 | pass   |
+| danger.default on surface.default           | status      | #ad3848    | #fffdf8    | 6.01  | 78.4 | pass   |
+| success.default on surface.canvas           | status      | #386e49    | #d8e4f4    | 4.67  | 63.2 | pass   |
+| success.default on surface.default          | status      | #386e49    | #fffdf8    | 5.91  | 78.7 | pass   |
+| warning.default on surface.canvas           | status      | #7e6018    | #d8e4f4    | 4.57  | 62.6 | pass   |
+| warning.default on surface.default          | status      | #7e6018    | #fffdf8    | 5.78  | 78.1 | pass   |
+| text.on.danger on danger.default            | on          | #ffffff    | #ad3848    | 6.11  | 84.8 | pass   |
+| text.on.success on success.default          | on          | #ffffff    | #386e49    | 6.01  | 85.1 | pass   |
+| text.on.warning on warning.default          | on          | #ffffff    | #7e6018    | 5.88  | 84.5 | pass   |
+| text.on.danger.subtle on danger.subtle      | on          | #ad3848    | #f7e9e6    | 5.17  | 68.2 | pass   |
+| text.on.success.subtle on success.subtle    | on          | #386e49    | #ebefe6    | 5.16  | 69.5 | pass   |
+| text.on.warning.subtle on warning.subtle    | on          | #7e6018    | #eee9db    | 4.85  | 66.3 | pass   |
+| text.default on accent.subtle               | on          | #253850    | #faecdf    | 10.30 | 87.3 | pass   |
+| surface.default on accent.default           | on          | #fffdf8    | #905501    | 5.93  | 83.6 | pass   |
+| review.issue on surface.default             | review      | #795b99    | #fffdf8    | 5.48  | 76.6 | pass   |
+| review.strength on surface.default          | review      | #2f7258    | #fffdf8    | 5.63  | 77.3 | pass   |
+| accent.default on surface.canvas            | boundary    | #905501    | #d8e4f4    | 4.68  | 63.1 | pass   |
+| accent.default on surface.default           | boundary    | #905501    | #fffdf8    | 5.93  | 78.6 | pass   |
+| accent.default on surface.inset             | boundary    | #905501    | #e6eef7    | 5.15  | 69.0 | pass   |
+| danger.default on surface.canvas            | boundary    | #ad3848    | #d8e4f4    | 4.75  | 62.9 | pass   |
+| danger.default on surface.default           | boundary    | #ad3848    | #fffdf8    | 6.01  | 78.4 | pass   |
+| danger.default on surface.inset             | boundary    | #ad3848    | #e6eef7    | 5.22  | 68.9 | pass   |
+| success.default on surface.canvas           | boundary    | #386e49    | #d8e4f4    | 4.67  | 63.2 | pass   |
+| success.default on surface.default          | boundary    | #386e49    | #fffdf8    | 5.91  | 78.7 | pass   |
+| success.default on surface.inset            | boundary    | #386e49    | #e6eef7    | 5.13  | 69.2 | pass   |
+| warning.default on surface.canvas           | boundary    | #7e6018    | #d8e4f4    | 4.57  | 62.6 | pass   |
+| warning.default on surface.default          | boundary    | #7e6018    | #fffdf8    | 5.78  | 78.1 | pass   |
+| warning.default on surface.inset            | boundary    | #7e6018    | #e6eef7    | 5.02  | 68.6 | pass   |
+| surface.default on accent.default           | boundary    | #fffdf8    | #905501    | 5.93  | 83.6 | pass   |
+| palette.gray on surface.default             | boundary    | #65768c    | #fffdf8    | 4.57  | 71.1 | pass   |
+| palette.red on surface.default              | boundary    | #bd554f    | #fffdf8    | 4.51  | 70.2 | pass   |
+| palette.orange on surface.default           | boundary    | #ae6133    | #fffdf8    | 4.53  | 70.5 | pass   |
+| palette.yellow on surface.default           | boundary    | #8a7407    | #fffdf8    | 4.51  | 70.5 | pass   |
+| palette.green on surface.default            | boundary    | #4a814c    | #fffdf8    | 4.55  | 70.9 | pass   |
+| palette.blue on surface.default             | boundary    | #4470a7    | #fffdf8    | 5.01  | 73.8 | pass   |
+| palette.purple on surface.default           | boundary    | #8763a1    | #fffdf8    | 4.77  | 72.4 | pass   |
+| text.red on surface.default                 | editor-text | #bd554f    | #fffdf8    | 4.51  | 70.2 | pass   |
+| text.orange on surface.default              | editor-text | #ae6133    | #fffdf8    | 4.53  | 70.5 | pass   |
+| text.amber on surface.default               | editor-text | #9d6b14    | #fffdf8    | 4.54  | 70.7 | pass   |
+| text.yellow on surface.default              | editor-text | #8a7407    | #fffdf8    | 4.51  | 70.5 | pass   |
+| text.lime on surface.default                | editor-text | #657d37    | #fffdf8    | 4.55  | 70.9 | pass   |
+| text.green on surface.default               | editor-text | #4a814c    | #fffdf8    | 4.55  | 70.9 | pass   |
+| text.emerald on surface.default             | editor-text | #288463    | #fffdf8    | 4.52  | 70.4 | pass   |
+| text.teal on surface.default                | editor-text | #02847a    | #fffdf8    | 4.51  | 70.1 | pass   |
+| text.cyan on surface.default                | editor-text | #03828d    | #fffdf8    | 4.51  | 70.1 | pass   |
+| text.sky on surface.default                 | editor-text | #18789d    | #fffdf8    | 4.90  | 72.9 | pass   |
+| text.blue on surface.default                | editor-text | #4470a7    | #fffdf8    | 5.01  | 73.8 | pass   |
+| text.indigo on surface.default              | editor-text | #5d68a8    | #fffdf8    | 5.15  | 74.7 | pass   |
+| text.violet on surface.default              | editor-text | #7968a9    | #fffdf8    | 4.73  | 72.1 | pass   |
+| text.purple on surface.default              | editor-text | #8763a1    | #fffdf8    | 4.77  | 72.4 | pass   |
+| text.fuchsia on surface.default             | editor-text | #925f95    | #fffdf8    | 4.81  | 72.6 | pass   |
+| text.pink on surface.default                | editor-text | #a55e87    | #fffdf8    | 4.54  | 70.7 | pass   |
+| text.rose on surface.default                | editor-text | #ac5d70    | #fffdf8    | 4.54  | 70.6 | pass   |
+| text.default on bg.gray                     | editor-bg   | #253850    | #e6eef7    | 10.19 | 86.6 | pass   |
+| text.default on bg.red                      | editor-bg   | #253850    | #f6e7e2    | 9.91  | 84.8 | pass   |
+| text.default on bg.orange                   | editor-bg   | #253850    | #f4e9de    | 9.97  | 85.2 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #253850    | #f0ebd9    | 9.99  | 85.3 | pass   |
+| text.default on bg.green                    | editor-bg   | #253850    | #e7ede2    | 10.00 | 85.4 | pass   |
+| text.default on bg.blue                     | editor-bg   | #253850    | #e7ebed    | 9.94  | 85.0 | pass   |
+| text.default on bg.purple                   | editor-bg   | #253850    | #efe9ed    | 9.97  | 85.2 | pass   |
+| text.default on ui.search-match             | editor-bg   | #253850    | #f0dfc3    | 9.12  | 79.6 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #253850    | #e6cca1    | 7.68  | 69.6 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #253850    | #f5ead7    | 10.02 | 85.5 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #253850    | #edd9b9    | 8.65  | 76.4 | pass   |
+| text.default on selection                   | editor-bg   | #253850    | #fbe8d3    | 9.99  | 85.3 | pass   |
 
 ## light-noctis-lilac
 
@@ -2213,6 +2481,354 @@ Gate: off. Floors are reported, not enforced.
 | text.default on ui.comment-highlight        | editor-bg   | #f1f1f7    | #453935    | 9.88  | 90.6 | pass   |
 | text.default on ui.comment-highlight-active | editor-bg   | #f1f1f7    | #665241    | 6.55  | 81.5 | pass   |
 | text.default on selection                   | editor-bg   | #f1f1f7    | #524864    | 7.56  | 84.9 | pass   |
+
+## dark-horizon
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #d5d8da    | #1c1e26    | 11.61 | 80.8 | pass   |
+| text.default on surface.default             | body        | #d5d8da    | #1c1e26    | 11.61 | 80.8 | pass   |
+| text.default on surface.inset               | body        | #d5d8da    | #232530    | 10.64 | 79.6 | pass   |
+| text.default on surface.hover               | state       | #d5d8da    | #252732    | 10.36 | 79.3 | pass   |
+| text.default on surface.active              | state       | #d5d8da    | #252732    | 10.36 | 79.3 | pass   |
+| text.muted on surface.hover                 | state-muted | #8a8c91    | #252732    | 4.41  | 37.2 | fail   |
+| text.muted on surface.active                | state-muted | #8a8c91    | #252732    | 4.41  | 37.2 | fail   |
+| text.muted on surface.canvas                | muted       | #8a8c91    | #1c1e26    | 4.94  | 38.7 | fail   |
+| text.muted on surface.default               | muted       | #8a8c91    | #1c1e26    | 4.94  | 38.7 | fail   |
+| text.muted on surface.inset                 | muted       | #8a8c91    | #232530    | 4.53  | 37.6 | fail   |
+| text.hint on surface.canvas                 | hint        | #6e6f75    | #1c1e26    | 3.32  | 25.2 | fail   |
+| text.hint on surface.default                | hint        | #6e6f75    | #1c1e26    | 3.32  | 25.2 | fail   |
+| text.hint on surface.inset                  | hint        | #6e6f75    | #232530    | 3.04  | 24.0 | fail   |
+| text.on.inverse on surface.inverse          | inverse     | #1c1e26    | #ebe7df    | 13.48 | 89.6 | pass   |
+| accent.default on surface.canvas            | signal      | #e95378    | #1c1e26    | 4.73  | 38.0 | fail   |
+| accent.default on surface.default           | signal      | #e95378    | #1c1e26    | 4.73  | 38.0 | fail   |
+| accent.default on surface.inset             | signal      | #e95378    | #232530    | 4.33  | 36.9 | fail   |
+| danger.default on surface.canvas            | status      | #e95678    | #1c1e26    | 4.80  | 38.5 | fail   |
+| danger.default on surface.default           | status      | #e95678    | #1c1e26    | 4.80  | 38.5 | fail   |
+| success.default on surface.canvas           | status      | #29d398    | #1c1e26    | 8.60  | 64.1 | pass   |
+| success.default on surface.default          | status      | #29d398    | #1c1e26    | 8.60  | 64.1 | pass   |
+| warning.default on surface.canvas           | status      | #fab795    | #1c1e26    | 9.72  | 70.3 | pass   |
+| warning.default on surface.default          | status      | #fab795    | #1c1e26    | 9.72  | 70.3 | pass   |
+| text.on.danger on danger.default            | on          | #000000    | #e95678    | 6.07  | 42.8 | fail   |
+| text.on.success on success.default          | on          | #000000    | #29d398    | 10.87 | 67.4 | pass   |
+| text.on.warning on warning.default          | on          | #000000    | #fab795    | 12.27 | 73.2 | pass   |
+| text.on.danger.subtle on danger.subtle      | on          | #f86484    | #412835    | 4.52  | 41.6 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #29d398    | #1e3f3b    | 5.94  | 58.1 | fail   |
+| text.on.warning.subtle on warning.subtle    | on          | #fab795    | #483d3c    | 6.11  | 62.5 | pass   |
+| text.default on accent.subtle               | on          | #d5d8da    | #3d2633    | 9.63  | 78.1 | pass   |
+| surface.default on accent.default           | on          | #1c1e26    | #e95378    | 4.73  | 39.8 | fail   |
+| review.issue on surface.default             | review      | #b877db    | #1c1e26    | 5.30  | 41.7 | fail   |
+| review.strength on surface.default          | review      | #59c6b3    | #1c1e26    | 8.04  | 60.3 | pass   |
+| accent.default on surface.canvas            | boundary    | #e95378    | #1c1e26    | 4.73  | 38.0 | pass   |
+| accent.default on surface.default           | boundary    | #e95378    | #1c1e26    | 4.73  | 38.0 | pass   |
+| accent.default on surface.inset             | boundary    | #e95378    | #232530    | 4.33  | 36.9 | pass   |
+| danger.default on surface.canvas            | boundary    | #e95678    | #1c1e26    | 4.80  | 38.5 | pass   |
+| danger.default on surface.default           | boundary    | #e95678    | #1c1e26    | 4.80  | 38.5 | pass   |
+| danger.default on surface.inset             | boundary    | #e95678    | #232530    | 4.40  | 37.4 | pass   |
+| success.default on surface.canvas           | boundary    | #29d398    | #1c1e26    | 8.60  | 64.1 | pass   |
+| success.default on surface.default          | boundary    | #29d398    | #1c1e26    | 8.60  | 64.1 | pass   |
+| success.default on surface.inset            | boundary    | #29d398    | #232530    | 7.88  | 63.0 | pass   |
+| warning.default on surface.canvas           | boundary    | #fab795    | #1c1e26    | 9.72  | 70.3 | pass   |
+| warning.default on surface.default          | boundary    | #fab795    | #1c1e26    | 9.72  | 70.3 | pass   |
+| warning.default on surface.inset            | boundary    | #fab795    | #232530    | 8.90  | 69.1 | pass   |
+| surface.default on accent.default           | boundary    | #1c1e26    | #e95378    | 4.73  | 39.8 | pass   |
+| palette.gray on surface.default             | boundary    | #6e6f75    | #1c1e26    | 3.32  | 25.2 | pass   |
+| palette.red on surface.default              | boundary    | #ec5955    | #1c1e26    | 4.85  | 38.9 | pass   |
+| palette.orange on surface.default           | boundary    | #feb68d    | #1c1e26    | 9.73  | 70.4 | pass   |
+| palette.yellow on surface.default           | boundary    | #dac678    | #1c1e26    | 9.76  | 70.5 | pass   |
+| palette.green on surface.default            | boundary    | #6dce73    | #1c1e26    | 8.49  | 63.1 | pass   |
+| palette.blue on surface.default             | boundary    | #72abf4    | #1c1e26    | 7.00  | 53.5 | pass   |
+| palette.purple on surface.default           | boundary    | #b478de    | #1c1e26    | 5.29  | 41.6 | pass   |
+| text.red on surface.default                 | editor-text | #ec5955    | #1c1e26    | 4.85  | 38.9 | fail   |
+| text.orange on surface.default              | editor-text | #feb68d    | #1c1e26    | 9.73  | 70.4 | pass   |
+| text.amber on surface.default               | editor-text | #edbd7a    | #1c1e26    | 9.63  | 69.7 | pass   |
+| text.yellow on surface.default              | editor-text | #dac678    | #1c1e26    | 9.76  | 70.5 | pass   |
+| text.lime on surface.default                | editor-text | #9ec549    | #1c1e26    | 8.34  | 62.1 | pass   |
+| text.green on surface.default               | editor-text | #6dce73    | #1c1e26    | 8.49  | 63.1 | pass   |
+| text.emerald on surface.default             | editor-text | #1ed39b    | #1c1e26    | 8.59  | 64.0 | pass   |
+| text.teal on surface.default                | editor-text | #60e2d3    | #1c1e26    | 10.54 | 75.2 | pass   |
+| text.cyan on surface.default                | editor-text | #59dfee    | #1c1e26    | 10.46 | 74.8 | pass   |
+| text.sky on surface.default                 | editor-text | #43b6e6    | #1c1e26    | 7.18  | 54.9 | pass   |
+| text.blue on surface.default                | editor-text | #72abf4    | #1c1e26    | 7.00  | 53.5 | pass   |
+| text.indigo on surface.default              | editor-text | #7c8cf6    | #1c1e26    | 5.49  | 43.0 | fail   |
+| text.violet on surface.default              | editor-text | #9f80ec    | #1c1e26    | 5.36  | 42.1 | fail   |
+| text.purple on surface.default              | editor-text | #b478de    | #1c1e26    | 5.29  | 41.6 | fail   |
+| text.fuchsia on surface.default             | editor-text | #c672cb    | #1c1e26    | 5.28  | 41.6 | fail   |
+| text.pink on surface.default                | editor-text | #ea66b7    | #1c1e26    | 5.61  | 44.3 | fail   |
+| text.rose on surface.default                | editor-text | #e75682    | #1c1e26    | 4.79  | 38.4 | fail   |
+| text.default on bg.gray                     | editor-bg   | #d5d8da    | #232530    | 10.64 | 79.6 | pass   |
+| text.default on bg.red                      | editor-bg   | #d5d8da    | #4c2c31    | 8.57  | 76.1 | pass   |
+| text.default on bg.orange                   | editor-bg   | #d5d8da    | #50413e    | 6.77  | 71.4 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #d5d8da    | #484539    | 6.71  | 71.3 | pass   |
+| text.default on bg.green                    | editor-bg   | #d5d8da    | #2f4638    | 7.14  | 72.5 | pass   |
+| text.default on bg.blue                     | editor-bg   | #d5d8da    | #303e55    | 7.54  | 73.6 | pass   |
+| text.default on bg.purple                   | editor-bg   | #d5d8da    | #3f3350    | 8.14  | 75.2 | pass   |
+| text.default on ui.search-match             | editor-bg   | #d5d8da    | #504637    | 6.45  | 70.4 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #d5d8da    | #6d5c40    | 4.50  | 61.8 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #d5d8da    | #3e3931    | 7.99  | 74.9 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #d5d8da    | #5c4f3a    | 5.57  | 67.1 | pass   |
+| text.default on selection                   | editor-bg   | #d5d8da    | #292b37    | 9.81  | 78.5 | pass   |
+
+## dark-kanagawa
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #dcd7ba    | #181820    | 12.16 | 80.6 | pass   |
+| text.default on surface.default             | body        | #dcd7ba    | #1f1f28    | 11.26 | 79.7 | pass   |
+| text.default on surface.inset               | body        | #dcd7ba    | #2a2a37    | 9.75  | 77.8 | pass   |
+| text.default on surface.hover               | state       | #dcd7ba    | #2a2a37    | 9.75  | 77.8 | pass   |
+| text.default on surface.active              | state       | #dcd7ba    | #363646    | 8.16  | 74.7 | pass   |
+| text.muted on surface.hover                 | state-muted | #c8c093    | #2a2a37    | 7.69  | 64.0 | pass   |
+| text.muted on surface.active                | state-muted | #c8c093    | #363646    | 6.44  | 60.9 | pass   |
+| text.muted on surface.canvas                | muted       | #c8c093    | #181820    | 9.59  | 66.9 | pass   |
+| text.muted on surface.default               | muted       | #c8c093    | #1f1f28    | 8.89  | 66.0 | pass   |
+| text.muted on surface.inset                 | muted       | #c8c093    | #2a2a37    | 7.69  | 64.0 | pass   |
+| text.hint on surface.canvas                 | hint        | #75746c    | #181820    | 3.76  | 27.8 | fail   |
+| text.hint on surface.default                | hint        | #75746c    | #1f1f28    | 3.48  | 27.0 | fail   |
+| text.hint on surface.inset                  | hint        | #75746c    | #2a2a37    | 3.01  | 25.0 | fail   |
+| text.on.inverse on surface.inverse          | inverse     | #1f1f28    | #ebe7df    | 13.25 | 89.3 | pass   |
+| accent.default on surface.canvas            | signal      | #7e9cd8    | #181820    | 6.41  | 47.6 | fail   |
+| accent.default on surface.default           | signal      | #7e9cd8    | #1f1f28    | 5.94  | 46.7 | fail   |
+| accent.default on surface.inset             | signal      | #7e9cd8    | #2a2a37    | 5.14  | 44.7 | fail   |
+| danger.default on surface.canvas            | status      | #e46876    | #181820    | 5.49  | 41.8 | fail   |
+| danger.default on surface.default           | status      | #e46876    | #1f1f28    | 5.09  | 40.9 | fail   |
+| success.default on surface.canvas           | status      | #98bb6c    | #181820    | 8.12  | 58.3 | fail   |
+| success.default on surface.default          | status      | #98bb6c    | #1f1f28    | 7.52  | 57.4 | fail   |
+| warning.default on surface.canvas           | status      | #e6c384    | #181820    | 10.50 | 72.0 | pass   |
+| warning.default on surface.default          | status      | #e6c384    | #1f1f28    | 9.73  | 71.1 | pass   |
+| text.on.danger on danger.default            | on          | #000000    | #e46876    | 6.54  | 45.3 | fail   |
+| text.on.success on success.default          | on          | #000000    | #98bb6c    | 9.66  | 61.3 | pass   |
+| text.on.warning on warning.default          | on          | #000000    | #e6c384    | 12.50 | 74.1 | pass   |
+| text.on.danger.subtle on danger.subtle      | on          | #f07380    | #422c36    | 4.54  | 42.6 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #98bb6c    | #353b34    | 5.29  | 51.8 | fail   |
+| text.on.warning.subtle on warning.subtle    | on          | #e6c384    | #47403a    | 6.06  | 63.0 | pass   |
+| text.default on accent.subtle               | on          | #dcd7ba    | #2e3344    | 8.65  | 75.8 | pass   |
+| surface.default on accent.default           | on          | #1f1f28    | #7e9cd8    | 5.94  | 48.2 | fail   |
+| review.issue on surface.default             | review      | #957fb8    | #1f1f28    | 4.67  | 37.1 | fail   |
+| review.strength on surface.default          | review      | #68ad99    | #1f1f28    | 6.25  | 48.9 | fail   |
+| accent.default on surface.canvas            | boundary    | #7e9cd8    | #181820    | 6.41  | 47.6 | pass   |
+| accent.default on surface.default           | boundary    | #7e9cd8    | #1f1f28    | 5.94  | 46.7 | pass   |
+| accent.default on surface.inset             | boundary    | #7e9cd8    | #2a2a37    | 5.14  | 44.7 | pass   |
+| danger.default on surface.canvas            | boundary    | #e46876    | #181820    | 5.49  | 41.8 | pass   |
+| danger.default on surface.default           | boundary    | #e46876    | #1f1f28    | 5.09  | 40.9 | pass   |
+| danger.default on surface.inset             | boundary    | #e46876    | #2a2a37    | 4.40  | 38.9 | pass   |
+| success.default on surface.canvas           | boundary    | #98bb6c    | #181820    | 8.12  | 58.3 | pass   |
+| success.default on surface.default          | boundary    | #98bb6c    | #1f1f28    | 7.52  | 57.4 | pass   |
+| success.default on surface.inset            | boundary    | #98bb6c    | #2a2a37    | 6.51  | 55.4 | pass   |
+| warning.default on surface.canvas           | boundary    | #e6c384    | #181820    | 10.50 | 72.0 | pass   |
+| warning.default on surface.default          | boundary    | #e6c384    | #1f1f28    | 9.73  | 71.1 | pass   |
+| warning.default on surface.inset            | boundary    | #e6c384    | #2a2a37    | 8.42  | 69.1 | pass   |
+| surface.default on accent.default           | boundary    | #1f1f28    | #7e9cd8    | 5.94  | 48.2 | pass   |
+| palette.gray on surface.default             | boundary    | #75746c    | #1f1f28    | 3.48  | 27.0 | pass   |
+| palette.red on surface.default              | boundary    | #e56a64    | #1f1f28    | 5.12  | 41.1 | pass   |
+| palette.orange on surface.default           | boundary    | #fea06b    | #1f1f28    | 8.14  | 61.6 | pass   |
+| palette.yellow on surface.default           | boundary    | #ddc87b    | #1f1f28    | 9.82  | 71.6 | pass   |
+| palette.green on surface.default            | boundary    | #7fc080    | #1f1f28    | 7.59  | 57.9 | pass   |
+| palette.blue on surface.default             | boundary    | #719fda    | #1f1f28    | 5.97  | 46.9 | pass   |
+| palette.purple on surface.default           | boundary    | #9e7ab9    | #1f1f28    | 4.62  | 36.7 | pass   |
+| text.red on surface.default                 | editor-text | #e56a64    | #1f1f28    | 5.12  | 41.1 | fail   |
+| text.orange on surface.default              | editor-text | #fea06b    | #1f1f28    | 8.14  | 61.6 | pass   |
+| text.amber on surface.default               | editor-text | #efbf7d    | #1f1f28    | 9.67  | 70.7 | pass   |
+| text.yellow on surface.default              | editor-text | #ddc87b    | #1f1f28    | 9.82  | 71.6 | pass   |
+| text.lime on surface.default                | editor-text | #9dba68    | #1f1f28    | 7.52  | 57.4 | pass   |
+| text.green on surface.default               | editor-text | #7fc080    | #1f1f28    | 7.59  | 57.9 | pass   |
+| text.emerald on surface.default             | editor-text | #5ab18e    | #1f1f28    | 6.32  | 49.4 | pass   |
+| text.teal on surface.default                | editor-text | #45b1a5    | #1f1f28    | 6.29  | 49.4 | pass   |
+| text.cyan on surface.default                | editor-text | #3fafbb    | #1f1f28    | 6.27  | 49.3 | pass   |
+| text.sky on surface.default                 | editor-text | #52a8cf    | #1f1f28    | 6.12  | 48.1 | pass   |
+| text.blue on surface.default                | editor-text | #719fda    | #1f1f28    | 5.97  | 46.9 | pass   |
+| text.indigo on surface.default              | editor-text | #8a97db    | #1f1f28    | 5.86  | 46.1 | pass   |
+| text.violet on surface.default              | editor-text | #907fc2    | #1f1f28    | 4.67  | 37.1 | fail   |
+| text.purple on surface.default              | editor-text | #9e7ab9    | #1f1f28    | 4.62  | 36.7 | fail   |
+| text.fuchsia on surface.default             | editor-text | #aa76ad    | #1f1f28    | 4.59  | 36.5 | fail   |
+| text.pink on surface.default                | editor-text | #cb7fab    | #1f1f28    | 5.57  | 44.1 | fail   |
+| text.rose on surface.default                | editor-text | #d47e92    | #1f1f28    | 5.60  | 44.4 | fail   |
+| text.default on bg.gray                     | editor-bg   | #dcd7ba    | #2a2a37    | 9.75  | 77.8 | pass   |
+| text.default on bg.red                      | editor-bg   | #dcd7ba    | #4d3036    | 8.08  | 74.4 | pass   |
+| text.default on bg.orange                   | editor-bg   | #dcd7ba    | #523d37    | 6.95  | 71.4 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #dcd7ba    | #4b463b    | 6.47  | 69.9 | pass   |
+| text.default on bg.green                    | editor-bg   | #dcd7ba    | #35443c    | 7.08  | 71.8 | pass   |
+| text.default on bg.blue                     | editor-bg   | #dcd7ba    | #323c51    | 7.61  | 73.3 | pass   |
+| text.default on bg.purple                   | editor-bg   | #dcd7ba    | #3c3449    | 8.13  | 74.6 | pass   |
+| text.default on ui.search-match             | editor-bg   | #dcd7ba    | #524838    | 6.18  | 68.9 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #dcd7ba    | #6c5b40    | 4.51  | 61.4 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #dcd7ba    | #403b32    | 7.66  | 73.4 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #dcd7ba    | #5e513c    | 5.32  | 65.5 | pass   |
+| text.default on selection                   | editor-bg   | #dcd7ba    | #223249    | 8.93  | 76.3 | pass   |
+
+## dark-nigecha-dame
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #f5f5f5    | #4c276f    | 10.54 | 93.2 | pass   |
+| text.default on surface.default             | body        | #f5f5f5    | #1d1a2f    | 15.52 | 99.6 | pass   |
+| text.default on surface.inset               | body        | #f5f5f5    | #2e2544    | 13.15 | 97.4 | pass   |
+| text.default on surface.hover               | state       | #f5f5f5    | #2e4826    | 9.30  | 91.0 | pass   |
+| text.default on surface.active              | state       | #f5f5f5    | #375f21    | 6.83  | 84.0 | pass   |
+| text.muted on surface.hover                 | state-muted | #b69cd3    | #2e4826    | 4.19  | 44.1 | fail   |
+| text.muted on surface.active                | state-muted | #b69cd3    | #375f21    | 3.08  | 37.1 | fail   |
+| text.muted on surface.canvas                | muted       | #b69cd3    | #4c276f    | 4.75  | 46.3 | fail   |
+| text.muted on surface.default               | muted       | #b69cd3    | #1d1a2f    | 7.00  | 52.7 | fail   |
+| text.muted on surface.inset                 | muted       | #b69cd3    | #2e2544    | 5.93  | 50.5 | fail   |
+| text.hint on surface.canvas                 | hint        | #9f68dd    | #4c276f    | 3.01  | 28.2 | fail   |
+| text.hint on surface.default                | hint        | #9f68dd    | #1d1a2f    | 4.43  | 34.6 | fail   |
+| text.hint on surface.inset                  | hint        | #9f68dd    | #2e2544    | 3.76  | 32.4 | fail   |
+| text.on.inverse on surface.inverse          | inverse     | #1d1a2f    | #ebe7df    | 13.72 | 89.8 | pass   |
+| accent.default on surface.canvas            | signal      | #8bd450    | #4c276f    | 6.37  | 61.2 | pass   |
+| accent.default on surface.default           | signal      | #8bd450    | #1d1a2f    | 9.37  | 67.6 | pass   |
+| accent.default on surface.inset             | signal      | #8bd450    | #2e2544    | 7.94  | 65.4 | pass   |
+| danger.default on surface.canvas            | status      | #f48771    | #4c276f    | 4.68  | 46.0 | fail   |
+| danger.default on surface.default           | status      | #f48771    | #1d1a2f    | 6.89  | 52.4 | fail   |
+| success.default on surface.canvas           | status      | #8bd450    | #4c276f    | 6.37  | 61.2 | pass   |
+| success.default on surface.default          | status      | #8bd450    | #1d1a2f    | 9.37  | 67.6 | pass   |
+| warning.default on surface.canvas           | status      | #e6bb85    | #4c276f    | 6.46  | 61.9 | pass   |
+| warning.default on surface.default          | status      | #e6bb85    | #1d1a2f    | 9.52  | 68.3 | pass   |
+| text.on.danger on danger.default            | on          | #000000    | #f48771    | 8.55  | 56.1 | fail   |
+| text.on.success on success.default          | on          | #000000    | #8bd450    | 11.63 | 70.5 | pass   |
+| text.on.warning on warning.default          | on          | #000000    | #e6bb85    | 11.81 | 71.2 | pass   |
+| text.on.danger.subtle on danger.subtle      | on          | #f48771    | #442e3b    | 5.03  | 47.7 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #8bd450    | #313b35    | 6.43  | 61.8 | pass   |
+| text.on.warning.subtle on warning.subtle    | on          | #e6bb85    | #453a40    | 6.11  | 61.1 | pass   |
+| text.default on accent.subtle               | on          | #f5f5f5    | #273529    | 11.84 | 95.8 | pass   |
+| surface.default on accent.default           | on          | #1d1a2f    | #8bd450    | 9.37  | 68.3 | pass   |
+| review.issue on surface.default             | review      | #b69ae0    | #1d1a2f    | 7.00  | 52.8 | fail   |
+| review.strength on surface.default          | review      | #81b88b    | #1d1a2f    | 7.38  | 55.3 | fail   |
+| accent.default on surface.canvas            | boundary    | #8bd450    | #4c276f    | 6.37  | 61.2 | pass   |
+| accent.default on surface.default           | boundary    | #8bd450    | #1d1a2f    | 9.37  | 67.6 | pass   |
+| accent.default on surface.inset             | boundary    | #8bd450    | #2e2544    | 7.94  | 65.4 | pass   |
+| danger.default on surface.canvas            | boundary    | #f48771    | #4c276f    | 4.68  | 46.0 | pass   |
+| danger.default on surface.default           | boundary    | #f48771    | #1d1a2f    | 6.89  | 52.4 | pass   |
+| danger.default on surface.inset             | boundary    | #f48771    | #2e2544    | 5.84  | 50.2 | pass   |
+| success.default on surface.canvas           | boundary    | #8bd450    | #4c276f    | 6.37  | 61.2 | pass   |
+| success.default on surface.default          | boundary    | #8bd450    | #1d1a2f    | 9.37  | 67.6 | pass   |
+| success.default on surface.inset            | boundary    | #8bd450    | #2e2544    | 7.94  | 65.4 | pass   |
+| warning.default on surface.canvas           | boundary    | #e6bb85    | #4c276f    | 6.46  | 61.9 | pass   |
+| warning.default on surface.default          | boundary    | #e6bb85    | #1d1a2f    | 9.52  | 68.3 | pass   |
+| warning.default on surface.inset            | boundary    | #e6bb85    | #2e2544    | 8.07  | 66.1 | pass   |
+| surface.default on accent.default           | boundary    | #1d1a2f    | #8bd450    | 9.37  | 68.3 | pass   |
+| palette.gray on surface.default             | boundary    | #965fd4    | #1d1a2f    | 3.94  | 30.6 | pass   |
+| palette.red on surface.default              | boundary    | #f5857d    | #1d1a2f    | 6.88  | 52.3 | pass   |
+| palette.orange on surface.default           | boundary    | #e68245    | #1d1a2f    | 6.16  | 47.5 | pass   |
+| palette.yellow on surface.default           | boundary    | #fed940    | #1d1a2f    | 12.26 | 83.5 | pass   |
+| palette.green on surface.default            | boundary    | #66d96e    | #1d1a2f    | 9.44  | 68.1 | pass   |
+| palette.blue on surface.default             | boundary    | #72affc    | #1d1a2f    | 7.46  | 55.8 | pass   |
+| palette.purple on surface.default           | boundary    | #ab66d7    | #1d1a2f    | 4.52  | 35.3 | pass   |
+| text.red on surface.default                 | editor-text | #f5857d    | #1d1a2f    | 6.88  | 52.3 | pass   |
+| text.orange on surface.default              | editor-text | #e68245    | #1d1a2f    | 6.16  | 47.5 | pass   |
+| text.amber on surface.default               | editor-text | #d39115    | #1d1a2f    | 6.31  | 48.4 | pass   |
+| text.yellow on surface.default              | editor-text | #fed940    | #1d1a2f    | 12.26 | 83.5 | pass   |
+| text.lime on surface.default                | editor-text | #a2cf36    | #1d1a2f    | 9.28  | 67.0 | pass   |
+| text.green on surface.default               | editor-text | #66d96e    | #1d1a2f    | 9.44  | 68.1 | pass   |
+| text.emerald on surface.default             | editor-text | #15dca1    | #1d1a2f    | 9.50  | 68.8 | pass   |
+| text.teal on surface.default                | editor-text | #0ee4d2    | #1d1a2f    | 10.51 | 74.6 | pass   |
+| text.cyan on surface.default                | editor-text | #0cdff1    | #1d1a2f    | 10.35 | 73.6 | pass   |
+| text.sky on surface.default                 | editor-text | #77d3fe    | #1d1a2f    | 10.10 | 71.7 | pass   |
+| text.blue on surface.default                | editor-text | #72affc    | #1d1a2f    | 7.46  | 55.8 | pass   |
+| text.indigo on surface.default              | editor-text | #94a4fd    | #1d1a2f    | 7.24  | 54.4 | pass   |
+| text.violet on surface.default              | editor-text | #926ee7    | #1d1a2f    | 4.52  | 35.2 | fail   |
+| text.purple on surface.default              | editor-text | #ab66d7    | #1d1a2f    | 4.52  | 35.3 | fail   |
+| text.fuchsia on surface.default             | editor-text | #e772ef    | #1d1a2f    | 6.49  | 49.9 | pass   |
+| text.pink on surface.default                | editor-text | #fe68c6    | #1d1a2f    | 6.45  | 49.9 | pass   |
+| text.rose on surface.default                | editor-text | #f1839e    | #1d1a2f    | 6.83  | 52.0 | pass   |
+| text.default on bg.gray                     | editor-bg   | #f5f5f5    | #2e2544    | 13.15 | 97.4 | pass   |
+| text.default on bg.red                      | editor-bg   | #f5f5f5    | #4f3341    | 10.23 | 92.9 | pass   |
+| text.default on bg.orange                   | editor-bg   | #f5f5f5    | #4b3234    | 10.67 | 93.8 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #f5f5f5    | #514633    | 8.47  | 89.0 | pass   |
+| text.default on bg.green                    | editor-bg   | #f5f5f5    | #2e463d    | 9.35  | 91.1 | pass   |
+| text.default on bg.blue                     | editor-bg   | #f5f5f5    | #313c5e    | 9.94  | 92.3 | pass   |
+| text.default on bg.purple                   | editor-bg   | #f5f5f5    | #3e2b56    | 11.43 | 95.1 | pass   |
+| text.default on ui.search-match             | editor-bg   | #f5f5f5    | #4d4639    | 8.56  | 89.3 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #f5f5f5    | #6d5e44    | 5.78  | 79.9 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #f5f5f5    | #3d3830    | 10.66 | 93.8 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #f5f5f5    | #594e3d    | 7.46  | 86.2 | pass   |
+| text.default on selection                   | editor-bg   | #f5f5f5    | #375f21    | 6.83  | 84.0 | pass   |
+
+## dark-beacon
+
+| Pair                                        | Class       | Foreground | Background | WCAG  | APCA | Result |
+| ------------------------------------------- | ----------- | ---------- | ---------- | ----- | ---- | ------ |
+| text.default on surface.canvas              | body        | #f0e8dc    | #243954    | 9.66  | 86.1 | pass   |
+| text.default on surface.default             | body        | #f0e8dc    | #1f2731    | 12.41 | 90.3 | pass   |
+| text.default on surface.inset               | body        | #f0e8dc    | #26313f    | 10.84 | 88.3 | pass   |
+| text.default on surface.hover               | state       | #f0e8dc    | #2d415a    | 8.57  | 83.7 | pass   |
+| text.default on surface.active              | state       | #f0e8dc    | #574331    | 7.67  | 81.4 | pass   |
+| text.muted on surface.hover                 | state-muted | #b9c5d5    | #2d415a    | 5.96  | 61.1 | pass   |
+| text.muted on surface.active                | state-muted | #b9c5d5    | #574331    | 5.33  | 58.7 | pass   |
+| text.muted on surface.canvas                | muted       | #b9c5d5    | #243954    | 6.72  | 63.4 | pass   |
+| text.muted on surface.default               | muted       | #b9c5d5    | #1f2731    | 8.62  | 67.7 | pass   |
+| text.muted on surface.inset                 | muted       | #b9c5d5    | #26313f    | 7.54  | 65.6 | pass   |
+| text.hint on surface.canvas                 | hint        | #869ab4    | #243954    | 4.08  | 39.4 | fail   |
+| text.hint on surface.default                | hint        | #869ab4    | #1f2731    | 5.24  | 43.6 | fail   |
+| text.hint on surface.inset                  | hint        | #869ab4    | #26313f    | 4.58  | 41.6 | fail   |
+| text.on.inverse on surface.inverse          | inverse     | #1f2731    | #ebe7df    | 12.23 | 88.0 | pass   |
+| accent.default on surface.canvas            | signal      | #f0b378    | #243954    | 6.39  | 60.8 | pass   |
+| accent.default on surface.default           | signal      | #f0b378    | #1f2731    | 8.20  | 65.0 | pass   |
+| accent.default on surface.inset             | signal      | #f0b378    | #26313f    | 7.17  | 63.0 | pass   |
+| danger.default on surface.canvas            | status      | #e49a91    | #243954    | 5.22  | 50.5 | fail   |
+| danger.default on surface.default           | status      | #e49a91    | #1f2731    | 6.70  | 54.8 | fail   |
+| success.default on surface.canvas           | status      | #9cb68a    | #243954    | 5.30  | 51.1 | fail   |
+| success.default on surface.default          | status      | #9cb68a    | #1f2731    | 6.80  | 55.3 | fail   |
+| warning.default on surface.canvas           | status      | #daba74    | #243954    | 6.29  | 60.0 | fail   |
+| warning.default on surface.default          | status      | #daba74    | #1f2731    | 8.08  | 64.2 | pass   |
+| text.on.danger on danger.default            | on          | #000000    | #e49a91    | 9.33  | 59.7 | fail   |
+| text.on.success on success.default          | on          | #000000    | #9cb68a    | 9.47  | 60.3 | pass   |
+| text.on.warning on warning.default          | on          | #000000    | #daba74    | 11.26 | 68.7 | pass   |
+| text.on.danger.subtle on danger.subtle      | on          | #e49a91    | #423c42    | 4.77  | 48.8 | fail   |
+| text.on.success.subtle on success.subtle    | on          | #9cb68a    | #364141    | 4.76  | 49.1 | fail   |
+| text.on.warning.subtle on warning.subtle    | on          | #daba74    | #44443e    | 5.25  | 56.4 | fail   |
+| text.default on accent.subtle               | on          | #f0e8dc    | #4a3b2e    | 8.83  | 84.4 | pass   |
+| surface.default on accent.default           | on          | #1f2731    | #f0b378    | 8.20  | 65.4 | pass   |
+| review.issue on surface.default             | review      | #b095d2    | #1f2731    | 5.80  | 48.0 | fail   |
+| review.strength on surface.default          | review      | #84b39a    | #1f2731    | 6.39  | 52.4 | fail   |
+| accent.default on surface.canvas            | boundary    | #f0b378    | #243954    | 6.39  | 60.8 | pass   |
+| accent.default on surface.default           | boundary    | #f0b378    | #1f2731    | 8.20  | 65.0 | pass   |
+| accent.default on surface.inset             | boundary    | #f0b378    | #26313f    | 7.17  | 63.0 | pass   |
+| danger.default on surface.canvas            | boundary    | #e49a91    | #243954    | 5.22  | 50.5 | pass   |
+| danger.default on surface.default           | boundary    | #e49a91    | #1f2731    | 6.70  | 54.8 | pass   |
+| danger.default on surface.inset             | boundary    | #e49a91    | #26313f    | 5.85  | 52.7 | pass   |
+| success.default on surface.canvas           | boundary    | #9cb68a    | #243954    | 5.30  | 51.1 | pass   |
+| success.default on surface.default          | boundary    | #9cb68a    | #1f2731    | 6.80  | 55.3 | pass   |
+| success.default on surface.inset            | boundary    | #9cb68a    | #26313f    | 5.94  | 53.3 | pass   |
+| warning.default on surface.canvas           | boundary    | #daba74    | #243954    | 6.29  | 60.0 | pass   |
+| warning.default on surface.default          | boundary    | #daba74    | #1f2731    | 8.08  | 64.2 | pass   |
+| warning.default on surface.inset            | boundary    | #daba74    | #26313f    | 7.06  | 62.2 | pass   |
+| surface.default on accent.default           | boundary    | #1f2731    | #f0b378    | 8.20  | 65.4 | pass   |
+| palette.gray on surface.default             | boundary    | #869ab4    | #1f2731    | 5.24  | 43.6 | pass   |
+| palette.red on surface.default              | boundary    | #df8e87    | #1f2731    | 6.00  | 49.7 | pass   |
+| palette.orange on surface.default           | boundary    | #f8ae84    | #1f2731    | 8.17  | 64.9 | pass   |
+| palette.yellow on surface.default           | boundary    | #d2be71    | #1f2731    | 8.14  | 64.6 | pass   |
+| palette.green on surface.default            | boundary    | #84bd85    | #1f2731    | 6.89  | 56.1 | pass   |
+| palette.blue on surface.default             | boundary    | #83b2ed    | #1f2731    | 6.86  | 55.9 | pass   |
+| palette.purple on surface.default           | boundary    | #b792d2    | #1f2731    | 5.78  | 47.9 | pass   |
+| text.red on surface.default                 | editor-text | #df8e87    | #1f2731    | 6.00  | 49.7 | pass   |
+| text.orange on surface.default              | editor-text | #f8ae84    | #1f2731    | 8.17  | 64.9 | pass   |
+| text.amber on surface.default               | editor-text | #e9b873    | #1f2731    | 8.31  | 65.7 | pass   |
+| text.yellow on surface.default              | editor-text | #d2be71    | #1f2731    | 8.14  | 64.6 | pass   |
+| text.lime on surface.default                | editor-text | #9eb870    | #1f2731    | 6.85  | 55.7 | pass   |
+| text.green on surface.default               | editor-text | #84bd85    | #1f2731    | 6.89  | 56.1 | pass   |
+| text.emerald on surface.default             | editor-text | #67be9a    | #1f2731    | 6.76  | 55.2 | pass   |
+| text.teal on surface.default                | editor-text | #53beb2    | #1f2731    | 6.73  | 55.1 | pass   |
+| text.cyan on surface.default                | editor-text | #4ebcc7    | #1f2731    | 6.71  | 54.9 | pass   |
+| text.sky on surface.default                 | editor-text | #66bbe2    | #1f2731    | 7.02  | 57.0 | pass   |
+| text.blue on surface.default                | editor-text | #83b2ed    | #1f2731    | 6.86  | 55.9 | pass   |
+| text.indigo on surface.default              | editor-text | #9caaee    | #1f2731    | 6.75  | 55.0 | pass   |
+| text.violet on surface.default              | editor-text | #a897dc    | #1f2731    | 5.83  | 48.3 | pass   |
+| text.purple on surface.default              | editor-text | #b792d2    | #1f2731    | 5.78  | 47.9 | pass   |
+| text.fuchsia on surface.default             | editor-text | #c38dc6    | #1f2731    | 5.70  | 47.4 | pass   |
+| text.pink on surface.default                | editor-text | #dd95bd    | #1f2731    | 6.54  | 53.6 | pass   |
+| text.rose on surface.default                | editor-text | #e594a6    | #1f2731    | 6.55  | 53.7 | pass   |
+| text.default on bg.gray                     | editor-bg   | #f0e8dc    | #26313f    | 10.84 | 88.3 | pass   |
+| text.default on bg.red                      | editor-bg   | #f0e8dc    | #4b3f45    | 8.24  | 83.0 | pass   |
+| text.default on bg.orange                   | editor-bg   | #f0e8dc    | #514644    | 7.48  | 80.9 | pass   |
+| text.default on bg.yellow                   | editor-bg   | #f0e8dc    | #484a40    | 7.42  | 80.7 | pass   |
+| text.default on bg.green                    | editor-bg   | #f0e8dc    | #364a44    | 7.78  | 81.8 | pass   |
+| text.default on bg.blue                     | editor-bg   | #f0e8dc    | #36475c    | 7.81  | 81.8 | pass   |
+| text.default on bg.purple                   | editor-bg   | #f0e8dc    | #424056    | 8.23  | 83.0 | pass   |
+| text.default on ui.search-match             | editor-bg   | #f0e8dc    | #544c3f    | 6.96  | 79.3 | pass   |
+| text.default on ui.search-match-active      | editor-bg   | #f0e8dc    | #736347    | 4.79  | 70.0 | pass   |
+| text.default on ui.comment-highlight        | editor-bg   | #f0e8dc    | #43403a    | 8.50  | 83.6 | pass   |
+| text.default on ui.comment-highlight-active | editor-bg   | #f0e8dc    | #605542    | 6.01  | 75.9 | pass   |
+| text.default on selection                   | editor-bg   | #f0e8dc    | #5c4e42    | 6.59  | 78.0 | pass   |
 
 ## dark-nord
 
