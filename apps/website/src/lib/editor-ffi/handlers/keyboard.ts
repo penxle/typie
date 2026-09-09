@@ -1,7 +1,6 @@
 import { runEscapeStack } from '@typie/ui/utils';
 import type { Message, Movement } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
-import type { ImeTextInput } from '../input/ime-context';
 import type { EditorScrollIntoViewOptions } from '../scroll.svelte';
 
 type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
@@ -302,9 +301,9 @@ const runBinding = (editor: Editor, binding: KeyBinding, e: KeyboardEvent): void
   if (reveal) editor.scrollIntoView(reveal);
 };
 
-export const handleKeyDown = (editor: Editor, e: KeyboardEvent & { currentTarget: ImeTextInput }): (() => void) | undefined => {
+export const handleKeyDown = (editor: Editor, e: KeyboardEvent, composing = e.isComposing): (() => void) | undefined => {
   const binding = bindings.find((candidate) => matchBinding(candidate, e));
-  if (e.isComposing) {
+  if (composing) {
     // Unmarked bindings, notably Tab and Escape, stay owned by native text input.
     // Replaying them could steal an IME command or duplicate work the platform already handled.
     if (!binding?.commitCompositionBeforeDispatch) return;

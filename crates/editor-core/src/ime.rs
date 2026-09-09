@@ -27,6 +27,65 @@ pub(crate) struct ImeWindowAnchor {
 }
 
 impl Editor {
+    pub(crate) fn set_composition_target_ranges(&mut self, ranges: Vec<ImeRange>) {
+        let mut targets: Vec<ImeRange> = Vec::new();
+        if self.focused
+            && let Some(composition) = self.state.composition
+        {
+            let mut ranges: Vec<_> = ranges
+                .into_iter()
+                .filter_map(|range| {
+                    let start = range.start.max(composition.start);
+                    let end = range.end.min(composition.end);
+                    (start < end).then_some(ImeRange { start, end })
+                })
+                .collect();
+            ranges.sort_unstable_by_key(|range| range.start);
+            for range in ranges {
+                if let Some(previous) = targets.last_mut()
+                    && range.start <= previous.end
+                {
+                    previous.end = previous.end.max(range.end);
+                } else {
+                    targets.push(range);
+                }
+            }
+            if targets.len() == 1
+                && targets[0].start == composition.start
+                && targets[0].end == composition.end
+            {
+                targets.clear();
+            }
+        }
+        if self.composition_target_ranges != targets {
+            self.composition_target_ranges = targets;
+            self.invalidate_render();
+        }
+    }
+
+    pub(crate) fn composition_target_rects(&self) -> Vec<editor_view::PageRect> {
+        let doc = self.state.view();
+        self.composition_target_ranges
+            .iter()
+            .flat_map(|range| {
+                let Some(from) = ResolvedPosition::from_flat(&doc, range.start) else {
+                    return Vec::new();
+                };
+                let Some(to) = ResolvedPosition::from_flat(&doc, range.end) else {
+                    return Vec::new();
+                };
+                let selection = Selection::new(Position::from(&from), Position::from(&to));
+                selection.resolve(&doc).map_or_else(Vec::new, |selection| {
+                    self.view
+                        .selection_rects(&selection)
+                        .iter()
+                        .map(|rect| rect.without_meta())
+                        .collect()
+                })
+            })
+            .collect()
+    }
+
     pub fn ime(
         &mut self,
         before_limit: usize,

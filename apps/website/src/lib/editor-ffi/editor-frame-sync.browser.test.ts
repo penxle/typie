@@ -110,6 +110,7 @@ afterEach(async () => {
   editor?.destroy();
   editor = undefined;
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 function entry(node: PlainNode, children: PlainNodeEntry[] = [], modifiers: PlainNodeEntry['modifiers'] = {} as never): PlainNodeEntry {
@@ -1328,6 +1329,7 @@ describe('web editor frame synchronization', () => {
   });
 
   it('reveals a page break inserted while composing on its first published frame', async () => {
+    vi.stubGlobal('EditContext', undefined);
     const { editor, scrollRoot } = await mountEditor(doc());
     editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
     await waitForPresentation(editor);
@@ -1347,6 +1349,7 @@ describe('web editor frame synchronization', () => {
         cancelable: true,
       }),
     );
+    if (!(input instanceof HTMLTextAreaElement)) throw new Error('Production textarea fallback is not mounted');
     input.value = '\u{2028}가\u{2029}';
     input.setSelectionRange(2, 2);
     input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '가', isComposing: true, bubbles: true }));

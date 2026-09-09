@@ -913,7 +913,7 @@ export type Tri<T> = { type: "absent" } | { type: "uniform"; value: T } | { type
 
 export type UnderlineStyle = "solid" | "dashed" | "wavy";
 
-export type ViewOp = { type: "toggle_fold"; id: Dot } | { type: "expand_folds_for_selection" } | { type: "expand_folds_for_tracked_range"; id: string } | { type: "set_direct_touch_interaction"; direct: boolean };
+export type ViewOp = { type: "toggle_fold"; id: Dot } | { type: "expand_folds_for_selection" } | { type: "expand_folds_for_tracked_range"; id: string } | { type: "set_direct_touch_interaction"; direct: boolean } | { type: "set_composition_target_ranges"; ranges: ImeRange[] };
 
 export type ViewportAnchor = { type: "position"; stable: StableSelection; original_node: Dot; geometry: ViewportAnchorPositionGeometry } | { type: "node"; node: Dot; offset_x: number; offset_y: number };
 

@@ -404,6 +404,7 @@ pub enum MarkData {
         focused: bool,
     },
     Composition,
+    CompositionTarget,
     DropIndicator,
     TrackedBackground {
         theme_key: String,
@@ -418,7 +419,9 @@ pub enum MarkData {
 impl MarkData {
     pub fn layer(&self) -> MarkLayer {
         match self {
-            Self::Selection { .. } | Self::TrackedBackground { .. } => MarkLayer::BelowContent,
+            Self::Selection { .. } | Self::CompositionTarget | Self::TrackedBackground { .. } => {
+                MarkLayer::BelowContent
+            }
             Self::Composition | Self::DropIndicator | Self::TrackedUnderline { .. } => {
                 MarkLayer::AboveContent
             }
@@ -550,6 +553,7 @@ impl Renderer {
         match data {
             MarkData::Selection { focused } => Some(selection_mark_color(theme, *focused)),
             MarkData::Composition => Some(theme.color("ui.text.default")),
+            MarkData::CompositionTarget => Some(selection_mark_color(theme, true)),
             MarkData::DropIndicator => Some(theme.color("selection")),
             MarkData::TrackedBackground { theme_key, .. } => Some(theme.color(theme_key)),
             MarkData::TrackedUnderline { .. } => None,
@@ -1878,6 +1882,7 @@ mod tests {
             MarkData::Selection { focused: true }.layer(),
             MarkLayer::BelowContent
         );
+        assert_eq!(MarkData::CompositionTarget.layer(), MarkLayer::BelowContent);
     }
 
     #[test]
@@ -1892,6 +1897,11 @@ mod tests {
 
         assert_eq!(selection_mark_color(&theme, true).a, 77);
         assert_eq!(selection_mark_color(&theme, false).a, 48);
+        let renderer = Renderer::new(Arc::new(Mutex::new(Resource::new_test())));
+        assert_eq!(
+            renderer.resolve_mark_color(&MarkData::CompositionTarget, &theme),
+            Some(selection_mark_color(&theme, true))
+        );
     }
 
     #[test]
