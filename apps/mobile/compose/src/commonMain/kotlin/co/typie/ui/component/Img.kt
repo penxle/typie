@@ -152,5 +152,6 @@ private fun PlaceholderAsyncImage(
     contentScale = contentScale,
     colorFilter = colorFilter,
     loading = { placeholder() },
+    error = { placeholder() },
   )
 }
