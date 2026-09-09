@@ -223,7 +223,7 @@
           color: 'text.hint',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.muted' },
+          _supportHover: { color: 'text.default' },
         })}
         onclick={() => (visibleCount += PAGE_SIZE)}
         type="button"

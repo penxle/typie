@@ -234,7 +234,7 @@
           color: 'text.hint',
           textAlign: 'left',
           transition: 'common',
-          _supportHover: { color: 'text.muted' },
+          _supportHover: { color: 'text.default' },
         })}
         disabled={query.loading}
         onclick={showMore}

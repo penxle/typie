@@ -47,7 +47,9 @@ const checkSource = (value: unknown, id: string, problems: string[]): PresetSour
   for (const key of SOURCE_REQUIRED) {
     if (!isText(value[key])) problems.push(`source.${key}: non-empty string expected`);
   }
-  if (isText(value.license) && value.license !== 'MIT') problems.push('source.license: MIT expected');
+  if (isText(value.license) && value.license !== 'MIT' && value.license !== 'CC0-1.0') {
+    problems.push('source.license: MIT or CC0-1.0 expected');
+  }
   if (value.notes !== undefined && !isText(value.notes)) problems.push('source.notes: non-empty string expected');
   for (const key of Object.keys(value)) {
     if (!SOURCE_FIELDS.has(key)) problems.push(`source: unexpected ${key}`);
