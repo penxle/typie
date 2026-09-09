@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,8 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.resolveIsDarkTheme
 import io.github.alexzhirkevich.compottie.Compottie
@@ -130,14 +134,16 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     trailing =
       if (!isLast) {
         {
+          val interaction = remember { MutableInteractionSource() }
           Text(
             text = "건너뛰기",
             style = AppTheme.typography.action,
             color = AppTheme.colors.textMuted,
             modifier =
-              Modifier.clickable {
-                scope.launch { pagerState.animateScrollToPage(pages.lastIndex) }
-              },
+              Modifier.hoverFeedback(interaction, shape = AppShapes.rounded(AppShapes.sm))
+                .clickable(interactionSource = interaction) {
+                  scope.launch { pagerState.animateScrollToPage(pages.lastIndex) }
+                },
           )
         }
       } else {
@@ -215,6 +221,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
       Row(modifier = Modifier.align(Alignment.CenterHorizontally)) {
         repeat(pages.size) { index ->
           val active = pagerState.currentPage == index
+          val interaction = remember { MutableInteractionSource() }
           val dotWidth by
             animateDpAsState(
               targetValue = if (active) 24.dp else 8.dp,
@@ -222,7 +229,8 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             )
           Box(
             modifier =
-              Modifier.clickable {
+              Modifier.hoverFeedback(interaction, enabled = !active, shape = CircleShape)
+                .clickable(interactionSource = interaction) {
                   pagerState.animateScrollToPage(
                     page = index,
                     animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing),

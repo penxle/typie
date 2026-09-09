@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.subpane.comments
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -40,6 +42,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -70,6 +73,7 @@ internal fun CommentComposer(
   onFocusChange: (Boolean) -> Unit,
   onSubmit: (String) -> Unit,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   val hasText = value.isNotBlank()
   val filled = hasText || submitting
 
@@ -92,7 +96,16 @@ internal fun CommentComposer(
           .size(28.dp)
           .clip(CircleShape)
           .background(if (filled) AppTheme.colors.surfaceInverse else Color.Transparent)
-          .clickable(enabled = hasText && !submitting) { onSubmit(value) },
+          .hoverFeedback(
+            interactionSource,
+            enabled = hasText && !submitting,
+            shape = CircleShape,
+            hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+            activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+          )
+          .clickable(interactionSource = interactionSource, enabled = hasText && !submitting) {
+            onSubmit(value)
+          },
       contentAlignment = Alignment.Center,
     ) {
       if (submitting) {
@@ -120,6 +133,7 @@ internal fun CommentTextActionButton(
       modifier =
         Modifier.height(28.dp)
           .clip(RoundedCornerShape(6.dp))
+          .hoverFeedback(enabled = !loading, shape = RoundedCornerShape(6.dp))
           .clickable(enabled = !loading) { onClick() }
           .pressScale(0.95f)
           .padding(horizontal = 4.dp),

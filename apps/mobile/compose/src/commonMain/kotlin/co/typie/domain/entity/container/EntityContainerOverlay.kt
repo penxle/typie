@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -37,6 +38,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -180,6 +182,7 @@ fun EntityContainerSelectionBar(
     modifier =
       modifier
         .shadow(AppTheme.shadows.lg, EntityContainerSelectionBarShape)
+        .clip(EntityContainerSelectionBarShape)
         .background(AppTheme.colors.surfaceDefault, EntityContainerSelectionBarShape),
     verticalAlignment = Alignment.CenterVertically,
   ) {
@@ -187,6 +190,7 @@ fun EntityContainerSelectionBar(
       Box(
         modifier =
           Modifier.height(EntityBottomOverlayDefaults.BarHeight)
+            .hoverFeedback(shape = AppShapes.circle)
             .clickable(onClick = onMoreClick)
             .pressScale(0.97f)
             .padding(start = 18.dp, end = 14.dp)
@@ -223,6 +227,7 @@ fun EntityContainerSelectionBar(
       Box(
         modifier =
           Modifier.size(EntityBottomOverlayDefaults.BarHeight)
+            .hoverFeedback(shape = AppShapes.circle)
             .clickable(onClick = onClearSelection)
             .pressScale(0.96f),
         contentAlignment = Alignment.Center,

@@ -33,6 +33,8 @@ import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 object EntityRowDefaults {
@@ -184,6 +186,10 @@ fun EntityRow(
           .fillMaxWidth()
           .background(backgroundColor)
           .graphicsLayer { this.alpha = alpha }
+          .hoverFeedback(
+            enabled = isInteractive && backgroundColor == Color.Transparent,
+            shape = AppShapes.rounded(AppShapes.md),
+          )
           .then(
             if (!isInteractive) {
               Modifier

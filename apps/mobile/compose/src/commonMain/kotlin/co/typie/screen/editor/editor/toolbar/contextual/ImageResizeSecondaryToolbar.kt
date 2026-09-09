@@ -243,11 +243,7 @@ private fun ImageResizeSecondaryToolbarSurface(
   modifier: Modifier = Modifier,
   content: @Composable RowScope.() -> Unit,
 ) {
-  ToolbarSecondarySurface(
-    onClose = onClose,
-    closeContentDescription = "이미지 폭 조정 닫기",
-    modifier = modifier,
-  ) {
+  ToolbarSecondarySurface(onClose = onClose, modifier = modifier) {
     Row(
       modifier =
         Modifier.fillMaxSize()

@@ -76,6 +76,7 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -290,6 +291,7 @@ fun FolderDetailsScreen(entityId: String) {
             Modifier.size(42.dp)
               .clip(AppShapes.rounded(AppShapes.md))
               .background(AppTheme.colors.surfaceDefault)
+              .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
               .clickable(onClick = openIconPicker)
               .pressScale(),
           contentAlignment = Alignment.Center,

@@ -18,7 +18,7 @@ internal fun editorFoldToolbarPage(targetId: String?): EditorToolbarPage =
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(
           icon = Lucide.TextSelect,
-          contentDescription = "일반 텍스트로",
+          contentDescription = "접기 해제",
           onClick = {
             val nodeId = targetId ?: return@EditorToolbarButton
             scope.sendMessage(Message.Node(NodeOp.Unwrap(id = nodeId)))

@@ -389,7 +389,11 @@ private class EditorInteractionsNode(
 
   private fun registerProvisionalPointerDowns(pointerEvent: PointerEvent) {
     pointerEvent.changes
-      .filter { it.isUnconsumedDirectDown(pointerEvent) }
+      .filter { change ->
+        change.isUnconsumedDirectDown(pointerEvent) ||
+          (change.isDirectDown(pointerEvent) &&
+            interactionController.suppressesTap(change.id.value))
+      }
       .forEach { change ->
         val positionInRoot = positionInRoot(change.position)
         val admission =
@@ -423,7 +427,9 @@ private class EditorInteractionsNode(
           return@filter false
         }
         val pointer = pointers[change.id.value] ?: return@filter false
-        change.isConsumed && pointer.admission == EditorDirectPointerAdmission.Document
+        change.isConsumed &&
+          pointer.admission == EditorDirectPointerAdmission.Document &&
+          !interactionController.suppressesTap(change.id.value)
       }
       .forEach { change ->
         if (pointers.remove(change.id.value) != null) {

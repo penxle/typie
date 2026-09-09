@@ -664,6 +664,7 @@ private fun RelatedNotesSheetBar(
   ) {
     SheetBarButton(
       icon = Lucide.X,
+      contentDescription = "닫기",
       onClick = { onDismiss() },
       modifier = Modifier.align(Alignment.CenterStart),
     )
@@ -683,14 +684,18 @@ private fun RelatedNotesSheetBar(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       RelatedNotesFilterPopover(selectedStatus = selectedStatus, onSelect = onFilterSelect)
-      SheetBarButton(icon = Typie.StickyNotePlus, onClick = { onCreate() })
+      SheetBarButton(
+        icon = Typie.StickyNotePlus,
+        contentDescription = "노트 추가",
+        onClick = { onCreate() },
+      )
     }
   }
 }
 
 @Composable
 private fun RelatedNotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus) -> Unit) {
-  PopoverMenu(anchor = { SheetBarButton(icon = Lucide.ListFilter, onClick = {}) }) {
+  PopoverMenu(anchor = { SheetBarButton(icon = Lucide.ListFilter, contentDescription = "노트 필터") }) {
     listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
       item(
         content = {

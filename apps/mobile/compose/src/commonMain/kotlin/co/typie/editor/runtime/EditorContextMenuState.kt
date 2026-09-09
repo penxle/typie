@@ -3,6 +3,7 @@ package co.typie.editor.runtime
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
@@ -17,11 +18,25 @@ internal class EditorContextMenuState {
   var pointerPosition: PagePoint? by mutableStateOf(null)
     private set
 
+  var boundsInWindow: Rect? = null
+  private var outsideDismissPointerId: Long? = null
+
+  fun beginOutsideDismissGesture(pointerId: Long) {
+    outsideDismissPointerId = pointerId
+    hide()
+  }
+
+  fun suppressesTap(pointerId: Long): Boolean = outsideDismissPointerId == pointerId
+
+  fun endOutsideDismissGesture(pointerId: Long) {
+    if (outsideDismissPointerId == pointerId) outsideDismissPointerId = null
+  }
+
   private var pendingPublicationTarget: PendingPublicationTarget? = null
 
-  fun show(state: EditorState) {
+  fun show(state: EditorState, pointerPosition: PagePoint? = null) {
     pendingPublicationTarget = null
-    pointerPosition = null
+    this.pointerPosition = pointerPosition
     shownForSelection = state.selection
     visible = true
   }
@@ -88,12 +103,13 @@ internal class EditorContextMenuState {
       state.selection == target.selection &&
         (!state.selection.isCollapsed() || target.pointerPosition != null)
     ) {
-      show(state)
-      pointerPosition = target.pointerPosition
+      show(state, pointerPosition = target.pointerPosition)
     }
   }
 
   fun reset() {
+    outsideDismissPointerId = null
+    boundsInWindow = null
     hide()
   }
 

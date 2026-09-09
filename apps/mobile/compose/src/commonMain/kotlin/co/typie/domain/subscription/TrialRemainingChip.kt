@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -38,6 +40,7 @@ import co.typie.graphql.type.PlanAvailability
 import co.typie.storage.Preference
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -97,6 +100,11 @@ fun TrialRemainingChip() {
       Row(
         modifier =
           Modifier.background(AppTheme.colors.surfaceInverse, AppShapes.circle)
+            .hoverFeedback(
+              shape = AppShapes.circle,
+              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+              activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+            )
             .clickable(onClick = openSubscribe)
             .padding(horizontal = 14.dp, vertical = 7.dp)
       ) {
@@ -155,6 +163,11 @@ private fun TrialReminderBalloon(daysLeft: Int, legacy: Boolean, onTap: () -> Un
           Modifier.padding(top = 4.dp)
             .shadow(AppTheme.shadows.lg, shape)
             .background(AppTheme.colors.surfaceInverse, shape)
+            .hoverFeedback(
+              shape = shape,
+              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+              activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+            )
             .clickable(onClick = { onTap() })
             .padding(horizontal = 14.dp, vertical = 10.dp)
             .pressScale()

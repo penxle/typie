@@ -35,8 +35,11 @@ import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.ToolbarBorderWidth
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonShape
 import co.typie.screen.editor.editor.toolbar.ToolbarButtonSize
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
@@ -166,6 +169,8 @@ internal fun TextToolbarSwatchButton(
           role = Role.Button
         }
         .clip(ToolbarButtonShape)
+        .hoverFeedback(interactionSource, enabled = !selected, shape = ToolbarButtonShape)
+        .tooltip(contentDescription, placement = TooltipPlacement.Above)
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     contentAlignment = Alignment.Center,
   ) {

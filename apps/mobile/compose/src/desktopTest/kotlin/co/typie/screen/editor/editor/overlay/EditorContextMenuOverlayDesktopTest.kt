@@ -1,14 +1,37 @@
 package co.typie.screen.editor.editor.overlay
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.dp
+import co.typie.editor.EditorState
+import co.typie.editor.PagePoint
 import co.typie.editor.ffi.SelectionExpansionUnit
+import co.typie.editor.interaction.EditorInteractionGeometry
+import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.scroll.EditorVisibleArea
+import co.typie.ext.clickable
+import co.typie.icons.Lucide
+import co.typie.screen.editor.editor.toolbar.toolbarIndicatorGestures
+import co.typie.ui.component.popover.LocalPopoverOverlayState
+import co.typie.ui.component.popover.PopoverMenu
+import co.typie.ui.component.popover.PopoverOverlayState
+import co.typie.ui.component.sheet.SheetBarButton
+import co.typie.ui.input.WindowInputTestHost
 import co.typie.ui.theme.LightAppShadows
 import co.typie.ui.theme.LightColors
 import co.typie.ui.theme.LocalAppColors
@@ -17,10 +40,122 @@ import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class EditorContextMenuOverlayDesktopTest {
+  @Test
+  fun onlyPointerMenusConsumeTheFirstOutsideControlClick() = runComposeUiTest {
+    val menu = EditorContextMenuState()
+    val geometry =
+      object : EditorInteractionGeometry {
+        override val density = 1f
+
+        override fun containsDocumentInteraction(positionInRoot: Offset) = false
+
+        override fun resolveInteractionPosition(positionInRoot: Offset): Offset? = null
+
+        override fun isTapEligible(positionInRoot: Offset) = false
+
+        override fun resolvePoint(positionInNode: Offset): PagePoint? = null
+
+        override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = null
+
+        override fun resolveEdgeAutoScrollViewport() = null
+      }
+    var clicks = 0
+    var selectedPage = 0
+    val popover = PopoverOverlayState()
+    setContent {
+      CompositionLocalProvider(LocalPopoverOverlayState provides popover) {
+        WindowInputTestHost(Modifier.size(400.dp, 700.dp)) {
+          EditorContextMenuOutsideTapHost(menu, geometry)
+          Box(
+            Modifier.align(Alignment.TopStart)
+              .size(100.dp, 40.dp)
+              .testTag("indicator")
+              .toolbarIndicatorGestures(
+                pageCount = 2,
+                currentPageIndex = selectedPage,
+                onIndicatorProgress = {},
+                onIndicatorDraggingChange = {},
+                onPageSelected = { selectedPage = it },
+                onInteractionActiveChange = {},
+              )
+          )
+          Box(Modifier.align(Alignment.TopEnd)) {
+            PopoverMenu(
+              anchor = {
+                SheetBarButton(Lucide.ListFilter, "필터", modifier = Modifier.testTag("anchor"))
+              }
+            ) {
+              item(Lucide.Check, "항목") {}
+            }
+          }
+          Box(
+            Modifier.align(Alignment.BottomCenter).size(80.dp).testTag("outside").clickable {
+              clicks++
+            }
+          )
+          if (menu.visible) {
+            EditorSelectionContextMenuOverlay(
+              anchor = EditorContextMenuAnchor(200f, 220f, 320f),
+              overlaySize = Size(400f, 700f),
+              visibleArea = EditorVisibleArea(viewport = Size(400f, 700f)),
+              showCopyCutActions = true,
+              availableExpansionUnits = SelectionExpansionUnit.entries.toSet(),
+              onCopy = {},
+              onCut = {},
+              onPaste = {},
+              onExpandWord = {},
+              onExpandSentence = {},
+              onExpandParagraph = {},
+              onSelectAll = {},
+              onDismiss = menu::hide,
+              onBoundsInWindowChanged = { menu.boundsInWindow = it },
+            )
+          }
+        }
+      }
+    }
+    for (pointerMenu in listOf(true, false)) {
+      repeat(2) { index ->
+        val before = clicks
+        runOnIdle {
+          menu.show(EditorState.Initial, if (pointerMenu) PagePoint(0, 200f, 220f) else null)
+        }
+        if (index == 0) onNodeWithTag("outside").performMouseInput { click() }
+        else onNodeWithTag("outside").performTouchInput { click() }
+        waitForIdle()
+        assertFalse(menu.visible)
+        assertEquals(before + if (pointerMenu) 0 else 1, clicks)
+      }
+    }
+    val before = clicks
+    onNodeWithTag("outside").performMouseInput { click() }
+    waitForIdle()
+    assertEquals(before + 1, clicks)
+    for (pointerMenu in listOf(true, false)) {
+      runOnIdle {
+        menu.show(EditorState.Initial, if (pointerMenu) PagePoint(0, 200f, 220f) else null)
+      }
+      onNodeWithTag("indicator").performMouseInput { click(Offset(width - 5f, center.y)) }
+      waitForIdle()
+      assertFalse(menu.visible)
+      assertEquals(if (pointerMenu) 0 else 1, selectedPage)
+    }
+    for (pointerMenu in listOf(true, false)) {
+      runOnIdle {
+        menu.show(EditorState.Initial, if (pointerMenu) PagePoint(0, 200f, 220f) else null)
+      }
+      onNodeWithTag("anchor").performMouseInput { click() }
+      waitForIdle()
+      assertFalse(menu.visible)
+      assertEquals(!pointerMenu, popover.acceptsInput)
+    }
+  }
+
   @Test
   fun selectingExpansionShowsLegacyExpansionMenu() = runComposeUiTest {
     setMenuContent()

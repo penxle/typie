@@ -6,6 +6,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +58,7 @@ import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -264,11 +267,15 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
       loadingText = "로그인 중...",
     )
 
+    val alternateLoginInteraction = remember { MutableInteractionSource() }
     Text(
       "다른 방법으로 로그인",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textMuted,
-      modifier = Modifier.align(Alignment.CenterHorizontally).clickable { onSingleSignOnClick() },
+      modifier =
+        Modifier.align(Alignment.CenterHorizontally)
+          .hoverFeedback(alternateLoginInteraction, shape = AppShapes.rounded(AppShapes.sm))
+          .clickable(interactionSource = alternateLoginInteraction) { onSingleSignOnClick() },
     )
   }
 }
@@ -292,6 +299,21 @@ private fun SingleSignOnButton(
           .height(48.dp)
           .thenIfNotNull(borderColor) { border(1.dp, it, shape) }
           .background(backgroundColor, shape)
+          .hoverFeedback(
+            shape = shape,
+            hoverColor =
+              lerp(
+                backgroundColor,
+                if (backgroundColor == Color.Black) foregroundColor else Color.Black,
+                0.12f,
+              ),
+            activeColor =
+              lerp(
+                backgroundColor,
+                if (backgroundColor == Color.Black) foregroundColor else Color.Black,
+                0.20f,
+              ),
+          )
           .clickable(onClick = onClick)
     ) {
       Img(

@@ -2,6 +2,7 @@ package co.typie.screen.studio.studiosettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.gate
 import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsOrImePadding
 import co.typie.ext.pressScale
@@ -270,7 +272,7 @@ private fun MoreMenu(model: StudioSettingsViewModel) {
   val dialog = LocalDialog.current
   val colors = AppTheme.colors
 
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "작업실 메뉴") }) {
     item(icon = Lucide.Trash2, label = "작업실 삭제", color = colors.danger) {
       if (model.query.data.me.sites.size <= 1) {
         scope.launch {
@@ -306,12 +308,17 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
   val logoShape = AppShapes.squircle(AppShapes.lg)
 
   InteractionScope {
+    val hovered by checkNotNull(LocalInteractionSource.current).collectIsHoveredAsState()
     Box(modifier = Modifier.clickable(onClick).pressScale()) {
       Box(
         modifier =
           Modifier.size(104.dp)
             .clip(logoShape)
-            .border(1.dp, AppTheme.colors.borderDefault, logoShape)
+            .border(
+              1.dp,
+              if (hovered) AppTheme.colors.borderEmphasis else AppTheme.colors.borderDefault,
+              logoShape,
+            )
             .background(AppTheme.colors.surfaceDefault, logoShape),
         contentAlignment = Alignment.Center,
       ) {
@@ -347,7 +354,9 @@ private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
   isDeleting: Boolean,
-  onDelete: suspend context(SheetScope<Unit>) () -> Unit,
+  onDelete:
+    suspend context(SheetScope<Unit>)
+    () -> Unit,
 ) {
   var inputValue by remember { mutableStateOf("") }
 

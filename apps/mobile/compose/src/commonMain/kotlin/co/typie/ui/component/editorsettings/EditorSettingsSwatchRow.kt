@@ -3,6 +3,7 @@ package co.typie.ui.component.editorsettings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorColorOption
 import co.typie.editor.ResolvedEditorTheme
 import co.typie.ext.clickable
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -96,11 +98,13 @@ internal fun EditorSettingsSwatchRow(
   ) {
     itemsIndexed(options) { _, option ->
       val isSelected = option.value == selected
+      val source = remember { MutableInteractionSource() }
       val color = option.themeKey?.let { theme[it] }
 
       Box(
         modifier =
-          Modifier.clickable { onSelect(option.value) }
+          Modifier.hoverFeedback(source, enabled = !isSelected, shape = outerShape)
+            .clickable(interactionSource = source) { onSelect(option.value) }
             .then(
               if (isSelected) Modifier.border(ringWidth, AppTheme.colors.textDefault, outerShape)
               else Modifier

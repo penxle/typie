@@ -13,6 +13,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,6 +62,7 @@ import co.typie.ext.textInputFocusable
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -279,6 +282,7 @@ fun TextField(
       tween(durationMillis = 220, easing = EaseInOutExpo),
     )
 
+  val interactionSource = remember { MutableInteractionSource() }
   val horizontalPadding = 16.dp
   val verticalPadding = 8.dp
   val labelTopPadding = 10.dp
@@ -315,6 +319,7 @@ fun TextField(
     }
 
     BasicTextField(
+      interactionSource = interactionSource,
       value = textInputState.value,
       onValueChange = { newValue ->
         val result =
@@ -393,9 +398,11 @@ fun TextField(
         Box(
           modifier =
             Modifier.fillMaxWidth()
+              .hoverable(interactionSource, enabled = enabled)
               .height(fieldHeight)
               .border(borderWidth, borderColor, shape)
               .background(containerColor, shape)
+              .hoverFeedback(interactionSource, enabled = enabled && !isFocused, shape = shape)
               .padding(horizontal = horizontalPadding)
         ) {
           val hasSuffix = suffix != null

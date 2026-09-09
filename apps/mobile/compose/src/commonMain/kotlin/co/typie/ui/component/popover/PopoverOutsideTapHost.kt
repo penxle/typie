@@ -27,7 +27,7 @@ internal class PopoverOutsideGestureTracker(
   private var isTapCandidate = true
 
   fun start(): PopoverOutsideGestureUpdate {
-    return PopoverOutsideGestureUpdate(dismiss = true, consumeChange = false, keepTracking = true)
+    return PopoverOutsideGestureUpdate(dismiss = true, consumeChange = true, keepTracking = true)
   }
 
   fun update(currentPosition: Offset, isPressed: Boolean): PopoverOutsideGestureUpdate {
@@ -53,8 +53,8 @@ internal fun Modifier.popoverOutsideTapHost(state: PopoverOverlayState): Modifie
     }
     .pointerInput(state, rootWindowOffset) {
       awaitEachGesture {
-        // Intercept outside taps before descendants turn them into clicks, but keep drags
-        // unconsumed.
+        // Own the press so mouse controls cannot start a click underneath the popover.
+        // Subsequent drag movement stays available to scrolling.
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         val paneBounds = state.outsideDismissPaneBoundsInWindow ?: return@awaitEachGesture
         val downPositionInWindow = down.position + rootWindowOffset
@@ -62,7 +62,7 @@ internal fun Modifier.popoverOutsideTapHost(state: PopoverOverlayState): Modifie
           return@awaitEachGesture
         }
 
-        val gestureId = state.beginOutsideDismissGesture()
+        val gestureId = state.beginOutsideDismissGesture(down.id.value)
         try {
           val gestureTracker =
             PopoverOutsideGestureTracker(
@@ -70,6 +70,7 @@ internal fun Modifier.popoverOutsideTapHost(state: PopoverOverlayState): Modifie
               touchSlop = viewConfiguration.touchSlop,
             )
           val startUpdate = gestureTracker.start()
+          if (startUpdate.consumeChange) down.consume()
           if (startUpdate.dismiss) {
             state.dismissFromOutsideGesture()
           }

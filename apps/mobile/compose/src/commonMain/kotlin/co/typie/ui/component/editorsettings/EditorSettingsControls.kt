@@ -1,6 +1,7 @@
 package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
@@ -327,10 +329,12 @@ internal fun EditorSettingsTrailingChip(
 ) {
   val backgroundColor = if (selected) AppTheme.colors.textDefault else AppTheme.colors.surfaceInset
   val textColor = if (selected) AppTheme.colors.surfaceDefault else AppTheme.colors.textDefault
+  val interactionSource = remember { MutableInteractionSource() }
   Box(
     modifier =
-      Modifier.clickable(onClick)
-        .background(backgroundColor, AppShapes.circle)
+      Modifier.background(backgroundColor, AppShapes.circle)
+        .hoverFeedback(interactionSource, enabled = !selected, shape = AppShapes.circle)
+        .clickable(interactionSource = interactionSource, onClick = onClick)
         .padding(horizontal = 16.dp, vertical = 8.dp)
   ) {
     Text(text = label, style = AppTheme.typography.action, color = textColor)

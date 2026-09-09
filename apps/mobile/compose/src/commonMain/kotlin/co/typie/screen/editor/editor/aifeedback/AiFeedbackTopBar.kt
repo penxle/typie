@@ -27,9 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,12 +44,9 @@ import co.typie.ui.theme.shadow
 internal fun AiFeedbackTopBarLeading(session: EditorAiFeedbackSession) {
   TopBarButton(
     icon = Lucide.X,
+    contentDescription = "닫기",
+    shortcut = "Esc",
     onClick = { session.close() },
-    modifier =
-      Modifier.semantics {
-        contentDescription = "AI 피드백 닫기"
-        role = Role.Button
-      },
   )
 }
 
@@ -128,12 +123,8 @@ internal fun AiFeedbackTopBarTrailing(session: EditorAiFeedbackSession) {
   } else {
     TopBarButton(
       icon = Lucide.RefreshCw,
+      contentDescription = "다시 분석",
       onClick = { session.rerun() },
-      modifier =
-        Modifier.semantics {
-          contentDescription = "다시 분석"
-          role = Role.Button
-        },
     )
   }
 }

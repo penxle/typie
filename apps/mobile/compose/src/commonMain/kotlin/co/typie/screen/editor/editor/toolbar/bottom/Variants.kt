@@ -66,6 +66,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.min
@@ -205,6 +206,7 @@ private fun VariantRow(
           .then(
             if (selected) Modifier.border(1.dp, AppTheme.colors.borderDefault, shape) else Modifier
           )
+          .hoverFeedback(interactionSource, enabled = !selected, shape = shape)
           .clickable(
             interactionSource = interactionSource,
             indication = null,

@@ -30,6 +30,7 @@ import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
@@ -59,11 +60,10 @@ fun PlanChangeNoticeHost() {
       return@LaunchedEffect
     }
 
-    val subscription = snapshotFlow {
-      (SubscriptionService.entitlement as? Entitlement.Active)?.subscription
-    }
-      .filterNotNull()
-      .first()
+    val subscription =
+      snapshotFlow { (SubscriptionService.entitlement as? Entitlement.Active)?.subscription }
+        .filterNotNull()
+        .first()
     if (!subscription.isLegacyTrial()) return@LaunchedEffect
 
     Preference.planChangeNoticeShown = true
@@ -96,10 +96,7 @@ private fun PlanChangeNoticeContent(showSubscribe: Boolean) {
     Spacer(Modifier.height(24.dp))
 
     if (showSubscribe) {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlineButton(text = "좀 더 둘러볼게요", onClick = { dismiss() })
 
         Button(text = "구독하고 계속 사용하기", onClick = { resolve(Unit) })
@@ -119,6 +116,7 @@ private fun OutlineButton(text: String, onClick: () -> Unit) {
           .height(48.dp)
           .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.lg))
           .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.lg))
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.lg))
           .clickable { onClick() },
       contentAlignment = Alignment.Center,
     ) {

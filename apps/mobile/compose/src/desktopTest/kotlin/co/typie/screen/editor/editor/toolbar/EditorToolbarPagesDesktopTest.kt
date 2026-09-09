@@ -1820,7 +1820,7 @@ class EditorToolbarPagesDesktopTest {
     )
 
     onNodeWithTag(MainButtonTag).performTouchInput { click(center) }
-    onNodeWithContentDescription("에디터 포커스 해제").performTouchInput { click(center) }
+    onNodeWithContentDescription("읽기 모드로 전환").performTouchInput { click(center) }
     waitForIdle()
 
     assertEquals(1, toolbarButtonClicks)
@@ -2304,7 +2304,6 @@ class EditorToolbarPagesDesktopTest {
               pagerState = pagerState,
               autoTargetPageKey = autoTargetPageKey,
               autoTargetKey = autoTargetRevision,
-              editorFocused = true,
               activeBottomPanel = null,
               fixedAction = ToolbarFixedAction.DismissInput,
               onEditorInputRequest = {},

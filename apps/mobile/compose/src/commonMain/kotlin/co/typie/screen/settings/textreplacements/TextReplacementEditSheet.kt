@@ -42,6 +42,7 @@ import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -183,6 +184,7 @@ private fun RegexToggleRow(
       modifier =
         Modifier.fillMaxWidth()
           .clip(AppShapes.rounded(AppShapes.md))
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
           .clickable(onClick)
           .pressScale()
           .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -212,6 +214,7 @@ private fun DeleteAction(isDeleting: Boolean, enabled: Boolean, onDelete: suspen
     Box(
       modifier =
         Modifier.fillMaxWidth()
+          .hoverFeedback(enabled = enabled, shape = AppShapes.rounded(AppShapes.sm))
           .clickable(enabled = enabled, onClick = onDelete)
           .pressScale(0.97f)
           .padding(horizontal = 4.dp, vertical = 8.dp)

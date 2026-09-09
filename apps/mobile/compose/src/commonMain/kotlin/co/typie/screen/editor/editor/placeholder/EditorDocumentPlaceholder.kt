@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.placeholder
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -30,6 +32,8 @@ import co.typie.ext.clickable
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.max
 
@@ -46,6 +50,7 @@ internal fun EditorDocumentPlaceholder(
   modifier: Modifier = Modifier,
   onLoadTemplate: suspend () -> Unit,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   val density = LocalDensity.current
   val placement =
     resolveEditorDocumentPlaceholderPlacement(
@@ -101,7 +106,14 @@ internal fun EditorDocumentPlaceholder(
         textAlign = placement.textAlign,
       )
       Row(
-        modifier = Modifier.semantics { role = Role.Button }.clickable { onLoadTemplate() },
+        modifier =
+          Modifier.semantics { role = Role.Button }
+            .hoverFeedback(
+              interactionSource,
+              enabled = true,
+              shape = AppShapes.rounded(AppShapes.sm),
+            )
+            .clickable(interactionSource = interactionSource) { onLoadTemplate() },
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
       ) {

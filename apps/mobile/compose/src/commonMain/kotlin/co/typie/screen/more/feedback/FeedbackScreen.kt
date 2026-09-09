@@ -36,6 +36,7 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -155,7 +156,8 @@ private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend
             color = if (selected) AppTheme.colors.surfaceInset else AppTheme.colors.surfaceDefault,
             shape = AppShapes.circle,
           )
-          .clickable(onClick)
+          .hoverFeedback(enabled = !selected, shape = AppShapes.circle)
+          .clickable(onClick = onClick)
           .padding(horizontal = 12.dp, vertical = 8.dp)
           .pressScale(),
       contentAlignment = Alignment.Center,
@@ -184,7 +186,8 @@ private fun FeedbackMoodButton(icon: IconData, selected: Boolean, onClick: suspe
             color = if (selected) AppTheme.colors.surfaceInset else AppTheme.colors.surfaceDefault,
             shape = AppShapes.circle,
           )
-          .clickable(onClick)
+          .hoverFeedback(enabled = !selected, shape = AppShapes.circle)
+          .clickable(onClick = onClick)
           .pressScale(),
       contentAlignment = Alignment.Center,
     ) {

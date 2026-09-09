@@ -15,7 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -60,12 +59,17 @@ import co.typie.screen.editor.editor.layout.viewportDirectControl
 import co.typie.screen.editor.editor.toolbar.emitPressInteractions
 import co.typie.screen.editor.editor.toolbar.preserveEditorFocusOnToolbarInteraction
 import co.typie.ui.component.Text
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hasNonTouchPointer
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.input.onPointerEvent
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.shortcutLabel
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -182,6 +186,7 @@ internal fun EditorZoomOverlay(
         ZoomIconButton(
           icon = Lucide.Minus,
           contentDescription = if (zoomOutAvailable) "페이지 축소" else "최소 배율입니다",
+          shortcut = shortcutLabel("-", ShortcutModifier.Mod),
           enabled = state.visible,
           available = zoomOutAvailable,
           onClick = {
@@ -199,6 +204,10 @@ internal fun EditorZoomOverlay(
         snapFeedbackRequest = state.snapFeedbackRequest,
         snapFeedbackLandmark = state.snapFeedbackLandmark,
         contentDescription = toggleDescription,
+        shortcut =
+          if (toggleTargetLandmark == EditorZoomLandmark.Unit)
+            shortcutLabel("0", ShortcutModifier.Mod)
+          else null,
         fixedWidth = nonTouchPointerActive,
         enabled = state.visible && toggleTarget != null,
         onPointerEnter = state::onValuePointerEnter,
@@ -217,6 +226,7 @@ internal fun EditorZoomOverlay(
         ZoomIconButton(
           icon = Lucide.Plus,
           contentDescription = if (zoomInAvailable) "페이지 확대" else "최대 배율입니다",
+          shortcut = shortcutLabel("+", ShortcutModifier.Mod),
           enabled = state.visible,
           available = zoomInAvailable,
           onClick = {
@@ -236,12 +246,12 @@ internal fun EditorZoomOverlay(
 private fun ZoomIconButton(
   icon: IconData,
   contentDescription: String,
+  shortcut: String,
   enabled: Boolean,
   available: Boolean,
   onClick: () -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
-  val hovered by interactionSource.collectIsHoveredAsState()
   CompositionLocalProvider(LocalInteractionSource provides interactionSource) {
     Box(
       modifier =
@@ -249,9 +259,12 @@ private fun ZoomIconButton(
           .pressScale()
           .focusProperties { canFocus = false }
           .clip(ZoomButtonShape)
-          .background(
-            if (hovered && enabled) AppTheme.colors.borderDefault else Color.Transparent,
-            ZoomButtonShape,
+          .hoverFeedback(interactionSource, enabled, ZoomButtonShape)
+          .tooltip(
+            contentDescription,
+            shortcut,
+            enabled = enabled,
+            placement = TooltipPlacement.Below,
           )
           .clickable(
             enabled = enabled,
@@ -284,6 +297,7 @@ private fun ZoomValueButton(
   snapFeedbackRequest: Int,
   snapFeedbackLandmark: EditorZoomLandmark?,
   contentDescription: String,
+  shortcut: String?,
   fixedWidth: Boolean,
   enabled: Boolean,
   onPointerEnter: () -> Unit,
@@ -292,7 +306,6 @@ private fun ZoomValueButton(
   onClick: () -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
-  val hovered by interactionSource.collectIsHoveredAsState()
   CompositionLocalProvider(LocalInteractionSource provides interactionSource) {
     Box(
       modifier =
@@ -302,9 +315,12 @@ private fun ZoomValueButton(
           .focusProperties { canFocus = false }
           .clip(ZoomButtonShape)
           .border(1.dp, Color.Transparent, ZoomButtonShape)
-          .background(
-            if (hovered && enabled) AppTheme.colors.borderDefault else Color.Transparent,
-            ZoomButtonShape,
+          .hoverFeedback(interactionSource, enabled, ZoomButtonShape)
+          .tooltip(
+            contentDescription,
+            shortcut,
+            enabled = enabled,
+            placement = TooltipPlacement.Below,
           )
           .onPointerEvent(PointerEventType.Enter, PointerEventPass.Initial) { event ->
             if (event.hasNonTouchPointer()) onPointerEnter()
@@ -439,7 +455,7 @@ private fun applyZoomStep(
 private fun toggleDescription(landmark: EditorZoomLandmark?): String =
   when (landmark) {
     EditorZoomLandmark.FitWidth -> "화면에 맞추기"
-    EditorZoomLandmark.Unit -> "원본 크기로 돌아가기  ⌘/Ctrl 0"
+    EditorZoomLandmark.Unit -> "원본 크기로 돌아가기"
     EditorZoomLandmark.Minimum -> "최소 배율로 축소"
     EditorZoomLandmark.Maximum -> "최대 배율로 확대"
     null -> "원본 크기가 화면에 맞춰져 있어요"

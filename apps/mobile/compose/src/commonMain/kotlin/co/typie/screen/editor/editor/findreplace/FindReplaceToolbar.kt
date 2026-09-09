@@ -57,6 +57,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import co.typie.ui.utils.ShortcutModifier
 import co.typie.ui.utils.matchesShortcut
+import co.typie.ui.utils.shortcutLabel
 
 @Composable
 internal fun FindReplaceToolbar(
@@ -107,6 +108,7 @@ internal fun FindReplaceToolbar(
           EditorToolbarButton(
             icon = Lucide.Replace,
             contentDescription = "바꾸기",
+            shortcut = shortcutLabel("Enter"),
             onClick = session.replace,
             enabled = session.canReplace,
           )
@@ -114,20 +116,23 @@ internal fun FindReplaceToolbar(
           EditorToolbarButton(
             icon = Lucide.ReplaceAll,
             contentDescription = "모두 바꾸기",
+            shortcut = shortcutLabel("Enter", ShortcutModifier.Mod),
             onClick = session.replaceAll,
             enabled = session.canReplace,
           )
           Spacer(Modifier.width(ToolbarItemGap))
           EditorToolbarButton(
             icon = Lucide.ChevronUp,
-            contentDescription = "이전 검색 결과",
+            contentDescription = "이전 결과 찾기",
+            shortcut = shortcutLabel("Enter", ShortcutModifier.Shift),
             onClick = session.findPrevious,
             enabled = session.hasMatches,
           )
           Spacer(Modifier.width(ToolbarItemGap))
           EditorToolbarButton(
             icon = Lucide.ChevronDown,
-            contentDescription = "다음 검색 결과",
+            contentDescription = "다음 결과 찾기",
+            shortcut = shortcutLabel("Enter"),
             onClick = session.findNext,
             enabled = session.hasMatches,
           )

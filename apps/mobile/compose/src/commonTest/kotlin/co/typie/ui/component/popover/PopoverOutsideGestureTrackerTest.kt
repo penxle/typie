@@ -8,18 +8,18 @@ import kotlin.test.assertTrue
 class PopoverOutsideGestureTrackerTest {
 
   @Test
-  fun start_tracksGesture_withoutImmediateDismiss() {
+  fun start_dismissesAndConsumesPress() {
     val tracker = PopoverOutsideGestureTracker(origin = Offset(10f, 20f), touchSlop = 8f)
 
     val start = tracker.start()
 
     assertTrue(start.dismiss)
-    assertFalse(start.consumeChange)
+    assertTrue(start.consumeChange)
     assertTrue(start.keepTracking)
   }
 
   @Test
-  fun tapOutside_dismissesAndConsumesOnlyRelease() {
+  fun tapOutside_consumesPressAndRelease() {
     val tracker = PopoverOutsideGestureTracker(origin = Offset(10f, 20f), touchSlop = 8f)
     tracker.start()
 
@@ -35,7 +35,7 @@ class PopoverOutsideGestureTrackerTest {
   }
 
   @Test
-  fun panOutside_keepsTrackingUntilRelease_withoutConsumingGesture() {
+  fun panOutside_keepsMovementAvailableAfterConsumingPress() {
     val tracker = PopoverOutsideGestureTracker(origin = Offset(10f, 20f), touchSlop = 8f)
     tracker.start()
 

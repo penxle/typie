@@ -59,7 +59,13 @@ fun MoreScreen() {
 
   ProvideTopBar(
     center = { Text("더 보기", style = AppTheme.typography.title) },
-    trailing = { TopBarButton(Lucide.Settings, onClick = { nav.navigate(Route.Settings) }) },
+    trailing = {
+      TopBarButton(
+        Lucide.Settings,
+        contentDescription = "설정",
+        onClick = { nav.navigate(Route.Settings) },
+      )
+    },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 

@@ -27,6 +27,8 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -65,7 +67,9 @@ fun SheetOptionRow(
   label: @Composable ColumnScope.() -> Unit,
 ) {
   CardRow(
-    onClick = { if (enabled) onClick() },
+    onClick = onClick,
+    enabled = enabled,
+    selected = selected,
     modifier = modifier,
     contentPadding = contentPadding,
   ) {
@@ -104,6 +108,7 @@ fun SheetActionRow(
       modifier =
         modifier
           .fillMaxWidth()
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
           .clickable(onClick = onClick)
           .heightIn(min = 44.dp)
           .padding(contentPadding)

@@ -25,11 +25,7 @@ internal fun TableAlignmentSecondaryToolbar(
   sendMessage: (Message) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  ToolbarSecondarySurface(
-    onClose = onClose,
-    closeContentDescription = "표 정렬 닫기",
-    modifier = modifier,
-  ) {
+  ToolbarSecondarySurface(onClose = onClose, modifier = modifier) {
     Row(
       modifier =
         Modifier.fillMaxSize()

@@ -47,8 +47,11 @@ class PopoverOverlayState {
   internal var isDetached: Boolean by mutableStateOf(false)
     private set
 
-  internal var isOutsideDismissGestureActive: Boolean by mutableStateOf(false)
-    private set
+  private var outsideDismissPointerId by mutableStateOf<Long?>(null)
+  internal val isOutsideDismissGestureActive: Boolean
+    get() = outsideDismissPointerId != null
+
+  internal fun suppressesTap(pointerId: Long): Boolean = outsideDismissPointerId == pointerId
 
   internal fun show(owner: Any, entry: PopoverOverlayEntry, anchorBounds: IntRect) {
     this.owner = owner
@@ -117,15 +120,15 @@ class PopoverOverlayState {
     onOutsideDismiss?.invoke()
   }
 
-  internal fun beginOutsideDismissGesture(): Int {
+  internal fun beginOutsideDismissGesture(pointerId: Long): Int {
     outsideDismissGestureIdState += 1
-    isOutsideDismissGestureActive = true
+    outsideDismissPointerId = pointerId
     return outsideDismissGestureIdState
   }
 
   internal fun endOutsideDismissGesture(gestureId: Int) {
     if (outsideDismissGestureIdState == gestureId) {
-      isOutsideDismissGestureActive = false
+      outsideDismissPointerId = null
     }
   }
 

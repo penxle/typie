@@ -5,6 +5,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -44,6 +46,7 @@ import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.safeDrawing
 import co.typie.ext.toPx
 import co.typie.navigation.PlatformBackHandler
+import co.typie.ui.component.tooltip.LocalTooltipState
 import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
@@ -122,7 +125,7 @@ fun Popover(
           }
         Box(focusObserver) { PopoverPaneSelectionHost(scope = scope, pane = pane) }
       },
-      anchor = { anchor() },
+      anchor = { CompositionLocalProvider(LocalTooltipState provides null) { anchor() } },
     )
   val openPopover = rememberUpdatedState {
     if (!isOverlayVisible) {
@@ -225,17 +228,26 @@ fun Popover(
   }
 
   if (!enabled) {
-    Box(modifier = anchorModifier) {
-      Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+    CompositionLocalProvider(LocalTooltipState provides null) {
+      Box(modifier = anchorModifier) {
+        Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+      }
     }
     return
   }
 
   Box(
     modifier =
-      anchorModifier.pointerInput(Unit) {
+      anchorModifier.hoverable(anchorInteractionSource, enabled = !isOverlayVisible).pointerInput(
+        Unit
+      ) {
         awaitEachGesture {
-          val press = awaitFirstDown(requireUnconsumed = false)
+          val initialDown =
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+          if (initialDown.isConsumed) return@awaitEachGesture
+          // A clickable anchor may consume Main; an ancestor's Initial consumption owns dismissal.
+          val press =
+            awaitPointerEvent(PointerEventPass.Main).changes.first { it.id == initialDown.id }
           if (overlayState.isOutsideDismissGestureActive) {
             return@awaitEachGesture
           }
@@ -306,7 +318,10 @@ fun Popover(
         }
       }
   ) {
-    CompositionLocalProvider(LocalInteractionSource provides anchorInteractionSource) {
+    CompositionLocalProvider(
+      LocalInteractionSource provides anchorInteractionSource,
+      LocalTooltipState provides LocalTooltipState.current.takeUnless { isOverlayVisible },
+    ) {
       Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
     }
   }

@@ -3,6 +3,7 @@ package co.typie.ui.component.sheet
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,12 +24,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -91,7 +97,8 @@ fun SheetBar(
 @Composable
 fun SheetBarButton(
   icon: IconData,
-  onClick: suspend () -> Unit,
+  contentDescription: String,
+  onClick: (suspend () -> Unit)? = null,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
   loading: Boolean = false,
@@ -104,16 +111,23 @@ fun SheetBarButton(
   val resolvedBorderColor = borderColor ?: SheetBarDefaults.controlBorderColor()
   val resolvedTint = tint ?: AppTheme.colors.textDefault
 
-  InteractionScope {
+  val source = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+  CompositionLocalProvider(LocalInteractionSource provides source) {
     Box(
       modifier =
         modifier
           .size(SheetBarDefaults.ButtonSize)
+          .tooltip(contentDescription, enabled = enabled && !loading)
           .graphicsLayer { this.alpha = alpha }
           .shadow(AppTheme.shadows.md, SheetBarDefaults.ButtonShape)
           .border(1.dp, resolvedBorderColor, SheetBarDefaults.ButtonShape)
           .background(resolvedBackground, SheetBarDefaults.ButtonShape)
-          .clickable(enabled = enabled && !loading, onClick = onClick)
+          .hoverFeedback(source, enabled && !loading, SheetBarDefaults.ButtonShape)
+          .then(
+            if (onClick != null)
+              Modifier.clickable(enabled = enabled && !loading, onClick = onClick)
+            else Modifier
+          )
           .pressScale(0.94f),
       contentAlignment = Alignment.Center,
     ) {
@@ -122,6 +136,7 @@ fun SheetBarButton(
       } else {
         Icon(
           icon = icon,
+          contentDescription = contentDescription,
           modifier = Modifier.size(SheetBarDefaults.ButtonIconSize),
           tint = resolvedTint,
         )
@@ -150,6 +165,7 @@ fun SheetBarTextButton(
             minHeight = SheetBarDefaults.SlotWidth,
           )
           .graphicsLayer { this.alpha = alpha }
+          .hoverFeedback(enabled = enabled && !loading, shape = SheetBarDefaults.ButtonShape)
           .clickable(enabled = enabled && !loading, onClick = onClick)
           .pressScale(0.96f),
       contentAlignment = Alignment.Center,

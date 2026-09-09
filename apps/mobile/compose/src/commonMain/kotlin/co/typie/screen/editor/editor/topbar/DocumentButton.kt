@@ -26,6 +26,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 
@@ -48,6 +49,7 @@ internal fun EditorDocumentButton(
           modifier
             .fillMaxWidth()
             .height(TopBarDefaults.TitleHeight)
+            .hoverFeedback(enabled = !loading, shape = TopBarDefaults.ButtonShape)
             .clickable(enabled = !loading, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,

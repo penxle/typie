@@ -462,7 +462,7 @@ private fun TrashActionsContent(
 
 @Composable
 private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: CoroutineScope) {
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "휴지통 메뉴") }) {
     actions.forEach { action ->
       item(icon = action.icon, label = action.label, color = action.tint) {
         actionScope.launch { action.onClick() }

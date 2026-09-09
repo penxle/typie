@@ -36,6 +36,7 @@ fun rememberEntityCreateBottomBarAction(
   return remember(model, siteId, parentEntityId, presenterScope, toast, sheet) {
     BottomBarAction(
       icon = Lucide.SquarePlus,
+      contentDescription = "새로 만들기",
       menus =
         listOf(
           ActionMenuItem(

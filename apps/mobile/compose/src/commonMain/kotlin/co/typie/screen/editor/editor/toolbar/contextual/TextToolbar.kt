@@ -51,6 +51,8 @@ import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.shortcutLabel
 
 @Composable
 internal fun rememberTextToolbarPage(
@@ -188,6 +190,7 @@ private fun EditorTextToolbar(
       onClick = { toggleMode(TextOptionMode.FontFamily) },
       selected = activeTextOptionMode == TextOptionMode.FontFamily,
       subtle = true,
+      tooltipEnabled = true,
     )
     EditorToolbarLabelButton(
       text = fontWeight?.let { toolbarFontWeightLabel(it, fontFamily, fontFamilies) } ?: "-",
@@ -195,6 +198,7 @@ private fun EditorTextToolbar(
       onClick = { toggleMode(TextOptionMode.FontWeight) },
       selected = activeTextOptionMode == TextOptionMode.FontWeight,
       subtle = true,
+      tooltipEnabled = true,
     )
     EditorToolbarLabelButton(
       text = fontSize?.let(::formatToolbarPointValue) ?: "-",
@@ -202,29 +206,34 @@ private fun EditorTextToolbar(
       onClick = { toggleMode(TextOptionMode.FontSize) },
       selected = activeTextOptionMode == TextOptionMode.FontSize,
       subtle = true,
+      tooltipEnabled = true,
     )
     EditorToolbarDivider()
     EditorToolbarButton(
       icon = Lucide.Bold,
       contentDescription = "굵게",
+      shortcut = shortcutLabel("B", ShortcutModifier.Mod),
       onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Bold))) },
       selected = modifierState?.effectiveBold.hasUniformValue(),
     )
     EditorToolbarButton(
       icon = Lucide.Italic,
       contentDescription = "기울임",
+      shortcut = shortcutLabel("I", ShortcutModifier.Mod),
       onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Italic))) },
       selected = modifierState?.italic.hasUniformValue(),
     )
     EditorToolbarButton(
       icon = Lucide.Underline,
       contentDescription = "밑줄",
+      shortcut = shortcutLabel("U", ShortcutModifier.Mod),
       onClick = { scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Underline))) },
       selected = modifierState?.underline.hasUniformValue(),
     )
     EditorToolbarButton(
       icon = Lucide.Strikethrough,
       contentDescription = "취소선",
+      shortcut = shortcutLabel("S", ShortcutModifier.Mod, ShortcutModifier.Shift),
       onClick = {
         scope.sendMessage(Message.Modifier(ModifierOp.Toggle(ModifierType.Strikethrough)))
       },
@@ -274,6 +283,7 @@ private fun EditorTextToolbar(
     EditorToolbarButton(
       icon = Lucide.RemoveFormatting,
       contentDescription = "서식 지우기",
+      shortcut = shortcutLabel("\\", ShortcutModifier.Mod),
       onClick = { scope.sendMessage(Message.Modifier(ModifierOp.ClearAll)) },
     )
   }

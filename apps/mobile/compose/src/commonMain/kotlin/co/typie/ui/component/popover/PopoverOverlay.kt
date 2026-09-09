@@ -347,6 +347,7 @@ private fun PopoverPaneSurface(
         anchorSize = anchorSize,
         paneOffset = paneOffset,
         anchorOffset = anchorOffset,
+        showAnchor = progress < 1f,
       )
     }
   }
@@ -360,6 +361,7 @@ private fun PopoverCropLayout(
   anchorSize: IntSize,
   paneOffset: IntOffset,
   anchorOffset: IntOffset,
+  showAnchor: Boolean,
 ) {
   Layout(
     content = {
@@ -373,8 +375,10 @@ private fun PopoverCropLayout(
       measurables[1].measure(Constraints.fixed(anchorSize.width, anchorSize.height))
 
     layout(constraints.maxWidth, constraints.maxHeight) {
+      if (showAnchor) {
+        anchorPlaceable.place(x = paneOffset.x + anchorOffset.x, y = paneOffset.y + anchorOffset.y)
+      }
       panePlaceable.place(paneOffset.x, paneOffset.y)
-      anchorPlaceable.place(x = paneOffset.x + anchorOffset.x, y = paneOffset.y + anchorOffset.y)
     }
   }
 }

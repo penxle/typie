@@ -58,9 +58,13 @@ fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =
   clickable(enabled = true, onClick = onClick)
 
 @Composable
-fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Modifier {
+fun Modifier.clickable(
+  enabled: Boolean = true,
+  interactionSource: MutableInteractionSource =
+    LocalInteractionSource.current ?: remember { MutableInteractionSource() },
+  onClick: suspend () -> Unit,
+): Modifier {
   val scope = rememberCoroutineScope()
-  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   return this.focusProperties { canFocus = false }
     .foundationClickable(
       enabled = enabled,

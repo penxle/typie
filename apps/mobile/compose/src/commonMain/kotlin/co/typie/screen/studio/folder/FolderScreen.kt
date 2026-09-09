@@ -102,6 +102,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberLazyListState
 import co.typie.ui.theme.AppTheme
@@ -699,6 +700,7 @@ private fun FolderTopBarButton(
           modifier
             .fillMaxWidth()
             .height(TopBarDefaults.TitleHeight)
+            .hoverFeedback(enabled = !loading, shape = TopBarDefaults.ButtonShape)
             .clickable(enabled = !loading, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,

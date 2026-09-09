@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.domain.entity.EntityBottomOverlayDefaults
@@ -23,6 +26,7 @@ import co.typie.ext.pressScale
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -46,6 +50,7 @@ fun EntityPasteBar(
       modifier =
         Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.72f }
           .shadow(AppTheme.shadows.md, EntityPasteBarShape)
+          .clip(EntityPasteBarShape)
           .background(AppTheme.colors.textDefault, EntityPasteBarShape)
           .border(1.dp, AppTheme.colors.textDefault.copy(alpha = 0.14f), EntityPasteBarShape),
       verticalAlignment = Alignment.CenterVertically,
@@ -54,6 +59,12 @@ fun EntityPasteBar(
         Box(
           modifier =
             Modifier.height(EntityBottomOverlayDefaults.BarHeight)
+              .hoverFeedback(
+                enabled = enabled,
+                shape = AppShapes.circle,
+                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+              )
               .clickable(enabled = enabled, onClick = onPaste)
               .pressScale(0.97f)
               .padding(start = 18.dp, end = 20.dp)
@@ -90,6 +101,12 @@ fun EntityPasteBar(
         Box(
           modifier =
             Modifier.size(EntityBottomOverlayDefaults.BarHeight)
+              .hoverFeedback(
+                enabled = enabled,
+                shape = AppShapes.circle,
+                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+              )
               .clickable(enabled = enabled, onClick = onClear)
               .pressScale(0.96f),
           contentAlignment = Alignment.Center,

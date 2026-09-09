@@ -540,6 +540,7 @@ private fun CommentsSheetBar(
   Box(modifier = modifier.fillMaxWidth().height(EditorSubPaneBarHeight)) {
     SheetBarButton(
       icon = Lucide.X,
+      contentDescription = "닫기",
       onClick = onDismiss,
       modifier = Modifier.align(Alignment.CenterStart),
     )
@@ -565,7 +566,12 @@ private fun CommentsSheetBar(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       CommentsFilterPopover(selectedFilter = selectedFilter, onSelect = onFilterSelect)
-      SheetBarButton(icon = Lucide.MessageSquarePlus, enabled = createEnabled, onClick = onCreate)
+      SheetBarButton(
+        icon = Lucide.MessageSquarePlus,
+        contentDescription = "코멘트 추가",
+        enabled = createEnabled,
+        onClick = onCreate,
+      )
     }
   }
 }
@@ -575,7 +581,9 @@ private fun CommentsFilterPopover(
   selectedFilter: CommentFilter,
   onSelect: (CommentFilter) -> Unit,
 ) {
-  PopoverMenu(anchor = { SheetBarButton(icon = Lucide.ListFilter, onClick = {}) }) {
+  PopoverMenu(
+    anchor = { SheetBarButton(icon = Lucide.ListFilter, contentDescription = "코멘트 필터") }
+  ) {
     CommentFilter.entries.forEach { filter ->
       item(
         content = {

@@ -1,6 +1,7 @@
 package co.typie.screen.editor.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.typie.domain.subscription.GatedAction
@@ -27,6 +29,7 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ui.component.Text
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -44,6 +47,7 @@ fun BoxScope.EditorSubscriptionBanner(
 ) {
   if (SubscriptionService.entitlement.grantsAccess()) return
 
+  val source = remember { MutableInteractionSource() }
   var hasLocalStash by remember(documentId) { mutableStateOf(false) }
   LaunchedEffect(documentId) {
     hasLocalStash = documentId != null && ChangesetDeltaStore.load(documentId).isNotEmpty()
@@ -73,7 +77,15 @@ fun BoxScope.EditorSubscriptionBanner(
             },
         )
         .background(surface.copy(alpha = .5f))
-        .clickable { SubscriptionService.requestSubscribeSheet(GatedAction.Generic) }
+        .hoverFeedback(
+          source,
+          shape = AppShapes.rounded(AppShapes.lg),
+          hoverColor = lerp(surface, Color.Black, 0.12f).copy(alpha = 0.5f),
+          activeColor = lerp(surface, Color.Black, 0.20f).copy(alpha = 0.5f),
+        )
+        .clickable(interactionSource = source) {
+          SubscriptionService.requestSubscribeSheet(GatedAction.Generic)
+        }
         .padding(horizontal = 24.dp, vertical = 16.dp),
     verticalArrangement = Arrangement.spacedBy(3.dp),
   ) {
@@ -82,11 +94,7 @@ fun BoxScope.EditorSubscriptionBanner(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(
-        text = "구독이 만료되어 읽기 전용이에요",
-        style = AppTheme.typography.caption,
-        color = AppColor.white,
-      )
+      Text(text = "구독이 만료되어 읽기 전용이에요", style = AppTheme.typography.caption, color = AppColor.white)
       Text(
         text = "구독하기",
         style = AppTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),

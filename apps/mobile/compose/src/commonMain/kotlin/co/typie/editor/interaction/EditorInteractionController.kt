@@ -32,6 +32,7 @@ internal class EditorInteractionController(
     ),
   private val platformProvider: () -> Platform = { Platform.Desktop },
   private val pointerInputEnabledProvider: () -> Boolean = { true },
+  private val suppressedTapProvider: (Long) -> Boolean = { false },
   private val readOnlyProvider: () -> Boolean = { false },
   private val editingProvider: () -> Boolean = { true },
   private val doubleTapToEditEnabledProvider: () -> Boolean = { true },
@@ -91,6 +92,9 @@ internal class EditorInteractionController(
 
   fun canApplyModeEvent(event: EditorInteractionEvent): Boolean = mode.canApply(event)
 
+  fun suppressesTap(pointerId: Long): Boolean =
+    uiStateProvider().contextMenu.suppressesTap(pointerId) || suppressedTapProvider(pointerId)
+
   fun onPointerDown(
     change: PointerInputChange,
     position: Offset?,
@@ -109,7 +113,7 @@ internal class EditorInteractionController(
         change = change,
         positionInEditor = position,
         positionInRoot = positionInRoot,
-        tapEnabled = tapEnabled && position != null,
+        tapEnabled = tapEnabled && position != null && !suppressesTap(change.id.value),
         inputModifiers = inputModifiers,
         button = button,
         touchPanDriver = touchPanDriver,
@@ -219,6 +223,9 @@ internal class EditorInteractionController(
   fun interruptZoomForDirectPan() {
     semantics.viewportZoom.interruptForDirectPan()
   }
+
+  fun resetZoomAtViewportCenter(): Boolean =
+    semantics.viewportZoom.setZoomAtViewportCenter(1f, snapToLandmarks = false)
 
   fun zoomInAtViewportCenter(): Boolean = semantics.viewportZoom.zoomInAtViewportCenter()
 

@@ -189,7 +189,7 @@ private fun PresetMenu(onReset: () -> Unit) {
   val dialog = LocalDialog.current
   val colors = AppTheme.colors
 
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "프리셋 메뉴") }) {
     item(icon = Lucide.RotateCcw, label = "프리셋 초기화", color = colors.danger) {
       scope.launch {
         val result =

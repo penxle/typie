@@ -60,7 +60,12 @@ class BottomBarActionButtonDesktopTest {
             }
           }
         }
-        setAction(ActionKey, BottomBarActionEntry.Data(BottomBarAction(icon = Lucide.Plus)))
+        setAction(
+          ActionKey,
+          BottomBarActionEntry.Data(
+            BottomBarAction(icon = Lucide.Plus, contentDescription = "새로 만들기")
+          ),
+        )
       }
     val keyboardOwner = Any()
     val previousHardwareKeyboardConnected = DesktopDebugKeyboard.hardwareKeyboardConnected
@@ -176,6 +181,7 @@ class BottomBarActionButtonDesktopTest {
 
           Box(Modifier.testTag(MenuRootTag).size(width = 400.dp, height = 700.dp)) {
             BottomBarActionButton(
+              contentDescription = "새로 만들기",
               icon = Lucide.Plus,
               menus = if (menuEnabled.value) menus else emptyList(),
             )

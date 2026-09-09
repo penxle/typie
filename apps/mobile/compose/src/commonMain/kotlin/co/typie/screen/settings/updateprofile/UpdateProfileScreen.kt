@@ -2,6 +2,7 @@ package co.typie.screen.settings.updateprofile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.imePadding
 import co.typie.ext.pressScale
@@ -147,12 +150,17 @@ fun UpdateProfileScreen() {
 @Composable
 private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> Unit) {
   InteractionScope {
+    val hovered by checkNotNull(LocalInteractionSource.current).collectIsHoveredAsState()
     Box(modifier = Modifier.pressScale().clickable(onClick)) {
       Box(
         modifier =
           Modifier.size(104.dp)
             .clip(AppShapes.circle)
-            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
+            .border(
+              1.dp,
+              if (hovered) AppTheme.colors.borderEmphasis else AppTheme.colors.borderDefault,
+              AppShapes.circle,
+            )
             .background(AppTheme.colors.surfaceDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {

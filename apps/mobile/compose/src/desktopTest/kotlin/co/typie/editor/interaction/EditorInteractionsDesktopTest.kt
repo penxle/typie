@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.Scrollable2DState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.pan
@@ -51,20 +53,36 @@ import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PageRect
+import co.typie.editor.ffi.Position
+import co.typie.editor.ffi.Rect as EditorRect
+import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.SelectionEndpoints
 import co.typie.editor.ffi.SelectionOp
+import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
 import co.typie.ext.ScrollGestureLockState
+import co.typie.icons.Lucide
 import co.typie.navigation.LocalNavigationPopNestedScroll
 import co.typie.navigation.NavigationStackTestHost
 import co.typie.navigation.Navigator
 import co.typie.navigation.navigationPopNestedScroll
 import co.typie.route.Route
+import co.typie.screen.editor.editor.overlay.EditorContextMenuOutsideTapHost
+import co.typie.ui.component.popover.LocalPopoverOverlayState
+import co.typie.ui.component.popover.PopoverMenu
+import co.typie.ui.component.popover.PopoverOverlay
+import co.typie.ui.component.popover.PopoverOverlayState
+import co.typie.ui.component.popover.popoverOutsideTapHost
+import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarState
+import co.typie.ui.input.WindowInputTestHost
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -83,6 +101,171 @@ import kotlinx.coroutines.yield
 @OptIn(ExperimentalTestApi::class)
 class EditorInteractionsDesktopTest {
   @Test
+  fun dismissingPopoverSuppressesOnlyTheFirstTapAndAllowsTheSameTouchToPan() = runComposeUiTest {
+    val fixture = Fixture(tapEligible = true)
+    fixture.fake.publishSnapshot(fixture.editor)
+    setEditorContent(fixture, includePopover = true)
+    val editor = onNodeWithTag(EditorTag)
+    fun openPopover() {
+      onNodeWithTag("popoverAnchor").performMouseInput { click() }
+      waitForIdle()
+      assertTrue(fixture.popover.acceptsInput)
+      assertFalse(requireNotNull(fixture.popover.paneBoundsInWindow).contains(Offset(40f, 200f)))
+      fixture.fake.enqueued.clear()
+    }
+    openPopover()
+    editor.performMouseInput { click(Offset(40f, 200f)) }
+    waitForIdle()
+    assertFalse(fixture.popover.acceptsInput)
+    assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+    openPopover()
+    editor.performTouchInput { click(Offset(40f, 200f)) }
+    waitForIdle()
+    assertFalse(fixture.popover.acceptsInput)
+    assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+    openPopover()
+    editor.performTouchInput { down(Offset(40f, 200f)) }
+    waitForIdle()
+    editor.performTouchInput { moveTo(Offset(40f, 250f)) }
+    waitForIdle()
+    assertTrue(fixture.touchPanDeltas.isNotEmpty())
+    assertEquals(EditorInteractionMode.Panning, fixture.controller.interactionMode)
+    assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+    editor.performTouchInput { up() }
+    waitForIdle()
+    assertFalse(fixture.popover.isOutsideDismissGestureActive)
+    editor.performTouchInput { click(Offset(40f, 200f)) }
+    waitForIdle()
+    assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isNotEmpty())
+  }
+
+  @Test
+  fun `pointer menu suppresses the first document tap but allows immediate touch pan`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      fixture.fake.publishSnapshot(fixture.editor)
+      setEditorContent(fixture)
+      fun showPointerMenu() = runOnIdle {
+        fixture.uiState.contextMenu.show(fixture.editor.publishedState, PagePoint(0, 280f, 280f))
+        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+        fixture.fake.enqueued.clear()
+      }
+      showPointerMenu()
+      onNodeWithTag(EditorTag).performMouseInput {
+        moveTo(Offset(100f, 100f))
+        press()
+        release()
+      }
+      waitForIdle()
+      assertFalse(fixture.uiState.contextMenu.visible)
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+      onNodeWithTag(EditorTag).performMouseInput {
+        press()
+        release()
+        exit()
+      }
+      waitForIdle()
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isNotEmpty())
+      showPointerMenu()
+      onNodeWithTag(EditorTag).performTouchInput {
+        down(0, Offset(100f, 100f))
+        up(0)
+      }
+      waitForIdle()
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+      showPointerMenu()
+      onNodeWithTag(EditorTag).performTouchInput {
+        down(0, Offset(100f, 100f))
+        moveTo(0, Offset(100f, 150f))
+        up(0)
+      }
+      waitForIdle()
+      assertFalse(fixture.uiState.contextMenu.visible)
+      assertTrue(fixture.touchPanDeltas.isNotEmpty())
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+      runOnIdle {
+        fixture.uiState.contextMenu.show(fixture.editor.publishedState)
+        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+      }
+      onNodeWithTag(EditorTag).performTouchInput {
+        down(0, Offset(100f, 100f))
+        up(0)
+      }
+      waitForIdle()
+      assertFalse(fixture.uiState.contextMenu.visible)
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isNotEmpty())
+    }
+
+  @Test
+  fun `pointer menu allows the first touch pan starting in the document header`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true, documentDownEligible = false)
+      fixture.fake.publishSnapshot(fixture.editor)
+      setEditorContent(fixture)
+      runOnIdle {
+        fixture.uiState.contextMenu.show(fixture.editor.publishedState, PagePoint(0, 280f, 280f))
+        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+      }
+      onNodeWithTag(EditorTag).performTouchInput {
+        down(0, Offset(100f, 40f))
+        moveTo(0, Offset(100f, 140f))
+        up(0)
+      }
+      waitForIdle()
+      assertFalse(fixture.uiState.contextMenu.visible)
+      assertTrue(fixture.touchPanDeltas.isNotEmpty())
+      assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+    }
+
+  @Test
+  fun `selection handles drag immediately regardless of how the menu was opened`() =
+    runComposeUiTest {
+      val fixture = Fixture(tapEligible = true)
+      val selection =
+        Selection(
+          Position("text", 0, Affinity.Downstream),
+          Position("text", 5, Affinity.Downstream),
+        )
+      fixture.fake.selectionProvider = { selection }
+      fixture.fake.selectionEndpointsProvider = {
+        SelectionEndpoints(
+          PageRect(0, EditorRect(42f, 30f, 2f, 20f)),
+          PageRect(0, EditorRect(142f, 30f, 2f, 20f)),
+          selection.anchor,
+          selection.head,
+        )
+      }
+      fixture.fake.publishSnapshot(fixture.editor)
+      setEditorContent(fixture)
+      for (pointerMenu in listOf(false, true)) {
+        runOnIdle {
+          fixture.uiState.contextMenu.show(
+            fixture.editor.publishedState,
+            if (pointerMenu) PagePoint(0, 280f, 280f) else null,
+          )
+          fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+          fixture.fake.enqueued.clear()
+        }
+        onNodeWithTag(EditorTag).performTouchInput {
+          down(0, Offset(42f, 30f))
+          moveTo(0, Offset(62f, 70f))
+        }
+        assertFalse(fixture.uiState.contextMenu.visible)
+        assertEquals(
+          EditorInteractionMode.SelectionHandleDragging,
+          fixture.controller.interactionMode,
+        )
+        onNodeWithTag(EditorTag).performTouchInput { up(0) }
+        waitForIdle()
+        assertTrue(
+          fixture.fake.enqueued.filterIsInstance<Message.Selection>().any {
+            it.op is SelectionOp.ExtendTo
+          }
+        )
+      }
+    }
+
+  @Test
   fun `secondary button opens a context menu without starting a selection drag`() =
     runComposeUiTest {
       val fixture = Fixture(tapEligible = true)
@@ -96,7 +279,7 @@ class EditorInteractionsDesktopTest {
       }
       waitForIdle()
       assertEquals(
-        listOf(SelectionOp.SetAt(0, 100f, 100f)),
+        listOf(SelectionOp.SelectUnitAt(0, 100f, 100f, SelectionPointUnit.Word)),
         fixture.fake.enqueued.filterIsInstance<Message.Selection>().map { it.op },
       )
       assertEquals(EditorInteractionMode.Idle, fixture.controller.interactionMode)
@@ -1836,6 +2019,7 @@ class EditorInteractionsDesktopTest {
   private fun androidx.compose.ui.test.ComposeUiTest.setEditorContent(
     fixture: Fixture,
     includeInteractionBoundary: () -> Boolean = { true },
+    includePopover: Boolean = false,
     editorWidth: androidx.compose.ui.unit.Dp = 400.dp,
     consumeIndirectInputAtChild: Boolean = false,
     onViewportIndirectInput: () -> Unit = {},
@@ -1847,11 +2031,13 @@ class EditorInteractionsDesktopTest {
       val interactionScope = rememberCoroutineScope()
       fixture.host.interactionScope = interactionScope
       onCoroutineScope(interactionScope)
-      Box(
+      WindowInputTestHost(
         Modifier.size(400.dp)
           .testTag(RootTag)
           .observeEditorScreenPointerSequence(screenPointerSequence)
+          .popoverOutsideTapHost(fixture.popover)
       ) {
+        EditorContextMenuOutsideTapHost(fixture.uiState.contextMenu, fixture.host)
         Box(
           Modifier.size(width = editorWidth, height = 400.dp)
             .testTag(EditorTag)
@@ -1895,6 +2081,20 @@ class EditorInteractionsDesktopTest {
                 }
               }
             )
+          }
+        }
+        if (includePopover) {
+          CompositionLocalProvider(LocalPopoverOverlayState provides fixture.popover) {
+            Box(Modifier.align(androidx.compose.ui.Alignment.TopEnd)) {
+              PopoverMenu(
+                anchor = {
+                  TopBarButton(Lucide.Ellipsis, "메뉴", modifier = Modifier.testTag("popoverAnchor"))
+                }
+              ) {
+                item(content = { Box(Modifier.size(100.dp, 40.dp)) }) {}
+              }
+            }
+            PopoverOverlay(fixture.popover)
           }
         }
         if (editorWidth < 400.dp) {
@@ -1969,6 +2169,7 @@ class EditorInteractionsDesktopTest {
     tapEligible: Boolean = false,
     documentDownEligible: Boolean = tapEligible,
   ) {
+    val popover = PopoverOverlayState()
     val touchPanDeltas = mutableListOf<Offset>()
     val flingPanDeltas = mutableListOf<Offset>()
     val nestedScrollAvailable = mutableListOf<Offset>()
@@ -2072,6 +2273,7 @@ class EditorInteractionsDesktopTest {
         geometry = host,
         semantics = semantics,
         uiStateProvider = { uiState },
+        suppressedTapProvider = popover::suppressesTap,
       )
   }
 
@@ -2098,7 +2300,7 @@ class EditorInteractionsDesktopTest {
     override fun resolvePoint(positionInNode: Offset): PagePoint? =
       PagePoint(page = 0, x = positionInNode.x, y = positionInNode.y).takeIf { tapEligible }
 
-    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset? = null
+    override fun resolvePagePosition(page: Int, x: Float, y: Float): Offset = Offset(x, y)
 
     override fun resolveEdgeAutoScrollViewport(): EditorEdgeAutoScrollViewport? = null
 

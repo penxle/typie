@@ -16,12 +16,8 @@ internal class PointerInputModeState {
     private set
 
   fun observe(event: PointerEvent): Boolean {
-    nonTouchPointerActive = event.hasNonTouchPointer()
+    if (event.changes.isNotEmpty()) nonTouchPointerActive = event.hasNonTouchPointer()
     return nonTouchPointerActive
-  }
-
-  fun leave(event: PointerEvent) {
-    if (event.hasNonTouchPointer()) nonTouchPointerActive = false
   }
 }
 
@@ -45,4 +41,3 @@ internal fun Modifier.trackPointerInputMode(
     .onPointerEvent(PointerEventType.Scroll, PointerEventPass.Initial) { event ->
       state.observe(event)
     }
-    .onPointerEvent(PointerEventType.Exit, PointerEventPass.Initial) { event -> state.leave(event) }

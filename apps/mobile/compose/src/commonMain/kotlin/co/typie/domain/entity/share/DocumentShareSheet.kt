@@ -54,7 +54,9 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -650,6 +652,10 @@ internal fun DocumentShareSheet(
                 Box(
                   modifier =
                     Modifier.size(28.dp)
+                      .hoverFeedback(
+                        enabled = !loading && !isUpdatingPassword,
+                        shape = AppShapes.circle,
+                      )
                       .clickable(enabled = !loading && !isUpdatingPassword) {
                         commitPassword(generateDocumentSharePassword())
                       }

@@ -496,6 +496,7 @@ fun NotesScreen() {
     action =
       BottomBarAction(
         icon = Typie.StickyNotePlus,
+        contentDescription = "새 노트",
         onClick = {
           noteActions.captureRequest()?.let { request ->
             scope.launch { handleCreateNote(request = request) }
@@ -613,7 +614,7 @@ fun NotesScreen() {
 
 @Composable
 private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus) -> Unit) {
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.ListFilter) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.ListFilter, contentDescription = "노트 필터") }) {
     listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
       item(
         content = {

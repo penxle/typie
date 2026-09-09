@@ -47,8 +47,11 @@ import androidx.compose.ui.unit.sp
 import co.typie.ext.LocalInteractionSource
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
@@ -85,6 +88,7 @@ internal fun EditorToolbarButton(
   selected: Boolean = false,
   tint: Color? = null,
   enabled: Boolean = true,
+  shortcut: String? = null,
 ) {
   EditorToolbarIconButton(
     icon = icon,
@@ -94,6 +98,7 @@ internal fun EditorToolbarButton(
     selected = selected,
     tint = tint,
     enabled = enabled,
+    shortcut = shortcut,
     modifier = modifier.size(ToolbarButtonSize),
   )
 }
@@ -108,6 +113,7 @@ internal fun EditorToolbarLabelButton(
   suffixIcon: IconData? = null,
   autoBringIntoView: Boolean = false,
   subtle: Boolean = false,
+  tooltipEnabled: Boolean = false,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
   val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -145,6 +151,8 @@ internal fun EditorToolbarLabelButton(
             Modifier
           }
         )
+        .hoverFeedback(interactionSource, enabled = !selected, shape = ToolbarButtonShape)
+        .tooltip(contentDescription, enabled = tooltipEnabled, placement = TooltipPlacement.Above)
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
         .padding(horizontal = ToolbarLabelHorizontalPadding),
     contentAlignment = Alignment.Center,
@@ -187,6 +195,7 @@ internal fun EditorToolbarIconButton(
   enabled: Boolean = true,
   inheritInteractionSource: Boolean = false,
   crossfadeIcon: Boolean = false,
+  shortcut: String? = null,
 ) {
   val inheritedInteractionSource = LocalInteractionSource.current
   val localInteractionSource = remember { MutableInteractionSource() }
@@ -224,6 +233,8 @@ internal fun EditorToolbarIconButton(
         .clip(shape)
         .then(surfaceModifier)
         .alpha(if (enabled) 1f else ToolbarDisabledOpacity)
+        .hoverFeedback(interactionSource, enabled = enabled && !selected, shape = shape)
+        .tooltip(contentDescription, shortcut, enabled, placement = TooltipPlacement.Above)
         .clickable(
           enabled = enabled,
           interactionSource = interactionSource,

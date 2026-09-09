@@ -2,6 +2,7 @@ package co.typie.domain.entity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.form.FormState
@@ -51,6 +53,7 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.entityIcons
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.rememberEntityIconColorOptions
 import co.typie.ui.resolveEntityIconTint
 import co.typie.ui.theme.AppShapes
@@ -275,6 +278,7 @@ private fun IconColorChip(
   onClick: () -> Unit,
 ) {
   InteractionScope {
+    val hovered by checkNotNull(LocalInteractionSource.current).collectIsHoveredAsState()
     Box(
       contentAlignment = Alignment.Center,
       modifier =
@@ -282,8 +286,8 @@ private fun IconColorChip(
           .clip(AppShapes.circle)
           .background(color.color, AppShapes.circle)
           .border(
-            width = if (selected) 1.dp else 0.dp,
-            color = if (selected) AppTheme.colors.borderEmphasis else Color.Transparent,
+            width = if (selected || enabled && hovered) 1.dp else 0.dp,
+            color = AppTheme.colors.borderEmphasis,
             shape = AppShapes.circle,
           )
           .clickable(enabled = enabled) { onClick() }
@@ -312,6 +316,7 @@ private fun IconGridCell(
           .aspectRatio(1f)
           .clip(AppShapes.rounded(AppShapes.sm))
           .background(if (selected) AppTheme.colors.surfaceInset else Color.Transparent)
+          .hoverFeedback(enabled = enabled && !selected, shape = AppShapes.rounded(AppShapes.sm))
           .clickable(enabled = enabled) { onSelect() }
           .pressScale(0.98f),
     ) {

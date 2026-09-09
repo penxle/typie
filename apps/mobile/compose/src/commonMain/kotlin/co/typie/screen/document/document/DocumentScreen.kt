@@ -94,6 +94,7 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -417,6 +418,7 @@ fun DocumentScreen(entityId: String) {
             Modifier.size(42.dp)
               .clip(AppShapes.rounded(AppShapes.md))
               .background(AppTheme.colors.surfaceDefault)
+              .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
               .clickable(onClick = openIconPicker)
               .pressScale(),
           contentAlignment = Alignment.Center,
@@ -528,11 +530,7 @@ fun DocumentScreen(entityId: String) {
         trailingIcon = Lucide.ExternalLink,
         onClick = openPublicPage,
       )
-      DocumentActionRow(
-        icon = Lucide.FileDown,
-        label = "파일로 내보내기",
-        onClick = exportDocument,
-      )
+      DocumentActionRow(icon = Lucide.FileDown, label = "파일로 내보내기", onClick = exportDocument)
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
 
@@ -642,7 +640,12 @@ private fun DocumentExpandableMetric(
   InteractionScope {
     Column(
       modifier =
-        modifier.fillMaxWidth().clickable { onToggle() }.pressScale().padding(vertical = 16.dp)
+        modifier
+          .fillMaxWidth()
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
+          .clickable { onToggle() }
+          .pressScale()
+          .padding(vertical = 16.dp)
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),

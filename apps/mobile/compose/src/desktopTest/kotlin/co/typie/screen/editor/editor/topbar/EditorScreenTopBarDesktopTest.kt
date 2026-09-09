@@ -219,7 +219,7 @@ class EditorScreenTopBarDesktopTest {
   private companion object {
     const val RootTag = "editor-top-bar-root"
     const val TitleTag = "editor-top-bar-title"
-    const val SearchDescription = "검색"
+    const val SearchDescription = "찾기 및 바꾸기"
     const val ToolsDescription = "도구"
     const val EnterReadingDescription = "읽기 모드로 전환"
   }

@@ -64,6 +64,7 @@ import co.typie.datetime.timeAgo
 import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.displayTitle
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.rememberTextInputState
@@ -84,6 +85,7 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.close
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
@@ -426,6 +428,7 @@ private fun NoteCollapsedContent(
         modifier =
           Modifier.weight(1f)
             .padding(end = 12.dp, top = 12.dp, bottom = 12.dp)
+            .hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
             .clickable { onExpand() }
             .pressScale(0.985f),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -457,7 +460,16 @@ private fun NoteCollapsedContent(
           NoteCollapsedMetaRow(note = note)
         }
 
-        Box(modifier = Modifier.size(NoteActionButtonSize), contentAlignment = Alignment.Center) {
+        Box(
+          modifier =
+            Modifier.size(NoteActionButtonSize)
+              .then(
+                LocalInteractionSource.current?.let {
+                  Modifier.hoverFeedback(it, shape = AppShapes.rounded(AppShapes.sm))
+                } ?: Modifier
+              ),
+          contentAlignment = Alignment.Center,
+        ) {
           Icon(
             icon = Lucide.Maximize2,
             modifier = Modifier.size(15.dp),
@@ -573,7 +585,11 @@ private fun NoteStatusToggleButton(
 
   InteractionScope {
     Box(
-      modifier = Modifier.size(NoteStatusHitTargetSize).clickable { onClick() }.pressScale(0.95f),
+      modifier =
+        Modifier.size(NoteStatusHitTargetSize)
+          .hoverFeedback(enabled = !resolved, shape = AppShapes.circle)
+          .clickable { onClick() }
+          .pressScale(0.95f),
       contentAlignment = Alignment.Center,
     ) {
       Box(
@@ -611,6 +627,7 @@ private fun NoteActionIconButton(
       modifier =
         Modifier.size(NoteActionButtonSize)
           .clip(AppShapes.rounded(AppShapes.sm))
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
           .clickable { onClick() }
           .pressScale(0.95f),
       contentAlignment = Alignment.Center,
@@ -622,7 +639,16 @@ private fun NoteActionIconButton(
 
 @Composable
 private fun NoteActionIconAnchor(icon: IconData, tint: Color = AppTheme.colors.textMuted) {
-  Box(modifier = Modifier.size(NoteActionButtonSize), contentAlignment = Alignment.Center) {
+  Box(
+    modifier =
+      Modifier.size(NoteActionButtonSize)
+        .then(
+          LocalInteractionSource.current?.let {
+            Modifier.hoverFeedback(it, shape = AppShapes.rounded(AppShapes.sm))
+          } ?: Modifier
+        ),
+    contentAlignment = Alignment.Center,
+  ) {
     Icon(icon = icon, modifier = Modifier.size(15.dp), tint = tint)
   }
 }
@@ -869,6 +895,10 @@ private fun NoteLinkedEntityChip(
         chipModifier
           .clip(AppShapes.rounded(AppShapes.sm))
           .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.sm))
+          .then(
+            if (onClick != null) Modifier.hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
+            else Modifier
+          )
           .padding(horizontal = 6.dp, vertical = 4.dp),
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -899,6 +929,7 @@ private fun NoteColorDot(option: NoteColorOption, selected: Boolean, onClick: ()
     Box(
       modifier =
         Modifier.size(width = NoteColorDotHitTargetWidth, height = NoteColorDotHitTargetHeight)
+          .hoverFeedback(enabled = !selected, shape = AppShapes.circle)
           .clickable { onClick() }
           .pressScale(0.96f),
       contentAlignment = Alignment.Center,

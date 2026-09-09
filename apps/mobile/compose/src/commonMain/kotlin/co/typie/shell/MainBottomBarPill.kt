@@ -5,6 +5,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -42,8 +44,11 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarDefaults
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShadow
 import co.typie.ui.theme.AppShadowLayer
 import co.typie.ui.theme.AppShapes
@@ -242,6 +247,7 @@ private fun MainBottomBarPillTrack(
       val activeWidthDp = with(density) { activeWidthsPx.getValue(tab).toDp() }
       val progress = activationWeights.getValue(tab)
       val presentation = tab.presentation
+      val interactionSource = remember { MutableInteractionSource() }
       // The active indicator sits restingInset inward from its box, leaving a
       // visual gap on each inactive tab's active-adjacent edge. Shift the tab's
       // row toward the active side by progress-weighted inset/2 so the icon
@@ -255,7 +261,13 @@ private fun MainBottomBarPillTrack(
           } * insetPx / 2.0)
           .toFloat()
       Box(
-        modifier = Modifier.width(widthDp).fillMaxHeight().clipToBounds(),
+        modifier =
+          Modifier.width(widthDp)
+            .fillMaxHeight()
+            .clipToBounds()
+            .hoverable(interactionSource)
+            .hoverFeedback(interactionSource, enabled = progress < 0.5f, shape = AppShapes.circle)
+            .tooltip(presentation.label, placement = TooltipPlacement.Above),
         contentAlignment = Alignment.CenterStart,
       ) {
         // Inner row always laid out at the active width so content position stays stable
@@ -271,6 +283,7 @@ private fun MainBottomBarPillTrack(
         ) {
           Icon(
             icon = presentation.icon,
+            contentDescription = presentation.label,
             modifier = Modifier.size(MainBottomBarPillIconSize),
             tint = lerp(AppTheme.colors.textHint, AppTheme.colors.textDefault, progress),
             strokeWidth = 2.5f,

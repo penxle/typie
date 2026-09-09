@@ -46,6 +46,7 @@ import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.PaperlogyFontFamily
@@ -160,6 +161,7 @@ private fun PlanOptionCard(
         Modifier.fillMaxWidth()
           .background(cardColor, AppShapes.rounded(AppShapes.md))
           .border(outlineWidth, outlineColor, AppShapes.rounded(AppShapes.md))
+          .hoverFeedback(enabled = !selected, shape = AppShapes.rounded(AppShapes.md))
           .clickable { onClick() }
           .padding(16.dp)
           .pressScale(),

@@ -55,7 +55,9 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
 import kotlin.time.Duration
@@ -128,7 +130,9 @@ fun FontSettingsScreen() {
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("폰트", style = AppTheme.typography.title) },
-    trailing = { TopBarButton(Lucide.Plus, onClick = { uploadFonts() }) },
+    trailing = {
+      TopBarButton(Lucide.Plus, contentDescription = "폰트 추가", onClick = { uploadFonts() })
+    },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
@@ -297,7 +301,11 @@ private fun FontSettingsFamilySection(
 
             InteractionScope {
               Box(
-                modifier = Modifier.size(44.dp).clickable { onDeleteFont(font) }.pressScale(),
+                modifier =
+                  Modifier.size(44.dp)
+                    .hoverFeedback(shape = AppShapes.circle)
+                    .clickable { onDeleteFont(font) }
+                    .pressScale(),
                 contentAlignment = Alignment.Center,
               ) {
                 Icon(
@@ -317,6 +325,7 @@ private fun FontSettingsFamilySection(
             Box(
               modifier =
                 Modifier.fillMaxWidth()
+                  .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
                   .clickable { onDeleteFontFamily() }
                   .padding(horizontal = 16.dp, vertical = 14.dp)
                   .pressScale(),

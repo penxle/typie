@@ -9,12 +9,14 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +28,7 @@ import co.typie.ext.clickable
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -42,6 +45,7 @@ internal fun EditorRepasteAsTextOverlay(
   onRepasteAsText: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   AnimatedVisibility(
     visible = visible,
     enter =
@@ -93,7 +97,8 @@ internal fun EditorRepasteAsTextOverlay(
             .border(1.dp, AppTheme.colors.borderDefault, RepasteAsTextOverlayShape)
             .background(AppTheme.colors.surfaceDefault, RepasteAsTextOverlayShape)
             .semantics(mergeDescendants = true) {}
-            .clickable { onRepasteAsText() }
+            .hoverFeedback(interactionSource, enabled = true, shape = RepasteAsTextOverlayShape)
+            .clickable(interactionSource = interactionSource) { onRepasteAsText() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {

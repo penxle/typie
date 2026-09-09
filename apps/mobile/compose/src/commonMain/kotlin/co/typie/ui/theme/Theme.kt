@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
@@ -48,6 +49,8 @@ data class AppColors(
   val surfaceDefault: Color,
   val surfaceInset: Color,
   val surfaceInverse: Color,
+  val surfaceActive: Color,
+  val surfaceHover: Color,
 
   // Border
   val borderEmphasis: Color,
@@ -87,6 +90,8 @@ val LightColors =
     surfaceDefault = AppColor.white,
     surfaceInset = AppColor.light.gray.s100,
     surfaceInverse = AppColor.light.gray.s900,
+    surfaceActive = AppColor.light.gray.s200,
+    surfaceHover = lerp(AppColor.light.gray.s100, AppColor.light.gray.s200, 0.5f),
     borderEmphasis = AppColor.light.gray.s300,
     borderDefault = AppColor.light.gray.s200,
     borderHairline = AppColor.light.gray.s100,
@@ -116,6 +121,8 @@ val DarkColors =
     surfaceDefault = AppColor.dark.gray.s900,
     surfaceInset = AppColor.dark.gray.s800,
     surfaceInverse = AppColor.dark.gray.s50,
+    surfaceActive = AppColor.dark.gray.s700,
+    surfaceHover = lerp(AppColor.dark.gray.s800, AppColor.dark.gray.s700, 0.5f),
     borderEmphasis = AppColor.dark.gray.s600,
     borderDefault = AppColor.dark.gray.s700,
     borderHairline = AppColor.dark.gray.s800,

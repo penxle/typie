@@ -161,6 +161,7 @@ import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.layout.attachViewportZoomAnchor
 import co.typie.screen.editor.editor.layout.rememberCommittedEditorRenderZoom
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
+import co.typie.screen.editor.editor.overlay.EditorContextMenuOutsideTapHost
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.overlay.EditorScrollbars
@@ -1362,22 +1363,6 @@ fun EditorScreen(entityId: String) {
         )
       }
     }
-    val screenShortcutContext =
-      EditorScreenShortcutContext(
-        sceneInForeground = screenState.sceneInForeground,
-        editorInputBlocked = editorInputBlocked,
-        editorFocused = uiState.focused,
-        findReplaceActive = findReplace.active,
-        spellcheckActive = spellcheck.active,
-        aiFeedbackActive = aiFeedback.active,
-      )
-    val screenShortcutActions =
-      EditorScreenShortcutActions(
-        openFindReplace = { openFindReplace() },
-        closeFindReplace = findReplace.close,
-        closeSpellcheck = ::closeSpellcheckAndRestoreEditorFocus,
-        closeAiFeedback = ::closeAiFeedbackAndRestoreEditorFocus,
-      )
     suspend fun openTemplateSheet() {
       val activeEditor = runtime.editor ?: return
       if (!requestEditing(activeEditor)) return
@@ -1697,6 +1682,37 @@ fun EditorScreen(entityId: String) {
           sessionAttached = editorSessionAttached,
           hasInitialFrame = publishedBundle?.frames?.isNotEmpty() == true,
         )
+    val screenShortcutContext =
+      EditorScreenShortcutContext(
+        enabled =
+          editorReady &&
+            screenState.sceneInForeground &&
+            !nav.isTransitioning &&
+            !editorInputBlocked &&
+            !dialog.acceptsInput &&
+            !sheet.acceptsInput &&
+            !popoverOverlayState.acceptsInput,
+        editorFocused = uiState.focused,
+        findReplaceActive = findReplace.active,
+        spellcheckActive = spellcheck.active,
+        aiFeedbackActive = aiFeedback.active,
+      )
+    val screenShortcutActions =
+      EditorScreenShortcutActions(
+        openFindReplace = { openFindReplace() },
+        resetZoom = { interactionScope.controller.resetZoomAtViewportCenter() },
+        zoomIn = { interactionScope.controller.zoomInAtViewportCenter() },
+        zoomOut = { interactionScope.controller.zoomOutAtViewportCenter() },
+        closeFindReplace = findReplace.close,
+        closeSpellcheck = ::closeSpellcheckAndRestoreEditorFocus,
+        closeAiFeedback = ::closeAiFeedbackAndRestoreEditorFocus,
+      )
+    EditorScreenShortcuts(screenShortcutContext, screenShortcutActions)
+    EditorContextMenuOutsideTapHost(
+      uiState.contextMenu,
+      interactionScope,
+      enabled = screenShortcutContext.enabled,
+    )
     val editorInteractionFocused = editorReady && uiState.focused && screenState.sceneInForeground
 
     LaunchedEffect(editor, publishedRevision, editorGeometryValid) {
@@ -1743,9 +1759,10 @@ fun EditorScreen(entityId: String) {
           Offset(x = editorRect.left + position.x, y = editorRect.top + position.y)
         }
       }
-    val editorInteractionEnabled = editorReady && !popoverOverlayState.isOutsideDismissGestureActive
+    val editorInteractionEnabled = editorReady
     val platformIndirectScaleEnabled =
       editorInteractionEnabled &&
+        !popoverOverlayState.isOutsideDismissGestureActive &&
         screenState.sceneInForeground &&
         !nav.isTransitioning &&
         !editorInputBlocked &&
@@ -1790,6 +1807,7 @@ fun EditorScreen(entityId: String) {
         viewportZoomConfig = viewportZoomConfig,
         layoutSpec = layoutSpec,
         pointerInputEnabled = { editorInteractionEnabled },
+        suppressedTapProvider = popoverOverlayState::suppressesTap,
         readOnly = { editorReadOnly },
         editing = { isEditing },
         doubleTapToEditEnabled = { doubleTapToEditEnabled },
@@ -2160,19 +2178,7 @@ fun EditorScreen(entityId: String) {
             modifier = Modifier.fillMaxSize(),
           )
         },
-        modifier =
-          Modifier.padding(start = startInset, end = endInset).editorScreenShortcutFocusTarget(
-            active = screenShortcutModeActive,
-            enabled = editorReady && screenState.sceneInForeground && !editorInputBlocked,
-            editorFocused = uiState.focused,
-            selection = appliedEditorState.selection,
-          ) { event ->
-            handleEditorScreenShortcut(
-              event = event,
-              context = screenShortcutContext,
-              actions = screenShortcutActions,
-            )
-          },
+        modifier = Modifier.padding(start = startInset, end = endInset),
       )
     }
   }

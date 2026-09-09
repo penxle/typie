@@ -130,6 +130,7 @@ internal fun EditorScreenOverlayHost(
                 onExpandParagraph = actions.onExpandParagraph,
                 onSelectAll = actions.onSelectAll,
                 onDismiss = actions.onDismiss,
+                onBoundsInWindowChanged = { contextMenu.boundsInWindow = it },
               )
             }
           }

@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
@@ -36,6 +38,7 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -117,6 +120,7 @@ private fun ShareThumbnailUploadButton(
   val shape = AppShapes.rounded(AppShapes.sm)
 
   InteractionScope {
+    val hovered by checkNotNull(LocalInteractionSource.current).collectIsHoveredAsState()
     Box(
       modifier =
         Modifier.then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
@@ -127,11 +131,15 @@ private fun ShareThumbnailUploadButton(
         modifier =
           Modifier.size(width = SHARE_THUMBNAIL_WIDTH_DP.dp, height = SHARE_THUMBNAIL_HEIGHT_DP.dp)
             .clip(shape)
-            .background(AppTheme.colors.surfaceInset, shape)
+            .background(
+              if (thumbnailUrl == null && enabled && hovered) AppTheme.colors.surfaceHover
+              else AppTheme.colors.surfaceInset,
+              shape,
+            )
             .border(
               width = 1.dp,
               color =
-                if (thumbnailUrl == null) AppTheme.colors.borderEmphasis
+                if (thumbnailUrl == null || enabled && hovered) AppTheme.colors.borderEmphasis
                 else AppTheme.colors.borderHairline,
               shape = shape,
             ),
@@ -173,6 +181,7 @@ private fun ShareThumbnailRemoveButton(enabled: Boolean, isRemoving: Boolean, on
     Box(
       modifier =
         Modifier.heightIn(min = SHARE_THUMBNAIL_HEIGHT_DP.dp)
+          .hoverFeedback(enabled = enabled, shape = AppShapes.rounded(AppShapes.sm))
           .clickable(enabled = enabled) { onClick() }
           .pressScale(0.95f),
       contentAlignment = Alignment.Center,

@@ -27,6 +27,7 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -70,7 +71,11 @@ fun CardActionTile(
     CardSurface(modifier = modifier.clickable(onClick), color = color) {
       Column(
         modifier =
-          Modifier.fillMaxWidth().heightIn(min = minHeight).padding(contentPadding).pressScale(),
+          Modifier.fillMaxWidth()
+            .heightIn(min = minHeight)
+            .hoverFeedback(shape = CardDefaults.Shape)
+            .padding(contentPadding)
+            .pressScale(),
         verticalArrangement = Arrangement.SpaceBetween,
         content = content,
       )
@@ -81,6 +86,8 @@ fun CardActionTile(
 @Composable
 fun CardRow(
   onClick: suspend () -> Unit,
+  enabled: Boolean = true,
+  selected: Boolean = false,
   modifier: Modifier = Modifier,
   contentPadding: PaddingValues = CardDefaults.RowPadding,
   spacing: Dp = 10.dp,
@@ -88,7 +95,13 @@ fun CardRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier.fillMaxWidth().clickable(onClick).padding(contentPadding).pressScale(),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .hoverFeedback(enabled = enabled && !selected, shape = CardDefaults.Shape)
+          .clickable(enabled = enabled, onClick = onClick)
+          .padding(contentPadding)
+          .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(spacing),
       content = content,
@@ -106,7 +119,13 @@ fun CardChevronRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier.fillMaxWidth().clickable(onClick).padding(contentPadding).pressScale(),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .hoverFeedback(shape = CardDefaults.Shape)
+          .clickable(onClick)
+          .padding(contentPadding)
+          .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(spacing),
       content = {

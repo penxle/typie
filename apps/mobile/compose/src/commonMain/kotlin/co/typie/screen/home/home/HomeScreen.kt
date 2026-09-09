@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -102,6 +103,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonDefaults
 import co.typie.ui.state.rememberPagerState
@@ -148,6 +150,7 @@ fun HomeScreen() {
     action =
       BottomBarAction(
         icon = Lucide.Pencil,
+        contentDescription = "새 문서",
         onClick = {
           if (model.isCreatingDocument) return@BottomBarAction
           if (!SubscriptionService.gate(sheet, GatedAction.CreateDocument)) return@BottomBarAction
@@ -327,6 +330,11 @@ private fun EmptyHome(
             .widthIn(min = 180.dp)
             .background(AppTheme.colors.textDefault, AppShapes.rounded(AppShapes.full))
             .pressScale()
+            .hoverFeedback(
+              shape = AppShapes.rounded(AppShapes.full),
+              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+              activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+            )
             .clickable(onClick = onCreate)
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -370,13 +378,15 @@ private fun BlinkingCaret() {
 
 @Composable
 private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
+  val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
   Row(
     verticalAlignment = Alignment.CenterVertically,
     modifier =
       Modifier.fillMaxWidth()
         .height(HomeSearchBarHeight)
         .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.md))
-        .clickable(onClick = onClick)
+        .hoverFeedback(source, shape = AppShapes.rounded(AppShapes.md))
+        .clickable(interactionSource = source, onClick = onClick)
         .padding(horizontal = 16.dp),
   ) {
     Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textHint)
@@ -461,6 +471,7 @@ private fun ContinueWritingCard(doc: HomeScreen_ContinueWriting_document, active
           .shadow(AppTheme.shadows.md, shape, alpha = { activeness })
           .background(AppTheme.colors.surfaceDefault, shape)
           .border(borderWidth, borderColor, shape)
+          .hoverFeedback(shape = shape)
           .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
           .pressScale()
           .padding(horizontal = 20.dp, vertical = 20.dp)
@@ -639,6 +650,7 @@ private fun RecentDocumentsSection(docs: List<HomeScreen_RecentDocumentRow_docum
       Row(
         modifier =
           Modifier.fillMaxWidth()
+            .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
             .clickable(onClick = { tabState.onSelectTab(Tab.Studio) })
             .pressScale()
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -661,7 +673,8 @@ private fun SortToggle(mode: RecentDocumentSort, onToggle: suspend () -> Unit) {
   InteractionScope {
     Row(
       modifier =
-        Modifier.clickable(onClick = onToggle)
+        Modifier.hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
+          .clickable(onClick = onToggle)
           .pressScale()
           .padding(horizontal = 2.dp, vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -790,6 +803,11 @@ private fun ContinueWritingNotification(
             },
           )
           .background(AppTheme.colors.surfaceInverse, shape)
+          .hoverFeedback(
+            shape = shape,
+            hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+            activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+          )
           .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
           .padding(horizontal = 18.dp)
           .pressScale(),

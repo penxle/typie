@@ -187,7 +187,15 @@ private fun ActionsMenu(
   val scope = rememberCoroutineScope()
   val shareAnchor = rememberShareAnchor()
 
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, modifier = shareAnchor.modifier) }) {
+  PopoverMenu(
+    anchor = {
+      TopBarButton(
+        icon = Lucide.Ellipsis,
+        contentDescription = "초대 메뉴",
+        modifier = shareAnchor.modifier,
+      )
+    }
+  ) {
     item(icon = Lucide.Copy, label = "초대 링크 복사") { scope.launch { onCopyLink() } }
     item(icon = Lucide.Share2, label = "초대 링크 공유") {
       scope.launch { onShareLink(shareAnchor.value) }

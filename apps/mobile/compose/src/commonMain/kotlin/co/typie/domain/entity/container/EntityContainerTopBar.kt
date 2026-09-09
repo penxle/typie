@@ -23,9 +23,9 @@ fun EntityContainerTopBarTrailing(
   onCloseSelectionClick: suspend () -> Unit = {},
 ) {
   if (isReordering) {
-    TopBarButton(icon = Lucide.Check, onClick = onDoneClick)
+    TopBarButton(icon = Lucide.Check, contentDescription = "완료", onClick = onDoneClick)
   } else if (isSelecting) {
-    TopBarButton(icon = Lucide.X, onClick = onCloseSelectionClick)
+    TopBarButton(icon = Lucide.X, contentDescription = "선택 취소", onClick = onCloseSelectionClick)
   } else {
     EntityContainerEditMenu(actions = actions)
   }
@@ -33,7 +33,7 @@ fun EntityContainerTopBarTrailing(
 
 @Composable
 private fun EntityContainerEditMenu(actions: List<EntityContainerEditAction>) {
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.LayoutList) }) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.LayoutList, contentDescription = "보기 옵션") }) {
     actions.forEach { action ->
       item(icon = action.icon, label = action.label) { action.onClick() }
     }

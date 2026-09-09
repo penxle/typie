@@ -6,10 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.EditorToolbarDebugOverlays
@@ -21,6 +17,8 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.shortcutLabel
 
 @Composable
 internal fun EditorScreenTopBar(
@@ -55,14 +53,10 @@ internal fun EditorScreenTopBar(
 private fun EditorEditingTopBarTrailing(onEnterReadingMode: suspend () -> Unit) {
   TopBarButton(
     icon = Lucide.Check,
+    contentDescription = EnterReadingModeDescription,
     onClick = onEnterReadingMode,
     backgroundColor = AppTheme.colors.textDefault,
     contentColor = AppTheme.colors.surfaceDefault,
-    modifier =
-      Modifier.semantics {
-        contentDescription = EnterReadingModeDescription
-        role = Role.Button
-      },
   )
 }
 
@@ -74,24 +68,12 @@ private fun EditorReadingTopBarTrailing(
   Row(horizontalArrangement = Arrangement.spacedBy(ReadingTopBarActionGap)) {
     TopBarButton(
       icon = Lucide.Search,
+      contentDescription = SearchDescription,
+      shortcut = shortcutLabel("F", ShortcutModifier.Mod),
       onClick = { onToolAction(EditorToolbarToolAction.Search) },
-      modifier =
-        Modifier.semantics {
-          contentDescription = SearchDescription
-          role = Role.Button
-        },
     )
     PopoverMenu(
-      anchor = {
-        TopBarButton(
-          icon = Lucide.Ellipsis,
-          modifier =
-            Modifier.semantics {
-              contentDescription = ToolsDescription
-              role = Role.Button
-            },
-        )
-      }
+      anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = ToolsDescription) }
     ) {
       EditorToolbarToolItems.forEach { item ->
         item(icon = item.icon, label = item.label) { onToolAction(item.action) }
@@ -108,7 +90,7 @@ private fun EditorReadingTopBarTrailing(
 
 private val EditingTopBarTrailingKey = Any()
 private val ReadingTopBarTrailingKey = Any()
-private const val SearchDescription = "검색"
+private const val SearchDescription = "찾기 및 바꾸기"
 private const val ToolsDescription = "도구"
 private const val EnterReadingModeDescription = "읽기 모드로 전환"
 private val ReadingTopBarActionGap = 8.dp

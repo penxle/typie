@@ -2,12 +2,14 @@ package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +37,7 @@ import co.typie.ext.clickable
 import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.subpane.EditorTableAxisActionsTarget
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -321,6 +324,7 @@ private fun resolvePositionInOverlay(
 
 @Composable
 private fun EditorTableAxisSelectorButton(selector: EditorTableAxisSelector, onClick: () -> Unit) {
+  val interactionSource = remember { MutableInteractionSource() }
   val icon =
     when (selector.axis) {
       Axis.Horizontal -> Lucide.EllipsisVertical
@@ -344,7 +348,8 @@ private fun EditorTableAxisSelectorButton(selector: EditorTableAxisSelector, onC
           contentDescription = description
           role = Role.Button
         }
-        .clickable { onClick() },
+        .hoverFeedback(interactionSource, enabled = true, shape = TableAxisSelectorButtonShape)
+        .clickable(interactionSource = interactionSource) { onClick() },
     contentAlignment = Alignment.Center,
   ) {
     Icon(
