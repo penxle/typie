@@ -5,11 +5,23 @@
   import { Grain } from '@typie/ui/effects';
   import dayjs from 'dayjs';
   import HeadphonesIcon from '~icons/lucide/headphones';
+  import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
 
   let error = $derived(page.error);
+  const connectionError = $derived(error?.code === 'network_error' || error?.code === 'service_unavailable');
+  let retrying = $state(false);
   const seed = Math.floor(Math.random() * 1000);
+
+  const retry = async () => {
+    retrying = true;
+    try {
+      await invalidateAll();
+    } finally {
+      retrying = false;
+    }
+  };
 </script>
 
 <div class={center({ width: '[100dvw]', height: '[100dvh]' })}>
@@ -74,6 +86,8 @@
       <h1 class={css({ fontSize: '24px', fontWeight: 'extrabold' })}>
         {#if page.status === 404}
           존재하지 않는 페이지예요
+        {:else if connectionError}
+          타이피 서버에 연결할 수 없어요
         {:else}
           앗! 문제가 발생했어요
         {/if}
@@ -81,6 +95,8 @@
       <div class={css({ fontSize: '14px', color: 'text.muted' })}>
         {#if page.status === 404}
           입력한 주소를 다시 한 번 확인해주세요.
+        {:else if connectionError}
+          연결 상태를 확인하거나 잠시 후 다시 시도해 주세요.
         {:else if error?.code === 'unexpected_error'}
           잠시 후 다시 시도해주세요.
         {:else if error?.message}
@@ -88,7 +104,9 @@
         {/if}
       </div>
 
-      {#if typeof window !== 'undefined' && !window.__webview__}
+      {#if connectionError}
+        <Button style={css.raw({ width: 'full' })} disabled={retrying} loading={retrying} onclick={retry} size="lg">다시 시도</Button>
+      {:else if typeof window !== 'undefined' && !window.__webview__}
         <Button style={css.raw({ width: 'full' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
       {/if}
 

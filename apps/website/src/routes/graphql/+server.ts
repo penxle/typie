@@ -50,25 +50,36 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
   const desktopMatch = /Typie\/(\S+)/.exec(userAgent);
   const deviceName = desktopMatch ? `Typie Desktop on ${os}` : `${browser} on ${os}`;
 
-  const response = await fetch(`${env.PRIVATE_API_URL}/graphql`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Client-IP': getClientAddress(),
-      'X-Device-Id': deviceId,
-      'X-Device-Name': deviceName,
-      'X-Device-Platform': platform,
-      ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
-      ...(bootstrapBypass && { 'X-Bootstrap-Bypass': bootstrapBypass }),
-    },
-    body: await request.arrayBuffer(),
-  });
+  const requestBody = await request.arrayBuffer();
+  let response: Response;
+  let responseBody: ArrayBuffer;
+  try {
+    response = await fetch(`${env.PRIVATE_API_URL}/graphql`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-IP': getClientAddress(),
+        'X-Device-Id': deviceId,
+        'X-Device-Name': deviceName,
+        'X-Device-Platform': platform,
+        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+        ...(bootstrapBypass && { 'X-Bootstrap-Bypass': bootstrapBypass }),
+      },
+      body: requestBody,
+    });
 
-  if (response.status === 401) {
-    cookies.delete('typie-at', { path: '/' });
+    if (response.status === 401) {
+      cookies.delete('typie-at', { path: '/' });
+    }
+
+    responseBody = await response.arrayBuffer();
+  } catch (err) {
+    if (err instanceof TypeError) {
+      return new Response(null, { status: 502, statusText: 'Bad Gateway' });
+    }
+    throw err;
   }
 
-  const responseBody = await response.arrayBuffer();
   const responseHeaders = new Headers(response.headers);
 
   return new Response(responseBody, {

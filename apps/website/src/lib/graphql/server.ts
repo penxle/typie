@@ -57,8 +57,19 @@ export async function loadQuery<T extends Artifact<'query'>>(
           error(inner.status, { message: inner.message, code: inner.code });
         }
 
-        if (isExchangeError(inner, 'http') && inner.extensions?.statusCode === 401) {
-          redirect(302, event.url.href);
+        if (isExchangeError(inner, 'http')) {
+          const status = inner.extensions?.statusCode;
+          if (status === 401) {
+            redirect(302, event.url.href);
+          }
+
+          if (inner.cause instanceof TypeError) {
+            error(503, { code: 'network_error', message: '서버에 연결할 수 없어요.' });
+          }
+
+          if (status === 502 || status === 503 || status === 504) {
+            error(status, { code: 'service_unavailable', message: '서버를 일시적으로 사용할 수 없어요.' });
+          }
         }
 
         if (isGraphQLError(inner)) {
