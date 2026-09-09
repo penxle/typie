@@ -110,7 +110,7 @@ export type Preset = {
   editor: Record<EditorKey, string>;
 };
 
-export const HOUSE_IDS = ['light-white', 'dark-black'] as const;
+export const HOUSE_IDS = ['light-white', 'dark-black', 'light-harbor', 'dark-beacon'] as const;
 
 export type Roster = { light: string[]; dark: string[] };
 

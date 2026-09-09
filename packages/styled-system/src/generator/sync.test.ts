@@ -20,7 +20,7 @@ describe('generated outputs', () => {
     expect(failingPairs(presets)).toEqual([]);
   });
 
-  it.each(['light-one', 'dark-one', 'light-monokai', 'light-modus-operandi', 'dark-modus-vivendi'])(
+  it.each(['light-one', 'dark-one', 'light-monokai', 'light-modus-operandi', 'dark-modus-vivendi', 'light-harbor', 'dark-beacon'])(
     '%s meets the WCAG contrast floors',
     (id) => {
       const { presets } = loadThemes(path.join(REPO_ROOT, 'assets/themes'));

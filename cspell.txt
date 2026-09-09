@@ -116,6 +116,7 @@ jsign
 kakao
 kakaokompassauth
 kakaopay
+kanagawa
 karpenter
 khtml
 koin
@@ -159,6 +160,7 @@ nanum
 napi
 natgw
 ngram
+nigecha
 nightfox
 noctis
 noeviction
