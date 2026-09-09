@@ -132,7 +132,7 @@
         >
           <div class={flex({ alignItems: 'center', gap: '4px' })}>
             <ToolbarIcon icon={ListIcon} />
-            순서 없는 목록
+            글머리 목록
           </div>
         </DropdownMenuItem>
 
@@ -144,7 +144,7 @@
         >
           <div class={flex({ alignItems: 'center', gap: '4px' })}>
             <ToolbarIcon icon={ListOrderedIcon} />
-            순서 있는 목록
+            번호 목록
           </div>
         </DropdownMenuItem>
       </DropdownMenu>
