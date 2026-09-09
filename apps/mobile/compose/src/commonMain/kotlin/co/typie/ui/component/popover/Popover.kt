@@ -238,9 +238,8 @@ fun Popover(
 
   Box(
     modifier =
-      anchorModifier.hoverable(anchorInteractionSource, enabled = !isOverlayVisible).pointerInput(
-        Unit
-      ) {
+      // Removing hoverable on open cancels the pointer handler while it is selecting pane items.
+      anchorModifier.hoverable(anchorInteractionSource).pointerInput(Unit) {
         awaitEachGesture {
           val initialDown =
             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
