@@ -8,6 +8,7 @@
   import { handleKeyDown } from '../handlers/keyboard';
   import { IME_CONTEXT_AFTER_LIMIT, IME_CONTEXT_BEFORE_LIMIT, normalizeImeContext } from '../input/ime-context';
   import { ImeInputAdapter } from '../input/ime-input-adapter';
+  import { syncImeInputScroll } from '../input/ime-input-geometry';
   import { wireImeResyncListener } from '../input/ime-resync';
   import { getViewportOverlayContext } from './ViewportOverlay.svelte';
   import type { Message } from '@typie/editor-ffi/browser';
@@ -52,6 +53,11 @@
     inputAdapter.syncFromEditor(editor.inputEl);
   };
 
+  const syncInputScroll = () => {
+    if (!editor?.focused || !editor.inputEl || editor.terminal) return;
+    syncImeInputScroll(editor.inputEl);
+  };
+
   const inputRect = $derived.by(() => {
     void viewportOverlay.change;
     if (!editor || editor.terminal) return null;
@@ -74,7 +80,9 @@
     if (!editor?.focused || !editor.inputEl || editor.terminal) return;
 
     void editor.appliedImeRevision;
+    void inputRect;
     syncInput();
+    syncInputScroll();
   });
 
   $effect(() => {
@@ -104,12 +112,16 @@
     style:top={`${inputRect?.top ?? -9999}px`}
     style:width={`${inputRect?.width ?? 1}px`}
     style:height={`${inputRect?.height ?? 1}px`}
+    style:font-size={`${inputRect?.height ?? 1}px`}
+    style:line-height={`${inputRect?.height ?? 1}px`}
     class={css({
       position: 'fixed',
       opacity: '0',
       pointerEvents: 'none',
       resize: 'none',
       overflow: 'hidden',
+      whiteSpace: 'pre',
+      overflowWrap: 'normal',
     })}
     autocapitalize="off"
     autocomplete="off"
@@ -181,6 +193,8 @@
       }
       handlePaste(ctx, e, handlePasteFailure);
     }}
+    onscroll={syncInputScroll}
+    onselect={syncInputScroll}
     readonly={editor.readOnly}
     spellcheck={false}></textarea>
 {/if}
