@@ -228,7 +228,7 @@
 </script>
 
 <Modal
-  style={css.raw({ maxWidth: '900px', height: 'full', maxHeight: '600px', padding: '0' })}
+  style={css.raw({ maxWidth: '1000px', height: 'full', maxHeight: '720px', padding: '0' })}
   onclose={() => history.back()}
   open={!!currentTab}
   showBackdrop={currentTab?.path !== '/preference/theme'}

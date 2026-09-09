@@ -1,30 +1,31 @@
 {
   "light": [
     "light-white",
+    "light-github",
     "light-flexoki",
     "light-everforest",
     "light-gruvbox-material",
     "light-rose-pine-dawn",
+    "light-catppuccin-latte",
     "light-cupcake",
     "light-sakura",
     "light-noctis-lilac",
-    "light-catppuccin-latte",
     "light-silk",
     "light-atelier-seaside",
     "light-atelier-lakeside"
   ],
   "dark": [
     "dark-black",
-    "dark-flexoki",
     "dark-github",
+    "dark-flexoki",
+    "dark-everforest",
+    "dark-gruvbox-material",
     "dark-rose-pine",
     "dark-catppuccin-mocha",
     "dark-dracula",
     "dark-nightfox",
     "dark-nord",
-    "dark-everforest",
     "dark-monokai",
-    "dark-melange",
-    "dark-gruvbox-material"
+    "dark-melange"
   ]
 }
