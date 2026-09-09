@@ -7,6 +7,7 @@
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import MonitorIcon from '~icons/lucide/monitor';
   import MoonIcon from '~icons/lucide/moon';
   import SunIcon from '~icons/lucide/sun';
@@ -281,4 +282,23 @@
       {/each}
     </div>
   </div>
+
+  <a
+    class={flex({
+      alignSelf: 'start',
+      alignItems: 'center',
+      gap: '4px',
+      fontSize: '12px',
+      color: 'text.hint',
+      textUnderlineOffset: '3px',
+      _hover: { color: 'text.muted', textDecoration: 'underline' },
+      _focusVisible: { color: 'text.muted', textDecoration: 'underline' },
+    })}
+    href="https://raw.githubusercontent.com/penxle/typie/main/assets/themes/NOTICES.md"
+    rel="noopener noreferrer"
+    target="_blank"
+  >
+    테마 출처 및 라이선스
+    <Icon aria-label="외부 링크" icon={ExternalLinkIcon} size={12} />
+  </a>
 </div>
