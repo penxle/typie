@@ -83,6 +83,7 @@ internal class EditorInputConnection(
   private val inputSessionScope: CoroutineScope,
   private val bringIntoViewRequests: EditorBringIntoViewRequests,
   private val extractMonitor: ImeExtractMonitor,
+  private val cursorAnchorInfo: EditorCursorAnchorInfoController,
   private val isSessionCurrent: () -> Boolean,
   private val onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ) : InputConnection {
@@ -299,12 +300,19 @@ internal class EditorInputConnection(
 
   override fun performPrivateCommand(action: String?, data: Bundle?): Boolean = false
 
-  override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean = false
+  override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean {
+    recordCall("requestCursorUpdates", "mode=$cursorUpdateMode")
+    return cursorAnchorInfo.requestUpdates(cursorUpdateMode)
+  }
+
+  override fun requestCursorUpdates(cursorUpdateMode: Int, cursorUpdateFilter: Int): Boolean =
+    requestCursorUpdates(cursorUpdateMode or cursorUpdateFilter)
 
   override fun getHandler() = null
 
   override fun closeConnection() {
     recordCall("closeConnection", "")
+    cursorAnchorInfo.close()
     extractMonitor.token = null
     batch.closeConnection()
   }
