@@ -74,6 +74,344 @@ const MULTILINE_PAT_PATTERN: &str = r"P1\nP2";
 const MULTILINE_PAT_SUBSTITUTE: &str = "Q";
 
 #[test]
+fn ime_leading_newline_preserves_list_range_enter_behavior() {
+    for text in ["\n", "\r\n"] {
+        let (initial, ..) = state! {
+            doc { root { bullet_list { list_item { p: paragraph { text("abc") } } } paragraph {} } }
+            selection: (p, 0) -> (p, 3)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: text.into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root {
+                bullet_list {
+                    list_item { paragraph {} }
+                    list_item { p: paragraph {} }
+                }
+                paragraph {}
+            } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_leading_newline_inserts_only_one_paragraph_after_a_unit_selection() {
+    for text in ["\n", "\r\n"] {
+        let (initial, ..) = state! {
+            doc { r: root { paragraph { text("a") } horizontal_rule paragraph { text("b") } } }
+            selection: (r, 1, >) -> (r, 2, <)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: text.into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("a") } horizontal_rule p: paragraph {} paragraph { text("b") } } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_leading_newline_materializes_a_gap_without_splitting_it_again() {
+    for text in ["\n", "\r\n"] {
+        let (initial, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: text.into() }],
+        });
+        let (expected, ..) = state! {
+            doc { root { p: paragraph {} image paragraph { text("b") } } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_multiline_commit_in_fold_title_keeps_text_when_enter_is_inapplicable() {
+    for ops in [
+        vec![FlatImeOp::ReplaceSelection {
+            text: "X\nY".into(),
+        }],
+        vec![FlatImeOp::ReplaceSelection {
+            text: "X\r\nY".into(),
+        }],
+        vec![
+            FlatImeOp::ReplaceSelection { text: "\n".into() },
+            FlatImeOp::CommitAsIs,
+            FlatImeOp::SetSelection { start: 4, end: 4 },
+            FlatImeOp::ReplaceSelection { text: "XY".into() },
+        ],
+    ] {
+        let (initial, ..) = state! {
+            doc { root {
+                fold { title: fold_title { text("ab") } fold_content { paragraph {} } }
+                paragraph {}
+            } }
+            selection: (title, 1)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput { ops });
+        let (expected, ..) = state! {
+            doc { root {
+                fold { title: fold_title { text("aXYb") } fold_content { paragraph {} } }
+                paragraph {}
+            } }
+            selection: (title, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_leading_gap_break_binds_all_input_boundaries_to_the_new_paragraph() {
+    for offset in 0..=2 {
+        let (initial, ..) = state! {
+            doc { r: root { image paragraph { text("b") } } }
+            selection: (r, 0, <)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection {
+                    text: "\r\n".into(),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetSelection {
+                    start: offset,
+                    end: offset,
+                },
+                FlatImeOp::ReplaceSelection { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p: paragraph { text("X") } image paragraph { text("b") } } }
+            selection: (p, 1)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_crlf_partial_delete_updates_coordinates_even_without_a_document_edit() {
+    for delete in [
+        FlatImeOp::DeleteSurrounding {
+            before: 1,
+            after: 0,
+        },
+        FlatImeOp::DeleteSurroundingUtf16 {
+            before: 1,
+            after: 0,
+        },
+    ] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection {
+                    text: "a\r\nb".into(),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetSelection { start: 4, end: 4 },
+                delete,
+                // The input is now OPEN a CR b CLOSE: offset 4 is after b.
+                FlatImeOp::SetSelection { start: 4, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("a") } p: paragraph { text("bX") } } }
+            selection: (p, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_multiline_selection_matches_the_native_input_buffer() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    // Also checked against the real Kotlin normalizer. Native text starts as
+    // OPEN CLOSE, then becomes OPEN a newline b CLOSE; offset 4 is after b.
+    let messages: Vec<Message> =
+        serde_json::from_str(include_str!("tests/fixtures/ime-multiline-selection.json")).unwrap();
+    let request = editor.enqueue_request(messages).unwrap();
+    editor.tick_through(request).unwrap();
+
+    let (expected, ..) = state! {
+        doc { root { paragraph { text("a") } p: paragraph { text("bX") } } }
+        selection: (p, 2)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_multiline_positions_survive_commit_barriers_and_later_edits() {
+    for (text, end) in [("a\nb", 4), ("a\r\nb", 5), ("a\rb", 4)] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        let request = editor
+            .enqueue_request(vec![Message::TextInput {
+                ops: vec![
+                    FlatImeOp::Compose { text: text.into() },
+                    FlatImeOp::CommitAsIs,
+                    FlatImeOp::ReplaceSelection {
+                        text: "😀".into()
+                    },
+                    FlatImeOp::SetSelection {
+                        start: end + 1,
+                        end: end + 1,
+                    },
+                    FlatImeOp::ReplaceSelection { text: "X".into() },
+                ],
+            }])
+            .unwrap();
+        editor.tick_through(request).unwrap();
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("a") } p: paragraph { text("b😀X") } } }
+            selection: (p, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
+    }
+}
+
+#[test]
+fn ime_multiline_composition_maps_to_the_inserted_paragraph() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    let request = editor
+        .enqueue_request(vec![Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection {
+                    text: "a\nb".into(),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetComposition { start: 3, end: 4 },
+                FlatImeOp::Compose { text: "乙".into() },
+                FlatImeOp::SetSelection { start: 3, end: 3 },
+            ],
+        }])
+        .unwrap();
+    editor.tick_through(request).unwrap();
+    let (expected, ..) = state! {
+        doc { root { paragraph { text("a") } p: paragraph { text("乙") } } }
+        selection: (p, 0)
+    };
+    assert_state_eq!(editor.state(), &expected);
+    assert_eq!(
+        editor.state().composition,
+        Some(Composition { start: 4, end: 5 })
+    );
+}
+
+#[test]
+fn ime_delete_after_multiline_commit_counts_input_newlines_not_structural_tokens() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    let request = editor
+        .enqueue_request(vec![Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection {
+                    text: "a\nb".into(),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetSelection { start: 3, end: 3 },
+                FlatImeOp::DeleteSurroundingUtf16 {
+                    before: 1,
+                    after: 0,
+                },
+                FlatImeOp::ReplaceSelection { text: "X".into() },
+            ],
+        }])
+        .unwrap();
+    editor.tick_through(request).unwrap();
+    let (expected, ..) = state! {
+        doc { root { p: paragraph { text("aXb") } } }
+        selection: (p, 2)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_messages_start_in_document_coordinates_even_in_one_request() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = Editor::new_test(initial);
+    let request = editor
+        .enqueue_request(vec![
+            Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection {
+                    text: "a\nb".into(),
+                }],
+            },
+            Message::TextInput {
+                ops: vec![
+                    FlatImeOp::SetSelection { start: 5, end: 5 },
+                    FlatImeOp::ReplaceSelection { text: "X".into() },
+                ],
+            },
+        ])
+        .unwrap();
+    editor.tick_through(request).unwrap();
+    let (expected, ..) = state! {
+        doc { root { paragraph { text("a") } p: paragraph { text("bX") } } }
+        selection: (p, 2)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
+fn ime_position_after_commit_follows_automatic_replacement() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("abc", "X", false)]);
+    let request = editor
+        .enqueue_request(vec![Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose { text: "abc".into() },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetSelection { start: 4, end: 4 },
+                FlatImeOp::ReplaceSelection { text: "!".into() },
+            ],
+        }])
+        .unwrap();
+    editor.tick_through(request).unwrap();
+    let (expected, ..) = state! {
+        doc { root { p: paragraph { text("X!") } } }
+        selection: (p, 2)
+    };
+    assert_state_eq!(editor.state(), &expected);
+}
+
+#[test]
 fn plain_rule_applies_on_insertion() {
     let (s, ..) = state! {
         doc { root { p1: paragraph { text("") } } }

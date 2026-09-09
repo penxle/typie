@@ -1,8 +1,19 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.EditProcessor
+import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.ffi.Ime
+
+internal fun Ime.toEditProcessor(): EditProcessor {
+  val value = toTextFieldValue()
+  return EditProcessor().also { processor ->
+    // reset intentionally clears composition when replacing its text buffer.
+    processor.reset(value.copy(composition = null), null)
+    value.composition?.let { processor.apply(listOf(SetComposingRegionCommand(it.min, it.max))) }
+  }
+}
 
 internal fun Ime.toTextFieldValue(): TextFieldValue =
   TextFieldValue(

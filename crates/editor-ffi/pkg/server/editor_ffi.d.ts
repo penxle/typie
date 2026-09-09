@@ -43,6 +43,16 @@ export interface Changeset<P> {
 }
 
 /**
+ * Edits to the IME's linear input buffer, initially addressed in document-flat
+ * Unicode scalar offsets. Each operation addresses the buffer after preceding
+ * operations in the same message, including across `CommitAsIs` barriers.
+ * Inserted CR/LF characters retain their input-buffer width; the engine binds
+ * their positions to the actual paragraph edits. Hosts must not pre-expand
+ * them into structural document offsets or separate Enter messages.
+ */
+export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "commit_as_is" } | { type: "move_cursor"; delta: number };
+
+/**
  * One node in the op-DAG. `id` is the op's unique identifier (also reused as
  * the semantic identifier — RGA element id, OR-Set add token — by the
  * payload). `parents` are the op-DAG parents of this op (the heads of the
@@ -794,8 +804,6 @@ export type ExternalDndPayloadKind = "text" | "html" | "image_files" | "files" |
 export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
 
 export type FileNodeAttr = { type: "id"; value: string | undefined };
-
-export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "commit_as_is" } | { type: "move_cursor"; delta: number };
 
 export type FoldContentNodeAttr = void;
 

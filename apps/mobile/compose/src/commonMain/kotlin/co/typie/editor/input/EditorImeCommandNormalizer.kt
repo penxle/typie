@@ -5,7 +5,6 @@ import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.EditCommand
-import androidx.compose.ui.text.input.EditingBuffer
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.MoveCursorCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
@@ -13,8 +12,6 @@ import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
-import co.typie.editor.ffi.Key
-import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.SelectionOp
@@ -34,51 +31,34 @@ internal object EditorImeCommandNormalizer {
       }
     }
 
-    val messages = mutableListOf<Message>()
     val ops = mutableListOf<FlatImeOp>()
     var hasActiveComposition = ime?.composing != null
-    val buffer =
-      ime?.toTextFieldValue()?.let { value ->
-        EditingBuffer(value.annotatedString, value.selection).also { buffer ->
-          value.composition?.let { SetComposingRegionCommand(it.min, it.max).applyTo(buffer) }
-        }
-      }
-    fun flushOps() {
-      if (ops.isEmpty()) return
-      messages += Message.TextInput(ops.toList())
-      ops.clear()
-    }
-
+    val buffer = ime?.toEditProcessor()
     for (command in commands) {
       // Coordinates refer to the text after preceding commands, not the initial IME snapshot.
-      val windowText = buffer?.toString().orEmpty()
-      buffer?.let(command::applyTo)
+      val windowText = buffer?.toTextFieldValue()?.text.orEmpty()
+      val valueAfter = buffer?.apply(listOf(command))
       if (command is CommitTextCommand) {
-        val text = command.text.replace("\r\n", "\n").replace('\r', '\n')
-        if (text == "\n") {
-          flushOps()
-
-          messages += Message.Key(KeyEvent(Key.Enter))
-          continue
+        // Keep the native text (including CR/LF) intact. Later coordinates
+        // address this buffer; only the engine knows the resulting paragraphs.
+        if (hasActiveComposition) {
+          ops += FlatImeOp.Compose(command.text)
+          ops += FlatImeOp.CommitAsIs
+        } else {
+          ops += FlatImeOp.ReplaceSelection(command.text)
         }
-        // The editor has no inline newline: multi-line commits become
-        // paragraph splits via the enter key path.
-        text.split("\n").forEachIndexed { index, segment ->
-          if (index > 0) {
-            flushOps()
-            messages += Message.Key(KeyEvent(Key.Enter))
-          }
-          if (segment.isNotEmpty() || index == 0) {
-            // commitText replaces an active preedit, but otherwise it is a committed
-            // selection replacement and must stay inside the native edit transaction.
-            if (hasActiveComposition) {
-              ops += FlatImeOp.Compose(segment)
-              ops += FlatImeOp.CommitAsIs
-            } else {
-              ops += FlatImeOp.ReplaceSelection(segment)
-            }
-            hasActiveComposition = false
-          }
+        hasActiveComposition = false
+        if (
+          command.newCursorPosition != 1 &&
+            !(command.newCursorPosition == 0 && command.text.isEmpty()) &&
+            valueAfter != null
+        ) {
+          val text = valueAfter.text
+          ops +=
+            FlatImeOp.SetSelection(
+              ime.windowStart + text.codePointOffsetAtUtf16Index(valueAfter.selection.min),
+              ime.windowStart + text.codePointOffsetAtUtf16Index(valueAfter.selection.max),
+            )
         }
         continue
       }
@@ -94,6 +74,16 @@ internal object EditorImeCommandNormalizer {
           command.toFlatImeOp(ime, windowText)
         } ?: continue
       ops += op
+      if (
+        command is SetComposingTextCommand && command.newCursorPosition != 1 && valueAfter != null
+      ) {
+        val text = valueAfter.text
+        ops +=
+          FlatImeOp.SetSelection(
+            ime.windowStart + text.codePointOffsetAtUtf16Index(valueAfter.selection.min),
+            ime.windowStart + text.codePointOffsetAtUtf16Index(valueAfter.selection.max),
+          )
+      }
       hasActiveComposition =
         when (op) {
           is FlatImeOp.Compose,
@@ -104,9 +94,7 @@ internal object EditorImeCommandNormalizer {
         }
     }
 
-    flushOps()
-
-    return messages
+    return if (ops.isEmpty()) emptyList() else listOf(Message.TextInput(ops))
   }
 
   private fun List<EditCommand>.resolveSelectionOnlyMessages(ime: Ime?): List<Message>? {

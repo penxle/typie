@@ -1534,26 +1534,13 @@ impl Editor {
         ime_failed: &mut bool,
         changes: &mut TickChanges,
     ) -> Result<(), EditorError> {
-        let mut messages: VecDeque<_> = messages.into();
-        while let Some(message) = messages.pop_front() {
-            let mut consumed = 1;
+        for message in messages {
             let mut outcome = CommandOutcome::Applied;
             let result: Result<(), EditorError> = match message {
-                // Coalesce composition updates until a committed message boundary.
-                // `handle_flat_ime_ops` still preserves barriers inside one message,
-                // while stopping here keeps per-message failure outcomes truthful.
+                // One message is one input-coordinate buffer. A later message
+                // starts in document coordinates, so concatenating its ops would
+                // silently change what its positions refer to.
                 Message::TextInput { ops } => {
-                    let mut batch = ops;
-                    while matches!(messages.front(), Some(Message::TextInput { .. }))
-                        && !batch.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs))
-                    {
-                        if let Message::TextInput { ops } =
-                            messages.pop_front().expect("matched text input message")
-                        {
-                            batch.extend(ops);
-                            consumed += 1;
-                        }
-                    }
                     if *ime_failed {
                         log::warn!(
                             "dropping text input batch queued after an absorbed ime failure"
@@ -1561,8 +1548,7 @@ impl Editor {
                         outcome = CommandOutcome::Rejected {
                             reason: CommandRejection::InvalidArgument,
                         };
-                    } else if let Err(e) =
-                        self.process_message(Message::TextInput { ops: batch }, changes)
+                    } else if let Err(e) = self.process_message(Message::TextInput { ops }, changes)
                     {
                         if is_illegal_slot(&e) {
                             log::warn!(
@@ -1620,7 +1606,7 @@ impl Editor {
                     return Err(error);
                 }
             }
-            command_outcomes.extend(std::iter::repeat_n(outcome, consumed));
+            command_outcomes.push(outcome);
         }
         Ok(())
     }
@@ -2932,13 +2918,10 @@ mod tests {
         );
     }
 
-    // A frame's worth of IME composition traffic arrives as several consecutive
-    // `TextInput` messages; `tick` coalesces them into batched reduces. The
-    // coalesced drain must land on the same document, composition, and selection
-    // as ticking each message separately. `CommitAsIs` remains an execution
-    // barrier inside the combined flat-op vector.
+    // Draining a frame's composition messages together must preserve the
+    // document, composition and selection produced by ticking them separately.
     #[test]
-    fn tick_coalesces_consecutive_text_input_messages() {
+    fn tick_preserves_consecutive_text_input_message_boundaries() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("ab") } } }
             selection: (p1, 2)

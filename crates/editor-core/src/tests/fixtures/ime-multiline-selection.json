@@ -1,0 +1,10 @@
+[
+  {
+    "type": "text_input",
+    "ops": [
+      { "type": "replace_selection", "text": "a\nb" },
+      { "type": "set_selection", "start": 4, "end": 4 },
+      { "type": "replace_selection", "text": "X" }
+    ]
+  }
+]

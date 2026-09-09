@@ -16,8 +16,17 @@ import android.view.inputmethod.SurroundingText
 import android.view.inputmethod.TextAttribute
 import android.view.inputmethod.TextSnapshot
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
+import androidx.compose.ui.text.input.EditCommand
+import androidx.compose.ui.text.input.FinishComposingTextCommand
+import androidx.compose.ui.text.input.SetComposingRegionCommand
+import androidx.compose.ui.text.input.SetComposingTextCommand
+import androidx.compose.ui.text.input.SetSelectionCommand
 import co.typie.editor.Editor
-import co.typie.editor.ffi.FlatImeOp
+import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
@@ -78,7 +87,7 @@ internal class EditorInputConnection(
   private val onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ) : InputConnection {
   private val batch =
-    ImeEditBatch(isSessionCurrent) { messages ->
+    ImeEditBatch(isSessionCurrent, { editor.appliedState.ime }) { messages ->
       val recorder = editor.inputRecorder
       val imeBefore = if (recorder == null) null else editor.appliedState.ime
       val update = editor.runCallback {
@@ -210,55 +219,46 @@ internal class EditorInputConnection(
   override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
     recordCall("commitText", "text=$value, newCursorPosition=$newCursorPosition")
-    if (value == "\n") {
-      batch.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
-    } else {
-      batch.commitText(value)
-    }
+    batch.enqueue(CommitTextCommand(value, newCursorPosition))
     return true
   }
 
   override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
     recordCall("setComposingText", "text=$value, newCursorPosition=$newCursorPosition")
-    batch.enqueue(FlatImeOp.Compose(value))
+    batch.enqueue(SetComposingTextCommand(value, newCursorPosition))
     return true
   }
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     recordCall("setComposingRegion", "start=$start, end=$end")
-    when (val decision = resolveComposingRegion(editor.appliedState.ime, start, end)) {
-      is ComposingRegionDecision.Set ->
-        batch.enqueue(FlatImeOp.SetComposition(decision.start, decision.end))
-      ComposingRegionDecision.Clear -> batch.enqueue(FlatImeOp.ClearComposition)
-    }
+    batch.setComposingRegion(start, end)
     return true
   }
 
   override fun finishComposingText(): Boolean {
     recordCall("finishComposingText", "")
-    batch.finishComposingText(hasActiveComposition = editor.appliedState.ime?.composing != null)
+    batch.enqueue(FinishComposingTextCommand())
     return true
   }
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
     recordCall("deleteSurroundingText", "before=$beforeLength, after=$afterLength")
-    batch.enqueue(FlatImeOp.DeleteSurroundingUtf16(beforeLength, afterLength))
+    if (beforeLength < 0 || afterLength < 0) return false
+    batch.enqueue(DeleteSurroundingTextCommand(beforeLength, afterLength))
     return true
   }
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
     recordCall("deleteSurroundingTextInCodePoints", "before=$beforeLength, after=$afterLength")
-    batch.enqueue(FlatImeOp.DeleteSurrounding(beforeLength, afterLength))
+    if (beforeLength < 0 || afterLength < 0) return false
+    batch.enqueue(DeleteSurroundingTextInCodePointsCommand(beforeLength, afterLength))
     return true
   }
 
   override fun setSelection(start: Int, end: Int): Boolean {
     recordCall("setSelection", "start=$start, end=$end")
-    val ctx = editor.appliedState.ime ?: return true
-    batch.enqueue(
-      FlatImeOp.SetSelection(ctx.projectWindowUtf16Index(start), ctx.projectWindowUtf16Index(end))
-    )
+    batch.enqueue(SetSelectionCommand(start, end))
     return true
   }
 
@@ -306,7 +306,7 @@ internal class EditorInputConnection(
   override fun closeConnection() {
     recordCall("closeConnection", "")
     extractMonitor.token = null
-    batch.closeConnection(hasActiveComposition = editor.appliedState.ime?.composing != null)
+    batch.closeConnection()
   }
 
   override fun commitContent(
@@ -412,10 +412,12 @@ internal fun ImeExtract.toExtractedText(): ExtractedText =
 
 internal class ImeEditBatch(
   private val isSessionCurrent: () -> Boolean,
+  private val currentIme: () -> Ime?,
   private val dispatch: (List<Message>) -> Unit,
 ) {
   private var batchLevel = 0
-  private val pendingOps = mutableListOf<FlatImeOp>()
+  private var imeBefore: Ime? = null
+  private val pendingCommands = mutableListOf<EditCommand>()
   private val pendingMessages = mutableListOf<Message>()
 
   fun beginBatchEdit(): Boolean {
@@ -429,51 +431,50 @@ internal class ImeEditBatch(
     return batchLevel > 0
   }
 
-  fun finishComposingText(hasActiveComposition: Boolean) {
-    pendingOps.add(
-      if (hasActiveComposition || hasPendingCompositionUpdate()) {
-        FlatImeOp.CommitAsIs
-      } else {
-        FlatImeOp.ClearComposition
-      }
-    )
-    flushIfReady()
-  }
-
-  fun closeConnection(hasActiveComposition: Boolean) {
+  fun closeConnection() {
+    if (pendingCommands.isEmpty()) imeBefore = currentIme()
+    pendingCommands.add(FinishComposingTextCommand())
     batchLevel = 0
-    if ((hasActiveComposition || hasPendingCompositionUpdate()) && !hasPendingCommitAsIs()) {
-      pendingOps.add(FlatImeOp.CommitAsIs)
-    } else if (!hasPendingCommitAsIs()) {
-      pendingOps.add(FlatImeOp.ClearComposition)
-    }
     flush()
   }
 
-  fun commitText(text: String) {
-    // The editor has no inline newline: multi-line commits (e.g. keyboard
-    // clipboard suggestions) become paragraph splits via the enter key path.
-    val segments = text.replace("\r\n", "\n").replace('\r', '\n').split("\n")
-    segments.forEachIndexed { index, segment ->
-      if (index > 0) {
-        flushOpsToPendingMessages()
-        pendingMessages.add(Message.Key(FfiKeyEvent(Key.Enter)))
-      }
-      if (segment.isNotEmpty() || index == 0) {
-        pendingOps.add(FlatImeOp.Compose(segment))
-        pendingOps.add(FlatImeOp.CommitAsIs)
-      }
+  fun setComposingRegion(start: Int, end: Int) {
+    val initial = if (pendingCommands.isEmpty()) currentIme() else imeBefore
+    val ime = initial?.let {
+      val value = it.toEditProcessor().apply(pendingCommands)
+      fun offset(index: Int) = it.windowStart + value.text.codePointOffsetAtUtf16Index(index)
+      Ime(
+        text = value.text,
+        windowStart = it.windowStart,
+        selection = ImeRange(offset(value.selection.min), offset(value.selection.max)),
+        composing =
+          value.composition?.let { range -> ImeRange(offset(range.min), offset(range.max)) },
+      )
     }
-    flushIfReady()
+    // Preserve Android's stale-window guard, but evaluate it against the
+    // buffer after earlier commands in this batch, not the old engine snapshot.
+    val command =
+      when (val region = resolveComposingRegion(ime, start, end)) {
+        ComposingRegionDecision.Clear -> SetComposingRegionCommand(0, 0)
+        is ComposingRegionDecision.Set -> {
+          requireNotNull(ime)
+          SetComposingRegionCommand(
+            ime.text.utf16IndexAtCodePointOffset(region.start - ime.windowStart),
+            ime.text.utf16IndexAtCodePointOffset(region.end - ime.windowStart),
+          )
+        }
+      }
+    enqueue(command)
   }
 
-  fun enqueue(op: FlatImeOp) {
-    pendingOps.add(op)
+  fun enqueue(command: EditCommand) {
+    if (pendingCommands.isEmpty()) imeBefore = currentIme()
+    pendingCommands.add(command)
     flushIfReady()
   }
 
   fun enqueue(message: Message) {
-    flushOpsToPendingMessages()
+    flushCommandsToPendingMessages()
     pendingMessages.add(message)
     flushIfReady()
   }
@@ -483,41 +484,25 @@ internal class ImeEditBatch(
   }
 
   private fun flush() {
-    flushOpsToPendingMessages()
-    if (pendingMessages.isEmpty()) return
-
     if (!isSessionCurrent()) {
+      pendingCommands.clear()
       pendingMessages.clear()
+      imeBefore = null
       return
     }
+
+    flushCommandsToPendingMessages()
+    if (pendingMessages.isEmpty()) return
 
     val messages = pendingMessages.toList()
     pendingMessages.clear()
     dispatch(messages)
   }
 
-  private fun flushOpsToPendingMessages() {
-    if (pendingOps.isEmpty()) return
-    pendingMessages.add(Message.TextInput(pendingOps.toList()))
-    pendingOps.clear()
+  private fun flushCommandsToPendingMessages() {
+    if (pendingCommands.isEmpty()) return
+    pendingMessages.addAll(EditorImeCommandNormalizer.normalize(pendingCommands, imeBefore))
+    pendingCommands.clear()
+    imeBefore = null
   }
-
-  private fun hasPendingCompositionUpdate(): Boolean =
-    pendingOps.any { it.startsOrUpdatesComposition() } ||
-      pendingMessages.any { message ->
-        message is Message.TextInput && message.ops.any { it.startsOrUpdatesComposition() }
-      }
-
-  private fun hasPendingCommitAsIs(): Boolean =
-    pendingOps.any { it == FlatImeOp.CommitAsIs } ||
-      pendingMessages.any { message ->
-        message is Message.TextInput && message.ops.any { it == FlatImeOp.CommitAsIs }
-      }
-
-  private fun FlatImeOp.startsOrUpdatesComposition(): Boolean =
-    when (this) {
-      is FlatImeOp.Compose,
-      is FlatImeOp.SetComposition -> true
-      else -> false
-    }
 }

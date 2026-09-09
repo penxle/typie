@@ -6,7 +6,7 @@ use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
-use crate::handle::paragraph_break::apply_list_paragraph_break;
+use crate::handle::paragraph_break::apply_paragraph_break;
 use crate::message::*;
 
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
@@ -26,33 +26,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             Ok(())
         }),
         (Key::Enter, _) => editor.transact(|tr| {
-            let applied = commands::chain!(
-                tr,
-                commands::optional!(commands::materialize_synthetic_selection_blocks()),
-                |tr| commands::first!(
-                    tr,
-                    commands::materialize_gap_paragraph(),
-                    commands::insert_paragraph_after_unit_selection(),
-                    |tr| {
-                        let selection_was_range = tr
-                            .selection()
-                            .is_some_and(|selection| !selection.is_collapsed());
-                        commands::chain!(
-                            tr,
-                            commands::optional!(commands::delete_selection()),
-                            |tr| commands::first!(
-                                tr,
-                                |tr| apply_list_paragraph_break(tr, selection_was_range),
-                                commands::lift_last_paragraph(),
-                                commands::split_paragraph(),
-                            ),
-                        )
-                    },
-                ),
-            )?;
-            if applied {
-                tr.clear_pending_format()?;
-            }
+            apply_paragraph_break(tr)?;
             Ok(())
         }),
         (Key::Backspace, _) if editor.try_undo_auto_replacement() => {
