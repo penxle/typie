@@ -3,18 +3,120 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
-use editor_common::{HistoryTag, StrExt};
+use editor_common::HistoryTag;
 use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{
-    Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState, ResolvedPosition,
-    ResolvedPositionFlatExt, Selection, apply_pending, as_gap_cursor, continuation_at, flat_chars,
-    flat_segments_in_range, flat_size, is_unit_node_selection, replacement_paint,
+    Affinity, Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState,
+    ResolvedPosition, ResolvedPositionFlatExt, Selection, StablePosition, apply_pending,
+    as_gap_cursor, continuation_at, flat_chars, flat_segments_in_range, flat_size,
+    replacement_paint,
 };
 use editor_transaction::{HistoryMeta, Transaction};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
+use crate::handle::paragraph_break::apply_paragraph_break;
 use crate::message::*;
+
+mod coordinates;
+use coordinates::{ImeTextPosition, remap_ime_tail};
+
+fn replace_ime_text(
+    tr: &mut Transaction,
+    selection: Selection,
+    text: &str,
+    paint: Option<Vec<Modifier>>,
+    inserted: &mut BTreeMap<usize, Option<StablePosition>>,
+) -> Result<(), CommandError> {
+    tr.set_selection(Some(selection))?;
+    let mut remaining = text;
+    let mut input_offset = 0;
+    loop {
+        let line_end = remaining.find(['\r', '\n']).unwrap_or(remaining.len());
+        let line = &remaining[..line_end];
+        let line_len = line.chars().count();
+        if !line.is_empty() || text.is_empty() {
+            let Some(selection) = tr.selection() else {
+                return Err(CommandError::InvalidArgument(
+                    "IME text replacement could not be applied".into(),
+                ));
+            };
+            if !commands::replace_range_with_text(tr, selection, line, paint.clone())? {
+                return Err(CommandError::InvalidArgument(
+                    "IME text replacement could not be applied".into(),
+                ));
+            }
+            let view = tr.view();
+            let Some(end) = tr.selection().and_then(|s| s.head.resolve(&view)) else {
+                return Err(CommandError::InvalidArgument(
+                    "IME text replacement could not be applied".into(),
+                ));
+            };
+            let Some(start) = end.to_flat().checked_sub(line_len) else {
+                return Err(CommandError::InvalidArgument(
+                    "IME text replacement could not be applied".into(),
+                ));
+            };
+            for (offset, binding) in inserted.range_mut(input_offset..=input_offset + line_len) {
+                let offset = start + offset - input_offset;
+                let Some(position) = ResolvedPosition::from_flat(&view, offset) else {
+                    return Err(CommandError::InvalidArgument(
+                        "IME text replacement could not be applied".into(),
+                    ));
+                };
+                let mut position: Position = (&position).into();
+                position.affinity = Affinity::Upstream;
+                *binding = Some(StablePosition::capture(&position, &view));
+            }
+        } else if let Some(binding) = inserted.get_mut(&input_offset) {
+            // A leading break must see the original range/gap/unit selection.
+            // In particular, an empty text replacement would delete a list
+            // range before Enter can decide whether to split or leave its item.
+            let view = tr.view();
+            if let Some(selection) = tr.selection().and_then(|s| s.resolve(&view))
+                && view
+                    .node(selection.from().node())
+                    .is_some_and(|n| n.spec().is_textblock())
+            {
+                let mut position: Position = selection.from().into();
+                position.affinity = Affinity::Upstream;
+                *binding = Some(StablePosition::capture(&position, &view));
+            }
+        }
+        if line_end == remaining.len() {
+            break;
+        }
+        let crlf = remaining[line_end..].starts_with("\r\n");
+        // Match Enter: an inapplicable break (e.g. in a fold title) is a
+        // no-op, not a reason to discard the rest of a committed text input.
+        apply_paragraph_break(tr)?;
+        let Some(selection) = tr.selection() else {
+            return Err(CommandError::InvalidArgument(
+                "IME text replacement could not be applied".into(),
+            ));
+        };
+        let boundary = StablePosition::capture(&selection.head, &tr.view());
+        // At a gap or unit there was no preceding text position: Enter creates
+        // one paragraph, and both sides of the input break name its start.
+        if let Some(binding) = inserted.get_mut(&input_offset)
+            && binding.is_none()
+        {
+            *binding = Some(boundary.clone());
+        }
+        input_offset += line_len + 1;
+        if let Some(binding) = inserted.get_mut(&input_offset) {
+            *binding = Some(boundary.clone());
+        }
+        if crlf {
+            input_offset += 1;
+            if let Some(binding) = inserted.get_mut(&input_offset) {
+                *binding = Some(boundary);
+            }
+        }
+        remaining = &remaining[line_end + if crlf { 2 } else { 1 }..];
+    }
+    Ok(())
+}
 
 fn selection_from_flat_range(
     doc: &DocView,
@@ -121,6 +223,7 @@ struct FlatText {
 }
 
 impl FlatText {
+    #[cfg(test)]
     fn whole(chars: Vec<char>) -> Self {
         let total = chars.len();
         Self {
@@ -225,33 +328,6 @@ struct FlatImeTextChange {
     replace_start: usize,
     replace_end: usize,
     insert: Vec<char>,
-}
-
-fn remap_op(op: &FlatImeOp, before: &FlatImeState, after: &FlatImeState) -> FlatImeOp {
-    match op {
-        FlatImeOp::SetSelection { start, end } => remap_range(before, after, *start, *end)
-            .map_or_else(
-                || op.clone(),
-                |(start, end)| FlatImeOp::SetSelection { start, end },
-            ),
-        FlatImeOp::SetComposition { start, end } => remap_range(before, after, *start, *end)
-            .map_or_else(
-                || op.clone(),
-                |(start, end)| FlatImeOp::SetComposition { start, end },
-            ),
-        _ => op.clone(),
-    }
-}
-
-fn remap_range(
-    before: &FlatImeState,
-    after: &FlatImeState,
-    start: usize,
-    end: usize,
-) -> Option<(usize, usize)> {
-    let before_cursor = (before.sel_start, before.sel_end);
-    let after_cursor = (after.sel_start, after.sel_end);
-    ((start, end) == before_cursor).then_some(after_cursor)
 }
 
 impl FlatImeTextChange {
@@ -443,30 +519,11 @@ impl FlatImeState {
         })
     }
 
-    fn from_editor_whole(editor: &Editor) -> Option<Self> {
-        let state = editor.state();
-        let doc = state.view();
-        let flat_size = flat_size(&doc);
-        let selection = state.selection?;
-        let anchor = selection.anchor.resolve(&doc)?.to_flat();
-        let head = selection.head.resolve(&doc)?.to_flat();
-        let comp = state
-            .composition
-            .filter(|c| composition_range_valid(&doc, c.start, c.end))
-            .map(|c| (c.start, c.end));
-        Some(FlatImeState {
-            text: FlatText::whole(flat_chars(&doc, 0..flat_size)),
-            sel_start: anchor.min(head),
-            sel_end: anchor.max(head),
-            comp,
-        })
-    }
-
     fn apply(&mut self, op: &FlatImeOp) -> Option<FlatImeTextChange> {
         match op {
             FlatImeOp::SetSelection { start, end } => {
-                self.sel_start = (*start).min(self.text.len());
-                self.sel_end = (*end).min(self.text.len());
+                self.sel_start = (*start.min(end)).min(self.text.len());
+                self.sel_end = (*start.max(end)).min(self.text.len());
                 None
             }
             FlatImeOp::ReplaceSelection { text } => {
@@ -742,8 +799,6 @@ struct FlatDelta {
     replace_end: usize,
     end_tokens: usize,
     ins_text: String,
-    // Result-buffer text start for remapping composition after token-only replacement.
-    composition_text_start: Option<usize>,
 }
 
 fn analyze_delta(
@@ -789,11 +844,6 @@ fn analyze_delta(
         replace_end,
         end_tokens: forward_count,
         ins_text,
-        composition_text_start: chars
-            .slice(replace_start..replace_end)
-            .iter()
-            .any(|c| is_token(*c))
-            .then_some(replace_start),
     }
 }
 
@@ -855,13 +905,25 @@ fn flat_ime_ops_have_direct_backspace_shape(ops: &[FlatImeOp]) -> bool {
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
-    for segment in ops.split_inclusive(|op| matches!(op, FlatImeOp::CommitAsIs)) {
-        handle_flat_ime_segment(editor, segment)?;
+    let mut ops = ops;
+    let mut remaining = ops.as_mut_slice();
+    while !remaining.is_empty() {
+        let count = remaining
+            .iter()
+            .position(|op| matches!(op, FlatImeOp::CommitAsIs))
+            .map_or(remaining.len(), |index| index + 1);
+        let (segment, tail) = remaining.split_at_mut(count);
+        handle_flat_ime_segment(editor, segment, tail)?;
+        remaining = tail;
     }
     Ok(())
 }
 
-fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(), EditorError> {
+fn handle_flat_ime_segment(
+    editor: &mut Editor,
+    ops: &[FlatImeOp],
+    tail: &mut [FlatImeOp],
+) -> Result<(), EditorError> {
     let mut delete_paint = editor.ime_delete_paint.take();
     let plain_backspace = flat_ime_ops_form_plain_backspace(editor, ops);
     let standalone_backspace = plain_backspace && flat_ime_ops_have_direct_backspace_shape(ops);
@@ -881,8 +943,10 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
     }
 
     let mut committed_composition = false;
+    let mut tail_coordinates = None;
     let committed_insert = (|| -> Result<bool, EditorError> {
-        let initial = match FlatImeState::from_editor(editor, ops) {
+        let reach: Vec<_> = ops.iter().chain(tail.iter()).cloned().collect();
+        let initial = match FlatImeState::from_editor(editor, &reach) {
             Some(s) => s,
             None => return Ok(false),
         };
@@ -890,6 +954,22 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
         let reduced = initial.clone().reduce_flat_ime_ops(ops);
 
         if reduced.text_change.is_none() {
+            return Ok(false);
+        }
+        // Composition is confined to one text block. A committed multiline
+        // replacement is supported, but a preedit spanning paragraph breaks
+        // cannot be represented by the document composition contract.
+        if reduced.state.comp.is_some_and(|(start, end)| {
+            start >= reduced.state.text.base
+                && start <= end
+                && end <= reduced.state.text.base + reduced.state.text.chars.len()
+                && reduced
+                    .state
+                    .text
+                    .slice(start..end)
+                    .iter()
+                    .any(|c| matches!(c, '\n' | '\r'))
+        }) {
             return Ok(false);
         }
 
@@ -901,28 +981,9 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
             .and_then(|s| s.resolve(&gap_view))
             .and_then(|rs| as_gap_cursor(&rs))
             .is_some();
-        let (initial, reduced) = if initial.text != reduced.state.text && started_at_gap {
+        if initial.text != reduced.state.text && started_at_gap {
             delete_paint = None;
-            let before_materialize = initial.clone();
-            editor.transact(|tr| {
-                tr.keep_pending_modifiers();
-                tr.set_composition(None)?;
-                commands::materialize_gap_paragraph(tr)?;
-                Ok(())
-            })?;
-            let initial = match FlatImeState::from_editor_whole(editor) {
-                Some(s) => s,
-                None => return Ok(false),
-            };
-            let replay_ops: Vec<_> = ops
-                .iter()
-                .map(|op| remap_op(op, &before_materialize, &initial))
-                .collect();
-            let reduced = initial.clone().reduce_flat_ime_ops(&replay_ops);
-            (initial, reduced)
-        } else {
-            (initial, reduced)
-        };
+        }
 
         let reduced_committed_composition = reduced.committed_composition;
         let result = reduced.state;
@@ -979,13 +1040,8 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
             &text_change.insert,
             initial.sel_start,
         );
-        let should_insert_after_unit_selection =
-            !delta.ins_text.is_empty()
-                && text_change.replace_start == initial.sel_start
-                && text_change.replace_end == initial.sel_end
-                && editor.state().selection.as_ref().is_some_and(|selection| {
-                    is_unit_node_selection(selection, &editor.state().view())
-                });
+        let replaces_selection = text_change.replace_start == initial.sel_start
+            && text_change.replace_end == initial.sel_end;
         let has_text_delta = !del.is_empty() || !text_change.insert.is_empty();
         let has_structural_seams = delta.start_tokens > 0 || delta.end_tokens > 0;
 
@@ -1016,111 +1072,137 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
             None
         };
 
-        if has_text_delta || result.comp.is_some() || editor.state().composition.is_some() {
+        let selection_changed =
+            (initial.sel_start, initial.sel_end) != (result.sel_start, result.sel_end);
+        if has_text_delta
+            || selection_changed
+            || result.comp.is_some()
+            || editor.state().composition.is_some()
+        {
             editor.transact(|tr| {
-                let mut composition_text_start = delta.composition_text_start;
+                // Ordinary typing needs only the caret/composition endpoints,
+                // not one document anchor for every character of a large commit.
+                let mut inserted = BTreeMap::new();
+                let mut capture = |offset| {
+                    let position = ImeTextPosition::capture(&tr.view(), &text_change, offset);
+                    if let Some(ImeTextPosition::Inserted(index)) = &position {
+                        inserted.entry(*index).or_insert(None);
+                    }
+                    position
+                };
+                let selection_start = capture(result.sel_start);
+                let selection_end = capture(result.sel_end);
+                let composition = result
+                    .comp
+                    .map(|(start, end)| (capture(start), capture(end)));
+                let tail_positions = (!tail.is_empty()).then(|| {
+                    (result.text.base..=result.text.base + result.text.chars.len())
+                        .map(&mut capture)
+                        .collect::<Vec<_>>()
+                });
 
                 if has_text_delta {
-                    if should_insert_after_unit_selection {
-                        commands::chain!(
-                            tr,
-                            commands::insert_paragraph_after_unit_selection(),
-                            commands::insert_text(&delta.ins_text),
-                        )?;
-                        composition_text_start = Some(text_change.replace_start);
-                    } else if has_structural_seams {
-                        let full_replace = text_change.replace_start == initial.sel_start
-                            && text_change.replace_end == initial.sel_end;
-                        if full_replace {
+                    if has_structural_seams && !replaces_selection {
+                        let deletes_body = delta.replace_start != delta.replace_end;
+                        let paint = if !delta.ins_text.is_empty() {
                             let sel = selection_from_flat_range(
                                 &tr.view(),
-                                text_change.replace_start,
-                                text_change.replace_end,
-                            )?;
-                            commands::replace_range_with_text(
-                                tr,
-                                sel,
-                                &delta.ins_text,
-                                sidecar_before.clone(),
-                            )?;
-                        } else {
-                            let deletes_body = delta.replace_start != delta.replace_end;
-                            let paint = if !delta.ins_text.is_empty() {
-                                let sel = selection_from_flat_range(
-                                    &tr.view(),
-                                    delta.replace_start,
-                                    delta.replace_end,
+                                delta.replace_start,
+                                delta.replace_end,
+                            )
+                            .ok();
+                            sel.and_then(|sel| {
+                                editor_state::replacement_paint(
+                                    &tr.state().projected,
+                                    sel.anchor,
+                                    sel.head,
                                 )
-                                .ok();
-                                sel.and_then(|sel| {
-                                    editor_state::replacement_paint(
-                                        &tr.state().projected,
-                                        sel.anchor,
-                                        sel.head,
-                                    )
-                                })
+                            })
+                        } else {
+                            None
+                        };
+
+                        if deletes_body {
+                            let sel = selection_from_flat_range(
+                                &tr.view(),
+                                delta.replace_start,
+                                delta.replace_end,
+                            )?;
+                            commands::replace_range_with_text(tr, sel, "", None)?;
+                        }
+
+                        if delta.end_tokens > 0 {
+                            let previous_selection = tr.selection();
+                            if !deletes_body {
+                                set_selection_at_flat(tr, delta.replace_end)?;
+                            }
+                            for _ in 0..delta.end_tokens {
+                                if !structural_forward(tr)? {
+                                    tr.set_selection(previous_selection)?;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if delta.start_tokens > 0 {
+                            let previous_selection = tr.selection();
+                            let selection_ready = if deletes_body {
+                                true
                             } else {
-                                None
+                                set_selection_at_flat(tr, delta.replace_start)?
                             };
 
-                            if deletes_body {
-                                let sel = selection_from_flat_range(
-                                    &tr.view(),
-                                    delta.replace_start,
-                                    delta.replace_end,
-                                )?;
-                                commands::replace_range_with_text(tr, sel, "", None)?;
-                            }
-
-                            if delta.end_tokens > 0 {
-                                let previous_selection = tr.selection();
-                                if !deletes_body {
-                                    set_selection_at_flat(tr, delta.replace_end)?;
-                                }
-                                for _ in 0..delta.end_tokens {
-                                    if !structural_forward(tr)? {
+                            if selection_ready {
+                                for _ in 0..delta.start_tokens {
+                                    if !structural_backward(tr)? {
                                         tr.set_selection(previous_selection)?;
                                         break;
                                     }
                                 }
                             }
-
-                            if delta.start_tokens > 0 {
-                                let previous_selection = tr.selection();
-                                let selection_ready = if deletes_body {
-                                    true
-                                } else {
-                                    set_selection_at_flat(tr, delta.replace_start)?
-                                };
-
-                                if selection_ready {
-                                    for _ in 0..delta.start_tokens {
-                                        if !structural_backward(tr)? {
-                                            tr.set_selection(previous_selection)?;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if !delta.ins_text.is_empty()
-                                && let Some(head) = tr.selection().map(|s| s.head)
-                            {
-                                commands::replace_range_with_text(
-                                    tr,
-                                    Selection::collapsed(head),
-                                    &delta.ins_text,
-                                    sidecar_before.clone().or(paint),
-                                )?;
-                            }
                         }
-                        composition_text_start = Some(text_change.replace_start);
+
+                        if !delta.ins_text.is_empty()
+                            && let Some(head) = tr.selection().map(|s| s.head)
+                        {
+                            replace_ime_text(
+                                tr,
+                                Selection::collapsed(head),
+                                &delta.ins_text,
+                                sidecar_before.clone().or(paint),
+                                &mut inserted,
+                            )?;
+                        }
                     } else {
-                        let sel = selection_from_flat_range(
-                            &tr.view(),
-                            delta.replace_start,
-                            delta.replace_end,
-                        )?;
+                        // Prepare a text insertion only for the actual editor
+                        // selection, not for a range reconstructed during IME
+                        // structural replay. A leading break prepares its own
+                        // target through the shared Enter workflow instead.
+                        if replaces_selection
+                            && !delta.ins_text.is_empty()
+                            && !delta.ins_text.starts_with(['\r', '\n'])
+                        {
+                            commands::first!(
+                                tr,
+                                commands::materialize_gap_paragraph(),
+                                commands::insert_paragraph_after_unit_selection(),
+                                |_tr| Ok(true),
+                            )?;
+                        }
+                        // Flat offsets alone lose the affinity that identifies
+                        // a gap or unit selection. Preserve the actual target
+                        // when this batch replaces the current selection.
+                        let sel = if replaces_selection {
+                            tr.selection().ok_or(CommandError::InvalidArgument(
+                                "IME text replacement has no selection".into(),
+                            ))?
+                        } else {
+                            selection_from_flat_range(
+                                &tr.view(),
+                                delta.replace_start,
+                                delta.replace_end,
+                            )?
+                        };
                         let paint = sidecar_before.clone().or_else(|| {
                             delete_paint
                                 .as_ref()
@@ -1130,53 +1212,43 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
                                 })
                                 .map(|(_, paint)| paint.clone())
                         });
-                        commands::replace_range_with_text(tr, sel, &delta.ins_text, paint)?;
+                        replace_ime_text(tr, sel, &delta.ins_text, paint, &mut inserted)?;
                     }
                 }
 
-                // Without structural replay the reduced coordinates are only
-                // meaningful when the document agrees with the reduced buffer;
-                // a dropped edit (e.g. a rejected replacement) leaves them
-                // pointing at unrelated text.
-                let reduced_applied = flat_size(&tr.view()) == result.text.len();
+                if has_text_delta
+                    && tr.doc_changed()
+                    && text_change.insert.is_empty()
+                    && let Some(binding) = inserted.get_mut(&0)
+                    && binding.is_none()
+                    && let Some(selection) = tr.selection()
+                {
+                    *binding = Some(StablePosition::capture(&selection.head, &tr.view()));
+                }
 
-                // None = leave the current composition untouched.
-                let composition_update = match (result.comp, composition_text_start) {
-                    // A structural replay rebuilds flat coordinates, so a composing
-                    // region the IME placed outside the replayed insert has no
-                    // mapping; drop it rather than fail the whole edit.
-                    (Some((start, end)), Some(text_start)) => Some((|| {
-                        // Text before the replayed range keeps its flat
-                        // coordinates, so a composing region there needs no
-                        // remap.
-                        if start <= end && end < text_start {
-                            return Some(Composition { start, end });
-                        }
-                        let inserted_len = delta.ins_text.char_count();
-                        let relative_start = start.checked_sub(text_start)?;
-                        let relative_end = end.checked_sub(text_start)?;
-                        if relative_start > relative_end || relative_end > inserted_len {
-                            return None;
-                        }
+                // Even a document no-op (such as Enter in a fold title) can
+                // change the native buffer's width. Keep its bound positions
+                // for the rest of the batch before skipping state publication.
+                if let Some(positions) = tail_positions {
+                    let bindings = positions
+                        .into_iter()
+                        .map(|position| position.and_then(|position| position.bind(&inserted)))
+                        .collect();
+                    tail_coordinates = Some((result.clone(), bindings));
+                }
+                // Rejected replacements must not publish positions from the
+                // input buffer as though their text had reached the document.
+                if has_text_delta && !tr.doc_changed() {
+                    return Ok(());
+                }
 
-                        let doc = tr.view();
-                        let inserted_start = tr
-                            .selection()
-                            .and_then(|selection| selection.head.resolve(&doc))
-                            .and_then(|head| head.to_flat().checked_sub(inserted_len))?;
-
+                {
+                    let composition = composition.and_then(|(start, end)| {
                         Some(Composition {
-                            start: inserted_start + relative_start,
-                            end: inserted_start + relative_end,
+                            start: start?.resolve(tr, &inserted)?,
+                            end: end?.resolve(tr, &inserted)?,
                         })
-                    })()),
-                    (Some((start, end)), None) => {
-                        reduced_applied.then_some(Some(Composition { start, end }))
-                    }
-                    (None, _) => Some(None),
-                };
-
-                if let Some(composition) = composition_update {
+                    });
                     let composition = composition.filter(|composition| {
                         composition_range_valid(&tr.view(), composition.start, composition.end)
                     });
@@ -1197,20 +1269,22 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
                     }
                 }
 
-                // Without structural replay the reduced coordinates match the
-                // document 1:1, so the reduced selection is authoritative
-                // (e.g. a delete before the composing text keeps the caret at
-                // the composition, not at the deletion site).
-                if has_text_delta && composition_text_start.is_none() && reduced_applied {
+                if has_text_delta || selection_changed {
+                    let target = selection_start.and_then(|start| {
+                        Some((
+                            start.resolve(tr, &inserted)?,
+                            selection_end?.resolve(tr, &inserted)?,
+                        ))
+                    });
                     let doc = tr.view();
                     let current = tr.selection().and_then(|s| {
                         let anchor = s.anchor.resolve(&doc)?.to_flat();
                         let head = s.head.resolve(&doc)?.to_flat();
                         Some((anchor.min(head), anchor.max(head)))
                     });
-                    if current != Some((result.sel_start, result.sel_end))
-                        && let Ok(sel) =
-                            selection_from_flat_range(&doc, result.sel_start, result.sel_end)
+                    if let Some((start, end)) = target
+                        && current != target
+                        && let Ok(sel) = selection_from_flat_range(&doc, start, end)
                     {
                         commands::set_selection(tr, sel)?;
                     }
@@ -1235,6 +1309,10 @@ fn handle_flat_ime_segment(editor: &mut Editor, ops: &[FlatImeOp]) -> Result<(),
         })?;
     }
 
+    if let Some((input, bindings)) = tail_coordinates {
+        remap_ime_tail(editor, input, bindings, tail)?;
+    }
+
     Ok(())
 }
 
@@ -1252,6 +1330,27 @@ mod tests {
             selection: (r, 0, <)
         };
         state
+    }
+
+    #[test]
+    fn multiline_input_positions_follow_gap_paragraph_materialization() {
+        let mut editor = Editor::new_test(leading_gap_state());
+        let ime = editor.ime(100, 100).unwrap().unwrap();
+        let end = ime.selection.start + 3;
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection {
+                    text: "a\nb".into(),
+                },
+                FlatImeOp::SetSelection { start: end, end },
+                FlatImeOp::ReplaceSelection { text: "X".into() },
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { paragraph { text("a") } p: paragraph { text("bX") } image paragraph { text("b") } } }
+            selection: (p, 2)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 
     fn between_monolithic_gap_state() -> editor_state::State {
@@ -1290,6 +1389,23 @@ mod tests {
             state,
             Message::TextInput {
                 ops: vec![FlatImeOp::ClearComposition],
+            },
+        );
+    }
+
+    #[test]
+    fn composition_outside_the_input_buffer_is_discarded() {
+        let (state, ..) = state! {
+            doc { root { p: paragraph { text("abc") } } }
+            selection: (p, 1)
+        };
+        assert_apply_preserves_state(
+            state,
+            Message::TextInput {
+                ops: vec![FlatImeOp::SetComposition {
+                    start: 1,
+                    end: usize::MAX,
+                }],
             },
         );
     }
@@ -1698,8 +1814,8 @@ mod tests {
 
     #[test]
     fn rejected_newline_compose_leaves_state_untouched() {
-        // replace_range_with_text rejects newline-bearing replacements; the
-        // dropped edit must not move the caret to reduced coordinates, mark
+        // A preedit cannot span paragraphs. The dropped edit must not move
+        // the caret to reduced coordinates, mark
         // untouched document text as composing, or consume pending modifiers.
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }
@@ -5123,7 +5239,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_ime_set_composition_beyond_insert_in_token_edit_is_dropped() {
+    fn flat_ime_set_composition_after_token_edit_follows_existing_text() {
         let (state, ..) = state! {
             doc { root {
                 paragraph { text("가나") }
@@ -5143,14 +5259,17 @@ mod tests {
         }]);
         editor
             .tick()
-            .expect("unmappable composing region must not fail");
+            .expect("composing region after the edit must follow its text");
 
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("가나다라") } } }
             selection: (p1, 2, <)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(editor.state().composition, None);
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 4, end: 5 })
+        );
     }
 
     fn ios_backspace_ops(start: usize, end: usize) -> Vec<FlatImeOp> {

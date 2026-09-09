@@ -82,7 +82,7 @@ describe('ImeInputAdapter', () => {
     ]);
   });
 
-  it('splits a multi-line text insertion into paragraph splits via enter keys', () => {
+  it('keeps a multi-line text insertion in one input-coordinate batch', () => {
     const harness = createImeHarness(context(''));
 
     harness.beforeTextInput('a\nb');
@@ -93,18 +93,13 @@ describe('ImeInputAdapter', () => {
         type: 'text_input',
         ops: [
           { type: 'set_selection', start: 20, end: 20 },
-          { type: 'replace_selection', text: 'a' },
+          { type: 'replace_selection', text: 'a\nb' },
         ],
-      },
-      { type: 'key', event: { key: 'enter' } },
-      {
-        type: 'text_input',
-        ops: [{ type: 'replace_selection', text: 'b' }],
       },
     ]);
   });
 
-  it('normalizes carriage returns and keeps empty lines in multi-line insertions', () => {
+  it('uses the textarea-normalized newlines as its coordinate buffer', () => {
     const harness = createImeHarness(context(''));
 
     harness.beforeTextInput('a\r\n\rb');
@@ -115,14 +110,8 @@ describe('ImeInputAdapter', () => {
         type: 'text_input',
         ops: [
           { type: 'set_selection', start: 20, end: 20 },
-          { type: 'replace_selection', text: 'a' },
+          { type: 'replace_selection', text: 'a\n\nb' },
         ],
-      },
-      { type: 'key', event: { key: 'enter' } },
-      { type: 'key', event: { key: 'enter' } },
-      {
-        type: 'text_input',
-        ops: [{ type: 'replace_selection', text: 'b' }],
       },
     ]);
   });

@@ -10,8 +10,6 @@ import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
-import co.typie.editor.ffi.Key
-import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
@@ -20,6 +18,29 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class EditorImeCommandNormalizerTest {
+  @Test
+  fun `commit cursor position is retained before a later edit`() {
+    val ime =
+      Ime(text = "\u2028\u2029", windowStart = 0, selection = ImeRange(1, 1), composing = null)
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(CommitTextCommand("a\nb", 0), CommitTextCommand("X", 1)),
+        ime,
+      )
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(
+            FlatImeOp.ReplaceSelection("a\nb"),
+            FlatImeOp.SetSelection(1, 1),
+            FlatImeOp.ReplaceSelection("X"),
+          )
+        )
+      ),
+      messages,
+    )
+  }
+
   @Test
   fun `selection after marked text uses the new text length`() {
     val ime = Ime(text = "", windowStart = 10, selection = ImeRange(10, 10), composing = null)
@@ -127,40 +148,31 @@ class EditorImeCommandNormalizerTest {
   }
 
   @Test
-  fun `newline commit normalizes to enter key`() {
+  fun `newline commit remains inside the input batch`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("\n", 1)), ime = null)
 
-    assertEquals(listOf(Message.Key(KeyEvent(Key.Enter))), messages)
+    assertEquals(listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("\n")))), messages)
   }
 
   @Test
-  fun `multi-line commit splits into paragraphs via enter keys`() {
+  fun `multi-line commit preserves the input text for the engine`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("foo\nbar", 1)), ime = null)
 
     assertEquals(
-      listOf(
-        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("foo"))),
-        Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("bar"))),
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("foo\nbar")))),
       messages,
     )
   }
 
   @Test
-  fun `multi-line commit normalizes carriage returns and keeps empty lines`() {
+  fun `multi-line commit keeps carriage returns in the coordinate buffer`() {
     val messages =
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("a\r\n\rb", 1)), ime = null)
 
     assertEquals(
-      listOf(
-        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a"))),
-        Message.Key(KeyEvent(Key.Enter)),
-        Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("b"))),
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.ReplaceSelection("a\r\n\rb")))),
       messages,
     )
   }
@@ -173,11 +185,7 @@ class EditorImeCommandNormalizerTest {
       EditorImeCommandNormalizer.normalize(listOf(CommitTextCommand("\nfoo", 1)), ime = ime)
 
     assertEquals(
-      listOf(
-        Message.TextInput(listOf(FlatImeOp.Compose(""), FlatImeOp.CommitAsIs)),
-        Message.Key(KeyEvent(Key.Enter)),
-        Message.TextInput(listOf(FlatImeOp.ReplaceSelection("foo"))),
-      ),
+      listOf(Message.TextInput(listOf(FlatImeOp.Compose("\nfoo"), FlatImeOp.CommitAsIs))),
       messages,
     )
   }

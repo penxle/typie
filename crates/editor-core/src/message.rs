@@ -385,6 +385,12 @@ pub enum SystemEvent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Edits to the IME's linear input buffer, initially addressed in document-flat
+/// Unicode scalar offsets. Each operation addresses the buffer after preceding
+/// operations in the same message, including across `CommitAsIs` barriers.
+/// Inserted CR/LF characters retain their input-buffer width; the engine binds
+/// their positions to the actual paragraph edits. Hosts must not pre-expand
+/// them into structural document offsets or separate Enter messages.
 pub enum FlatImeOp {
     SetSelection { start: usize, end: usize },
     ReplaceSelection { text: String },

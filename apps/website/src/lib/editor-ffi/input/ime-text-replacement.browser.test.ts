@@ -30,10 +30,10 @@ describe('web IME text replacement', () => {
   let editor: Editor | undefined;
   let mounted: Record<string, unknown> | undefined;
 
-  const mountEditor = async (): Promise<{ editor: Editor; input: HTMLTextAreaElement }> => {
+  const mountEditor = async (initialDoc = doc(''), position = 1): Promise<{ editor: Editor; input: HTMLTextAreaElement }> => {
     const host = await initWasm();
     host.set_text_replacement_rules([{ id: 'cry-to-laugh', matchPattern: 'ㅠㅠ', substitute: '하하하', regex: false }]);
-    const mountedEditor = await Editor.createFromDoc(doc(''), { width: 320, height: 180, scale_factor: 1 });
+    const mountedEditor = await Editor.createFromDoc(initialDoc, { width: 320, height: 180, scale_factor: 1 });
     editor = mountedEditor;
 
     const target = document.createElement('div');
@@ -44,7 +44,7 @@ describe('web IME text replacement', () => {
     });
     await tick();
     mountedEditor.updateNow(() => {
-      mountedEditor.enqueue({ type: 'selection', op: { type: 'set_flat', start: 1, end: 1 } });
+      mountedEditor.enqueue({ type: 'selection', op: { type: 'set_flat', start: position, end: position } });
       mountedEditor.enqueue({ type: 'system', event: { type: 'set_focused', focused: true } });
     });
     await tick();
@@ -56,6 +56,16 @@ describe('web IME text replacement', () => {
   };
 
   const imeEvents = (input: HTMLTextAreaElement) => ({
+    insertText: (text: string) => {
+      const accepted = input.dispatchEvent(
+        new InputEvent('beforeinput', { inputType: 'insertText', data: text, bubbles: true, cancelable: true }),
+      );
+      expect(accepted).toBe(true);
+      // Synthetic beforeinput does not perform the native textarea mutation.
+      // The production input handler and WASM engine remain responsible for the edit.
+      input.setRangeText(text, input.selectionStart, input.selectionEnd, 'end');
+      input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
+    },
     composition: (type: 'compositionstart' | 'compositionupdate' | 'compositionend', data: string) =>
       input.dispatchEvent(new CompositionEvent(type, { data, bubbles: true })),
     beforeCompositionInput: (data: string) =>
@@ -95,6 +105,128 @@ describe('web IME text replacement', () => {
     const host = await initWasm();
     host.set_text_replacement_rules([]);
     document.body.replaceChildren();
+  });
+
+  it.each([
+    // Prose export separates paragraphs with a blank line; IME text preserves every block boundary.
+    { text: 'a\nb', prose: 'a\n\nb', buffer: '\u{2028}a\u{2029}\u{2028}b\u{2029}', caret: 5 },
+    { text: 'a\r\n\r😀b', prose: 'a\n\n😀b', buffer: '\u{2028}a\u{2029}\u{2028}\u{2029}\u{2028}😀b\u{2029}', caret: 8 },
+  ])('syncs paragraph coordinates after native insertion of $text', async ({ text, prose, buffer, caret }) => {
+    const { editor, input } = await mountEditor();
+    const events = imeEvents(input);
+
+    events.insertText(text);
+    await tick();
+
+    expect(editor.proseText()).toBe(prose);
+    expect(editor.ime(100, 100)).toMatchObject({ text: buffer, selection: { start: caret, end: caret } });
+    expect(input.value).toBe(buffer);
+    expect(input.selectionStart).toBe(buffer.length - 1);
+    expect(input.selectionEnd).toBe(buffer.length - 1);
+
+    events.insertText('X');
+    await tick();
+
+    expect(editor.proseText()).toBe(`${prose}X`);
+    expect(editor.ime(100, 100)?.selection).toEqual({ start: caret + 1, end: caret + 1 });
+    expect(input.value).toBe(`${buffer.slice(0, -1)}X\u{2029}`);
+  });
+
+  it('composes and converts Japanese in the paragraph created by a native multiline insertion', async () => {
+    const { editor, input } = await mountEditor();
+    const events = imeEvents(input);
+
+    events.insertText('a\nb');
+    await tick();
+    events.composition('compositionstart', '');
+    events.composition('compositionupdate', 'に');
+    events.beforeCompositionInput('に');
+    events.applyNativeInput('\u{2028}a\u{2029}\u{2028}bに\u{2029}', 6, 'insertCompositionText', 'に');
+    await tick();
+
+    expect(editor.proseText()).toBe('a\n\nbに');
+    expect(editor.ime(100, 100)?.composing).toEqual({ start: 5, end: 6 });
+
+    events.composition('compositionupdate', '日本語');
+    events.beforeCompositionInput('日本語');
+    events.applyNativeInput('\u{2028}a\u{2029}\u{2028}b日本語\u{2029}', 8, 'insertCompositionText', '日本語');
+    events.composition('compositionend', '日本語');
+    await tick();
+    events.insertText('X');
+    await tick();
+
+    expect(editor.proseText()).toBe('a\n\nb日本語X');
+    expect(editor.ime(100, 100)).toMatchObject({ selection: { start: 9, end: 9 }, composing: undefined });
+    expect(input.value).toBe('\u{2028}a\u{2029}\u{2028}b日本語X\u{2029}');
+    expect(input.selectionStart).toBe(9);
+  });
+
+  it('replaces a selection with multiple paragraphs and keeps the suffix after the caret', async () => {
+    const { editor, input } = await mountEditor(doc('leftOLDright'), 5);
+    const events = imeEvents(input);
+
+    input.setSelectionRange(5, 8);
+    events.insertText('a\nb');
+    await tick();
+    expect(editor.proseText()).toBe('lefta\n\nbright');
+    expect(input.selectionStart).toBe(9);
+    expect(input.selectionEnd).toBe(9);
+
+    events.insertText('X');
+    await tick();
+    expect(editor.proseText()).toBe('lefta\n\nbXright');
+    expect(editor.ime(100, 100)?.selection).toEqual({ start: 10, end: 10 });
+  });
+
+  it('materializes paragraphs before an image and preserves the following text during native input', async () => {
+    const initialDoc = doc('tail');
+    initialDoc.root.children.unshift(entry({ type: 'image', id: 'asset', proportion: 100 }));
+    const { editor, input } = await mountEditor(initialDoc, 0);
+    const events = imeEvents(input);
+    editor.updateNow(() => {
+      editor.enqueue({ type: 'navigation', op: { type: 'move', movement: { type: 'document', direction: 'backward' }, extend: false } });
+    });
+    await tick();
+    expect(editor.appliedSnapshot.selection?.head).toMatchObject({ offset: 0, affinity: 'upstream' });
+
+    events.insertText('a\nb');
+    await tick();
+    events.insertText('X');
+    await tick();
+
+    expect(editor.proseText()).toBe('a\n\nbX\n\ntail');
+    expect(editor.appliedSnapshot.externalElements.map(({ data }) => data)).toEqual([{ type: 'image', id: 'asset', proportion: 100 }]);
+    expect(editor.ime(100, 100)?.selection).toEqual({ start: 6, end: 6 });
+    expect(input.selectionStart).toBe(6);
+  });
+
+  it('resolves input-buffer selection and composition across a commit barrier in the real WASM engine', async () => {
+    const { editor, input } = await mountEditor();
+
+    // Browser input events do not expose Compose's multi-command batch. Exercise
+    // that shared contract separately, including the shipped WASM FFI boundary.
+    editor.updateNow(() => {
+      editor.enqueue({
+        type: 'text_input',
+        ops: [
+          { type: 'replace_selection', text: 'a\n😀b' },
+          { type: 'commit_as_is' },
+          { type: 'set_composition', start: 4, end: 5 },
+          { type: 'compose', text: 'に' },
+          { type: 'set_selection', start: 4, end: 4 },
+        ],
+      });
+    });
+    await tick();
+
+    expect(editor.ime(100, 100)).toMatchObject({
+      text: '\u{2028}a\u{2029}\u{2028}😀に\u{2029}',
+      selection: { start: 5, end: 5 },
+      composing: { start: 5, end: 6 },
+    });
+    expect(input.value).toBe('\u{2028}a\u{2029}\u{2028}😀に\u{2029}');
+    expect(input.selectionStart).toBe(6);
+    expect(input.selectionEnd).toBe(6);
   });
 
   it('replaces a Korean match when macOS appends Space to the final composition update', async () => {
