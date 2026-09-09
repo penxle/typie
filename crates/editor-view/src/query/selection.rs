@@ -141,6 +141,7 @@ struct SelectionWalk<'a, 'doc> {
     to: &'a Position,
     from_owner: Option<&'a LayoutEntry>,
     to_owner: Option<&'a LayoutEntry>,
+    from_path: Option<&'a [usize]>,
     pages: &'a [LayoutPage],
     selection: &'a ResolvedSelection<'doc>,
     direct_touch_interaction: bool,
@@ -219,6 +220,9 @@ fn selection_rect_sets(
         to: &to,
         from_owner,
         to_owner,
+        from_path: from_owner
+            .map(LayoutEntry::path)
+            .or_else(|| layout_index.box_path(&from.node)),
         pages,
         selection,
         direct_touch_interaction,
@@ -833,7 +837,6 @@ fn visit_box(
     let mark_rects_before = rects.mark_rects.len();
     let text_rects_before = rects.text_rects.len();
     let mut has_content_child = false;
-    let mut content_idx = 0usize;
 
     if from_at_box_level && *phase == Phase::Before && from.offset == 0 {
         *phase = Phase::Inside;
@@ -842,7 +845,31 @@ fn visit_box(
         *phase = Phase::After;
     }
 
-    for child in &bx.children {
+    // Before the selection, follow its indexed path without visiting earlier
+    // siblings. Keep the ancestors in the walk for paragraph breaks and blocks
+    // whose selection geometry replaces their descendants.
+    let first_child = if *phase == Phase::Before {
+        walk.from_path
+            .and_then(|path| path.strip_prefix(layout_index.box_path(&bx.node)?))
+            .and_then(|path| path.first().copied())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    // Parent-level offsets count content children, not layout spacing nodes.
+    let mut content_idx = if from_at_box_level || to_at_box_level {
+        bx.children[..first_child]
+            .iter()
+            .filter(|child| !matches!(child.content, LayoutContent::Spacing(_)))
+            .count()
+    } else {
+        0
+    };
+
+    for child in &bx.children[first_child..] {
+        if *phase == Phase::After {
+            break;
+        }
         let is_spacing = matches!(child.content, LayoutContent::Spacing(_));
 
         visit_node(child, walk, phase, rects);
@@ -1260,6 +1287,53 @@ mod tests {
             "wrapped paragraph must yield ≥2 text rects (phase machine), got {:?}",
             rects
         );
+    }
+
+    #[test]
+    fn selection_in_later_paragraph_ends_at_parent_boundary() {
+        let root = Dot::ROOT;
+        let first = Dot::new(41, 1);
+        let second = Dot::new(41, 100);
+        let third = Dot::new(41, 200);
+        let mut items = Vec::new();
+        for (para, text) in [
+            (first, "abcdefghij"),
+            (second, "klmnopqrst"),
+            (third, "uvwxyz"),
+        ] {
+            items.push((
+                para,
+                SeqItem::Block {
+                    node_type: NodeType::Paragraph,
+                    parents: vec![root],
+                    attrs: vec![],
+                },
+            ));
+            for (offset, ch) in text.chars().enumerate() {
+                items.push((
+                    Dot::new(41, para.clock + offset as u64 + 1),
+                    SeqItem::Char(ch),
+                ));
+            }
+        }
+        let doc = logs(&items);
+        let (pd, index) = build_index(&doc, 40.0);
+        let view = DocView::new(&pd);
+        let from = Position::new(second, 8);
+        let to = Position::new(root, 2);
+        let selection = Selection::new(from, to).resolve(&view).unwrap();
+        let expected = Selection::new(from, Position::new(second, 10))
+            .resolve(&view)
+            .unwrap();
+
+        let first_line = index.entry_for_position(&Position::new(first, 0)).unwrap();
+        let selected_line = index.entry_for_position(&from).unwrap();
+        assert!(selected_line.rect.y > first_line.rect.bottom());
+        for direct_touch in [false, true] {
+            let actual = selection_rect_sets(&index, &selection, direct_touch);
+            assert_eq!(actual.line_box_rects.len(), 1);
+            assert_eq!(actual, selection_rect_sets(&index, &expected, direct_touch));
+        }
     }
 
     #[test]

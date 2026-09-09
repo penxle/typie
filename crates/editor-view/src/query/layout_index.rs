@@ -516,6 +516,10 @@ impl LayoutIndex {
 }
 
 impl LayoutEntry {
+    pub(crate) fn path(&self) -> &[usize] {
+        &self.path
+    }
+
     pub(crate) fn node<'a>(&self, layout_index: &'a LayoutIndex) -> Option<&'a LayoutNode> {
         node_at_path(&layout_index.tree.root, &self.path)
     }
