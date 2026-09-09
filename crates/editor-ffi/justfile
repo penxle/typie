@@ -94,6 +94,12 @@ ensure cmd *install:
 
 [private]
 build features target:
+    #!/usr/bin/env bash
+    set -e
+    # Match the app/Compose minimum; cc otherwise defaults to the installed SDK.
+    if [[ "{{target}}" == *-apple-ios* ]]; then
+        export IPHONEOS_DEPLOYMENT_TARGET=15.6
+    fi
     rustup target add {{target}}
     cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
         --profile {{profile}}-{{features}} --features {{features}} --target {{target}}
