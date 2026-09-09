@@ -78,7 +78,6 @@
   );
 
   const app = getAppContext();
-  const active = $derived(app.state.ancestors.includes(folder.data.entity.id));
   const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(folder.data.entity.id));
 
   let tooltipRequested = $state(false);
@@ -132,26 +131,22 @@
   style:opacity={isCut ? 0.5 : 1}
   class={cx(
     'group',
-    css(
-      {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        width: 'full',
-        paddingX: '8px',
-        paddingY: '6px',
-        borderRadius: '6px',
-        cursor: 'pointer',
-        touchAction: 'none',
-        transition: 'common',
-        _supportHover: { backgroundColor: 'surface.hover' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
-        '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
-      },
-      active && { backgroundColor: 'surface.active' },
-    ),
+    css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      width: 'full',
+      paddingX: '8px',
+      paddingY: '6px',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      touchAction: 'none',
+      transition: 'common',
+      _supportHover: { backgroundColor: 'surface.hover' },
+      '&:has([aria-pressed="true"])': { backgroundColor: 'surface.active', _supportHover: { backgroundColor: 'surface.active' } },
+      '&[data-context-menu-open="true"]': { backgroundColor: 'surface.active' },
+    }),
   )}
-  aria-current={active ? 'true' : undefined}
   data-icon={folder.data.entity.icon}
   data-icon-color={folder.data.entity.iconColor}
   data-id={folder.data.entity.id}
@@ -169,7 +164,7 @@
 >
   <EntityIcon entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
-  <EntityName name={folder.data.name} {active} />
+  <EntityName name={folder.data.name} />
 
   {#if folder.data.entity.goal}
     <EntityGoalIndicator
