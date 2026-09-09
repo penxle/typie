@@ -9,21 +9,15 @@ import UIKit
   private static var patchedClasses: Set<ObjectIdentifier> = []
   private static let documentNavigation = EditorDocumentNavigation()
 
-  public static func install() -> Int {
+  public static func install(on view: UIView) -> Int {
     installGeneration += 1
     let generation = installGeneration
-    installOnCurrentFirstResponder(generation: generation)
-
-    DispatchQueue.main.async {
-      installOnCurrentFirstResponder(generation: generation)
+    if let cls = object_getClass(view) {
+      patchIfNeeded(on: cls)
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-      installOnCurrentFirstResponder(generation: generation)
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
-      installOnCurrentFirstResponder(generation: generation)
-    }
-
+    activeResponder = view
+    // Compose normally connects before focus. Native text views can already be focused.
+    if view.isFirstResponder { view.reloadInputViews() }
     return generation
   }
 
@@ -37,25 +31,6 @@ import UIKit
 
   public static func takeDocumentNavigation(_ consume: (Bool, Bool) -> Void) {
     documentNavigation.takeMovement(consume)
-  }
-
-  private static func installOnCurrentFirstResponder(generation: Int) {
-    guard generation == installGeneration else {
-      return
-    }
-
-    guard
-      let responder = UIApplication.shared.activeWindow?.typieFirstResponder(),
-      let cls: AnyClass = object_getClass(responder)
-    else {
-      return
-    }
-
-    patchIfNeeded(on: cls)
-    if activeResponder !== responder {
-      activeResponder = responder
-      responder.reloadInputViews()
-    }
   }
 
   private static func patchIfNeeded(on cls: AnyClass) {
@@ -140,22 +115,5 @@ import UIKit
       class_replaceMethod(
         cls, selector, imp_implementationWithBlock(block), method_getTypeEncoding(method))
     }
-  }
-}
-
-extension UIView {
-  @MainActor
-  fileprivate func typieFirstResponder() -> UIResponder? {
-    if isFirstResponder {
-      return self
-    }
-
-    for subview in subviews {
-      if let responder = subview.typieFirstResponder() {
-        return responder
-      }
-    }
-
-    return nil
   }
 }

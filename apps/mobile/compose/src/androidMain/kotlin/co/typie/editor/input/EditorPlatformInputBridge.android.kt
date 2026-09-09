@@ -7,6 +7,7 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
@@ -28,8 +29,15 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     if (!active) inputView.clear()
   }
 
-  actual fun bindInputSession(session: PlatformTextInputSessionScope) {
+  actual fun bindInputSession(
+    session: PlatformTextInputSessionScope,
+    request: PlatformTextInputMethodRequest,
+    cursor: () -> CursorMetrics?,
+    viewportTransform: () -> EditorViewportTransform,
+    dispatch: (List<Message>) -> Unit,
+  ): PlatformTextInputMethodRequest {
     inputView = WeakReference(session.view)
+    return request
   }
 
   actual fun resetPlatformInputBeforeBindingDispatch() {
@@ -65,9 +73,6 @@ internal actual class EditorPlatformInputBridge actual constructor() {
   ) = Unit
 
   actual fun installSessionEffects(
-    cursor: () -> CursorMetrics?,
-    viewportTransform: () -> EditorViewportTransform,
-    dispatch: (List<Message>) -> Unit,
-    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
+    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean
   ): () -> Unit = {}
 }

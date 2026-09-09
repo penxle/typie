@@ -620,15 +620,10 @@ internal class EditorInputNode(
         editor.launchEffect(coroutineScope = coroutineScope) {
           val uninstallPlatformSessionEffects =
             platformInputBridge.installSessionEffects(
-              cursor = ::presentedCursor,
-              viewportTransform = {
-                uiState.resolveViewportTransform(editor.publishedState.pageSizes)
-              },
-              dispatch = { messages -> dispatch(messages) },
               dispatchBindingOnUnmatchedKeyUp = { key, modifiers ->
                 imeSessionGeneration == generationAtStart &&
                   dispatchBindingOnUnmatchedKeyUp(key, modifiers)
-              },
+              }
             )
           val inputSessionUiState = uiState
           val inputSessionOwner = Any()
@@ -638,7 +633,6 @@ internal class EditorInputNode(
             // the session must not start against a pre-activation snapshot.
             editor.refreshImeSnapshot()
             establishTextInputSession {
-              platformInputBridge.bindInputSession(this)
               val request =
                 createEditorInputRequest(
                   editor = editor,
@@ -715,7 +709,17 @@ internal class EditorInputNode(
                   .collect { notifyImeStateChanged(editor) }
               }
 
-              startInputMethod(request)
+              startInputMethod(
+                platformInputBridge.bindInputSession(
+                  session = this,
+                  request = request,
+                  cursor = ::presentedCursor,
+                  viewportTransform = {
+                    uiState.resolveViewportTransform(editor.publishedState.pageSizes)
+                  },
+                  dispatch = { messages -> dispatch(messages) },
+                )
+              )
             }
           } finally {
             try {

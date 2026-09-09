@@ -2,6 +2,7 @@ package co.typie.editor.input
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
@@ -36,7 +37,13 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     }
   }
 
-  actual fun bindInputSession(session: PlatformTextInputSessionScope) = Unit
+  actual fun bindInputSession(
+    session: PlatformTextInputSessionScope,
+    request: PlatformTextInputMethodRequest,
+    cursor: () -> CursorMetrics?,
+    viewportTransform: () -> EditorViewportTransform,
+    dispatch: (List<Message>) -> Unit,
+  ): PlatformTextInputMethodRequest = request
 
   actual fun resetPlatformInputBeforeBindingDispatch() = Unit
 
@@ -72,10 +79,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
   }
 
   actual fun installSessionEffects(
-    cursor: () -> CursorMetrics?,
-    viewportTransform: () -> EditorViewportTransform,
-    dispatch: (List<Message>) -> Unit,
-    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean,
+    dispatchBindingOnUnmatchedKeyUp: (Key, Set<KeyModifier>) -> Boolean
   ): () -> Unit {
     val focusManager = KeyboardFocusManager.getCurrentKeyboardFocusManager()
     val generation = ++sessionEffectsGeneration
