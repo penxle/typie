@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import co.typie.ui.icon.Icon
@@ -185,7 +186,9 @@ internal fun Modifier.toolbarIndicatorGestures(
     fun pageForX(x: Float): Int = progressForX(x).roundToInt().coerceIn(0, pageCount - 1)
 
     awaitEachGesture {
-      val down = awaitFirstDown(requireUnconsumed = false)
+      val initialDown = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      if (initialDown.isConsumed) return@awaitEachGesture
+      val down = awaitPointerEvent(PointerEventPass.Main).changes.first { it.id == initialDown.id }
       var lastPosition = down.position
       var totalDelta = Offset.Zero
       val downProgress = progressForX(down.position.x)

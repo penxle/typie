@@ -85,6 +85,9 @@ import co.typie.ui.component.dialog.DialogScope
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.dismiss
 import co.typie.ui.component.dialog.resolve
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
@@ -213,11 +216,7 @@ private fun TextOptionsToolbarSurface(
   val scrollState = rememberScrollState()
   val scrollStartPadding = ToolbarSecondaryContentStartInset
 
-  ToolbarSecondarySurface(
-    onClose = onClose,
-    closeContentDescription = "텍스트 옵션 닫기",
-    modifier = modifier,
-  ) {
+  ToolbarSecondarySurface(onClose = onClose, modifier = modifier) {
     Row(
       modifier =
         Modifier.fillMaxSize()
@@ -301,6 +300,7 @@ private fun FontFamilyOptions(
       selected = selected,
       contentDescription = family.displayName,
       onClick = { sendSet(sendMessages, EditorModifier.FontFamily(family.familyName)) },
+      tooltipEnabled = representativeFont != null,
     ) { contentColor ->
       if (representativeFont != null) {
         FontSpecimen(
@@ -458,6 +458,7 @@ private fun TextOptionContentButton(
   contentDescription: String,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  tooltipEnabled: Boolean = true,
   content: @Composable (Color) -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -488,6 +489,8 @@ private fun TextOptionContentButton(
             Modifier
           }
         )
+        .hoverFeedback(interactionSource, enabled = !selected, shape = ToolbarButtonShape)
+        .tooltip(contentDescription, enabled = tooltipEnabled, placement = TooltipPlacement.Above)
         .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
         .padding(horizontal = ToolbarLabelHorizontalPadding),
     contentAlignment = Alignment.Center,

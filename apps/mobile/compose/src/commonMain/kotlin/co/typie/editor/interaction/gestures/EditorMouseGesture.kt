@@ -65,7 +65,8 @@ internal class EditorMouseGesture {
         if (
           selection != null &&
             selection == editor.publishedState.selection &&
-            editor.publishedState.selectionHitRects.any { hit ->
+            (editor.publishedState.selectionHitRects + editor.publishedState.cursorHitRects).any {
+              hit ->
               hit.pageIdx == point.page &&
                 point.x >= hit.rect.x &&
                 point.x <= hit.rect.x + hit.rect.width &&
@@ -76,7 +77,7 @@ internal class EditorMouseGesture {
           // Preserve the hit range after any older selection commands already in the queue.
           SelectionOp.Set(selection)
         } else {
-          SelectionOp.SetAt(point.page, point.x, point.y)
+          SelectionOp.SelectUnitAt(point.page, point.x, point.y, SelectionPointUnit.Word)
         }
       val state = context.semantics.pointSelection.applySelection(editor, op) ?: return true
       context.semantics.contextMenu.requestShowForAppliedSelection(

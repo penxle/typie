@@ -27,9 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,12 +44,9 @@ import co.typie.ui.theme.shadow
 internal fun SpellcheckTopBarLeading(session: EditorSpellcheckSession) {
   TopBarButton(
     icon = Lucide.X,
+    contentDescription = "닫기",
+    shortcut = "Esc",
     onClick = { session.close() },
-    modifier =
-      Modifier.semantics {
-        contentDescription = "맞춤법 검사 닫기"
-        role = Role.Button
-      },
   )
 }
 
@@ -119,12 +114,8 @@ internal fun SpellcheckTopBarTrailing(session: EditorSpellcheckSession) {
   } else {
     TopBarButton(
       icon = Lucide.RefreshCw,
+      contentDescription = "다시 검사",
       onClick = { session.rerun() },
-      modifier =
-        Modifier.semantics {
-          contentDescription = "다시 검사"
-          role = Role.Button
-        },
     )
   }
 }

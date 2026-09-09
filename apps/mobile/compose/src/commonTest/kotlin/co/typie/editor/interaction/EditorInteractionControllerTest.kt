@@ -595,7 +595,7 @@ class EditorInteractionControllerTest {
   }
 
   @Test
-  fun `secondary click preserves a hit selection and otherwise opens at the new cursor after publication`() =
+  fun `secondary click preserves a hit selection and otherwise selects the word before opening after publication`() =
     runTest {
       val fixture = MouseFixture(this)
       fixture.selection =
@@ -620,7 +620,10 @@ class EditorInteractionControllerTest {
         type = PointerType.Mouse,
         button = EditorMouseButton.Secondary,
       )
-      assertEquals(SelectionOp.SetAt(0, 80f, 20f), fixture.selections().last())
+      assertEquals(
+        SelectionOp.SelectUnitAt(0, 80f, 20f, SelectionPointUnit.Word),
+        fixture.selections().last(),
+      )
       assertFalse(fixture.host.uiState.contextMenu.visible)
       fixture.controller.presentAppliedState(fixture.editor)
       assertTrue(fixture.host.uiState.contextMenu.visible)
@@ -640,6 +643,20 @@ class EditorInteractionControllerTest {
       assertFalse(fixture.host.focused)
       assertNull(fixture.host.scheduledLongPressDispatchAtMillis)
     }
+
+  @Test
+  fun `secondary click on the caret preserves it instead of selecting a word`() = runTest {
+    val fixture = MouseFixture(this)
+    fixture.selection =
+      Selection(Position("text", 2, Affinity.Downstream), Position("text", 2, Affinity.Downstream))
+    fixture.fake.cursorHitRectsProvider = { listOf(PageRect(0, Rect(0f, 0f, 50f, 50f))) }
+    fixture.fake.publishSnapshot(fixture.editor)
+    fixture.down(button = EditorMouseButton.Secondary)
+    assertEquals(listOf(SelectionOp.Set(fixture.selection)), fixture.selections())
+    fixture.controller.presentAppliedState(fixture.editor)
+    assertTrue(fixture.host.uiState.contextMenu.visible)
+    fixture.controller.cancel()
+  }
 
   private class MouseFixture(scope: TestScope, readOnly: Boolean = false) {
     var selection =
@@ -3056,7 +3073,10 @@ class EditorInteractionControllerTest {
             )
           )
           val commands = fake.enqueued.filterIsInstance<Message.Selection>().drop(selectionCount)
-          assertEquals(listOf(SelectionOp.SetAt(0, down.x, down.y)), commands.map { it.op })
+          assertEquals(
+            listOf(SelectionOp.SelectUnitAt(0, down.x, down.y, SelectionPointUnit.Word)),
+            commands.map { it.op },
+          )
           assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
         }
         assertTrue(controller.tryClaimScrollbarDirectDrag())

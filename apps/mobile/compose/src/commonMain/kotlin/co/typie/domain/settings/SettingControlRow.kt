@@ -14,6 +14,8 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ui.component.Text
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -25,14 +27,16 @@ fun SettingControlRow(
   onClick: (suspend () -> Unit)? = null,
   trailing: @Composable RowScope.() -> Unit = {},
 ) {
-  val interactiveModifier =
-    if (enabled && onClick != null) {
-      Modifier.clickable(onClick).pressScale()
-    } else {
-      Modifier
-    }
-
   InteractionScope {
+    val interactiveModifier =
+      if (enabled && onClick != null) {
+        Modifier.hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
+          .clickable(onClick)
+          .pressScale()
+      } else {
+        Modifier
+      }
+
     Row(
       modifier =
         modifier

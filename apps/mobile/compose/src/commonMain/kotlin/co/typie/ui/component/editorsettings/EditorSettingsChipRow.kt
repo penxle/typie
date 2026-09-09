@@ -1,6 +1,7 @@
 package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorOption
 import co.typie.ext.clickable
 import co.typie.ui.component.Text
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -87,10 +89,12 @@ internal fun <T> EditorSettingsChipRow(
       val textColor =
         if (isSelected) AppTheme.colors.surfaceDefault else AppTheme.colors.textDefault
 
+      val interactionSource = remember { MutableInteractionSource() }
       Box(
         modifier =
-          Modifier.clickable { onSelect(option.value) }
-            .background(backgroundColor, AppShapes.circle)
+          Modifier.background(backgroundColor, AppShapes.circle)
+            .hoverFeedback(interactionSource, enabled = !isSelected, shape = AppShapes.circle)
+            .clickable(interactionSource = interactionSource) { onSelect(option.value) }
             .padding(horizontal = 16.dp, vertical = 8.dp)
       ) {
         Text(text = option.label, style = AppTheme.typography.action, color = textColor)

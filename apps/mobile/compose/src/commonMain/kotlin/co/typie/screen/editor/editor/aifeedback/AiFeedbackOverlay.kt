@@ -17,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -59,6 +60,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMil
 import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryGap
 import co.typie.ui.component.Text
 import co.typie.ui.component.bleedingScrollFog
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.absoluteValue
@@ -273,6 +275,7 @@ private fun AiFeedbackResultCard(
   onIgnore: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   val shape = RoundedCornerShape(12.dp)
   val background = AppTheme.colors.surfaceDefault
   val borderColor by
@@ -294,7 +297,8 @@ private fun AiFeedbackResultCard(
           .clip(shape)
           .background(background, shape)
           .border(1.dp, borderColor, shape)
-          .clickable(onClick = onClick)
+          .hoverFeedback(interactionSource, enabled = !active, shape = shape)
+          .clickable(interactionSource = interactionSource, onClick = onClick)
     ) {
       if (showExpandedContent) {
         ExpandedAiFeedbackResultCardContent(
@@ -447,11 +451,13 @@ private fun AiFeedbackActionRow(
 
 @Composable
 private fun AiFeedbackActionChip(text: String, onClick: () -> Unit) {
+  val interactionSource = remember { MutableInteractionSource() }
   Box(
     modifier =
       Modifier.clip(AppShapes.rounded(AppShapes.full))
         .background(AppTheme.colors.surfaceInset)
-        .clickable(onClick = onClick)
+        .hoverFeedback(interactionSource, enabled = true, shape = AppShapes.circle)
+        .clickable(interactionSource = interactionSource, onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 6.dp),
     contentAlignment = Alignment.Center,
   ) {

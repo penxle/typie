@@ -61,8 +61,10 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 private const val MOVE_DEPTH_LIMIT_MESSAGE = "폴더의 최대 깊이를 초과했어요"
@@ -475,7 +477,10 @@ private fun MoveBreadcrumbChip(
   InteractionScope {
     Text(
       text = item.label,
-      modifier = Modifier.clickable(onClick = onClick).pressScale(0.96f),
+      modifier =
+        Modifier.hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
+          .clickable(onClick = onClick)
+          .pressScale(0.96f),
       style = AppTheme.typography.action,
       color = color,
       maxLines = 1,
@@ -491,7 +496,11 @@ private fun MoveNavigateUpRow(enabled: Boolean, onClick: suspend () -> Unit) {
       modifier =
         Modifier.fillMaxWidth()
           .graphicsLayer { alpha = if (enabled) 1f else 0.48f }
-          .then(if (enabled) Modifier.clickable(onClick) else Modifier)
+          .then(
+            if (enabled)
+              Modifier.hoverFeedback(shape = AppShapes.rounded(AppShapes.md)).clickable(onClick)
+            else Modifier
+          )
           .then(if (enabled) Modifier.pressScale() else Modifier)
           .padding(CardDefaults.RowPadding)
     ) {

@@ -58,10 +58,15 @@ import co.typie.screen.editor.editor.toolbar.HorizontalRuleVariantPanelTarget
 import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelRadius
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.utils.ShortcutModifier
+import co.typie.ui.utils.shortcutLabel
 
 @Composable
 internal fun BottomToolbarNodes(
@@ -146,6 +151,13 @@ private fun NodeInsertTile(
           .focusProperties { canFocus = false }
           .clip(shape)
           .background(if (pressed) AppTheme.colors.surfaceInset else Color.Transparent, shape)
+          .hoverFeedback(interactionSource, shape = shape)
+          .tooltip(
+            item.label,
+            item.shortcut,
+            enabled = item.shortcut != null,
+            placement = TooltipPlacement.Above,
+          )
           .clickable(
             interactionSource = interactionSource,
             indication = null,
@@ -185,6 +197,7 @@ internal data class EditorToolbarNodeInsertItem(
   val icon: IconData,
   val label: String,
   val action: EditorToolbarNodeInsertAction,
+  val shortcut: String? = null,
 )
 
 internal sealed interface EditorToolbarNodeInsertAction {
@@ -263,6 +276,7 @@ internal fun editorToolbarNodeInsertItems(
         EditorToolbarNodeInsertItem(
           icon = Lucide.FilePlus,
           label = "페이지 나누기",
+          shortcut = shortcutLabel("Enter", ShortcutModifier.Mod),
           action =
             EditorToolbarNodeInsertAction.SendMessage(
               Message.Insertion(InsertionOp.Break(Break.Page))
@@ -274,6 +288,7 @@ internal fun editorToolbarNodeInsertItems(
       EditorToolbarNodeInsertItem(
         icon = if (hasUnitSelection) Lucide.CornerLeftUp else Lucide.CornerDownLeft,
         label = if (hasUnitSelection) "위에 문단 넣기" else "문단 내 줄바꿈",
+        shortcut = shortcutLabel("Enter", ShortcutModifier.Shift),
         action =
           EditorToolbarNodeInsertAction.SendMessage(
             Message.Key(KeyEvent(Key.Enter, InputModifiers(shift = true)))

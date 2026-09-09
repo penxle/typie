@@ -100,6 +100,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -201,6 +202,7 @@ internal fun MainDrawerContent() {
                       else AppTheme.colors.surfaceDefault,
                       AppShapes.rounded(AppShapes.md),
                     )
+                    .hoverFeedback(enabled = !isCurrent, shape = AppShapes.rounded(AppShapes.md))
                     .clickable {
                       if (site.id != selection.currentSiteId) {
                         Preference.siteId = site.id
@@ -252,11 +254,17 @@ internal fun MainDrawerContent() {
           }
 
           Skeleton(enabled = SubscriptionService.entitlement is Entitlement.Unknown) {
+            val source = remember {
+              androidx.compose.foundation.interaction.MutableInteractionSource()
+            }
             Row(
               verticalAlignment = Alignment.CenterVertically,
               modifier =
                 Modifier.fillMaxWidth()
-                  .clickable { dismissAndRun { openCreateSpaceSheet() } }
+                  .hoverFeedback(source, shape = AppShapes.rounded(AppShapes.md))
+                  .clickable(interactionSource = source) {
+                    dismissAndRun { openCreateSpaceSheet() }
+                  }
                   .padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
               Box(
@@ -329,6 +337,7 @@ private fun DrawerActionRow(icon: IconData, label: String, onClick: () -> Unit) 
       verticalAlignment = Alignment.CenterVertically,
       modifier =
         Modifier.fillMaxWidth()
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
           .clickable { onClick() }
           .pressScale()
           .padding(horizontal = 12.dp, vertical = 12.dp),

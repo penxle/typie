@@ -99,7 +99,7 @@ class ToolbarSecondarySurfaceDesktopTest {
     setContent {
       ToolbarSecondarySurfaceTestTheme {
         Box(Modifier.width(ToolbarWidth).testTag(SurfaceTag)) {
-          ToolbarSecondarySurface(onClose = {}, closeContentDescription = "닫기") {
+          ToolbarSecondarySurface(onClose = {}) {
             val requester = remember { BringIntoViewRequester() }
 
             LaunchedEffect(requestRevision.intValue) {

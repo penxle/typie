@@ -12,6 +12,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
@@ -22,7 +24,9 @@ import co.typie.graphql.fragment.Img_image
 import co.typie.storage.Preference
 import co.typie.ui.component.Img
 import co.typie.ui.component.drawer.LocalDrawer
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.component.topbar.TopBarDefaults
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import kotlinx.coroutines.launch
@@ -71,6 +75,9 @@ private fun TriggerContent(logo: Img_image, onClick: suspend () -> Unit) {
         .clip(shape)
         .background(TopBarDefaults.controlBackgroundColor(), shape)
         .border(1.dp, TopBarDefaults.controlBorderColor(), shape)
+        .tooltip("작업실 메뉴")
+        .semantics { contentDescription = "작업실 메뉴" }
+        .hoverFeedback(shape = shape)
         .clickable(onClick = onClick)
         .padding(horizontal = TriggerHorizontalPadding),
   ) {

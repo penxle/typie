@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -58,8 +60,11 @@ import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.SelectablePaneHost
 import co.typie.ui.component.popover.rememberPressGestureSessionState
 import co.typie.ui.component.popover.trackPressGestureSession
+import co.typie.ui.component.tooltip.TooltipPlacement
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -73,6 +78,7 @@ data class ActionMenuItem(
 
 data class BottomBarAction(
   val icon: IconData,
+  val contentDescription: String,
   val menus: List<ActionMenuItem> = emptyList(),
   val onClick: suspend () -> Unit = {},
 )
@@ -88,6 +94,7 @@ internal const val ACTION_BUTTON_TOTAL_WIDTH = ACTION_SIZE + ACTION_GAP
 @Composable
 fun BottomBarActionButton(
   icon: IconData,
+  contentDescription: String,
   menus: List<ActionMenuItem> = emptyList(),
   onClick: suspend () -> Unit = {},
   modifier: Modifier = Modifier,
@@ -210,6 +217,7 @@ fun BottomBarActionButton(
           Modifier.align(Alignment.BottomEnd)
             .padding(end = shellHorizontalInset, bottom = actionBottomPadding)
             .size(ACTION_SIZE.dp)
+            .tooltip(contentDescription, enabled = !isMenuOpen, placement = TooltipPlacement.Above)
             .onGloballyPositioned { coordinates ->
               buttonWindowTopLeft = coordinates.positionInWindow()
             }
@@ -221,50 +229,70 @@ fun BottomBarActionButton(
             .background(AppTheme.colors.surfaceInverse, AppShapes.circle)
             .then(
               if (hasMenu) {
-                Modifier.pointerInput(icon, menus) {
-                  awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                Modifier.hoverable(actionInteractionSource)
+                  .hoverFeedback(
+                    actionInteractionSource,
+                    enabled = !isMenuOpen,
+                    shape = AppShapes.circle,
+                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                    activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+                  )
+                  .pointerInput(icon, menus) {
+                    awaitEachGesture {
+                      val down = awaitFirstDown(requireUnconsumed = false)
 
-                    isMenuPressed = true
-                    var released = false
-                    try {
-                      down.consume()
-                      if (isMenuOpen) {
-                        isMenuOpen = false
-                        resetMenuGesture()
-                        return@awaitEachGesture
-                      }
-
-                      isMenuOpen = true
-                      released =
-                        trackPressGestureSession(
-                          pointerId = down.id,
-                          initialPositionInWindow = buttonWindowTopLeft + down.position,
-                          downUptimeMillis = down.uptimeMillis,
-                          armDelayMillis = ACTION_SELECTION_ARM_DELAY_MS,
-                          resolvePositionInWindow = { change, _ ->
-                            buttonWindowTopLeft + change.position
-                          },
-                        ) { session, change ->
-                          pressGestureSessionState.publish(session)
-                          change?.consume()
+                      isMenuPressed = true
+                      var released = false
+                      try {
+                        down.consume()
+                        if (isMenuOpen) {
+                          isMenuOpen = false
+                          resetMenuGesture()
+                          return@awaitEachGesture
                         }
-                    } finally {
-                      if (!released) {
-                        pressGestureSessionState.clear()
+
+                        isMenuOpen = true
+                        released =
+                          trackPressGestureSession(
+                            pointerId = down.id,
+                            initialPositionInWindow = buttonWindowTopLeft + down.position,
+                            downUptimeMillis = down.uptimeMillis,
+                            armDelayMillis = ACTION_SELECTION_ARM_DELAY_MS,
+                            resolvePositionInWindow = { change, _ ->
+                              buttonWindowTopLeft + change.position
+                            },
+                          ) { session, change ->
+                            pressGestureSessionState.publish(session)
+                            change?.consume()
+                          }
+                      } finally {
+                        if (!released) {
+                          pressGestureSessionState.clear()
+                        }
+                        isMenuPressed = false
                       }
-                      isMenuPressed = false
                     }
                   }
-                }
               } else {
-                Modifier.clickable { onClick() }
+                Modifier.hoverFeedback(
+                    actionInteractionSource,
+                    shape = AppShapes.circle,
+                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                    activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
+                  )
+                  .clickable { onClick() }
               }
             ),
         contentAlignment = Alignment.Center,
       ) {
         val icon = if (hasMenu && isMenuOpen) Lucide.X else icon
-        Crossfade(icon) { icon -> Icon(icon = icon, tint = AppTheme.colors.textOnInverse) }
+        Crossfade(icon) { icon ->
+          Icon(
+            icon = icon,
+            contentDescription = if (isMenuOpen) "닫기" else contentDescription,
+            tint = AppTheme.colors.textOnInverse,
+          )
+        }
       }
     }
   }

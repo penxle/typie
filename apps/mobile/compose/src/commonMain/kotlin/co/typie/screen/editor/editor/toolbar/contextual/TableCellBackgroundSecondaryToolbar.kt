@@ -32,11 +32,7 @@ internal fun TableCellBackgroundSecondaryToolbar(
   val variant = currentEditorThemeVariant()
   val editorTheme = remember(variant) { EditorTheme.resolve(variant) }
 
-  ToolbarSecondarySurface(
-    onClose = onClose,
-    closeContentDescription = "셀 배경색 닫기",
-    modifier = modifier,
-  ) {
+  ToolbarSecondarySurface(onClose = onClose, modifier = modifier) {
     Row(
       modifier =
         Modifier.fillMaxSize()

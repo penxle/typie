@@ -40,6 +40,7 @@ import co.typie.screen.editor.editor.toolbar.editorToolbarDebugToolItems
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -105,6 +106,7 @@ private fun ToolTile(
           .focusProperties { canFocus = false }
           .clip(shape)
           .background(if (pressed) AppTheme.colors.surfaceInset else Color.Transparent, shape)
+          .hoverFeedback(interactionSource, shape = shape)
           .clickable(
             interactionSource = interactionSource,
             indication = null,

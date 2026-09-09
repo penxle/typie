@@ -37,7 +37,9 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -217,7 +219,12 @@ private fun FooterButton(
 ) {
   InteractionScope {
     Box(
-      modifier = modifier.clickable(onClick).padding(vertical = 12.dp).pressScale(),
+      modifier =
+        modifier
+          .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
+          .clickable(onClick)
+          .padding(vertical = 12.dp)
+          .pressScale(),
       contentAlignment = Alignment.Center,
     ) {
       Text(text = label, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)

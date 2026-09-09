@@ -15,6 +15,7 @@ fun TopBarBackButton(
   val navigator = Nav.current
   TopBarButton(
     icon = icon,
+    contentDescription = "뒤로",
     onClick =
       onClick
         ?: {

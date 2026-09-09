@@ -53,6 +53,7 @@ fun BottomBar(state: BottomBarState, modifier: Modifier = Modifier) {
         is BottomBarActionEntry.Data ->
           BottomBarActionButton(
             icon = entry.action.icon,
+            contentDescription = entry.action.contentDescription,
             menus = entry.action.menus,
             onClick = entry.action.onClick,
           )

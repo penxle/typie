@@ -40,7 +40,7 @@ internal fun editorBlockquoteToolbarPage(
         )
         EditorToolbarButton(
           icon = Lucide.TextSelect,
-          contentDescription = "일반 텍스트로",
+          contentDescription = "인용구 해제",
           onClick = {
             val nodeId = target?.id ?: return@EditorToolbarButton
             scope.sendMessage(Message.Node(NodeOp.Unwrap(id = nodeId)))

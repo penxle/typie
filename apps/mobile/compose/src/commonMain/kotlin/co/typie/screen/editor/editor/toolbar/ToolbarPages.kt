@@ -132,7 +132,6 @@ internal fun EditorToolbarPages(
   pagerState: ToolbarPagerState = rememberToolbarPagerState(),
   autoTargetPageKey: EditorToolbarPageKey? = null,
   autoTargetKey: Any? = autoTargetPageKey,
-  editorFocused: Boolean,
   activeBottomPanel: EditorToolbarBottomPanel?,
   fixedAction: ToolbarFixedAction,
   onEditorInputRequest: () -> Unit,
@@ -375,12 +374,13 @@ internal fun EditorToolbarPages(
 
     LaunchedEffect(pages, pageMetrics) {
       snapshotFlow {
-        pages.mapIndexedNotNull { index, page ->
-          val scrollState = page.scrollState ?: return@mapIndexedNotNull null
-          val target = pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
-          scrollState to target.coerceIn(0, scrollState.maxValue)
+          pages.mapIndexedNotNull { index, page ->
+            val scrollState = page.scrollState ?: return@mapIndexedNotNull null
+            val target =
+              pageMetrics.internalScrollFor(index, pagerState.scrollPosition).roundToInt()
+            scrollState to target.coerceIn(0, scrollState.maxValue)
+          }
         }
-      }
         .collect { scrollTargets ->
           scrollTargets.forEach { (scrollState, target) ->
             if (scrollState.value != target) {
@@ -551,10 +551,10 @@ internal fun EditorToolbarPages(
         validAutoTargetKey != null && pagerState.lastAppliedAutoTargetKey != validAutoTargetKey
       }
       snapshotFlow {
-        scrollableState.isScrollInProgress ||
-          pagerState.pointerScrollGestureActive ||
-          pagerState.decayFlingInProgress
-      }
+          scrollableState.isScrollInProgress ||
+            pagerState.pointerScrollGestureActive ||
+            pagerState.decayFlingInProgress
+        }
         .first { inProgress -> !inProgress }
       val targetPageKey =
         pendingAutoTargetPageKey
@@ -849,9 +849,9 @@ internal fun EditorToolbarPages(
                   },
                 contentDescription =
                   when (fixedAction) {
-                    ToolbarFixedAction.ClosePanel -> "하단 패널 닫기"
+                    ToolbarFixedAction.ClosePanel -> "닫기"
                     ToolbarFixedAction.HideToolbar -> "툴바 숨기기"
-                    ToolbarFixedAction.DismissInput -> if (editorFocused) "에디터 포커스 해제" else "키보드 닫기"
+                    ToolbarFixedAction.DismissInput -> "읽기 모드로 전환"
                   },
                 onClick = onKeyboardDismissRequest,
                 shape = ToolbarFixedActionShape,

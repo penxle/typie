@@ -39,8 +39,10 @@ import co.typie.editor.sync.ws.SyncWs
 import co.typie.navigation.ApplyActiveNavigationStatusBarAppearance
 import co.typie.navigation.NavigationStatusBarAppearanceState
 import co.typie.navigation.ProvideNavigationStatusBarAppearanceOwner
+import co.typie.platform.LocalHardwareKeyboardConnected
 import co.typie.platform.appLifecycleService
 import co.typie.platform.connectivityService
+import co.typie.platform.rememberHardwareKeyboardConnected
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
@@ -63,9 +65,15 @@ import co.typie.ui.component.sheet.SheetOverlay
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.Toast
 import co.typie.ui.component.toast.ToastOverlay
+import co.typie.ui.component.tooltip.LocalTooltipState
+import co.typie.ui.component.tooltip.TooltipHost
+import co.typie.ui.component.tooltip.TooltipState
 import co.typie.ui.input.DirectTouchInteractionState
 import co.typie.ui.input.LocalDirectTouchInteractionState
+import co.typie.ui.input.LocalWindowInputState
+import co.typie.ui.input.WindowInputState
 import co.typie.ui.input.trackDirectTouchInteraction
+import co.typie.ui.input.windowInput
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
@@ -84,6 +92,10 @@ private enum class RootScreen {
 
 @Composable
 fun RootShell() {
+  val tooltipScope = rememberCoroutineScope()
+  val tooltip = remember { TooltipState(tooltipScope) }
+  val windowInput = remember { WindowInputState() }
+
   LaunchedEffect(Unit) { BootstrapService.launch() }
   LaunchedEffect(Unit) { PushNotificationService.launch() }
 
@@ -147,6 +159,7 @@ fun RootShell() {
           lifecycleScope.launch { orphanSweeper.sweep() }
         }
         Lifecycle.Event.ON_STOP -> {
+          tooltip.dismiss()
           appLifecycleService.update(foreground = false)
           lifecycleScope.launch { ActiveDocumentEditingSessions.flushSyncAll() }
         }
@@ -201,7 +214,20 @@ fun RootShell() {
     themeMode = AppTheme.themeMode,
   )
 
+  LaunchedEffect(
+    screen,
+    sheet.entries.lastOrNull(),
+    dialog.current,
+    popover.entry?.owner,
+    loader.loading,
+  ) {
+    tooltip.dismiss()
+  }
+
   CompositionLocalProvider(
+    LocalTooltipState provides tooltip,
+    LocalWindowInputState provides windowInput,
+    LocalHardwareKeyboardConnected provides rememberHardwareKeyboardConnected(),
     LocalSheet provides sheet,
     LocalDialog provides dialog,
     LocalToast provides toast,
@@ -214,6 +240,7 @@ fun RootShell() {
         .preferredFrameRate(FrameRateCategory.High)
         .trackDirectTouchInteraction(directTouchInteractionState)
         .popoverOutsideTapHost(state = popover)
+        .windowInput(windowInput)
     ) {
       Crossfade(
         screen,
@@ -239,6 +266,7 @@ fun RootShell() {
       LoaderOverlay()
       ToastOverlay()
       PushNotificationToastEffect()
+      TooltipHost(tooltip)
     }
   }
 }

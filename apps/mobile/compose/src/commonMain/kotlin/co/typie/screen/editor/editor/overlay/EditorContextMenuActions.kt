@@ -55,6 +55,7 @@ internal fun rememberEditorContextMenuActions(
   ) {
     val expandSelection =
       { unit: SelectionExpansionUnit, bringIntoViewTarget: EditorBringIntoViewTarget? ->
+        val pointerPosition = contextMenu.pointerPosition
         editor.launchEffect {
           val appliedState =
             if (bringIntoViewTarget == null) {
@@ -68,7 +69,11 @@ internal fun rememberEditorContextMenuActions(
                 ?.snapshot
             }
           appliedState?.let { state ->
-            contextMenu.requestShowForAppliedSelection(editor = editor, state = state)
+            contextMenu.requestShowForAppliedSelection(
+              editor = editor,
+              state = state,
+              pointerPosition = pointerPosition,
+            )
           }
         }
       }

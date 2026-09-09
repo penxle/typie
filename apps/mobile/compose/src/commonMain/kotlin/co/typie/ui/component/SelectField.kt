@@ -18,12 +18,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import co.typie.ext.LocalInteractionSource
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -115,6 +117,11 @@ private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
         .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
         .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
         .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md))
+        .then(
+          LocalInteractionSource.current?.let {
+            Modifier.hoverFeedback(it, enabled, AppShapes.rounded(AppShapes.md))
+          } ?: Modifier
+        )
         .padding(horizontal = 12.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),

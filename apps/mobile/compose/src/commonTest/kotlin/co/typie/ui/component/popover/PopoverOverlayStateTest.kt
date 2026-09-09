@@ -222,19 +222,34 @@ class PopoverOverlayStateTest {
   }
 
   @Test
+  fun clearingThePopoverDoesNotReleaseItsStillPressedOutsidePointer() {
+    val state = PopoverOverlayState()
+    val owner = Any()
+    state.show(owner, createEntry(owner), IntRect.Zero)
+    val gesture = state.beginOutsideDismissGesture(7L)
+    state.clear(owner)
+    assertEquals(true, state.suppressesTap(7L))
+    state.endOutsideDismissGesture(gesture)
+    assertEquals(false, state.suppressesTap(7L))
+  }
+
+  @Test
   fun endingOlderOutsideDismissGestureDoesNotCancelNewerGesture() {
     val state = PopoverOverlayState()
 
-    val firstGestureId = state.beginOutsideDismissGesture()
-    val secondGestureId = state.beginOutsideDismissGesture()
+    val firstGestureId = state.beginOutsideDismissGesture(1L)
+    val secondGestureId = state.beginOutsideDismissGesture(2L)
 
     state.endOutsideDismissGesture(firstGestureId)
 
     assertEquals(true, state.isOutsideDismissGestureActive)
+    assertEquals(false, state.suppressesTap(1L))
+    assertEquals(true, state.suppressesTap(2L))
 
     state.endOutsideDismissGesture(secondGestureId)
 
     assertEquals(false, state.isOutsideDismissGestureActive)
+    assertEquals(false, state.suppressesTap(2L))
   }
 }
 

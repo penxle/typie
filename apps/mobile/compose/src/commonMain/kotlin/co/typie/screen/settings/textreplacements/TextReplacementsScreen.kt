@@ -1,6 +1,7 @@
 package co.typie.screen.settings.textreplacements
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.state.rememberLazyListState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -80,6 +82,7 @@ fun TextReplacementsScreen() {
     trailing = {
       TopBarButton(
         icon = Lucide.Plus,
+        contentDescription = "텍스트 대치 추가",
         onClick = {
           if (SubscriptionService.gate(sheet, GatedAction.TextReplacement)) {
             sheet.present { TextReplacementEditSheet(model = model, editing = null) }
@@ -275,6 +278,7 @@ private fun CustomRow(
   onToggle: suspend () -> Unit,
   onReorderCommit: (movedKey: String, orderedKeys: List<String>) -> Unit,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   val id = entry.textReplacementId
   val toggleScope = rememberCoroutineScope()
 
@@ -303,7 +307,8 @@ private fun CustomRow(
     Row(
       modifier =
         Modifier.weight(1f)
-          .clickable(onClick = onEdit)
+          .hoverFeedback(interactionSource, enabled = true, shape = AppShapes.rounded(AppShapes.md))
+          .clickable(interactionSource = interactionSource, onClick = onEdit)
           .padding(top = 16.dp, end = 12.dp, bottom = 16.dp),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalAlignment = Alignment.CenterVertically,

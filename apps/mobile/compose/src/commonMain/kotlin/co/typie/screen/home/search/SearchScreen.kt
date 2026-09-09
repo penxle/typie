@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +55,9 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.scrollFog
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 private val FogInsets = PaddingValues(vertical = 24.dp)
@@ -193,6 +196,7 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
             modifier =
               Modifier.fillMaxWidth()
                 .pressScale()
+                .hoverFeedback(shape = AppShapes.rounded(AppShapes.md))
                 .clickable { onSelect(search) }
                 .padding(vertical = 12.dp),
           ) {
@@ -206,9 +210,15 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
 
             Text(search, style = AppTheme.typography.action, modifier = Modifier.weight(1f))
 
+            val removeSource = remember {
+              androidx.compose.foundation.interaction.MutableInteractionSource()
+            }
             Icon(
               icon = Lucide.X,
-              modifier = Modifier.size(16.dp).clickable { onRemove(search) },
+              modifier =
+                Modifier.size(16.dp)
+                  .hoverFeedback(removeSource, shape = AppShapes.circle)
+                  .clickable(interactionSource = removeSource) { onRemove(search) },
               tint = AppTheme.colors.textHint,
             )
           }

@@ -1,5 +1,6 @@
 package co.typie.ui.component.popover
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import co.typie.ext.clickable
+import co.typie.ui.input.hoverFeedback
+import co.typie.ui.theme.AppShapes
 
 data class PopoverListItem(
   val content: @Composable () -> Unit,
@@ -38,6 +41,7 @@ private fun PopoverPaneSelectableItem(
 ) {
   val paneSelectionState = LocalPopoverPaneSelectionState.current
   val registrationKey = remember { Any() }
+  val interactionSource = remember { MutableInteractionSource() }
   val latestOnSelected = rememberUpdatedState(onSelected)
 
   DisposableEffect(paneSelectionState, registrationKey) {
@@ -63,7 +67,12 @@ private fun PopoverPaneSelectableItem(
         .onGloballyPositioned { coordinates ->
           paneSelectionState?.updateItemLayoutCoordinates(registrationKey, coordinates)
         }
-        .clickable(enabled = enabled) {
+        .hoverFeedback(
+          interactionSource,
+          enabled,
+          AppShapes.rounded(PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding),
+        )
+        .clickable(enabled = enabled, interactionSource = interactionSource) {
           if (paneSelectionState?.consumeSuppressedClick(registrationKey) == true) {
             return@clickable
           }

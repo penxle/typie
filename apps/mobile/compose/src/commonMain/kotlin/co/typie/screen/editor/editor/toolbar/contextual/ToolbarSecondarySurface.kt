@@ -45,7 +45,6 @@ import kotlin.math.abs
 @Composable
 internal fun ToolbarSecondarySurface(
   onClose: () -> Unit,
-  closeContentDescription: String,
   modifier: Modifier = Modifier,
   content: @Composable BoxScope.() -> Unit,
 ) {
@@ -84,7 +83,7 @@ internal fun ToolbarSecondarySurface(
     EditorToolbarSurfaceBackground(shape = ToolbarCapsuleShape)
     CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec) { content() }
     Box(modifier = Modifier.align(Alignment.CenterStart)) {
-      ToolbarSecondaryCloseButton(contentDescription = closeContentDescription, onClick = onClose)
+      ToolbarSecondaryCloseButton(onClick = onClose)
     }
   }
 }
@@ -108,11 +107,11 @@ private class ToolbarSecondaryBringIntoViewSpec(
 }
 
 @Composable
-private fun ToolbarSecondaryCloseButton(contentDescription: String, onClick: () -> Unit) {
+private fun ToolbarSecondaryCloseButton(onClick: () -> Unit) {
   InteractionScope {
     EditorToolbarIconButton(
       icon = Lucide.X,
-      contentDescription = contentDescription,
+      contentDescription = "닫기",
       onClick = onClick,
       shape = ToolbarFixedActionShape,
       fixedActionSurface = true,

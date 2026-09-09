@@ -41,6 +41,7 @@ internal class EditorInteractionScope(
   private var onSelectionHaptic: (() -> Unit)? = null
   private var onRequestSoftwareKeyboard: (() -> Unit)? = null
   private var pointerInputEnabled: () -> Boolean = { true }
+  private var suppressedTapProvider: (Long) -> Boolean = { false }
   private var readOnly: () -> Boolean = { false }
   private var editing: () -> Boolean = { true }
   private var doubleTapToEditEnabled: () -> Boolean = { true }
@@ -70,6 +71,7 @@ internal class EditorInteractionScope(
       platformProvider = { platformProvider() },
       uiStateProvider = { checkNotNull(uiState) { "Editor interaction scope has no UI state" } },
       pointerInputEnabledProvider = { pointerInputEnabled() },
+      suppressedTapProvider = { suppressedTapProvider(it) },
       readOnlyProvider = { readOnly() },
       editingProvider = { editing() },
       doubleTapToEditEnabledProvider = { doubleTapToEditEnabled() },
@@ -87,6 +89,7 @@ internal class EditorInteractionScope(
     viewportZoomConfig: EditorViewportZoomSemanticConfig?,
     layoutSpec: EditorDocumentLayoutSpec? = null,
     pointerInputEnabled: () -> Boolean = { true },
+    suppressedTapProvider: (Long) -> Boolean = { false },
     readOnly: () -> Boolean = { false },
     editing: () -> Boolean = { true },
     doubleTapToEditEnabled: () -> Boolean = { true },
@@ -121,6 +124,7 @@ internal class EditorInteractionScope(
     this.onSelectionHaptic = onSelectionHaptic
     this.onRequestSoftwareKeyboard = onRequestSoftwareKeyboard
     this.pointerInputEnabled = pointerInputEnabled
+    this.suppressedTapProvider = suppressedTapProvider
     this.readOnly = readOnly
     this.editing = editing
     this.doubleTapToEditEnabled = doubleTapToEditEnabled
@@ -154,6 +158,7 @@ internal class EditorInteractionScope(
     onSelectionHaptic = null
     onRequestSoftwareKeyboard = null
     pointerInputEnabled = { true }
+    suppressedTapProvider = { false }
     readOnly = { false }
     editing = { true }
     doubleTapToEditEnabled = { true }

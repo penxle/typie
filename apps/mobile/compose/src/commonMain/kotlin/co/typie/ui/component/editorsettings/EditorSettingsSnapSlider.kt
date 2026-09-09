@@ -2,6 +2,7 @@ package co.typie.ui.component.editorsettings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -43,6 +44,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Slider
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
@@ -143,6 +145,7 @@ private fun ValueBadge(
   unitSuffix: String,
   bringIntoViewRequester: BringIntoViewRequester,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   var editText by remember { mutableStateOf(TextFieldValue("")) }
   var isFocused by remember { mutableStateOf(false) }
   val focusManager = LocalFocusManager.current
@@ -215,12 +218,17 @@ private fun ValueBadge(
         style = AppTheme.typography.action,
         color = AppTheme.colors.textMuted,
         modifier =
-          Modifier.clickable {
-            if (!isFocused) {
-              editText = TextFieldValue(numberText, TextRange(numberText.length))
-            }
-            textInputBinding.requestFocus()
-          },
+          Modifier.hoverFeedback(
+              interactionSource,
+              enabled = !isFocused,
+              shape = AppShapes.rounded(AppShapes.sm),
+            )
+            .clickable(interactionSource = interactionSource) {
+              if (!isFocused) {
+                editText = TextFieldValue(numberText, TextRange(numberText.length))
+              }
+              textInputBinding.requestFocus()
+            },
       )
     }
   }

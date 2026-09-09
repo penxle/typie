@@ -51,6 +51,7 @@ import co.typie.icons.Lucide
 import co.typie.screen.editor.editor.toolbar.ToolbarHeight
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.floor
@@ -320,6 +321,7 @@ private fun TableInsertButton(
             shape,
           )
           .border(ToolbarTableSizeBorderWidth, AppTheme.colors.borderEmphasis, shape)
+          .hoverFeedback(interactionSource, shape = shape)
           .clickable(
             interactionSource = interactionSource,
             indication = null,

@@ -263,7 +263,6 @@ internal fun EditorToolbarHost(
           pagerState = pagerState,
           autoTargetPageKey = toolbarContext.autoTargetPageKey,
           autoTargetKey = toolbarContext.autoTargetKey,
-          editorFocused = editorFocused,
           activeBottomPanel = activeBottomPanel,
           fixedAction = fixedAction,
           onEditorInputRequest = ::restoreEditorInput,

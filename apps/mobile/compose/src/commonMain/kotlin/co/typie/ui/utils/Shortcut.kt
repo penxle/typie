@@ -64,3 +64,21 @@ internal fun matchesShortcutModifiers(
     isMetaPressed == expectedMeta &&
     isAltPressed == (ShortcutModifier.Alt in modifiers)
 }
+
+/** Uses the same platform modifier policy as shortcut matching. */
+internal fun shortcutLabel(key: String, vararg modifiers: ShortcutModifier): String {
+  val keys = buildList {
+    if (platformModUsesMeta) {
+      if (ShortcutModifier.Ctrl in modifiers) add("⌃")
+      if (ShortcutModifier.Alt in modifiers) add("⌥")
+      if (ShortcutModifier.Shift in modifiers) add("⇧")
+      if (ShortcutModifier.Mod in modifiers) add("⌘")
+    } else {
+      if (ShortcutModifier.Ctrl in modifiers || ShortcutModifier.Mod in modifiers) add("Ctrl")
+      if (ShortcutModifier.Alt in modifiers) add("Alt")
+      if (ShortcutModifier.Shift in modifiers) add("Shift")
+    }
+    add(if (platformModUsesMeta && key == "Enter") "↵" else key)
+  }
+  return keys.joinToString(if (platformModUsesMeta) "" else "+")
+}

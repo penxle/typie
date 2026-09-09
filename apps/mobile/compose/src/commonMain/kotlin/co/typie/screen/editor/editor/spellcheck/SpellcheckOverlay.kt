@@ -17,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +63,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarBottomPanelVisibilityExitMil
 import co.typie.screen.editor.editor.toolbar.ToolbarSecondaryGap
 import co.typie.ui.component.Text
 import co.typie.ui.component.bleedingScrollFog
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.absoluteValue
@@ -287,6 +290,7 @@ private fun SpellcheckResultCard(
   onIgnore: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   val shape = RoundedCornerShape(12.dp)
   val background = AppTheme.colors.surfaceDefault
   val borderColor by
@@ -308,7 +312,8 @@ private fun SpellcheckResultCard(
           .clip(shape)
           .background(background, shape)
           .border(1.dp, borderColor, shape)
-          .clickable(onClick = onClick)
+          .hoverFeedback(interactionSource, enabled = !active, shape = shape)
+          .clickable(interactionSource = interactionSource, onClick = onClick)
     ) {
       if (showExpandedContent) {
         ExpandedSpellcheckResultCardContent(
@@ -590,13 +595,23 @@ private fun SpellcheckActionRow(
 
 @Composable
 private fun SpellcheckActionChip(text: String, danger: Boolean = false, onClick: () -> Unit) {
+  val interactionSource = remember { MutableInteractionSource() }
   val background = if (danger) AppTheme.colors.dangerSubtle else AppTheme.colors.surfaceInset
   val foreground = if (danger) AppTheme.colors.textOnDangerSubtle else AppTheme.colors.textDefault
   Box(
     modifier =
       Modifier.clip(AppShapes.rounded(AppShapes.full))
         .background(background)
-        .clickable(onClick = onClick)
+        .hoverFeedback(
+          interactionSource,
+          enabled = true,
+          shape = AppShapes.circle,
+          hoverColor =
+            if (danger) lerp(background, Color.Black, 0.12f) else AppTheme.colors.surfaceHover,
+          activeColor =
+            if (danger) lerp(background, Color.Black, 0.20f) else AppTheme.colors.surfaceActive,
+        )
+        .clickable(interactionSource = interactionSource, onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 6.dp),
     contentAlignment = Alignment.Center,
   ) {

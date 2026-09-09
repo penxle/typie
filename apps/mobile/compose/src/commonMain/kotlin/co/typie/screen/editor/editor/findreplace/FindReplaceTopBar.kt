@@ -23,10 +23,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,12 +44,9 @@ import co.typie.ui.utils.matchesShortcut
 internal fun FindReplaceTopBarLeading(session: EditorFindReplaceSession) {
   TopBarButton(
     icon = Lucide.X,
+    contentDescription = "닫기",
+    shortcut = "Esc",
     onClick = { session.close() },
-    modifier =
-      Modifier.semantics {
-        contentDescription = "검색 종료"
-        role = Role.Button
-      },
   )
 }
 
@@ -138,18 +131,7 @@ private fun handleFindInputShortcut(event: KeyEvent, session: EditorFindReplaceS
 
 @Composable
 internal fun FindReplaceTopBarTrailing(session: EditorFindReplaceSession) {
-  PopoverMenu(
-    anchor = {
-      TopBarButton(
-        icon = Lucide.Ellipsis,
-        modifier =
-          Modifier.semantics {
-            contentDescription = "검색 옵션"
-            role = Role.Button
-          },
-      )
-    }
-  ) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "찾기 옵션") }) {
     item(content = { WholeWordMenuItem(selected = session.matchWholeWord) }) {
       session.updateMatchWholeWord(!session.matchWholeWord)
     }
@@ -204,7 +186,7 @@ private fun WholeWordMenuItem(selected: Boolean) {
     )
     Spacer(Modifier.width(12.dp))
     Text(
-      text = "어절 단위 검색",
+      text = "어절 단위로 찾기",
       style = AppTheme.typography.action,
       color = AppTheme.colors.textDefault,
       modifier = Modifier.weight(1f),

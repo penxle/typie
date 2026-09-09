@@ -1,6 +1,7 @@
 package co.typie.ui.component.dialog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.ext.verticalScroll
 import co.typie.ui.component.Text
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -94,8 +97,13 @@ internal fun DialogActionButton(
   color: Color = AppTheme.colors.textDefault,
   onClick: () -> Unit,
 ) {
+  val interactionSource = remember { MutableInteractionSource() }
   Box(
-    modifier = with(rowScope) { Modifier.weight(1f) }.clickable(onClick).padding(vertical = 14.dp),
+    modifier =
+      with(rowScope) { Modifier.weight(1f) }
+        .hoverFeedback(interactionSource, enabled = true, shape = AppShapes.rounded(AppShapes.md))
+        .clickable(interactionSource = interactionSource, onClick = onClick)
+        .padding(vertical = 14.dp),
     contentAlignment = Alignment.Center,
   ) {
     Text(text = text, style = AppTheme.typography.action, color = color)

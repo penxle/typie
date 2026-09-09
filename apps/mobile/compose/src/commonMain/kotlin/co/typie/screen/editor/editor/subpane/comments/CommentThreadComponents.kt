@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.timeAgo
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.graphql.fragment.CommentsSheetComment_comment
 import co.typie.graphql.fragment.CommentsSheetThread_thread
@@ -36,8 +37,10 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Img
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverMenu
+import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -439,8 +442,22 @@ private fun CommentMenuRow(
 
 @Composable
 private fun CommentActionAnchor(icon: IconData) {
-  Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-    Icon(icon = icon, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
+  Box(
+    modifier =
+      Modifier.size(28.dp)
+        .tooltip("코멘트 메뉴")
+        .then(
+          LocalInteractionSource.current?.let { Modifier.hoverFeedback(it, shape = CircleShape) }
+            ?: Modifier
+        ),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      icon = icon,
+      contentDescription = "코멘트 메뉴",
+      modifier = Modifier.size(16.dp),
+      tint = AppTheme.colors.textMuted,
+    )
   }
 }
 

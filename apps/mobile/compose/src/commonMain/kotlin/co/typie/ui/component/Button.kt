@@ -25,12 +25,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppColors
 import co.typie.ui.theme.AppShapes
@@ -91,6 +93,16 @@ fun Button(
             .height(height)
             .graphicsLayer { this.alpha = alpha }
             .background(colors.background, AppShapes.rounded(AppShapes.lg))
+            .hoverFeedback(
+              enabled = interactive,
+              shape = AppShapes.rounded(AppShapes.lg),
+              hoverColor =
+                if (variant == ButtonVariant.Secondary) AppTheme.colors.surfaceHover
+                else lerp(colors.background, Color.Black, 0.12f),
+              activeColor =
+                if (variant == ButtonVariant.Secondary) AppTheme.colors.surfaceActive
+                else lerp(colors.background, Color.Black, 0.20f),
+            )
             .clickable(enabled = interactive, onClick = onClick),
         contentAlignment = Alignment.Center,
       ) {
