@@ -85,13 +85,14 @@ internal object EditorImeCommandNormalizer {
           )
       }
       hasActiveComposition =
-        when (op) {
-          is FlatImeOp.Compose,
-          is FlatImeOp.SetComposition -> true
-          is FlatImeOp.ClearComposition,
-          is FlatImeOp.CommitAsIs -> false
-          else -> hasActiveComposition
-        }
+        valueAfter?.let { it.composition != null }
+          ?: when (op) {
+            is FlatImeOp.Compose -> op.text.isNotEmpty()
+            is FlatImeOp.SetComposition -> op.start != op.end
+            is FlatImeOp.ClearComposition,
+            is FlatImeOp.CommitAsIs -> false
+            else -> hasActiveComposition
+          }
     }
 
     return if (ops.isEmpty()) emptyList() else listOf(Message.TextInput(ops))
@@ -133,10 +134,9 @@ internal object EditorImeCommandNormalizer {
           FlatImeOp.ClearComposition
         } else {
           ime?.let {
-            FlatImeOp.SetComposition(
-              it.windowStart + windowText.codePointOffsetAtUtf16Index(minOf(start, end)),
-              it.windowStart + windowText.codePointOffsetAtUtf16Index(maxOf(start, end)),
-            )
+            val from = it.windowStart + windowText.codePointOffsetAtUtf16Index(minOf(start, end))
+            val to = it.windowStart + windowText.codePointOffsetAtUtf16Index(maxOf(start, end))
+            if (from == to) FlatImeOp.ClearComposition else FlatImeOp.SetComposition(from, to)
           }
         }
       is DeleteSurroundingTextCommand ->

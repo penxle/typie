@@ -1,6 +1,7 @@
 package co.typie.editor.input
 
 import androidx.compose.ui.text.input.CommitTextCommand
+import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.DeleteSurroundingTextInCodePointsCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
@@ -18,6 +19,74 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class EditorImeCommandNormalizerTest {
+  @Test
+  fun `composing region clamped to an empty range clears native composition`() {
+    val ime =
+      Ime(
+        text = "abcd",
+        windowStart = 10,
+        selection = ImeRange(12, 12),
+        composing = ImeRange(11, 12),
+      )
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(SetComposingRegionCommand(20, 30), CommitTextCommand("X", 1)),
+        ime,
+      )
+    assertEquals(
+      listOf(
+        Message.TextInput(listOf(FlatImeOp.ClearComposition, FlatImeOp.ReplaceSelection("X")))
+      ),
+      messages,
+    )
+  }
+
+  @Test
+  fun `deleting the whole composition commits at the later selection`() {
+    val ime =
+      Ime(text = "abcd", windowStart = 0, selection = ImeRange(2, 2), composing = ImeRange(1, 2))
+    for (delete in
+      listOf(DeleteSurroundingTextCommand(1, 0), DeleteSurroundingTextInCodePointsCommand(1, 0))) {
+      val messages =
+        EditorImeCommandNormalizer.normalize(
+          listOf(delete, SetSelectionCommand(2, 2), CommitTextCommand("X", 1)),
+          ime,
+        )
+      val deleteOp =
+        if (delete is DeleteSurroundingTextCommand) FlatImeOp.DeleteSurroundingUtf16(1, 0)
+        else FlatImeOp.DeleteSurrounding(1, 0)
+      assertEquals(
+        listOf(
+          Message.TextInput(
+            listOf(deleteOp, FlatImeOp.SetSelection(2, 2), FlatImeOp.ReplaceSelection("X"))
+          )
+        ),
+        messages,
+      )
+    }
+  }
+
+  @Test
+  fun `empty preedit clears composition even without an IME snapshot`() {
+    val messages =
+      EditorImeCommandNormalizer.normalize(
+        listOf(
+          SetComposingTextCommand("", 1),
+          FinishComposingTextCommand(),
+          CommitTextCommand("X", 1),
+        ),
+        ime = null,
+      )
+    assertEquals(
+      listOf(
+        Message.TextInput(
+          listOf(FlatImeOp.Compose(""), FlatImeOp.ClearComposition, FlatImeOp.ReplaceSelection("X"))
+        )
+      ),
+      messages,
+    )
+  }
+
   @Test
   fun `commit cursor position is retained before a later edit`() {
     val ime =

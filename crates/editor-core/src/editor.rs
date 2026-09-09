@@ -4646,6 +4646,9 @@ mod tests {
         // below the limit — but the active composition defers the re-anchor.
         editor.apply(Message::TextInput {
             ops: vec![
+                // Surrounding deletes count from the selection, so move to
+                // the composition start before deleting the preceding text.
+                FlatImeOp::SetSelection { start: 7, end: 7 },
                 FlatImeOp::DeleteSurrounding {
                     before: 1,
                     after: 0,
@@ -4654,6 +4657,7 @@ mod tests {
                     before: 1,
                     after: 0,
                 },
+                FlatImeOp::SetSelection { start: 6, end: 6 },
             ],
         });
         let ctx = editor.ime(3, 3).unwrap().unwrap();
