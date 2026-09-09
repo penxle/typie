@@ -30,7 +30,9 @@
   };
 
   const contentClass = (value: TooltipPresentation) =>
-    value.kind === 'action' ? flex({ alignItems: 'center', gap: '4px', fontWeight: 'semibold' }) : css({ fontWeight: 'medium' });
+    value.kind === 'action'
+      ? flex({ flexDirection: 'column', alignItems: 'flex-start', gap: '0', fontWeight: 'semibold' })
+      : css({ fontWeight: 'medium' });
 
   let {
     presentation,
@@ -49,14 +51,16 @@
 
 {#snippet renderPresentation(value: TooltipPresentation)}
   {#if value.kind === 'action'}
-    <span class={css({ whiteSpace: 'pre-line' })}>{value.message}</span>
+    <div class={flex({ alignItems: 'center', gap: '4px' })}>
+      <span class={css({ whiteSpace: 'pre-line' })}>{value.message}</span>
 
-    {#if value.trailingIcon}
-      <Icon style={css.raw({ opacity: '50' })} icon={value.trailingIcon} size={12} />
-    {/if}
-    {#if value.trailing}
-      <span class={css({ opacity: '50' })}>{value.trailing}</span>
-    {/if}
+      {#if value.trailingIcon}
+        <Icon style={css.raw({ opacity: '50' })} icon={value.trailingIcon} size={12} />
+      {/if}
+      {#if value.trailing}
+        <span class={css({ opacity: '50' })}>{value.trailing}</span>
+      {/if}
+    </div>
 
     {#if value.keys}
       <div
