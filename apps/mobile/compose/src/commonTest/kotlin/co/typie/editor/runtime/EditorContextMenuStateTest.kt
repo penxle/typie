@@ -3,16 +3,47 @@ package co.typie.editor.runtime
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.FakeFfiEditor
+import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 class EditorContextMenuStateTest {
+  @Test
+  fun `pointer menu can open for a caret only after publication and dismissal cancels it`() =
+    runTest {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val caret = Position("text", 2, Affinity.Downstream)
+      val target = EditorState.Initial.copy(version = 5L, selection = Selection(caret, caret))
+      val state = EditorContextMenuState()
+      state.requestShowForAppliedSelection(editor, target)
+      state.onEditorStateChanged(editor, target)
+      assertFalse(state.visible)
+      state.requestShowForAppliedSelection(editor, target, PagePoint(0, 20f, 40f))
+      state.onEditorStateChanged(editor, target.copy(version = 4L))
+      assertFalse(state.visible)
+      state.onEditorStateChanged(editor, target)
+      assertTrue(state.visible)
+      assertEquals(PagePoint(0, 20f, 40f), state.pointerPosition)
+      state.hide()
+      assertNull(state.pointerPosition)
+      state.requestShowForAppliedSelection(
+        editor,
+        target.copy(version = 6L),
+        PagePoint(0, 30f, 40f),
+      )
+      state.hide()
+      state.onEditorStateChanged(editor, target.copy(version = 6L))
+      assertFalse(state.visible)
+    }
+
   @Test
   fun `applied target cancels for another editor and otherwise matches version and selection once`() =
     runTest(StandardTestDispatcher()) {

@@ -311,6 +311,13 @@ internal fun resolveContextMenuAnchor(
   }
 
   val transform = uiState.resolveViewportTransform(pageSizes = editor.publishedState.pageSizes)
+  uiState.contextMenu.pointerPosition?.let { point ->
+    val position =
+      transform.localToGlobal(page = point.page, x = point.x, y = point.y) ?: return null
+    val x = editorRectInOverlay.left + position.x * density
+    val y = editorRectInOverlay.top + position.y * density
+    return EditorContextMenuAnchor(centerX = x, above = y, below = y)
+  }
   val rangeSelection = editor.publishedState.selection?.takeIf { !it.isCollapsed() }
   val gapPx = ContextMenuGap.value * density
 

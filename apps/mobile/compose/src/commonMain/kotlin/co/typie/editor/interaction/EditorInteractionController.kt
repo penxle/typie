@@ -5,12 +5,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.EditorZoomLandmark
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ViewOp
+import co.typie.editor.interaction.gestures.EditorMouseButton
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePlacement
 import co.typie.editor.interaction.semantics.EditorTableColumnResizePresentation
@@ -38,6 +40,9 @@ internal class EditorInteractionController(
     get() = checkNotNull(editorProvider()) { "Editor interaction scope has no editor" }
 
   override var mode by mutableStateOf(EditorInteractionMode.Idle)
+    private set
+
+  override var pointerType: PointerType = PointerType.Touch
     private set
 
   private var syncedDirectTouchInteractionEditor: Editor? = null
@@ -72,6 +77,10 @@ internal class EditorInteractionController(
   fun resolveTableColumnResizePlacement(): EditorTableColumnResizePlacement? =
     semantics.tableColumnResize.resolvePlacement(editor = editor, geometry = geometry)
 
+  fun updateMouseConfiguration(doubleClickTimeoutMillis: Long, dragSlopPx: Float) {
+    gestures.updateMouseConfiguration(doubleClickTimeoutMillis, dragSlopPx)
+  }
+
   fun updateTapSlop(tapSlopPx: Float) {
     gestures.updateTapSlop(tapSlopPx)
   }
@@ -87,10 +96,12 @@ internal class EditorInteractionController(
     position: Offset?,
     tapEnabled: Boolean = true,
     inputModifiers: InputModifiers = InputModifiers(),
+    button: EditorMouseButton = EditorMouseButton.Primary,
     positionInRoot: Offset = requireNotNull(position),
     touchPanDriver: EditorPanGestureDriver? = null,
   ): Boolean =
     if (ensurePointerInputEnabled()) {
+      pointerType = change.type
       if (position != null) {
         updateDirectTouchInteraction(change.type.isDirectTouchInteraction())
       }
@@ -100,6 +111,7 @@ internal class EditorInteractionController(
         positionInRoot = positionInRoot,
         tapEnabled = tapEnabled && position != null,
         inputModifiers = inputModifiers,
+        button = button,
         touchPanDriver = touchPanDriver,
         context = this,
       )
@@ -235,7 +247,13 @@ internal class EditorInteractionController(
   }
 
   fun onEditorStateChanged(state: EditorState) {
-    semantics.onEditorStateChanged(editor = editor, state = state, mode = mode)
+    semantics.onEditorStateChanged(
+      editor = editor,
+      state = state,
+      mode = mode,
+      directTouchInteraction =
+        syncedDirectTouchInteraction != false && pointerType.isDirectTouchInteraction(),
+    )
     gestures.onPublishedStateChanged(state = state, context = this)
   }
 
