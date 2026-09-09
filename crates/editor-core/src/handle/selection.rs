@@ -202,6 +202,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             head_x,
             head_y,
             base_selection,
+            unit,
             allow_collapse,
         } => {
             let selection = resolve_extend_to_selection(
@@ -211,6 +212,7 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
                 head_x,
                 head_y,
                 base_selection,
+                unit,
                 allow_collapse,
             );
             editor.transact(|tr| {
@@ -284,20 +286,28 @@ fn resolve_select_unit_at_selection(
     let layout_state = editor.view.layout_state()?;
     let layout_view = layout_state.view();
     let hit = editor.view.hit_test(page, x, y)?;
-    let selection = match unit {
+    let selection = expand_selection_unit(editor, &layout_view, hit, unit);
+    remap_layout_selection(editor, selection)
+}
+
+fn expand_selection_unit(
+    editor: &Editor,
+    view: &DocView,
+    selection: Selection,
+    unit: SelectionPointUnit,
+) -> Selection {
+    match unit {
         SelectionPointUnit::Word => {
             let resource = editor.resource.lock().unwrap();
-            resolve_word_selection_expansion(&hit, &layout_view, &resource).unwrap_or(hit)
+            resolve_word_selection_expansion(&selection, view, &resource)
         }
         SelectionPointUnit::Sentence => {
             let resource = editor.resource.lock().unwrap();
-            resolve_sentence_selection_expansion(&hit, &layout_view, &resource).unwrap_or(hit)
+            resolve_sentence_selection_expansion(&selection, view, &resource)
         }
-        SelectionPointUnit::Paragraph => {
-            resolve_paragraph_selection_expansion(&hit, &layout_view).unwrap_or(hit)
-        }
-    };
-    remap_layout_selection(editor, selection)
+        SelectionPointUnit::Paragraph => resolve_paragraph_selection_expansion(&selection, view),
+    }
+    .unwrap_or(selection)
 }
 
 fn resolve_extend_to_selection(
@@ -307,6 +317,7 @@ fn resolve_extend_to_selection(
     head_x: f32,
     head_y: f32,
     base_selection: Option<Selection>,
+    unit: Option<SelectionPointUnit>,
     allow_collapse: bool,
 ) -> Option<Selection> {
     let mut input_state = editor.view.layout_state()?.clone();
@@ -348,11 +359,15 @@ fn resolve_extend_to_selection(
         }
     }
 
+    let head_selection = match unit {
+        Some(unit) => expand_selection_unit(editor, &view, head_hit.selection, unit),
+        None => head_hit.selection,
+    };
     let base_selection = base_selection.or_else(|| expand_unit_at(&anchor, &view));
     let selection = if let Some(base_selection) = base_selection {
-        extend_base_selection(&view, base_selection, head_hit.selection)?
+        extend_base_selection(&view, base_selection, head_selection)?
     } else {
-        extend_drag_hit(&view, anchor, head_hit.selection)?
+        extend_drag_hit(&view, anchor, head_selection)?
     };
     let selection = selection.normalize(&view).unwrap_or(selection);
 
@@ -986,6 +1001,7 @@ mod tests {
                 head_x: 9999.0,
                 head_y: 30.0,
                 base_selection: Some(initial),
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -999,6 +1015,190 @@ mod tests {
             sel
         );
         assert!(!editor.undo_history.can_undo());
+    }
+
+    fn extend_unit_to_position(
+        editor: &mut Editor,
+        base: Selection,
+        target: Position,
+        unit: SelectionPointUnit,
+    ) {
+        let metrics = editor.view.cursor_metrics(&editor.state, &target).unwrap();
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: base.anchor,
+                head_page: metrics.page_idx,
+                head_x: metrics.caret.x,
+                head_y: metrics.line.y + metrics.line.height / 2.0,
+                base_selection: Some(base),
+                unit: Some(unit),
+                allow_collapse: false,
+            },
+        });
+    }
+
+    #[test]
+    fn extend_to_word_expands_shrinks_and_reverses_around_initial_word() {
+        let (english, english_p) = state! {
+            doc { root { p: paragraph { text("alpha beta gamma delta") } } }
+            selection: (p, 6) -> (p, 10)
+        };
+        let (korean, korean_p) = state! {
+            doc { root { p: paragraph { text("하나 둘셋 넷다섯 여섯") } } }
+            selection: (p, 3) -> (p, 5)
+        };
+        for (state, p, steps) in [
+            (
+                english,
+                english_p,
+                vec![
+                    (13, 6, 16),
+                    (19, 6, 22),
+                    (13, 6, 16),
+                    (8, 6, 10),
+                    (2, 10, 0),
+                    (13, 6, 16),
+                ],
+            ),
+            (
+                korean,
+                korean_p,
+                vec![
+                    (7, 3, 9),
+                    (11, 3, 12),
+                    (7, 3, 9),
+                    (4, 3, 5),
+                    (1, 5, 0),
+                    (7, 3, 9),
+                ],
+            ),
+        ] {
+            let mut editor = Editor::new_test(state);
+            let base = editor.state.selection.unwrap();
+            for (offset, anchor, head) in steps {
+                extend_unit_to_position(
+                    &mut editor,
+                    base,
+                    Position::new(p, offset),
+                    SelectionPointUnit::Word,
+                );
+                let selection = editor.state.selection.unwrap();
+                assert_eq!((selection.anchor.node, selection.head.node), (p, p));
+                assert_eq!(
+                    (selection.anchor.offset, selection.head.offset),
+                    (anchor, head),
+                    "hit {offset}"
+                );
+            }
+            assert!(!editor.undo_history.can_undo());
+        }
+    }
+
+    #[test]
+    fn extend_to_paragraph_expands_shrinks_and_reverses_around_initial_paragraph() {
+        let (state, first, middle, last) = state! {
+            doc { root {
+                first: paragraph { text("first paragraph") }
+                middle: paragraph { text("middle paragraph") }
+                last: paragraph { text("last paragraph") }
+            } }
+            selection: (middle, 0) -> (middle, 16)
+        };
+        let mut editor = Editor::new_test(state);
+        let base = editor.state.selection.unwrap();
+        for (target, anchor, head, end) in [
+            (last, middle, last, 14),
+            (middle, middle, middle, 16),
+            (first, middle, first, 0),
+            (last, middle, last, 14),
+        ] {
+            extend_unit_to_position(
+                &mut editor,
+                base,
+                Position::new(target, 4),
+                SelectionPointUnit::Paragraph,
+            );
+            let selection = editor.state.selection.unwrap();
+            assert_eq!((selection.anchor.node, selection.head.node), (anchor, head));
+            assert_eq!(
+                selection.anchor.offset,
+                if target == first { 16 } else { 0 }
+            );
+            assert_eq!(selection.head.offset, end);
+        }
+    }
+
+    #[test]
+    fn extend_to_paragraph_includes_an_empty_paragraph_and_can_return_to_base() {
+        let (state, first, empty, last) = state! {
+            doc { root {
+                first: paragraph { text("first") }
+                empty: paragraph {}
+                last: paragraph { text("last") }
+            } }
+            selection: (first, 0) -> (first, 5)
+        };
+        let mut editor = Editor::new_test(state);
+        let base = editor.state.selection.unwrap();
+        extend_unit_to_position(
+            &mut editor,
+            base,
+            Position::new(empty, 0),
+            SelectionPointUnit::Paragraph,
+        );
+        let selection = editor.state.selection.unwrap();
+        assert_eq!((selection.anchor.node, selection.anchor.offset), (first, 0));
+        assert_eq!((selection.head.node, selection.head.offset), (last, 0));
+        extend_unit_to_position(
+            &mut editor,
+            base,
+            Position::new(first, 2),
+            SelectionPointUnit::Paragraph,
+        );
+        let selection = editor.state.selection.unwrap();
+        assert_eq!((selection.anchor.node, selection.head.node), (first, first));
+        assert_eq!((selection.anchor.offset, selection.head.offset), (0, 5));
+    }
+
+    #[test]
+    fn extend_to_unit_across_table_cells_keeps_cell_selection() {
+        for unit in [SelectionPointUnit::Word, SelectionPointUnit::Paragraph] {
+            let (state, c1, _p1, c2, p2) = state! {
+                doc { root {
+                    table {
+                        table_row {
+                            c1: table_cell { p1: paragraph { text("first word") } }
+                            c2: table_cell { p2: paragraph { text("other word") } }
+                        }
+                        table_row {
+                            table_cell { paragraph { text("below") } }
+                            table_cell { paragraph { text("below") } }
+                        }
+                    }
+                    paragraph {}
+                } }
+                selection: (p1, 0) -> (p1, 5)
+            };
+            let mut editor = Editor::new_test(state);
+            editor.view.layout(&editor.state);
+            let base = editor.state.selection.unwrap();
+            extend_unit_to_position(&mut editor, base, Position::new(p2, 2), unit);
+            let view = editor.state.view();
+            let rect = editor
+                .state
+                .selection
+                .unwrap()
+                .resolve(&view)
+                .unwrap()
+                .as_cell_rect()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "expected cell range for {unit:?}, got {:?}",
+                        editor.state.selection
+                    )
+                });
+            assert_eq!((rect.anchor_cell.id(), rect.head_cell.id()), (c1, c2));
+        }
     }
 
     #[test]
@@ -1046,6 +1246,7 @@ mod tests {
                 head_x,
                 head_y,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1086,6 +1287,7 @@ mod tests {
                 head_x: target_metrics.caret.x,
                 head_y: target_metrics.line.y + target_metrics.line.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1123,6 +1325,7 @@ mod tests {
                 head_x: text_rect.x + 1.0,
                 head_y: text_rect.y + text_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1161,6 +1364,7 @@ mod tests {
                 head_x: rect.x + rect.width / 2.0,
                 head_y: rect.y + 4.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1223,6 +1427,7 @@ mod tests {
                 head_x,
                 head_y,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1269,6 +1474,7 @@ mod tests {
                 head_x: text_rect.right() - 1.0,
                 head_y: text_rect.y + text_rect.height / 2.0,
                 base_selection: Some(initial),
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1299,6 +1505,7 @@ mod tests {
                 head_x: 9999.0,
                 head_y: 30.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1326,6 +1533,7 @@ mod tests {
                 head_x: 20.0,
                 head_y: -100.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1371,6 +1579,7 @@ mod tests {
                 head_x: rect.rect.right() + 4.0,
                 head_y: rect.rect.y + rect.rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1442,6 +1651,7 @@ mod tests {
                         head_x,
                         head_y,
                         base_selection: None,
+                        unit: None,
                         allow_collapse: false,
                     },
                 });
@@ -1515,6 +1725,7 @@ mod tests {
                     head_x,
                     head_y,
                     base_selection: None,
+                    unit: None,
                     allow_collapse: false,
                 },
             });
@@ -1595,6 +1806,7 @@ mod tests {
                 head_x: rect.rect.right() + 4.0,
                 head_y: rect.rect.y + rect.rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1624,6 +1836,7 @@ mod tests {
                 head_x: 20.0,
                 head_y: -100.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -1664,6 +1877,7 @@ mod tests {
                 head_x: p1_rect.x + p1_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1709,6 +1923,7 @@ mod tests {
                 head_x: p2_rect.x + p2_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1749,6 +1964,7 @@ mod tests {
                 head_x: p1_rect.x + p1_rect.width / 2.0,
                 head_y: -100.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1794,6 +2010,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: (p1_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1837,6 +2054,7 @@ mod tests {
                 head_x: p2_metrics.caret.x,
                 head_y: p2_metrics.line.y + p2_metrics.line.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1879,6 +2097,7 @@ mod tests {
                 head_x: line_metrics.caret.x,
                 head_y: line_metrics.line.y + line_metrics.line.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1920,6 +2139,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -1967,6 +2187,7 @@ mod tests {
                 head_x: p2_rect.x + p2_rect.width / 2.0,
                 head_y: (callout_rect.bottom() + p2_rect.y) / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2004,6 +2225,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2056,6 +2278,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2102,6 +2325,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2149,6 +2373,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + cell_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2196,6 +2421,7 @@ mod tests {
                 head_x,
                 head_y,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2246,6 +2472,7 @@ mod tests {
                 head_x: cell_rect.x + cell_rect.width / 2.0,
                 head_y: cell_rect.y + 4.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2291,6 +2518,7 @@ mod tests {
                 head_x: c01_rect.x + c01_rect.width / 2.0,
                 head_y: c01_rect.y + c01_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2337,6 +2565,7 @@ mod tests {
                 head_x: table_rect.right() + 1.0,
                 head_y: target_rect.y + target_rect.height / 2.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: true,
             },
         });
@@ -2389,6 +2618,7 @@ mod tests {
                 head_x: table_rect.right() + 1.0,
                 head_y: target_rect.y + target_rect.height / 2.0,
                 base_selection: Some(base_selection),
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2448,6 +2678,7 @@ mod tests {
                 head_x: target_rect.x + target_rect.width / 2.0,
                 head_y: target_rect.y + target_rect.height / 2.0,
                 base_selection: Some(initial),
+                unit: None,
                 allow_collapse: false,
             },
         });
@@ -2488,6 +2719,7 @@ mod tests {
                 head_x: callout_rect.x + callout_rect.width / 2.0,
                 head_y: callout_rect.y + 4.0,
                 base_selection: None,
+                unit: None,
                 allow_collapse: false,
             },
         });

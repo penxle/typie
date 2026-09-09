@@ -277,13 +277,17 @@ fn sentence_range_in_text(
 
 fn text_boundaries(text: &str, byte_boundaries: impl Iterator<Item = usize>) -> Vec<usize> {
     let mut boundaries = vec![0];
+    let mut byte_offset = 0;
+    let mut char_offset = 0;
     for boundary in byte_boundaries {
-        let char_boundary = text.nth_byte_char_offset(boundary);
-        if boundaries.last().copied() != Some(char_boundary) {
-            boundaries.push(char_boundary);
+        // Segmenter boundaries are ordered; count each UTF-8 slice only once.
+        char_offset += text[byte_offset..boundary].char_count();
+        byte_offset = boundary;
+        if boundaries.last().copied() != Some(char_offset) {
+            boundaries.push(char_offset);
         }
     }
-    let char_count = text.char_count();
+    let char_count = char_offset + text[byte_offset..].char_count();
     if boundaries.last().copied() != Some(char_count) {
         boundaries.push(char_count);
     }
@@ -320,6 +324,22 @@ mod tests {
     use editor_resource::Resource;
 
     use crate::{Affinity, Position};
+
+    #[test]
+    fn text_boundaries_preserve_unicode_scalar_offsets_and_endpoints() {
+        // ASCII, Hangul, a supplementary-plane emoji, and a combining mark.
+        let text = "a한😀e\u{301}";
+        assert_eq!(
+            text_boundaries(text, [0, 1, 4, 8, 11].into_iter()),
+            vec![0, 1, 2, 3, 5],
+        );
+        assert_eq!(
+            text_boundaries(text, [1, 4, 4, 8].into_iter()),
+            vec![0, 1, 2, 3, 5],
+        );
+        assert_eq!(text_boundaries(text, [].into_iter()), vec![0, 5]);
+        assert_eq!(text_boundaries("", [0, 0].into_iter()), vec![0]);
+    }
 
     fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
         let mut ev = Vec::new();
