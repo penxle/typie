@@ -1,0 +1,32 @@
+{
+  "delete-before-selection": [
+    {
+      "type": "text_input",
+      "ops": [
+        { "type": "delete_surrounding_utf16", "before": 1, "after": 0 },
+        { "type": "replace_selection", "text": "X" }
+      ]
+    }
+  ],
+  "delete-inside-composition": [
+    {
+      "type": "text_input",
+      "ops": [
+        { "type": "delete_surrounding_utf16", "before": 1, "after": 0 },
+        { "type": "set_selection", "start": 3, "end": 3 },
+        { "type": "compose", "text": "X" },
+        { "type": "commit_as_is" }
+      ]
+    }
+  ],
+  "empty-composition": [
+    {
+      "type": "text_input",
+      "ops": [
+        { "type": "compose", "text": "" },
+        { "type": "set_selection", "start": 3, "end": 3 },
+        { "type": "replace_selection", "text": "X" }
+      ]
+    }
+  ]
+}

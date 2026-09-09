@@ -218,6 +218,26 @@ impl UndoHistory {
         }
     }
 
+    /// Combine transactions of one action, retaining its first pre-edit
+    /// selection. Tagged entries (e.g. automatic replacements) keep their own
+    /// undo boundary. The caller isolates the action's first transaction so
+    /// it cannot have merged into an entry before `start`.
+    pub fn merge_since(&mut self, start: usize) {
+        if self.undos.len().saturating_sub(start) < 2
+            || self.undos[start..].iter().any(|entry| entry.tag.is_some())
+        {
+            return;
+        }
+        let tail = self.undos.split_off(start + 1);
+        let first = self.undos.last_mut().expect("start names an undo entry");
+        for entry in tail {
+            first.ops.extend(entry.ops);
+        }
+        first.merge = RecordMerge::Isolated;
+        self.last_push = None;
+        self.sync_last_tag_from_top();
+    }
+
     /// Undo the most recent entry: apply each op's inverse to `state`, returning
     /// the applied inverse ops (so the editor can broadcast them), the selection
     /// to restore, and the ids of the entry's own ops — the edits this call took

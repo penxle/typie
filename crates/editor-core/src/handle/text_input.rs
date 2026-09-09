@@ -11,7 +11,7 @@ use editor_state::{
     as_gap_cursor, continuation_at, flat_chars, flat_segments_in_range, flat_size,
     replacement_paint,
 };
-use editor_transaction::{HistoryMeta, Transaction};
+use editor_transaction::{HistoryMeta, MergeKind, Transaction};
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -550,7 +550,7 @@ impl FlatImeState {
                 self.text.splice(start..end, chars.iter().copied());
                 self.sel_start = new_end;
                 self.sel_end = new_end;
-                self.comp = Some((start, new_end));
+                self.comp = (start < new_end).then_some((start, new_end));
                 Some(FlatImeTextChange {
                     replace_start: start,
                     replace_end: end,
@@ -594,19 +594,11 @@ impl FlatImeState {
         }
     }
 
-    // deleteSurrounding must not touch the composing text: lengths count from
-    // its edges (AOSP BaseInputConnection contract).
+    // InputConnection/Compose exclude the selection, not the composition.
+    // A deletion may shorten or remove the composing range.
     fn surrounding_delete_bases(&self) -> (usize, usize) {
         let len = self.text.len();
-        let cursor = self.sel_start.min(len);
-        match self.comp {
-            Some((comp_start, comp_end)) => {
-                let base_before = cursor.min(comp_start);
-                let base_after = self.sel_end.max(comp_end).min(len).max(base_before);
-                (base_before, base_after)
-            }
-            None => (cursor, cursor),
-        }
+        (self.sel_start.min(len), self.sel_end.min(len))
     }
 
     fn apply_surrounding_deletes(
@@ -618,14 +610,12 @@ impl FlatImeState {
     ) -> Option<FlatImeTextChange> {
         let deletes_before = del_start < base_before;
         let deletes_after = base_after < del_end;
-        // Deleting on both sides of a non-empty composing region is two
-        // disjoint edits — unrepresentable as one flat replacement (same
-        // policy as disjoint batches), so the op is ignored.
+        // The handler splits two-sided deletes before reduction, so each
+        // change can preserve the selected text and its per-character paint.
         if base_before < base_after && deletes_before && deletes_after {
             return None;
         }
 
-        let remap_selection = self.comp.is_some();
         let (start, end) = if base_before < base_after {
             if deletes_before {
                 (del_start, base_before)
@@ -638,11 +628,7 @@ impl FlatImeState {
 
         if start < end {
             self.text.splice(start..end, std::iter::empty());
-            self.remap_after_delete(start, end, remap_selection);
-        }
-        if !remap_selection {
-            self.sel_start = del_start;
-            self.sel_end = del_start;
+            self.remap_after_delete(start, end);
         }
         (start < end).then_some(FlatImeTextChange {
             replace_start: start,
@@ -651,7 +637,7 @@ impl FlatImeState {
         })
     }
 
-    fn remap_after_delete(&mut self, del_start: usize, del_end: usize, remap_selection: bool) {
+    fn remap_after_delete(&mut self, del_start: usize, del_end: usize) {
         let removed = del_end - del_start;
         let map = |pos: usize| {
             if pos >= del_end {
@@ -661,12 +647,35 @@ impl FlatImeState {
             }
         };
         if let Some((start, end)) = self.comp {
-            self.comp = Some((map(start), map(end)));
+            let (start, end) = (map(start), map(end));
+            self.comp = (start < end).then_some((start, end));
         }
-        if remap_selection {
-            self.sel_start = map(self.sel_start);
-            self.sel_end = map(self.sel_end);
+        self.sel_start = map(self.sel_start);
+        self.sel_end = map(self.sel_end);
+    }
+
+    fn contiguous_prefix_len(mut self, ops: &[FlatImeOp]) -> usize {
+        let mut change: Option<FlatImeAnchoredChangeTracker> = None;
+        let mut last_edit_end = 0;
+        for (index, op) in ops.iter().enumerate() {
+            if let Some(next) = self.apply(op) {
+                match &mut change {
+                    Some(change) => {
+                        if !change.absorb(next, &self.text) {
+                            // Keep the next edit's selection/composition setup
+                            // with that edit, including an empty Web target.
+                            return last_edit_end;
+                        }
+                    }
+                    None => change = Some(FlatImeAnchoredChangeTracker::new(next, &self.text)),
+                }
+                last_edit_end = index + 1;
+            }
+            if matches!(op, FlatImeOp::CommitAsIs) {
+                return index + 1;
+            }
         }
+        ops.len()
     }
 
     #[cfg(test)]
@@ -724,8 +733,8 @@ impl FlatImeState {
                 let change = FlatImeTextChange::collapsed_at(initial_sel_start);
                 (Some(change.clone()), Some(change))
             }
-            // A batch with disjoint text edits cannot be represented as one safe
-            // flat replacement. Ignore it instead of widening the edited range.
+            // Only a contiguous segment is representable as one replacement.
+            // The handler splits disjoint edits before calling this reducer.
             None => (None, None),
         };
 
@@ -905,15 +914,42 @@ fn flat_ime_ops_have_direct_backspace_shape(ops: &[FlatImeOp]) -> bool {
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
-    let mut ops = ops;
+    let mut normalized = Vec::with_capacity(ops.len());
+    for op in ops {
+        // Delete after first so the before count retains its original base.
+        // Two disjoint sides must never become a replacement of the selection.
+        match op {
+            FlatImeOp::DeleteSurrounding { before, after } if before > 0 && after > 0 => {
+                normalized.push(FlatImeOp::DeleteSurrounding { before: 0, after });
+                normalized.push(FlatImeOp::DeleteSurrounding { before, after: 0 });
+            }
+            FlatImeOp::DeleteSurroundingUtf16 { before, after } if before > 0 && after > 0 => {
+                normalized.push(FlatImeOp::DeleteSurroundingUtf16 { before: 0, after });
+                normalized.push(FlatImeOp::DeleteSurroundingUtf16 { before, after: 0 });
+            }
+            _ => normalized.push(op),
+        }
+    }
+    let mut ops = normalized;
     let mut remaining = ops.as_mut_slice();
+    let mut undo_start = editor.undo_history.undos_len();
     while !remaining.is_empty() {
-        let count = remaining
-            .iter()
-            .position(|op| matches!(op, FlatImeOp::CommitAsIs))
-            .map_or(remaining.len(), |index| index + 1);
+        let count = if remaining.len() == 1 {
+            1
+        } else {
+            let Some(initial) = FlatImeState::from_editor(editor, remaining) else {
+                return Ok(());
+            };
+            initial.contiguous_prefix_len(remaining)
+        };
         let (segment, tail) = remaining.split_at_mut(count);
-        handle_flat_ime_segment(editor, segment, tail)?;
+        let committed = matches!(segment.last(), Some(FlatImeOp::CommitAsIs));
+        let isolate_history = !committed && !tail.is_empty();
+        handle_flat_ime_segment(editor, segment, tail, isolate_history)?;
+        if committed || tail.is_empty() || editor.last_history_tag().is_some() {
+            editor.undo_history.merge_since(undo_start);
+            undo_start = editor.undo_history.undos_len();
+        }
         remaining = tail;
     }
     Ok(())
@@ -923,6 +959,7 @@ fn handle_flat_ime_segment(
     editor: &mut Editor,
     ops: &[FlatImeOp],
     tail: &mut [FlatImeOp],
+    isolate_history: bool,
 ) -> Result<(), EditorError> {
     let mut delete_paint = editor.ime_delete_paint.take();
     let plain_backspace = flat_ime_ops_form_plain_backspace(editor, ops);
@@ -1290,6 +1327,9 @@ fn handle_flat_ime_segment(
                     }
                 }
 
+                if isolate_history {
+                    tr.update_meta(|meta| meta.merge = MergeKind::Isolated);
+                }
                 Ok(())
             })?;
         }
@@ -2783,6 +2823,29 @@ mod tests {
     }
 
     #[test]
+    fn empty_composition_does_not_anchor_later_preedit() {
+        for empty in [
+            FlatImeOp::Compose { text: "".into() },
+            FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 0,
+            },
+        ] {
+            let mut s = flat_ime_state("abcd", 2);
+            s.comp = Some((1, 2));
+            s.apply(&empty);
+            assert_eq!(flat_ime_text(&s), "acd");
+            assert_eq!(s.comp, None);
+            let s = s.reduce(&[
+                FlatImeOp::SetSelection { start: 2, end: 2 },
+                FlatImeOp::Compose { text: "X".into() },
+            ]);
+            assert_eq!(flat_ime_text(&s), "acXd");
+            assert_eq!(s.comp, Some((2, 3)));
+        }
+    }
+
+    #[test]
     fn korean_ime_recomposition_batch() {
         let o = FLAT_OPEN;
         let c = FLAT_CLOSE;
@@ -2928,9 +2991,9 @@ mod tests {
     }
 
     #[test]
-    fn flat_ime_disjoint_text_edits_are_ignored() {
+    fn flat_ime_disjoint_text_edits_preserve_intervening_paint() {
         let (s, ..) = state! {
-            doc { root { p1: paragraph { text("abcdef") } } }
+            doc { root { p1: paragraph { text("ab") text("cd") [bold] text("ef") } } }
             selection: (p1, 0)
         };
         let editor = apply_flat_ime_ops(
@@ -2943,14 +3006,37 @@ mod tests {
             ],
         );
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("abcdef") } } }
-            selection: (p1, 0)
+            doc { root { p1: paragraph { text("aB") text("cd") [bold] text("Ef") } } }
+            selection: (p1, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
 
     #[test]
-    fn flat_ime_disjoint_text_edits_at_gap_cursor_do_not_materialize() {
+    fn flat_ime_disjoint_edit_keeps_its_empty_web_composition_target() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("abcdef") } } }
+            selection: (p, 1) -> (p, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::ReplaceSelection { text: "B".into() },
+                FlatImeOp::SetComposition { start: 5, end: 5 },
+                FlatImeOp::Compose { text: "X".into() },
+                FlatImeOp::CommitAsIs,
+            ],
+        });
+        let (expected, ..) = state! {
+            doc { root { p: paragraph { text("aBcdXef") } } }
+            selection: (p, 5)
+        };
+        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().composition, None);
+    }
+
+    #[test]
+    fn flat_ime_disjoint_text_edits_away_from_gap_cursor_do_not_materialize_it() {
         let (s, ..) = state! {
             doc { r: root { image paragraph { text("abcdef") } } }
             selection: (r, 0, <)
@@ -2980,8 +3066,8 @@ mod tests {
         });
 
         let (expected, ..) = state! {
-            doc { r: root { image paragraph { text("abcdef") } } }
-            selection: (r, 0, <)
+            doc { root { image p: paragraph { text("aBcdEf") } } }
+            selection: (p, 5)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -3451,6 +3537,40 @@ mod tests {
             selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
+    }
+
+    #[test]
+    fn flat_ime_delete_both_sides_preserves_selection_and_paint() {
+        for op in [
+            FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 1,
+            },
+            FlatImeOp::DeleteSurroundingUtf16 {
+                before: 2,
+                after: 2,
+            },
+        ] {
+            let (initial, ..) = state! {
+                doc { root { p: paragraph { text("😀") text("bc") [bold] text("😺") } } }
+                selection: (p, 1) -> (p, 3)
+            };
+            let mut editor = Editor::new_test(initial.clone());
+            editor.apply(Message::TextInput { ops: vec![op] });
+            let (expected, ..) = state! {
+                doc { root { p: paragraph { text("bc") [bold] } } }
+                selection: (p, 0) -> (p, 2)
+            };
+            assert_state_eq!(editor.state(), &expected);
+            editor.apply(Message::History {
+                op: HistoryOp::Undo,
+            });
+            assert_state_eq!(editor.state(), &initial);
+            editor.apply(Message::History {
+                op: HistoryOp::Redo,
+            });
+            assert_state_eq!(editor.state(), &expected);
+        }
     }
 
     #[test]
@@ -5092,7 +5212,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_ime_delete_surrounding_excludes_composing_text() {
+    fn flat_ime_delete_surrounding_deletes_composing_text_before_caret() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("가") } } }
             selection: (p1, 1)
@@ -5113,14 +5233,11 @@ mod tests {
         });
 
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("나") } } }
+            doc { root { p1: paragraph { text("가") } } }
             selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 1, end: 2 })
-        );
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]
@@ -5156,7 +5273,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_ime_delete_surrounding_both_sides_of_composing_text_is_ignored() {
+    fn flat_ime_delete_surrounding_both_sides_of_caret_in_composing_text() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("가다") } } }
             selection: (p1, 1)
@@ -5173,14 +5290,11 @@ mod tests {
         });
 
         let (expected, ..) = state! {
-            doc { root { p1: paragraph { text("가나다") } } }
-            selection: (p1, 2)
+            doc { root { p1: paragraph { text("가") } } }
+            selection: (p1, 1)
         };
         assert_state_eq!(editor.state(), &expected);
-        assert_eq!(
-            editor.state().composition,
-            Some(Composition { start: 2, end: 3 })
-        );
+        assert_eq!(editor.state().composition, None);
     }
 
     #[test]

@@ -240,6 +240,65 @@ fn ime_crlf_partial_delete_updates_coordinates_even_without_a_document_edit() {
 }
 
 #[test]
+fn ime_disjoint_edits_keep_automatic_replacement_undo_boundary() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph { text("abcdef") } } }
+        selection: (p, 1) -> (p, 2)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("B", "β", false)]);
+    editor.apply(Message::TextInput {
+        ops: vec![
+            FlatImeOp::ReplaceSelection { text: "B".into() },
+            FlatImeOp::SetSelection { start: 5, end: 6 },
+            FlatImeOp::ReplaceSelection { text: "E".into() },
+        ],
+    });
+    assert_eq!(flat_text(&editor), "\u{2028}aβcdEf\u{2029}");
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert_eq!(flat_text(&editor), "\u{2028}aβcdef\u{2029}");
+    editor.apply(Message::History {
+        op: HistoryOp::Undo,
+    });
+    assert_eq!(flat_text(&editor), "\u{2028}aBcdef\u{2029}");
+}
+
+#[test]
+fn ime_deletion_and_empty_composition_match_the_native_input_buffer() {
+    let fixtures: std::collections::BTreeMap<String, Vec<Message>> =
+        serde_json::from_str(include_str!("tests/fixtures/ime-delete-composition.json")).unwrap();
+    for (name, start, end, composition, text, caret) in [
+        ("delete-before-selection", 2, 4, None, "Xd", 1),
+        ("delete-inside-composition", 3, 3, Some((2, 4)), "aXd", 2),
+        ("empty-composition", 3, 3, Some((2, 3)), "acXd", 3),
+    ] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("abcd") } } }
+            selection: (p, 2)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetSelection { start, end }],
+        });
+        if let Some((start, end)) = composition {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::SetComposition { start, end }],
+            });
+        }
+        let request = editor.enqueue_request(fixtures[name].clone()).unwrap();
+        editor.tick_through(request).unwrap();
+        assert_eq!(
+            flat_text(&editor),
+            format!("\u{2028}{text}\u{2029}"),
+            "{name}"
+        );
+        assert_eq!(caret_flat(&editor), caret + 1, "{name}");
+        assert_eq!(editor.state().composition, None, "{name}");
+    }
+}
+
+#[test]
 fn ime_multiline_selection_matches_the_native_input_buffer() {
     let (initial, ..) = state! {
         doc { root { p: paragraph {} } }
