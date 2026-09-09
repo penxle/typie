@@ -1,11 +1,14 @@
 package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.InputModifiers
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.isViewportZooming
@@ -478,6 +481,8 @@ internal fun EditorTapGesture.handleTapTimer(
     return
   }
   val clickCount = tapCountForActivePointer ?: return
+  // Wait for release so a scroll or long press does not become a composition-only tap.
+  if (context.shouldConsumeTapForComposition(clickCount)) return
   val point = context.geometry.resolvePoint(positionInNode = position)
   val hitSelection =
     point != null &&
@@ -656,6 +661,15 @@ private fun EditorTapGesture.dispatchSelectionTap(
     return false
   }
   val editor = context.editor
+  if (context.shouldConsumeTapForComposition(clickCount)) {
+    clearTapHistory()
+    cancelPendingPresentation(context = context)
+    context.effects.cancelTapDispatch()
+    editor.runCallback {
+      editor.updateNow { enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs))) }
+    }
+    return true
+  }
   when (
     context.semantics.interactiveHit.handleTap(
       editor = editor,
@@ -789,6 +803,14 @@ private fun EditorTapGesture.dispatchSelectionTap(
   }
   return true
 }
+
+private fun EditorGestureContext.shouldConsumeTapForComposition(clickCount: Int): Boolean =
+  platform == Platform.iOS &&
+    pointerType == PointerType.Touch &&
+    editing &&
+    !readOnly &&
+    clickCount == 1 &&
+    editor.appliedState.ime?.composing != null
 
 private fun isSameCursorTap(previousCursor: CursorMetrics?, nextState: EditorState): Boolean {
   val nextCursor = nextState.cursor ?: return false

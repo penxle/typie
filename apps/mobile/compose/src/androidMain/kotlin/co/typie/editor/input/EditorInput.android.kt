@@ -7,9 +7,11 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.Editor
 import co.typie.editor.scroll.EditorBringIntoViewRequests
@@ -27,6 +29,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
   focusedRectInRoot: () -> Rect?,
+  firstRectForRangeInRoot: (TextRange) -> Rect?,
+  unclippedTextOffsetInRoot: () -> Offset?,
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,

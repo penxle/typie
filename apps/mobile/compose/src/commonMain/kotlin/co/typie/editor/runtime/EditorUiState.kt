@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Size
 
 @Stable
@@ -102,32 +103,38 @@ class EditorUiState {
 
   fun textClippingRectInRoot(): Rect? = editorClippedBoundsInRoot.takeIf { it.isUsable }
 
-  fun cursorRectInRoot(cursor: CursorMetrics?): Rect? {
-    cursor ?: return null
-    val pagePositionInRoot = pagePositionsInRoot[cursor.pageIdx] ?: return null
+  // Every page is laid out, including offscreen pages. Use the document origin so moving the
+  // selection between pages cannot be mistaken for scrolling the text.
+  internal fun unclippedTextOffsetInRoot(): Offset? = pagePositionsInRoot[0]?.position
+
+  fun cursorRectInRoot(cursor: CursorMetrics?): Rect? = cursor?.let {
+    pageRectInRoot(it.pageIdx, it.caret)
+  }
+
+  internal fun pageRectInRoot(page: Int, rect: FfiRect): Rect? {
+    val pagePositionInRoot = pagePositionsInRoot[page] ?: return null
     if (pagePositionInRoot.density <= 0f) {
       return null
     }
-    val caret = cursor.caret
     if (
-      !caret.x.isFinite() ||
-        !caret.y.isFinite() ||
-        !caret.width.isFinite() ||
-        !caret.height.isFinite() ||
-        caret.width < 0f ||
-        caret.height <= 0f
+      !rect.x.isFinite() ||
+        !rect.y.isFinite() ||
+        !rect.width.isFinite() ||
+        !rect.height.isFinite() ||
+        rect.width < 0f ||
+        rect.height <= 0f
     ) {
       return null
     }
 
     val scale = displayZoom * pagePositionInRoot.density
-    val left = pagePositionInRoot.position.x + caret.x * scale
-    val top = pagePositionInRoot.position.y + caret.y * scale
+    val left = pagePositionInRoot.position.x + rect.x * scale
+    val top = pagePositionInRoot.position.y + rect.y * scale
     return Rect(
       left = left,
       top = top,
-      right = left + caret.width * scale,
-      bottom = top + caret.height * scale,
+      right = left + rect.width * scale,
+      bottom = top + rect.height * scale,
     )
   }
 

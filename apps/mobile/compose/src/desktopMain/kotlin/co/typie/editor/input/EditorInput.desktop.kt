@@ -31,6 +31,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
   focusedRectInRoot: () -> Rect?,
+  firstRectForRangeInRoot: (TextRange) -> Rect?,
+  unclippedTextOffsetInRoot: () -> Offset?,
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,

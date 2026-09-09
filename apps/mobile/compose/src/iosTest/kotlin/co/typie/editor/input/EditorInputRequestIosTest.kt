@@ -2,14 +2,19 @@
 
 package co.typie.editor.input
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.platform.UIKitTextInputMethodRequest
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
+import co.typie.editor.EditorViewportTransform
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.ImeRange
@@ -23,6 +28,36 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
 class EditorInputRequestIosTest {
+  @Test
+  fun platformBindingPreservesRequestedTextRangeGeometry() = runTest {
+    val rectangle = Rect(120f, 240f, 180f, 272f)
+    val origin = Offset(40f, -120f)
+    runNativeEdit(
+      before = ime(text = "にほんご", selection = 4),
+      firstRectForRangeInRoot = { range ->
+        assertEquals(TextRange(1, 3), range)
+        rectangle
+      },
+      unclippedTextOffsetInRoot = { origin },
+      inspect = { request ->
+        val wrapped =
+          EditorPlatformInputBridge()
+            .bindInputSession(
+              TestTextInputSessionScope(coroutineContext),
+              request,
+              cursor = { null },
+              viewportTransform = { EditorViewportTransform(emptyMap(), emptyList(), 1f) },
+              dispatch = {},
+            )
+        assertEquals(origin, wrapped.unclippedTextOffsetInRoot())
+        assertEquals(
+          rectangle,
+          (wrapped as UIKitTextInputMethodRequest).firstRectForRangeInRoot?.invoke(TextRange(1, 3)),
+        )
+      },
+    ) {}
+  }
+
   @Test
   fun requestExposesTheWholeImeWindowIncludingParagraphBoundaries() = runTest {
     val before = ime(text = "\u2028문단1\u2029\u2028ㅎ\u2029", selection = 7)
@@ -66,6 +101,9 @@ class EditorInputRequestIosTest {
 
   private suspend fun TestScope.runNativeEdit(
     before: Ime,
+    firstRectForRangeInRoot: (TextRange) -> Rect? = { null },
+    unclippedTextOffsetInRoot: () -> Offset? = { null },
+    inspect: (PlatformTextInputMethodRequest) -> Unit = {},
     block: TextEditingScope.() -> Unit,
   ): NativeEditResult {
     val editorScope = CoroutineScope(EmptyCoroutineContext)
@@ -82,6 +120,8 @@ class EditorInputRequestIosTest {
             bringIntoViewRequests = EditorBringIntoViewRequests(),
             onEditCommand = dispatched::add,
             focusedRectInRoot = { null },
+            firstRectForRangeInRoot = firstRectForRangeInRoot,
+            unclippedTextOffsetInRoot = unclippedTextOffsetInRoot,
             textFieldRectInRoot = { null },
             textClippingRectInRoot = { null },
             suppressSoftwareKeyboard = false,
@@ -89,6 +129,7 @@ class EditorInputRequestIosTest {
             onIncomingContent = { false },
           )
 
+      inspect(request)
       val value = request.value()
       request.editText(block)
       return NativeEditResult(value = value, dispatched = dispatched)

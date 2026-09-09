@@ -99,6 +99,7 @@ internal class FakeFfiEditor(
   var cursorHitRectsProvider: () -> List<PageRect> = { emptyList() },
   var interactiveRegionsProvider: () -> List<InteractiveRegion> = { emptyList() },
   var replaceViewportAnchorPresentationProvider: (Revision) -> Boolean = { true },
+  var firstRectForRangeProvider: (Revision, Int, Int) -> PageRect? = { _, _, _ -> null },
   var captureSelectionViewportAnchorProvider: (Revision) -> CapturedViewportAnchor? = { null },
   var captureViewportAnchorAtProvider: (Revision, ViewportAnchorPoint) -> CapturedViewportAnchor? =
     { _, _ ->
@@ -355,6 +356,9 @@ internal class FakeFfiEditor(
   override fun pageTableOverlays(page: Int): List<TableOverlay> = emptyList()
 
   override fun ime(beforeLimit: Int, afterLimit: Int): Ime? = imeProvider(beforeLimit, afterLimit)
+
+  override fun firstRectForRange(revision: Revision, start: Int, end: Int): PageRect? =
+    firstRectForRangeProvider(revision, start, end)
 
   override fun attachSurface(
     page: Int,

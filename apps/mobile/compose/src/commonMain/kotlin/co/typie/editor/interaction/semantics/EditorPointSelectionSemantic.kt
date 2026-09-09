@@ -4,6 +4,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.CommandOutcome
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
@@ -19,7 +20,13 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
   }
 
   fun applySelection(editor: Editor, op: SelectionOp): EditorState? {
-    val update = editor.updateNow { enqueue(Message.Selection(op)) } ?: return null
+    val update =
+      editor.updateNow {
+        if (editor.appliedState.ime?.composing != null) {
+          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+        }
+        enqueue(Message.Selection(op))
+      } ?: return null
     if (update.commandOutcomes.any { it is CommandOutcome.Rejected }) return null
     return update.snapshot
   }
@@ -123,6 +130,9 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
 
   fun enqueueCursorMove(editor: Editor, point: PagePoint): Boolean {
     return editor.runCallback {
+      if (editor.appliedState.ime?.composing != null) {
+        editor.enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+      }
       editor.enqueue(
         Message.Selection(SelectionOp.SetAt(page = point.page, x = point.x, y = point.y))
       )
@@ -153,6 +163,9 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
   ): Boolean {
     val update =
       editor.update(admit = { generation == pendingSelectionGeneration }) {
+        if (editor.appliedState.ime?.composing != null) {
+          enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+        }
         enqueue(Message.Selection(op))
       } ?: return false
     if (generation != pendingSelectionGeneration) return false

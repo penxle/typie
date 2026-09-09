@@ -127,6 +127,7 @@ class EditorUiStateTest {
   fun `ui state maps cursor page coordinates into root coordinates`() {
     val state = EditorUiState()
     state.updateDisplayZoom(1.5f)
+    state.updatePagePositionInRoot(page = 0, positionInRoot = Offset(200f, -600f), density = 2f)
     state.updatePagePositionInRoot(page = 2, positionInRoot = Offset(200f, 300f), density = 2f)
 
     val rect =
@@ -143,6 +144,14 @@ class EditorUiStateTest {
     assertEquals(360f, rect.top)
     assertEquals(233f, rect.right)
     assertEquals(414f, rect.bottom)
+    assertEquals(Offset(200f, -600f), state.unclippedTextOffsetInRoot())
+
+    state.updatePagePositionInRoot(page = 2, positionInRoot = Offset(200f, 260f), density = 2f)
+    assertEquals(Offset(200f, -600f), state.unclippedTextOffsetInRoot())
+    state.updatePagePositionInRoot(page = 0, positionInRoot = Offset(200f, -640f), density = 2f)
+    assertEquals(Offset(200f, -640f), state.unclippedTextOffsetInRoot())
+    state.clear()
+    assertNull(state.unclippedTextOffsetInRoot())
   }
 
   @Test

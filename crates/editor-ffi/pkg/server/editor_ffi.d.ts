@@ -954,6 +954,7 @@ declare class Editor {
     export_page_vector(page: number, scale_factor: number): Uint8Array;
     external_elements(): ExternalElement[];
     find_matches(query: string, options?: SearchOptions | null): Selection[];
+    first_rect_for_range(revision: Revision, start: number, end: number): PageRect | undefined;
     freeze_selection(selection: Selection): StableSelection | undefined;
     ime(before_limit: number, after_limit: number): Ime | undefined;
     insert_template_fragment(changesets: Uint8Array): void;

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.IntSize
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.CapturedViewportAnchor
@@ -19,6 +20,7 @@ import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.PlainDoc
 import co.typie.editor.ffi.ProseRangeInstallOutcome
 import co.typie.editor.ffi.ProseTrackedRangeRegistration
@@ -40,6 +42,7 @@ import co.typie.editor.ffi.ViewportAnchor
 import co.typie.editor.ffi.ViewportAnchorPoint
 import co.typie.editor.ffi.ViewportAnchorResolution
 import co.typie.editor.input.EditorInputRecorder
+import co.typie.editor.input.projectWindowUtf16Index
 import co.typie.editor.sync.MissingBytes
 import co.typie.editor.sync.PartitionedBytes
 import co.typie.editor.sync.SplitChangeset
@@ -913,6 +916,27 @@ internal constructor(
 
   internal fun completePresentation(bundle: PublishedBundle) {
     completePublicationWaiters(bundle)
+  }
+
+  internal fun firstRectForRange(range: TextRange): PageRect? {
+    if (terminal) return null
+    return withFailureFallback(defaultValue = { null }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock null
+          // UITextInput exposes applied text before the matching frame is published.
+          // Read its offsets and layout under the same lock as the applied snapshot.
+          val snapshot = appliedState
+          val ime = snapshot.ime ?: return@withPriorityLock null
+          if (range.min < 0 || range.max > ime.text.length) return@withPriorityLock null
+          inner.firstRectForRange(
+            Revision(snapshot.version),
+            ime.projectWindowUtf16Index(range.min),
+            ime.projectWindowUtf16Index(range.max),
+          )
+        }
+      }
+    }
   }
 
   internal fun captureSelectionViewportAnchor(revision: Long): CapturedViewportAnchor? {

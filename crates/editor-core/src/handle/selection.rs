@@ -936,6 +936,56 @@ mod tests {
     }
 
     #[test]
+    fn committed_composition_stays_at_its_site_when_point_selection_moves_input() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text(" tail") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose {
+                text: "日本語".into(),
+            }],
+        });
+
+        // Selection supplied by the IME moves within marked text without committing it.
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetFlat { start: 2, end: 2 },
+        });
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 1, end: 4 })
+        );
+        editor.view.layout(&editor.state);
+
+        // The pointer host commits before dispatching its hit-tested selection.
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
+        });
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetAt {
+                page: 0,
+                x: 9999.0,
+                y: 5.0,
+            },
+        });
+        assert!(editor.state().composition.is_none());
+        assert_eq!(editor.state().selection.unwrap().head.offset, 8);
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "あ".into() }],
+        });
+        let ime = editor.ime(64, 64).unwrap().unwrap();
+        assert!(ime.text.contains("日本語 tailあ"), "{ime:?}");
+        assert_eq!(
+            editor.state().composition,
+            Some(Composition { start: 9, end: 10 })
+        );
+        let head = editor.state().selection.unwrap().head;
+        assert_eq!((head.node, head.offset), (p1, 9));
+    }
+
+    #[test]
     fn set_at_sets_hit_selection() {
         let (state, ..) = state! {
             doc { root { p1: paragraph { text("hello") } } }

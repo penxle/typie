@@ -696,6 +696,21 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.ime(before_limit, after_limit)?.into_ffi()?))
     }
 
+    pub fn first_rect_for_range(
+        &self,
+        revision: Complex<editor_core::Revision>,
+        start: usize,
+        end: usize,
+    ) -> EditorResult<Option<Complex<editor_view::PageRect>>> {
+        let revision = revision.from_ffi()?;
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .first_rect_for_range(revision, start, end)
+                .into_ffi()?)
+        })
+    }
+
     pub fn receive_remote_changeset(&self, payload: Vec<u8>) -> EditorResult<()> {
         self.with_inner(|inner| {
             let decoded = editor_codec::decode_changeset_stream(&payload[..])
