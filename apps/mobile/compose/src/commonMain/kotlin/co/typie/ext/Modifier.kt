@@ -1,18 +1,17 @@
 package co.typie.ext
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable as foundationClickable
 import androidx.compose.foundation.combinedClickable as foundationCombinedClickable
 import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,20 +136,15 @@ fun Modifier.pointerIgnore(): Modifier =
 @Composable
 fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier {
   val interactionSource = LocalInteractionSource.current ?: return this
-  val scale = remember { Animatable(1f) }
-
-  LaunchedEffect(interactionSource) {
-    interactionSource.interactions.collect { interaction ->
-      when (interaction) {
-        is PressInteraction.Press -> scale.animateTo(targetScale, tween(100, easing = EaseOut))
-        is PressInteraction.Release,
-        is PressInteraction.Cancel -> scale.animateTo(1f, tween(100, easing = EaseOut))
-      }
-    }
-  }
+  val pressed by interactionSource.collectIsPressedAsState()
+  val scale by
+    animateFloatAsState(
+      targetValue = if (pressed) targetScale else 1f,
+      animationSpec = tween(100, easing = EaseOut),
+    )
 
   return this.graphicsLayer {
-    scaleX = scale.value
-    scaleY = scale.value
+    scaleX = scale
+    scaleY = scale
   }
 }

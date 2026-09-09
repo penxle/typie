@@ -52,6 +52,7 @@ import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hoverFeedback
+import co.typie.ui.input.isTrackpadGesture
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
@@ -297,17 +298,18 @@ internal fun Modifier.emitPressInteractions(interactionSource: MutableInteractio
   pointerInput(interactionSource) {
     awaitEachGesture {
       val down = awaitFirstDown(requireUnconsumed = false)
+      if (currentEvent.isTrackpadGesture) return@awaitEachGesture
       val press = PressInteraction.Press(down.position)
       interactionSource.tryEmit(press)
 
-      val up = waitForUpOrCancellation()
-      val release =
-        if (up == null) {
-          PressInteraction.Cancel(press)
-        } else {
-          PressInteraction.Release(press)
-        }
-      interactionSource.tryEmit(release)
+      var released = false
+      try {
+        released = waitForUpOrCancellation() != null
+      } finally {
+        interactionSource.tryEmit(
+          if (released) PressInteraction.Release(press) else PressInteraction.Cancel(press)
+        )
+      }
     }
   }
 
