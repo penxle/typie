@@ -342,9 +342,10 @@ export class ImeInputAdapter {
     const nextText = replaceContextRange(context, edit.target, edit.text);
     if (input.value !== nextText) {
       input.value = nextText;
+      const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
+      input.setSelectionRange(selection, selection);
     }
-    const selection = flatOffsetToUtf16Index(nextText, context.windowStart, composing.end);
-    input.setSelectionRange(selection, selection);
+    // Keep the IME's selected clause or caret when the native text already matches.
     this.#context = updateContextFromInputElement(context, input, composing);
   }
 

@@ -161,6 +161,54 @@ describe('web IME text replacement', () => {
     expect(input.selectionStart).toBe(9);
   });
 
+  it('keeps Japanese clauses on the same native input line at the editor caret height', async () => {
+    const { input } = await mountEditor();
+    const events = imeEvents(input);
+    events.composition('compositionstart', '');
+    events.composition('compositionupdate', 'に');
+    events.beforeCompositionInput('に');
+    events.applyNativeInput('\u{2028}に\u{2029}', 2, 'insertCompositionText', 'に');
+    await tick();
+    const initialScrollHeight = input.scrollHeight;
+
+    events.composition('compositionupdate', '日本の国');
+    events.beforeCompositionInput('日本の国');
+    events.applyNativeInput('\u{2028}日本の国\u{2029}', 5, 'insertCompositionText', '日本の国');
+    await tick();
+
+    // Extra clauses must extend horizontally, without moving their candidate anchors
+    // onto different textarea lines. The surrounding paragraph separators remain.
+    expect(input.scrollHeight).toBe(initialScrollHeight);
+    const rect = input.getBoundingClientRect();
+    const style = getComputedStyle(input);
+    expect(Number.parseFloat(style.lineHeight)).toBeCloseTo(rect.height, 1);
+    expect(Number.parseFloat(style.fontSize)).toBeCloseTo(rect.height, 1);
+  });
+
+  it('aligns the native input scroll with programmatic caret movement in a long line', async () => {
+    const { editor, input } = await mountEditor(doc('Long text before the caret '.repeat(5)), 100);
+    const nativePrefixWidth = () => {
+      const probe = input.cloneNode() as HTMLTextAreaElement;
+      probe.value = input.value.slice(0, input.selectionEnd);
+      input.after(probe);
+      const width = probe.scrollWidth;
+      probe.remove();
+      return width;
+    };
+    await expect.poll(() => input.getBoundingClientRect().left).toBeGreaterThan(-1000);
+    await expect.poll(() => input.scrollLeft).toBeGreaterThan(100);
+    expect(Math.abs(input.scrollLeft - nativePrefixWidth())).toBeLessThanOrEqual(1);
+
+    editor.updateNow(() => {
+      editor.enqueue({ type: 'selection', op: { type: 'set_flat', start: 1, end: 1 } });
+    });
+    await tick();
+
+    expect(input.selectionStart).toBe(1);
+    expect(input.scrollLeft).toBeLessThan(10);
+    expect(Math.abs(input.scrollLeft - nativePrefixWidth())).toBeLessThanOrEqual(1);
+  });
+
   it('replaces a selection with multiple paragraphs and keeps the suffix after the caret', async () => {
     const { editor, input } = await mountEditor(doc('leftOLDright'), 5);
     const events = imeEvents(input);

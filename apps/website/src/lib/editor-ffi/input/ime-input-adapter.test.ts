@@ -586,6 +586,28 @@ describe('ImeInputAdapter', () => {
     ]);
   });
 
+  it('preserves the native selection when moving between Japanese conversion clauses', () => {
+    const harness = createImeHarness(context(''));
+    harness.compositionStart();
+    harness.beforeCompositionInput('にほんのくに');
+    harness.applyNativeInput('にほんのくに', 6);
+
+    // Converting text and moving between clauses can both deliver composition input.
+    // The latter has the same text but a different native selection.
+    for (const [text, start, end] of [
+      ['日本の国', 0, 3],
+      ['日本の国', 3, 4],
+      ['日本の国', 2, 2],
+    ] as const) {
+      harness.compositionUpdate(text);
+      harness.beforeCompositionInput(text);
+      harness.applyNativeInput(text, start, end);
+      harness.syncFromEditor();
+      harness.expectInput(text, start, end);
+    }
+    expect(harness.compositionEnd()).toBe(true);
+  });
+
   it('uses insertCompositionText data instead of duplicated native DOM preedit text', () => {
     const input = createInput();
     const messages: Message[] = [];
