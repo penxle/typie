@@ -1,7 +1,7 @@
 import '../../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initWasm } from '$lib/wasm-ffi.svelte';
 import { Editor } from '../editor.svelte';
 import EditorFrameSyncTestHost from '../editor-frame-sync-test-host.svelte';
@@ -27,6 +27,7 @@ const doc = (text: string): PlainDoc => ({
 });
 
 describe('web IME text replacement', () => {
+  beforeEach(() => vi.stubGlobal('EditContext', undefined));
   let editor: Editor | undefined;
   let mounted: Record<string, unknown> | undefined;
 
@@ -50,7 +51,7 @@ describe('web IME text replacement', () => {
     await tick();
 
     const input = mountedEditor.inputEl;
-    if (!input) throw new Error('Production editor input is not mounted');
+    if (!(input instanceof HTMLTextAreaElement)) throw new Error('Production textarea fallback is not mounted');
     input.focus();
     return { editor: mountedEditor, input };
   };
@@ -105,6 +106,7 @@ describe('web IME text replacement', () => {
     const host = await initWasm();
     host.set_text_replacement_rules([]);
     document.body.replaceChildren();
+    vi.unstubAllGlobals();
   });
 
   it.each([

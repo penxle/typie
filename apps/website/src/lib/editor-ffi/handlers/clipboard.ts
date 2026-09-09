@@ -1,9 +1,8 @@
 import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../attachment-importer';
 import type { Editor, EditorContext } from '../editor.svelte';
-import type { ImeTextInput } from '../input/ime-context';
 import type { EditorEventHandler } from '../types';
 
-export const handleCopy: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
+export const handleCopy: EditorEventHandler<HTMLElement, ClipboardEvent> = (editor, e) => {
   if (editor.readOnly && editor.protectContent) {
     e.preventDefault();
     return;
@@ -27,7 +26,7 @@ export const handleCopy: EditorEventHandler<ImeTextInput, ClipboardEvent> = (edi
   e.preventDefault();
 };
 
-export const handleCut: EditorEventHandler<ImeTextInput, ClipboardEvent> = (editor, e) => {
+export const handleCut: EditorEventHandler<HTMLElement, ClipboardEvent> = (editor, e) => {
   const payload = editor.copySelection();
   if (!payload) {
     return;
@@ -54,8 +53,9 @@ export const deferPasteShortcutDuringComposition = (
   e: KeyboardEvent,
   requestPaste: () => void,
   requestPasteTextOnly: () => void,
+  composing = e.isComposing,
 ): (() => void) | undefined => {
-  if (!e.isComposing || e.altKey) return;
+  if (!composing || e.altKey) return;
 
   const isMac = navigator.platform.toUpperCase().includes('MAC');
   const hasMod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
@@ -139,7 +139,7 @@ const paste = (
 
 export const handlePaste = (
   ctx: EditorContext,
-  e: ClipboardEvent & { currentTarget: ImeTextInput },
+  e: ClipboardEvent & { currentTarget: HTMLElement },
   onFailure: AttachmentImportFailureHandler,
 ): void => {
   const data = e.clipboardData;

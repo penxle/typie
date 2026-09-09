@@ -49,6 +49,10 @@ pub fn handle_view_op(editor: &mut Editor, op: ViewOp) -> Result<(), EditorError
             editor.set_direct_touch_interaction(direct);
             Ok(())
         }
+        ViewOp::SetCompositionTargetRanges { ranges } => {
+            editor.set_composition_target_ranges(ranges);
+            Ok(())
+        }
     }
 }
 

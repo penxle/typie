@@ -1,4 +1,5 @@
 mod alias_e2e;
+mod composition_decoration;
 mod dnd_judgment_parity;
 mod layout_state_input;
 mod list_affordance_parity;

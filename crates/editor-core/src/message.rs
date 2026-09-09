@@ -305,10 +305,22 @@ pub enum ListOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewOp {
-    ToggleFold { id: Dot },
+    ToggleFold {
+        id: Dot,
+    },
     ExpandFoldsForSelection,
-    ExpandFoldsForTrackedRange { id: String },
-    SetDirectTouchInteraction { direct: bool },
+    ExpandFoldsForTrackedRange {
+        id: String,
+    },
+    SetDirectTouchInteraction {
+        direct: bool,
+    },
+    /// Temporary IME target ranges in document-flat Unicode scalar offsets.
+    /// Replaces the previous ranges without editing text, selection, or history.
+    /// Document edits, composition changes, and blur clear these decorations.
+    SetCompositionTargetRanges {
+        ranges: Vec<crate::ImeRange>,
+    },
 }
 
 #[ffi]

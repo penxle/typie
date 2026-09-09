@@ -37,6 +37,7 @@ import type {
   Modifier,
   ModifierState,
   ModifierType,
+  PageRect,
   PlaceholderMetrics,
   PlainDoc,
   PlainRootNode,
@@ -449,7 +450,7 @@ export class Editor {
   appliedImeRevision = $state(0);
   appliedSelectionRevision = $state(0);
 
-  inputEl = $state<HTMLTextAreaElement>();
+  inputEl = $state<HTMLElement>();
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
   extensionAreaEl = $state<HTMLDivElement>();
   documentTrackEl = $state<HTMLDivElement>();
@@ -1702,6 +1703,10 @@ export class Editor {
 
   ime(beforeLimit: number, afterLimit: number): Ime | undefined {
     return this.#invokeCore((core) => core.ime(beforeLimit, afterLimit));
+  }
+
+  firstRectForRange(start: number, end: number): PageRect | undefined {
+    return this.#invokeCore((core) => core.first_rect_for_range({ value: this.appliedRevision }, start, end));
   }
 
   selectionHitTest(page: number, x: number, y: number): boolean {

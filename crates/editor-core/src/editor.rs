@@ -323,7 +323,7 @@ pub struct Editor {
     // drag-and-drop state
     pub(crate) dnd: DndState,
 
-    focused: bool,
+    pub(crate) focused: bool,
     /// Monotonic counter bumped whenever a change can alter rendered page pixels
     /// beyond the selection overlay (doc edits, layout/reflow, font, theme).
     /// Selection-only changes intentionally do NOT bump it, so `page_render_signature`
@@ -360,6 +360,8 @@ pub struct Editor {
     pub(crate) requested_manifests: HashMap<(u16, u16), ManifestRequestClass>,
     pub(crate) shaped_font_inflight: HashSet<(u16, u16, u16)>,
     pub(crate) composition_paint: Option<Vec<editor_model::Modifier>>,
+    // Native IME presentation only; never persisted or restored by undo.
+    pub(crate) composition_target_ranges: Vec<crate::ImeRange>,
     pub(crate) ime_delete_paint: Option<(usize, Vec<editor_model::Modifier>)>,
     // Anchored IME window (flat offsets). Keyboards compare the exposed window
     // against their own prediction of it (iOS resets Hangul composition on
@@ -410,6 +412,7 @@ impl Editor {
             requested_manifests: HashMap::new(),
             shaped_font_inflight: HashSet::new(),
             composition_paint: None,
+            composition_target_ranges: Vec::new(),
             ime_delete_paint: None,
             ime_window_anchor: None,
             selection_mark_rects_cache: Mutex::new(None),
@@ -1176,6 +1179,7 @@ impl Editor {
         }
 
         if ime_failed {
+            self.set_composition_target_ranges(Vec::new());
             if self.state.composition.is_some()
                 && let Err(e) = self.transact(|tr| {
                     tr.update_meta(|m| m.history = HistoryMeta::Skip);
@@ -1678,6 +1682,13 @@ impl Editor {
                 data: MarkData::Composition,
                 rects,
             });
+            let rects = self.composition_target_rects();
+            if !rects.is_empty() {
+                marks.push(Mark {
+                    data: MarkData::CompositionTarget,
+                    rects,
+                });
+            }
         }
 
         if self.dnd.reuse_node_id().is_none()
@@ -1886,6 +1897,9 @@ impl Editor {
         }
 
         self.state = state;
+        if !ops.is_empty() || prev_composition != self.state.composition {
+            self.set_composition_target_ranges(Vec::new());
+        }
         if let Some(paint) = composition_paint_update {
             self.composition_paint = Some(paint);
         }
@@ -2053,6 +2067,9 @@ impl Editor {
         let would_change = self.focused != focused;
         if would_change {
             self.focused = focused;
+            if !focused {
+                self.composition_target_ranges.clear();
+            }
             self.invalidate_render();
         }
     }
@@ -2228,6 +2245,7 @@ impl Editor {
                     Some(restored.normalize(&view).unwrap_or(restored))
                 });
                 self.state.composition = None;
+                self.set_composition_target_ranges(Vec::new());
                 self.composition_paint = None;
                 self.ime_delete_paint = None;
                 self.state.pending_modifiers.clear();
@@ -2301,6 +2319,9 @@ impl Editor {
         }
         self.state = next;
         let changed = !applied_ops.is_empty();
+        if changed {
+            self.set_composition_target_ranges(Vec::new());
+        }
         self.pending_ops.extend(applied_ops);
         Ok(changed)
     }
@@ -2316,6 +2337,7 @@ impl Editor {
             msg: format!("{error:?}"),
         })?;
         self.composition_paint = None;
+        self.composition_target_ranges.clear();
         self.ime_delete_paint = None;
         crate::font::reresolve_fonts(self).ok();
         self.view.layout(&self.state);
@@ -2627,6 +2649,7 @@ impl Editor {
             requested_manifests: HashMap::new(),
             shaped_font_inflight: HashSet::new(),
             composition_paint: None,
+            composition_target_ranges: Vec::new(),
             ime_delete_paint: None,
             ime_window_anchor: None,
             selection_mark_rects_cache: Mutex::new(None),
