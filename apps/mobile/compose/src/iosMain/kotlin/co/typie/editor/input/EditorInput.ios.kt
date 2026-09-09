@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.platform.UIKitTextInputMethodRequest
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.CommitTextCommand
@@ -36,13 +37,15 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
   focusedRectInRoot: () -> Rect?,
+  firstRectForRangeInRoot: (TextRange) -> Rect?,
+  unclippedTextOffsetInRoot: () -> Offset?,
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
   isSessionCurrent: () -> Boolean,
   onIncomingContent: (IncomingContentCandidates) -> Boolean,
 ): PlatformTextInputMethodRequest {
-  return object : PlatformTextInputMethodRequest {
+  return object : UIKitTextInputMethodRequest {
     private var lastPulledValue: TextFieldValue? = null
 
     override val value: () -> TextFieldValue = {
@@ -86,24 +89,20 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
 
+    override fun onTextInputViewAttached(view: UIView) = Unit
+
+    override fun onTextInputViewDetached(view: UIView) = Unit
+
+    override val firstRectForRangeInRoot: (TextRange) -> Rect? = firstRectForRangeInRoot
+
     override val focusedRectInRoot: () -> Rect? = focusedRectInRoot
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
 
-    @ExperimentalComposeUiApi override val unclippedTextOffsetInRoot: () -> Offset? = { null }
+    @ExperimentalComposeUiApi
+    override val unclippedTextOffsetInRoot: () -> Offset? = unclippedTextOffsetInRoot
 
-    // Workaround for Compose iOS 1.10.3: startInputMethod only uses textFieldRectInRoot
-    // to position the hidden UIKit text input view, while IntermediateTextInputUIView
-    // returns a fixed local caretRectForPosition(1, 1, 1, 1). Keep the hidden view's
-    // origin at the caret, but expand the frame to the visible line edge so Japanese IME
-    // candidates anchor near the insertion point without treating the text field as 1x1.
-    override val textFieldRectInRoot: () -> Rect? = {
-      fixedLocalCaretTextFieldRectInRoot(
-        focusedRectInRoot = focusedRectInRoot(),
-        textClippingRectInRoot = textClippingRectInRoot(),
-        fallbackRectInRoot = textFieldRectInRoot(),
-      )
-    }
+    override val textFieldRectInRoot: () -> Rect? = textFieldRectInRoot
 
     override val textClippingRectInRoot: () -> Rect? = textClippingRectInRoot
 

@@ -8,6 +8,9 @@ import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.CursorMetrics
+import co.typie.editor.ffi.FlatImeOp
+import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -26,6 +29,43 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorPointSelectionSemanticTest {
+  @Test
+  fun `pointer selection commits marked text before moving in every dispatch path`() =
+    runTest(StandardTestDispatcher()) {
+      for (path in listOf("immediate", "suspending", "enqueued")) {
+        val fake =
+          FakeFfiEditor(
+            imeProvider = { _, _ ->
+              Ime(
+                text = "日本語 text",
+                windowStart = 0,
+                selection = ImeRange(3, 3),
+                composing = ImeRange(0, 3),
+              )
+            }
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        editor.setImeSessionActive(true)
+        fake.applySnapshot(editor)
+        val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+        val point = PagePoint(page = 0, x = 100f, y = 20f)
+        val selection = SelectionOp.SetAt(page = 0, x = 100f, y = 20f)
+
+        when (path) {
+          "immediate" -> semantic.applySelection(editor, selection)
+          "suspending" -> semantic.dispatchCursorMove(editor, point)
+          "enqueued" -> semantic.enqueueCursorMove(editor, point)
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(
+          listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), Message.Selection(selection)),
+          fake.enqueued,
+          path,
+        )
+      }
+    }
+
   @Test
   fun `cursor move sends set at and runs before commit hook`() =
     runTest(StandardTestDispatcher()) {

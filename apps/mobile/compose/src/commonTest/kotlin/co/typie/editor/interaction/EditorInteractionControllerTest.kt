@@ -23,7 +23,10 @@ import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.FrameKey
+import co.typie.editor.ffi.Ime
+import co.typie.editor.ffi.ImeRange
 import co.typie.editor.ffi.InputModifiers
 import co.typie.editor.ffi.InteractiveHit
 import co.typie.editor.ffi.Message
@@ -179,6 +182,100 @@ private fun EditorInteractionController.presentAppliedState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionControllerTest {
+  @Test
+  fun `iOS composition tap commits only and the next tap moves instead of selecting a word`() =
+    runTest(StandardTestDispatcher()) {
+      for (timerBeforeRelease in listOf(false, true)) {
+        var ime = Ime("日本語 text", 0, ImeRange(3, 3), ImeRange(0, 3))
+        val fake = FakeFfiEditor(imeProvider = { _, _ -> ime })
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        editor.setImeSessionActive(true)
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.iOS },
+          )
+        val point = Offset(80f, 20f)
+        controller.onPointerDown(1L, point, 0L)
+        if (timerBeforeRelease) {
+          controller.onTapTimer(250L)
+          runCurrent()
+          assertTrue(
+            fake.enqueued.isEmpty(),
+            "A held finger must still be able to scroll or long press",
+          )
+        }
+        val releaseTime = if (timerBeforeRelease) 280L else 40L
+        assertTrue(controller.onPointerUp(1L, point, releaseTime))
+        runCurrent()
+        assertEquals(
+          listOf<Message>(Message.TextInput(listOf(FlatImeOp.CommitAsIs))),
+          fake.enqueued,
+        )
+        assertNull(host.scheduledTapDispatchAtMillis)
+        assertTrue(host.requestedBringIntoViewVersions.isEmpty())
+
+        // Deliver the engine's committed value; the next tap is within double-tap distance/time.
+        ime = ime.copy(composing = null)
+        fake.publishSnapshot(editor)
+        fake.enqueued.clear()
+        controller.onPointerDown(2L, point, releaseTime + 40L)
+        controller.onPointerUp(2L, point, releaseTime + 80L)
+        runCurrent()
+        assertEquals(
+          listOf<Message>(Message.Selection(SelectionOp.SetAt(0, 80f, 20f))),
+          fake.enqueued,
+        )
+        controller.cancel()
+      }
+    }
+
+  @Test
+  fun `composition tap still moves on Android and with mouse or stylus on iOS`() =
+    runTest(StandardTestDispatcher()) {
+      for ((platform, pointerType) in
+        listOf(
+          Platform.Android to PointerType.Touch,
+          Platform.iOS to PointerType.Mouse,
+          Platform.iOS to PointerType.Stylus,
+        )) {
+        val fake =
+          FakeFfiEditor(
+            imeProvider = { _, _ -> Ime("日本語 text", 0, ImeRange(3, 3), ImeRange(0, 3)) }
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        editor.setImeSessionActive(true)
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { platform },
+          )
+        val point = Offset(80f, 20f)
+        controller.onPointerDown(1L, point, 0L, type = pointerType)
+        controller.onPointerUp(1L, point, 40L)
+        runCurrent()
+        assertEquals(
+          listOf(
+            Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
+            Message.Selection(SelectionOp.SetAt(0, 80f, 20f)),
+          ),
+          fake.enqueued,
+          "$platform $pointerType",
+        )
+        controller.cancel()
+      }
+    }
+
   @Test
   fun `mouse click supersedes touch selection waiting to launch or enter the editor`() = runTest {
     for (start in listOf(CoroutineStart.DEFAULT, CoroutineStart.UNDISPATCHED)) {

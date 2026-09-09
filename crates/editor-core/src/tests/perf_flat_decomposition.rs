@@ -92,7 +92,7 @@ fn resolved_selection_caret<'a>(
 fn nearest_insertable_probe(editor: &Editor, flat: usize) -> Option<usize> {
     let view = editor.state().view();
     let total = editor_state::flat_size(&view);
-    Some(crate::editor::nearest_insertable_flat_probe(
+    Some(crate::ime::nearest_insertable_flat_probe(
         &view, total, flat,
     ))
 }

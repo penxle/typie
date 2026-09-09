@@ -5,6 +5,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.key.KeyEvent
@@ -18,6 +19,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.EditCommand
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
@@ -88,6 +90,8 @@ internal expect suspend fun PlatformTextInputSessionScope.createEditorInputReque
   bringIntoViewRequests: EditorBringIntoViewRequests,
   onEditCommand: (List<EditCommand>) -> Unit,
   focusedRectInRoot: () -> Rect?,
+  firstRectForRangeInRoot: (TextRange) -> Rect?,
+  unclippedTextOffsetInRoot: () -> Offset?,
   textFieldRectInRoot: () -> Rect?,
   textClippingRectInRoot: () -> Rect?,
   suppressSoftwareKeyboard: Boolean,
@@ -130,21 +134,6 @@ internal fun toolbarInsertTextMessages(text: String, composing: Boolean): List<M
   } else {
     listOf(Message.Insertion(InsertionOp.Text(text)))
   }
-
-internal fun fixedLocalCaretTextFieldRectInRoot(
-  focusedRectInRoot: Rect?,
-  textClippingRectInRoot: Rect?,
-  fallbackRectInRoot: Rect?,
-): Rect? {
-  val focused = focusedRectInRoot ?: return fallbackRectInRoot
-  val rightBoundary = textClippingRectInRoot?.right ?: fallbackRectInRoot?.right ?: focused.right
-  return Rect(
-    left = focused.left,
-    top = focused.top,
-    right = maxOf(focused.right, focused.left + 1f, rightBoundary),
-    bottom = maxOf(focused.bottom, focused.top + 1f),
-  )
-}
 
 private data class EditorInputElement(
   private val session: DocumentEditingSession,
@@ -212,6 +201,11 @@ internal class EditorInputNode(
   private fun presentedCursor(): CursorMetrics? {
     val bundle = editor.publishedBundle ?: return null
     return bundle.snapshot.cursor?.takeIf { bundle.frames.containsKey(it.pageIdx) }
+  }
+
+  private fun firstRectForRangeInRoot(range: TextRange): Rect? {
+    val rect = editor.firstRectForRange(range) ?: return null
+    return uiState.pageRectInRoot(rect.pageIdx, rect.rect)
   }
 
   private var unsubscribeImeResync: (() -> Unit)? = null
@@ -666,6 +660,8 @@ internal class EditorInputNode(
                     }
                   },
                   focusedRectInRoot = { uiState.cursorRectInRoot(presentedCursor()) },
+                  firstRectForRangeInRoot = ::firstRectForRangeInRoot,
+                  unclippedTextOffsetInRoot = uiState::unclippedTextOffsetInRoot,
                   textFieldRectInRoot = uiState::editorRectInRoot,
                   textClippingRectInRoot = uiState::textClippingRectInRoot,
                   suppressSoftwareKeyboard = suppressSoftwareKeyboard,

@@ -3,6 +3,7 @@
 package co.typie.editor.input
 
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.isAltPressed
@@ -13,6 +14,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.UIKitTextInputMethodRequest
+import androidx.compose.ui.text.TextRange
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
@@ -48,6 +50,9 @@ internal actual class EditorPlatformInputBridge actual constructor() {
     object : PlatformTextInputMethodRequest by request, UIKitTextInputMethodRequest {
       private var attachedView: UIView? = null
       private var uninstall: (() -> Unit)? = null
+
+      override val firstRectForRangeInRoot: ((TextRange) -> Rect?)?
+        get() = (request as? UIKitTextInputMethodRequest)?.firstRectForRangeInRoot
 
       override fun onTextInputViewAttached(view: UIView) {
         uninstall?.invoke()
