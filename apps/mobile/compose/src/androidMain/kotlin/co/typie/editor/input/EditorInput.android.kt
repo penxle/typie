@@ -40,7 +40,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
   val androidView = view
   val extractMonitor = ImeExtractMonitor()
   editorImeExtractMonitors[editor] = extractMonitor
+  var activeCursorAnchorInfo: EditorCursorAnchorInfoController? = null
   return PlatformTextInputMethodRequest { outAttrs ->
+    activeCursorAnchorInfo?.close()
     outAttrs.inputType =
       InputType.TYPE_CLASS_TEXT or
         InputType.TYPE_TEXT_FLAG_MULTI_LINE or
@@ -50,6 +52,22 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     val ctx = editor.appliedState.ime
     outAttrs.initialSelStart = ctx?.let { it.windowUtf16Offset(it.selection.start) } ?: -1
     outAttrs.initialSelEnd = ctx?.let { it.windowUtf16Offset(it.selection.end) } ?: -1
+    val cursorAnchorInfo =
+      EditorCursorAnchorInfoController(
+        view = androidView,
+        scope = this,
+        ime = {
+          editor.publishedState.ime?.takeIf {
+            !editor.imeNotificationsPaused && it == editor.appliedState.ime
+          }
+        },
+        focusedRectInRoot = focusedRectInRoot,
+        firstRectForRangeInRoot = firstRectForRangeInRoot,
+        textFieldRectInRoot = textFieldRectInRoot,
+        textClippingRectInRoot = textClippingRectInRoot,
+        isSessionCurrent = isSessionCurrent,
+      )
+    activeCursorAnchorInfo = cursorAnchorInfo
     val connection =
       EditorInputConnection(
         editor = editor,
@@ -57,6 +75,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
         inputSessionScope = this,
         bringIntoViewRequests = bringIntoViewRequests,
         extractMonitor = extractMonitor,
+        cursorAnchorInfo = cursorAnchorInfo,
         isSessionCurrent = isSessionCurrent,
         onIncomingContent = onIncomingContent,
       )
