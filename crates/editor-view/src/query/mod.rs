@@ -1,5 +1,4 @@
 pub(crate) mod common;
-pub(crate) mod composition;
 pub(crate) mod cursor;
 pub(crate) mod dnd;
 pub(crate) mod grapheme;
@@ -17,7 +16,6 @@ pub(crate) mod selection;
 pub(crate) mod viewport_anchor;
 pub(crate) mod visit;
 
-pub use composition::CompositionRect;
 pub use cursor::CursorMetrics;
 pub use hit_test::{ExtendingHit, ExtendingHitSource};
 pub use placeholder::PlaceholderMetrics;

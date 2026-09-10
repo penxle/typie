@@ -403,6 +403,7 @@ pub enum MarkData {
     Selection {
         focused: bool,
     },
+    /// Composition marks share text-area bounds; the underline uses their bottom edge.
     Composition,
     CompositionTarget,
     DropIndicator,
@@ -579,6 +580,18 @@ impl Renderer {
                     continue;
                 }
                 match &mark.data {
+                    MarkData::Composition => {
+                        let thickness = TEXT_DECORATION_THICKNESS.min(rect.rect.height);
+                        let underline = Rect::from_xywh(
+                            rect.rect.x,
+                            rect.rect.bottom() - thickness,
+                            rect.rect.width,
+                            thickness,
+                        );
+                        if let Some(color) = self.resolve_mark_color(&mark.data, theme) {
+                            sink.fill_rect(underline, color, transform);
+                        }
+                    }
                     MarkData::TrackedUnderline { underline } => {
                         draw_underline(sink, rect.rect, underline, theme, transform);
                     }

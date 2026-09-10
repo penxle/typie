@@ -914,17 +914,6 @@ impl View {
         result.layout_index.box_contains(point, &id)
     }
 
-    pub fn composition_rects(
-        &self,
-        from: &Position,
-        to: &Position,
-    ) -> Vec<crate::query::composition::CompositionRect> {
-        let Some(result) = self.layout.as_ref() else {
-            return Vec::new();
-        };
-        crate::query::composition::composition_rects(&result.layout_index, from, to)
-    }
-
     pub fn pages(&self) -> &[LayoutPage] {
         self.layout.as_ref().map_or(&[], |r| &r.pages)
     }
