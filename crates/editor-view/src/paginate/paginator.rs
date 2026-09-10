@@ -8,6 +8,11 @@ use crate::measure::types::{MeasuredBox, MeasuredContent, MeasuredNode, Measured
 use crate::page::LayoutPage;
 use crate::style::*;
 
+pub(crate) use super::placement::{box_content_top, content_bottom};
+use super::placement::{
+    child_border_bottom, child_border_top, leading_chrome_height, line_y, place_node_at,
+    positioned_style, trailing_chrome_height,
+};
 use super::types::*;
 
 pub(crate) struct Paginator {
@@ -17,6 +22,7 @@ pub(crate) struct Paginator {
     content_height: f32,
     margins: EdgeInsets,
     accumulated_y: f32,
+    previous_content_bottom: f32,
     current_x: f32,
     current_width: f32,
     page_content_top: f32,
@@ -35,6 +41,7 @@ impl Paginator {
             content_height,
             margins,
             accumulated_y: margins.top,
+            previous_content_bottom: 0.0,
             current_x: margins.left,
             current_width: content_width,
             page_content_top: margins.top,
@@ -52,6 +59,7 @@ impl Paginator {
             content_height: max_content_height,
             margins,
             accumulated_y: margins.top,
+            previous_content_bottom: 0.0,
             current_x: margins.left,
             current_width: content_width,
             page_content_top: margins.top,
@@ -75,12 +83,14 @@ impl Paginator {
         parent: Dot,
         child_index: usize,
         accumulated_y: f32,
+        previous_content_bottom: f32,
         current_x: f32,
         current_width: f32,
         page_content_top: f32,
         page_content_bottom: f32,
     ) -> LayoutNode {
         self.accumulated_y = accumulated_y;
+        self.previous_content_bottom = previous_content_bottom;
         self.current_x = current_x;
         self.current_width = current_width;
         self.page_content_top = page_content_top;
@@ -123,9 +133,13 @@ impl Paginator {
                 placed
             }
             MeasuredContent::Line(l) => {
-                let y = self.accumulated_y;
+                let y = line_y(l, self.accumulated_y, self.previous_content_bottom);
                 let x = self.current_x;
-                self.accumulated_y += node.height;
+                self.accumulated_y = y + node.height;
+                if !l.is_phantom {
+                    self.previous_content_bottom =
+                        self.previous_content_bottom.max(y + l.baseline + l.descent);
+                }
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Line(LayoutLine {
@@ -137,6 +151,7 @@ impl Paginator {
                 let y = self.accumulated_y;
                 let x = self.current_x;
                 self.accumulated_y += node.height;
+                self.previous_content_bottom = self.previous_content_bottom.max(self.accumulated_y);
                 LayoutNode {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Atom(LayoutAtom {
@@ -189,6 +204,9 @@ impl Paginator {
             measured.style.border.left
         };
 
+        if let Some(top) = box_content_top(&measured.style, measured.scope, box_y) {
+            self.previous_content_bottom = self.previous_content_bottom.max(top);
+        }
         self.accumulated_y += lead_border_top + measured.style.padding.top;
 
         let old_x = self.current_x;
@@ -289,12 +307,19 @@ impl Paginator {
         };
         self.accumulated_y += measured.style.padding.bottom + trail_border_bottom;
         let box_height = self.accumulated_y - box_y;
+        if box_content_top(&measured.style, measured.scope, box_y).is_some()
+            || measured.style.padding.bottom > 0.0
+            || measured.style.border.bottom > 0.0
+        {
+            self.previous_content_bottom = self.previous_content_bottom.max(self.accumulated_y);
+        }
+        let style = positioned_style(measured, &children, box_y);
 
         LayoutNode {
             rect: Rect::from_xywh(box_x, box_y, width, box_height),
             content: LayoutContent::Box(LayoutBox {
                 node: measured.node,
-                style: measured.style.clone(),
+                style,
                 children: children.into(),
                 attachment: None,
                 scope: measured.scope,
@@ -303,57 +328,17 @@ impl Paginator {
     }
 
     fn place_horizontal(&mut self, measured: &MeasuredBox, node: &MeasuredNode) -> LayoutNode {
-        let box_x = self.compute_box_x(measured, node.width);
-        let box_y = self.accumulated_y;
-
-        let collapse = measured.style.border_mode == BorderMode::Collapse;
-        let lead_border_left = if collapse {
-            0.0
-        } else {
-            measured.style.border.left
-        };
-        let lead_border_top = if collapse {
-            0.0
-        } else {
-            measured.style.border.top
-        };
-
-        let mut child_x = box_x + lead_border_left + measured.style.padding.left;
-        let child_y = box_y + lead_border_top + measured.style.padding.top;
-
-        let mut child_index: usize = 0;
-        let children: Vec<LayoutNode> = measured
-            .children
-            .iter()
-            .map(|child| {
-                let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
-                let layout_child =
-                    place_node_at(child, child_x, child_y, measured.node, child_index);
-                if is_doc_child {
-                    child_index += 1;
-                }
-                child_x += child.width;
-                if measured.style.border_mode == BorderMode::Collapse
-                    && let MeasuredContent::Box(child_box) = &child.content
-                {
-                    child_x -= child_box.style.border.right;
-                }
-                layout_child
-            })
-            .collect();
-
-        self.accumulated_y += node.height;
-
-        LayoutNode {
-            rect: Rect::from_xywh(box_x, box_y, node.width, node.height),
-            content: LayoutContent::Box(LayoutBox {
-                node: measured.node,
-                style: measured.style.clone(),
-                children: children.into(),
-                attachment: None,
-                scope: measured.scope,
-            }),
-        }
+        let x = self.compute_box_x(measured, node.width);
+        let placed = place_node_at(
+            node,
+            x,
+            self.accumulated_y,
+            measured.node,
+            0,
+            &mut self.previous_content_bottom,
+        );
+        self.accumulated_y = placed.rect.bottom();
+        placed
     }
 
     fn break_page(&mut self, children: &mut Vec<LayoutNode>) {
@@ -400,7 +385,13 @@ impl Paginator {
             return child.height > remaining;
         }
 
-        initial_keep_height(child, terminal_chrome_after).is_some_and(|keep| keep > remaining)
+        initial_keep_height(
+            child,
+            terminal_chrome_after,
+            self.accumulated_y,
+            self.previous_content_bottom,
+        )
+        .is_some_and(|keep| keep > remaining)
     }
 
     fn page_content_bottom(&self) -> f32 {
@@ -425,6 +416,7 @@ impl Paginator {
             self.page_content_top = page_end + self.margins.top;
             self.page_content_bottom = self.page_content_top + self.content_height;
             self.accumulated_y = self.page_content_top;
+            self.previous_content_bottom = page_end;
         } else {
             let is_first_page = self.pages.is_empty();
             let page_start = if is_first_page {
@@ -496,38 +488,6 @@ impl Paginator {
     }
 }
 
-fn child_border_top(node: &MeasuredNode) -> f32 {
-    match &node.content {
-        MeasuredContent::Box(b) => b.style.border.top,
-        _ => 0.0,
-    }
-}
-
-fn child_border_bottom(node: &MeasuredNode) -> Option<f32> {
-    match &node.content {
-        MeasuredContent::Box(b) => Some(b.style.border.bottom),
-        _ => None,
-    }
-}
-
-fn leading_chrome_height(b: &MeasuredBox) -> f32 {
-    let border_top = if b.style.border_mode == BorderMode::Collapse {
-        0.0
-    } else {
-        b.style.border.top
-    };
-    border_top + b.style.padding.top
-}
-
-fn trailing_chrome_height(b: &MeasuredBox) -> f32 {
-    let border_bottom = if b.style.border_mode == BorderMode::Collapse {
-        0.0
-    } else {
-        b.style.border.bottom
-    };
-    b.style.padding.bottom + border_bottom
-}
-
 fn terminal_child_index(b: &MeasuredBox) -> Option<usize> {
     let mut last = None;
     for (i, child) in b.children.iter().enumerate() {
@@ -547,120 +507,46 @@ fn initial_child_index(b: &MeasuredBox) -> Option<usize> {
         .position(|child| !matches!(child.content, MeasuredContent::Spacing(_)))
 }
 
-fn initial_keep_height(node: &MeasuredNode, terminal_chrome_after: f32) -> Option<f32> {
-    if node.page_break_policy() == PageBreakPolicy::Avoid {
-        return Some(node.height + terminal_chrome_after);
+fn initial_keep_height(
+    node: &MeasuredNode,
+    terminal_chrome_after: f32,
+    y: f32,
+    mut previous_content_bottom: f32,
+) -> Option<f32> {
+    if let MeasuredContent::Line(line) = &node.content {
+        return Some(
+            line_y(line, y, previous_content_bottom) - y + node.height + terminal_chrome_after,
+        );
     }
-
+    if node.page_break_policy() == PageBreakPolicy::Avoid {
+        let placed = place_node_at(node, 0.0, y, Dot::ROOT, 0, &mut previous_content_bottom);
+        return Some(placed.rect.bottom() - y + terminal_chrome_after);
+    }
     let MeasuredContent::Box(b) = &node.content else {
         return None;
     };
     if b.style.direction != Direction::Vertical {
         return None;
     }
-
     let first_child_index = initial_child_index(b)?;
     let child_terminal_chrome_after = if Some(first_child_index) == terminal_child_index(b) {
         terminal_chrome_after + trailing_chrome_height(b)
     } else {
         0.0
     };
-
-    Some(
-        leading_chrome_height(b)
-            + initial_keep_height(&b.children[first_child_index], child_terminal_chrome_after)?,
-    )
-}
-
-fn place_node_at(
-    node: &MeasuredNode,
-    x: f32,
-    y: f32,
-    parent: Dot,
-    child_index: usize,
-) -> LayoutNode {
-    match &node.content {
-        MeasuredContent::Box(b) => {
-            let mut offset_y = b.style.border.top + b.style.padding.top;
-            let mut offset_x = b.style.border.left + b.style.padding.left;
-            let children: Vec<LayoutNode> = match b.style.direction {
-                Direction::Vertical => {
-                    let mut idx: usize = 0;
-                    b.children
-                        .iter()
-                        .map(|child| {
-                            let is_doc_child =
-                                !matches!(child.content, MeasuredContent::Spacing(_));
-                            let c = place_node_at(child, x + offset_x, y + offset_y, b.node, idx);
-                            if is_doc_child {
-                                idx += 1;
-                            }
-                            offset_y += child.height;
-                            c
-                        })
-                        .collect()
-                }
-                Direction::Horizontal => {
-                    let mut idx: usize = 0;
-                    b.children
-                        .iter()
-                        .map(|child| {
-                            let is_doc_child =
-                                !matches!(child.content, MeasuredContent::Spacing(_));
-                            let c = place_node_at(child, x + offset_x, y + offset_y, b.node, idx);
-                            if is_doc_child {
-                                idx += 1;
-                            }
-                            offset_x += child.width;
-                            c
-                        })
-                        .collect()
-                }
-            };
-            let attachment = Some(ChildAttachment {
-                parent,
-                index: child_index,
-            });
-            LayoutNode {
-                rect: Rect::from_xywh(x, y, node.width, node.height),
-                content: LayoutContent::Box(LayoutBox {
-                    node: b.node,
-                    style: b.style.clone(),
-                    children: children.into(),
-                    attachment,
-                    scope: b.scope,
-                }),
-            }
-        }
-        MeasuredContent::Line(l) => LayoutNode {
-            rect: Rect::from_xywh(x, y, node.width, node.height),
-            content: LayoutContent::Line(LayoutLine {
-                measured: std::sync::Arc::clone(l),
-            }),
-        },
-        MeasuredContent::Atom(a) => LayoutNode {
-            rect: Rect::from_xywh(x, y, node.width, node.height),
-            content: LayoutContent::Atom(LayoutAtom {
-                node: a.node,
-                attachment: ChildAttachment {
-                    parent,
-                    index: child_index,
-                },
-            }),
-        },
-        MeasuredContent::Spacing(h) => LayoutNode {
-            rect: Rect::from_xywh(x, y, node.width, *h),
-            content: LayoutContent::Spacing(SpacingKind::Gap {
-                position: Position::new(parent, child_index),
-            }),
-        },
-        MeasuredContent::PageBreak => LayoutNode {
-            rect: Rect::from_xywh(x, y, 0.0, 0.0),
-            content: LayoutContent::Spacing(SpacingKind::Gap {
-                position: Position::new(parent, child_index),
-            }),
-        },
+    if let Some(top) = box_content_top(&b.style, b.scope, y) {
+        previous_content_bottom = previous_content_bottom.max(top);
     }
+    let leading = leading_chrome_height(b);
+    Some(
+        leading
+            + initial_keep_height(
+                &b.children[first_child_index],
+                child_terminal_chrome_after,
+                y + leading,
+                previous_content_bottom,
+            )?,
+    )
 }
 
 #[cfg(test)]

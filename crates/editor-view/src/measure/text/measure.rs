@@ -24,7 +24,6 @@ use super::inline::{
 use super::layout::build_layout;
 use super::resolve::{ResolvedTextStyle, apply_pending_to_style, style_from_effective_modifiers};
 use super::ruby::build_ruby_annotations;
-use super::ruby::ruby_extra_top;
 use super::seg_cache::{self, SegmentCache};
 use super::strut::compute_strut;
 use super::style_run::resolve_style_runs;
@@ -97,11 +96,14 @@ impl MeasuredLine {
                     glyph.y += delta;
                 }
             }
+        }
+        let ruby_delta = delta - (ascent - self.ascent);
+        if ruby_delta != 0.0 {
             for annotation in &mut line.ruby_annotations {
-                annotation.baseline_y += delta;
+                annotation.baseline_y += ruby_delta;
                 for run in &mut annotation.glyph_runs {
                     for glyph in &mut run.glyphs {
-                        glyph.y += delta;
+                        glyph.y += ruby_delta;
                     }
                 }
             }
@@ -304,11 +306,6 @@ fn measure_segment<'a>(
         .into_iter()
         .enumerate()
         .map(|(i, (line, ruby_annotations))| {
-            let extra_top = ruby_extra_top(line.baseline, line.ascent, &ruby_annotations);
-            let new_ascent = line.ascent + extra_top;
-            let new_baseline = line.baseline + extra_top;
-            let new_height = line.height + extra_top;
-
             let line_offset_range = if n == 1 {
                 Some(seg_off.clone())
             } else if i == 0 {
@@ -318,32 +315,6 @@ fn measure_segment<'a>(
             } else {
                 None
             };
-
-            let glyph_runs = line
-                .glyph_runs
-                .into_iter()
-                .map(|mut r| {
-                    if extra_top != 0.0 {
-                        for g in &mut r.glyphs {
-                            g.y += extra_top;
-                        }
-                    }
-                    r
-                })
-                .collect::<Vec<_>>();
-
-            let ruby_annotations = ruby_annotations
-                .into_iter()
-                .map(|mut a| {
-                    a.baseline_y += extra_top;
-                    for run in &mut a.glyph_runs {
-                        for g in &mut run.glyphs {
-                            g.y += extra_top;
-                        }
-                    }
-                    a
-                })
-                .collect::<Vec<_>>();
 
             let tab_gaps: Vec<TabGap> = line
                 .tab_gaps_raw
@@ -358,13 +329,13 @@ fn measure_segment<'a>(
 
             MeasuredLine {
                 node: para,
-                height: new_height,
-                baseline: new_baseline,
-                ascent: new_ascent,
+                height: line.height,
+                baseline: line.baseline,
+                ascent: line.ascent,
                 descent: line.descent,
                 cursor_ascent: strut.ascent,
                 cursor_descent: strut.descent,
-                glyph_runs,
+                glyph_runs: line.glyph_runs,
                 ruby_annotations,
                 empty_caret_x: empty_caret_x_for(align, indent, width),
                 offset_range: line_offset_range,
@@ -820,7 +791,7 @@ mod tests {
     }
 
     #[test]
-    fn ruby_inflates_line_and_carries_annotations() {
+    fn ruby_preserves_base_line_metrics_and_carries_annotations() {
         let plain = measure(&build_logs(vec![ch('\u{6F22}'), ch('\u{5B57}')]), 1.0e6).0;
         let mut l = build_logs(vec![ch('\u{6F22}'), ch('\u{5B57}')]);
         l.spans = SpanLog::new()
@@ -840,17 +811,27 @@ mod tests {
             !ruby[0].ruby_annotations.is_empty(),
             "ruby annotations present"
         );
-        let d_ascent = ruby[0].ascent - plain[0].ascent;
-        let d_baseline = ruby[0].baseline - plain[0].baseline;
-        let d_height = ruby[0].height - plain[0].height;
-        assert!(
-            d_ascent > 0.0,
-            "ruby strictly inflates the line (extra_top > 0)"
+        assert_eq!(ruby[0].ascent, plain[0].ascent);
+        assert_eq!(ruby[0].descent, plain[0].descent);
+        assert_eq!(ruby[0].baseline, plain[0].baseline);
+        assert_eq!(ruby[0].height, plain[0].height);
+        assert_eq!(ruby[0].glyph_runs, plain[0].glyph_runs);
+
+        let expanded = expand_line_for_caret(
+            &ruby[0],
+            &LineStrutExpansion {
+                ascent: ruby[0].ascent + 10.0,
+                descent: ruby[0].descent + 2.0,
+                min_line_height: ruby[0].height + 20.0,
+            },
         );
-        assert!(
-            (d_ascent - d_baseline).abs() < 1e-3 && (d_ascent - d_height).abs() < 1e-3,
-            "extra_top added uniformly to ascent/baseline/height",
-        );
+        let ruby_bottom = expanded
+            .ruby_annotations
+            .iter()
+            .map(|annotation| annotation.baseline_y + annotation.descent)
+            .reduce(f32::max)
+            .unwrap();
+        assert!((expanded.baseline - expanded.ascent - ruby_bottom - 2.0).abs() < 0.001);
     }
 
     #[test]

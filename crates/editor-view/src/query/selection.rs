@@ -388,13 +388,12 @@ fn line_endpoint(
     pos: &Position,
 ) -> Option<PageRect> {
     let page_rect = layout_index.page_rect(entry.rect)?;
-    let band = ruby_band(line);
-    let height = (entry.rect.height - band).max(0.0);
+    let height = entry.rect.height;
     Some(PageRect::new(
         page_rect.page_idx,
         Rect::from_xywh(
             entry.rect.x + grapheme::x_at_offset(line, pos),
-            page_rect.rect.y + band,
+            page_rect.rect.y,
             0.0,
             height,
         ),
@@ -645,12 +644,8 @@ fn strut_line_has_selectable_child_range(line: &LayoutLine) -> bool {
             .is_some_and(|range| range.start < range.end)
 }
 
-fn ruby_band(line: &LayoutLine) -> f32 {
-    crate::measure::text::ruby::ruby_extra_top(line.baseline, line.ascent, &line.ruby_annotations)
-}
-
 fn text_area_height(line: &LayoutLine) -> f32 {
-    let height = (line.ascent + line.descent - ruby_band(line)).max(0.0);
+    let height = (line.ascent + line.descent).max(0.0);
     if height > 0.0 {
         height
     } else if !line.glyph_runs.is_empty() {
@@ -745,10 +740,9 @@ fn visit_line(
     };
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        let band = ruby_band(line);
-        let box_height = (node.rect.height - band).max(0.0);
+        let box_height = node.rect.height;
         let x = node.rect.x + x_start;
-        let box_top = node.rect.y + band - pages[page_idx].y_start;
+        let box_top = node.rect.y - pages[page_idx].y_start;
         let line_box = PageRect::with_meta(
             page_idx,
             Rect::from_xywh(x, box_top, width, box_height),
@@ -1406,7 +1400,11 @@ mod tests {
         let view = DocView::new(&pd);
         let (entry, line) = first_line_for_para(&index, &first_para).unwrap();
         assert!(!line.ruby_annotations.is_empty());
-        assert!(entry.rect.height > plain_break.height);
+        assert_close(
+            entry.rect.height,
+            plain_break.height,
+            "ruby preserves base line height",
+        );
 
         let text = Selection::new(Position::new(first_para, 0), Position::new(first_para, 3));
         let text_rect = selection_rects(&index, &text.resolve(&view).unwrap())[0].rect;

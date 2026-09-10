@@ -8,7 +8,9 @@ use smallvec::SmallVec;
 use std::sync::{Arc, OnceLock};
 
 use crate::page::{LayoutPage, PageRect};
+use crate::paginate::paginator::{box_content_top, content_bottom};
 use crate::paginate::types::{LayoutContent, LayoutLine, LayoutNode, LayoutTree, SpacingKind};
+use crate::style::Direction;
 
 type LayoutEntryId = usize;
 
@@ -42,6 +44,8 @@ impl std::ops::Deref for LayoutIndex {
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutEntry {
     pub(crate) rect: Rect,
+    /// Unchanged geometry keeps this prefix value valid across content splices.
+    pub(crate) previous_content_bottom: f32,
     path: SmallVec<[usize; 8]>,
     ancestors: SmallVec<[Dot; 4]>,
 }
@@ -88,7 +92,7 @@ impl LayoutIndex {
             spatial: Vec::new(),
             entries_by_page: vec![Vec::new(); pages.len()],
         };
-        builder.build_node(&tree.root);
+        builder.build_node(&tree.root, f32::NEG_INFINITY);
         Self {
             tree,
             data: Arc::new(LayoutIndexData {
@@ -112,8 +116,8 @@ impl LayoutIndex {
     /// Reuse every derived structure (entries, node maps, per-page lists,
     /// spatial entries — even a built R-tree) under a new `LayoutTree` whose
     /// geometry is byte-identical to the old one. Sound only when the caller
-    /// has verified geometry equality; all index data derives from rects,
-    /// node ids and traversal structure, never from line content.
+    /// has verified geometry equality; index data derives from base text metrics,
+    /// box geometry, node ids and traversal structure, never from glyph content.
     pub(crate) fn rebind_tree(mut self, tree: LayoutTree) -> Self {
         self.tree = tree;
         self
@@ -125,8 +129,8 @@ impl LayoutIndex {
     }
 
     /// Whether `new_tree` is geometry-identical to the current tree at
-    /// `block`'s subtree — same rects, ids, structure and attachment; line
-    /// content is deliberately ignored (the index never derives from it).
+    /// `block`'s subtree — same base text metrics, box geometry, ids, structure and
+    /// attachment. Glyph content and ruby annotations do not affect the index.
     pub(crate) fn subtree_geometry_matches(&self, new_tree: &LayoutTree, block: &Dot) -> bool {
         let Some(&entry_id) = self.boxes_by_node_id.get(block) else {
             return false;
@@ -539,10 +543,10 @@ impl LayoutEntry {
 }
 
 impl LayoutIndexBuilder<'_> {
-    fn build_node(&mut self, node: &LayoutNode) {
+    fn build_node(&mut self, node: &LayoutNode, previous_content_bottom: f32) {
         match &node.content {
             LayoutContent::Box(b) => {
-                let id = self.add_entry(node.rect);
+                let id = self.add_entry(node.rect, previous_content_bottom);
                 self.boxes_by_node_id.insert(b.node, id);
                 if b.scope {
                     self.scope_by_node.insert(b.node, id);
@@ -551,26 +555,35 @@ impl LayoutIndexBuilder<'_> {
                     self.register_match_node(attachment.parent, id);
                 }
                 self.ancestors.push(b.node);
+                let mut previous_content_bottom = box_content_top(&b.style, b.scope, node.rect.y)
+                    .map_or(previous_content_bottom, |top| {
+                        previous_content_bottom.max(top)
+                    });
                 for (idx, child) in b.children.iter().enumerate() {
                     self.path.push(idx);
-                    self.build_node(child);
+                    self.build_node(child, previous_content_bottom);
                     self.path.pop();
+                    if b.style.direction == Direction::Vertical
+                        && let Some(bottom) = content_bottom(child)
+                    {
+                        previous_content_bottom = previous_content_bottom.max(bottom);
+                    }
                 }
                 self.ancestors.pop();
             }
             LayoutContent::Spacing(SpacingKind::Gap { .. }) => {
                 if !self.ancestors.is_empty() {
-                    self.add_entry(node.rect);
+                    self.add_entry(node.rect, previous_content_bottom);
                 }
             }
             LayoutContent::Line(line) if line.is_phantom => {}
             LayoutContent::Spacing(_) => {}
             LayoutContent::Line(line) => {
-                let id = self.add_entry(node.rect);
+                let id = self.add_entry(node.rect, previous_content_bottom);
                 self.register_match_node(line.node, id);
             }
             LayoutContent::Atom(atom) => {
-                let id = self.add_entry(node.rect);
+                let id = self.add_entry(node.rect, previous_content_bottom);
                 self.atoms_by_node_id.insert(atom.node, id);
                 self.register_match_node(atom.attachment.parent, id);
             }
@@ -584,10 +597,11 @@ impl LayoutIndexBuilder<'_> {
         }
     }
 
-    fn add_entry(&mut self, rect: Rect) -> LayoutEntryId {
+    fn add_entry(&mut self, rect: Rect, previous_content_bottom: f32) -> LayoutEntryId {
         let entry_id = self.entries.len();
         self.entries.push(LayoutEntry {
             rect,
+            previous_content_bottom,
             path: SmallVec::from_slice(&self.path),
             ancestors: SmallVec::from_slice(&self.ancestors),
         });
@@ -630,6 +644,10 @@ pub(crate) fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
             x.node == y.node
                 && x.attachment == y.attachment
                 && x.scope == y.scope
+                && x.style.direction == y.style.direction
+                && x.style.padding == y.style.padding
+                && x.style.border == y.style.border
+                && x.style.monolithic == y.style.monolithic
                 && x.children.len() == y.children.len()
                 && x.children
                     .iter()
@@ -637,7 +655,11 @@ pub(crate) fn node_geometry_eq(a: &LayoutNode, b: &LayoutNode) -> bool {
                     .all(|(c, d)| node_geometry_eq(c, d))
         }
         (LayoutContent::Line(x), LayoutContent::Line(y)) => {
-            x.node == y.node && x.is_phantom == y.is_phantom
+            x.node == y.node
+                && x.is_phantom == y.is_phantom
+                && x.baseline == y.baseline
+                && x.ascent == y.ascent
+                && x.descent == y.descent
         }
         (LayoutContent::Atom(x), LayoutContent::Atom(y)) => {
             x.node == y.node && x.attachment == y.attachment

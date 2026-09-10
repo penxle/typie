@@ -19,7 +19,6 @@ mod viewport;
 pub use dnd::*;
 pub use external::ExternalElement;
 pub use measure::text::measure::TabGap;
-pub use measure::text::ruby::ruby_extra_top;
 pub use page::*;
 pub use page_fragment::{
     PageFragmentAtom, PageFragmentBox, PageFragmentContent, PageFragmentDecoration,
