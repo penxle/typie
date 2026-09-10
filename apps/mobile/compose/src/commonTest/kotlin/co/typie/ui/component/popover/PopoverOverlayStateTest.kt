@@ -1,5 +1,7 @@
 package co.typie.ui.component.popover
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
@@ -75,14 +77,12 @@ class PopoverOverlayStateTest {
       owner = firstOwner,
       entry = createEntry(firstOwner),
       anchorBounds = IntRect(left = 1, top = 2, right = 3, bottom = 4),
-      progress = 0.25f,
       interactive = false,
     )
 
     assertEquals(secondEntry, state.entry)
     assertEquals(secondBounds, state.anchorBounds)
     assertEquals(0f, state.progress)
-    assertEquals(0f, state.easedProgress)
     assertEquals(true, state.interactive)
   }
 
@@ -91,17 +91,11 @@ class PopoverOverlayStateTest {
     val state = PopoverOverlayState()
     val owner = Any()
     val initialEntry = createEntry(owner)
-    val updatedEntry = createEntry(owner)
+    val updatedEntry = createEntry(owner, mutableStateOf(0.25f))
     val bounds = IntRect(left = 40, top = 50, right = 140, bottom = 170)
 
     state.show(owner, initialEntry, IntRect.Zero)
-    state.update(
-      owner = owner,
-      entry = updatedEntry,
-      anchorBounds = bounds,
-      progress = 0.25f,
-      interactive = false,
-    )
+    state.update(owner = owner, entry = updatedEntry, anchorBounds = bounds, interactive = false)
 
     assertSame(updatedEntry, state.entry)
     assertEquals(bounds, state.anchorBounds)
@@ -120,7 +114,6 @@ class PopoverOverlayStateTest {
       owner = owner,
       entry = entry,
       anchorBounds = IntRect(left = 10, top = 12, right = 34, bottom = 56),
-      progress = 1f,
       interactive = false,
     )
     state.clear(owner)
@@ -128,7 +121,6 @@ class PopoverOverlayStateTest {
     assertNull(state.entry)
     assertEquals(IntRect.Zero, state.anchorBounds)
     assertEquals(0f, state.progress)
-    assertEquals(0f, state.easedProgress)
     assertEquals(true, state.interactive)
     assertNull(state.paneBoundsInWindow)
   }
@@ -137,48 +129,38 @@ class PopoverOverlayStateTest {
   fun detachKeepsOverlayVisibleForClosingAnimation() {
     val state = PopoverOverlayState()
     val owner = Any()
-    val entry = createEntry(owner)
-    val bounds = IntRect(left = 10, top = 12, right = 34, bottom = 56)
     val progress = 0.8f
+    val entry = createEntry(owner, mutableStateOf(progress))
+    val bounds = IntRect(left = 10, top = 12, right = 34, bottom = 56)
 
     state.show(owner, entry, bounds)
-    state.update(
-      owner = owner,
-      entry = entry,
-      anchorBounds = bounds,
-      progress = progress,
-      interactive = true,
-    )
+    state.update(owner = owner, entry = entry, anchorBounds = bounds, interactive = true)
     state.detach(owner)
 
     assertEquals(entry, state.entry)
     assertEquals(bounds, state.anchorBounds)
     assertEquals(progress, state.progress)
-    assertEquals(expectedProgress(progress), state.easedProgress)
     assertEquals(false, state.interactive)
     assertEquals(true, state.isDetached)
     assertEquals(false, state.isOwnedBy(owner))
   }
 
   @Test
-  fun easedProgressUsesSameEasingForProgress() {
+  fun sharesActiveFramesAndFreezesTheLastFrameWhenTheTriggerDisappears() {
     val state = PopoverOverlayState()
     val owner = Any()
-    val progress = 0.4f
-    val bounds = IntRect(left = 10, top = 12, right = 34, bottom = 56)
-    val entry = createEntry(owner)
+    val progress = mutableStateOf(0.2f)
+    state.show(owner, createEntry(owner, progress), IntRect.Zero)
 
-    state.show(owner, entry, bounds)
-    state.update(
-      owner = owner,
-      entry = entry,
-      anchorBounds = bounds,
-      progress = progress,
-      interactive = true,
-    )
+    progress.value = 0.6f
+    assertEquals(0.6f, state.progress)
 
-    assertEquals(progress, state.progress)
-    assertEquals(expectedProgress(progress), state.easedProgress)
+    state.detach(owner)
+    progress.value = 0f
+    assertEquals(0.6f, state.progress)
+
+    state.updateDetachedProgress(state.detachedCloseRequestId(), 0.3f)
+    assertEquals(0.3f, state.progress)
   }
 
   @Test
@@ -253,16 +235,15 @@ class PopoverOverlayStateTest {
   }
 }
 
-private fun expectedProgress(progress: Float): Float {
-  return PopoverDefaults.PopoverEasing.transform(progress).coerceIn(0f, 1f)
-}
-
-private fun createEntry(owner: Any): PopoverOverlayEntry {
+private fun createEntry(
+  owner: Any,
+  progress: State<Float> = mutableStateOf(0f),
+): PopoverOverlayEntry {
   return PopoverOverlayEntry(
     owner = owner,
+    progress = progress,
     placement = PopoverPlacement.BelowEnd,
     screenPadding = PopoverScreenPadding(left = 0, top = 0, right = 0, bottom = 0),
-    collapsedCornerRadius = 0.dp,
     maxWidth = null,
     minWidth = 0.dp,
     pane = {},

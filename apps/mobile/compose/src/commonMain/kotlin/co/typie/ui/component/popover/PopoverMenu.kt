@@ -80,7 +80,6 @@ fun PopoverMenu(
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
-  collapsedCornerRadius: Dp? = null,
   content: PopoverMenuScope.() -> Unit,
 ) {
   Popover(
@@ -90,7 +89,6 @@ fun PopoverMenu(
     maxWidth = maxWidth,
     minWidth = minWidth,
     screenPadding = screenPadding,
-    collapsedCornerRadius = collapsedCornerRadius,
     pane = {
       val entries = PopoverMenuScope().apply(content).entries
 
@@ -98,14 +96,7 @@ fun PopoverMenu(
         val segments = segmentEntries(entries)
         segments.forEachIndexed { index, segment ->
           if (index > 0 && segment is MenuSegment.Divider) {
-            Spacer(Modifier.height(12.dp))
-            Box(
-              Modifier.fillMaxWidth()
-                .height(1.dp)
-                .padding(horizontal = 8.dp)
-                .background(AppTheme.colors.borderHairline)
-            )
-            Spacer(Modifier.height(12.dp))
+            PopoverMenuDivider()
           }
           when (segment) {
             is MenuSegment.Items -> {
@@ -133,6 +124,16 @@ fun PopoverMenu(
         }
       }
     },
+  )
+}
+
+@Composable
+internal fun PopoverMenuDivider() {
+  Box(
+    Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+      .fillMaxWidth()
+      .height(1.dp)
+      .background(AppTheme.colors.borderHairline)
   )
 }
 

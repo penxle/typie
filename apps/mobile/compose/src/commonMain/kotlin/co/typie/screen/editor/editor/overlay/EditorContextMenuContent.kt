@@ -1,13 +1,10 @@
 package co.typie.screen.editor.editor.overlay
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +32,7 @@ import co.typie.ui.component.popover.LocalPopoverPaneEdgeAutoScrollController
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.PopoverMenuDivider
 import co.typie.ui.component.popover.PopoverMenuItemRow
 import co.typie.ui.component.popover.PressGestureSession
 import co.typie.ui.component.popover.SelectablePaneHost
@@ -82,7 +80,7 @@ internal fun EditorExpandedContextMenu(
   EditorContextMenuPane(acceptsInput) {
     PopoverList(clipboardItems, acceptsInput = acceptsInput)
     if (actions.availableExpansionUnits.isNotEmpty()) {
-      if (clipboardItems.isNotEmpty()) EditorContextMenuDivider()
+      if (clipboardItems.isNotEmpty()) PopoverMenuDivider()
       var itemCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
       val interactionSource = remember { MutableInteractionSource() }
       val triggerInput =
@@ -116,7 +114,7 @@ internal fun EditorExpandedContextMenu(
     }
     if (actions.contextualItems.isNotEmpty() || actions.onComment != null) {
       if (clipboardItems.isNotEmpty() || actions.availableExpansionUnits.isNotEmpty()) {
-        EditorContextMenuDivider()
+        PopoverMenuDivider()
       }
       PopoverList(
         acceptsInput = acceptsInput,
@@ -172,7 +170,7 @@ internal fun EditorSelectionContextSubmenu(
         ),
     )
     Column(Modifier.graphicsLayer { alpha = revealProgress }) {
-      EditorContextMenuDivider()
+      PopoverMenuDivider()
       PopoverList(
         acceptsInput = acceptsInput,
         items =
@@ -227,16 +225,6 @@ private fun EditorContextMenuPane(
       }
     }
   }
-}
-
-@Composable
-private fun EditorContextMenuDivider() {
-  Box(
-    Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-      .fillMaxWidth()
-      .height(1.dp)
-      .background(AppTheme.colors.borderHairline)
-  )
 }
 
 internal data class EditorContextMenuExpansionItem(

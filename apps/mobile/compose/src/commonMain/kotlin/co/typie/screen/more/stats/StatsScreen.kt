@@ -1,7 +1,6 @@
 package co.typie.screen.more.stats
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +34,7 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverMenu
+import co.typie.ui.component.popover.popoverAnchorSurface
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -114,12 +114,11 @@ fun StatsScreen() {
               anchor = {
                 Box(
                   modifier =
-                    Modifier.border(
-                        1.dp,
+                    Modifier.popoverAnchorSurface(
+                        AppTheme.colors.surfaceDefault,
                         AppTheme.colors.borderEmphasis,
-                        AppShapes.rounded(AppShapes.md),
+                        AppShapes.md,
                       )
-                      .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
                       .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                   Text(
@@ -128,8 +127,7 @@ fun StatsScreen() {
                     color = AppTheme.colors.textMuted,
                   )
                 }
-              },
-              collapsedCornerRadius = AppShapes.md,
+              }
             ) {
               item(icon = Lucide.Copy, label = "클립보드에 복사") {
                 scope.launch {

@@ -1,8 +1,6 @@
 package co.typie.ui.component.sheet
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,13 +27,13 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ui.component.Spinner
 import co.typie.ui.component.Text
+import co.typie.ui.component.popover.popoverAnchorSurface
 import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
 
 object SheetBarDefaults {
   val SlotWidth: Dp = 44.dp
@@ -119,16 +117,18 @@ fun SheetBarButton(
           .size(SheetBarDefaults.ButtonSize)
           .tooltip(contentDescription, enabled = enabled && !loading)
           .graphicsLayer { this.alpha = alpha }
-          .shadow(AppTheme.shadows.md, SheetBarDefaults.ButtonShape)
-          .border(1.dp, resolvedBorderColor, SheetBarDefaults.ButtonShape)
-          .background(resolvedBackground, SheetBarDefaults.ButtonShape)
+          .popoverAnchorSurface(
+            resolvedBackground,
+            resolvedBorderColor,
+            shadow = AppTheme.shadows.md,
+            pressedScale = 1.1f,
+          )
           .hoverFeedback(source, enabled && !loading, SheetBarDefaults.ButtonShape)
           .then(
             if (onClick != null)
               Modifier.clickable(enabled = enabled && !loading, onClick = onClick)
             else Modifier
-          )
-          .pressScale(0.94f),
+          ),
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {

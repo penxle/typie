@@ -7,11 +7,13 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable as foundationClickable
 import androidx.compose.foundation.combinedClickable as foundationCombinedClickable
 import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -136,15 +138,22 @@ fun Modifier.pointerIgnore(): Modifier =
 @Composable
 fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier {
   val interactionSource = LocalInteractionSource.current ?: return this
-  val pressed by interactionSource.collectIsPressedAsState()
-  val scale by
-    animateFloatAsState(
-      targetValue = if (pressed) targetScale else 1f,
-      animationSpec = tween(100, easing = EaseOut),
-    )
+  val scale = rememberPressScale(interactionSource, targetScale)
 
   return this.graphicsLayer {
-    scaleX = scale
-    scaleY = scale
+    scaleX = scale.value
+    scaleY = scale.value
   }
+}
+
+@Composable
+internal fun rememberPressScale(
+  interactionSource: InteractionSource,
+  targetScale: Float,
+): State<Float> {
+  val pressed by interactionSource.collectIsPressedAsState()
+  return animateFloatAsState(
+    targetValue = if (pressed) targetScale else 1f,
+    animationSpec = tween(100, easing = EaseOut),
+  )
 }
