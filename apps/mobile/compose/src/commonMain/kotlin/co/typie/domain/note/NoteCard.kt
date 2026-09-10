@@ -427,10 +427,11 @@ private fun NoteCollapsedContent(
       Row(
         modifier =
           Modifier.weight(1f)
-            .padding(end = 12.dp, top = 12.dp, bottom = 12.dp)
+            .padding(end = 6.dp, top = 6.dp, bottom = 6.dp)
             .hoverFeedback(shape = AppShapes.rounded(AppShapes.sm))
             .clickable { onExpand() }
-            .pressScale(0.985f),
+            .pressScale(0.985f)
+            .padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
       ) {
@@ -460,16 +461,7 @@ private fun NoteCollapsedContent(
           NoteCollapsedMetaRow(note = note)
         }
 
-        Box(
-          modifier =
-            Modifier.size(NoteActionButtonSize)
-              .then(
-                LocalInteractionSource.current?.let {
-                  Modifier.hoverFeedback(it, shape = AppShapes.rounded(AppShapes.sm))
-                } ?: Modifier
-              ),
-          contentAlignment = Alignment.Center,
-        ) {
+        Box(modifier = Modifier.size(NoteActionButtonSize), contentAlignment = Alignment.Center) {
           Icon(
             icon = Lucide.Maximize2,
             modifier = Modifier.size(15.dp),
@@ -489,7 +481,10 @@ private fun NoteCardLeadingContent(
   onToggleStatus: () -> Unit,
 ) {
   Column(
-    modifier = Modifier.padding(10.dp).width(NoteGripHitTargetSize),
+    // The remaining 6.dp of the trailing gap belongs to the body hover area.
+    modifier =
+      Modifier.padding(start = 10.dp, top = 10.dp, end = 4.dp, bottom = 10.dp)
+        .width(NoteGripHitTargetSize),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     NoteStatusToggleButton(resolved = resolved, colorOption = colorOption, onClick = onToggleStatus)

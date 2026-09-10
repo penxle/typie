@@ -100,7 +100,7 @@ internal fun CommentComposer(
             interactionSource,
             enabled = hasText && !submitting,
             shape = CircleShape,
-            hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+            hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
             activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
           )
           .clickable(interactionSource = interactionSource, enabled = hasText && !submitting) {

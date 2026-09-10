@@ -234,7 +234,7 @@ fun BottomBarActionButton(
                     actionInteractionSource,
                     enabled = !isMenuOpen,
                     shape = AppShapes.circle,
-                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
                     activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
                   )
                   .pointerInput(icon, menus) {
@@ -277,7 +277,7 @@ fun BottomBarActionButton(
                 Modifier.hoverFeedback(
                     actionInteractionSource,
                     shape = AppShapes.circle,
-                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                    hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
                     activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
                   )
                   .clickable { onClick() }

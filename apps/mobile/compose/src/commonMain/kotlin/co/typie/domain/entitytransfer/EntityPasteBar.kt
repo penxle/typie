@@ -62,7 +62,7 @@ fun EntityPasteBar(
               .hoverFeedback(
                 enabled = enabled,
                 shape = AppShapes.circle,
-                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
                 activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
               )
               .clickable(enabled = enabled, onClick = onPaste)
@@ -104,7 +104,7 @@ fun EntityPasteBar(
               .hoverFeedback(
                 enabled = enabled,
                 shape = AppShapes.circle,
-                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+                hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
                 activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
               )
               .clickable(enabled = enabled, onClick = onClear)

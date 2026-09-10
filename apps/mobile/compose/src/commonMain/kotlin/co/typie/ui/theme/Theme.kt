@@ -11,7 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
@@ -91,7 +90,7 @@ val LightColors =
     surfaceInset = AppColor.light.gray.s100,
     surfaceInverse = AppColor.light.gray.s900,
     surfaceActive = AppColor.light.gray.s200,
-    surfaceHover = lerp(AppColor.light.gray.s100, AppColor.light.gray.s200, 0.5f),
+    surfaceHover = AppColor.light.gray.s900.copy(alpha = 0.04f),
     borderEmphasis = AppColor.light.gray.s300,
     borderDefault = AppColor.light.gray.s200,
     borderHairline = AppColor.light.gray.s100,
@@ -122,7 +121,7 @@ val DarkColors =
     surfaceInset = AppColor.dark.gray.s800,
     surfaceInverse = AppColor.dark.gray.s50,
     surfaceActive = AppColor.dark.gray.s700,
-    surfaceHover = lerp(AppColor.dark.gray.s800, AppColor.dark.gray.s700, 0.5f),
+    surfaceHover = AppColor.dark.gray.s50.copy(alpha = 0.03f),
     borderEmphasis = AppColor.dark.gray.s600,
     borderDefault = AppColor.dark.gray.s700,
     borderHairline = AppColor.dark.gray.s800,

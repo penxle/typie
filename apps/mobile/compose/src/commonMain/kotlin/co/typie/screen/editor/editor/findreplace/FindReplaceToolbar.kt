@@ -7,6 +7,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +23,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +57,7 @@ import co.typie.screen.editor.editor.toolbar.ToolbarVisibilityEnterMillis
 import co.typie.screen.editor.editor.toolbar.ToolbarVisibilityExitMillis
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Text
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -151,11 +157,14 @@ private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifi
       onDismiss = {},
     )
   val shape = AppShapes.rounded(AppShapes.full)
+  val interactionSource = remember { MutableInteractionSource() }
+  val focused by interactionSource.collectIsFocusedAsState()
 
   BasicTextField(
     value = inputState.value,
     onValueChange = inputState::onValueChange,
     singleLine = true,
+    interactionSource = interactionSource,
     textStyle = ToolbarLabelTextStyle.copy(color = AppTheme.colors.textDefault),
     cursorBrush = SolidColor(AppTheme.colors.textDefault),
     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -165,6 +174,8 @@ private fun ReplaceTextField(session: EditorFindReplaceSession, modifier: Modifi
         .height(ToolbarButtonSize)
         .clip(shape)
         .background(AppTheme.colors.surfaceInset, shape)
+        .hoverable(interactionSource)
+        .hoverFeedback(interactionSource, enabled = !focused, shape = shape)
         .padding(horizontal = 10.dp)
         .textInputFocusable(inputState)
         .onPreviewKeyEvent { event -> handleReplaceInputShortcut(event, session) },
