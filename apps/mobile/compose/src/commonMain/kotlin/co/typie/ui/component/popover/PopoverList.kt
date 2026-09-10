@@ -23,10 +23,13 @@ data class PopoverListItem(
 )
 
 @Composable
-fun PopoverList(items: List<PopoverListItem>) {
+fun PopoverList(items: List<PopoverListItem>, acceptsInput: Boolean = true) {
   Column(modifier = Modifier.fillMaxWidth()) {
     items.forEach { item ->
-      PopoverPaneSelectableItem(enabled = item.enabled, onSelected = item.onSelected) {
+      PopoverPaneSelectableItem(
+        enabled = item.enabled && acceptsInput,
+        onSelected = item.onSelected,
+      ) {
         Box(Modifier.graphicsLayer { alpha = if (item.enabled) 1f else 0.4f }) { item.content() }
       }
     }

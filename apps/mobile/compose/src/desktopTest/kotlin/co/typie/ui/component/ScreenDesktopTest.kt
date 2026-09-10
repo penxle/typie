@@ -1,5 +1,6 @@
 package co.typie.ui.component
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -8,12 +9,21 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -34,6 +44,37 @@ private val LocalScreenOverlayTestValue = staticCompositionLocalOf { "default" }
 
 @OptIn(ExperimentalTestApi::class)
 class ScreenDesktopTest {
+  @Test
+  fun aDownConsumedByContentInTheFinalPassKeepsFocus() = runComposeUiTest {
+    val focusRequester = FocusRequester()
+    setContent {
+      CompositionLocalProvider(LocalDialog provides Dialog()) {
+        Screen {
+          Box(Modifier.size(240.dp).focusRequester(focusRequester).focusable().testTag("focus")) {
+            Box(
+              Modifier.size(120.dp).testTag("handled").pointerInput(Unit) {
+                awaitPointerEventScope {
+                  while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Final)
+                    event.changes
+                      .filter { it.changedToDownIgnoreConsumed() }
+                      .forEach { it.consume() }
+                  }
+                }
+              }
+            )
+          }
+        }
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+      }
+    }
+    onNodeWithTag("focus").assertIsFocused()
+    onNodeWithTag("handled").performTouchInput { click() }
+    onNodeWithTag("focus").assertIsFocused()
+    onNodeWithTag("focus").performTouchInput { click(Offset(200f, 200f)) }
+    onNodeWithTag("focus").assertIsNotFocused()
+  }
+
   @Test
   fun rendersWithoutNavigatorProviderWhenLoadableIsAbsent() = runComposeUiTest {
     setContent {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,7 @@ import co.typie.editor.Editor
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionExpansionUnit
+import co.typie.editor.runtime.EditorContextMenuMode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorAutoScrollPolicy
@@ -44,13 +46,6 @@ internal fun EditorScreenOverlayHost(
   val density = LocalDensity.current
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
-  val contextMenu = uiState.contextMenu
-  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
-  var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
-  val overlayBounds = overlayBoundsInRoot
-  val editorRectInOverlay = overlayBounds?.let { bounds ->
-    uiState.editorRectInRoot()?.translate(translateX = -bounds.left, translateY = -bounds.top)
-  }
   val editorRectInViewport: () -> Rect? = {
     uiState.editorBoundsInContainer
       .toPxRect(density.density)
@@ -61,12 +56,7 @@ internal fun EditorScreenOverlayHost(
             (viewportState.scrollOffset.y * density.density).roundToInt(),
       )
   }
-  Box(
-    modifier =
-      modifier.fillMaxSize().onGloballyPositioned { coordinates ->
-        overlayBoundsInRoot = coordinates.unclippedBoundsInRoot()
-      }
-  ) {
+  Box(modifier = modifier.fillMaxSize()) {
     if (showDebugOverlay) {
       DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
       DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
@@ -83,62 +73,101 @@ internal fun EditorScreenOverlayHost(
       }
     }
 
-    if (overlayBounds != null) {
-      val editor = runtime.editor
-      if (editor != null) {
-        if (editorMutationEnabled) {
-          EditorTableAxisSelectionOverlay(
-            editor = editor,
-            uiState = uiState,
-            editorRectInOverlay = editorRectInViewport,
-            density = density.density,
-            onTableAxisActionsRequest = onTableAxisActionsRequest,
-          )
-        }
-
-        if (editorRectInOverlay != null && contextMenu.isVisibleFor(editor.publishedState)) {
-          val anchor =
-            resolveContextMenuAnchor(
-              editor = editor,
-              uiState = uiState,
-              editorRectInOverlay = editorRectInOverlay,
-              density = density.density,
-            )
-          if (anchor != null) {
-            val availableExpansionUnits = rememberAvailableExpansionUnits(editor)
-            if (availableExpansionUnits != null) {
-              val actions =
-                rememberEditorContextMenuActions(
-                  editor = editor,
-                  bringIntoViewRequests = bringIntoViewRequests,
-                  contextMenu = contextMenu,
-                  availableExpansionUnits = availableExpansionUnits,
-                )
-
-              EditorSelectionContextMenuOverlay(
-                anchor = anchor,
-                overlaySize = overlayBounds.size,
-                visibleArea = visibleArea,
-                showCopyCutActions = actions.showCopyCutActions,
-                editorMutationEnabled = editorMutationEnabled,
-                availableExpansionUnits = actions.availableExpansionUnits,
-                onCopy = actions.onCopy,
-                onCut = actions.onCut,
-                onPaste = actions.onPaste,
-                onExpandWord = actions.onExpandWord,
-                onExpandSentence = actions.onExpandSentence,
-                onExpandParagraph = actions.onExpandParagraph,
-                onSelectAll = actions.onSelectAll,
-                onDismiss = actions.onDismiss,
-                onBoundsInWindowChanged = { contextMenu.boundsInWindow = it },
-              )
-            }
-          }
-        }
-      }
+    val editor = runtime.editor
+    if (editor != null && editorMutationEnabled) {
+      EditorTableAxisSelectionOverlay(
+        editor = editor,
+        uiState = uiState,
+        editorRectInOverlay = editorRectInViewport,
+        density = density.density,
+        onTableAxisActionsRequest = onTableAxisActionsRequest,
+      )
     }
   }
 }
+
+@Composable
+internal fun EditorContextMenuHost(
+  visibleArea: EditorVisibleArea,
+  onCommentRequest: (() -> Unit)?,
+  editorMutationEnabled: Boolean,
+  modifier: Modifier = Modifier,
+) {
+  val density = LocalDensity.current
+  val runtime = LocalEditorRuntime.current
+  val uiState = LocalEditorUiState.current
+  val contextMenu = uiState.contextMenu
+  val bringIntoViewRequests = LocalEditorBringIntoViewRequests.current
+  var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+
+  Box(
+    modifier =
+      modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+        overlayBoundsInRoot = coordinates.unclippedBoundsInRoot()
+      }
+  ) {
+    val editor = runtime.editor ?: return@Box
+    val overlayBounds = overlayBoundsInRoot ?: return@Box
+    val editorRectInOverlay =
+      uiState
+        .editorRectInRoot()
+        ?.translate(translateX = -overlayBounds.left, translateY = -overlayBounds.top) ?: return@Box
+    var lastPresentation by
+      remember(editor) { mutableStateOf<EditorContextMenuPresentation?>(null) }
+    val presentation =
+      if (contextMenu.isVisibleFor(editor.publishedState)) {
+        val anchor =
+          resolveContextMenuAnchor(
+            editor = editor,
+            uiState = uiState,
+            editorRectInOverlay = editorRectInOverlay,
+            density = density.density,
+          )
+        val availableExpansionUnits = rememberAvailableExpansionUnits(editor)
+        if (anchor != null && availableExpansionUnits != null) {
+          EditorContextMenuPresentation(
+            mode = contextMenu.mode,
+            anchor = anchor,
+            visibleArea = visibleArea,
+            editorMutationEnabled = editorMutationEnabled,
+            actions =
+              rememberEditorContextMenuActions(
+                editor = editor,
+                bringIntoViewRequests = bringIntoViewRequests,
+                contextMenu = contextMenu,
+                availableExpansionUnits = availableExpansionUnits,
+                editorMutationEnabled = editorMutationEnabled,
+                onComment = onCommentRequest,
+              ),
+          )
+        } else null
+      } else null
+    SideEffect { if (presentation != null) lastPresentation = presentation }
+    val displayed = presentation ?: lastPresentation ?: return@Box
+    EditorSelectionContextMenuOverlay(
+      visible = presentation != null,
+      onHidden = { lastPresentation = null },
+      mode = displayed.mode,
+      onExpandMenu = contextMenu::expand,
+      anchor = displayed.anchor,
+      overlaySize = overlayBounds.size,
+      visibleArea = displayed.visibleArea,
+      actions = displayed.actions,
+      editorMutationEnabled = displayed.editorMutationEnabled,
+      onBoundsInWindowChanged = { contextMenu.boundsInWindow = it },
+    )
+  }
+}
+
+// Dismissal clears the selection anchor and mode immediately; retain only the final presentation
+// until its exit animation finishes, without keeping the menu logically open.
+private data class EditorContextMenuPresentation(
+  val mode: EditorContextMenuMode,
+  val anchor: EditorContextMenuAnchor,
+  val visibleArea: EditorVisibleArea,
+  val editorMutationEnabled: Boolean,
+  val actions: EditorContextMenuActions,
+)
 
 @Composable
 private fun rememberAvailableExpansionUnits(editor: Editor): Set<SelectionExpansionUnit>? {

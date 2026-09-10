@@ -8,6 +8,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.LocalViewConfiguration
 import co.typie.editor.interaction.EditorInteractionGeometry
+import co.typie.editor.runtime.EditorContextMenuMode
 import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.ui.input.WindowInputHandler
 
@@ -45,10 +46,12 @@ private class EditorContextMenuOutsideTap(
     if (event.type != PointerEventType.Press || !state.visible) return
     val change =
       event.changes.firstOrNull { it.pressed && !it.previousPressed && !it.isConsumed } ?: return
-    val bounds = state.boundsInWindow ?: return
-    if (bounds.contains(layout.localToWindow(change.position))) return
-    if (state.pointerPosition == null) {
-      // The editor's touch-selection semantics already dismiss its menu on pointer down.
+    val bounds = state.boundsInWindow
+    if (bounds.isEmpty()) return
+    val positionInWindow = layout.localToWindow(change.position)
+    if (bounds.any { it.contains(positionInWindow) }) return
+    if (state.mode == EditorContextMenuMode.Compact) {
+      // Compact menus permit the outside tap to perform its normal action.
       if (!geometry.containsDocumentInteraction(layout.localToRoot(change.position))) state.hide()
       return
     }

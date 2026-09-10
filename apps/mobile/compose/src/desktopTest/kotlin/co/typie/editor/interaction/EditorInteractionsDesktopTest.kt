@@ -64,6 +64,7 @@ import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
+import co.typie.editor.runtime.EditorContextMenuMode
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.viewport.EditorViewportState
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
@@ -147,7 +148,7 @@ class EditorInteractionsDesktopTest {
       setEditorContent(fixture)
       fun showPointerMenu() = runOnIdle {
         fixture.uiState.contextMenu.show(fixture.editor.publishedState, PagePoint(0, 280f, 280f))
-        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+        fixture.uiState.contextMenu.boundsInWindow = listOf(Rect(250f, 250f, 350f, 300f))
         fixture.fake.enqueued.clear()
       }
       showPointerMenu()
@@ -185,7 +186,7 @@ class EditorInteractionsDesktopTest {
       assertTrue(fixture.fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
       runOnIdle {
         fixture.uiState.contextMenu.show(fixture.editor.publishedState)
-        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+        fixture.uiState.contextMenu.boundsInWindow = listOf(Rect(250f, 250f, 350f, 300f))
       }
       onNodeWithTag(EditorTag).performTouchInput {
         down(0, Offset(100f, 100f))
@@ -197,14 +198,15 @@ class EditorInteractionsDesktopTest {
     }
 
   @Test
-  fun `pointer menu allows the first touch pan starting in the document header`() =
+  fun `expanded touch menu allows the first touch pan starting in the document header`() =
     runComposeUiTest {
       val fixture = Fixture(tapEligible = true, documentDownEligible = false)
       fixture.fake.publishSnapshot(fixture.editor)
       setEditorContent(fixture)
       runOnIdle {
-        fixture.uiState.contextMenu.show(fixture.editor.publishedState, PagePoint(0, 280f, 280f))
-        fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+        fixture.uiState.contextMenu.show(fixture.editor.publishedState)
+        fixture.uiState.contextMenu.expand()
+        fixture.uiState.contextMenu.boundsInWindow = listOf(Rect(250f, 250f, 350f, 300f))
       }
       onNodeWithTag(EditorTag).performTouchInput {
         down(0, Offset(100f, 40f))
@@ -237,13 +239,19 @@ class EditorInteractionsDesktopTest {
       }
       fixture.fake.publishSnapshot(fixture.editor)
       setEditorContent(fixture)
-      for (pointerMenu in listOf(false, true)) {
+      for ((pointerPosition, mode) in
+        listOf(
+          null to EditorContextMenuMode.Compact,
+          PagePoint(0, 280f, 280f) to EditorContextMenuMode.Expanded,
+          null to EditorContextMenuMode.Expanded,
+        )) {
         runOnIdle {
           fixture.uiState.contextMenu.show(
             fixture.editor.publishedState,
-            if (pointerMenu) PagePoint(0, 280f, 280f) else null,
+            pointerPosition = pointerPosition,
+            mode = mode,
           )
-          fixture.uiState.contextMenu.boundsInWindow = Rect(250f, 250f, 350f, 300f)
+          fixture.uiState.contextMenu.boundsInWindow = listOf(Rect(250f, 250f, 350f, 300f))
           fixture.fake.enqueued.clear()
         }
         onNodeWithTag(EditorTag).performTouchInput {
@@ -289,6 +297,7 @@ class EditorInteractionsDesktopTest {
       assertTrue(fixture.editor.acceptPublication(publication))
       fixture.controller.onEditorStateChanged(publication.snapshot)
       assertTrue(fixture.uiState.contextMenu.visible)
+      assertEquals(EditorContextMenuMode.Expanded, fixture.uiState.contextMenu.mode)
       assertEquals(PagePoint(0, 100f, 100f), fixture.uiState.contextMenu.pointerPosition)
     }
 

@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.Dp
@@ -179,6 +181,9 @@ private fun Modifier.clearFocusOnUnhandledTap(
         if (down.isConsumed) {
           return@awaitEachGesture
         }
+        if (down.type == PointerType.Mouse && !currentEvent.buttons.isPrimaryPressed) {
+          return@awaitEachGesture
+        }
 
         val origin = down.position
         var isTapCandidate = true
@@ -186,7 +191,8 @@ private fun Modifier.clearFocusOnUnhandledTap(
         while (pressed) {
           val event = awaitPointerEvent(pass = PointerEventPass.Final)
           val change = event.changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
-          if (change.isConsumed) {
+          // A descendant can consume the down later in the same Final pass.
+          if (down.isConsumed || change.isConsumed) {
             return@awaitEachGesture
           }
           if ((change.position - origin).getDistance() > viewConfiguration.touchSlop) {

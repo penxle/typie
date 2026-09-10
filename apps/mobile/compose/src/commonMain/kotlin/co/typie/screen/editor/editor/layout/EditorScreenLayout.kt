@@ -104,6 +104,7 @@ private enum class EditorScreenLayoutSlot {
   ViewportOverlay,
   Overlay,
   Toolbar,
+  ContextMenu,
   SubPane,
 }
 
@@ -227,6 +228,7 @@ internal fun EditorScreenLayout(
   viewportOverlay: @Composable BoxScope.() -> Unit = {},
   overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
+  contextMenu: @Composable () -> Unit = {},
   subPane: @Composable BoxScope.() -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
@@ -715,6 +717,7 @@ internal fun EditorScreenLayout(
       EditorScreenForegroundLayout(
         overlay = overlay,
         toolbar = toolbar,
+        contextMenu = contextMenu,
         subPane = subPane,
         softwareMagnifierSource = softwareMagnifierSource,
         magnifierPlacement = magnifierPlacement,
@@ -907,6 +910,7 @@ private fun EditorViewportOverlayLayout(viewportOverlay: @Composable BoxScope.()
 private fun EditorScreenForegroundLayout(
   overlay: @Composable () -> Unit,
   toolbar: @Composable () -> Unit,
+  contextMenu: @Composable () -> Unit,
   subPane: @Composable BoxScope.() -> Unit,
   softwareMagnifierSource: GraphicsLayer,
   magnifierPlacement: EditorMagnifierPlacement?,
@@ -938,10 +942,16 @@ private fun EditorScreenForegroundLayout(
         }
         .map { it.measure(fullConstraints) }
 
+    val contextMenuPlaceables =
+      subcompose(EditorScreenLayoutSlot.ContextMenu, contextMenu).map {
+        it.measure(fullConstraints)
+      }
+
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
       overlayPlaceables.forEach { it.place(x = 0, y = 0) }
       subPanePlaceables.forEach { it.place(x = 0, y = 0) }
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
+      contextMenuPlaceables.forEach { it.place(x = 0, y = 0) }
     }
   }
 }

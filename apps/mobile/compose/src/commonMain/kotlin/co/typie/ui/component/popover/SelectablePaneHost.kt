@@ -33,16 +33,12 @@ internal fun SelectablePaneHost(
   var paneCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
   var previousActiveItemKey by remember { mutableStateOf<Any?>(null) }
   val selectionInputModifier =
-    if (acceptsInput) {
-      rememberPopoverPaneSelectionInputModifier(
-        enabled = true,
-        positionInWindow = { localPosition -> paneCoordinates?.localToWindow(localPosition) },
-        selectionState = paneSelectionState,
-        edgeAutoScrollController = edgeAutoScrollController,
-      )
-    } else {
-      Modifier
-    }
+    rememberPopoverPaneSelectionInputModifier(
+      enabled = acceptsInput,
+      positionInWindow = { localPosition -> paneCoordinates?.localToWindow(localPosition) },
+      selectionState = paneSelectionState,
+      edgeAutoScrollController = edgeAutoScrollController,
+    )
 
   LaunchedEffect(acceptsInput, pressGestureSession, viewConfiguration.touchSlop) {
     if (!acceptsInput) {

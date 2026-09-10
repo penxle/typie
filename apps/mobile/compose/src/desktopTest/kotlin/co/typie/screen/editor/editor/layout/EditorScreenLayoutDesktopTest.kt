@@ -1,5 +1,6 @@
 package co.typie.screen.editor.editor.layout
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -31,6 +32,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -46,6 +49,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.pan
 import androidx.compose.ui.test.performClick
@@ -1119,7 +1123,9 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun toolbarReceivesPointerAboveOverlappingSubPane() = runComposeUiTest {
+  fun contextMenuDrawsAndReceivesPointerAboveToolbarAndSubPane() = runComposeUiTest {
+    var menuVisible by mutableStateOf(true)
+    var menuTaps = 0
     var toolbarTaps = 0
     var subPaneTaps = 0
 
@@ -1156,10 +1162,25 @@ class EditorScreenLayoutDesktopTest {
           body = { _ -> Box(Modifier.fillMaxWidth().height(800.dp)) },
           toolbar = {
             Box(
-              Modifier.fillMaxWidth().height(160.dp).testTag(ToolbarTag).pointerInput(Unit) {
-                detectTapGestures { toolbarTaps += 1 }
-              }
+              Modifier.fillMaxWidth()
+                .height(160.dp)
+                .background(Color.Red)
+                .testTag(ToolbarTag)
+                .pointerInput(Unit) { detectTapGestures { toolbarTaps += 1 } }
             )
+          },
+          contextMenu = {
+            if (menuVisible) {
+              Box(Modifier.fillMaxSize()) {
+                Box(
+                  Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .background(Color.Green)
+                    .pointerInput(Unit) { detectTapGestures { menuTaps += 1 } }
+                )
+              }
+            }
           },
           subPane = {
             Box(
@@ -1175,6 +1196,20 @@ class EditorScreenLayoutDesktopTest {
       }
     }
     waitForIdle()
+
+    assertEquals(Color.Green, onNodeWithTag(LayoutTag).captureToImage().toPixelMap()[160, 600])
+    onNodeWithTag(LayoutTag).performTouchInput {
+      down(Offset(x = center.x, y = 600f))
+      up()
+    }
+    waitForIdle()
+
+    assertEquals(1, menuTaps)
+    assertEquals(0, toolbarTaps)
+    assertEquals(0, subPaneTaps)
+    runOnIdle { menuVisible = false }
+    waitForIdle()
+    assertEquals(Color.Red, onNodeWithTag(LayoutTag).captureToImage().toPixelMap()[160, 600])
 
     onNodeWithTag(LayoutTag).performTouchInput {
       down(Offset(x = center.x, y = 600f))

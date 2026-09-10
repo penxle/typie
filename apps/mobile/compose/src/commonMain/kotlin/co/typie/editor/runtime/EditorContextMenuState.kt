@@ -10,15 +10,23 @@ import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.Selection
 
+internal enum class EditorContextMenuMode {
+  Compact,
+  Expanded,
+}
+
 internal class EditorContextMenuState {
   var visible: Boolean by mutableStateOf(false)
+    private set
+
+  var mode: EditorContextMenuMode by mutableStateOf(EditorContextMenuMode.Compact)
     private set
 
   private var shownForSelection: Selection? = null
   var pointerPosition: PagePoint? by mutableStateOf(null)
     private set
 
-  var boundsInWindow: Rect? = null
+  var boundsInWindow: List<Rect> = emptyList()
   private var outsideDismissPointerId: Long? = null
 
   fun beginOutsideDismissGesture(pointerId: Long) {
@@ -34,11 +42,21 @@ internal class EditorContextMenuState {
 
   private var pendingPublicationTarget: PendingPublicationTarget? = null
 
-  fun show(state: EditorState, pointerPosition: PagePoint? = null) {
+  fun show(
+    state: EditorState,
+    pointerPosition: PagePoint? = null,
+    mode: EditorContextMenuMode =
+      if (pointerPosition == null) EditorContextMenuMode.Compact else EditorContextMenuMode.Expanded,
+  ) {
     pendingPublicationTarget = null
     this.pointerPosition = pointerPosition
+    this.mode = mode
     shownForSelection = state.selection
     visible = true
+  }
+
+  fun expand() {
+    if (visible) mode = EditorContextMenuMode.Expanded
   }
 
   fun hide() {
@@ -51,6 +69,7 @@ internal class EditorContextMenuState {
     }
     shownForSelection = null
     pointerPosition = null
+    mode = EditorContextMenuMode.Compact
     visible = false
   }
 
@@ -68,6 +87,8 @@ internal class EditorContextMenuState {
     editor: Editor,
     state: EditorState,
     pointerPosition: PagePoint? = null,
+    mode: EditorContextMenuMode =
+      if (pointerPosition == null) EditorContextMenuMode.Compact else EditorContextMenuMode.Expanded,
   ) {
     val selection = state.selection
     if (selection == null || (selection.isCollapsed() && pointerPosition == null)) {
@@ -80,6 +101,7 @@ internal class EditorContextMenuState {
         version = state.version,
         selection = selection,
         pointerPosition = pointerPosition,
+        mode = mode,
       )
     onEditorStateChanged(editor = editor, state = editor.publishedState)
   }
@@ -103,13 +125,13 @@ internal class EditorContextMenuState {
       state.selection == target.selection &&
         (!state.selection.isCollapsed() || target.pointerPosition != null)
     ) {
-      show(state, pointerPosition = target.pointerPosition)
+      show(state, pointerPosition = target.pointerPosition, mode = target.mode)
     }
   }
 
   fun reset() {
     outsideDismissPointerId = null
-    boundsInWindow = null
+    boundsInWindow = emptyList()
     hide()
   }
 
@@ -118,5 +140,6 @@ internal class EditorContextMenuState {
     val version: Long,
     val selection: Selection,
     val pointerPosition: PagePoint?,
+    val mode: EditorContextMenuMode,
   )
 }
