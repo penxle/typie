@@ -1,7 +1,6 @@
 package co.typie.ui.component.popover
 
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,7 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -53,9 +54,14 @@ internal fun Modifier.popoverOutsideTapHost(state: PopoverOverlayState): Modifie
     }
     .pointerInput(state, rootWindowOffset) {
       awaitEachGesture {
+        // Outside dismissal accepts every mouse button; awaitFirstDown filters secondary clicks.
         // Own the press so mouse controls cannot start a click underneath the popover.
         // Subsequent drag movement stays available to scrolling.
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        var press: PointerEvent
+        do {
+          press = awaitPointerEvent(PointerEventPass.Initial)
+        } while (!press.changes.all { it.changedToDownIgnoreConsumed() })
+        val down = press.changes.first()
         val paneBounds = state.outsideDismissPaneBoundsInWindow ?: return@awaitEachGesture
         val downPositionInWindow = down.position + rootWindowOffset
         if (paneBounds.contains(downPositionInWindow)) {

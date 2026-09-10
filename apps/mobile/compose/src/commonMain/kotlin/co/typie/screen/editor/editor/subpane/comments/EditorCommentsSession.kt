@@ -34,7 +34,7 @@ internal class EditorCommentsSession(
   val freezeCurrentSelection: suspend () -> StableSelection?,
   val ensureMutationSubscription: suspend () -> Boolean,
   val onInputFocusChanged: (Boolean) -> Unit,
-  val requestFromTextToolbar: () -> Unit,
+  val requestFromSelection: () -> Unit,
   val openFromToolPanel: () -> Unit,
   private val onDiscardVirtualThreadRequested: () -> Unit,
 ) {
@@ -247,7 +247,7 @@ internal fun rememberEditorCommentsSession(
       },
     ensureMutationSubscription = ensureMutationSubscription,
     onInputFocusChanged = { focused -> inputFocused = focused },
-    requestFromTextToolbar = {
+    requestFromSelection = {
       hideContextMenu()
       val activeEditor = editor
       val currentSelection = editorState.selection

@@ -12,8 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
@@ -181,9 +185,10 @@ class PopoverPointerDesktopTest {
   }
 
   @Test
-  fun outsideMouseAndTouchDismissWithoutActivatingUnderlyingControl() = runComposeUiTest {
+  fun outsideMouseButtonsAndTouchDismissWithoutActivatingUnderlyingControl() = runComposeUiTest {
     val state = PopoverOverlayState()
     var clicks = 0
+    var secondaryClicks = 0
     setContent {
       CompositionLocalProvider(
         LocalPopoverOverlayState provides state,
@@ -191,9 +196,24 @@ class PopoverPointerDesktopTest {
       ) {
         Box(Modifier.size(320.dp).popoverOutsideTapHost(state)) {
           Box(
-            Modifier.align(Alignment.BottomCenter).size(100.dp).testTag("outside").clickable {
-              clicks++
-            }
+            Modifier.align(Alignment.BottomCenter)
+              .size(100.dp)
+              .testTag("outside")
+              .pointerInput(Unit) {
+                awaitPointerEventScope {
+                  while (true) {
+                    val event = awaitPointerEvent()
+                    if (
+                      event.type == PointerEventType.Press &&
+                        event.buttons.isSecondaryPressed &&
+                        event.changes.any { !it.isConsumed }
+                    ) {
+                      secondaryClicks++
+                    }
+                  }
+                }
+              }
+              .clickable { clicks++ }
           )
           PopoverMenu(
             anchor = {
@@ -206,19 +226,26 @@ class PopoverPointerDesktopTest {
         }
       }
     }
-    repeat(2) { index ->
+    repeat(3) { index ->
       onNodeWithTag("anchor").performMouseInput { click() }
       waitForIdle()
       assertTrue(state.acceptsInput)
-      if (index == 0) onNodeWithTag("outside").performMouseInput { click() }
-      else onNodeWithTag("outside").performTouchInput { click() }
+      when (index) {
+        0 -> onNodeWithTag("outside").performMouseInput { click() }
+        1 -> onNodeWithTag("outside").performMouseInput { click(button = MouseButton.Secondary) }
+        else -> onNodeWithTag("outside").performTouchInput { click() }
+      }
       waitForIdle()
       assertFalse(state.acceptsInput)
       assertEquals(0, clicks)
+      assertEquals(0, secondaryClicks)
     }
     onNodeWithTag("outside").performMouseInput { click() }
     waitForIdle()
     assertEquals(1, clicks)
+    onNodeWithTag("outside").performMouseInput { click(button = MouseButton.Secondary) }
+    waitForIdle()
+    assertEquals(1, secondaryClicks)
   }
 
   @Test

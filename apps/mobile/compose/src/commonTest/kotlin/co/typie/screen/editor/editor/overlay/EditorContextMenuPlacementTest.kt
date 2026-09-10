@@ -53,4 +53,19 @@ class EditorContextMenuPlacementTest {
 
     assertEquals(EditorContextMenuPlacement(topLeft = Offset(140f, 160f)), placement)
   }
+
+  @Test
+  fun `pointer menu starts below the pointer and flips above near the bottom edge`() {
+    for ((pointerY, expectedY) in listOf(100f to 100f, 650f to 350f)) {
+      val placement =
+        resolveEditorContextMenuPlacement(
+          anchor = EditorContextMenuAnchor(380f, pointerY, pointerY, atPointer = true),
+          menuSize = Size(240f, 300f),
+          overlaySize = Size(400f, 700f),
+          visibleArea = EditorVisibleArea(viewport = Size(400f, 700f)),
+          density = 1f,
+        )
+      assertEquals(EditorContextMenuPlacement(Offset(156f, expectedY)), placement)
+    }
+  }
 }

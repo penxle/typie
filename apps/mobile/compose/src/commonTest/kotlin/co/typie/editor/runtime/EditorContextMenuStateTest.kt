@@ -31,6 +31,7 @@ class EditorContextMenuStateTest {
       assertFalse(state.visible)
       state.onEditorStateChanged(editor, target)
       assertTrue(state.visible)
+      assertEquals(EditorContextMenuMode.Expanded, state.mode)
       assertEquals(PagePoint(0, 20f, 40f), state.pointerPosition)
       state.hide()
       assertNull(state.pointerPosition)
@@ -42,6 +43,39 @@ class EditorContextMenuStateTest {
       state.hide()
       state.onEditorStateChanged(editor, target.copy(version = 6L))
       assertFalse(state.visible)
+    }
+
+  @Test
+  fun `touch menu expands without changing its anchor and survives selection publication`() =
+    runTest {
+      val editor = Editor(FakeFfiEditor(), this, StandardTestDispatcher(testScheduler))
+      val selection =
+        Selection(
+          Position("text", 0, Affinity.Downstream),
+          Position("text", 4, Affinity.Downstream),
+        )
+      val initial = EditorState.Initial.copy(version = 1L, selection = selection)
+      val state = EditorContextMenuState()
+      state.show(initial)
+      assertEquals(EditorContextMenuMode.Compact, state.mode)
+      state.expand()
+      assertEquals(EditorContextMenuMode.Expanded, state.mode)
+      assertNull(state.pointerPosition)
+
+      val next =
+        initial.copy(
+          version = 2L,
+          selection = selection.copy(head = Position("text", 8, Affinity.Downstream)),
+        )
+      state.requestShowForAppliedSelection(editor, next, mode = state.mode)
+      state.onEditorStateChanged(editor, next)
+      assertTrue(state.isVisibleFor(next))
+      assertEquals(EditorContextMenuMode.Expanded, state.mode)
+      assertNull(state.pointerPosition)
+
+      state.hide()
+      state.show(initial)
+      assertEquals(EditorContextMenuMode.Compact, state.mode)
     }
 
   @Test

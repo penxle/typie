@@ -18,14 +18,14 @@ internal fun rememberPopoverPaneSelectionInputModifier(
   armDelayMillis: Long = PopoverDefaults.ArmDelayMs,
 ): Modifier {
   val positionInWindowState = rememberUpdatedState(positionInWindow)
+  val enabledState = rememberUpdatedState(enabled)
 
-  return Modifier.pointerInput(enabled, selectionState, edgeAutoScrollController, armDelayMillis) {
+  // A submenu's opening press belongs to a descendant. Keep this node mounted and its gesture
+  // alive while suspending the parent; removing it also cancels the descendant's pointer path.
+  return Modifier.pointerInput(selectionState, edgeAutoScrollController, armDelayMillis) {
     awaitEachGesture {
-      if (!enabled) {
-        return@awaitEachGesture
-      }
-
       val down = awaitFirstDown(requireUnconsumed = false)
+      if (!enabledState.value) return@awaitEachGesture
       val initialPositionInWindow =
         positionInWindowState.value(down.position) ?: return@awaitEachGesture
       if (!selectionState.canHandleLocalGesture(initialPositionInWindow)) {
@@ -47,6 +47,11 @@ internal fun rememberPopoverPaneSelectionInputModifier(
             positionInWindowState.value(change.position) ?: previousPositionInWindow
           },
         ) { session, change ->
+          if (!enabledState.value) {
+            selectionState.clear()
+            edgeAutoScrollController?.pointer = null
+            return@trackPressGestureSession
+          }
           val currentPositionInWindow = session.positionInWindow
 
           if (!panScrollDetected && change != null && !session.isArmed) {

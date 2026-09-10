@@ -161,6 +161,7 @@ import co.typie.screen.editor.editor.layout.EditorViewportScrollReconcileMode
 import co.typie.screen.editor.editor.layout.attachViewportZoomAnchor
 import co.typie.screen.editor.editor.layout.rememberCommittedEditorRenderZoom
 import co.typie.screen.editor.editor.overlay.EditorCharacterCountOverlay
+import co.typie.screen.editor.editor.overlay.EditorContextMenuHost
 import co.typie.screen.editor.editor.overlay.EditorContextMenuOutsideTapHost
 import co.typie.screen.editor.editor.overlay.EditorRepasteAsTextOverlay
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
@@ -2149,13 +2150,23 @@ fun EditorScreen(entityId: String) {
             sessionState = toolbarSessionState,
             commentEnabled = comments.toolbarEnabled,
             debugOverlays = debugOverlays,
-            onCommentRequest = comments.requestFromTextToolbar,
+            onCommentRequest = comments.requestFromSelection,
             onInputEffects = ::performInputEffects,
             onToolAction = { action ->
               performToolAction(action = action, restoreEditorInput = true)
             },
             modifier = Modifier,
           )
+        },
+        contextMenu = {
+          if (editorReady && editingSession != null) {
+            EditorContextMenuHost(
+              visibleArea = visibleArea,
+              onCommentRequest =
+                comments.requestFromSelection.takeIf { comments.topBarCreateEnabled },
+              editorMutationEnabled = directEditingEnabled,
+            )
+          }
         },
         subPane = {
           EditorSubPaneHost(

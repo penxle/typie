@@ -15,17 +15,14 @@ import co.typie.editor.ffi.NodeOp
 import co.typie.editor.ffi.PlainNode
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.icons.Lucide
-import co.typie.network.Http
 import co.typie.platform.FilePickerResult
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.IncomingContentItem
-import co.typie.platform.Platform
-import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
 import co.typie.platform.rememberShareAnchor
 import co.typie.screen.editor.editor.attachment.EditorAttachmentDestination
 import co.typie.screen.editor.editor.attachment.LocalEditorAttachmentImporter
-import co.typie.screen.editor.editor.attachment.downloadEditorAttachment
+import co.typie.screen.editor.editor.attachment.downloadEditorImage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarButton
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPage
 import co.typie.screen.editor.editor.toolbar.EditorToolbarPageKey
@@ -34,7 +31,6 @@ import co.typie.screen.editor.editor.toolbar.EditorToolbarRow
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSecondary
 import co.typie.screen.editor.editor.toolbar.EditorToolbarSessionState
 import co.typie.ui.component.toast.LocalToast
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -191,40 +187,11 @@ private fun EditorImageToolbar(
         enabled = !downloadInProgress,
         modifier = shareAnchor.modifier,
         onClick = {
-          if (PlatformModule.platform == Platform.Desktop) {
-            uriHandler.openUri(readyAsset.originalUrl)
-          } else if (!downloadInProgress) {
+          if (!downloadInProgress) {
             downloadInProgress = true
             coroutineScope.launch {
               try {
-                val downloaded =
-                  try {
-                    Http.downloadEditorAttachment(
-                      url = readyAsset.originalUrl,
-                      defaultFilenameStem = "image",
-                    )
-                  } catch (error: CancellationException) {
-                    throw error
-                  } catch (_: Throwable) {
-                    toast.error("이미지를 내려받을 수 없어요.")
-                    return@launch
-                  }
-                val shared =
-                  try {
-                    PlatformModule.share.share(
-                      bytes = downloaded.bytes,
-                      filename = downloaded.filename,
-                      mimeType = downloaded.mimeType,
-                      anchor = shareAnchor.value,
-                    )
-                  } catch (error: CancellationException) {
-                    throw error
-                  } catch (_: Throwable) {
-                    false
-                  }
-                if (!shared) {
-                  toast.error("이미지를 내보낼 수 없어요.")
-                }
+                downloadEditorImage(readyAsset.originalUrl, shareAnchor.value, uriHandler, toast)
               } finally {
                 downloadInProgress = false
               }
