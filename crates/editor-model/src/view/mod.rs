@@ -180,6 +180,17 @@ impl<'a> NodeView<'a> {
     pub fn leaf_child_count(&self) -> usize {
         self.tree_node().map_or(0, |n| n.children.leaf_count())
     }
+    /// Whether a direct leaf was moved here by copy-identity projection, which
+    /// can make the children's display order differ from their sequence order.
+    pub fn has_redirected_leaf(&self) -> bool {
+        self.leaf_child_count() > 0
+            && self
+                .view
+                .doc
+                .redirected
+                .keys()
+                .any(|leaf| self.view.block_of(*leaf) == Some(self.id))
+    }
     /// Flat width of this block including its two boundary sentinels (the root
     /// reports its sentinel-free total via [`DocView::root_flat_total`]). Reads
     /// the maintained flat index — `O(1)`.

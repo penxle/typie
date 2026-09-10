@@ -1536,7 +1536,7 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
-  it('retains freshly resolved tracked geometry for an older published snapshot', async () => {
+  it.each(['doc', 'page_sizes'] as const)('refreshes tracked ranges on %s while retaining older snapshot geometry', async (field) => {
     const { editor, core } = await createEditor();
     const stale = {
       id: 'prism-issue:0',
@@ -1554,20 +1554,33 @@ describe('Editor guarded core invocation', () => {
       })
       .mockReturnValueOnce({
         revision: { value: 3 },
+        events: [{ type: 'state_changed', fields: [field] }],
+        request_outcomes: [],
+      })
+      .mockReturnValueOnce({
+        revision: { value: 4 },
         events: [{ type: 'state_changed', fields: ['ime'] }],
         request_outcomes: [],
       });
 
     editor.enqueue({ type: 'history', op: { type: 'undo' } });
     frames.at(-1)?.(0);
-    const publishedCandidate = editor.appliedSnapshot;
-    expect(editor.freshTrackedRanges()).toEqual([fresh]);
+    const beforeEdit = editor.appliedSnapshot;
 
     editor.enqueue({ type: 'history', op: { type: 'undo' } });
     frames.at(-1)?.(0);
-
+    const afterEdit = editor.appliedSnapshot;
     expect(editor.appliedRevision).toBe(3);
-    expect(editor.trackedRangeForSnapshot(stale.id, publishedCandidate)).toEqual(fresh);
+    expect(afterEdit.trackedRanges).toEqual([fresh]);
+    expect(editor.trackedRangeForSnapshot(stale.id, beforeEdit)).toEqual(stale);
+
+    core.tracked_ranges.mockClear();
+    editor.enqueue({ type: 'history', op: { type: 'undo' } });
+    frames.at(-1)?.(0);
+    expect(editor.appliedSnapshot.trackedRanges).toBe(afterEdit.trackedRanges);
+    expect(editor.trackedRangeForSnapshot(stale.id, afterEdit)).toEqual(fresh);
+    expect(editor.trackedRangeForSnapshot(stale.id, editor.appliedSnapshot)).toEqual(fresh);
+    expect(core.tracked_ranges).not.toHaveBeenCalled();
 
     editor.destroy();
   });

@@ -410,6 +410,16 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
     let Some(r) = ctx.resolver.position(d) else {
         return 0;
     };
+    // Root blocks and inline children without redirected leaves preserve sequence
+    // order. Fixed-role containers and synthetic blocks retain the linear path;
+    // synthetic blocks inherit the preceding rank there.
+    if (c.id() == Dot::ROOT || c.spec().is_textblock())
+        && !c.has_redirected_leaf()
+        && c.child_blocks().all(|block| block.dot().is_some())
+        && let Some(offset) = offset_within_ordered(c, r, ctx)
+    {
+        return offset;
+    }
     let mut offset = 0usize;
     let mut prev_real: Option<usize> = None;
     for child in c.children() {
@@ -437,6 +447,22 @@ fn offset_within(c: &NodeView, target: Dot, ctx: &StableResolveCtx) -> usize {
         }
     }
     offset
+}
+
+fn offset_within_ordered(c: &NodeView, rank: usize, ctx: &StableResolveCtx) -> Option<usize> {
+    let mut lo = 0;
+    let mut hi = c.child_count();
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        let dot = child_elem_id(&c.child_at(mid)?);
+        let child_rank = ctx.resolver.visible_position(dot)?;
+        if child_rank < rank {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(lo)
 }
 
 /// Resolves a chain step to a live node in the current projection. A real step
@@ -1441,6 +1467,120 @@ mod tests {
     }
 
     #[test]
+    fn deleted_boundaries_match_linear_resolution_in_root_and_text_children() {
+        for inline in [false, true] {
+            let mut items = vec![(Dot::new(1, 1), block(NodeType::Paragraph, vec![Dot::ROOT]))];
+            items.extend((2..=65).map(|clock| {
+                (
+                    Dot::new(1, clock),
+                    if inline {
+                        SeqItem::Char('a')
+                    } else {
+                        block(NodeType::Paragraph, vec![Dot::ROOT])
+                    },
+                )
+            }));
+            let mut events = ins_only(&items);
+            // Delete boundaries at the beginning, middle and end of the host.
+            for index in (1..items.len()).rev().filter(|i| i % 3 == 1) {
+                let parent = events.last().unwrap().id;
+                events.push(InputEvent {
+                    id: Dot::new(1, events.len() as u64 + 1),
+                    parents: vec![parent],
+                    op: ListOp::Del { pos: index, len: 1 },
+                });
+            }
+            let logs = doclogs(&events);
+            let projected = project_document(&logs).unwrap();
+            let view = DocView::new(&projected);
+            let ctx = StableResolveCtx::new(&view, &logs.seq);
+            let host = if inline {
+                view.node(items[0].0).unwrap()
+            } else {
+                view.root().unwrap()
+            };
+            for (dot, _) in &items[1..] {
+                let expected = v1_offset_within(&host, *dot, &ctx, &mut false);
+                assert_eq!(offset_within(&host, *dot, &ctx), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn deleted_anchor_in_redirected_paragraph_keeps_its_boundary() {
+        use editor_model::EditOp;
+
+        let mut state = crate::ProjectedState::empty();
+        let original = state
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        let insert = |pos, c| {
+            EditOp::Seq(ListOp::Ins {
+                pos,
+                item: SeqItem::Char(c),
+            })
+        };
+        let a = state.apply(insert(1, 'a')).unwrap().id;
+        let z = state.apply(insert(2, 'z')).unwrap().id;
+        let q = state.apply(insert(3, 'q')).unwrap().id;
+        let captured = StablePosition::capture(&Position::new(original, 3), &state.view());
+        let moved = state
+            .apply(EditOp::Seq(ListOp::Ins {
+                pos: 4,
+                item: block(NodeType::Paragraph, vec![Dot::ROOT]),
+            }))
+            .unwrap()
+            .id;
+        let copied_a = state.apply(insert(5, 'a')).unwrap().id;
+        state
+            .apply(EditOp::Alias(AliasOp {
+                pairs: vec![
+                    AliasRun {
+                        old_start: original,
+                        len: 1,
+                        new_start: moved,
+                    },
+                    AliasRun {
+                        old_start: a,
+                        len: 1,
+                        new_start: copied_a,
+                    },
+                ],
+            }))
+            .unwrap();
+        // Moving the original paragraph redirects z/q behind the copied a.
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 0, len: 2 }))
+            .unwrap();
+        state
+            .apply(EditOp::Seq(ListOp::Del { pos: 1, len: 1 }))
+            .unwrap();
+
+        let view = state.view();
+        let host = view.node(moved).unwrap();
+        assert_eq!(
+            host.children()
+                .map(|child| child_elem_id(&child))
+                .collect::<Vec<_>>(),
+            vec![copied_a, z]
+        );
+        assert!(view.leaf(q).is_none());
+        // Display order is a,z, while sequence order is z,a. The deleted q
+        // boundary must keep the linear resolver's a|z position, not az|.
+        for ctx in [
+            StableResolveCtx::from_live(&view, state.seq_checkout()),
+            StableResolveCtx::new(&view, state.seq()),
+        ] {
+            assert_eq!(captured.resolve(&ctx), Some(Position::new(moved, 1)));
+        }
+    }
+
+    #[test]
     fn deleted_host_block_walks_to_live_ancestor() {
         let root = Dot::ROOT;
         let p0 = Dot::new(1, 1);
@@ -1527,6 +1667,13 @@ mod tests {
         let post = project_document(&post_logs).unwrap();
         let post_view = DocView::new(&post);
         let ctx = StableResolveCtx::new(&post_view, &post_logs.seq);
+        let fold_view = post_view.node(fold).unwrap();
+        for target in [content, title] {
+            assert_eq!(
+                offset_within(&fold_view, target, &ctx),
+                v1_offset_within(&fold_view, target, &ctx, &mut false),
+            );
+        }
         let r = sp.resolve(&ctx).unwrap();
         if let Some(host) = post_view.node(r.node) {
             assert!(r.offset <= host.children().count(), "offset in range");
@@ -2487,6 +2634,16 @@ mod tests {
             .filter(|e| matches!(e.op, ListOp::Ins { .. }))
             .map(|e| e.dot)
             .collect();
+        let ctx = StableResolveCtx::from_live(&ordered, state.seq_checkout());
+        for host in all_block_nodes(&ordered) {
+            for target in all_dots.iter().step_by((all_dots.len() / 4).max(1)).take(4) {
+                assert_eq!(
+                    offset_within(&host, *target, &ctx),
+                    v1_offset_within(&host, *target, &ctx, &mut false),
+                    "boundary lookup diverged from linear resolution",
+                );
+            }
+        }
         for dot in &all_dots {
             let a = ordered
                 .leaf(*dot)
