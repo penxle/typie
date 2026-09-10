@@ -15,12 +15,10 @@ import androidx.compose.ui.geometry.Offset as ComposeOffset
 import androidx.compose.ui.geometry.Size as ComposeSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
@@ -165,40 +163,18 @@ internal fun EditorPageSurface(
   ) {
     backgroundOverlay()
 
-    Layout(
-      content = {
-        Canvas(
-          modifier =
-            Modifier.graphicsLayer(
-              scaleX = displayScaleX,
-              scaleY = displayScaleY,
-              transformOrigin = TransformOrigin(0f, 0f),
-            )
-        ) {
-          frame?.bitmap?.let { bitmap ->
-            drawImage(
-              image = bitmap,
-              srcOffset = IntOffset.Zero,
-              srcSize = IntSize(bitmap.width, bitmap.height),
-              dstOffset = IntOffset.Zero,
-              dstSize = IntSize(bitmap.width, bitmap.height),
-            )
+    Canvas(modifier = Modifier.matchParentSize()) {
+      withTransform({ scale(displayScaleX, displayScaleY, pivot = ComposeOffset.Zero) }) {
+        frame?.tiles?.forEach { tile ->
+          val gutter = co.typie.editor.EditorTileGutter
+          val width = tile.bitmap.width - gutter * 2
+          val height = tile.bitmap.height - gutter * 2
+          val left = tile.offset.x.toFloat()
+          val top = tile.offset.y.toFloat()
+          clipRect(left, top, left + width, top + height) {
+            drawImage(tile.bitmap, topLeft = ComposeOffset(left - gutter, top - gutter))
           }
         }
-      }
-    ) { measurables, _ ->
-      val placeable =
-        measurables
-          .single()
-          .measure(
-            androidx.compose.ui.unit.Constraints.fixed(
-              width = committedPixelSize.width,
-              height = committedPixelSize.height,
-            )
-          )
-
-      layout(width = displayedWidthPxInt, height = displayedHeightPxInt) {
-        placeable.place(x = 0, y = 0)
       }
     }
 

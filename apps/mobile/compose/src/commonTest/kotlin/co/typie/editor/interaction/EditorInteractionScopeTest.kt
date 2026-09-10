@@ -112,7 +112,7 @@ class EditorInteractionScopeTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = firstSurface,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = 0L,
         frameKey = assertNotNull(firstFrameKey).value,
@@ -159,14 +159,14 @@ class EditorInteractionScopeTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = firstSurface,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = update.revision,
         frameKey = assertNotNull(firstFrameKey).value,
       )
       editor.deliverFrame(
         session = secondSurface,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = update.revision,
         frameKey = assertNotNull(secondFrameKey).value,
@@ -307,7 +307,7 @@ class EditorInteractionScopeTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = surface,
-        bitmap = ImageBitmap(width = 400, height = 700),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 400, height = 700))),
         pixelSize = IntSize(width = 400, height = 700),
         editorRevision = editor.appliedState.version,
         frameKey = assertNotNull(frameKey).value,

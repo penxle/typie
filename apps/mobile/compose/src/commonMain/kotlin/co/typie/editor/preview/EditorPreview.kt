@@ -269,10 +269,30 @@ private fun EditorPreviewContent(
       emptySet()
     }
   if (editor != null) {
-    SideEffect { editor.requestSurfacePages(requiredPages) }
+    val regions = requiredPages.associateWith { page ->
+      val top =
+        layoutSpec.resolvePageContentTop(
+          page = page,
+          pageSizes = editor.appliedState.pageSizes,
+          displayZoom = displayZoom,
+          density = density.density,
+        ) ?: 0f
+      val width = editor.appliedState.pageSizes[page].width * displayZoom
+      val left = maxOf(0f, (viewportWidth - width) / 2f)
+      listOf(
+        androidx.compose.ui.geometry.Rect(
+          (-left - viewportWidth * 0.25f) / displayZoom,
+          (-top - viewportHeight * 0.5f) / displayZoom,
+          (viewportWidth * 1.25f - left) / displayZoom,
+          (viewportHeight * 1.5f - top) / displayZoom,
+        )
+      )
+    }
+    SideEffect { editor.requestSurfacePages(requiredPages, regions) }
     EditorSurfaceHost(
       editor = editor,
       scaleFactor = density.density.toDouble() * renderZoom.toDouble(),
+      zoomSettled = co.typie.editor.zoomEquals(displayZoom, renderZoom),
       onFailure = { error -> runtime.fail(editor, error) },
     )
   }

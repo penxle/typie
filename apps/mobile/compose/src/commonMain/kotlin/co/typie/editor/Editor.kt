@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.IntSize
 import co.touchlab.kermit.Logger
@@ -205,11 +204,6 @@ internal constructor(
     AtomicReference(
       PublicationSource(snapshot = EditorState.Initial, hostToken = null, pages = emptyMap())
     )
-  // Native buffer readers cannot wait for a tick that owns the Editor mutex.
-  // Writers refresh this immutable derived view while holding that mutex.
-  private val retainedFrameBitmaps:
-    AtomicReference<PersistentMap<Int, PersistentList<ImageBitmap>>> =
-    AtomicReference(persistentMapOf())
   private val queuedLocalEdits: AtomicReference<PersistentList<LocalEdit>> =
     AtomicReference(persistentListOf())
   private val pendingRequests: AtomicReference<PersistentMap<Long, PendingRequest>> =
@@ -230,12 +224,23 @@ internal constructor(
   internal val activeSurfacePages: Set<Int>
     get() = publicationSource.load().pages.keys
 
-  internal fun requestSurfacePages(pages: Set<Int>) {
+  internal fun surfaceConfiguration(page: Int): SurfaceConfiguration? =
+    publicationSource.load().pages[page]?.target?.configuration
+
+  internal var surfacePageRegions: Map<Int, List<androidx.compose.ui.geometry.Rect>>? by
+    mutableStateOf(null)
+    private set
+
+  internal fun requestSurfacePages(
+    pages: Set<Int>,
+    regions: Map<Int, List<androidx.compose.ui.geometry.Rect>>? = null,
+  ) {
     val validPages =
       pages.filterTo(mutableSetOf()) { page ->
         page in appliedState.pageSizes.indices ||
           (appliedState === EditorState.Initial && page in activeSurfacePages)
       }
+    surfacePageRegions = regions
     if (surfacePageRequirements == validPages) return
     surfacePageRequirements = validPages
     publicationVersion += 1
@@ -828,7 +833,10 @@ internal constructor(
     }
   }
 
-  internal fun publishIfReady(requiredPages: Set<Int>): PublishedBundle? {
+  internal fun publishIfReady(
+    requiredPages: Set<Int>,
+    regions: Map<Int, List<androidx.compose.ui.geometry.Rect>>? = surfacePageRegions,
+  ): PublishedBundle? {
     if (surfacePageRequirements != requiredPages) return null
     val source = publicationSource.load()
     if (source.hostToken == null) return null
@@ -837,6 +845,17 @@ internal constructor(
     for (pageIndex in requiredPages) {
       val page = source.pages[pageIndex] ?: return null
       val frame = page.frame ?: return null
+      if (regions != null) {
+        val configuration = page.target.configuration
+        val expectedTiles =
+          requiredSurfaceTiles(
+            configuration.width,
+            configuration.height,
+            configuration.scaleFactor,
+            regions[pageIndex] ?: emptyList(),
+          )
+        if (configuration.tiles != expectedTiles) return null
+      }
       if (
         !Publication.accepts(
           proof = frame.proof,
@@ -907,7 +926,6 @@ internal constructor(
           published = bundle
           publishedHostToken = host.token
           refreshPublicationSource()
-          refreshRetainedFrames()
           true
         }
       }
@@ -1006,7 +1024,6 @@ internal constructor(
         publishedHostToken = null
         surfacePageRequirements = emptySet()
         refreshPublicationSource()
-        refreshRetainedFrames()
         publicationWaiters.exchange(persistentListOf()).forEach { it.completion.complete(NoHost) }
       }
     }
@@ -1018,12 +1035,14 @@ internal constructor(
     width: Double,
     height: Double,
     scaleFactor: Double,
+    tiles: List<androidx.compose.ui.unit.IntRect>? = null,
     wakeDelivery: (FrameKey) -> Unit,
   ): SurfaceSessionHandle = runBlocking {
     mutex.withPriorityLock {
       ensureActive()
       val host = visualHost ?: error("Cannot attach a surface without an active visual host")
-      val configuration = SurfaceConfiguration(width, height, scaleFactor).withAppliedPageSize(page)
+      val configuration =
+        SurfaceConfiguration(width, height, scaleFactor, tiles).withAppliedPageSize(page)
       val key = SurfaceKey(nextSurfaceKey.addAndFetch(1))
       val session = surfaceDriver.attach(this@Editor, page, handle, configuration)
       host.pages[page] =
@@ -1099,7 +1118,7 @@ internal constructor(
 
   internal fun deliverFrame(
     session: SurfaceSessionHandle,
-    bitmap: ImageBitmap,
+    tiles: List<PresentedTile>,
     pixelSize: IntSize,
     editorRevision: Long,
     frameKey: Long,
@@ -1131,7 +1150,7 @@ internal constructor(
         }
         page.frame =
           PresentedFrame(
-            bitmap = bitmap,
+            tiles = tiles,
             pixelSize = pixelSize,
             proof =
               FrameProof(
@@ -1145,9 +1164,6 @@ internal constructor(
       }
     }
   }
-
-  internal fun retainedFrames(page: Int): List<ImageBitmap> =
-    retainedFrameBitmaps.load()[page] ?: emptyList()
 
   internal fun surfaceDeliveryFailed(page: Int, session: SurfaceSessionHandle?, error: Throwable) {
     if (terminal) return
@@ -1240,7 +1256,6 @@ internal constructor(
         page.available = false
         page.failedRevision = null
         refreshPublicationSource()
-        refreshRetainedFrames()
         val error = EditorSurfaceUnavailableException(session.page)
         publicationWaiters.exchange(persistentListOf()).forEach {
           it.completion.completeExceptionally(error)
@@ -1334,7 +1349,6 @@ internal constructor(
 
   private fun publicationSourceChanged() {
     refreshPublicationSource()
-    refreshRetainedFrames()
   }
 
   private fun SurfacePage.clearInFlightRender() {
@@ -1360,7 +1374,9 @@ internal constructor(
           } ?: emptyMap(),
       )
     )
-    publicationVersion += 1
+    // Frame delivery can finish while the UI is measuring the previous source.
+    // Notify on the UI dispatcher so that completion schedules a subsequent measure.
+    scope.launch(Dispatchers.Main) { requestPublication() }
   }
 
   private fun completePublicationWaiters(bundle: PublishedBundle) {
@@ -1378,23 +1394,6 @@ internal constructor(
     publicationWaiters.updatePersistent { it.removingAll(completed) }
     val result = Published(bundle.snapshot.version)
     completed.forEach { it.completion.complete(result) }
-  }
-
-  private fun refreshRetainedFrames() {
-    val pages = mutableSetOf<Int>()
-    published?.frames?.keys?.let(pages::addAll)
-    visualHost?.pages?.keys?.let(pages::addAll)
-
-    val frames = persistentMapOf<Int, PersistentList<ImageBitmap>>().builder()
-    for (page in pages) {
-      var bitmaps = persistentListOf<ImageBitmap>()
-      published?.frames?.get(page)?.bitmap?.let { bitmaps = bitmaps.adding(it) }
-      visualHost?.pages?.get(page)?.frame?.bitmap?.let { bitmap ->
-        if (bitmaps.none { it === bitmap }) bitmaps = bitmaps.adding(bitmap)
-      }
-      if (bitmaps.isNotEmpty()) frames[page] = bitmaps
-    }
-    retainedFrameBitmaps.store(frames.build())
   }
 
   private fun rejectFailedRevision(page: SurfacePage, revision: Long) {
@@ -1571,7 +1570,6 @@ internal constructor(
         visualHost = null
         surfacePageRequirements = emptySet()
         refreshPublicationSource()
-        retainedFrameBitmaps.store(persistentMapOf())
       }
       requests.forEach(CollectedEditorRequest::discard)
       receipts.forEach { it.completeExceptionally(error) }

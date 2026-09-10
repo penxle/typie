@@ -162,7 +162,7 @@ private fun Editor.deliverLatestFrame(fake: FakeFfiEditor, surface: SurfaceSessi
   val render = fake.renderCalls.last()
   deliverFrame(
     session = surface,
-    bitmap = ImageBitmap(width = 100, height = 100),
+    tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
     pixelSize = IntSize(width = 100, height = 100),
     editorRevision = render.requestedRevision.value,
     frameKey = render.requestedRevision.value,

@@ -92,7 +92,7 @@ class EditorTableColumnResizeSemanticTest {
         advanceUntilIdle()
         editor.deliverFrame(
           session = session,
-          bitmap = ImageBitmap(width = 100, height = 100),
+          tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
           pixelSize = IntSize(width = 100, height = 100),
           editorRevision = 0L,
           frameKey = requireNotNull(pendingFrameKey).value,

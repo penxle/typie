@@ -1096,6 +1096,16 @@ impl Editor {
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm-browser", editor_macros::ffi_export(wasm))]
 impl Editor {
+    /// Device-pixel rectangles [left, top, right, bottom] for the current page target.
+    pub fn configure_surface_tiles(&self, page: u32, bounds: Vec<i32>) -> EditorResult<()> {
+        self.with_guarded_render(|render| {
+            if let Some(surface) = render.surfaces.get_mut(&page) {
+                surface.configure_tiles(&bounds)?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn attach_surface(
         &self,
         page: u32,
@@ -1184,6 +1194,42 @@ impl Editor {
                     return Ok(None);
                 };
                 if let Some(frame_key) = render.reused_frame_key(page, sig) {
+                    if render
+                        .surfaces
+                        .get(&page)
+                        .is_some_and(SurfaceHandle::needs_render)
+                    {
+                        // Scrolling changes tile coverage, not document content. Reuse the
+                        // display list and existing tile pixels without rebuilding glyphs.
+                        drop(inner);
+                        let frame_key = render.prepare_frame_key(page, sig);
+                        let committed =
+                            match (render.surfaces.get_mut(&page), render.prev_dl.get(&page)) {
+                                (Some(surface), Some(dl)) => surface.apply_damage(
+                                    dl,
+                                    &[],
+                                    requested_revision.get(),
+                                    frame_key,
+                                ),
+                                _ => false,
+                            };
+                        if !committed {
+                            render.clear_page_present_state(page);
+                        }
+                        return Ok(committed.then_some(frame_key));
+                    }
+                    // A newly configured consumer may no longer hold the prior frame.
+                    // Republish its immutable tiles with the requested revision even
+                    // when raster pixels and their frame key are unchanged.
+                    #[cfg(any(target_os = "android", target_os = "ios", feature = "uniffi"))]
+                    if !render
+                        .surfaces
+                        .get(&page)
+                        .unwrap()
+                        .publish_frame(requested_revision.get(), frame_key)
+                    {
+                        return Ok(None);
+                    }
                     return Ok(Some(frame_key));
                 }
                 (sig, inner.editor.build_display_list(page, scale_factor))
@@ -1201,15 +1247,15 @@ impl Editor {
                 Some(prev) => editor_renderer::diff::diff(prev, &dl, page_bounds),
             };
             // The surface backing is fixed at the page's max height, so a taller
-            // content region reveals rows that were outside the previous page
-            // bounds (or hold stale pixels from an earlier shrink). No primitive
-            // diff covers those gaps, so paint the revealed strip explicitly.
+            // content region reveals rows outside the previous bounds; shrinking
+            // must also clear pixels below the new bounds. Primitive damage is
+            // clipped to the current content, so cover both strips explicitly.
             if let Some(prev_h) = prev_content_h {
                 let strip = editor_renderer::damage::IRect {
                     x0: 0,
-                    y0: prev_h.max(0),
+                    y0: prev_h.min(page_bounds.y1).max(0),
                     x1: page_bounds.x1,
-                    y1: page_bounds.y1,
+                    y1: prev_h.max(page_bounds.y1),
                 };
                 if !strip.is_empty() {
                     damage.push(strip);
@@ -1251,11 +1297,20 @@ impl Editor {
         })
     }
 
+    /// Publish only after the host accepts this page's prepared frame proof.
+    pub fn present_surface(&self, page: u32, frame_key: u64) -> EditorResult<bool> {
+        self.with_guarded_render(|render| {
+            Ok(render
+                .surfaces
+                .get_mut(&page)
+                .is_some_and(|surface| surface.present(frame_key)))
+        })
+    }
+
     pub fn surface_backend(&self, page: u32) -> EditorResult<String> {
         self.with_guarded_render(|render| {
             Ok(match render.surfaces.get(&page) {
                 None => "none".to_string(),
-                Some(surface) if surface.is_oversized() => "cpu-oversized".to_string(),
                 Some(_) => "cpu".to_string(),
             })
         })

@@ -25,10 +25,11 @@
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
-  import { browserScaleFactor, Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { RECENT_EDIT_WINDOW_MS } from '$lib/editor-ffi/recent-edit-marks';
+  import { browserScaleFactor } from '$lib/editor-ffi/zoom';
   import { cache, mearieClient } from '$lib/graphql';
   import { getDocumentChannels, getSyncConnection } from '$lib/sync';
   import { graphql } from '$mearie';

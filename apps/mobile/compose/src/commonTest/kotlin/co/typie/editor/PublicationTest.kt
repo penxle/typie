@@ -79,7 +79,7 @@ class PublicationTest {
 
   private fun frame(surfaceKey: Long): PresentedFrame =
     PresentedFrame(
-      bitmap = ImageBitmap(width = 1, height = 1),
+      tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 1, height = 1))),
       pixelSize = IntSize(width = 1, height = 1),
       proof =
         FrameProof(editorRevision = 10, surfaceKey = SurfaceKey(surfaceKey), frameKey = FrameKey(1)),

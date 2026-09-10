@@ -360,6 +360,8 @@ internal class FakeFfiEditor(
   override fun firstRectForRange(revision: Revision, start: Int, end: Int): PageRect? =
     firstRectForRangeProvider(revision, start, end)
 
+  override fun configureSurfaceTiles(page: Int, bounds: List<Int>) {}
+
   override fun attachSurface(
     page: Int,
     handle: Long,

@@ -1440,7 +1440,7 @@ describe('EditorScrollScope', () => {
 
     editor.published = {
       snapshot,
-      frames: new Map([[0, { revision: snapshot.revision, surfaceKey: 1, frameKey: 1, canvas: document.createElement('canvas') }]]),
+      frames: new Map([[0, { revision: snapshot.revision, surfaceKey: 1, frameKey: 1, surface: document.createElement('div') }]]),
     };
     editor.pageEls[1] = undefined;
 

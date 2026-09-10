@@ -1,6 +1,7 @@
 package co.typie.editor
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import co.typie.editor.ffi.FrameKey
 import kotlin.jvm.JvmInline
@@ -19,8 +20,10 @@ internal data class FrameProof(
   val frameKey: FrameKey,
 )
 
+internal data class PresentedTile(val bitmap: ImageBitmap, val offset: IntOffset = IntOffset.Zero)
+
 internal data class PresentedFrame(
-  val bitmap: ImageBitmap,
+  val tiles: List<PresentedTile>,
   val pixelSize: IntSize,
   val proof: FrameProof,
 )

@@ -1,5 +1,6 @@
 package co.typie.editor
 
+import androidx.compose.ui.unit.IntRect
 import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.Editor as FfiEditor
 import co.typie.editor.ffi.FrameKey
@@ -23,6 +24,7 @@ internal data class SurfaceConfiguration(
   val width: Double,
   val height: Double,
   val scaleFactor: Double,
+  val tiles: List<IntRect>? = null,
 )
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -198,6 +200,7 @@ internal class SurfaceDriver(
             command.configuration.height,
             command.configuration.scaleFactor,
           )
+          configureTiles(command.session.page, command.configuration)
           attached[command.session.page] = command.session.id
         }
         is ResizeSurface -> {
@@ -210,6 +213,7 @@ internal class SurfaceDriver(
             command.configuration.height,
             command.configuration.scaleFactor,
           )
+          configureTiles(command.session.page, command.configuration)
         }
         is RenderSurface -> runRender(command, attached)
         is DetachSurface -> error("handled above")
@@ -218,6 +222,15 @@ internal class SurfaceDriver(
       throw e
     } catch (e: Throwable) {
       notifyFailure(e)
+    }
+  }
+
+  private fun configureTiles(page: Int, configuration: SurfaceConfiguration) {
+    configuration.tiles?.let { tiles ->
+      inner.configureSurfaceTiles(
+        page,
+        tiles.flatMap { listOf(it.left, it.top, it.right, it.bottom) },
+      )
     }
   }
 

@@ -1868,6 +1868,7 @@ fun EditorScreen(entityId: String) {
         EditorSurfaceHost(
           editor = activeEditor,
           scaleFactor = density.toDouble() * committedRenderZoom.toDouble(),
+          zoomSettled = co.typie.editor.zoomEquals(displayZoom, committedRenderZoom),
           onDeactivate = bringIntoViewRequests::cancel,
           onPublicationFailure = bringIntoViewRequests::discardFailedForVersion,
           onFailure = { error -> runtime.fail(activeEditor, error) },
@@ -1885,6 +1886,7 @@ fun EditorScreen(entityId: String) {
         platformIndirectScaleEnabled = platformIndirectScaleEnabled,
         viewportContentWidth = bodyTrackWidth,
         viewportAnchorState = viewportAnchorState,
+        zoomSettled = co.typie.editor.zoomEquals(displayZoom, committedRenderZoom),
         viewportScrollReconcileMode = viewportScrollReconcileMode,
         pointerInputModeState = pointerInputModeState,
         onViewportIndirectInput = {

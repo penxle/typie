@@ -22,8 +22,9 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
-  import { browserScaleFactor, Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { Editor, setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { browserScaleFactor } from '$lib/editor-ffi/zoom';
   import { unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import BodyUnavailable from './BodyUnavailable.svelte';

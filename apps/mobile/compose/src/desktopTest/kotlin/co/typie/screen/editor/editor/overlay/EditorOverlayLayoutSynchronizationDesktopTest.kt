@@ -127,7 +127,7 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
     val renderedRevision = fake.renderCalls.last { it.page == 1 }.requestedRevision.value
     editor.deliverFrame(
       session = surface,
-      bitmap = ImageBitmap(width = 100, height = 100),
+      tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
       pixelSize = IntSize(width = 100, height = 100),
       editorRevision = renderedRevision,
       frameKey = 1L,

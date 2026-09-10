@@ -776,7 +776,7 @@ declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
-    attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
+    attach_surface(page: number, handle: HTMLElement, width: number, height: number, scale_factor: number): void;
     block_state(): BlockState | undefined;
     capture_selection_viewport_anchor(revision: Revision): CapturedViewportAnchor | undefined;
     capture_viewport_anchor_at(revision: Revision, point: ViewportAnchorPoint): CapturedViewportAnchor | undefined;
@@ -788,6 +788,10 @@ declare class Editor {
      */
     changeset_ids(): string[];
     character_counts(): CharacterCounts;
+    /**
+     * Device-pixel rectangles [left, top, right, bottom] for the current page target.
+     */
+    configure_surface_tiles(page: number, bounds: Int32Array): void;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
@@ -838,6 +842,10 @@ declare class Editor {
     partition_remote_changesets(payload: Uint8Array): PartitionedChangesets;
     placeholder(): PlaceholderMetrics | undefined;
     pointer_style(page: number, x: number, y: number, read_only: boolean): PointerStyle;
+    /**
+     * Publish only after the host accepts this page's prepared frame proof.
+     */
+    present_surface(page: number, frame_key: bigint): boolean;
     prose_text(): string;
     prose_text_annotated(): string;
     prose_to_selection(start: number, end: number): Selection | undefined;

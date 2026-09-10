@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use editor_macros::ffi;
-use editor_renderer::backend::cpu::CpuSink;
 use editor_renderer::damage::IRect;
 
 use crate::editor::FrameKey;
@@ -22,11 +21,14 @@ impl SurfaceHandle {
         unreachable!();
     }
 
-    pub fn scale_factor(&self) -> f64 {
-        unreachable!();
+    pub fn needs_render(&self) -> bool {
+        unreachable!()
+    }
+    pub fn configure_tiles(&mut self, _bounds: &[i32]) -> Result<(), FfiError> {
+        unreachable!()
     }
 
-    pub fn cpu_sink(&mut self) -> &mut CpuSink {
+    pub fn scale_factor(&self) -> f64 {
         unreachable!();
     }
 
@@ -38,10 +40,6 @@ impl SurfaceHandle {
         _frame_key: FrameKey,
     ) -> bool {
         unreachable!()
-    }
-
-    pub fn present_damage(&mut self, _damage: &[IRect]) -> bool {
-        unreachable!();
     }
 
     pub fn resize(&mut self, _width: f64, _height: f64, _scale_factor: f64) -> bool {

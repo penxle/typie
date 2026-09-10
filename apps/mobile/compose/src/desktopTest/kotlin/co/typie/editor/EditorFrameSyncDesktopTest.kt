@@ -600,10 +600,9 @@ class EditorFrameSyncDesktopTest {
         )
       assertTrue(firstRestoredFrame.snapshot.version >= restore.revision)
       assertEquals(restore.snapshot.selection, firstRestoredFrame.snapshot.selection)
-      assertEquals(
-        firstRestoredFrame.snapshot.version,
-        firstRestoredFrame.cursorNativeFrameRevision,
-      )
+      // A later non-rendering tick may advance the snapshot while retaining the
+      // restored pixels. The first drawn frame must cover the restore itself.
+      assertTrue(assertNotNull(firstRestoredFrame.cursorNativeFrameRevision) >= restore.revision)
       val expectedScroll =
         assertNotNull(
           resolveEditorScrollIntent(
@@ -1566,6 +1565,7 @@ class EditorFrameSyncDesktopTest {
           EditorSurfaceHost(
             editor = fixture.editor,
             scaleFactor = committedRenderZoom.toDouble(),
+            zoomSettled = zoomEquals(zoomController.displayZoom, committedRenderZoom),
             onDeactivate = fixture.bringIntoViewRequests::cancel,
             onFailure = { throw it },
           )
@@ -1576,6 +1576,7 @@ class EditorFrameSyncDesktopTest {
             visibleArea = fixture.visibleArea,
             viewportScrollableState = viewportScrollableState,
             viewportContentWidth = geometry.pageColumnWidth,
+            zoomSettled = zoomEquals(zoomController.displayZoom, committedRenderZoom),
             viewportScrollReconcileMode = EditorViewportScrollReconcileMode.Disabled,
             onMeasuredViewportSizeChange = { measuredViewport.value = it },
             header = {},
