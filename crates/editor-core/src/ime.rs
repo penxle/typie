@@ -77,7 +77,7 @@ impl Editor {
                 let selection = Selection::new(Position::from(&from), Position::from(&to));
                 selection.resolve(&doc).map_or_else(Vec::new, |selection| {
                     self.view
-                        .selection_rects(&selection)
+                        .selection_text_rects(&selection)
                         .iter()
                         .map(|rect| rect.without_meta())
                         .collect()

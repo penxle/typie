@@ -1671,10 +1671,12 @@ impl Editor {
                 ResolvedPosition::from_flat(&doc, composition.start),
                 ResolvedPosition::from_flat(&doc, composition.end),
             )
+            && let Some(selection) =
+                Selection::new(Position::from(&from), Position::from(&to)).resolve(&doc)
         {
             let rects = self
                 .view
-                .composition_rects(&Position::from(&from), &Position::from(&to))
+                .selection_text_rects(&selection)
                 .iter()
                 .map(|r| r.without_meta())
                 .collect();

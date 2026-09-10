@@ -87,8 +87,10 @@ describe('EditContext input', () => {
     const context = canvas?.getContext('2d');
     if (!rect || !canvas || !context) throw new Error('Editor page is not rendered');
     const scale = canvas.width / editor.pageSizes[rect.page_idx].width;
-    // Sample the line's top padding, clear of glyphs and the composition underline.
-    return [...context.getImageData(Math.floor((rect.rect.x + 1) * scale), Math.floor((rect.rect.y + 1) * scale), 1, 1).data];
+    // Sample the character's left padding inside the text band, excluding line spacing.
+    return [
+      ...context.getImageData(Math.floor((rect.rect.x + 1) * scale), Math.floor((rect.rect.y + rect.rect.height / 2) * scale), 1, 1).data,
+    ];
   };
 
   afterEach(async () => {

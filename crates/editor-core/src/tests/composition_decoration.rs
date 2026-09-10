@@ -1,8 +1,8 @@
-use editor_common::Rect;
+use editor_common::{Color, Rect};
 use editor_macros::state;
 use editor_renderer::display_list::PrimPayload;
 
-use crate::{Editor, FlatImeOp, HistoryOp, ImeRange, Message, SystemEvent, ViewOp};
+use crate::{Editor, FlatImeOp, HistoryOp, ImeRange, Message, ModifierOp, SystemEvent, ViewOp};
 
 fn composing_editor() -> Editor {
     let (state, _) = state! {
@@ -37,6 +37,20 @@ fn backgrounds(editor: &mut Editor) -> Vec<Rect> {
         .unwrap()
         .theme()
         .color_with_alpha("selection", 77);
+    fills(editor, color)
+}
+
+fn underlines(editor: &mut Editor) -> Vec<Rect> {
+    let color = editor
+        .resource()
+        .lock()
+        .unwrap()
+        .theme()
+        .color("ui.text.default");
+    fills(editor, color)
+}
+
+fn fills(editor: &mut Editor, color: Color) -> Vec<Rect> {
     editor
         .build_display_list(0, 1.0)
         .unwrap()
@@ -65,13 +79,21 @@ fn composition_target_moves_the_rendered_background_without_editing_text_or_sele
     assert_ne!(editor.page_render_signature(0), signature);
     let first = backgrounds(&mut editor);
     assert_eq!(first.len(), 1);
-    assert_eq!(
-        first[0],
-        editor
-            .first_rect_for_range(editor.revision(), 1, 4)
-            .unwrap()
-            .rect
+    let line_box = editor
+        .first_rect_for_range(editor.revision(), 1, 4)
+        .unwrap()
+        .rect;
+    assert_eq!(first[0].x, line_box.x);
+    assert_eq!(first[0].width, line_box.width);
+    assert!(
+        first[0].y > line_box.y,
+        "composition background must exclude line spacing"
     );
+    assert!(first[0].bottom() < line_box.bottom());
+    let underline = underlines(&mut editor);
+    assert_eq!(underline.len(), 1);
+    assert_eq!(underline[0].height, 1.0);
+    assert_eq!(first[0].bottom(), underline[0].bottom());
     set_targets(&mut editor, vec![ImeRange { start: 4, end: 5 }]);
     let last = backgrounds(&mut editor);
     assert_eq!(last.len(), 1);
@@ -158,19 +180,46 @@ fn composition_target_updates_do_not_create_undo_entries() {
 
 #[test]
 fn composition_target_uses_engine_geometry_across_soft_wraps() {
-    let (state, _) = state! {
-        doc { root { p: paragraph { text("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz") } } }
-        selection: (p, 0)
-    };
-    let mut editor = Editor::new_test(state);
-    editor.apply(Message::System {
-        event: SystemEvent::SetFocused { focused: true },
-    });
-    editor.apply(Message::TextInput {
-        ops: vec![FlatImeOp::SetComposition { start: 1, end: 105 }],
-    });
-    set_targets(&mut editor, vec![ImeRange { start: 3, end: 103 }]);
-    let rects = backgrounds(&mut editor);
-    assert!(rects.len() > 1);
-    assert!(rects[1].y > rects[0].y);
+    let mut previous_metrics = None;
+    for line_height in [160, 300] {
+        let (state, _) = state! {
+            doc { root { p: paragraph { text("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz") } } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Modifier {
+            op: ModifierOp::SetOnNode {
+                id: editor.state().selection.unwrap().head.node,
+                modifier: editor_model::Modifier::LineHeight { value: line_height },
+            },
+        });
+        editor.apply(Message::System {
+            event: SystemEvent::SetFocused { focused: true },
+        });
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::SetComposition { start: 1, end: 105 }],
+        });
+        set_targets(&mut editor, vec![ImeRange { start: 3, end: 103 }]);
+        let rects = backgrounds(&mut editor);
+        assert!(rects.len() > 1);
+        assert!(rects[1].y > rects[0].y);
+        let underline = underlines(&mut editor);
+        assert_eq!(rects.len(), underline.len());
+        for (background, underline) in rects.iter().zip(&underline) {
+            assert_eq!(background.bottom(), underline.bottom());
+            assert_eq!(underline.height, 1.0);
+        }
+        let line_spacing = rects[1].y - rects[0].y;
+        if let Some((height, spacing)) = previous_metrics {
+            assert!(
+                line_spacing > spacing,
+                "fixture must increase the line spacing"
+            );
+            assert_eq!(
+                rects[0].height, height,
+                "line spacing must not enlarge composition decorations"
+            );
+        }
+        previous_metrics = Some((rects[0].height, line_spacing));
+    }
 }
