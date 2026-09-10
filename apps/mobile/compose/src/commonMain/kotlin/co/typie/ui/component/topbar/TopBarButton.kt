@@ -1,7 +1,5 @@
 package co.typie.ui.component.topbar
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -12,17 +10,15 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
-import co.typie.ext.pressScale
+import co.typie.ui.component.popover.popoverAnchorSurface
 import co.typie.ui.component.tooltip.tooltip
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.shadow
 
 @Composable
 fun TopBarButton(
@@ -80,10 +76,12 @@ private fun TopBarButtonContent(
         .size(TopBarDefaults.ButtonSize)
         .semantics { role = Role.Button }
         .tooltip(contentDescription, shortcut)
-        .shadow(AppTheme.shadows.sm, TopBarDefaults.ButtonShape)
-        .pressScale(TopBarButtonPressedScale)
-        .background(backgroundColor, TopBarDefaults.ButtonShape)
-        .border(1.dp, borderColor, TopBarDefaults.ButtonShape)
+        .popoverAnchorSurface(
+          backgroundColor,
+          borderColor,
+          shadow = AppTheme.shadows.sm,
+          pressedScale = TopBarButtonPressedScale,
+        )
         .hoverFeedback(
           shape = TopBarDefaults.ButtonShape,
           hoverColor =

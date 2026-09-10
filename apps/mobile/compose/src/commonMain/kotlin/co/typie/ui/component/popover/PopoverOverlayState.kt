@@ -2,6 +2,7 @@ package co.typie.ui.component.popover
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +30,9 @@ class PopoverOverlayState {
   var anchorBounds: IntRect by mutableStateOf(IntRect.Zero)
     private set
 
-  internal var progress: Float by mutableStateOf(0f)
-    private set
-
-  val easedProgress: Float
-    get() = PopoverDefaults.PopoverEasing.transform(progress).coerceIn(0f, 1f)
+  private var detachedProgress by mutableStateOf(0f)
+  internal val progress: Float
+    get() = if (isDetached) detachedProgress else entry?.progress?.value ?: 0f
 
   var interactive: Boolean by mutableStateOf(true)
     private set
@@ -59,7 +58,7 @@ class PopoverOverlayState {
     onOutsideDismiss = null
     this.entry = entry
     this.anchorBounds = anchorBounds
-    progress = 0f
+    detachedProgress = 0f
     interactive = true
     paneBoundsInWindow = null
   }
@@ -68,7 +67,6 @@ class PopoverOverlayState {
     owner: Any,
     entry: PopoverOverlayEntry,
     anchorBounds: IntRect,
-    progress: Float,
     interactive: Boolean,
   ) {
     if (this.owner !== owner) {
@@ -77,7 +75,6 @@ class PopoverOverlayState {
 
     this.entry = entry
     this.anchorBounds = anchorBounds
-    this.progress = progress
     this.interactive = interactive
   }
 
@@ -137,6 +134,7 @@ class PopoverOverlayState {
       return
     }
 
+    detachedProgress = progress
     this.owner = null
     onOutsideDismiss = null
     interactive = false
@@ -149,8 +147,7 @@ class PopoverOverlayState {
     if (!isDetached || detachedCloseRequestIdState != closeRequestId) {
       return
     }
-
-    this.progress = progress
+    detachedProgress = progress
   }
 
   internal fun clearDetached(closeRequestId: Int) {
@@ -177,7 +174,7 @@ class PopoverOverlayState {
     isDetached = false
     entry = null
     anchorBounds = IntRect.Zero
-    progress = 0f
+    detachedProgress = 0f
     interactive = true
     paneBoundsInWindow = null
   }
@@ -185,11 +182,12 @@ class PopoverOverlayState {
 
 internal class PopoverOverlayEntry(
   val owner: Any,
+  val progress: State<Float>,
   val placement: PopoverPlacement,
   val screenPadding: PopoverScreenPadding,
-  val collapsedCornerRadius: Dp?,
   val maxWidth: Dp?,
   val minWidth: Dp,
   val pane: @Composable () -> Unit,
   val anchor: @Composable () -> Unit,
+  val anchorSurface: PopoverAnchorSurface? = null,
 )

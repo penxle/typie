@@ -1,7 +1,6 @@
 package co.typie.ui.component.popover
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,17 +17,20 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,8 @@ import co.typie.ext.safeDrawing
 import co.typie.ext.toPx
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.component.tooltip.LocalTooltipState
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 @Composable
 fun Popover(
@@ -51,7 +55,6 @@ fun Popover(
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
-  collapsedCornerRadius: Dp? = null,
 ) {
   val density = LocalDensity.current
   val focusManager = LocalFocusManager.current
@@ -73,6 +76,7 @@ fun Popover(
 
   val overlayState = LocalPopoverOverlayState.current
   val overlayOwner = remember { Any() }
+  val anchorSurfaceState = remember { PopoverAnchorSurfaceState() }
   val anchorInteractionSource = remember { MutableInteractionSource() }
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
@@ -80,6 +84,7 @@ fun Popover(
   var reverseAnimationCompleted by remember { mutableStateOf(false) }
   var paneHasFocus by remember { mutableStateOf(false) }
   val progress = remember { Animatable(0f) }
+  val animationScope = rememberCoroutineScope()
   val scope =
     remember(overlayState, overlayOwner, focusManager) {
       PopoverScope(
@@ -90,6 +95,8 @@ fun Popover(
             }
             overlayState.stopAcceptingInput(overlayOwner)
           }
+          // Freeze an interrupted intro before the close effect runs on the next frame.
+          animationScope.launch(start = CoroutineStart.UNDISPATCHED) { progress.stop() }
           isExpanded = false
         }
       )
@@ -100,9 +107,10 @@ fun Popover(
   val overlayEntry =
     PopoverOverlayEntry(
       owner = overlayOwner,
+      progress = progress.asState(),
       placement = placement,
       screenPadding = resolvedScreenPadding,
-      collapsedCornerRadius = collapsedCornerRadius,
+      anchorSurface = anchorSurfaceState.surface,
       maxWidth = maxWidth,
       minWidth = minWidth,
       pane = {
@@ -114,7 +122,16 @@ fun Popover(
           }
         Box(focusObserver) { PopoverPaneSelectionHost(scope = scope, pane = pane) }
       },
-      anchor = { CompositionLocalProvider(LocalTooltipState provides null) { anchor() } },
+      anchor = {
+        CompositionLocalProvider(
+          LocalTooltipState provides null,
+          LocalInteractionSource provides null,
+          LocalPopoverAnchorSurfaceState provides null,
+          LocalPopoverAnchorContentOnly provides true,
+        ) {
+          anchor()
+        }
+      },
     )
   val openPopover = rememberUpdatedState {
     if (!isOverlayVisible) {
@@ -129,15 +146,16 @@ fun Popover(
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
-      progress.stop()
-      progress.snapTo(0f)
-      progress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
+      progress.animateTo(
+        1f,
+        tween(PopoverDefaults.ForwardDuration, easing = PopoverDefaults.OpenEasing),
+      )
     } else if (isOverlayVisible) {
-      val from = if (progress.value == 0f) 1f else progress.value
       reverseAnimationCompleted = false
-      progress.stop()
-      progress.snapTo(from)
-      progress.animateTo(0f, tween(PopoverDefaults.ReverseDuration, easing = LinearEasing))
+      progress.animateTo(
+        0f,
+        tween(PopoverDefaults.ReverseDuration, easing = PopoverDefaults.CloseEasing),
+      )
       reverseAnimationCompleted = true
     }
   }
@@ -195,7 +213,6 @@ fun Popover(
         owner = overlayOwner,
         entry = overlayEntry,
         anchorBounds = anchorBounds,
-        progress = progress.value.coerceIn(0f, 1f),
         interactive = scope.acceptsInput,
       )
     }
@@ -205,12 +222,13 @@ fun Popover(
     scope.close()
   }
 
-  val easedProgress =
-    if (isOverlayVisible && ownsOverlay) {
-      PopoverDefaults.PopoverEasing.transform(progress.value).coerceIn(0f, 1f)
-    } else {
-      0f
-    }
+  // Keep the original input node alive for press-drag selection. Only the overlay draws
+  // the trigger while its surface expands; fading both copies would duplicate its outline.
+  val anchorDrawModifier =
+    Modifier.semantics { if (isOverlayVisible && ownsOverlay) hideFromAccessibility() }
+      .drawWithContent {
+        if (!isOverlayVisible || !ownsOverlay || progress.value <= 0f) drawContent()
+      }
   val anchorModifier = Modifier.onGloballyPositioned { coordinates ->
     val pos = coordinates.positionInWindow().round()
     anchorBounds = IntRect(pos, coordinates.size)
@@ -218,9 +236,7 @@ fun Popover(
 
   if (!enabled) {
     CompositionLocalProvider(LocalTooltipState provides null) {
-      Box(modifier = anchorModifier) {
-        Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
-      }
+      Box(modifier = anchorModifier) { Box(modifier = anchorDrawModifier) { anchor() } }
     }
     return
   }
@@ -243,9 +259,10 @@ fun Popover(
   ) {
     CompositionLocalProvider(
       LocalInteractionSource provides anchorInteractionSource,
+      LocalPopoverAnchorSurfaceState provides anchorSurfaceState,
       LocalTooltipState provides LocalTooltipState.current.takeUnless { isOverlayVisible },
     ) {
-      Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+      Box(modifier = anchorDrawModifier) { anchor() }
     }
   }
 }

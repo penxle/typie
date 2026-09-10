@@ -1,7 +1,6 @@
 package co.typie.ui.component.popover
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -19,9 +19,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -29,6 +33,7 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -42,17 +47,14 @@ import co.typie.ext.rememberEdgeAutoScrollController
 import co.typie.ext.toDp
 import co.typie.ext.toPx
 import co.typie.ext.verticalScroll
+import co.typie.ui.shape.SquircleShape
 import co.typie.ui.state.rememberScrollState
-import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-data class PopoverPaneTransition(val progress: Float, val anchorContentRect: Rect)
-
-val LocalPopoverPaneTransition = staticCompositionLocalOf<PopoverPaneTransition?> { null }
 val LocalPopoverPaneEdgeAutoScrollController =
   staticCompositionLocalOf<EdgeAutoScrollController?> { null }
 
@@ -83,19 +85,19 @@ fun PopoverOverlay(state: PopoverOverlayState) {
       return@LaunchedEffect
     }
 
-    val from = state.progress.takeIf { it > 0f } ?: 1f
+    val from = state.progress
     detachedCloseProgress.stop()
     detachedCloseProgress.snapTo(from)
     detachedCloseProgress.animateTo(
       targetValue = 0f,
-      animationSpec = tween(PopoverDefaults.ReverseDuration, easing = LinearEasing),
+      animationSpec = tween(PopoverDefaults.ReverseDuration, easing = PopoverDefaults.CloseEasing),
     ) {
       state.updateDetachedProgress(detachedCloseRequestId, value)
     }
     state.clearDetached(detachedCloseRequestId)
   }
 
-  val progress = state.easedProgress
+  val progress = state.progress
   if (progress <= 0f) return
 
   PopoverPaneContent(
@@ -105,7 +107,7 @@ fun PopoverOverlay(state: PopoverOverlayState) {
     placement = entry.placement,
     progress = progress,
     interactive = state.interactive,
-    collapsedCornerRadius = entry.collapsedCornerRadius,
+    anchorSurface = entry.anchorSurface,
     screenPadding = entry.screenPadding,
     maxWidth = entry.maxWidth,
     minWidth = entry.minWidth,
@@ -121,7 +123,7 @@ private fun PopoverPaneContent(
   placement: PopoverPlacement,
   progress: Float,
   interactive: Boolean,
-  collapsedCornerRadius: Dp?,
+  anchorSurface: PopoverAnchorSurface?,
   screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
   minWidth: Dp,
@@ -219,17 +221,6 @@ private fun PopoverPaneContent(
         popupContentSize = paneSize,
         screenPadding = screenPadding,
       )
-    val transition =
-      PopoverPaneTransition(
-        progress = progress,
-        anchorContentRect =
-          Rect(
-            left = geometry.anchorBoundsInPopup.left.toFloat(),
-            top = geometry.anchorBoundsInPopup.top.toFloat(),
-            right = geometry.anchorBoundsInPopup.right.toFloat(),
-            bottom = geometry.anchorBoundsInPopup.bottom.toFloat(),
-          ),
-      )
 
     val surfacePlaceable =
       subcompose(PopoverPaneSlot.Surface) {
@@ -248,8 +239,7 @@ private fun PopoverPaneContent(
               }
           ) {
             CompositionLocalProvider(
-              LocalPopoverPaneTransition provides transition,
-              LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Interactive,
+              LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Interactive
             ) {
               PopoverPaneSurface(
                 anchor = anchor,
@@ -258,7 +248,7 @@ private fun PopoverPaneContent(
                 anchorContentRect = geometry.anchorBoundsInPopup,
                 progress = progress,
                 interactive = interactive,
-                collapsedCornerRadius = collapsedCornerRadius,
+                anchorSurface = anchorSurface,
               )
             }
           }
@@ -295,24 +285,44 @@ private fun PopoverPaneSurface(
   anchorContentRect: IntRect,
   progress: Float,
   interactive: Boolean,
-  collapsedCornerRadius: Dp?,
+  anchorSurface: PopoverAnchorSurface?,
 ) {
   val density = LocalDensity.current
   val anchorSize = anchorContentRect.size
-  val animatedWidth =
-    sizeForProgress(anchorSize.width.toFloat(), paneSize.width.toFloat(), progress)
-  val animatedHeight =
-    sizeForProgress(anchorSize.height.toFloat(), paneSize.height.toFloat(), progress)
-  val surfaceOffset = surfaceOffsetForProgress(anchorContentRect, progress)
+  val anchorScale = anchorSurface?.scale?.value ?: 1f
+  val animatedWidth = lerp(anchorSize.width * anchorScale, paneSize.width.toFloat(), progress)
+  val animatedHeight = lerp(anchorSize.height * anchorScale, paneSize.height.toFloat(), progress)
+  val surfaceOffset = surfaceOffsetForProgress(anchorContentRect, anchorScale, progress)
   val paneOffset = IntOffset(x = -surfaceOffset.x, y = -surfaceOffset.y)
   val anchorOffset = IntOffset(x = anchorContentRect.left, y = anchorContentRect.top)
   val cornerRadius =
     lerp(
-      collapsedCornerRadius?.toPx(density) ?: min(anchorSize.width, anchorSize.height) / 2f,
+      (anchorSurface?.cornerRadius?.toPx(density)
+        ?: min(anchorSize.width, anchorSize.height) / 2f) * anchorScale,
       PopoverDefaults.ExpandedRadius.toPx(density),
       progress,
     )
-  val paneShape = AppShapes.squircle(cornerRadius.toDp(density))
+  val paneShape = SquircleShape(cornerRadius.toDp(density), smoothing = progress)
+  val background =
+    lerp(
+      anchorSurface?.background ?: AppTheme.colors.surfaceDefault.copy(alpha = 0f),
+      AppTheme.colors.surfaceDefault,
+      progress,
+    )
+  val border =
+    lerp(
+      anchorSurface?.border ?: AppTheme.colors.borderDefault.copy(alpha = 0f),
+      AppTheme.colors.borderDefault,
+      progress,
+    )
+  val anchorAlpha = (1f - progress / 0.35f).coerceIn(0f, 1f)
+  val paneAlpha = ((progress - 0.15f) / 0.85f).coerceIn(0f, 1f)
+  val paneScale = lerp(0.90f, 1f, progress)
+  val paneTransformOrigin =
+    TransformOrigin(
+      (anchorContentRect.center.x.toFloat() / paneSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+      (anchorContentRect.center.y.toFloat() / paneSize.height.coerceAtLeast(1)).coerceIn(0f, 1f),
+    )
 
   Box(
     modifier =
@@ -321,10 +331,16 @@ private fun PopoverPaneSurface(
     Box(
       modifier =
         Modifier.offset { surfaceOffset }
+          .wrapContentSize(Alignment.TopStart, unbounded = true)
           .size(width = animatedWidth.toDp(density), height = animatedHeight.toDp(density))
+          .then(
+            anchorSurface?.let { Modifier.shadow(it.shadow, paneShape, alpha = { 1f - progress }) }
+              ?: Modifier
+          )
           .shadow(AppTheme.shadows.md, paneShape, alpha = { progress })
-          .border(1.dp, AppTheme.colors.borderDefault, paneShape)
-          .background(AppTheme.colors.surfaceDefault, paneShape)
+          .border(1.dp, border, paneShape)
+          .background(background, paneShape)
+          .clip(paneShape)
           .then(
             if (interactive) {
               Modifier
@@ -341,13 +357,37 @@ private fun PopoverPaneSurface(
           )
     ) {
       PopoverCropLayout(
-        pane = { Box(modifier = Modifier.graphicsLayer { alpha = progress }) { pane() } },
-        anchor = { Box(modifier = Modifier.graphicsLayer { alpha = 1f - progress }) { anchor() } },
+        pane = {
+          Box(
+            modifier =
+              Modifier.graphicsLayer {
+                alpha = paneAlpha
+                scaleX = paneScale
+                scaleY = paneScale
+                transformOrigin = paneTransformOrigin
+              }
+          ) {
+            pane()
+          }
+        },
+        anchor = {
+          Box(
+            modifier =
+              Modifier.clearAndSetSemantics {}
+                .graphicsLayer {
+                  alpha = anchorAlpha
+                  scaleX = anchorScale
+                  scaleY = anchorScale
+                }
+          ) {
+            anchor()
+          }
+        },
         paneSize = paneSize,
         anchorSize = anchorSize,
         paneOffset = paneOffset,
         anchorOffset = anchorOffset,
-        showAnchor = progress < 1f,
+        showAnchor = anchorAlpha > 0f,
       )
     }
   }
@@ -387,15 +427,6 @@ private fun lerp(start: Float, end: Float, fraction: Float): Float {
   return start + (end - start) * fraction
 }
 
-private fun sizeForProgress(start: Float, end: Float, progress: Float): Float {
-  val size = lerp(start, end, progress)
-  return if (start <= end) {
-    max(start, size)
-  } else {
-    min(start, size)
-  }
-}
-
 private fun shrinkBounded(value: Int, inset: Int): Int {
   if (value == Constraints.Infinity) {
     return value
@@ -421,10 +452,18 @@ private fun availableHeightForPlacement(
   }
 }
 
-private fun surfaceOffsetForProgress(anchorContentRect: IntRect, progress: Float): IntOffset {
+private fun surfaceOffsetForProgress(
+  anchorContentRect: IntRect,
+  anchorScale: Float,
+  progress: Float,
+): IntOffset {
   return IntOffset(
-    x = lerp(anchorContentRect.left.toFloat(), 0f, progress).roundToInt(),
-    y = lerp(anchorContentRect.top.toFloat(), 0f, progress).roundToInt(),
+    x =
+      lerp(anchorContentRect.left + anchorContentRect.width * (1f - anchorScale) / 2f, 0f, progress)
+        .roundToInt(),
+    y =
+      lerp(anchorContentRect.top + anchorContentRect.height * (1f - anchorScale) / 2f, 0f, progress)
+        .roundToInt(),
   )
 }
 

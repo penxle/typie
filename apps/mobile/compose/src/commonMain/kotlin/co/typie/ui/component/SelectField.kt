@@ -1,7 +1,5 @@
 package co.typie.ui.component
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +21,7 @@ import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.popover.PopoverPlacement
+import co.typie.ui.component.popover.popoverAnchorSurface
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.input.hoverFeedback
@@ -66,7 +65,6 @@ fun <T> SelectField(
     placement = placement,
     maxWidth = 320.dp,
     screenPadding = PaddingValues(20.dp),
-    collapsedCornerRadius = 8.dp,
     anchor = anchor,
   ) {
     items.forEach { selectItem ->
@@ -115,8 +113,11 @@ private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
     modifier =
       Modifier.heightIn(min = 38.dp)
         .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
-        .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
-        .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md))
+        .popoverAnchorSurface(
+          AppTheme.colors.surfaceDefault,
+          AppTheme.colors.borderEmphasis,
+          AppShapes.md,
+        )
         .then(
           LocalInteractionSource.current?.let {
             Modifier.hoverFeedback(it, enabled, AppShapes.rounded(AppShapes.md))
