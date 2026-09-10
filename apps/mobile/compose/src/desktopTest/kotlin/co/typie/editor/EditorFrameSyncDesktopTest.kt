@@ -367,7 +367,7 @@ class EditorFrameSyncDesktopTest {
       FrameSyncFixture(continuous = true, initialDoc = continuousDocumentWithOffscreenTable())
 
     try {
-      setFrameSyncContent(fixture)
+      setFrameSyncContent(fixture, directTouchInteraction = true)
       waitUntil(timeoutMillis = 10_000) {
         fixture.editor.publishedBundle?.frames?.isNotEmpty() == true
       }
@@ -1470,6 +1470,7 @@ class EditorFrameSyncDesktopTest {
 
   private fun androidx.compose.ui.test.ComposeUiTest.setFrameSyncContent(
     fixture: FrameSyncFixture,
+    directTouchInteraction: Boolean = false,
     viewportHeight: () -> Float = { fixture.visibleArea.viewport.height },
     onRequiredPagesChanged: (Set<Int>) -> Unit = {},
     onInputRequest: (PlatformTextInputMethodRequest) -> Unit = {},
@@ -1530,13 +1531,13 @@ class EditorFrameSyncDesktopTest {
           Offset(x = -consumed.x, y = -consumed.y)
         }
         val directTouchInteractionState = remember {
-          DirectTouchInteractionState(initialDirectTouchInteraction = false)
+          DirectTouchInteractionState(initialDirectTouchInteraction = directTouchInteraction)
         }
 
         SideEffect {
           interactionScope.update(
             editor = fixture.editor,
-            directTouchInteraction = false,
+            directTouchInteraction = directTouchInteraction,
             bringIntoViewRequests = fixture.bringIntoViewRequests,
             uiState = fixture.uiState,
             visibleArea = fixture.visibleArea,

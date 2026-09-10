@@ -93,7 +93,7 @@ internal fun EditorView(
           val target = currentEnvironment ?: return@LaunchedEffect
           val shouldUpdateTheme = editorThemeVariant != target.themeVariant
           if (shouldUpdateTheme) {
-            EditorRegistry.commitResourceUpdate {
+            EditorRegistry.shared.commitResourceUpdate {
               PlatformModule.editorHost.setThemeVariant(target.themeVariant)
             }
           }
@@ -140,13 +140,13 @@ internal fun EditorView(
       val publishedSelection = publishedBundle?.snapshot?.selection
       var previousSelection by remember(editor) { mutableStateOf(publishedSelection) }
       LaunchedEffect(editor, themeVariant) {
-        EditorRegistry.commitResourceUpdate {
+        EditorRegistry.shared.commitResourceUpdate {
           PlatformModule.editorHost.setThemeVariant(themeVariant)
         }
       }
       val autoSurroundEnabled = Preference.autoSurroundEnabled
       LaunchedEffect(autoSurroundEnabled) {
-        EditorRegistry.commitResourceUpdate {
+        EditorRegistry.shared.commitResourceUpdate {
           PlatformModule.editorHost.setAutoSurroundEnabled(autoSurroundEnabled)
         }
       }

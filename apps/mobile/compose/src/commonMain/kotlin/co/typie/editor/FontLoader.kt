@@ -183,7 +183,7 @@ object FontLoader {
         val changed =
           next.keys.filter { key -> fontPaths[key]?.hash != next[key]?.hash } +
             fontPaths.keys.filterNot { it in next }
-        EditorRegistry.commitResourceUpdate {
+        EditorRegistry.shared.commitResourceUpdate {
           val update = PlatformModule.editorHost.setFonts(ffiFamilies)
           fontPaths = next
           purgeKeysLocked(changed)
@@ -348,7 +348,7 @@ object FontLoader {
                   if (state.isStale(fk, dispatchGen)) {
                     false
                   } else {
-                    EditorRegistry.commitResourceUpdate {
+                    EditorRegistry.shared.commitResourceUpdate {
                       val update =
                         when (fd) {
                           FontData.Manifest ->

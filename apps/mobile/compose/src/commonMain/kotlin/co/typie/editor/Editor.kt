@@ -1553,7 +1553,7 @@ internal constructor(
 
   fun dispose() {
     if (!disposed.compareAndSet(expectedValue = false, newValue = true)) return
-    EditorRegistry.unregisterAsync(this)
+    EditorRegistry.shared.unregisterAsync(this)
     val error = CancellationException("Editor disposed")
     listeners.store(persistentMapOf())
     surfaceDriver.dispose()
@@ -1724,7 +1724,7 @@ internal constructor(
     if (disposed.load()) return
     if (!failure.compareAndSet(expectedValue = null, newValue = error)) return
 
-    EditorRegistry.unregisterAsync(this)
+    EditorRegistry.shared.unregisterAsync(this)
     scope.launch(dispatcher + NonCancellable, start = CoroutineStart.UNDISPATCHED) {
       var requests: Collection<CollectedEditorRequest> = emptyList()
       var receipts: Collection<CompletableDeferred<EditorUpdate>> = emptyList()
@@ -1866,9 +1866,9 @@ internal constructor(
             createdEditor = editor
 
             editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
-            EditorRegistry.register(editor)
+            EditorRegistry.shared.register(editor)
             try {
-              EditorRegistry.commitResourceUpdate {
+              EditorRegistry.shared.commitResourceUpdate {
                 PlatformModule.editorHost.setThemeVariant(themeVariant)
               }
               val update =
@@ -1884,7 +1884,7 @@ internal constructor(
               initialized.store(true)
             } finally {
               if (!initialized.load()) {
-                EditorRegistry.unregister(editor)
+                EditorRegistry.shared.unregister(editor)
               }
             }
 

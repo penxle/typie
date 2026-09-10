@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.InternalComposeUiApi
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -30,10 +32,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import co.typie.editor.Editor
 import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
+import co.typie.editor.SurfaceSessionHandle
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
@@ -152,6 +156,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -218,6 +223,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -284,6 +290,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -353,7 +360,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -415,6 +428,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -495,6 +509,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -578,6 +593,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -643,6 +659,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -696,7 +713,13 @@ class EditorDocumentManipulationDesktopTest {
       val runtime = EditorRuntime(scope).apply { attach(editor) }
       fake.publishSnapshot(editor)
       try {
-        setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+        setOverlayHostContent(
+          fake = fake,
+          editor = editor,
+          runtime = runtime,
+          uiState = uiState,
+          scope = scope,
+        )
         waitForIdle()
 
         val root = onNodeWithTag(RootTag)
@@ -712,8 +735,9 @@ class EditorDocumentManipulationDesktopTest {
             cellSelection =
               TableOverlayCellSelection(anchorRow = 0, anchorCol = 0, headRow = 0, headCol = 1),
           )
-        fake.publishSnapshot(editor)
+        fake.applySnapshot(editor)
         fake.enqueued.clear()
+        waitUntil { editor.publishedRevision == editor.appliedRevision }
         waitForIdle()
 
         root.performTouchInput {
@@ -762,7 +786,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -809,7 +839,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -860,7 +896,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       val root = onNodeWithTag(RootTag)
@@ -924,7 +966,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -984,6 +1032,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -1055,6 +1104,7 @@ class EditorDocumentManipulationDesktopTest {
     fake.publishSnapshot(editor)
     try {
       setOverlayHostContent(
+        fake = fake,
         editor = editor,
         runtime = runtime,
         uiState = uiState,
@@ -1104,7 +1154,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -1155,7 +1211,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -1207,7 +1269,13 @@ class EditorDocumentManipulationDesktopTest {
     val runtime = EditorRuntime(scope).apply { attach(editor) }
     fake.publishSnapshot(editor)
     try {
-      setOverlayHostContent(editor = editor, runtime = runtime, uiState = uiState, scope = scope)
+      setOverlayHostContent(
+        fake = fake,
+        editor = editor,
+        runtime = runtime,
+        uiState = uiState,
+        scope = scope,
+      )
       waitForIdle()
 
       onNodeWithTag(RootTag).performTouchInput {
@@ -1231,6 +1299,7 @@ class EditorDocumentManipulationDesktopTest {
   }
 
   private fun androidx.compose.ui.test.ComposeUiTest.setOverlayHostContent(
+    fake: FakeFfiEditor,
     editor: Editor,
     runtime: EditorRuntime,
     uiState: EditorUiState,
@@ -1245,7 +1314,37 @@ class EditorDocumentManipulationDesktopTest {
     onLowerPointerDown: () -> Unit = {},
     onInteractionScope: (EditorInteractionScope) -> Unit = {},
   ) {
+    val surfaceSizes = editor.appliedState.pageSizes
+    val requiredPages = surfaceSizes.indices.toSet()
     setContent {
+      // Hit testing and handles require frames from the same publication as their geometry.
+      DisposableEffect(editor) {
+        val sessions = surfaceSizes.mapIndexed { page, size ->
+          val pixelSize = IntSize(size.width.toInt(), size.height.toInt())
+          val bitmap = ImageBitmap(pixelSize.width, pixelSize.height)
+          lateinit var session: SurfaceSessionHandle
+          session =
+            editor.attachSurface(
+              page = page,
+              handle = page.toLong() + 1L,
+              width = size.width.toDouble(),
+              height = size.height.toDouble(),
+              scaleFactor = 1.0,
+              wakeDelivery = { frameKey ->
+                val revision = fake.renderCalls.last { it.page == page }.requestedRevision.value
+                editor.deliverFrame(
+                  session = session,
+                  bitmap = bitmap,
+                  pixelSize = pixelSize,
+                  editorRevision = revision,
+                  frameKey = frameKey.value,
+                )
+              },
+            )
+          session
+        }
+        onDispose { sessions.forEach { editor.detachSurface(it) {} } }
+      }
       val interactionScope = remember {
         EditorInteractionScope(coroutineScope = scope, platformProvider = { Platform.Desktop })
       }
@@ -1274,8 +1373,8 @@ class EditorDocumentManipulationDesktopTest {
       }
       editor.publicationVersion
       SideEffect {
-        editor.requestSurfacePages(emptySet())
-        editor.publishIfReady(emptySet())?.let { bundle ->
+        editor.requestSurfacePages(requiredPages)
+        editor.publishIfReady(requiredPages)?.let { bundle ->
           if (editor.acceptPublication(bundle)) {
             editor.completePresentation(bundle)
           }
@@ -1354,6 +1453,11 @@ class EditorDocumentManipulationDesktopTest {
         }
       }
     }
+    waitUntil {
+      editor.publishedRevision == editor.appliedRevision &&
+        editor.publishedBundle?.frames?.keys == requiredPages
+    }
+    waitForIdle()
   }
 
   private fun focusedTestUiState(): EditorUiState =

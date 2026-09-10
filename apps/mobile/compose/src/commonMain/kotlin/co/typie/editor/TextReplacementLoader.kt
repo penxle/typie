@@ -18,7 +18,7 @@ object TextReplacementLoader {
       snapshotFlow(user).filterNotNull().distinctUntilChanged().collect { user ->
         val rules = user.toTextReplacementRules()
         withContext(Dispatchers.Default) {
-          EditorRegistry.commitResourceUpdate {
+          EditorRegistry.shared.commitResourceUpdate {
             PlatformModule.editorHost.setTextReplacementRules(rules)
           }
         }

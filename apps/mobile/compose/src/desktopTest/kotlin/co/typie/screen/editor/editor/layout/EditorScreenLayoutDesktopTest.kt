@@ -65,6 +65,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.EditorInteractionScope
@@ -157,7 +158,7 @@ class EditorScreenLayoutDesktopTest {
       assertTrue(fixture.scrollDeltas.isNotEmpty())
       onNodeWithTag(HeaderFieldTag).assertIsNotFocused()
       assertEquals(TextRange.Zero, fixture.fieldValue.selection)
-      assertTrue(fixture.fake.enqueued.isEmpty())
+      assertEquals(fixture.initialCommands, fixture.fake.enqueued)
       assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
     } finally {
       fixture.close()
@@ -1007,7 +1008,7 @@ class EditorScreenLayoutDesktopTest {
   }
 
   @Test
-  fun areaOutsideScrollbarQuickMouseDragGoesToViewportPan() = runComposeUiTest {
+  fun areaOutsideScrollbarQuickMouseDragDoesNotPanViewport() = runComposeUiTest {
     val fixture = ViewportOverlayFixture()
     setViewportOverlayContent(
       fixture = fixture,
@@ -1027,12 +1028,12 @@ class EditorScreenLayoutDesktopTest {
     waitForIdle()
 
     assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
-    assertTrue(fixture.scrollDeltas.isNotEmpty())
+    assertTrue(fixture.scrollDeltas.isEmpty())
     assertEquals(0, fixture.directDragClaimCount)
   }
 
   @Test
-  fun areaOutsideScrollbarHeldMouseDragStaysWithViewportPan() = runComposeUiTest {
+  fun areaOutsideScrollbarHeldMouseDragDoesNotPanViewport() = runComposeUiTest {
     val fixture = ViewportOverlayFixture()
     setViewportOverlayContent(
       fixture = fixture,
@@ -1053,7 +1054,7 @@ class EditorScreenLayoutDesktopTest {
     waitForIdle()
 
     assertEquals(initialScroll, fixture.viewportState.scrollOffset.y)
-    assertTrue(fixture.scrollDeltas.isNotEmpty())
+    assertTrue(fixture.scrollDeltas.isEmpty())
     assertEquals(0, fixture.directDragClaimCount)
   }
 
@@ -1490,9 +1491,8 @@ class EditorScreenLayoutDesktopTest {
     viewportOverlay: @Composable BoxScope.() -> Unit = {},
   ) {
     setContent {
-      val interactionScope = remember {
-        EditorInteractionScope(coroutineScope = fixture.coroutineScope)
-      }
+      val coroutineScope = rememberCoroutineScope()
+      val interactionScope = remember { EditorInteractionScope(coroutineScope = coroutineScope) }
       fixture.interactionScope = interactionScope
       val bringIntoViewRequests = remember { EditorBringIntoViewRequests() }
       val scrollGestureLockState = remember { ScrollGestureLockState() }
@@ -1574,6 +1574,7 @@ class EditorScreenLayoutDesktopTest {
       }
     }
     waitForIdle()
+    fixture.initialCommands = fixture.fake.enqueued.toList()
   }
 
   private fun androidx.compose.ui.test.ComposeUiTest.setViewportOverlayContent(
@@ -1587,8 +1588,26 @@ class EditorScreenLayoutDesktopTest {
       val coroutineScope = rememberCoroutineScope()
       val interactionScope = remember { EditorInteractionScope(coroutineScope = coroutineScope) }
       fixture.interactionScope = interactionScope
+      val bringIntoViewRequests = rememberEditorBringIntoViewRequests()
+      val scrollGestureLockState = remember { ScrollGestureLockState() }
+      SideEffect {
+        interactionScope.update(
+          editor = null,
+          directTouchInteraction = false,
+          bringIntoViewRequests = bringIntoViewRequests,
+          uiState = fixture.uiState,
+          visibleArea = fixture.visibleArea,
+          viewportState = fixture.viewportState,
+          density = 1f,
+          scrollGestureLockState = scrollGestureLockState,
+          viewportZoomConfig = null,
+          layoutSpec = fixture.layoutSpec,
+          onSelectionHaptic = {},
+          onRequestSoftwareKeyboard = {},
+        )
+      }
       CompositionLocalProvider(
-        LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
+        LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides fixture.uiState,
       ) {
@@ -1635,7 +1654,7 @@ class EditorScreenLayoutDesktopTest {
     assertTrue(fixture.scrollDeltas.isEmpty())
     assertEquals(expectedZoom, fixture.zoomController.displayZoom)
     assertEquals(EditorInteractionMode.Idle, fixture.interactionScope.controller.interactionMode)
-    assertTrue(fixture.fake.enqueued.isEmpty())
+    assertEquals(fixture.initialCommands, fixture.fake.enqueued)
   }
 
   private fun androidx.compose.ui.test.ComposeUiTest.assertFreshHeaderBodyPinchWorks(
@@ -1773,6 +1792,7 @@ class EditorScreenLayoutDesktopTest {
         }
       )
     val editor = Editor(fake, coroutineScope)
+    var initialCommands: List<Message> = emptyList()
     val viewportState = EditorViewportState()
     val visibleArea = EditorVisibleArea(viewport = TestViewportSize)
     val headerGeometry =
