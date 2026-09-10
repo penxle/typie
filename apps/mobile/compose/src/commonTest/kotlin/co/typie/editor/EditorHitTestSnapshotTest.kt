@@ -14,8 +14,10 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SystemEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -226,22 +228,26 @@ class EditorHitTestSnapshotTest {
         )
       val reported = mutableListOf<Throwable>()
       val editor = Editor(fake, scope, dispatcher, onError = { _, error -> reported += error })
-      editor.activateVisualHost(Any())
-      editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
-      editor.requestSurfacePages(setOf(0))
-      advanceUntilIdle()
-      editor.setImeSessionActive(true)
+      try {
+        editor.activateVisualHost(Any())
+        editor.attachSurface(0, 10L, 100.0, 100.0, 1.0, wakeDelivery = {})
+        editor.requestSurfacePages(setOf(0))
+        advanceUntilIdle()
+        editor.setImeSessionActive(true)
 
-      assertNull(editor.characterCounts())
-      assertNull(editor.copySelection())
-      editor.refreshImeSnapshot()
+        assertNull(editor.characterCounts())
+        assertNull(editor.copySelection())
+        val signal = assertFailsWith<EditorFailureSignal> { editor.refreshImeSnapshot() }
+        assertSame(failure, signal.failure)
 
-      assertEquals(listOf<Throwable>(failure), reported)
-      assertTrue(uncaught.all { it.unwrapEditorFailureSignal() === failure })
-      assertEquals(0, characterCountCalls)
-      assertEquals(0, copyCalls)
-      assertEquals(0, imeCalls)
-      scope.cancel()
+        assertEquals(listOf<Throwable>(failure), reported)
+        assertTrue(uncaught.all { it.unwrapEditorFailureSignal() === failure })
+        assertEquals(0, characterCountCalls)
+        assertEquals(0, copyCalls)
+        assertEquals(0, imeCalls)
+      } finally {
+        scope.cancel()
+      }
     } finally {
       Dispatchers.resetMain()
     }

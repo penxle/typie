@@ -63,6 +63,8 @@ class EditorReadingModeInteractionTest {
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+      fixture.present()
 
       advanceTimeBy(EditorConsecutiveTapMaxIntervalMillis - 1)
       runCurrent()
@@ -90,6 +92,7 @@ class EditorReadingModeInteractionTest {
       val fixture = fixture(pointSelectionResult = movedSelection)
       fixture.fake.applySnapshot(fixture.editor)
       val surface = fixture.fake.attachSurfaceWithoutFrame(fixture.editor)
+      fixture.editor.requestSurfacePages(setOf(0))
       fun deliverFrame(editorRevision: Long, frameKey: Long) {
         fixture.editor.deliverFrame(
           session = surface,
@@ -101,7 +104,8 @@ class EditorReadingModeInteractionTest {
       }
       advanceUntilIdle()
       deliverFrame(editorRevision = 1L, frameKey = 1L)
-      advanceUntilIdle()
+      runCurrent()
+      fixture.present()
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -119,8 +123,8 @@ class EditorReadingModeInteractionTest {
       assertEquals(1L, fixture.editor.publishedRevision)
 
       deliverFrame(editorRevision = 2L, frameKey = 2L)
-      advanceUntilIdle()
-      fixture.controller.onEditorStateChanged(fixture.editor.publishedState)
+      runCurrent()
+      fixture.present()
 
       assertEquals(1, fixture.effects.hintCount)
     }
@@ -131,6 +135,7 @@ class EditorReadingModeInteractionTest {
       val fixture = fixture()
       fixture.fake.applySnapshot(fixture.editor)
       val surface = fixture.fake.attachSurfaceWithoutFrame(fixture.editor)
+      fixture.editor.requestSurfacePages(setOf(0))
       fun deliverFrame(editorRevision: Long) {
         fixture.editor.deliverFrame(
           session = surface,
@@ -142,7 +147,8 @@ class EditorReadingModeInteractionTest {
       }
       advanceUntilIdle()
       deliverFrame(editorRevision = 1L)
-      advanceUntilIdle()
+      runCurrent()
+      fixture.present()
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
@@ -160,8 +166,8 @@ class EditorReadingModeInteractionTest {
       assertEquals(0, fixture.effects.hintCount)
 
       deliverFrame(editorRevision = 2L)
-      advanceUntilIdle()
-      fixture.controller.onEditorStateChanged(fixture.editor.publishedState)
+      runCurrent()
+      fixture.present()
 
       assertEquals(1, fixture.effects.hintCount)
     }
@@ -224,6 +230,7 @@ class EditorReadingModeInteractionTest {
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
       runCurrent()
+      fixture.present()
 
       assertFalse(fixture.editing)
       assertEquals(0, fixture.effects.editingRequestCount)
@@ -488,6 +495,8 @@ class EditorReadingModeInteractionTest {
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+      fixture.present()
       advanceUntilIdle()
 
       assertFalse(fixture.effects.uiState.contextMenu.visible)
@@ -507,6 +516,8 @@ class EditorReadingModeInteractionTest {
 
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
+      runCurrent()
+      fixture.present()
       advanceUntilIdle()
 
       assertEquals(
@@ -532,6 +543,7 @@ class EditorReadingModeInteractionTest {
       fixture.controller.down(pointerId = 1L, nowMillis = 0L)
       fixture.controller.up(pointerId = 1L, nowMillis = 40L)
       runCurrent()
+      fixture.present()
 
       assertEquals(0, fixture.effects.hintCount)
       assertFalse(fixture.effects.uiState.contextMenu.visible)
@@ -644,6 +656,15 @@ class EditorReadingModeInteractionTest {
         editing = editing,
       )
     return fixture
+  }
+
+  private fun Fixture.present() {
+    val pages = editor.activeSurfacePages
+    editor.requestSurfacePages(pages)
+    val bundle = requireNotNull(editor.publishIfReady(pages))
+    check(editor.acceptPublication(bundle))
+    editor.completePresentation(bundle)
+    controller.onEditorStateChanged(editor.publishedState)
   }
 
   private class Fixture(

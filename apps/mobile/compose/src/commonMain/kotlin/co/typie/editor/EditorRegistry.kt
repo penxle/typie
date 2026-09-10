@@ -10,7 +10,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-object EditorRegistry {
+class EditorRegistry internal constructor() {
+  companion object {
+    val shared = EditorRegistry()
+  }
+
   private val mutex = Mutex()
   private val editors = mutableSetOf<Editor>()
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

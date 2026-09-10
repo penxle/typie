@@ -325,7 +325,7 @@ private fun EditorPreviewContent(
         }
       runtime.attach(nextEditor)
     } else {
-      EditorRegistry.commitResourceUpdate {
+      EditorRegistry.shared.commitResourceUpdate {
         PlatformModule.editorHost.setThemeVariant(themeVariant)
       }
       activeEditor.runEffect {
