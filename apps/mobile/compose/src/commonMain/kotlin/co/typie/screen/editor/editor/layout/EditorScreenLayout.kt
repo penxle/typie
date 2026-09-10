@@ -112,6 +112,7 @@ private object EditorViewportNestedScrollConnection : NestedScrollConnection
 
 internal data class EditorSurfacePreparation(
   val requiredPages: Set<Int>,
+  val regions: Map<Int, List<Rect>> = emptyMap(),
   val scrollIntent: EditorScrollIntentResult?,
   val maximumScrollY: Float,
   val contentOriginY: Float,
@@ -213,6 +214,7 @@ internal fun EditorScreenLayout(
   viewportScrollableState: Scrollable2DState,
   viewportContentWidth: Float,
   viewportAnchorState: EditorViewportAnchorState? = null,
+  zoomSettled: Boolean = true,
   isCurrentNavigationRoute: Boolean = true,
   editorInteractionEnabled: Boolean = true,
   platformIndirectScaleEnabled: Boolean = editorInteractionEnabled,
@@ -267,7 +269,9 @@ internal fun EditorScreenLayout(
     )
   }
   if (editor != null && surfacePreparation != null) {
-    SideEffect { editor.requestSurfacePages(surfacePreparation.requiredPages) }
+    SideEffect {
+      editor.requestSurfacePages(surfacePreparation.requiredPages, surfacePreparation.regions)
+    }
   }
   val interactionScope = LocalEditorInteractionScope.current
   val uiState = LocalEditorUiState.current
@@ -406,9 +410,10 @@ internal fun EditorScreenLayout(
         } else {
           null
         }
-      val candidateBundle = currentPreparation?.let {
-        editor?.publishIfReady(requiredPages = it.requiredPages)
-      }
+      val candidateBundle =
+        currentPreparation
+          ?.takeIf { zoomSettled }
+          ?.let { editor?.publishIfReady(requiredPages = it.requiredPages, regions = it.regions) }
       val acceptedBundle = candidateBundle?.let { candidate ->
         val acceptingEditor = editor ?: return@let null
         val latestState = acceptingEditor.appliedState
@@ -741,6 +746,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       editor = editor,
       scrollFrame = scrollFrame,
       currentScroll = currentScrollOffset.y,
+      currentScrollX = currentScrollOffset.x,
       bringIntoViewRequest = bringIntoViewRequest,
       smoothScrollEnabled = smoothScrollEnabled,
     ) ?: return null
@@ -765,6 +771,7 @@ internal fun resolveAnchoredEditorSurfacePreparation(
       editor = editor,
       scrollFrame = scrollFrame,
       currentScroll = anchorPublication.scrollOffset.y,
+      currentScrollX = anchorPublication.scrollOffset.x,
       bringIntoViewRequest = bringIntoViewRequest,
       smoothScrollEnabled = smoothScrollEnabled,
     )
@@ -781,6 +788,7 @@ internal fun resolveEditorSurfacePreparation(
   currentScroll: Float,
   bringIntoViewRequest: EditorBringIntoViewRequests.Request?,
   smoothScrollEnabled: Boolean = true,
+  currentScrollX: Float = 0f,
 ): EditorSurfacePreparation? {
   val state = scrollFrame.state
   val viewportHeight = scrollFrame.visibleArea.viewport.height
@@ -875,8 +883,26 @@ internal fun resolveEditorSurfacePreparation(
         "required=$requiredPages destination=$exactPages"
     }
   }
+  // Keep a half viewport of pixels ahead; fixed tile rounding provides additional slack.
+  val viewportWidth = scrollFrame.visibleArea.viewport.width
+  val zoom = scrollFrame.displayZoom
+  val regions = requiredPages.associateWith { page ->
+    val pageSpan = pageSpans.first { it.page == page }
+    val pageWidth = state.pageSizes[page].width * zoom
+    val pageLeft =
+      ((maxOf(viewportWidth, bodyGeometry.pageColumnWidth) - pageWidth) / 2f).coerceAtLeast(0f)
+    (listOf(currentViewport) + preparationViewports).map { viewport ->
+      Rect(
+        left = (currentScrollX - pageLeft - viewportWidth * 0.25f) / zoom,
+        top = (viewport.top - pageSpan.top - viewportHeight * 0.5f) / zoom,
+        right = (currentScrollX - pageLeft + viewportWidth * 1.25f) / zoom,
+        bottom = (viewport.bottom - pageSpan.top + viewportHeight * 0.5f) / zoom,
+      )
+    }
+  }
   return EditorSurfacePreparation(
     requiredPages = requiredPages,
+    regions = regions,
     scrollIntent = scrollIntent,
     maximumScrollY = maximumScrollY,
     contentOriginY = resolvedContentOrigin,

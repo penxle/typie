@@ -648,16 +648,108 @@ function trackedTargetScrollTop(editor: Editor, id: string): number | null {
 
 function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPixels = true) {
   const frame = editor.published?.frames.get(pageIndex);
-  const canvas = document.querySelector<HTMLCanvasElement>(`canvas[data-page-canvas="${pageIndex}"]`);
+  const canvas = document.querySelector<HTMLElement>(`[data-page-surface="${pageIndex}"]`);
   expect(frame, `page ${pageIndex} must have a frame in the published bundle`).toBeDefined();
-  expect(canvas, `page ${pageIndex} must have a production Page canvas`).toBe(frame?.canvas);
+  expect(canvas, `page ${pageIndex} must have a production Page canvas`).toBe(frame?.surface);
   if (requirePaintedPixels) {
-    const pixels = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
-    expect(pixels && pixels.some((channel) => channel !== 0), `page ${pageIndex} canvas must contain rendered pixels`).toBe(true);
+    const tiles = [...(canvas?.querySelectorAll('canvas') ?? [])];
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles.every((tile) => tile.width <= 514 && tile.height <= 514)).toBe(true);
+    expect(
+      tiles.some((tile) =>
+        tile
+          .getContext('2d')
+          ?.getImageData(0, 0, tile.width, tile.height)
+          .data.some((channel) => channel !== 0),
+      ),
+      `page ${pageIndex} tiles must contain rendered pixels`,
+    ).toBe(true);
   }
 }
 
 describe('web editor frame synchronization', () => {
+  it('keeps rendering while browser smart zoom narrows and pans the visual viewport', async () => {
+    const visualViewport = Object.assign(new EventTarget(), {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 360,
+      height: 180,
+      scale: 1,
+    });
+    vi.stubGlobal('visualViewport', visualViewport);
+    const plain = longDoc();
+    plain.root.children = plain.root.children?.map((child) => entry({ type: 'callout' }, [child]));
+    const { editor, scrollRoot } = await mountEditor(plain, { displayZoom: 2 });
+    vi.stubGlobal('devicePixelRatio', 2);
+    Object.assign(visualViewport, { width: 36, height: 18, scale: 10 });
+    visualViewport.offsetLeft = scrollRoot.getBoundingClientRect().left + 120;
+    visualViewport.offsetTop = scrollRoot.getBoundingClientRect().top + 30;
+    editor.resizeViewport(360, 180, 20);
+    await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(20);
+    const surface = editor.published?.frames.get(0)?.surface;
+    if (!surface) throw new Error('Expected a published surface');
+    const coordinates = () => [...surface.querySelectorAll('canvas')].map((tile) => `${tile.dataset.tileX},${tile.dataset.tileY}`);
+    const before = coordinates();
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.length).toBeLessThanOrEqual(16);
+    const frameKey = editor.published?.frames.get(0)?.frameKey;
+    visualViewport.offsetLeft += 50;
+    visualViewport.offsetTop += 50;
+    visualViewport.dispatchEvent(new Event('scroll'));
+    await expect.poll(() => editor.published?.frames.get(0)?.frameKey).not.toBe(frameKey);
+    expect(coordinates()).not.toEqual(before);
+    expect(coordinates().length).toBeLessThanOrEqual(16);
+    expect(editor.terminal).toBeFalsy();
+    expectActualCanvas(editor, 0);
+    Object.assign(visualViewport, { width: 360, height: 180, scale: 1, offsetLeft: 0, offsetTop: 0 });
+    visualViewport.dispatchEvent(new Event('resize'));
+    const beforeScaleUpdate = editor.published?.frames.get(0)?.frameKey;
+    editor.requestPublication();
+    await tick();
+    await nextAnimationFrame();
+    editor.requestPublication();
+    await tick();
+    expect(editor.terminal).toBeFalsy();
+    expect(editor.published?.frames.get(0)?.frameKey).toBe(beforeScaleUpdate);
+    editor.resizeViewport(360, 180, 2);
+    await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(2);
+    expect(editor.terminal).toBeFalsy();
+    expectActualCanvas(editor, 0);
+  });
+
+  it('bounds raster allocation and reuses visible tiles at 200% zoom on a dense display', async () => {
+    const document = longDoc();
+    document.root.children = document.root.children?.map((child) => entry({ type: 'callout' }, [child]));
+    const { editor } = await mountEditor(document, { displayZoom: 2 });
+    vi.stubGlobal('devicePixelRatio', 3.1875);
+    editor.resizeViewport(360, 180, 3.1875);
+    await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(3.1875);
+    const surface = editor.published?.frames.get(0)?.surface;
+    if (!surface) throw new Error('Expected a published surface');
+    const viewport = editor.scrollViewport;
+    const scrollRoot = editor.scrollRootEl;
+    if (!viewport || !scrollRoot) throw new Error('Expected a scroll viewport');
+    const tileMap = () =>
+      new Map([...surface.querySelectorAll('canvas')].map((tile) => [`${tile.dataset.tileX},${tile.dataset.tileY}`, tile]));
+    expect(editor.surfaceScaleFactor).toBe(6.375);
+    const before = tileMap();
+    const pixels = [...before.values()].reduce((sum, tile) => sum + tile.width * tile.height, 0);
+    const backing = editor.appliedSnapshot.pageBackingSizes[0];
+    expect(backing.width * backing.height * editor.surfaceScaleFactor ** 2).toBeGreaterThan(pixels * 4);
+    expect([...before.values()].every((tile) => tile.width <= 514 && tile.height <= 514)).toBe(true);
+    const frameKey = editor.published?.frames.get(0)?.frameKey;
+    viewport.scrollTo({ top: 160, behavior: 'instant' });
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await expect.poll(() => editor.published?.frames.get(0)?.frameKey).not.toBe(frameKey);
+    const after = tileMap();
+    const overlapping = [...before.keys()].filter((key) => after.has(key));
+    expect(overlapping.length).toBeGreaterThan(0);
+    for (const key of overlapping) expect(after.get(key)).toBe(before.get(key));
+    expectActualCanvas(editor, 0);
+    await setDisplayZoom(editor, 1.37);
+    expectActualCanvas(editor, 0);
+  });
+
   it('orders text selection collapse, focus-mode exit, and editor blur across Escape presses', async () => {
     const { editor } = await mountEditor(doc('hello'));
     const range = editor.proseToSelection(1, 4);
@@ -862,7 +954,7 @@ describe('web editor frame synchronization', () => {
 
   it('completes a pending reveal without removing the last frame after terminal surface failure', async () => {
     const { editor } = await mountEditor(doc());
-    const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-page-canvas="0"]');
+    const canvas = document.querySelector<HTMLElement>('[data-page-surface="0"]');
     expect(canvas).not.toBeNull();
     let presentation: Promise<void> | undefined;
 
@@ -1288,8 +1380,8 @@ describe('web editor frame synchronization', () => {
     expect(editor.published?.snapshot.pageSizes).toHaveLength(1);
     expect(shrinkFrame?.cursorPage).toBe(0);
     expectActualCanvas(editor, 0, false);
-    expect(document.querySelector('[data-page-canvas="1"]')).toBeNull();
-    expect(document.querySelector('[data-page-canvas="2"]')).toBeNull();
+    expect(document.querySelector('[data-page-surface="1"]')).toBeNull();
+    expect(document.querySelector('[data-page-surface="2"]')).toBeNull();
   });
 
   it('keeps typewriter reveal aligned for Enter edits within an existing paginated canvas', async () => {
@@ -1386,7 +1478,7 @@ describe('web editor frame synchronization', () => {
     await waitForPresentation(editor);
     editor.focus();
     await tick();
-    const displayed = editor.published?.frames.get(0)?.canvas;
+    const displayed = editor.published?.frames.get(0)?.surface;
     expect(displayed).toBeDefined();
     expect(displayed?.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
@@ -1417,23 +1509,23 @@ describe('web editor frame synchronization', () => {
       const mismatch = describeWebFrameMismatch(sample, previousSample);
       expect(mismatch, mismatch).toBeUndefined();
       previousSample = sample;
-      expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+      expect(editor.published?.frames.get(0)?.surface.isConnected).toBe(true);
       expectActualCanvas(editor, 0);
     }
 
     await expect.poll(() => Math.abs(editor.renderZoom - editor.displayZoom)).toBeLessThan(0.005);
-    for (let frame = 0; frame < 60 && editor.published?.frames.get(0)?.canvas === displayed; frame += 1) {
+    for (let frame = 0; frame < 60 && editor.published?.frames.get(0)?.surface === displayed; frame += 1) {
       await nextAnimationFrame();
       const sample = readWebFrameSample(editor, scrollRoot, 0, 12 + frame, null);
       const mismatch = describeWebFrameMismatch(sample, previousSample);
       expect(mismatch, mismatch).toBeUndefined();
       previousSample = sample;
-      expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+      expect(editor.published?.frames.get(0)?.surface.isConnected).toBe(true);
     }
     await waitForPresentation(editor);
-    expect(editor.published?.frames.get(0)?.canvas).not.toBe(displayed);
+    expect(editor.published?.frames.get(0)?.surface).not.toBe(displayed);
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0).length).toBeGreaterThan(0);
-    expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    expect(editor.published?.frames.get(0)?.surface.isConnected).toBe(true);
     expectActualCanvas(editor, 0);
   });
 
@@ -1630,7 +1722,7 @@ describe('web editor frame synchronization', () => {
     const attachSurface = editor.attachSurface.bind(editor);
     const attachSurfaceSpy = vi.spyOn(editor, 'attachSurface').mockImplementation((...args) => attachSurface(...args));
     const initialPageWidth = editor.appliedSnapshot.pageSizes[0]?.width;
-    const initialCanvas = editor.published?.frames.get(0)?.canvas;
+    const initialCanvas = editor.published?.frames.get(0)?.surface;
     expect(initialPageWidth).toBeCloseTo(360);
     expect(initialCanvas).toBeDefined();
     expectActualCanvas(editor, 0, false);
@@ -1653,17 +1745,17 @@ describe('web editor frame synchronization', () => {
     expect(editor.renderZoom).toBe(1);
     expect(editor.viewport.width).toBeCloseTo(360);
     expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeCloseTo(initialPageWidth ?? 0);
-    expect(editor.published?.frames.get(0)?.canvas).toBe(initialCanvas);
+    expect(editor.published?.frames.get(0)?.surface).toBe(initialCanvas);
 
     await expect.poll(() => editor.renderZoom).toBeCloseTo(editor.displayZoom);
     await expect.poll(() => editor.viewport.width).toBeGreaterThan(360);
     await waitForPresentation(editor);
 
     expect(editor.appliedSnapshot.pageSizes[0]?.width).toBeGreaterThan(initialPageWidth ?? Infinity);
-    expect(editor.published?.frames.get(0)?.canvas).not.toBe(initialCanvas);
+    expect(editor.published?.frames.get(0)?.surface).not.toBe(initialCanvas);
     expect(editor.pageEls[0]?.getBoundingClientRect().width).toBeCloseTo(360, 0);
-    expect(editor.published?.frames.get(0)?.canvas.width).toBeGreaterThan(0);
-    expect(editor.published?.frames.get(0)?.canvas.height).toBeGreaterThan(0);
+    expect(editor.published?.frames.get(0)?.surface.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(editor.published?.frames.get(0)?.surface.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(attachSurfaceSpy.mock.calls.filter(([page]) => page === 0)).toHaveLength(1);
     expectActualCanvas(editor, 0, false);
   });
@@ -1833,7 +1925,7 @@ describe('web editor frame synchronization', () => {
     editor.focus();
     await tick();
     const initialPageWidth = editor.appliedSnapshot.pageSizes[0]?.width;
-    const initialCanvas = editor.published?.frames.get(0)?.canvas;
+    const initialCanvas = editor.published?.frames.get(0)?.surface;
     expect(initialPageWidth).toBeCloseTo(360);
     expect(initialCanvas).toBeDefined();
     const initialSample = readWebFrameSample(editor, scrollRoot, 0, -1, null);
@@ -1861,7 +1953,7 @@ describe('web editor frame synchronization', () => {
     const intermediateSample = readWebFrameSample(editor, scrollRoot, 0, 0, null);
     const intermediateMismatch = describeWebFrameMismatch(intermediateSample, initialSample);
     expect(intermediateMismatch, intermediateMismatch).toBeUndefined();
-    expect(editor.published?.frames.get(0)?.canvas.isConnected).toBe(true);
+    expect(editor.published?.frames.get(0)?.surface.isConnected).toBe(true);
     expectActualCanvas(editor, 0, false);
 
     await waitForPresentation(editor);
@@ -1869,7 +1961,7 @@ describe('web editor frame synchronization', () => {
     const settledSample = readWebFrameSample(editor, scrollRoot, 0, 1, null);
     const settledMismatch = describeWebFrameMismatch(settledSample, intermediateSample);
     expect(settledMismatch, settledMismatch).toBeUndefined();
-    expect(editor.published?.frames.get(0)?.canvas).not.toBe(initialCanvas);
+    expect(editor.published?.frames.get(0)?.surface).not.toBe(initialCanvas);
     expect(editor.pageEls[0]?.getBoundingClientRect().width).toBeCloseTo(360, 0);
     expectActualCanvas(editor, 0, false);
   });

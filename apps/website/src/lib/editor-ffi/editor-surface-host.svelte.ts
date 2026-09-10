@@ -7,7 +7,7 @@ import type { SurfaceDriverEffects } from './surface-driver';
 type PageProducer = {
   width: number;
   height: number;
-  driver: ReturnType<typeof createSurfaceDriver<HTMLCanvasElement>>;
+  driver: ReturnType<typeof createSurfaceDriver<HTMLElement>>;
 };
 
 export class EditorSurfaceHost {
@@ -34,7 +34,7 @@ export class EditorSurfaceHost {
     for (const [page, producer] of this.#producers) {
       if (requiredPages.has(page)) continue;
       producer.driver.setActive(false);
-      if (!this.#editor.publishedSurfaceCanvas(page)) {
+      if (!this.#editor.publishedSurfaceElement(page)) {
         producer.driver.destroy();
         this.#producers.delete(page);
       }
@@ -64,7 +64,7 @@ export class EditorSurfaceHost {
 
   registerPageContainer(page: number, container: HTMLElement): () => void {
     this.#containers.set(page, container);
-    this.#producers.get(page)?.driver.syncPublished(this.#editor.publishedSurfaceCanvas(page));
+    this.#producers.get(page)?.driver.syncPublished(this.#editor.publishedSurfaceElement(page));
     return () => {
       if (this.#containers.get(page) === container) this.#containers.delete(page);
     };
@@ -72,9 +72,9 @@ export class EditorSurfaceHost {
 
   syncPublished(bundle: PublishedBundle | undefined = this.#editor.published): void {
     for (const [page, producer] of this.#producers) {
-      const canvas = bundle?.frames.get(page)?.canvas;
-      producer.driver.syncPublished(canvas);
-      if (!canvas && !this.#editor.surfacePageRequirements.has(page)) {
+      const surface = bundle?.frames.get(page)?.surface;
+      producer.driver.syncPublished(surface);
+      if (!surface && !this.#editor.surfacePageRequirements.has(page)) {
         producer.driver.destroy();
         this.#producers.delete(page);
       }
@@ -94,23 +94,22 @@ export class EditorSurfaceHost {
   #createProducer(page: number, width: number, height: number): PageProducer {
     // eslint-disable-next-line prefer-const -- callbacks close over the carrier before its driver can be constructed
     let producer: PageProducer;
-    const effects: SurfaceDriverEffects<HTMLCanvasElement> = {
-      createCanvas: () => {
-        const canvas = document.createElement('canvas');
-        canvas.dataset.pageCanvas = String(page);
-        canvas.style.position = 'absolute';
-        canvas.style.inset = '0';
-        canvas.style.width = '100%';
-        canvas.style.imageRendering = 'pixelated';
-        return canvas;
+    const effects: SurfaceDriverEffects<HTMLElement> = {
+      createSurface: () => {
+        const surface = document.createElement('div');
+        surface.dataset.pageSurface = String(page);
+        surface.style.position = 'absolute';
+        surface.style.inset = '0';
+        surface.style.width = '100%';
+        return surface;
       },
-      styleCanvas: (canvas) => {
+      styleSurface: (surface) => {
         const scaleFactor = this.#editor.scaleFactor;
-        canvas.style.height = `${roundToScale(producer.height, scaleFactor)}px`;
+        surface.style.height = `${roundToScale(producer.height, scaleFactor)}px`;
       },
-      attach: (canvas) => {
-        const backend = this.#editor.attachSurface(page, canvas, producer.width, producer.height, () => producer.driver.replace());
-        probeAttach(this.#editor, page, canvas);
+      attach: (surface) => {
+        const backend = this.#editor.attachSurface(page, surface, producer.width, producer.height, () => producer.driver.replace());
+        probeAttach(this.#editor, page, surface);
         if (backend === 'cpu') return 'cpu';
         return backend === 'cpu-oversized' ? 'cpu-oversized' : 'none';
       },
@@ -119,23 +118,22 @@ export class EditorSurfaceHost {
         this.#editor.detachSurface(page);
       },
       recover: () => this.#editor.invalidateSurface(page),
-      addContextListeners: (canvas, isCurrent) => {
+      addContextListeners: (surface, isCurrent) => {
         const onContextRestored = () => {
           probeEvent(`contextrestored page=${page}`);
           if (isCurrent()) this.#editor.invalidateSurface(page);
         };
-        canvas.addEventListener('contextrestored', onContextRestored);
-        return () => canvas.removeEventListener('contextrestored', onContextRestored);
+        surface.addEventListener('contextrestored', onContextRestored, { capture: true });
+        return () => surface.removeEventListener('contextrestored', onContextRestored, true);
       },
-      releaseCpuBacking: (canvas) => {
-        canvas.width = 0;
-        canvas.height = 0;
+      releaseCpuBacking: (surface) => {
+        surface.replaceChildren();
       },
-      promote: (canvas) => {
+      promote: (surface) => {
         const container = this.#containers.get(page);
-        if (container && canvas.parentNode !== container) container.append(canvas);
+        if (container && surface.parentNode !== container) container.append(surface);
       },
-      removeNode: (canvas) => canvas.remove(),
+      removeNode: (surface) => surface.remove(),
       replacementFailed: () => this.#editor.surfaceReplacementFailed(page),
     };
     producer = { width, height, driver: createSurfaceDriver(effects) };

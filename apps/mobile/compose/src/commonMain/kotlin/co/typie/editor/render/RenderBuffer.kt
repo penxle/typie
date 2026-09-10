@@ -1,33 +1,29 @@
 package co.typie.editor.render
 
 internal expect object RenderBuffer {
-  fun allocate(width: Int, height: Int): Long
+  fun allocate(): Long
 
-  fun free(handle: Long)
-
-  fun resize(handle: Long, width: Int, height: Int)
+  fun free(handle: Long): Unit
 
   fun beginRead(handle: Long): Boolean
 
-  fun endRead(handle: Long)
-
-  fun getDataPointer(handle: Long): Long
+  fun endRead(handle: Long): Unit
 
   fun getPixelWidth(handle: Long): Int
 
   fun getPixelHeight(handle: Long): Int
 
-  fun getPinnedVersion(handle: Long): Long
-
   fun getPinnedEditorRevision(handle: Long): Long
 
   fun getPinnedFrameKey(handle: Long): Long
 
-  fun getPinnedDamageFrom(handle: Long): Long
+  fun getPinnedTileCount(handle: Long): Int
 
-  fun getPinnedDamagePointer(handle: Long): Long
+  fun getPinnedTileBounds(handle: Long, index: Int): Long
 
-  fun getPinnedDamageCount(handle: Long): Int
+  fun getPinnedTilePixels(handle: Long, index: Int): Long
 
-  fun readPinnedInto(handle: Long, dstAddr: Long, dstLen: Long, rowFrom: Int, rowTo: Int): Boolean
+  fun getPinnedTileVersion(handle: Long, index: Int): Long
+
+  fun readPinnedTileInto(handle: Long, index: Int, dstAddr: Long, dstLen: Long): Boolean
 }

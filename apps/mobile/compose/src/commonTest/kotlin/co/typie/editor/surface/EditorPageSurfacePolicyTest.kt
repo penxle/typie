@@ -15,7 +15,7 @@ class EditorPageSurfacePolicyTest {
   fun `published frame keeps its committed pixel size across a density and zoom replacement`() {
     val frame =
       PresentedFrame(
-        bitmap = ImageBitmap(101, 199),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(101, 199))),
         pixelSize = IntSize(101, 199),
         proof = FrameProof(editorRevision = 1, surfaceKey = SurfaceKey(1), frameKey = FrameKey(1)),
       )

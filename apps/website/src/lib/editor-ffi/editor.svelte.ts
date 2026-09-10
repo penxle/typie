@@ -122,7 +122,7 @@ type PublishedFrame = Readonly<{
   revision: number;
   surfaceKey: number;
   frameKey: number;
-  canvas: HTMLCanvasElement;
+  surface: HTMLElement;
 }>;
 
 const HIDDEN_TICK = Symbol('hidden-tick');
@@ -163,7 +163,7 @@ type AppliedWaiter = {
 type SurfaceTarget = {
   page: number;
   key: number;
-  canvas: HTMLCanvasElement;
+  surface: HTMLElement;
   width: number;
   height: number;
   scaleFactor: number;
@@ -206,15 +206,6 @@ function sameViewport(a: Viewport, b: Viewport): boolean {
 
 function isContinuousLayout(rootAttrs: PlainRootNode | undefined): boolean {
   return rootAttrs?.layout_mode.type === 'continuous';
-}
-
-export function browserScaleFactor(): number {
-  if (typeof window === 'undefined') {
-    return 1;
-  }
-
-  const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale ?? 1);
-  return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
 }
 
 export class EditorContext {
@@ -419,6 +410,7 @@ export class Editor {
   #commentDecorationsInstalled = false;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #registeredCommentIds = new Set<string>();
+  #surfaceTiles: ReadonlyMap<number, readonly number[]> | undefined;
 
   #characterCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -788,7 +780,6 @@ export class Editor {
       if (current !== target || current.key !== surfaceKey || !current.available) continue;
       if (frameKey) {
         target.proof = { revision: requestedRevision, surfaceKey, frameKey: frameKey.value };
-        probeRendered(this, target.page);
       } else {
         target.failedRevision = requestedRevision;
         this.#rejectPublicationWaitersThrough(requestedRevision);
@@ -1867,8 +1858,22 @@ export class Editor {
     this.#pullToolbarStateIfReady();
   }
 
-  requestSurfacePages(pages: ReadonlySet<number>): void {
+  requestSurfacePages(pages: ReadonlySet<number>, tiles?: ReadonlyMap<number, readonly number[]>): void {
     if (this.terminal) return;
+    const previousTiles = this.#surfaceTiles;
+    this.#surfaceTiles = tiles;
+    for (const [page, bounds] of tiles ?? []) {
+      const previous = previousTiles?.get(page);
+      if (previous?.length === bounds.length && previous.every((value, index) => value === bounds[index])) continue;
+      const target = this.#visualHost?.targets.get(page);
+      if (!target?.available) continue;
+      this.#invokeCore((core) => core.configure_surface_tiles(page, Int32Array.from(bounds)));
+      target.proof = undefined;
+      target.requiredRevision = this.#applied.revision;
+      target.failedRevision = undefined;
+      this.#renderRequiredTargets();
+      this.#publicationChanged();
+    }
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable value installed into raw reactive state
     const valid = new Set([...pages].filter((page) => page >= 0 && page < this.#applied.pageSizes.length));
     if (valid.size === this.surfacePageRequirements.size && [...valid].every((page) => this.surfacePageRequirements.has(page))) {
@@ -1908,7 +1913,7 @@ export class Editor {
         revision: target.proof.revision,
         surfaceKey: target.key,
         frameKey: target.proof.frameKey,
-        canvas: target.canvas,
+        surface: target.surface,
       });
     }
     const current = this.published;
@@ -1918,7 +1923,7 @@ export class Editor {
       [...frames].every(([page, frame]) => {
         const previous = current.frames.get(page);
         return (
-          previous?.canvas === frame.canvas &&
+          previous?.surface === frame.surface &&
           previous.revision === frame.revision &&
           previous.surfaceKey === frame.surfaceKey &&
           previous.frameKey === frame.frameKey
@@ -1946,7 +1951,7 @@ export class Editor {
       const target = host.targets.get(page);
       if (
         !target ||
-        target.canvas !== frame.canvas ||
+        target.surface !== frame.surface ||
         target.key !== frame.surfaceKey ||
         target.proof?.revision !== frame.revision ||
         target.proof?.frameKey !== frame.frameKey ||
@@ -1963,6 +1968,10 @@ export class Editor {
       !this.#invokeCore((core) => core.replace_viewport_anchor_presentation({ value: nextRevision }))
     ) {
       return false;
+    }
+    for (const [page, frame] of bundle.frames) {
+      if (!this.#invokeCore((core) => core.present_surface(page, BigInt(frame.frameKey)))) return false;
+      probeRendered(this, page);
     }
     for (const target of targets) {
       target.requiredRevision = undefined;
@@ -2013,7 +2022,7 @@ export class Editor {
     });
   }
 
-  attachSurface(page: number, canvas: HTMLCanvasElement, width: number, height: number, replace?: () => void): string {
+  attachSurface(page: number, surface: HTMLElement, width: number, height: number, replace?: () => void): string {
     return untrack(() => {
       if (this.terminal) return 'none';
       const host = this.#visualHost;
@@ -2025,7 +2034,7 @@ export class Editor {
       const scaleFactor = this.surfaceScaleFactor;
       const current = host.targets.get(page);
       if (
-        current?.canvas === canvas &&
+        current?.surface === surface &&
         current.width === targetWidth &&
         current.height === targetHeight &&
         current.scaleFactor === scaleFactor &&
@@ -2044,13 +2053,15 @@ export class Editor {
 
       const backend = this.#invokeCore((core) => {
         if (current) core.detach_surface(page);
-        core.attach_surface(page, canvas, targetWidth, targetHeight, scaleFactor);
+        core.attach_surface(page, surface, targetWidth, targetHeight, scaleFactor);
+        const tiles = this.#surfaceTiles?.get(page);
+        if (tiles) core.configure_surface_tiles(page, Int32Array.from(tiles));
         return core.surface_backend(page);
       });
       const target: SurfaceTarget = {
         page,
         key: ++this.#surfaceKey,
-        canvas,
+        surface,
         width: targetWidth,
         height: targetHeight,
         scaleFactor,
@@ -2135,8 +2146,8 @@ export class Editor {
     this.fail(new Error(`Editor surface replacement failed for page ${page}`));
   }
 
-  publishedSurfaceCanvas(page: number): HTMLCanvasElement | undefined {
-    return this.published?.frames.get(page)?.canvas;
+  publishedSurfaceElement(page: number): HTMLElement | undefined {
+    return this.published?.frames.get(page)?.surface;
   }
 
   recoverSurfaces(): void {

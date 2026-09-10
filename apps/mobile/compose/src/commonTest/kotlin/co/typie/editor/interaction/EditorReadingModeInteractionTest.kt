@@ -96,7 +96,7 @@ class EditorReadingModeInteractionTest {
       fun deliverFrame(editorRevision: Long, frameKey: Long) {
         fixture.editor.deliverFrame(
           session = surface,
-          bitmap = ImageBitmap(width = 100, height = 100),
+          tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
           pixelSize = IntSize(width = 100, height = 100),
           editorRevision = editorRevision,
           frameKey = frameKey,
@@ -139,7 +139,7 @@ class EditorReadingModeInteractionTest {
       fun deliverFrame(editorRevision: Long) {
         fixture.editor.deliverFrame(
           session = surface,
-          bitmap = ImageBitmap(width = 100, height = 100),
+          tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
           pixelSize = IntSize(width = 100, height = 100),
           editorRevision = editorRevision,
           frameKey = editorRevision,

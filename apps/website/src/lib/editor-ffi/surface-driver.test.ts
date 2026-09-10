@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSurfaceDriver } from './surface-driver';
 import type { AttachResult, SurfaceDriverEffects } from './surface-driver';
 
-type FakeCanvas = { id: number; pixels: string; disposed: boolean; removed: boolean; listeners: number };
+type FakeSurface = { id: number; pixels: string; disposed: boolean; removed: boolean; listeners: number };
 
 function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
   let nextId = 0;
@@ -11,18 +11,18 @@ function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
   let detachCount = 0;
   let promoteCount = 0;
   let replacementFailureCount = 0;
-  let maxLiveCanvasCount = 0;
-  const canvases: FakeCanvas[] = [];
+  let maxLiveSurfaceCount = 0;
+  const canvases: FakeSurface[] = [];
   const lifecycle: string[] = [];
-  const effects: SurfaceDriverEffects<FakeCanvas> = {
-    createCanvas: () => {
-      const canvas = { id: nextId++, pixels: '', disposed: false, removed: false, listeners: 0 };
-      canvases.push(canvas);
-      maxLiveCanvasCount = Math.max(maxLiveCanvasCount, canvases.filter((candidate) => !candidate.disposed).length);
-      return canvas;
+  const effects: SurfaceDriverEffects<FakeSurface> = {
+    createSurface: () => {
+      const surface = { id: nextId++, pixels: '', disposed: false, removed: false, listeners: 0 };
+      canvases.push(surface);
+      maxLiveSurfaceCount = Math.max(maxLiveSurfaceCount, canvases.filter((candidate) => !candidate.disposed).length);
+      return surface;
     },
-    styleCanvas: () => {
-      // Canvas styling is outside this lifecycle fixture.
+    styleSurface: () => {
+      // Surface styling is outside this lifecycle fixture.
     },
     attach: () => {
       const result = Array.isArray(attachResult) ? (attachResult.shift() ?? 'cpu') : attachResult;
@@ -36,25 +36,25 @@ function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
     recover: () => {
       recoverCount += 1;
     },
-    addContextListeners: (canvas) => {
-      canvas.listeners += 1;
+    addContextListeners: (surface) => {
+      surface.listeners += 1;
       return () => {
-        canvas.listeners -= 1;
+        surface.listeners -= 1;
       };
     },
-    releaseCpuBacking: (canvas) => {
-      lifecycle.push(`release:${canvas.id}`);
-      canvas.pixels = '';
-      canvas.disposed = true;
+    releaseCpuBacking: (surface) => {
+      lifecycle.push(`release:${surface.id}`);
+      surface.pixels = '';
+      surface.disposed = true;
     },
-    promote: (canvas, previous) => {
-      lifecycle.push(`promote:${canvas.id}:${previous?.id ?? 'none'}`);
+    promote: (surface, previous) => {
+      lifecycle.push(`promote:${surface.id}:${previous?.id ?? 'none'}`);
       promoteCount += 1;
-      canvas.removed = false;
+      surface.removed = false;
     },
-    removeNode: (canvas) => {
-      lifecycle.push(`remove:${canvas.id}`);
-      canvas.removed = true;
+    removeNode: (surface) => {
+      lifecycle.push(`remove:${surface.id}`);
+      surface.removed = true;
     },
     replacementFailed: () => {
       replacementFailureCount += 1;
@@ -69,13 +69,13 @@ function harness(attachResult: AttachResult | AttachResult[] = 'cpu') {
     detachCount: () => detachCount,
     promoteCount: () => promoteCount,
     replacementFailureCount: () => replacementFailureCount,
-    maxLiveCanvasCount: () => maxLiveCanvasCount,
+    maxLiveSurfaceCount: () => maxLiveSurfaceCount,
     lifecycle,
   };
 }
 
 describe('surface-driver', () => {
-  it('does not expose a target canvas before Editor publishes its delivered frame', () => {
+  it('does not expose a target surface before Editor publishes its delivered frame', () => {
     const h = harness();
     expect(h.driver.hasSurface()).toBe(false);
 
@@ -89,7 +89,7 @@ describe('surface-driver', () => {
     expect(h.driver.debug().displayed).toBe(h.canvases[0]);
   });
 
-  it('ignores stale delivery for a canvas that is not the current target', () => {
+  it('ignores stale delivery for a surface that is not the current target', () => {
     const h = harness();
     h.driver.setActive(true);
     const stale = { id: 99, pixels: '', disposed: false, removed: false, listeners: 0 };
@@ -136,7 +136,7 @@ describe('surface-driver', () => {
     expect(h.replacementFailureCount()).toBe(1);
   });
 
-  it('forwards recovery for the current target without creating another canvas', () => {
+  it('forwards recovery for the current target without creating another surface', () => {
     const h = harness();
     h.driver.setActive(true);
     h.driver.resume();
@@ -145,7 +145,7 @@ describe('surface-driver', () => {
     expect(h.recoverCount()).toBe(1);
   });
 
-  it('re-promotes the same canvas after an in-place backing replacement publishes', () => {
+  it('re-promotes the same surface after an in-place backing replacement publishes', () => {
     const h = harness();
     h.driver.setActive(true);
     h.driver.syncPublished(h.canvases[0]);
@@ -157,7 +157,7 @@ describe('surface-driver', () => {
     expect(h.promoteCount()).toBe(2);
   });
 
-  it('keeps the published canvas visible until its replacement is published', () => {
+  it('keeps the published surface visible until its replacement is published', () => {
     const h = harness();
     h.driver.setActive(true);
     h.canvases[0].pixels = 'published pixels';
@@ -215,7 +215,7 @@ describe('surface-driver', () => {
     h.driver.replace();
     h.driver.replace();
 
-    expect(h.maxLiveCanvasCount()).toBe(2);
+    expect(h.maxLiveSurfaceCount()).toBe(2);
     expect(h.canvases[1]).toMatchObject({ disposed: true, removed: true });
     expect(h.driver.debug()).toMatchObject({ target: h.canvases[2], displayed: h.canvases[0] });
 
@@ -224,10 +224,10 @@ describe('surface-driver', () => {
 
     h.driver.syncPublished(h.canvases[2]);
     expect(h.driver.debug().displayed).toBe(h.canvases[2]);
-    expect(h.canvases.filter((canvas) => !canvas.disposed)).toEqual([h.canvases[2]]);
+    expect(h.canvases.filter((surface) => !surface.disposed)).toEqual([h.canvases[2]]);
   });
 
-  it('keeps the published canvas when a replacement is oversized', () => {
+  it('keeps the published surface when a replacement is oversized', () => {
     const h = harness(['cpu', 'cpu-oversized']);
     h.driver.setActive(true);
     h.driver.syncPublished(h.canvases[0]);
@@ -257,7 +257,7 @@ describe('surface-driver', () => {
     expect(h.driver.debug()).toMatchObject({ target: h.canvases[1], displayed: h.canvases[0], wantsLive: true });
   });
 
-  it('releases the target and displayed canvas when destroyed', () => {
+  it('releases the target and displayed surface when destroyed', () => {
     const h = harness();
     h.driver.setActive(true);
     h.driver.syncPublished(h.canvases[0]);
@@ -269,7 +269,7 @@ describe('surface-driver', () => {
     expect(h.driver.debug()).toMatchObject({ target: undefined, displayed: undefined, wantsLive: false });
   });
 
-  it('freezes the published canvas on terminal failure and discards only an unpublished replacement', () => {
+  it('freezes the published surface on terminal failure and discards only an unpublished replacement', () => {
     const h = harness();
     h.driver.setActive(true);
     h.canvases[0].pixels = 'published pixels';

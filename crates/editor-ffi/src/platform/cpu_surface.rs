@@ -1,21 +1,19 @@
+#[cfg(not(test))]
 use editor_macros::ffi;
-use editor_renderer::RenderBackend;
-use editor_renderer::backend::cpu::CpuSink;
-use editor_renderer::damage::IRect;
+use editor_renderer::{damage::IRect, display_list::DisplayList};
 
-use super::render_buffer::RenderBuffer;
-use crate::editor::FrameKey;
-use crate::error::FfiError;
+use super::{
+    render_buffer::{RenderBuffer, RenderedFrame},
+    tiled_surface::TiledSurface,
+};
+use crate::{editor::FrameKey, error::FfiError};
 
-#[ffi]
+#[cfg_attr(not(test), ffi)]
 pub type PlatformHandle = u64;
 
 pub struct SurfaceHandle {
-    backend: RenderBackend,
     handle: PlatformHandle,
-    width: u32,
-    height: u32,
-    scale_factor: f64,
+    raster: TiledSurface,
 }
 
 impl SurfaceHandle {
@@ -25,95 +23,47 @@ impl SurfaceHandle {
         height: f64,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
-        let pw = (width * scale_factor).round() as u32;
-        let ph = (height * scale_factor).round() as u32;
-
-        if handle != 0 {
-            unsafe {
-                (*(handle as *const RenderBuffer)).resize(pw, ph);
-            }
-        }
-
-        let backend = RenderBackend::new_cpu(pw as u16, ph as u16);
-
         Ok(Self {
-            backend,
             handle,
-            width: pw,
-            height: ph,
-            scale_factor,
+            raster: TiledSurface::new(width, height, scale_factor)?,
         })
     }
 
     pub fn scale_factor(&self) -> f64 {
-        self.scale_factor
+        self.raster.scale_factor()
     }
-
-    pub fn cpu_sink(&mut self) -> &mut CpuSink {
-        self.backend.cpu_sink()
+    pub fn needs_render(&self) -> bool {
+        self.raster.needs_render()
+    }
+    pub fn configure_tiles(&mut self, bounds: &[i32]) -> Result<(), FfiError> {
+        self.raster.configure_tiles(bounds)
+    }
+    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
+        self.raster.resize(width, height, scale_factor)
     }
 
     pub fn apply_damage(
         &mut self,
-        dl: &editor_renderer::display_list::DisplayList,
+        dl: &DisplayList,
         damage: &[IRect],
         editor_revision: u64,
         frame_key: FrameKey,
     ) -> bool {
-        let sink = self.cpu_sink();
-        for &r in damage {
-            sink.clear_rect(r);
-            sink.set_clip(Some(r));
-            editor_renderer::diff::replay(dl, r, sink);
-        }
-        sink.set_clip(None);
-        self.present_damage(damage, editor_revision, frame_key)
-    }
-
-    pub fn present_damage(
-        &mut self,
-        damage: &[IRect],
-        editor_revision: u64,
-        frame_key: FrameKey,
-    ) -> bool {
-        if self.handle == 0 {
-            return true;
-        }
-
-        let (w, handle) = (self.width, self.handle);
-        match &mut self.backend {
-            RenderBackend::Cpu(sink) => unsafe {
-                (*(handle as *const RenderBuffer)).commit_damage(
-                    editor_revision,
-                    frame_key.value,
-                    damage,
-                    |data, r| {
-                        sink.read_back_rect_absolute(data, w as usize * 4, r);
-                    },
-                )
-            },
-        }
-    }
-
-    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
-        let pw = (width * scale_factor).round() as u32;
-        let ph = (height * scale_factor).round() as u32;
-
-        if self.width == pw && self.height == ph && self.scale_factor == scale_factor {
+        if !self.raster.apply_damage(dl, damage, frame_key.value) {
             return false;
         }
+        self.publish_frame(editor_revision, frame_key)
+    }
 
-        self.width = pw;
-        self.height = ph;
-        self.scale_factor = scale_factor;
-
-        if self.handle != 0 {
-            unsafe {
-                (*(self.handle as *const RenderBuffer)).resize(pw, ph);
-            }
+    pub fn publish_frame(&self, editor_revision: u64, frame_key: FrameKey) -> bool {
+        unsafe {
+            (&*(self.handle as *const RenderBuffer)).publish(RenderedFrame {
+                width: self.raster.width,
+                height: self.raster.height,
+                editor_revision,
+                frame_key: frame_key.value,
+                tiles: self.raster.tiles.clone(),
+            })
         }
-
-        self.backend.resize(pw as u16, ph as u16);
-        true
     }
 }

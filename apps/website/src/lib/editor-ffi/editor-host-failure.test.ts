@@ -82,6 +82,8 @@ function createCore() {
     invalidate_surface: vi.fn(),
     refresh_surface: vi.fn(),
     render_surface: vi.fn<(_page: number, _revision: { value: number }) => { value: number } | undefined>(() => ({ value: 1 })),
+    present_surface: vi.fn(() => true),
+    configure_surface_tiles: vi.fn(),
     surface_backend: vi.fn(() => 'cpu'),
     page_external_elements: vi.fn(() => []),
     page_table_overlays: vi.fn(() => []),
@@ -282,7 +284,7 @@ describe('Editor guarded core invocation', () => {
     const { editor, core } = await createEditor();
     const order: string[] = [];
     const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100, () => {
+    editor.attachSurface(0, document.createElement('surface'), 100, 100, () => {
       order.push('replace');
     });
     editor.registerScrollIntoView((_options, request) => {
@@ -391,7 +393,7 @@ describe('Editor guarded core invocation', () => {
     const { editor, core } = await createEditor();
     const error = new Error('surface replacement failed');
     const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100, () => {
+    editor.attachSurface(0, document.createElement('surface'), 100, 100, () => {
       throw error;
     });
     core.page_sizes.mockReturnValue([{ width: 100, height: 120 }, ...DefaultPageSizes.slice(1)]);
@@ -419,7 +421,7 @@ describe('Editor guarded core invocation', () => {
     const releaseHost = editor.activateVisualHost();
     const requiredPages = new Set([0]);
     editor.requestSurfacePages(requiredPages);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     const bundle = editor.publishIfReady(requiredPages);
     if (!bundle) throw new Error('Expected a publishable bundle');
     const publication = editor.awaitPublishedRevision(bundle.snapshot.revision, { requireFrame: true });
@@ -439,7 +441,7 @@ describe('Editor guarded core invocation', () => {
     const releaseHost = editor.activateVisualHost();
     const requiredPages = new Set([0]);
     editor.requestSurfacePages(requiredPages);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     const bundle = editor.publishIfReady(requiredPages);
     if (!bundle) throw new Error('Expected a publishable bundle');
 
@@ -515,7 +517,7 @@ describe('Editor guarded core invocation', () => {
         });
         let thrown: unknown;
         try {
-          editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+          editor.attachSurface(0, document.createElement('surface'), 100, 100);
         } catch (err) {
           thrown = err;
         }
@@ -745,7 +747,7 @@ describe('Editor guarded core invocation', () => {
     const releaseHost = editor.activateVisualHost();
     core.surface_backend.mockReturnValue('cpu-oversized');
 
-    expect(editor.attachSurface(0, document.createElement('canvas'), 100, 100)).toBe('cpu-oversized');
+    expect(editor.attachSurface(0, document.createElement('surface'), 100, 100)).toBe('cpu-oversized');
     expect(editor.failure).toBeUndefined();
 
     const sameRevisionUpdate = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
@@ -753,7 +755,7 @@ describe('Editor guarded core invocation', () => {
     await expect(sameRevisionPublication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
 
     core.tick.mockReturnValue({
       revision: { value: 2 },
@@ -777,9 +779,9 @@ describe('Editor guarded core invocation', () => {
     core.surface_backend.mockReturnValue('none');
     core.render_surface.mockClear();
 
-    expect(editor.attachSurface(0, document.createElement('canvas'), 100, 100)).toBe('none');
+    expect(editor.attachSurface(0, document.createElement('surface'), 100, 100)).toBe('none');
     expect(core.render_surface).not.toHaveBeenCalled();
-    expect(editor.publishedSurfaceCanvas(0)).toBeUndefined();
+    expect(editor.publishedSurfaceElement(0)).toBeUndefined();
 
     const update = editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
     if (!update) throw new Error('Expected an editor update');
@@ -787,7 +789,7 @@ describe('Editor guarded core invocation', () => {
     await expectPending(publication);
 
     core.surface_backend.mockReturnValue('cpu');
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
     expect(editor.failure).toBeUndefined();
 
@@ -798,14 +800,14 @@ describe('Editor guarded core invocation', () => {
   it('keeps the whole framed publication when the active host loses its last target', async () => {
     const { editor } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const canvas = document.createElement('canvas');
-    editor.attachSurface(0, canvas, 100, 100);
+    const surface = document.createElement('surface');
+    editor.attachSurface(0, surface, 100, 100);
     const published = editor.published;
 
     editor.detachSurface(0);
 
     expect(editor.published).toBe(published);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(canvas);
+    expect(editor.publishedSurfaceElement(0)).toBe(surface);
 
     releaseHost();
     editor.destroy();
@@ -816,10 +818,10 @@ describe('Editor guarded core invocation', () => {
     const releaseHost = editor.activateVisualHost();
 
     try {
-      editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+      editor.attachSurface(0, document.createElement('surface'), 100, 100);
 
       core.surface_backend.mockReturnValue('none');
-      editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+      editor.attachSurface(0, document.createElement('surface'), 100, 100);
       const publication = editor.awaitPublishedRevision(1);
       const framedPublication = editor.awaitPublishedRevision(1, { requireFrame: true });
 
@@ -840,7 +842,7 @@ describe('Editor guarded core invocation', () => {
     const requiredPages = new Set([0]);
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValueOnce(undefined);
     editor.requestSurfacePages(requiredPages);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     const initial = editor.publishIfReady(requiredPages);
     if (!initial) throw new Error('Expected the initial surface publication');
     expect(editor.acceptPublication(initial)).toBe(true);
@@ -872,9 +874,9 @@ describe('Editor guarded core invocation', () => {
   it('rejects a failed render revision once and retries only after applied advances', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const canvas = document.createElement('canvas');
+    const surface = document.createElement('surface');
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValueOnce(undefined).mockReturnValueOnce({ value: 3 });
-    editor.attachSurface(0, canvas, 100, 100);
+    editor.attachSurface(0, surface, 100, 100);
     core.tick
       .mockReturnValueOnce({
         revision: { value: 2 },
@@ -913,7 +915,7 @@ describe('Editor guarded core invocation', () => {
     expect(failedPublicationSettled).toBe(true);
     expect(failedPublicationResult).toMatchObject({ name: 'OperationError' });
     expect(editor.publishedRevision).toBe(1);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(canvas);
+    expect(editor.publishedSurfaceElement(0)).toBe(surface);
     expect(core.render_surface.mock.calls.map(([, revision]) => revision.value)).toEqual([1, 2]);
     let lateFailedPublication: unknown;
     void editor.awaitPublishedRevision(2).catch((err: unknown) => {
@@ -941,7 +943,7 @@ describe('Editor guarded core invocation', () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValueOnce(undefined);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     core.tick.mockReturnValue({
       revision: { value: 2 },
       events: [{ type: 'render_invalidated' }],
@@ -971,11 +973,11 @@ describe('Editor guarded core invocation', () => {
     await Promise.resolve();
     expect(framedPublicationSettled).toBe(false);
 
-    const canvas = document.createElement('canvas');
-    editor.attachSurface(0, canvas, 100, 100);
+    const surface = document.createElement('surface');
+    editor.attachSurface(0, surface, 100, 100);
 
     await expect(framedPublication).resolves.toEqual({ type: 'published', revision: 1 });
-    expect(editor.publishedSurfaceCanvas(0)).toBe(canvas);
+    expect(editor.publishedSurfaceElement(0)).toBe(surface);
 
     releaseHost();
     editor.destroy();
@@ -987,11 +989,11 @@ describe('Editor guarded core invocation', () => {
     core.render_surface.mockReturnValue(undefined);
 
     const framedPublication = editor.awaitPublishedRevision(1, { requireFrame: true });
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
 
     await expect(framedPublication).rejects.toMatchObject({ name: 'OperationError' });
     expect(editor.publishedRevision).toBe(1);
-    expect(editor.publishedSurfaceCanvas(0)).toBeUndefined();
+    expect(editor.publishedSurfaceElement(0)).toBeUndefined();
 
     releaseHost();
     editor.destroy();
@@ -1009,7 +1011,7 @@ describe('Editor guarded core invocation', () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValueOnce(undefined);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     core.tick.mockReturnValue({
       revision: { value: 2 },
       events: [{ type: 'render_invalidated' }],
@@ -1032,7 +1034,7 @@ describe('Editor guarded core invocation', () => {
   it('returns the accepted publication when registered after a target becomes unavailable', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
 
     const waiterAtFailure = editor.awaitPublishedRevision(2);
     core.surface_backend.mockReturnValue('cpu-oversized');
@@ -1045,7 +1047,7 @@ describe('Editor guarded core invocation', () => {
 
     core.surface_backend.mockReturnValue('cpu');
     core.render_surface.mockReturnValue({ value: 2 });
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
 
     releaseHost();
     editor.destroy();
@@ -1060,7 +1062,7 @@ describe('Editor guarded core invocation', () => {
     const finalBlockState = { marker: 'final-block' };
     core.modifier_state.mockReturnValue(initialModifierState as never);
     core.block_state.mockReturnValue(initialBlockState as never);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     core.tick.mockReturnValueOnce({
       revision: { value: 2 },
       events: [{ type: 'state_changed', fields: ['modifiers', 'block'] }],
@@ -1149,7 +1151,7 @@ describe('Editor guarded core invocation', () => {
   it('keeps an oversized target unavailable after invalidation', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     core.surface_backend.mockReturnValue('cpu-oversized');
 
     editor.invalidateSurface(0);
@@ -1158,7 +1160,7 @@ describe('Editor guarded core invocation', () => {
     await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     expect(editor.failure).toBeUndefined();
 
     releaseHost();
@@ -1168,7 +1170,7 @@ describe('Editor guarded core invocation', () => {
   it('keeps an oversized target unavailable after surface recovery', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     core.surface_backend.mockReturnValue('cpu-oversized');
 
     editor.recoverSurfaces();
@@ -1177,7 +1179,7 @@ describe('Editor guarded core invocation', () => {
     await expect(publication).resolves.toEqual({ type: 'published', revision: 1 });
 
     core.surface_backend.mockReturnValue('cpu');
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     expect(editor.failure).toBeUndefined();
 
     releaseHost();
@@ -1196,9 +1198,9 @@ describe('Editor guarded core invocation', () => {
   it('keeps the published target intact when a changed surface configuration has no replacement', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const canvas = document.createElement('canvas');
+    const surface = document.createElement('surface');
     core.render_surface.mockReturnValueOnce({ value: 1 }).mockReturnValue(undefined);
-    editor.attachSurface(0, canvas, 100, 100);
+    editor.attachSurface(0, surface, 100, 100);
 
     core.page_sizes.mockReturnValue([{ width: 200, height: 300 }]);
     core.page_backing_sizes.mockReturnValue([{ width: 200, height: 400 }]);
@@ -1216,7 +1218,7 @@ describe('Editor guarded core invocation', () => {
     expect(editor.appliedRevision).toBe(2);
     expect(editor.publishedRevision).toBe(1);
     expect(editor.pageSizes).toEqual(DefaultPageSizes);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(canvas);
+    expect(editor.publishedSurfaceElement(0)).toBe(surface);
 
     releaseHost();
     editor.destroy();
@@ -1225,8 +1227,8 @@ describe('Editor guarded core invocation', () => {
   it('replaces a changed surface configuration without clearing the published target in place', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const displayed = document.createElement('canvas');
-    const candidate = document.createElement('canvas');
+    const displayed = document.createElement('surface');
+    const candidate = document.createElement('surface');
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValue(undefined);
     const replace = vi.fn(() => {
       editor.attachSurface(0, candidate, 200, 400, replace);
@@ -1248,13 +1250,13 @@ describe('Editor guarded core invocation', () => {
     expect(core.resize_surface).not.toHaveBeenCalled();
     expect(core.detach_surface.mock.invocationCallOrder[0]).toBeLessThan(core.attach_surface.mock.invocationCallOrder[1]);
     expect(editor.publishedRevision).toBe(1);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(displayed);
+    expect(editor.publishedSurfaceElement(0)).toBe(displayed);
 
     core.render_surface.mockReturnValue({ value: 2 });
     editor.invalidateSurface(0);
 
     expect(editor.publishedRevision).toBe(2);
-    expect(editor.publishedSurfaceCanvas(0)).toBe(candidate);
+    expect(editor.publishedSurfaceElement(0)).toBe(candidate);
 
     releaseHost();
     editor.destroy();
@@ -1271,8 +1273,8 @@ describe('Editor guarded core invocation', () => {
     }));
     const { editor } = await createEditor(core);
     const releaseHost = editor.activateVisualHost();
-    const displayed = document.createElement('canvas');
-    const candidate = document.createElement('canvas');
+    const displayed = document.createElement('surface');
+    const candidate = document.createElement('surface');
     core.render_surface.mockReset().mockReturnValueOnce({ value: 1 }).mockReturnValue(undefined);
     const replace = vi.fn(() => {
       editor.attachSurface(0, candidate, 320, 1064, replace);
@@ -1298,7 +1300,7 @@ describe('Editor guarded core invocation', () => {
 
     expect(editor.publishedRevision).toBe(2);
     expect(editor.publishedViewport).toEqual({ width: 320, height: 800, scale_factor: 1 });
-    expect(editor.publishedSurfaceCanvas(0)).toBe(candidate);
+    expect(editor.publishedSurfaceElement(0)).toBe(candidate);
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
 
     releaseHost();
@@ -1308,7 +1310,7 @@ describe('Editor guarded core invocation', () => {
   it('publishes the immediately applied viewport with the retained frame', async () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const displayed = document.createElement('canvas');
+    const displayed = document.createElement('surface');
     editor.attachSurface(0, displayed, 100, 100);
     core.render_surface.mockClear();
     core.tick_through.mockImplementation((requestId) => ({
@@ -1323,7 +1325,7 @@ describe('Editor guarded core invocation', () => {
     expect(editor.appliedRevision).toBe(2);
     expect(editor.publishedRevision).toBe(2);
     expect(editor.publishedViewport).toEqual({ width: 320, height: 800, scale_factor: 1 });
-    expect(editor.publishedSurfaceCanvas(0)).toBe(displayed);
+    expect(editor.publishedSurfaceElement(0)).toBe(displayed);
 
     releaseHost();
     editor.destroy();
@@ -1346,7 +1348,7 @@ describe('Editor guarded core invocation', () => {
     editor.resizeViewportNow(320, 800, 1);
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
 
-    editor.attachSurface(0, document.createElement('canvas'), 320, 1064);
+    editor.attachSurface(0, document.createElement('surface'), 320, 1064);
 
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
 
@@ -1369,7 +1371,7 @@ describe('Editor guarded core invocation', () => {
     const releaseFirstHost = editor.activateVisualHost();
 
     editor.resizeViewportNow(320, 800, 1);
-    editor.attachSurface(0, document.createElement('canvas'), 320, 1064);
+    editor.attachSurface(0, document.createElement('surface'), 320, 1064);
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
 
     releaseFirstHost();
@@ -1377,10 +1379,10 @@ describe('Editor guarded core invocation', () => {
 
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(false);
 
-    const secondCanvas = document.createElement('canvas');
-    editor.attachSurface(0, secondCanvas, 320, 1064);
+    const secondSurface = document.createElement('surface');
+    editor.attachSurface(0, secondSurface, 320, 1064);
 
-    expect(editor.publishedSurfaceCanvas(0)).toBe(secondCanvas);
+    expect(editor.publishedSurfaceElement(0)).toBe(secondSurface);
     expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true);
 
     releaseSecondHost();
@@ -1407,7 +1409,7 @@ describe('Editor guarded core invocation', () => {
     const releaseHost = editor.activateVisualHost();
     core.page_table_overlays.mockReturnValue([{ table_id: 'table-1' }] as never);
     core.page_link_rects.mockReturnValue([{ href: 'https://example.com' }] as never);
-    editor.attachSurface(2, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(2, document.createElement('surface'), 100, 100);
     core.page_table_overlays.mockClear();
     core.page_link_rects.mockClear();
     core.tick.mockReturnValue({
@@ -1436,8 +1438,8 @@ describe('Editor guarded core invocation', () => {
     core.root_attrs.mockReturnValue({ layout_mode: { type: 'continuous', max_width: 800 } } as PlainRootNode);
     core.page_table_overlays.mockReturnValue([{ table_id: 'table-1' }] as never);
     core.table_overlays.mockReturnValue([{ table_id: 'table-1', page_idx: 0 }] as never);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
-    editor.attachSurface(1, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
+    editor.attachSurface(1, document.createElement('surface'), 100, 100);
     core.tick.mockReturnValue({
       revision: { value: 2 },
       events: [{ type: 'state_changed', fields: ['root_attrs', 'table_overlays'] }],
@@ -1508,7 +1510,7 @@ describe('Editor guarded core invocation', () => {
     const { editor, core } = await createEditor();
     const releaseHost = editor.activateVisualHost();
     core.render_surface.mockReturnValueOnce({ value: 1 }).mockReturnValue(undefined);
-    editor.attachSurface(0, document.createElement('canvas'), 100, 100);
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
     const range = {
       id: 'spellcheck-1',
       anchor: { node: 'text', offset: 1, affinity: 'downstream' },
@@ -1586,9 +1588,9 @@ describe('Editor guarded core invocation', () => {
   it('does not make surface attachment depend on the applied or published snapshot it replaces', async () => {
     const { editor } = await createEditor();
     const releaseHost = editor.activateVisualHost();
-    const canvas = document.createElement('canvas');
+    const surface = document.createElement('surface');
     const tracked = createTrackedEffect(() => {
-      editor.attachSurface(0, canvas, 100, 100);
+      editor.attachSurface(0, surface, 100, 100);
       return;
     });
 

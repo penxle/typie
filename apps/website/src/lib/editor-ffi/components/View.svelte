@@ -8,7 +8,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { graphql } from '$mearie';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, PAGE_GAP } from '../constants';
-  import { browserScaleFactor, getEditorContext } from '../editor.svelte';
+  import { getEditorContext } from '../editor.svelte';
   import { setupEditorPublication } from '../editor-publication.svelte';
   import { EditorSurfaceHost } from '../editor-surface-host.svelte';
   import { loadFonts } from '../fonts';
@@ -26,7 +26,7 @@
   } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
   import { touchPanLock } from '../touch-pan-lock';
-  import { resolveContinuousLayoutViewportWidth } from '../zoom';
+  import { browserScaleFactor, resolveContinuousLayoutViewportWidth } from '../zoom';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import DocumentOverlayLayer from './DocumentOverlayLayer.svelte';

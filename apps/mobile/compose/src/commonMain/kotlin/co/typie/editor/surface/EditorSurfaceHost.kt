@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 internal fun EditorSurfaceHost(
   editor: Editor,
   scaleFactor: Double,
+  zoomSettled: Boolean = true,
   onDeactivate: () -> Unit = {},
   onPublicationFailure: (Long) -> Unit = {},
   onFailure: (Throwable) -> Unit,
@@ -46,12 +47,24 @@ internal fun EditorSurfaceHost(
   val requiredPages = editor.surfacePageRequirements
   requiredPages.forEach { page ->
     val size = editor.appliedState.pageSizes.getOrNull(page) ?: return@forEach
+    // While zoom is animated, transform the published tiles. Expanding coverage
+    // at the previous high raster scale would defeat the viewport memory bound.
     val configuration =
-      SurfaceConfiguration(
-        width = size.width.toDouble(),
-        height = size.height.toDouble(),
-        scaleFactor = scaleFactor,
-      )
+      if (!zoomSettled) {
+        editor.surfaceConfiguration(page) ?: return@forEach
+      } else
+        SurfaceConfiguration(
+          width = size.width.toDouble(),
+          height = size.height.toDouble(),
+          scaleFactor = scaleFactor,
+          tiles =
+            co.typie.editor.requiredSurfaceTiles(
+              size.width.toDouble(),
+              size.height.toDouble(),
+              scaleFactor,
+              editor.surfacePageRegions?.get(page),
+            ),
+        )
     key(editor, hostLifetime, page) {
       EditorSurfaceProducer(
         editor = editor,
@@ -106,6 +119,7 @@ private fun EditorSurfaceProducer(
           height = configuration.height,
           scaleFactor = configuration.scaleFactor,
           wakeDelivery = wakeDelivery,
+          tiles = configuration.tiles,
         )
     }
     LaunchedEffect(surfaceSession?.isRetired, surfaceHandle) {
@@ -127,19 +141,17 @@ private fun EditorSurfaceProducer(
     RenderFrameProducer(
       desiredPixelSize = desiredPixelSize,
       configuration = configuration,
-      displayedFrame = displayedFrame?.bitmap,
-      retainedFrames = { editor.retainedFrames(page) },
       trigger = trigger,
       onAttach = attachSurface,
       onDetach = { releaseBuffer ->
         runSurfaceCleanup { surfaceSession?.detach(releaseBuffer) ?: releaseBuffer() }
       },
       onResize = { surfaceSession?.requestResize(configuration) },
-      onFrame = { bitmap, pixelSize, editorRevision, frameKey ->
+      onFrame = { tiles, pixelSize, editorRevision, frameKey ->
         surfaceSession?.let { session ->
           editor.deliverFrame(
             session = session,
-            bitmap = bitmap,
+            tiles = tiles,
             pixelSize = pixelSize,
             editorRevision = editorRevision,
             frameKey = frameKey,

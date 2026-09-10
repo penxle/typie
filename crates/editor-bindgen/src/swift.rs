@@ -259,6 +259,9 @@ fn swift_param_type(ty: &FfiParamType, custom_types: &HashMap<String, String>) -
         FfiParamType::Vec(inner) => {
             if matches!(inner, FfiScalarParam::Primitive(p) if p == "u8") {
                 "Data".into()
+            } else if matches!(inner, FfiScalarParam::Primitive(p) if is_objc_scalar_primitive(p, custom_types))
+            {
+                "[NSNumber]".into()
             } else {
                 "[String]".into()
             }
@@ -346,6 +349,29 @@ fn param_conversion(param: &FfiParam, custom_types: &HashMap<String, String>) ->
                 "u64" => format!("UInt64({})", name),
                 _ => name,
             }
+        }
+        FfiParamType::Vec(FfiScalarParam::Primitive(p))
+            if p != "u8" && is_objc_scalar_primitive(p, custom_types) =>
+        {
+            let resolved = custom_types
+                .get(p.as_str())
+                .map(String::as_str)
+                .unwrap_or(p);
+            let property = match resolved {
+                "bool" => "boolValue",
+                "u8" => "uint8Value",
+                "i8" => "int8Value",
+                "u16" => "uint16Value",
+                "i16" => "int16Value",
+                "u32" | "usize" => "uint32Value",
+                "i32" => "int32Value",
+                "u64" => "uint64Value",
+                "i64" => "int64Value",
+                "f32" => "floatValue",
+                "f64" => "doubleValue",
+                _ => unreachable!("numeric vector parameter"),
+            };
+            format!("{}.map {{ $0.{} }}", name, property)
         }
         FfiParamType::Owned(_) => format!("{}.inner", name),
         _ => name,
@@ -453,6 +479,40 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn numeric_vector_parameters_cross_objc_as_boxed_numbers() {
+        let custom = HashMap::new();
+        for (primitive, property) in [
+            ("i32", "int32Value"),
+            ("u64", "uint64Value"),
+            ("f32", "floatValue"),
+        ] {
+            let param = FfiParam {
+                name: "values".into(),
+                ty: FfiParamType::Vec(FfiScalarParam::Primitive(primitive.into())),
+            };
+            assert_eq!(swift_param_type(&param.ty, &custom), "[NSNumber]");
+            assert_eq!(
+                param_conversion(&param, &custom),
+                format!("values.map {{ $0.{property} }}")
+            );
+        }
+        assert_eq!(
+            swift_param_type(
+                &FfiParamType::Vec(FfiScalarParam::Primitive("String".into())),
+                &custom
+            ),
+            "[String]"
+        );
+        assert_eq!(
+            swift_param_type(
+                &FfiParamType::Vec(FfiScalarParam::Primitive("u8".into())),
+                &custom
+            ),
+            "Data"
+        );
     }
 
     #[test]

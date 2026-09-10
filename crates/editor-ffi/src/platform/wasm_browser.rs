@@ -1,270 +1,249 @@
-use editor_renderer::RenderBackend;
-use editor_renderer::backend::cpu::{CpuSink, unpremultiply};
-use editor_renderer::damage::IRect;
+use editor_renderer::{backend::cpu::unpremultiply, damage::IRect, display_list::DisplayList};
 use wasm_bindgen::prelude::*;
 
-use super::surface_budget;
-use crate::editor::FrameKey;
-use crate::error::FfiError;
+use super::tiled_surface::{RenderedTile, TiledSurface};
+use crate::{editor::FrameKey, error::FfiError};
 
-pub type PlatformHandle = web_sys::HtmlCanvasElement;
+pub type PlatformHandle = web_sys::HtmlElement;
 
-pub struct CpuPageSurface {
-    backend: Option<RenderBackend>,
-    handle: PlatformHandle,
-    width: u32,
-    height: u32,
-    scale_factor: f64,
-    oversized: bool,
+struct CanvasTile {
+    bounds: [i32; 4],
+    version: u64,
+    element: web_sys::HtmlElement,
+    context: web_sys::CanvasRenderingContext2d,
+    pending: Option<(IRect, Vec<u8>)>,
 }
 
-impl CpuPageSurface {
+pub struct SurfaceHandle {
+    handle: PlatformHandle,
+    container: web_sys::HtmlElement,
+    raster: TiledSurface,
+    tiles: Vec<CanvasTile>,
+    prepared_frame: Option<u64>,
+    tiles_changed: bool,
+    layout_changed: bool,
+    mounted: bool,
+}
+
+impl SurfaceHandle {
     pub fn new(
         handle: PlatformHandle,
         width: f64,
         height: f64,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
-        let raw_w = (width * scale_factor).round() as u32;
-        let raw_h = (height * scale_factor).round() as u32;
-        let pw = surface_budget::clamp_dim_u16(raw_w);
-        let ph = surface_budget::clamp_dim_u16(raw_h);
-        let w = u32::from(pw);
-        let h = u32::from(ph);
-        if raw_w != w || raw_h != h {
-            web_sys::console::warn_1(
-                &format!("[cpu-surface] page {raw_w}x{raw_h} clamped to {w}x{h}").into(),
-            );
-        }
-
-        handle.set_width(w);
-        handle.set_height(h);
-
-        let (backend, oversized) = Self::alloc_backend(pw, ph, w, h);
-
+        let container = handle
+            .owner_document()
+            .ok_or_else(|| FfiError::Surface("surface has no document".into()))?
+            .create_element("div")
+            .and_then(|element| {
+                element
+                    .dyn_into::<web_sys::HtmlElement>()
+                    .map_err(Into::into)
+            })
+            .map_err(|_| FfiError::Surface("could not create tile container".into()))?;
         Ok(Self {
-            backend,
             handle,
-            width: w,
-            height: h,
-            scale_factor,
-            oversized,
+            container,
+            raster: TiledSurface::new(width, height, scale_factor)?,
+            tiles: Vec::new(),
+            prepared_frame: None,
+            tiles_changed: true,
+            layout_changed: true,
+            mounted: false,
         })
     }
 
-    fn alloc_backend(pw: u16, ph: u16, w: u32, h: u32) -> (Option<RenderBackend>, bool) {
-        if !Self::budget_gate("page", w, h) {
-            return (None, true);
-        }
-        match RenderBackend::try_new_cpu(pw, ph) {
-            Some(backend) => (Some(backend), false),
-            None => {
-                Self::warn_alloc_failed("page", w, h);
-                (None, true)
-            }
-        }
-    }
-
-    // `new`/`resize` 공통: 예산 초과 시 콘솔 경고 후 false를 돌려준다(oversized로 강등).
-    fn budget_gate(context: &str, w: u32, h: u32) -> bool {
-        let within = surface_budget::cpu_surface_within_budget(w, h);
-        if !within {
-            web_sys::console::warn_1(
-                &format!("[cpu-surface] {context} {w}x{h} exceeds byte budget; surface oversized")
-                    .into(),
-            );
-        }
-        within
-    }
-
-    // `new`/`resize` 공통: 할당 실패 시 콘솔 경고.
-    fn warn_alloc_failed(context: &str, w: u32, h: u32) {
-        web_sys::console::warn_1(
-            &format!("[cpu-surface] {context} {w}x{h} allocation failed; surface oversized").into(),
-        );
-    }
-
     pub fn scale_factor(&self) -> f64 {
-        self.scale_factor
+        self.raster.scale_factor()
     }
-
-    pub fn is_oversized(&self) -> bool {
-        self.oversized
+    pub fn needs_render(&self) -> bool {
+        self.raster.needs_render()
     }
-
-    pub fn cpu_sink(&mut self) -> Option<&mut CpuSink> {
-        self.backend.as_mut().map(RenderBackend::cpu_sink)
+    pub fn configure_tiles(&mut self, bounds: &[i32]) -> Result<(), FfiError> {
+        self.raster.configure_tiles(bounds)
+    }
+    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
+        if !self.raster.resize(width, height, scale_factor) {
+            return false;
+        }
+        self.prepared_frame = None;
+        self.tiles.clear();
+        self.tiles_changed = true;
+        self.layout_changed = true;
+        true
     }
 
     pub fn apply_damage(
         &mut self,
-        dl: &editor_renderer::display_list::DisplayList,
+        dl: &DisplayList,
         damage: &[IRect],
-        _editor_revision: u64,
-        _frame_key: FrameKey,
+        _revision: u64,
+        frame_key: FrameKey,
     ) -> bool {
-        if self.oversized {
+        if !self.raster.apply_damage(dl, damage, frame_key.value) {
             return false;
         }
-        let bounds = IRect {
-            x0: 0,
-            y0: 0,
-            x1: self.width as i32,
-            y1: self.height as i32,
-        };
-        let clamped: Vec<IRect> = damage.iter().filter_map(|&r| r.intersect(bounds)).collect();
-
-        let Some(sink) = self.cpu_sink() else {
-            return false;
-        };
-        for &r in &clamped {
-            sink.clear_rect(r);
-            sink.set_clip(Some(r));
-            editor_renderer::diff::replay(dl, r, sink);
-        }
-        sink.set_clip(None);
-        self.present_damage(&clamped)
-    }
-
-    pub fn present_damage(&mut self, damage: &[IRect]) -> bool {
-        if self.oversized {
-            return false;
-        }
-        if damage.is_empty() {
-            return true;
-        }
-
-        let ctx = self
-            .handle
-            .get_context("2d")
-            .unwrap()
-            .unwrap()
-            .dyn_into::<web_sys::CanvasRenderingContext2d>()
-            .unwrap();
-
-        for &r in damage {
-            let w = r.width() as u32;
-            let h = r.height() as u32;
-            if w == 0 || h == 0 {
-                continue;
-            }
-
-            if !self.present_rect_via_put_image_data(&ctx, r) {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    fn present_rect_via_put_image_data(
-        &mut self,
-        ctx: &web_sys::CanvasRenderingContext2d,
-        r: IRect,
-    ) -> bool {
-        let w = r.width() as u32;
-        if w == 0 {
-            return true;
-        }
-        let max_rows =
-            surface_budget::max_strip_rows(w, surface_budget::CPU_PRESENT_STRIP_BYTE_BUDGET).max(1)
-                as i32;
-        let mut y = r.y0;
-        while y < r.y1 {
-            let y1 = y.saturating_add(max_rows).min(r.y1);
-            let strip = IRect {
-                x0: r.x0,
-                y0: y,
-                x1: r.x1,
-                y1,
+        self.tiles_changed |= self.tiles.iter().map(|tile| tile.bounds).ne(self
+            .raster
+            .tiles
+            .iter()
+            .map(|tile| tile.bounds));
+        let mut previous = std::mem::take(&mut self.tiles);
+        let mut tiles = Vec::with_capacity(self.raster.tiles.len());
+        for tile in &self.raster.tiles {
+            let [left, top, right, bottom] = tile.bounds;
+            let raster = IRect {
+                x0: left - 1,
+                y0: top - 1,
+                x1: right + 1,
+                y1: bottom + 1,
             };
-            if !self.put_image_strip(ctx, strip) {
-                return false;
+            let (mut canvas, dirty) =
+                if let Some(index) = previous.iter().position(|t| t.bounds == tile.bounds) {
+                    let existing = previous.swap_remove(index);
+                    if existing.version == tile.version {
+                        tiles.push(existing);
+                        continue;
+                    }
+                    let dirty = damage
+                        .iter()
+                        .filter_map(|r| r.intersect(raster))
+                        .reduce(IRect::union)
+                        .unwrap_or(raster);
+                    // Accumulate every change since the canvas was last presented,
+                    // including revisions prepared while another page was pending.
+                    let dirty = existing
+                        .pending
+                        .as_ref()
+                        .map_or(dirty, |(pending, _)| dirty.union(*pending));
+                    (existing, dirty)
+                } else {
+                    let Ok(canvas) = self.create_tile(tile) else {
+                        return false;
+                    };
+                    (canvas, raster)
+                };
+            let stride = raster.width() as usize * 4;
+            let row_bytes = dirty.width() as usize * 4;
+            let mut pixels = Vec::with_capacity(row_bytes * dirty.height() as usize);
+            for y in dirty.y0..dirty.y1 {
+                let offset =
+                    (y - raster.y0) as usize * stride + (dirty.x0 - raster.x0) as usize * 4;
+                pixels.extend_from_slice(&tile.pixels[offset..offset + row_bytes]);
             }
-            y = y1;
+            unpremultiply(&mut pixels);
+            canvas.version = tile.version;
+            canvas.pending = Some((dirty, pixels));
+            tiles.push(canvas);
         }
+        // Keep visible pixels intact until the matching snapshot is presented.
+        self.tiles = tiles;
+        self.prepared_frame = Some(frame_key.value);
         true
     }
 
-    fn put_image_strip(&mut self, ctx: &web_sys::CanvasRenderingContext2d, r: IRect) -> bool {
-        let w = r.width() as u32;
-        let h = r.height() as u32;
-        if w == 0 || h == 0 {
-            return true;
-        }
-
-        let len = w as usize * h as usize * 4;
-        let mut buf = Vec::new();
-        if buf.try_reserve_exact(len).is_err() {
-            return false;
-        }
-        buf.resize(len, 0u8);
-
-        let Some(sink) = self.cpu_sink() else {
-            return false;
-        };
-        sink.read_back_rect(&mut buf, (w * 4) as usize, r);
-        unpremultiply(&mut buf);
-
-        let clamped = wasm_bindgen::Clamped(&buf[..]);
-        let Ok(image_data) = web_sys::ImageData::new_with_u8_clamped_array_and_sh(clamped, w, h)
-        else {
-            return false;
-        };
-
-        ctx.put_image_data(&image_data, r.x0 as f64, r.y0 as f64)
-            .is_ok()
+    fn create_tile(&self, tile: &RenderedTile) -> Result<CanvasTile, JsValue> {
+        let document = self
+            .handle
+            .owner_document()
+            .ok_or_else(|| JsValue::from_str("surface has no document"))?;
+        let canvas = document
+            .create_element("canvas")?
+            .dyn_into::<web_sys::HtmlCanvasElement>()?;
+        let [left, top, right, bottom] = tile.bounds;
+        let width = (right - left + 2) as u32;
+        let height = (bottom - top + 2) as u32;
+        canvas.set_width(width);
+        canvas.set_height(height);
+        canvas.set_attribute("data-tile-x", &left.to_string())?;
+        canvas.set_attribute("data-tile-y", &top.to_string())?;
+        let element = document
+            .create_element("div")?
+            .dyn_into::<web_sys::HtmlElement>()?;
+        // Keep every tile on one integer pixel grid. Scaling the common container
+        // avoids separately rounded CSS bounds overlapping translucent pixels.
+        element.set_attribute(
+            "style",
+            &format!(
+                "position:absolute;overflow:hidden;left:{left}px;top:{top}px;width:{}px;height:{}px;",
+                right - left,
+                bottom - top,
+            ),
+        )?;
+        canvas.set_attribute(
+            "style",
+            &format!("position:absolute;left:-1px;top:-1px;width:{width}px;height:{height}px;",),
+        )?;
+        let ctx = canvas
+            .get_context("2d")?
+            .ok_or_else(|| JsValue::from_str("2d context unavailable"))?
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
+        element.append_child(&canvas)?;
+        Ok(CanvasTile {
+            bounds: tile.bounds,
+            version: tile.version,
+            element,
+            context: ctx,
+            pending: None,
+        })
     }
 
-    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
-        let raw_w = (width * scale_factor).round() as u32;
-        let raw_h = (height * scale_factor).round() as u32;
-        let pw = surface_budget::clamp_dim_u16(raw_w);
-        let ph = surface_budget::clamp_dim_u16(raw_h);
-        let w = u32::from(pw);
-        let h = u32::from(ph);
-
-        if self.width == w && self.height == h && self.scale_factor == scale_factor {
+    pub fn present(&mut self, frame_key: u64) -> bool {
+        if self.prepared_frame != Some(frame_key) {
             return false;
         }
-        if raw_w != w || raw_h != h {
-            web_sys::console::warn_1(
-                &format!("[cpu-surface] resize {raw_w}x{raw_h} clamped to {w}x{h}").into(),
-            );
-        }
-
-        self.width = w;
-        self.height = h;
-        self.scale_factor = scale_factor;
-
-        self.handle.set_width(w);
-        self.handle.set_height(h);
-
-        if !Self::budget_gate("resize", w, h) {
-            self.backend = None;
-            self.oversized = true;
-            return true;
-        }
-
-        let resized = match self.backend.as_mut() {
-            Some(backend) => backend.try_resize(pw, ph),
-            None => match RenderBackend::try_new_cpu(pw, ph) {
-                Some(backend) => {
-                    self.backend = Some(backend);
-                    true
+        for tile in &mut self.tiles {
+            if let Some((dirty, pixels)) = tile.pending.take() {
+                // ImageData borrows WASM memory, so create and upload it while
+                // its owned pixel buffer is alive, without retaining the JS view.
+                let Ok(data) = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
+                    wasm_bindgen::Clamped(&pixels),
+                    dirty.width() as u32,
+                    dirty.height() as u32,
+                ) else {
+                    return false;
+                };
+                if tile
+                    .context
+                    .put_image_data(
+                        &data,
+                        f64::from(dirty.x0 - tile.bounds[0] + 1),
+                        f64::from(dirty.y0 - tile.bounds[1] + 1),
+                    )
+                    .is_err()
+                {
+                    return false;
                 }
-                None => false,
-            },
-        };
-        if !resized {
-            Self::warn_alloc_failed("resize", w, h);
-            self.backend = None;
+            }
         }
-        self.oversized = !resized;
+        if self.layout_changed {
+            if self.container.set_attribute(
+                "style",
+                &format!(
+                    "position:absolute;left:0;top:0;width:{}px;height:{}px;transform-origin:0 0;transform:scale({});",
+                    self.raster.width,
+                    self.raster.height,
+                    1.0 / self.raster.scale_factor(),
+                ),
+            ).is_err() {
+                return false;
+            }
+            self.layout_changed = false;
+        }
+        if self.tiles_changed {
+            let nodes = js_sys::Array::new();
+            for tile in &self.tiles {
+                nodes.push(&tile.element);
+            }
+            self.container.replace_children_with_node(&nodes);
+            self.tiles_changed = false;
+        }
+        if !self.mounted {
+            self.handle
+                .replace_children_with_node(&js_sys::Array::of1(&self.container));
+            self.mounted = true;
+        }
         true
     }
 }
-
-// CPU가 유일한 present 백엔드다 — 핸들은 곧 CPU 표면 그 자체다. `new`(scale_factor·apply_damage·
-// resize·is_oversized)는 CpuPageSurface에서 그대로 온다.
-pub type SurfaceHandle = CpuPageSurface;

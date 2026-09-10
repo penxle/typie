@@ -12,7 +12,7 @@ const enabled = mode === '1';
 type ProbeEditor = object;
 
 type Entry = {
-  canvas: HTMLCanvasElement;
+  surface: HTMLElement;
   baseline: Uint8ClampedArray | null;
   baselineAt: number;
   renders: number;
@@ -42,18 +42,20 @@ function samplePoints(width: number, height: number): [number, number][] {
 // wipe 감지용 스냅샷: 페이지 캔버스를 getImageData(2d)로 표본 판독한다. 컨텍스트를 못 잡거나
 // 너무 작은 캔버스면 null.
 function capture(entry: Entry): Uint8ClampedArray | null {
-  const canvas = entry.canvas;
-  if (canvas.width < 32 || canvas.height < 32) return null;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  const points = samplePoints(canvas.width, canvas.height);
-  const out = new Uint8ClampedArray(points.length * BLOCK_BYTES);
-  try {
-    for (const [i, [x, y]] of points.entries()) {
-      out.set(ctx.getImageData(x, y, BLOCK, BLOCK).data, i * BLOCK_BYTES);
+  const canvases = [...entry.surface.querySelectorAll('canvas')];
+  const out = new Uint8ClampedArray(canvases.length * 5 * BLOCK_BYTES);
+  for (const [tileIndex, canvas] of canvases.entries()) {
+    if (canvas.width < 32 || canvas.height < 32) return null;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const points = samplePoints(canvas.width, canvas.height);
+    try {
+      for (const [i, [x, y]] of points.entries()) {
+        out.set(ctx.getImageData(x, y, BLOCK, BLOCK).data, (tileIndex * 5 + i) * BLOCK_BYTES);
+      }
+    } catch {
+      return null;
     }
-  } catch {
-    return null;
   }
   return out;
 }
@@ -74,7 +76,7 @@ function diffPoints(a: Uint8ClampedArray, b: Uint8ClampedArray): number[] {
 function verifyAll() {
   for (const [, pages] of editors) {
     for (const [page, entry] of pages) {
-      if (!entry.baseline || !entry.canvas.isConnected) continue;
+      if (!entry.baseline || !entry.surface.isConnected) continue;
       const current = capture(entry);
       if (!current) continue;
       const mismatched = diffPoints(entry.baseline, current);
@@ -98,14 +100,14 @@ function ensureInterval() {
   intervalId ??= setInterval(verifyAll, 1000);
 }
 
-export function probeAttach(editor: ProbeEditor, page: number, canvas: HTMLCanvasElement): void {
+export function probeAttach(editor: ProbeEditor, page: number, surface: HTMLElement): void {
   if (!enabled) return;
   let pages = editors.get(editor);
   if (!pages) {
     pages = new Map();
     editors.set(editor, pages);
   }
-  pages.set(page, { canvas, baseline: null, baselineAt: 0, renders: 0, wiped: false });
+  pages.set(page, { surface, baseline: null, baselineAt: 0, renders: 0, wiped: false });
   ensureInterval();
 }
 

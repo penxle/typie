@@ -19,13 +19,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 class EditorMainThreadBlockingDesktopTest {
   @Test
-  fun retainedFrameReadDoesNotBlockUiWhileTickOwnsEditorMutex() {
-    assertUiRemainsResponsiveWhileTickOwnsEditorMutex { editor ->
-      suspend { editor.retainedFrames(page = 0) }
-    }
-  }
-
-  @Test
   fun noOpSurfaceResizeDoesNotBlockUiWhileTickOwnsEditorMutex() {
     assertUiRemainsResponsiveWhileTickOwnsEditorMutex { editor ->
       val configuration = SurfaceConfiguration(width = 100.0, height = 100.0, scaleFactor = 1.0)

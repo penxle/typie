@@ -4,10 +4,10 @@ import type { Editor, PublishedBundle } from './editor.svelte';
 
 describe('EditorSurfaceHost', () => {
   it('reactivates a retained published producer when its page becomes required again', () => {
-    let attachedCanvas: HTMLCanvasElement | undefined;
+    let attachedSurface: HTMLElement | undefined;
     let targetAttached = false;
-    const attachSurface = vi.fn((_page: number, canvas: HTMLCanvasElement) => {
-      attachedCanvas = canvas;
+    const attachSurface = vi.fn((_page: number, surface: HTMLElement) => {
+      attachedSurface = surface;
       targetAttached = true;
       return 'cpu';
     });
@@ -24,7 +24,7 @@ describe('EditorSurfaceHost', () => {
       scaleFactor: 1,
       published: undefined,
       activateVisualHost: () => vi.fn(),
-      publishedSurfaceCanvas: () => attachedCanvas,
+      publishedSurfaceElement: () => attachedSurface,
       surfaceConfigMatches: () => targetAttached,
       attachSurface,
       detachSurface,
@@ -34,9 +34,9 @@ describe('EditorSurfaceHost', () => {
     const host = new EditorSurfaceHost(editor, vi.fn());
 
     host.reconcile(new Set([0]));
-    const firstCanvas = attachedCanvas;
-    expect(firstCanvas).toBeDefined();
-    host.syncPublished({ frames: new Map([[0, { canvas: firstCanvas }]]) } as unknown as PublishedBundle);
+    const firstSurface = attachedSurface;
+    expect(firstSurface).toBeDefined();
+    host.syncPublished({ frames: new Map([[0, { surface: firstSurface }]]) } as unknown as PublishedBundle);
 
     host.reconcile(new Set());
     expect(detachSurface).toHaveBeenCalledOnce();

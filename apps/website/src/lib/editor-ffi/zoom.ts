@@ -13,6 +13,15 @@ export const RENDER_ZOOM_SCALE_RATIO_THRESHOLD = 1.18;
 export const ZOOM_EPSILON = 0.0001;
 const DISCRETE_ZOOM_STEP = 0.1;
 
+export function browserScaleFactor(): number {
+  if (typeof window === 'undefined') {
+    return 1;
+  }
+
+  const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale ?? 1);
+  return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
+}
+
 export type ZoomBounds = {
   min: number;
   max: number;

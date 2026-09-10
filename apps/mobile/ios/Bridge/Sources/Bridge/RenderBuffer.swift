@@ -1,108 +1,95 @@
 import Foundation
 
 @_silgen_name("render_buffer_allocate")
-private func renderBufferAllocate(_ width: Int32, _ height: Int32) -> Int64
+private func nativeAllocate() -> Int64
 
 @_silgen_name("render_buffer_free")
-private func renderBufferFree(_ handle: Int64)
-
-@_silgen_name("render_buffer_resize")
-private func renderBufferResize(_ handle: Int64, _ width: Int32, _ height: Int32)
+private func nativeFree(_ handle: Int64) -> Void
 
 @_silgen_name("render_buffer_begin_read")
-private func renderBufferBeginRead(_ handle: Int64) -> Bool
+private func nativeBeginRead(_ handle: Int64) -> Bool
 
 @_silgen_name("render_buffer_end_read")
-private func renderBufferEndRead(_ handle: Int64)
-
-@_silgen_name("render_buffer_data_pointer")
-private func renderBufferDataPointer(_ handle: Int64) -> Int64
+private func nativeEndRead(_ handle: Int64) -> Void
 
 @_silgen_name("render_buffer_width")
-private func renderBufferWidth(_ handle: Int64) -> Int32
+private func nativeGetPixelWidth(_ handle: Int64) -> Int32
 
 @_silgen_name("render_buffer_height")
-private func renderBufferHeight(_ handle: Int64) -> Int32
-
-@_silgen_name("render_buffer_pinned_version")
-private func renderBufferPinnedVersion(_ handle: Int64) -> Int64
+private func nativeGetPixelHeight(_ handle: Int64) -> Int32
 
 @_silgen_name("render_buffer_pinned_editor_revision")
-private func renderBufferPinnedEditorRevision(_ handle: Int64) -> Int64
+private func nativeGetPinnedEditorRevision(_ handle: Int64) -> Int64
 
 @_silgen_name("render_buffer_pinned_frame_key")
-private func renderBufferPinnedFrameKey(_ handle: Int64) -> Int64
+private func nativeGetPinnedFrameKey(_ handle: Int64) -> Int64
 
-@_silgen_name("render_buffer_pinned_damage_from")
-private func renderBufferPinnedDamageFrom(_ handle: Int64) -> Int64
+@_silgen_name("render_buffer_pinned_tile_count")
+private func nativeGetPinnedTileCount(_ handle: Int64) -> Int32
 
-@_silgen_name("render_buffer_pinned_damage_pointer")
-private func renderBufferPinnedDamagePointer(_ handle: Int64) -> Int64
+@_silgen_name("render_buffer_pinned_tile_bounds")
+private func nativeGetPinnedTileBounds(_ handle: Int64, _ index: Int32) -> Int64
 
-@_silgen_name("render_buffer_pinned_damage_count")
-private func renderBufferPinnedDamageCount(_ handle: Int64) -> Int32
+@_silgen_name("render_buffer_pinned_tile_pixels")
+private func nativeGetPinnedTilePixels(_ handle: Int64, _ index: Int32) -> Int64
 
-@_silgen_name("render_buffer_read_pinned_into")
-private func renderBufferReadPinnedInto(_ handle: Int64, _ dst: Int64, _ dstLen: Int64, _ rowFrom: Int32, _ rowTo: Int32) -> Bool
+@_silgen_name("render_buffer_pinned_tile_version")
+private func nativeGetPinnedTileVersion(_ handle: Int64, _ index: Int32) -> Int64
+
+@_silgen_name("render_buffer_read_pinned_tile_into")
+private func nativeReadPinnedTileInto(_ handle: Int64, _ index: Int32, _ dstAddr: Int64, _ dstLen: Int64) -> Bool
 
 @objc public class RenderBuffer: NSObject {
-    @objc public static func allocate(_ width: Int32, _ height: Int32) -> Int64 {
-        renderBufferAllocate(width, height)
+    @objc public static func allocate() -> Int64 {
+        nativeAllocate()
     }
 
-    @objc public static func free(_ handle: Int64) {
-        renderBufferFree(handle)
-    }
-
-    @objc public static func resize(_ handle: Int64, _ width: Int32, _ height: Int32) {
-        renderBufferResize(handle, width, height)
+    @objc public static func free(_ handle: Int64) -> Void {
+        nativeFree(handle)
     }
 
     @objc public static func beginRead(_ handle: Int64) -> Bool {
-        renderBufferBeginRead(handle)
+        nativeBeginRead(handle)
     }
 
-    @objc public static func endRead(_ handle: Int64) {
-        renderBufferEndRead(handle)
-    }
-
-    @objc public static func dataPointer(_ handle: Int64) -> Int64 {
-        renderBufferDataPointer(handle)
+    @objc public static func endRead(_ handle: Int64) -> Void {
+        nativeEndRead(handle)
     }
 
     @objc public static func width(_ handle: Int64) -> Int32 {
-        renderBufferWidth(handle)
+        nativeGetPixelWidth(handle)
     }
 
     @objc public static func height(_ handle: Int64) -> Int32 {
-        renderBufferHeight(handle)
-    }
-
-    @objc public static func pinnedVersion(_ handle: Int64) -> Int64 {
-        renderBufferPinnedVersion(handle)
+        nativeGetPixelHeight(handle)
     }
 
     @objc public static func pinnedEditorRevision(_ handle: Int64) -> Int64 {
-        renderBufferPinnedEditorRevision(handle)
+        nativeGetPinnedEditorRevision(handle)
     }
 
     @objc public static func pinnedFrameKey(_ handle: Int64) -> Int64 {
-        renderBufferPinnedFrameKey(handle)
+        nativeGetPinnedFrameKey(handle)
     }
 
-    @objc public static func pinnedDamageFrom(_ handle: Int64) -> Int64 {
-        renderBufferPinnedDamageFrom(handle)
+    @objc public static func pinnedTileCount(_ handle: Int64) -> Int32 {
+        nativeGetPinnedTileCount(handle)
     }
 
-    @objc public static func pinnedDamagePointer(_ handle: Int64) -> Int64 {
-        renderBufferPinnedDamagePointer(handle)
+    @objc public static func pinnedTileBounds(_ handle: Int64, _ index: Int32) -> Int64 {
+        nativeGetPinnedTileBounds(handle, index)
     }
 
-    @objc public static func pinnedDamageCount(_ handle: Int64) -> Int32 {
-        renderBufferPinnedDamageCount(handle)
+    @objc public static func pinnedTilePixels(_ handle: Int64, _ index: Int32) -> Int64 {
+        nativeGetPinnedTilePixels(handle, index)
     }
 
-    @objc public static func readPinnedInto(_ handle: Int64, _ dst: Int64, _ dstLen: Int64, _ rowFrom: Int32, _ rowTo: Int32) -> Bool {
-        renderBufferReadPinnedInto(handle, dst, dstLen, rowFrom, rowTo)
+    @objc public static func pinnedTileVersion(_ handle: Int64, _ index: Int32) -> Int64 {
+        nativeGetPinnedTileVersion(handle, index)
     }
+
+    @objc public static func readPinnedTileInto(_ handle: Int64, _ index: Int32, _ dstAddr: Int64, _ dstLen: Int64) -> Bool {
+        nativeReadPinnedTileInto(handle, index, dstAddr, dstLen)
+    }
+
 }

@@ -6,7 +6,6 @@ cfg_if! {
         mod cpu_surface;
         pub use cpu_surface::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(feature = "wasm-browser")] {
-        pub(crate) mod surface_budget;
         mod wasm_browser;
         pub use wasm_browser::{PlatformHandle, SurfaceHandle};
     } else {
@@ -22,5 +21,22 @@ cfg_if! {
 ))]
 mod render_buffer;
 
-#[cfg(all(test, not(feature = "wasm-browser")))]
-mod surface_budget;
+#[cfg(any(
+    test,
+    target_os = "android",
+    target_os = "ios",
+    feature = "uniffi",
+    feature = "wasm-browser"
+))]
+mod tiled_surface;
+
+#[cfg(all(
+    test,
+    not(any(
+        target_os = "android",
+        target_os = "ios",
+        feature = "uniffi",
+        feature = "wasm-browser"
+    ))
+))]
+mod cpu_surface;

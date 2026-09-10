@@ -1334,7 +1334,7 @@ class EditorDocumentManipulationDesktopTest {
                 val revision = fake.renderCalls.last { it.page == page }.requestedRevision.value
                 editor.deliverFrame(
                   session = session,
-                  bitmap = bitmap,
+                  tiles = listOf(co.typie.editor.PresentedTile(bitmap)),
                   pixelSize = pixelSize,
                   editorRevision = revision,
                   frameKey = frameKey.value,

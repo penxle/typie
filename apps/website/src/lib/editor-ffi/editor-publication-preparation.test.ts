@@ -29,6 +29,113 @@ afterEach(() => {
 });
 
 describe('editor publication preparation', () => {
+  it.each([800, 4000])('prepares tiles only around the current viewport and actual reveal destination for a caret at %i', (caretY) => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    const candidate = snapshot({
+      cursor: {
+        page_idx: 0,
+        caret: { x: 100, y: caretY, width: 1, height: 20 },
+        line: { x: 100, y: caretY, width: 1, height: 20 },
+      },
+      pageSizes: [{ width: 640, height: 10_000 }],
+      pageBackingSizes: [{ width: 640, height: 10_000 }],
+    });
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      appliedRevision: candidate.revision,
+      publishedRevision: candidate.revision,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
+      viewport: { height: 1000 },
+      scaleFactor: 2,
+      surfaceScaleFactor: 2,
+      displayZoom: 1,
+      activeSurfacePages: new Set([0]),
+      extensionAreaEl: { getBoundingClientRect: () => new DOMRect(0, 0, 640, 10_000) },
+      scrollViewport: {
+        getRect: () => new DOMRect(0, 0, 1000, 1000),
+        getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 1000,
+        getScrollHeight: () => 10_000,
+      },
+      requestPublication: vi.fn(),
+      safeDisplayZoom: () => 1,
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+    const before = resolveEditorSurfacePreparation(editor, scroll)?.tiles;
+    scroll.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
+    const preparation = resolveEditorSurfacePreparation(editor, scroll);
+
+    if (caretY === 800) {
+      expect(preparation?.scrollIntent).toEqual({ type: 'no_scroll' });
+      expect(preparation?.tiles).toEqual(before);
+    } else {
+      expect(preparation?.scrollIntent).toEqual({ type: 'scroll_to', y: 3080 });
+      const bounds = preparation?.tiles.get(0) ?? [];
+      // Current viewport: 0..1500 CSS px with overscan; destination: 2580..4580.
+      expect(Math.max(...bounds.filter((_, index) => index % 4 === 3))).toBe(9216);
+      expect(bounds.some((value, index) => index % 4 === 1 && value <= 8000 && bounds[index + 2] >= 8040)).toBe(true);
+    }
+  });
+
+  it('limits raster tiles to the visual viewport and follows browser zoom panning', () => {
+    const candidate = snapshot({
+      pageSizes: [{ width: 2000, height: 10_000 }],
+      pageBackingSizes: [{ width: 2000, height: 10_000 }],
+      rootAttrs: { layout_mode: { type: 'continuous', max_width: 2000 } } as EditorSnapshot['rootAttrs'],
+    });
+    const visualViewport = { offsetLeft: 400, offsetTop: 300, width: 240, height: 180, scale: 5 };
+    vi.stubGlobal('visualViewport', visualViewport);
+    vi.stubGlobal('devicePixelRatio', 2);
+    let scaleFactor = 10;
+    const editor = {
+      destroyed: false,
+      appliedSnapshot: candidate,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
+      viewport: { height: 900 },
+      get scaleFactor() {
+        return scaleFactor;
+      },
+      get surfaceScaleFactor() {
+        return scaleFactor * 2;
+      },
+      displayZoom: 2,
+      activeSurfacePages: new Set<number>(),
+      extensionAreaEl: { getBoundingClientRect: () => new DOMRect(100, 50, 4000, 20_000) },
+      scrollViewport: {
+        getRect: () => new DOMRect(100, 50, 1200, 900),
+        getScrollTop: () => 0,
+        getScrollLeft: () => 0,
+        getScrollWidth: () => 4000,
+        getScrollHeight: () => 20_000,
+      },
+      safeDisplayZoom: () => 2,
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+    const tiles = () => resolveEditorSurfacePreparation(editor, scroll)?.tiles.get(0) ?? [];
+    const before = tiles();
+    expect(before.length / 4).toBeLessThanOrEqual(72);
+    expect(before.slice(0, 4)).toEqual([2048, 1536, 2560, 2048]);
+    expect(before.slice(-4)).toEqual([5632, 5120, 6144, 5632]);
+
+    visualViewport.offsetLeft += 200;
+    visualViewport.offsetTop += 200;
+    const after = tiles();
+    expect(after.length / 4).toBeLessThanOrEqual(72);
+    expect(after.slice(0, 4)).toEqual([4096, 3584, 4608, 4096]);
+    expect(after).not.toEqual(before);
+
+    Object.assign(visualViewport, { offsetLeft: 0, offsetTop: 0, width: 1200, height: 900, scale: 1 });
+    // Any publication trigger can arrive before View installs the browser's new scale.
+    expect(resolveEditorSurfacePreparation(editor, scroll)).toBeNull();
+    scaleFactor = 2;
+    expect(tiles().length).toBeGreaterThan(0);
+
+    visualViewport.offsetLeft = 5000;
+    expect(tiles()).toEqual([]);
+  });
+
   it('completes a current-selection reveal when the candidate has no selection geometry', async () => {
     const position = { node: 'hidden', offset: 0, affinity: 'downstream' as const };
     const candidate = snapshot({

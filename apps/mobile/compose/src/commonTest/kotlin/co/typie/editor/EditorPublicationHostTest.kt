@@ -29,6 +29,30 @@ class EditorPublicationHostTest {
   private val message = Message.System(SystemEvent.Initialize)
 
   @Test
+  fun sameRevisionScrollWaitsForRequestedTileCoverage() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(width = 100f, height = 2000f)) })
+      val editor = Editor(fake, this, dispatcher)
+      editor.activateVisualHost(Any())
+      val first = listOf(androidx.compose.ui.unit.IntRect(0, 0, 100, 512))
+      val session =
+        editor.attachSurface(0, 10L, 100.0, 2000.0, 1.0, tiles = first, wakeDelivery = {})
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 1L)
+      advanceUntilIdle()
+      val regions = mapOf(0 to listOf(androidx.compose.ui.geometry.Rect(0f, 1200f, 100f, 1400f)))
+      assertNull(editor.publishIfReady(setOf(0), regions))
+      val next = requiredSurfaceTiles(100.0, 2000.0, 1.0, regions.getValue(0))
+      session.requestResize(SurfaceConfiguration(100.0, 2000.0, 1.0, next))
+      advanceUntilIdle()
+      assertNull(editor.publishIfReady(setOf(0), regions))
+      editor.deliverFrame(session, editorRevision = 0L, frameKey = 2L)
+      advanceUntilIdle()
+      assertTrue(editor.publishIfReady(setOf(0), regions) != null)
+    }
+
+  @Test
   fun publicationWaitsForEveryActiveTarget() =
     runTest(dispatcher) {
       val fake =
@@ -58,10 +82,10 @@ class EditorPublicationHostTest {
       val pendingFirstBitmap = editor.deliverFrame(first, editorRevision = 1L, frameKey = 3L)
       runCurrent()
       assertFalse(publication.isCompleted)
-      val retained = editor.retainedFrames(page = 0)
-      assertEquals(2, retained.size)
-      assertSame(publishedFirstBitmap, retained[0])
-      assertSame(pendingFirstBitmap, retained[1])
+      assertSame(
+        publishedFirstBitmap,
+        editor.publishedBundle?.frames?.get(0)?.tiles?.single()?.bitmap,
+      )
 
       editor.deliverFrame(second, editorRevision = 1L, frameKey = 4L)
       advanceUntilIdle()
@@ -74,9 +98,10 @@ class EditorPublicationHostTest {
         )
       assertEquals(setOf(0, 1), publishedPages.toSet())
       assertEquals(1L, editor.publishedRevision)
-      val retainedAfterPublication = editor.retainedFrames(page = 0)
-      assertEquals(1, retainedAfterPublication.size)
-      assertSame(pendingFirstBitmap, retainedAfterPublication.single())
+      assertSame(
+        pendingFirstBitmap,
+        editor.publishedBundle?.frames?.get(0)?.tiles?.single()?.bitmap,
+      )
     }
 
   @Test
@@ -94,7 +119,7 @@ class EditorPublicationHostTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = session,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = 0L,
         frameKey = 1L,
@@ -107,7 +132,7 @@ class EditorPublicationHostTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = session,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = update.revision,
         frameKey = 2L,
@@ -407,7 +432,7 @@ class EditorPublicationHostTest {
       val first = requireNotNull(editor.publishedBundle)
       assertEquals(0L, first.snapshot.version)
       assertEquals(FrameKey(1L), first.frames[0]?.proof?.frameKey)
-      assertSame(firstBitmap, first.frames[0]?.bitmap)
+      assertSame(firstBitmap, first.frames[0]?.tiles?.single()?.bitmap)
 
       requireNotNull(editor.update { enqueue(message) })
       advanceUntilIdle()
@@ -418,8 +443,8 @@ class EditorPublicationHostTest {
       assertEquals(1L, second.snapshot.version)
       assertEquals(FrameKey(2L), second.frames[0]?.proof?.frameKey)
       assertEquals(FrameKey(1L), first.frames[0]?.proof?.frameKey)
-      assertSame(secondBitmap, second.frames[0]?.bitmap)
-      assertSame(firstBitmap, first.frames[0]?.bitmap)
+      assertSame(secondBitmap, second.frames[0]?.tiles?.single()?.bitmap)
+      assertSame(firstBitmap, first.frames[0]?.tiles?.single()?.bitmap)
     }
 
   @Test
@@ -469,14 +494,14 @@ class EditorPublicationHostTest {
       advanceUntilIdle()
       editor.deliverFrame(
         session = first,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = 0L,
         frameKey = 1L,
       )
       editor.deliverFrame(
         session = second,
-        bitmap = ImageBitmap(width = 100, height = 100),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
         pixelSize = IntSize(width = 100, height = 100),
         editorRevision = 0L,
         frameKey = 2L,
@@ -639,7 +664,7 @@ class EditorPublicationHostTest {
       assertEquals(Published(update.revision), publication.await())
       val published = requireNotNull(editor.publishedBundle)
       assertEquals(update.revision, published.snapshot.version)
-      assertSame(replacementBitmap, published.frames.getValue(0).bitmap)
+      assertSame(replacementBitmap, published.frames.getValue(0).tiles.single().bitmap)
     }
 
   @Test
@@ -1107,7 +1132,7 @@ class EditorPublicationHostTest {
         editor.requestSurfacePages(setOf(0))
         editor.deliverFrame(
           session = first,
-          bitmap = ImageBitmap(width = 100, height = 100),
+          tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
           pixelSize = IntSize(width = 100, height = 100),
           editorRevision = update.revision,
           frameKey = requireNotNull(prepared[0]).value,
@@ -1118,7 +1143,7 @@ class EditorPublicationHostTest {
         )
         editor.deliverFrame(
           session = dropped,
-          bitmap = ImageBitmap(width = 100, height = 100),
+          tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 100, height = 100))),
           pixelSize = IntSize(width = 100, height = 100),
           editorRevision = update.revision,
           frameKey = requireNotNull(prepared[1]).value,
@@ -1207,7 +1232,7 @@ private fun Editor.deliverFrame(
   val bitmap = ImageBitmap(width = 100, height = 100)
   deliverFrame(
     session = session,
-    bitmap = bitmap,
+    tiles = listOf(co.typie.editor.PresentedTile(bitmap)),
     pixelSize = IntSize(width = 100, height = 100),
     editorRevision = editorRevision,
     frameKey = frameKey,

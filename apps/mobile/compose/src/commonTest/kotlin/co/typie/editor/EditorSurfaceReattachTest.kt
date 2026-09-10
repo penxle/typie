@@ -80,7 +80,7 @@ class EditorSurfaceReattachTest {
 
         assertTrue(firstSession.isRetired)
         assertSame(firstBundle, editor.publishedBundle)
-        assertSame(firstBitmap, editor.publishedBundle?.frames?.get(0)?.bitmap)
+        assertSame(firstBitmap, editor.publishedBundle?.frames?.get(0)?.tiles?.single()?.bitmap)
         assertEquals(1, fake.attachCount)
         assertEquals(1, fake.detachCount)
 
@@ -123,7 +123,10 @@ class EditorSurfaceReattachTest {
         assertEquals(regrownRevision, editor.publishedRevision)
         assertEquals(regrownRevision, replacementProof.editorRevision)
         assertNotEquals(firstProof.surfaceKey, replacementProof.surfaceKey)
-        assertSame(replacementBitmap, editor.publishedBundle?.frames?.get(0)?.bitmap)
+        assertSame(
+          replacementBitmap,
+          editor.publishedBundle?.frames?.get(0)?.tiles?.single()?.bitmap,
+        )
         assertEquals(2, fake.attachCount)
       } finally {
         editor.deactivateVisualHost(host)
@@ -145,7 +148,7 @@ private fun Editor.deliverFrame(
   val bitmap = ImageBitmap(width = 100, height = 100)
   deliverFrame(
     session = session,
-    bitmap = bitmap,
+    tiles = listOf(co.typie.editor.PresentedTile(bitmap)),
     pixelSize = IntSize(width = 100, height = 100),
     editorRevision = editorRevision,
     frameKey = frameKey,

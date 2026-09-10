@@ -308,7 +308,7 @@ export class EditorScrollScope {
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
     if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null, attachmentAchieved: false };
-    const metrics = this.#viewportMetrics(snapshot, true);
+    const metrics = this.viewportMetrics(snapshot, true);
     if (!metrics) return { type: 'unavailable' };
     const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
     if (selectionCapture && this.#viewportAnchor.needsSelectionAdoption(selectionCapture.identity)) {
@@ -447,7 +447,7 @@ export class EditorScrollScope {
     this.#viewportAnchor.finishRevealConvergence();
 
     const snapshot = this.#editor.published?.snapshot;
-    const metrics = this.#viewportMetrics(snapshot);
+    const metrics = this.viewportMetrics(snapshot);
     if (!snapshot || !metrics) return;
     const preferred = this.#resolvePreferredSelectionAnchor(snapshot, metrics);
     if (
@@ -472,7 +472,7 @@ export class EditorScrollScope {
 
   reconcileViewportResize(): void {
     const snapshot = this.#editor.published?.snapshot;
-    const metrics = this.#viewportMetrics(snapshot);
+    const metrics = this.viewportMetrics(snapshot);
     if (!snapshot || !metrics) return;
     if (this.#smoothMotion) {
       if (metrics.clientHeight > 0) {
@@ -663,7 +663,7 @@ export class EditorScrollScope {
 
   attachViewportAnchorAt(point: { page: number; x: number; y: number }, desiredScroll?: EditorViewportScrollPosition): void {
     const snapshot = this.#editor.published?.snapshot;
-    const metrics = this.#viewportMetrics(snapshot);
+    const metrics = this.viewportMetrics(snapshot);
     if (!snapshot || !metrics) return;
     const capture = this.#editor.captureViewportAnchorAt(snapshot.revision, {
       page_idx: point.page,
@@ -689,7 +689,7 @@ export class EditorScrollScope {
   updateViewportZoomAttachment(desiredScroll: EditorViewportScrollPosition): void {
     const attachment = this.#viewportAnchor.viewportAttachment;
     const snapshot = this.#editor.published?.snapshot;
-    const metrics = this.#viewportMetrics(snapshot);
+    const metrics = this.viewportMetrics(snapshot);
     if (!attachment || !snapshot || !metrics) return;
     const resolution = this.#editor.resolveViewportAnchor(snapshot.revision, attachment.identity);
     if (resolution.type !== 'resolved') return;
@@ -756,7 +756,7 @@ export class EditorScrollScope {
     snapshot = this.#editor.published?.snapshot,
     metrics?: EditorViewportMetrics,
   ): void {
-    const resolvedMetrics = metrics ?? this.#viewportMetrics(snapshot);
+    const resolvedMetrics = metrics ?? this.viewportMetrics(snapshot);
     if (!snapshot || !resolvedMetrics) return;
     const capture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
     if (capture) {
@@ -784,7 +784,7 @@ export class EditorScrollScope {
   }
 
   #attachViewportCenter(snapshot = this.#editor.published?.snapshot, metrics?: EditorViewportMetrics): boolean {
-    const resolvedMetrics = metrics ?? this.#viewportMetrics(snapshot);
+    const resolvedMetrics = metrics ?? this.viewportMetrics(snapshot);
     if (!snapshot || !resolvedMetrics) return false;
     const point = viewportCenterAnchorPoint(snapshot, resolvedMetrics.layout, resolvedMetrics, this.visibleArea);
     if (!point) return false;
@@ -825,7 +825,7 @@ export class EditorScrollScope {
     return resolveViewportAnchorGeometry(resolution.geometry, metrics.layout);
   }
 
-  #viewportMetrics(snapshot: EditorSnapshot | undefined, candidateExtent = false): EditorViewportMetrics | null {
+  viewportMetrics(snapshot: EditorSnapshot | undefined, candidateExtent = false): EditorViewportMetrics | null {
     const viewport = this.#editor.scrollViewport;
     if (!snapshot || !viewport) return null;
     const viewportRect = viewport.getRect();
@@ -913,7 +913,7 @@ export class EditorScrollScope {
 
   #applySmoothReveal(request: EditorBringIntoViewRequest, snapshot: EditorSnapshot, target: number): boolean {
     const viewport = this.#editor.scrollViewport;
-    const metrics = this.#viewportMetrics(snapshot);
+    const metrics = this.viewportMetrics(snapshot);
     if (!viewport || !metrics) return false;
     const clampedTarget = Math.max(0, Math.min(target, metrics.maximumScrollTop));
     const previous = this.#smoothMotion?.snapshot();

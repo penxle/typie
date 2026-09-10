@@ -175,7 +175,7 @@ class ImageResizeSecondaryToolbarDesktopTest {
       waitUntil { frameKey != null }
       editor.deliverFrame(
         session = surface,
-        bitmap = ImageBitmap(width = 400, height = 700),
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(width = 400, height = 700))),
         pixelSize = IntSize(width = 400, height = 700),
         editorRevision = initialUpdate.revision,
         frameKey = assertNotNull(frameKey).value,
