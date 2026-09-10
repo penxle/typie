@@ -607,7 +607,7 @@ private fun SpellcheckActionChip(text: String, danger: Boolean = false, onClick:
           enabled = true,
           shape = AppShapes.circle,
           hoverColor =
-            if (danger) lerp(background, Color.Black, 0.12f) else AppTheme.colors.surfaceHover,
+            if (danger) lerp(background, Color.Black, 0.06f) else AppTheme.colors.surfaceHover,
           activeColor =
             if (danger) lerp(background, Color.Black, 0.20f) else AppTheme.colors.surfaceActive,
         )

@@ -98,7 +98,7 @@ fun Button(
               shape = AppShapes.rounded(AppShapes.lg),
               hoverColor =
                 if (variant == ButtonVariant.Secondary) AppTheme.colors.surfaceHover
-                else lerp(colors.background, Color.Black, 0.12f),
+                else lerp(colors.background, Color.Black, 0.06f),
               activeColor =
                 if (variant == ButtonVariant.Secondary) AppTheme.colors.surfaceActive
                 else lerp(colors.background, Color.Black, 0.20f),

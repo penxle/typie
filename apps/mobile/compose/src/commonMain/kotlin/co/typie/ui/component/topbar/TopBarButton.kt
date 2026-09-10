@@ -88,7 +88,7 @@ private fun TopBarButtonContent(
           shape = TopBarDefaults.ButtonShape,
           hoverColor =
             if (isDefaultBackground) AppTheme.colors.surfaceHover
-            else lerp(backgroundColor, Color.Black, 0.12f),
+            else lerp(backgroundColor, Color.Black, 0.06f),
           activeColor =
             if (isDefaultBackground) AppTheme.colors.surfaceActive
             else lerp(backgroundColor, Color.Black, 0.20f),

@@ -80,7 +80,7 @@ fun BoxScope.EditorSubscriptionBanner(
         .hoverFeedback(
           source,
           shape = AppShapes.rounded(AppShapes.lg),
-          hoverColor = lerp(surface, Color.Black, 0.12f).copy(alpha = 0.5f),
+          hoverColor = lerp(surface, Color.Black, 0.06f).copy(alpha = 0.5f),
           activeColor = lerp(surface, Color.Black, 0.20f).copy(alpha = 0.5f),
         )
         .clickable(interactionSource = source) {

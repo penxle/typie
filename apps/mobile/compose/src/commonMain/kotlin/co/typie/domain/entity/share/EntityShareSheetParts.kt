@@ -131,11 +131,8 @@ private fun ShareThumbnailUploadButton(
         modifier =
           Modifier.size(width = SHARE_THUMBNAIL_WIDTH_DP.dp, height = SHARE_THUMBNAIL_HEIGHT_DP.dp)
             .clip(shape)
-            .background(
-              if (thumbnailUrl == null && enabled && hovered) AppTheme.colors.surfaceHover
-              else AppTheme.colors.surfaceInset,
-              shape,
-            )
+            .background(AppTheme.colors.surfaceInset, shape)
+            .hoverFeedback(enabled = thumbnailUrl == null && enabled, shape = shape)
             .border(
               width = 1.dp,
               color =

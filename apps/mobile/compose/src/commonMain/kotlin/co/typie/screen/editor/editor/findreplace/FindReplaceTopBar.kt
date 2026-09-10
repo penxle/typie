@@ -2,6 +2,9 @@ package co.typie.screen.editor.editor.findreplace
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +39,7 @@ import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
+import co.typie.ui.input.hoverFeedback
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
@@ -62,6 +68,8 @@ internal fun FindReplaceTopBarCenter(
   }
 
   val shape = AppShapes.rounded(AppShapes.full)
+  val interactionSource = remember { MutableInteractionSource() }
+  val focused by interactionSource.collectIsFocusedAsState()
   Row(
     modifier =
       Modifier.fillMaxWidth()
@@ -70,6 +78,8 @@ internal fun FindReplaceTopBarCenter(
         .clip(shape)
         .background(TopBarDefaults.controlBackgroundColor(), shape)
         .border(1.dp, TopBarDefaults.controlBorderColor(), shape)
+        .hoverable(interactionSource)
+        .hoverFeedback(interactionSource, enabled = !focused, shape = shape)
         .padding(horizontal = 14.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
@@ -84,6 +94,7 @@ internal fun FindReplaceTopBarCenter(
       value = inputState.value,
       onValueChange = inputState::onValueChange,
       singleLine = true,
+      interactionSource = interactionSource,
       textStyle = AppTheme.typography.body.copy(color = AppTheme.colors.textDefault),
       cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

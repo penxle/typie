@@ -102,7 +102,7 @@ fun TrialRemainingChip() {
           Modifier.background(AppTheme.colors.surfaceInverse, AppShapes.circle)
             .hoverFeedback(
               shape = AppShapes.circle,
-              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
               activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
             )
             .clickable(onClick = openSubscribe)
@@ -165,7 +165,7 @@ private fun TrialReminderBalloon(daysLeft: Int, legacy: Boolean, onTap: () -> Un
             .background(AppTheme.colors.surfaceInverse, shape)
             .hoverFeedback(
               shape = shape,
-              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.12f),
+              hoverColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.06f),
               activeColor = lerp(AppTheme.colors.surfaceInverse, Color.Black, 0.20f),
             )
             .clickable(onClick = { onTap() })

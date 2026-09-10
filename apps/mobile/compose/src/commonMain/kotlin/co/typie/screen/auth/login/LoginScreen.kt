@@ -305,7 +305,7 @@ private fun SingleSignOnButton(
               lerp(
                 backgroundColor,
                 if (backgroundColor == Color.Black) foregroundColor else Color.Black,
-                0.12f,
+                0.06f,
               ),
             activeColor =
               lerp(
