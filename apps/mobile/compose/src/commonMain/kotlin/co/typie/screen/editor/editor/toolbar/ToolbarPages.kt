@@ -16,7 +16,9 @@ import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -154,6 +156,8 @@ internal fun EditorToolbarPages(
   val density = LocalDensity.current
   val hapticFeedback = LocalHapticFeedback.current
   val hazeState = LocalHazeState.current
+  val hoverInteractionSource = remember { MutableInteractionSource() }
+  val hovered by hoverInteractionSource.collectIsHoveredAsState()
   val secondaryToolbarTransition = remember { MutableTransitionState(false) }
   secondaryToolbarTransition.targetState = secondaryToolbarVisible
   val secondaryToolbarInLayout = secondaryToolbarVisible || !secondaryToolbarTransition.isIdle
@@ -418,7 +422,7 @@ internal fun EditorToolbarPages(
     }
 
     val indicatorHeldVisible =
-      pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning
+      hovered || pagerState.indicatorInteracting || pagerState.indicatorPageTransitioning
     LaunchedEffect(pagerState.indicatorPulse, indicatorHeldVisible) {
       if (pagerState.indicatorPulse == 0 && !indicatorHeldVisible) {
         pagerState.indicatorVisible = false
@@ -638,7 +642,8 @@ internal fun EditorToolbarPages(
                 .alpha(indicatorAlpha)
                 .then(
                   if (indicatorAlpha > 0.01f) {
-                    Modifier.toolbarIndicatorGestures(
+                    Modifier.hoverable(hoverInteractionSource)
+                      .toolbarIndicatorGestures(
                         pageCount = pageCount,
                         currentPageIndex = currentPageIndex,
                         onIndicatorProgress = { progress ->
@@ -701,6 +706,7 @@ internal fun EditorToolbarPages(
             modifier =
               Modifier.fillMaxWidth()
                 .height(ToolbarSecondaryHeight)
+                .hoverable(hoverInteractionSource)
                 .toolbarVerticalSwipeGestures(onSwipeDown = onSecondaryToolbarClear)
           ) {
             Box(
@@ -788,6 +794,7 @@ internal fun EditorToolbarPages(
                 .shadow(AppTheme.shadows.sm, ToolbarCapsuleShape)
                 .pressScale(ToolbarCapsulePressedScale)
                 .clip(ToolbarCapsuleShape)
+                .hoverable(hoverInteractionSource)
                 .hazeBlur(
                   input = HazeInput.Sources(hazeState),
                   style =
