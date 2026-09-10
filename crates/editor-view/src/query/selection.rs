@@ -1367,6 +1367,95 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_break_with_ruby_matches_base_line_geometry() {
+        use editor_model::{Anchor, Bias, Modifier, SpanOp};
+
+        let (mut doc, _root, first_para, second_para) = two_para_doc("abc", "def");
+        let (plain_pd, plain_index) = build_index(&doc, 400.0);
+        let plain_view = DocView::new(&plain_pd);
+        let plain_break = super::super::paragraph_break::paragraph_break_occurrence_for_node(
+            &plain_index,
+            &plain_view,
+            first_para,
+        )
+        .unwrap()
+        .geometry
+        .rect
+        .rect;
+
+        doc.spans = doc
+            .spans
+            .apply(
+                Dot::ROOT,
+                SpanOp::AddSpan {
+                    start: Anchor {
+                        id: Dot::new(11, 2),
+                        bias: Bias::Before,
+                    },
+                    end: Anchor {
+                        id: Dot::new(11, 4),
+                        bias: Bias::After,
+                    },
+                    modifier: Modifier::Ruby {
+                        text: "annotation".to_string(),
+                    },
+                },
+            )
+            .unwrap();
+        let (pd, index) = build_index(&doc, 400.0);
+        let view = DocView::new(&pd);
+        let (entry, line) = first_line_for_para(&index, &first_para).unwrap();
+        assert!(!line.ruby_annotations.is_empty());
+        assert!(entry.rect.height > plain_break.height);
+
+        let text = Selection::new(Position::new(first_para, 0), Position::new(first_para, 3));
+        let text_rect = selection_rects(&index, &text.resolve(&view).unwrap())[0].rect;
+        let paragraph_break = super::super::paragraph_break::paragraph_break_occurrence_for_node(
+            &index, &view, first_para,
+        )
+        .unwrap();
+        let break_rect = paragraph_break.geometry.rect.rect;
+        assert_close(
+            break_rect.y,
+            text_rect.y,
+            "paragraph break top matches base text",
+        );
+        assert_close(
+            break_rect.height,
+            text_rect.height,
+            "paragraph break height matches base text",
+        );
+        assert_close(
+            break_rect.height,
+            plain_break.height,
+            "ruby preserves paragraph break height",
+        );
+        assert_close(
+            break_rect.width,
+            plain_break.width,
+            "ruby preserves paragraph break width",
+        );
+
+        let selection = Selection::new(Position::new(first_para, 0), Position::new(second_para, 1));
+        for direct_touch in [false, true] {
+            let rects =
+                selection_rect_sets(&index, &selection.resolve(&view).unwrap(), direct_touch);
+            assert_eq!(
+                rects.line_box_rects.len(),
+                2,
+                "ruby text and paragraph break share a rect"
+            );
+            assert_eq!(rects.mark_rects.len(), 2);
+            assert_close(rects.mark_rects[0].rect.y, text_rect.y, "merged mark top");
+            assert_close(
+                rects.mark_rects[0].rect.height,
+                text_rect.height,
+                "merged mark height",
+            );
+        }
+    }
+
+    #[test]
     fn direct_touch_extends_only_active_paragraph_break_presentation_to_line_end() {
         let (doc, _root, first_para, _second_para) = two_para_doc("abc", "def");
         let (pd, index) = build_index(&doc, 400.0);
