@@ -1,9 +1,11 @@
 // spell-checker:words HWPTAG Hwpunit
+import { fitImageSize } from '@typie/lib/image';
 import { mapFormat } from '../../core/assets.ts';
 import { buildSectionDef, makeInlineObjectParagraph } from '../paragraph.ts';
 import { allocate, ctrlId, HWPTAG, makeRecord, pxToHwpunit } from '../records.ts';
 import { resolveParaShape } from '../styles.ts';
-import { convertPlaceholderNodeV2 } from './blocks.ts';
+import { convertPlaceholderNodeV2, FOLD_CELL_MARGINS } from './blocks.ts';
+import { TABLE_CELL_MARGINS } from './table.ts';
 import type { ImageV2 } from '../../core/v2/types.ts';
 import type { HwpConvertContext } from '../types.ts';
 
@@ -120,8 +122,24 @@ export function imageToRecordsV2(n: ImageV2, ctx: HwpConvertContext, isFirst: bo
   }
 
   const contentWidthPx = ctx.pageLayout.pageWidth - ctx.pageLayout.pageMarginLeft - ctx.pageLayout.pageMarginRight;
-  const displayWidthPx = contentWidthPx * Math.min(n.proportion, 1);
-  const displayHeightPx = displayWidthPx * (asset.height / asset.width);
+  const { width: displayWidthPx, height: displayHeightPx } = fitImageSize({
+    width: asset.width,
+    height: asset.height,
+    maxWidth: contentWidthPx,
+    proportion: n.proportion,
+    // Reserve the same vertical padding as the enclosing exported cells.
+    maxHeight: Math.max(
+      1,
+      n.ancestors.reduce(
+        (height, { node }) => {
+          if (node.type === 'table_cell') return height - (TABLE_CELL_MARGINS.top + TABLE_CELL_MARGINS.bottom) / 75;
+          if (node.type === 'fold_content') return height - (FOLD_CELL_MARGINS.top + FOLD_CELL_MARGINS.bottom) / 75;
+          return height;
+        },
+        ctx.pageLayout.pageHeight - ctx.pageLayout.pageMarginTop - ctx.pageLayout.pageMarginBottom,
+      ),
+    ),
+  });
 
   const origWidth = pxToHwpunit(asset.width);
   const origHeight = pxToHwpunit(asset.height);

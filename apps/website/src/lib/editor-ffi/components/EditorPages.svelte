@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DocumentEmbeds from './DocumentEmbeds.svelte';
+  import DocumentExternalElements from './DocumentExternalElements.svelte';
   import Page from './Page.svelte';
   import type { Editor } from '../editor.svelte';
   import type { EditorSurfaceHost } from '../editor-surface-host.svelte';
@@ -23,5 +23,5 @@
     {/key}
   {/if}
 
-  <DocumentEmbeds {editor} />
+  <DocumentExternalElements {editor} />
 {/key}

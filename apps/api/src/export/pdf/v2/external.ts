@@ -5,7 +5,7 @@ export function mapExternalElement(e: EngineExternalElement): ExternalElement {
   const d = e.data;
   const data =
     d.type === 'image'
-      ? { type: 'image' as const, id: d.id ?? undefined, proportion: d.proportion / 100 }
+      ? { type: 'image' as const, id: d.id ?? undefined, proportion: d.proportion / 100, maxHeight: d.max_height }
       : d.type === 'file'
         ? { type: 'file' as const, id: d.id ?? undefined }
         : d.type === 'embed'

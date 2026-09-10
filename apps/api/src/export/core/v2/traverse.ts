@@ -17,14 +17,17 @@ export function traverseV2<TCtx, TOut>(
 ): TOut[] {
   const defaults = parsed.defaults;
   let listDepth = 0;
+  const ancestors: PlainNodeEntry[] = [];
   return convertChildren(parsed.root);
 
   function convertChildren(e: PlainNodeEntry): TOut[] {
+    ancestors.push(e);
     const out: TOut[] = [];
     for (const child of e.children) {
       const r = convertNode(child);
       if (r !== undefined) out.push(r);
     }
+    ancestors.pop();
     return out;
   }
   function parseParagraph(e: PlainNodeEntry): ParagraphV2 {
@@ -91,7 +94,7 @@ export function traverseV2<TCtx, TOut>(
         const imgId = e.node.id ?? undefined;
         const asset = imgId ? parsed.images.get(imgId) : undefined;
         if (!imgId || !asset) return undefined;
-        return v.image({ id: imgId, proportion: (e.node.proportion ?? 100) / 100, asset }, ctx);
+        return v.image({ id: imgId, proportion: (e.node.proportion ?? 100) / 100, asset, ancestors: [...ancestors] }, ctx);
       }
       case 'file': {
         return e.node.id ? v.file({ id: e.node.id }, ctx) : undefined;

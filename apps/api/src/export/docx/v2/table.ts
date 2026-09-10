@@ -4,6 +4,8 @@ import type { IBorderOptions, ITableBordersOptions } from 'docx';
 import type { TableV2 } from '../../core/v2/types.ts';
 import type { FileChild } from '../blocks.ts';
 
+export const TABLE_CELL_MARGINS = { top: 40, bottom: 40, left: 80, right: 80 };
+
 function mapBorderStyle(style: string): IBorderOptions {
   switch (style) {
     case 'dashed': {
@@ -41,7 +43,7 @@ export function convertTableV2(t: TableV2<FileChild[]>): Table {
               children: toBlockChildren(cell.children.flat()),
               width: cell.colWidth ? { size: cell.colWidth, type: WidthType.DXA } : undefined,
               shading: cell.backgroundColorHex ? { fill: cell.backgroundColorHex, type: ShadingType.CLEAR } : undefined,
-              margins: { top: 40, bottom: 40, left: 80, right: 80 },
+              margins: TABLE_CELL_MARGINS,
             }),
         ),
       }),

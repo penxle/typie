@@ -14,6 +14,8 @@ import type { Alignment } from '@typie/editor-ffi/server';
 import type { IParagraphOptions } from 'docx';
 import type { DocDefaults, FileChild } from '../blocks.ts';
 
+export const FOLD_CELL_MARGINS = { top: 80, bottom: 80, left: 120, right: 120 };
+
 export function buildParagraphV2(
   align: Alignment,
   lineHeight: number,
@@ -63,7 +65,7 @@ export function buildFoldV2(titleChildren: IParagraphOptions['children'], conten
             children: [titleParagraph],
             shading: { fill: 'F3F4F9', type: ShadingType.CLEAR },
             borders: { top: SUBTLE_BORDER, bottom: SUBTLE_BORDER, left: SUBTLE_BORDER, right: SUBTLE_BORDER },
-            margins: { top: 80, bottom: 80, left: 120, right: 120 },
+            margins: FOLD_CELL_MARGINS,
           }),
         ],
       }),
@@ -72,7 +74,7 @@ export function buildFoldV2(titleChildren: IParagraphOptions['children'], conten
           new TableCell({
             children: toBlockChildren(content),
             borders: { top: NO_BORDER, bottom: SUBTLE_BORDER, left: SUBTLE_BORDER, right: SUBTLE_BORDER },
-            margins: { top: 80, bottom: 80, left: 120, right: 120 },
+            margins: FOLD_CELL_MARGINS,
           }),
         ],
       }),

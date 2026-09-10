@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,7 +46,7 @@ internal fun EditorExternalElementOverlay(
 
   Box(modifier.fillMaxSize()) {
     for (element in elements) {
-      EditorExternalElement(element = element, displayZoom = displayZoom)
+      key(element.node) { EditorExternalElement(element = element, displayZoom = displayZoom) }
     }
   }
 }
@@ -56,6 +58,11 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   }
 
   val editor = LocalEditorRuntime.current.editor ?: return
+  val imageState = LocalEditorExternalElementState.current.images
+  val imageSize =
+    (element.data as? ExternalElementData.Image)?.let {
+      imageState.displaySize(element.node, it, element.bounds.width)
+    }
   val uiState = LocalEditorUiState.current
   val density = LocalDensity.current
   val zoom = if (displayZoom.isFinite() && displayZoom > 0f) displayZoom else 1f
@@ -69,6 +76,19 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
     remember(themeVariant) { EditorTheme.resolve(themeVariant).colors.getValue("selection") }
   val selectionAlpha = if (uiState.focused) SELECTION_FOCUSED_ALPHA else SELECTION_UNFOCUSED_ALPHA
 
+  fun reportHeight(height: Float) {
+    if (height <= 0f || !height.isFinite()) return
+    val unchanged =
+      if (imageSize != null) reportedHeight == height else abs(reportedHeight - height) < 0.5f
+    if (unchanged) return
+    reportedHeight = height
+    editor.runCallback {
+      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
+    }
+  }
+
+  LaunchedEffect(imageSize?.height) { imageSize?.height?.let(::reportHeight) }
+
   Box(
     Modifier.offset {
         IntOffset(
@@ -79,27 +99,15 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
       .width((element.bounds.width * zoom).dp)
       .graphicsLayer { alpha = if (reportedHeight.isNaN()) 0f else 1f }
       .onSizeChanged { size ->
-        val height = size.height.toFloat() / density.density / zoom
-        if (height <= 0f || !height.isFinite()) {
-          return@onSizeChanged
-        }
-        if (!reportedHeight.isNaN() && abs(reportedHeight - height) < 0.5f) {
-          return@onSizeChanged
-        }
-        reportedHeight = height
-        editor.runCallback {
-          editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
+        if (imageSize == null) {
+          reportHeight(size.height.toFloat() / density.density / zoom)
         }
       }
   ) {
     context(renderScope) {
       when (val data = element.data) {
         is ExternalElementData.Image ->
-          EditorImageExternalElement(
-            data = data,
-            nodeId = element.node,
-            boundsWidth = element.bounds.width,
-          )
+          EditorImageExternalElement(data = data, nodeId = element.node, size = imageSize)
         is ExternalElementData.File -> EditorFileExternalElement(data = data, nodeId = element.node)
         is ExternalElementData.Embed ->
           EditorEmbedExternalElement(data = data, nodeId = element.node)

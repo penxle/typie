@@ -1739,8 +1739,12 @@ describe('web editor frame synchronization', () => {
     expect(document.querySelector('[aria-label="이미지 확대 보기"]')).toBeNull();
     expect(document.querySelector('[aria-label="이미지 삭제"]')).toBeNull();
     const minimumHandles = [...document.querySelectorAll<HTMLElement>('[aria-label="이미지 크기 조절"]')];
-    expect(minimumHandles).toHaveLength(2);
+    expect(minimumHandles).toHaveLength(1);
     expect(minimumHandles[0]?.getBoundingClientRect().height).toBeCloseTo(24, 0);
+    expect(minimumHandles[0]?.getBoundingClientRect().right).toBeCloseTo(image.getBoundingClientRect().right, 0);
+
+    await setDisplayZoom(editor, 1);
+    expect(document.querySelectorAll('[aria-label="이미지 크기 조절"]')).toHaveLength(2);
   });
 
   it('keeps uploading image status accessible while its spinner fits available space', async () => {

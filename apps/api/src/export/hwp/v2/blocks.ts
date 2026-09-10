@@ -12,6 +12,8 @@ import type { HwpConvertContext, InlineSegment } from '../types.ts';
 
 type TableOpts = { tableWidthRatio?: number; tableAlign?: string };
 
+export const FOLD_CELL_MARGINS = { left: 1200, right: 1200, top: 800, bottom: 800 };
+
 function makeSingleCellTableV2(
   cellRecords: Uint8Array[],
   ctx: HwpConvertContext,
@@ -197,10 +199,7 @@ export function foldToRecordsV2(title: Run[], content: Uint8Array[][], ctx: HwpC
 
   return [
     ...makeInlineObjectParagraph(ctx, 0, 'tbl ', { sectionRecords }),
-    ...makeTableRecords(rows, 2, 1, tableWidth, emptyBfId, emptyBfId, instanceId, { left: 1200, right: 1200, top: 800, bottom: 800 }, [
-      titleBfId,
-      contentBfId,
-    ]),
+    ...makeTableRecords(rows, 2, 1, tableWidth, emptyBfId, emptyBfId, instanceId, FOLD_CELL_MARGINS, [titleBfId, contentBfId]),
   ];
 }
 

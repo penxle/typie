@@ -1,72 +1,50 @@
 package co.typie.editor.external
 
+import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.ExternalElementData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class EditorImageResizePolicyTest {
   @Test
-  fun width_bounds_cap_max_at_original_image_width() {
-    val bounds = imageResizeWidthBounds(boundsWidth = 800f, originalWidth = 320f)
-
-    assertEquals(100f, bounds.min)
-    assertEquals(320f, bounds.max)
+  fun proportion_scales_the_size_fitted_to_a_full_page() {
+    val maxSize = imageResizeMaxSize(600f, 600f, 0.2f, 800f)
+    assertEquals(Size(160f, 800f), maxSize)
+    assertEquals(Size(80f, 400f), imageResizeSize(50f, maxSize))
+    assertEquals(Size(16f, 80f), imageResizeSize(10f, maxSize))
+    assertEquals(Size(600f, 3000f), imageResizeMaxSize(600f, 600f, 0.2f, null))
   }
 
   @Test
-  fun width_bounds_min_uses_larger_of_ten_percent_and_minimum_width() {
-    val wide = imageResizeWidthBounds(boundsWidth = 1600f, originalWidth = 2000f)
-    val narrow = imageResizeWidthBounds(boundsWidth = 600f, originalWidth = 2000f)
-
-    assertEquals(160f, wide.min)
-    assertEquals(100f, narrow.min)
+  fun very_narrow_images_can_shrink_to_ten_percent() {
+    val maxSize = imageResizeMaxSize(600f, 600f, 0.03f, 800f)
+    assertEquals(Size(24f, 800f), maxSize)
+    val minimum = imageResizeSize(10f, maxSize)
+    assertEquals(2.4f, minimum.width, 0.00001f)
+    assertEquals(80f, minimum.height)
+    assertEquals(minimum, imageResizeSize(0f, maxSize))
+    assertEquals(maxSize, imageResizeSize(200f, maxSize))
   }
 
   @Test
-  fun width_bounds_min_never_exceeds_max_width() {
-    val bounds = imageResizeWidthBounds(boundsWidth = 800f, originalWidth = 64f)
-
-    assertEquals(64f, bounds.min)
-    assertEquals(64f, bounds.max)
+  fun original_size_and_container_width_bound_the_reference_size() {
+    val smallOriginal = imageResizeMaxSize(800f, 320f, 2f, null)
+    val narrowContainer = imageResizeMaxSize(200f, 320f, 2f, null)
+    assertEquals(Size(320f, 160f), smallOriginal)
+    assertEquals(Size(160f, 80f), imageResizeSize(50f, smallOriginal))
+    assertEquals(Size(200f, 100f), narrowContainer)
+    assertEquals(Size(100f, 50f), imageResizeSize(50f, narrowContainer))
   }
 
   @Test
-  fun proportion_range_is_derived_from_width_bounds() {
-    val range = imageResizeProportionRange(boundsWidth = 800f, originalWidth = 320f)
-
-    assertEquals(13..40, range)
-  }
-
-  @Test
-  fun proportion_for_width_rounds_to_nearest_percent() {
-    assertEquals(38, imageResizeProportionForWidth(width = 300.8f, boundsWidth = 800f))
-  }
-
-  @Test
-  fun display_percent_treats_original_width_as_hundred_percent() {
-    assertEquals(
-      100,
-      imageResizeDisplayPercent(proportion = 40f, boundsWidth = 800f, originalWidth = 320f),
-    )
-  }
-
-  @Test
-  fun display_percent_matches_bounds_proportion_when_original_is_larger() {
-    assertEquals(
-      50,
-      imageResizeDisplayPercent(proportion = 50f, boundsWidth = 800f, originalWidth = 1200f),
-    )
-  }
-
-  @Test
-  fun final_height_uses_the_same_original_width_cap_as_the_display() {
-    assertEquals(
-      160f,
-      imageResizeHeightForProportion(
-        proportion = 40f,
-        boundsWidth = 800f,
-        originalWidth = 320f,
-        imageRatio = 2f,
-      ),
-    )
+  fun resize_draft_keeps_its_reference_size_until_commit() {
+    val state = EditorExternalImageElementState()
+    state.assets["asset"] = EditorImageAsset("asset", "", "", 600, 3000, 0.2, null)
+    val image = ExternalElementData.Image(id = "asset", proportion = 100, maxHeight = 800f)
+    val maxSize = imageResizeMaxSize(600f, 600f, 0.2f, 800f)
+    state.resizeDrafts["image"] = EditorImageResizeDraft(50f, maxSize)
+    assertEquals(Size(80f, 400f), state.displaySize("image", image, 100f))
+    state.clearResizeState("image")
+    assertEquals(Size(100f, 500f), state.displaySize("image", image, 100f))
   }
 }

@@ -30,7 +30,9 @@
   const pagePresented = $derived(editor.published?.frames.has(page) === true);
   const externalElements = $derived.by(() => {
     void editor.publishedRevision;
-    return pagePresented ? editor.pageExternalElements(page).filter((element) => element.data.type !== 'embed') : [];
+    return pagePresented
+      ? editor.pageExternalElements(page).filter((element) => element.data.type !== 'embed' && element.data.type !== 'image')
+      : [];
   });
   const tableOverlays = $derived.by(() => {
     void editor.publishedRevision;

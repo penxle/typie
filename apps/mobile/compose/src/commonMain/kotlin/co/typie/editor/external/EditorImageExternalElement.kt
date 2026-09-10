@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import co.typie.editor.ffi.ExternalElementData
@@ -25,7 +26,7 @@ context(scope: EditorExternalElementRenderScope)
 internal fun EditorImageExternalElement(
   data: ExternalElementData.Image,
   nodeId: String,
-  boundsWidth: Float,
+  size: Size?,
 ) {
   val externalElementState = LocalEditorExternalElementState.current
   val imageState = externalElementState.images
@@ -39,37 +40,21 @@ internal fun EditorImageExternalElement(
       (resolution == EditorAssetResolution.RetryableFailure ||
         resolution == EditorAssetResolution.Unavailable)
   val resolvingAsset = missingAsset && !unavailableAsset
-  val ratio = asset?.ratio ?: upload?.ratio
 
   if (!hasImage) {
     ImagePlaceholder(resolvingAsset = resolvingAsset, unavailableAsset = unavailableAsset)
     return
   }
 
-  val imageRatio = ratio ?: return
-  if (boundsWidth <= 0f || imageRatio <= 0.0) {
-    return
-  }
-
-  val originalWidth = (asset?.width ?: upload?.width ?: 0).toFloat()
-  val nodeProportion = data.proportion.coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
-  val draft = imageState.resizeDrafts[nodeId]
-  val displayProportion = draft?.proportion ?: nodeProportion.toFloat()
-  val displayWidth =
-    imageResizeWidthForProportion(
-      proportion = displayProportion,
-      boundsWidth = draft?.boundsWidth ?: boundsWidth,
-      originalWidth = draft?.originalWidth ?: originalWidth,
-    )
-  val displayHeight = displayWidth / imageRatio.toFloat()
+  if (size == null) return
   val imageShape = AppShapes.rounded(scope.scaledDp(4f))
 
-  Box(modifier = Modifier.fillMaxWidth().height(scope.scaledDp(displayHeight))) {
+  Box(modifier = Modifier.fillMaxWidth().height(scope.scaledDp(size.height))) {
     Box(
       modifier =
         Modifier.align(Alignment.TopCenter)
-          .width(scope.scaledDp(displayWidth))
-          .height(scope.scaledDp(displayHeight))
+          .width(scope.scaledDp(size.width))
+          .height(scope.scaledDp(size.height))
           .clip(imageShape)
     ) {
       when {

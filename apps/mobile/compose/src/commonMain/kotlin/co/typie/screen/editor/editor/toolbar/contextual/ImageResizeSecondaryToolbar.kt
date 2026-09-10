@@ -25,9 +25,8 @@ import co.typie.editor.external.EditorImageResizeDraft
 import co.typie.editor.external.IMAGE_MAX_PROPORTION
 import co.typie.editor.external.IMAGE_MIN_PROPORTION
 import co.typie.editor.external.LocalEditorExternalElementState
-import co.typie.editor.external.imageResizeDisplayPercent
-import co.typie.editor.external.imageResizeHeightForProportion
-import co.typie.editor.external.imageResizeProportionRange
+import co.typie.editor.external.imageResizeMaxSize
+import co.typie.editor.external.imageResizeSize
 import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.ImageNodeAttr
@@ -83,39 +82,36 @@ internal fun ImageResizeSecondaryToolbar(
     return
   }
 
-  val originalWidth = asset.width.toFloat()
-  val publishedRange =
-    imageResizeProportionRange(boundsWidth = boundsWidth, originalWidth = originalWidth)
+  val maxSize = imageResizeMaxSize(boundsWidth, asset.width.toFloat(), imageRatio, image.maxHeight)
   val nodeProportion = image.proportion.coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
   var publicationWaitJob by remember(nodeId) { mutableStateOf<Job?>(null) }
   val draft = imageState.resizeDrafts[nodeId]
-  val range =
-    draft?.let {
-      imageResizeProportionRange(boundsWidth = it.boundsWidth, originalWidth = it.originalWidth)
-    } ?: publishedRange
   val currentProportion =
     (draft?.proportion ?: nodeProportion.toFloat()).coerceIn(
-      range.first.toFloat(),
-      range.last.toFloat(),
+      IMAGE_MIN_PROPORTION.toFloat(),
+      IMAGE_MAX_PROPORTION.toFloat(),
     )
-  val currentPercent =
-    imageResizeDisplayPercent(
-      currentProportion,
-      draft?.boundsWidth ?: boundsWidth,
-      draft?.originalWidth ?: originalWidth,
-    )
+
+  fun clearDraft() {
+    if (imageState.resizeDrafts.remove(nodeId) == null) return
+    editor.runCallback {
+      val currentElement =
+        editor.appliedState.externalElements.firstOrNull { it.node == nodeId } ?: return@runCallback
+      val currentImage = currentElement.data as? ExternalElementData.Image ?: return@runCallback
+      val height =
+        imageState.displaySize(nodeId, currentImage, currentElement.bounds.width)?.height
+          ?: return@runCallback
+      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, height)))
+    }
+  }
 
   DisposableEffect(editor, nodeId) {
     onDispose {
       val previousWait = publicationWaitJob
       publicationWaitJob = null
       previousWait?.cancel()
-      imageState.clearResizeState(nodeId)
+      clearDraft()
     }
-  }
-
-  fun clearDraft() {
-    imageState.clearResizeState(nodeId)
   }
 
   fun beginDraft(value: Float) {
@@ -124,55 +120,34 @@ internal fun ImageResizeSecondaryToolbar(
     previousWait?.cancel()
     imageState.resizeDrafts[nodeId] =
       EditorImageResizeDraft(
-        proportion = value.coerceIn(publishedRange.first.toFloat(), publishedRange.last.toFloat()),
-        boundsWidth = boundsWidth,
-        originalWidth = originalWidth,
+        proportion = value.coerceIn(IMAGE_MIN_PROPORTION.toFloat(), IMAGE_MAX_PROPORTION.toFloat()),
+        maxSize = maxSize,
       )
   }
 
   fun updateDraft(value: Float) {
     val currentDraft =
       imageState.resizeDrafts[nodeId]
-        ?: EditorImageResizeDraft(
-          proportion = value,
-          boundsWidth = boundsWidth,
-          originalWidth = originalWidth,
-        )
-    val stableRange =
-      imageResizeProportionRange(
-        boundsWidth = currentDraft.boundsWidth,
-        originalWidth = currentDraft.originalWidth,
-      )
-    val next = value.coerceIn(stableRange.first.toFloat(), stableRange.last.toFloat())
+        ?: EditorImageResizeDraft(proportion = value, maxSize = maxSize)
+    val next = value.coerceIn(IMAGE_MIN_PROPORTION.toFloat(), IMAGE_MAX_PROPORTION.toFloat())
     imageState.resizeDrafts[nodeId] = currentDraft.copy(proportion = next)
+    editor.runCallback {
+      val height = imageResizeSize(next, currentDraft.maxSize).height
+      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, height)))
+    }
   }
 
   fun commit(value: Float) {
     val stableDraft = imageState.resizeDrafts[nodeId]
-    val stableRange =
-      stableDraft?.let {
-        imageResizeProportionRange(boundsWidth = it.boundsWidth, originalWidth = it.originalWidth)
-      } ?: publishedRange
-    val next = value.roundToInt().coerceIn(stableRange.first, stableRange.last)
+    val next = value.roundToInt().coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
     if (next == nodeProportion) {
       clearDraft()
       return
     }
-    val stableBoundsWidth = stableDraft?.boundsWidth ?: boundsWidth
-    val stableOriginalWidth = stableDraft?.originalWidth ?: originalWidth
-    val finalHeight =
-      imageResizeHeightForProportion(
-        proportion = next.toFloat(),
-        boundsWidth = stableBoundsWidth,
-        originalWidth = stableOriginalWidth,
-        imageRatio = imageRatio,
-      )
+    val stableMaxSize = stableDraft?.maxSize ?: maxSize
+    val finalHeight = imageResizeSize(next.toFloat(), stableMaxSize).height
     imageState.resizeDrafts[nodeId] =
-      EditorImageResizeDraft(
-        proportion = next.toFloat(),
-        boundsWidth = stableBoundsWidth,
-        originalWidth = stableOriginalWidth,
-      )
+      EditorImageResizeDraft(proportion = next.toFloat(), maxSize = stableMaxSize)
     val update = editor.runCallback {
       editor.updateNow {
         enqueue(
@@ -215,7 +190,7 @@ internal fun ImageResizeSecondaryToolbar(
   ImageResizeSecondaryToolbarSurface(onClose = onClose, modifier = modifier) {
     Slider(
       value = currentProportion,
-      range = range.first.toFloat()..range.last.toFloat(),
+      range = IMAGE_MIN_PROPORTION.toFloat()..IMAGE_MAX_PROPORTION.toFloat(),
       onDragStart = ::beginDraft,
       onDrag = ::updateDraft,
       onDragEnd = ::commit,
@@ -226,7 +201,7 @@ internal fun ImageResizeSecondaryToolbar(
       modifier = Modifier.weight(1f).height(30.dp),
     )
     Text(
-      text = "$currentPercent%",
+      text = "${currentProportion.roundToInt()}%",
       modifier = Modifier.width(48.dp),
       style = ToolbarLabelTextStyle,
       color = AppTheme.colors.textDefault,
