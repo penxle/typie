@@ -452,6 +452,62 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
+  fun `pinch overzoom stays unchanged across page geometry updates while fingers stay still`() {
+    for (distancePx in listOf(5f, 250f)) {
+      val fixture = Fixture()
+      val start = EditorPinchSample(focalInRootPx = Offset(80f, 150f), distancePx = 100f)
+      val sample = start.copy(distancePx = distancePx)
+      assertTrue(fixture.semantic.beginPinch(start))
+      assertTrue(fixture.semantic.updatePinch(sample))
+      val overzoom = fixture.zoomController.displayZoom
+
+      repeat(2) { index ->
+        fixture.updatePresentation(
+          pageSizes = listOf(PageSize(width = 720f, height = 970f + index * 10f)),
+          pageOffsets = mapOf(0 to Offset.Zero),
+          displayZoom = fixture.zoomController.displayZoom,
+        )
+
+        assertTrue(fixture.semantic.updatePinch(sample))
+
+        assertEquals(overzoom, fixture.zoomController.displayZoom, 0.0001f)
+        assertTrue(fixture.viewportState.isTransforming)
+      }
+    }
+  }
+
+  @Test
+  fun `indirect overzoom stays cumulative across page geometry updates`() {
+    for (scaleFactor in listOf(0.05f, 2.5f)) {
+      val fixture = Fixture()
+      val uninterrupted = Fixture()
+      val focal = Offset(80f, 150f)
+      for (current in listOf(fixture, uninterrupted)) {
+        assertTrue(current.semantic.beginIndirect())
+        assertTrue(current.semantic.updateIndirectScale(focal, scaleFactor))
+      }
+
+      repeat(2) { index ->
+        fixture.updatePresentation(
+          pageSizes = listOf(PageSize(width = 720f, height = 970f + index * 10f)),
+          pageOffsets = mapOf(0 to Offset.Zero),
+          displayZoom = fixture.zoomController.displayZoom,
+        )
+
+        assertTrue(fixture.semantic.updateIndirectScale(focal, 0.99f))
+        assertTrue(uninterrupted.semantic.updateIndirectScale(focal, 0.99f))
+
+        assertEquals(
+          uninterrupted.zoomController.displayZoom,
+          fixture.zoomController.displayZoom,
+          0.0001f,
+        )
+        assertTrue(fixture.viewportState.isTransforming)
+      }
+    }
+  }
+
+  @Test
   fun `pinch samples resolve an absolute target from a root-stable focal`() {
     val fixture =
       Fixture(

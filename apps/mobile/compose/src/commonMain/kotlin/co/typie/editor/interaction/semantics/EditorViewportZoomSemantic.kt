@@ -165,7 +165,11 @@ internal class EditorViewportZoomSemantic(
         ?: currentConfig.createIndirectSession(focalInRootPx, timestampMillis)
         ?: return false
     if (currentConfig.pageSizes !== session.pageSizes) {
-      session = currentConfig.createIndirectSession(focalInRootPx, timestampMillis) ?: return false
+      session =
+        currentConfig
+          .createIndirectSession(focalInRootPx, timestampMillis)
+          ?.copy(rawZoom = session.rawZoom, lastTimestampMillis = session.lastTimestampMillis)
+          ?: return false
     }
 
     val rawZoom = session.rawZoom * scaleFactor
@@ -651,12 +655,12 @@ private fun EditorViewportZoomSemanticConfig.rebasePinchSession(
     anchor = anchor,
     startSample = session.lastSample,
     startScrollOffset = viewportState.effectiveTransformScrollTarget,
-    startRawZoom = displayZoom,
+    startRawZoom = session.rawZoom,
     startAnchorDisplayPosition = anchorDisplayPosition,
     startFocal = toRootDp(session.lastSample.focalInRootPx),
     pageSizes = pageSizes,
     lastSample = session.lastSample,
-    rawZoom = displayZoom,
+    rawZoom = session.rawZoom,
   )
 }
 
