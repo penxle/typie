@@ -34,14 +34,14 @@ fn dnd_position(
             layout_index.entry_is_in_scope(entry, scope) && !std::ptr::eq(entry, scope)
         };
         let in_scope = |entry: &LayoutEntry| layout_index.entry_is_in_scope(entry, scope);
-        exact_dnd_position(layout_index, view, point, &in_scope_descendant)
-            .or_else(|| exact_dnd_position(layout_index, view, point, &in_scope))
-            .or_else(|| closest_dnd_position(layout_index, view, point, &in_scope_descendant))
-            .or_else(|| closest_dnd_position(layout_index, view, point, &in_scope))
+        exact_dnd_position(layout_index, point, &in_scope_descendant)
+            .or_else(|| exact_dnd_position(layout_index, point, &in_scope))
+            .or_else(|| closest_dnd_position(layout_index, point, &in_scope_descendant))
+            .or_else(|| closest_dnd_position(layout_index, point, &in_scope))
     } else {
         let all_entries = |_: &LayoutEntry| true;
-        exact_dnd_position(layout_index, view, point, &all_entries)
-            .or_else(|| closest_dnd_position(layout_index, view, point, &all_entries))
+        exact_dnd_position(layout_index, point, &all_entries)
+            .or_else(|| closest_dnd_position(layout_index, point, &all_entries))
     }?;
 
     position.resolve(view).is_some().then_some(position)
@@ -49,7 +49,6 @@ fn dnd_position(
 
 fn exact_dnd_position(
     layout_index: &LayoutIndex,
-    view: &DocView,
     point: LayoutPoint,
     include: &impl Fn(&LayoutEntry) -> bool,
 ) -> Option<Position> {
@@ -58,14 +57,13 @@ fn exact_dnd_position(
             if !include(entry) {
                 return None;
             }
-            dnd_position_for_candidate(layout_index, view, entry, node, point)
+            dnd_position_for_candidate(layout_index, entry, node, point)
         })
         .map(|(_, position)| position)
 }
 
 fn closest_dnd_position(
     layout_index: &LayoutIndex,
-    view: &DocView,
     point: LayoutPoint,
     include: &impl Fn(&LayoutEntry) -> bool,
 ) -> Option<Position> {
@@ -74,20 +72,19 @@ fn closest_dnd_position(
             if !include(entry) {
                 return None;
             }
-            dnd_position_for_candidate(layout_index, view, entry, node, point)
+            dnd_position_for_candidate(layout_index, entry, node, point)
         })
         .map(|(_, position)| position)
 }
 
 fn dnd_position_for_candidate(
     layout_index: &LayoutIndex,
-    view: &DocView,
     entry: &LayoutEntry,
     node: &crate::paginate::types::LayoutNode,
     point: LayoutPoint,
 ) -> Option<Position> {
     is_dnd_entry(entry, node)
-        .then(|| dnd_position_for_entry(layout_index, view, entry, point))
+        .then(|| dnd_position_for_entry(layout_index, entry, point))
         .flatten()
 }
 
@@ -103,7 +100,6 @@ fn is_dnd_entry(_entry: &LayoutEntry, node: &crate::paginate::types::LayoutNode)
 
 fn dnd_position_for_entry(
     layout_index: &LayoutIndex,
-    view: &DocView,
     entry: &LayoutEntry,
     point: LayoutPoint,
 ) -> Option<Position> {
@@ -113,7 +109,7 @@ fn dnd_position_for_entry(
             atom.attachment.parent,
             atom.attachment.index + 1,
         )),
-        LayoutContent::Box(b) => box_edge_position(layout_index, view, b, point),
+        LayoutContent::Box(b) => box_edge_position(layout_index, b, point),
         LayoutContent::Spacing(SpacingKind::Gap { position }) => Some(*position),
         LayoutContent::Spacing(SpacingKind::Fill) => None,
     }
@@ -131,7 +127,6 @@ struct DropChild {
 
 fn box_edge_position(
     layout_index: &LayoutIndex,
-    view: &DocView,
     b: &crate::paginate::types::LayoutBox,
     point: LayoutPoint,
 ) -> Option<Position> {
@@ -143,7 +138,6 @@ fn box_edge_position(
     if point.y < page.content_y_start {
         let first = drop_children_in_y_range(
             layout_index,
-            view,
             &b.node,
             page.content_y_start,
             page.content_y_end,
@@ -155,7 +149,6 @@ fn box_edge_position(
     if point.y > page.content_y_end {
         let last = drop_children_in_y_range(
             layout_index,
-            view,
             &b.node,
             page.content_y_start,
             page.content_y_end,
@@ -165,7 +158,7 @@ fn box_edge_position(
         return Some(Position::new(b.node, last.offset + 1));
     }
 
-    let children = drop_children(layout_index, view, &b.node);
+    let children = drop_children(layout_index, &b.node);
     let first = children.first()?;
     if point.y < first.rect.y {
         return Some(Position::new(b.node, first.offset));
@@ -179,46 +172,35 @@ fn box_edge_position(
     None
 }
 
-fn drop_children(layout_index: &LayoutIndex, view: &DocView, parent: &Dot) -> Vec<DropChild> {
+fn drop_children(layout_index: &LayoutIndex, parent: &Dot) -> Vec<DropChild> {
     layout_index
         .direct_child_entries(parent)
-        .filter_map(|entry| drop_child(layout_index, view, parent, entry))
+        .filter_map(|entry| drop_child(layout_index, parent, entry))
         .collect()
 }
 
 fn drop_children_in_y_range(
     layout_index: &LayoutIndex,
-    view: &DocView,
     parent: &Dot,
     y_start: f32,
     y_end: f32,
 ) -> Vec<DropChild> {
     layout_index
         .direct_child_entries_in_y_range(parent, y_start, y_end)
-        .filter_map(|entry| drop_child(layout_index, view, parent, entry))
+        .filter_map(|entry| drop_child(layout_index, parent, entry))
         .collect()
 }
 
-fn drop_child(
-    layout_index: &LayoutIndex,
-    view: &DocView,
-    parent: &Dot,
-    entry: &LayoutEntry,
-) -> Option<DropChild> {
-    match entry.content(layout_index)? {
-        LayoutContent::Box(b) => {
-            let child_ref = view.node(b.node)?;
-            (child_ref.parent()?.id() == *parent).then(|| DropChild {
-                offset: child_ref.index().unwrap_or(0),
-                rect: entry.rect,
-            })
-        }
-        LayoutContent::Atom(atom) => (atom.attachment.parent == *parent).then_some(DropChild {
-            offset: atom.attachment.index,
-            rect: entry.rect,
-        }),
-        LayoutContent::Line(_) | LayoutContent::Spacing(_) => None,
-    }
+fn drop_child(layout_index: &LayoutIndex, parent: &Dot, entry: &LayoutEntry) -> Option<DropChild> {
+    let attachment = match entry.content(layout_index)? {
+        LayoutContent::Box(b) => b.attachment.as_ref()?,
+        LayoutContent::Atom(atom) => &atom.attachment,
+        LayoutContent::Line(_) | LayoutContent::Spacing(_) => return None,
+    };
+    (attachment.parent == *parent).then_some(DropChild {
+        offset: attachment.index,
+        rect: entry.rect,
+    })
 }
 
 fn promote_outer_edge_drop_position(
@@ -277,10 +259,7 @@ fn drop_indicator_from_position(
 
 fn block_drop_indicator(layout_index: &LayoutIndex, position: Position) -> Option<DropIndicator> {
     let node_rect = layout_index.box_rect(&position.node)?;
-    let children: Vec<_> = layout_index
-        .direct_child_entries(&position.node)
-        .filter(|entry| !matches!(entry.content(layout_index), Some(LayoutContent::Spacing(_))))
-        .collect();
+    let children = drop_children(layout_index, &position.node);
     let (x, width) = children
         .first()
         .map(|child| (child.rect.x, child.rect.width))
@@ -329,6 +308,7 @@ mod tests {
     use crate::paginate::paginator::Paginator;
     use crate::paginate::types::LayoutContent;
     use crate::query::grapheme;
+    use crate::view_state::GapPhantom;
 
     use super::*;
 
@@ -610,6 +590,94 @@ mod tests {
             "cell padding drop should be a block boundary, got {:?}",
             bottom_indicator
         );
+    }
+
+    #[test]
+    fn drop_after_gap_phantom_keeps_document_child_offset() {
+        for ancestors in [
+            vec![],
+            vec![NodeType::Table, NodeType::TableRow, NodeType::TableCell],
+        ] {
+            let mut parents = vec![Dot::ROOT];
+            let mut items = Vec::new();
+            for node_type in ancestors {
+                let id = Dot::new(19, parents.len() as u64);
+                items.push((
+                    id,
+                    SeqItem::Block {
+                        node_type,
+                        parents: parents.clone(),
+                        attrs: vec![],
+                    },
+                ));
+                parents.push(id);
+            }
+            let container = *parents.last().unwrap();
+            let Node::Image(image) = NodeType::Image.into_node() else {
+                unreachable!()
+            };
+            let paragraph = Dot::new(19, 11);
+            items.extend([
+                (
+                    Dot::new(19, 10),
+                    SeqItem::BlockAtom {
+                        leaf: AtomLeaf::Image { node: image },
+                        parents: parents.clone(),
+                    },
+                ),
+                (
+                    paragraph,
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents,
+                        attrs: vec![],
+                    },
+                ),
+                (Dot::new(19, 12), SeqItem::Char('x')),
+            ]);
+            let pd = project_document(&logs(&items)).unwrap();
+            let view = DocView::new(&pd);
+            for paginator in [
+                Paginator::continuous(400.0, 100_000.0, EdgeInsets::ZERO),
+                Paginator::paginated(400.0, 800.0, EdgeInsets::ZERO),
+            ] {
+                let measured = measure_node(
+                    &mut crate::measure::Measurer::new(),
+                    &view.root().unwrap(),
+                    400.0,
+                    &MeasureContext {
+                        gap_phantom: Some(GapPhantom {
+                            parent: container,
+                            index: 0,
+                        }),
+                        ..Default::default()
+                    },
+                    &mut Resource::new_test(),
+                );
+                let layout = paginator.paginate(MeasuredTree { root: measured });
+                let index = LayoutIndex::new(layout.tree, &layout.pages);
+                let children = drop_children(&index, &container);
+                assert_eq!(
+                    children
+                        .iter()
+                        .map(|child| child.offset)
+                        .collect::<Vec<_>>(),
+                    vec![0, 1]
+                );
+                let image_rect = children[0].rect;
+                let paragraph_rect = index.box_rect(&paragraph).unwrap();
+                let x = paragraph_rect.x + paragraph_rect.width * 0.5;
+                let y = image_rect.y + image_rect.height * 0.5;
+                let (position, indicator) = drop_target_at(&index, &view, 0, x, y)
+                    .expect("dropping on the image must resolve to its following document slot");
+                assert_eq!(position, Position::new(container, 1));
+                let DropIndicator::Block { y: indicator_y, .. } = indicator else {
+                    panic!("expected a block indicator between the image and paragraph")
+                };
+                let expected_y = (image_rect.bottom() + paragraph_rect.y) * 0.5;
+                assert!((indicator_y - expected_y).abs() < 0.01);
+            }
+        }
     }
 
     fn two_para_gap_doc() -> DocLogs {

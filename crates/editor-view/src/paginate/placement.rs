@@ -120,7 +120,10 @@ pub(super) fn place_node_at(
                     idx,
                     previous_content_bottom,
                 );
-                if !matches!(child.content, MeasuredContent::Spacing(_)) {
+                if matches!(
+                    child.content,
+                    MeasuredContent::Box(_) | MeasuredContent::Atom(_) | MeasuredContent::PageBreak
+                ) {
                     idx += 1;
                 }
                 if b.style.direction == Direction::Horizontal {
