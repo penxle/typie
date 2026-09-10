@@ -197,7 +197,7 @@ class EditorViewportZoomSemanticTest {
   }
 
   @Test
-  fun `indicator steps stop at ten-percent grid lines and send snap haptics`() {
+  fun `indicator steps stop at ten-percent grid lines without snap haptics`() {
     val fixture = Fixture()
     fixture.zoomController.setDisplayZoom(
       zoom = 0.53f,
@@ -208,11 +208,42 @@ class EditorViewportZoomSemanticTest {
 
     assertTrue(fixture.semantic.zoomInAtViewportCenter())
     assertEquals(0.6f, fixture.zoomController.displayZoom, 0.0001f)
-    assertEquals(1, fixture.zoomSnapCount)
+    assertEquals(0, fixture.zoomSnapCount)
 
     assertTrue(fixture.semantic.zoomOutAtViewportCenter())
     assertEquals(0.5f, fixture.zoomController.displayZoom, 0.0001f)
-    assertEquals(2, fixture.zoomSnapCount)
+    assertEquals(0, fixture.zoomSnapCount)
+  }
+
+  @Test
+  fun `indicator steps send one snap haptic when reaching a landmark`() {
+    val cases =
+      listOf(
+        Triple(0.4f, 0.5f, EditorZoomLandmark.FitWidth),
+        Triple(0.6f, 0.5f, EditorZoomLandmark.FitWidth),
+        Triple(0.9f, 1f, EditorZoomLandmark.Unit),
+        Triple(1.1f, 1f, EditorZoomLandmark.Unit),
+        Triple(0.2f, 100f / 720f, EditorZoomLandmark.Minimum),
+        Triple(1.9f, 2f, EditorZoomLandmark.Maximum),
+      )
+    for ((startZoom, targetZoom, landmark) in cases) {
+      val fixture = Fixture(viewportWidth = 360f)
+      fixture.zoomController.setDisplayZoom(
+        zoom = startZoom,
+        layoutSpec = fixture.layoutSpec,
+        viewportWidth = fixture.viewportWidth,
+        snapToLandmarks = false,
+      )
+
+      val changed =
+        if (targetZoom > startZoom) fixture.semantic.zoomInAtViewportCenter()
+        else fixture.semantic.zoomOutAtViewportCenter()
+
+      assertTrue(changed)
+      assertEquals(targetZoom, fixture.zoomController.displayZoom, 0.0001f)
+      assertEquals(landmark, fixture.zoomController.resolveLandmark())
+      assertEquals(1, fixture.zoomSnapCount)
+    }
   }
 
   @Test

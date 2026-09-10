@@ -266,7 +266,8 @@ internal class EditorViewportZoomSemantic(
     val currentConfig = config ?: return false
     val targetZoom = currentConfig.zoomController.resolveZoomInTarget() ?: return false
     val changed = setZoomAtViewportCenter(targetZoom, snapToLandmarks = false)
-    if (changed) currentConfig.onZoomSnap()
+    if (changed && currentConfig.zoomController.resolveLandmark() != null)
+      currentConfig.onZoomSnap()
     return changed
   }
 
@@ -274,7 +275,8 @@ internal class EditorViewportZoomSemantic(
     val currentConfig = config ?: return false
     val targetZoom = currentConfig.zoomController.resolveZoomOutTarget() ?: return false
     val changed = setZoomAtViewportCenter(targetZoom, snapToLandmarks = false)
-    if (changed) currentConfig.onZoomSnap()
+    if (changed && currentConfig.zoomController.resolveLandmark() != null)
+      currentConfig.onZoomSnap()
     return changed
   }
 
