@@ -11,7 +11,7 @@ use crate::paginate::types::{
     ChildAttachment, LayoutAtom, LayoutContent, LayoutLine, LayoutNode, LayoutTree,
 };
 use crate::query::Edges;
-use crate::style::{BoxStyle, DecorationData};
+use crate::style::{BoxStyle, DecorationData, Direction};
 
 #[derive(Debug, Clone)]
 pub struct PageFragmentTree {
@@ -89,13 +89,37 @@ pub(crate) fn build_page_fragment_tree(
     }
 }
 
+fn paint_top(node: &LayoutNode) -> Option<f32> {
+    match &node.content {
+        LayoutContent::Line(line) if !line.is_phantom => Some(
+            line.ruby_annotations
+                .iter()
+                .map(|ruby| node.rect.y + ruby.baseline_y - ruby.ascent)
+                .fold(node.rect.y, f32::min),
+        ),
+        LayoutContent::Box(b) => {
+            // Later vertical content cannot rise above the first painted child:
+            // pagination keeps ruby clear of all preceding content.
+            let top = match b.style.direction {
+                Direction::Vertical => b.children.iter().find_map(paint_top),
+                Direction::Horizontal => b.children.iter().filter_map(paint_top).reduce(f32::min),
+            };
+            top.map(|top| top.min(node.rect.y))
+        }
+        LayoutContent::Atom(_) => Some(node.rect.y),
+        _ => None,
+    }
+}
+
 fn fragment_node(node: &LayoutNode, page: &LayoutPage) -> Option<PageFragmentNode> {
     let node_top = node.rect.y;
     let node_bottom = node.rect.bottom();
     let visible_top = page.content_y_start;
     let visible_bottom = page.content_y_end;
 
-    if node_bottom <= visible_top || node_top >= visible_bottom {
+    if node_bottom <= visible_top
+        || (node_top >= visible_bottom && paint_top(node).is_none_or(|top| top >= visible_bottom))
+    {
         return None;
     }
 
@@ -107,7 +131,7 @@ fn fragment_node(node: &LayoutNode, page: &LayoutPage) -> Option<PageFragmentNod
                 node.rect.x,
                 fragment_top - page.y_start,
                 node.rect.width,
-                fragment_bottom - fragment_top,
+                (fragment_bottom - fragment_top).max(0.0),
             );
             let content = PageFragmentContent::Box(PageFragmentBox {
                 node: b.node,
@@ -134,10 +158,8 @@ fn fragment_node(node: &LayoutNode, page: &LayoutPage) -> Option<PageFragmentNod
             return Some(PageFragmentNode { rect, content });
         }
         LayoutContent::Line(l) => {
-            debug_assert!(
-                node_top >= visible_top && node_bottom <= visible_bottom,
-                "line layout node should be contained by its page content window"
-            );
+            // Continuous rendering pages can split the leading shared by two
+            // lines. Include the next line's ruby on both sides of that split.
             PageFragmentContent::Line(fragment_line(l))
         }
         LayoutContent::Atom(a) => {

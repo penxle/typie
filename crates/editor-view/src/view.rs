@@ -242,6 +242,7 @@ impl View {
             content_width: f32,
             page_top: f32,
             page_bottom: f32,
+            previous_content_bottom: f32,
         }
 
         let mut seeds: Vec<SpliceSeed> = Vec::new();
@@ -254,9 +255,10 @@ impl View {
                 if seeds.iter().any(|s| s.dot == *dot) {
                     continue;
                 }
-                let Some(path) = index.box_path(dot) else {
+                let Some(entry) = index.box_entry(dot) else {
                     return false;
                 };
+                let path = entry.path();
                 // Rebuild the paginator's (current_x, current_width) context by
                 // replaying each vertical ancestor's content-box computation
                 // from its retained rect and style.
@@ -321,6 +323,11 @@ impl View {
                     content_width: w,
                     page_top,
                     page_bottom,
+                    previous_content_bottom: entry.previous_content_bottom.max(if continuous {
+                        0.0
+                    } else {
+                        page.y_start
+                    }),
                 });
             }
         }
@@ -346,6 +353,7 @@ impl View {
                 seed.parent,
                 seed.child_index,
                 seed.y,
+                seed.previous_content_bottom,
                 seed.x,
                 seed.content_width,
                 seed.page_top,
@@ -1880,6 +1888,74 @@ mod incremental_tests {
             .iter()
             .map(|p| (p.y_start, p.y_end, p.content_y_start, p.content_y_end))
             .collect()
+    }
+
+    #[test]
+    fn reconcile_ruby_content_edit_matches_full_layout() {
+        use editor_model::{Anchor, Bias, Modifier, ModifierAttrOp, SpanOp};
+
+        let mut g = OpGraph::<EditOp>::with_actor(1);
+        g.add_mut(seq_block(0, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap();
+        g.add_mut(seq_char(1, 'a')).unwrap();
+        let paragraph = g
+            .add_mut(seq_block(2, NodeType::Paragraph, vec![Dot::ROOT]))
+            .unwrap()
+            .id;
+        let base_char = g.add_mut(seq_char(3, 'b')).unwrap().id;
+        g.add_mut(EditOp::Span(SpanOp::AddSpan {
+            start: Anchor {
+                id: base_char,
+                bias: Bias::Before,
+            },
+            end: Anchor {
+                id: base_char,
+                bias: Bias::After,
+            },
+            modifier: Modifier::Ruby {
+                text: "annotation".into(),
+            },
+        }))
+        .unwrap();
+        for modifier in [
+            Modifier::LineHeight { value: 100 },
+            Modifier::BlockGap { value: 0 },
+        ] {
+            g.add_mut(EditOp::BlockModifier(ModifierAttrOp::SetModifier {
+                target: Dot::ROOT,
+                modifier,
+            }))
+            .unwrap();
+        }
+        g.commit_mut();
+        let mut projected = ProjectedState::from_graph(g).unwrap();
+        let pre = State::new(projected.clone(), None);
+        let mut view = make_view(800.0);
+        view.layout(&pre);
+        view.hit_test(0, 45.0, 50.0);
+        projected.take_layout_dirty();
+        projected.apply(seq_char(4, 'c')).unwrap();
+        let dirty = projected.take_layout_dirty();
+        let post = State::new(projected, None);
+        view.reconcile(&post, dirty, None, None);
+        assert!(
+            view.layout.as_ref().unwrap().layout_index.rtree_built(),
+            "unchanged base geometry must keep the index during a content splice"
+        );
+
+        let mut fresh = make_view(800.0);
+        fresh.layout(&post);
+        assert_eq!(
+            view.node_box_rects(&[paragraph]),
+            fresh.node_box_rects(&[paragraph])
+        );
+        assert_eq!(page_sig(&view), page_sig(&fresh));
+        for y in 0..100 {
+            assert_eq!(
+                view.hit_test(0, 45.0, y as f32),
+                fresh.hit_test(0, 45.0, y as f32)
+            );
+        }
     }
 
     #[test]

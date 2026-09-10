@@ -12,7 +12,6 @@ use editor_state::{
     paragraph_break_at_end, paragraph_break_ending_at,
 };
 
-use crate::measure::text::ruby::ruby_extra_top;
 use crate::page::{LayoutPage, PageRect};
 use crate::paginate::types::{LayoutContent, LayoutLine, SpacingKind};
 
@@ -181,18 +180,12 @@ fn geometry_for_line_entry(
     let pos = paragraph_break_range.anchor;
     let page_idx = page_for_y(pages, entry.rect.y)?;
     let x = entry.rect.x + super::grapheme::x_at_offset(line, &pos);
-    let band = ruby_extra_top(line.baseline, line.ascent, &line.ruby_annotations);
-    let height = (entry.rect.height - band).max(0.0);
+    let height = entry.rect.height;
     let width = height * 0.15;
     Some(ParagraphBreakGeometry {
         rect: PageRect::new(
             page_idx,
-            Rect::from_xywh(
-                x,
-                entry.rect.y + band - pages[page_idx].y_start,
-                width,
-                height,
-            ),
+            Rect::from_xywh(x, entry.rect.y - pages[page_idx].y_start, width, height),
         ),
         line_right: entry.rect.right(),
     })

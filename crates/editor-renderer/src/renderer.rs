@@ -349,16 +349,9 @@ fn underline_rect(m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
     )
 }
 
-fn text_background_rect(
-    line_rect: Rect,
-    m: LineMetrics,
-    ruby_extra_top: f32,
-    run_x: f32,
-    run_width: f32,
-) -> Rect {
-    let text_height = (m.ascent + m.descent - ruby_extra_top).max(0.0);
-    let text_area = (line_rect.height - ruby_extra_top).max(0.0);
-    let text_top = ruby_extra_top + (text_area - text_height).max(0.0) * 0.5;
+fn text_background_rect(line_rect: Rect, m: LineMetrics, run_x: f32, run_width: f32) -> Rect {
+    let text_height = (m.ascent + m.descent).max(0.0);
+    let text_top = (line_rect.height - text_height).max(0.0) * 0.5;
     Rect::from_xywh(run_x, text_top, run_width, text_height)
 }
 
@@ -1313,13 +1306,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
 
         if self.on(RenderLayer::Background) {
-            let ruby_extra_top =
-                editor_view::ruby_extra_top(metrics.baseline, metrics.ascent, ruby_annotations);
             for run in glyph_runs {
                 if let Some(ref bg_token) = run.background_color {
                     let bg_color = self.theme.color(bg_token);
-                    let run_rect =
-                        text_background_rect(local_rect, metrics, ruby_extra_top, run.x, run.width);
+                    let run_rect = text_background_rect(local_rect, metrics, run.x, run.width);
                     self.sink.fill_rect(run_rect, bg_color, t);
                 }
             }
@@ -2088,8 +2078,8 @@ mod tests {
             descent: 15.0,
         };
 
-        // No ruby (ruby_extra_top = 0): identical to the legacy centred formula.
-        let r = text_background_rect(line_rect, m, 0.0, 12.0, 34.0);
+        // The base text remains centered in its line box.
+        let r = text_background_rect(line_rect, m, 12.0, 34.0);
         let v1_text_height = m.ascent + m.descent;
         let selection_height = line_rect.height;
         let line_top = (selection_height - v1_text_height) * 0.5;
@@ -2100,29 +2090,6 @@ mod tests {
         assert!((r.height - v1_text_height).abs() < 0.01);
         assert!((selection_height - 100.0).abs() < 0.01);
         assert!(r.height < selection_height);
-    }
-
-    #[test]
-    fn text_background_rect_excludes_ruby_band() {
-        // Ruby inflates `ascent` and the line box top by `ruby_extra_top`. The
-        // fill must hug the base text only: height drops by the ruby band and
-        // the rect starts below it, never reaching into the ruby. (TR-222)
-        let line_rect = Rect::from_xywh(0.0, 0.0, 120.0, 100.0);
-        let m = LineMetrics {
-            baseline: 80.0,
-            ascent: 60.0, // base ascent 40 + ruby band 20
-            descent: 15.0,
-        };
-        let ruby_extra_top = 20.0;
-
-        let with_ruby = text_background_rect(line_rect, m, ruby_extra_top, 12.0, 34.0);
-        let without = text_background_rect(line_rect, m, 0.0, 12.0, 34.0);
-
-        // Height excludes the ruby band: (60-20)+15 = 55, vs 75 without.
-        assert!((with_ruby.height - 55.0).abs() < 0.01);
-        assert!(with_ruby.height < without.height);
-        // The rect starts below the ruby band reserved at the top.
-        assert!(with_ruby.y >= ruby_extra_top - 0.01);
     }
 
     /// Render the Background layer for a one-line doc and return the single
