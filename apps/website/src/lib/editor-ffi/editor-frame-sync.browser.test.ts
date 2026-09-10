@@ -1049,6 +1049,36 @@ describe('web editor frame synchronization', () => {
     expect(editor.publishedRevision).toBeGreaterThanOrEqual(restore.revision);
   });
 
+  it('publishes current tracked range geometry after reflow and removes deleted review anchors', async () => {
+    const { editor } = await mountEditor(continuousDoc('prefix target suffix'));
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_flat', start: 8, end: 14 } }));
+    const selection = editor.appliedSnapshot.selection;
+    const frozen = selection && editor.freezeSelection(selection);
+    if (!frozen) throw new Error('Expected a frozen review selection');
+    editor.updateNow(() => editor.setPrismReviewRanges([{ id: 'review', selection: frozen, tone: 'issue' }]));
+    await waitForPresentation(editor);
+    const before = editor.published?.snapshot;
+    const original = before?.trackedRanges.find((range) => range.id === 'review');
+    expect(original?.text).toBe('target');
+
+    editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_flat', start: 1, end: 1 } });
+      request.enqueue({ type: 'insertion', op: { type: 'text', text: 'prefix '.repeat(30) } });
+    });
+    await waitForPresentation(editor);
+    const moved = editor.published?.snapshot.trackedRanges.find((range) => range.id === 'review');
+    expect(moved?.text).toBe('target');
+    expect(moved?.rects).not.toEqual(original?.rects);
+    expect(before?.trackedRanges.find((range) => range.id === 'review')).toEqual(original);
+
+    editor.updateNow((request) => {
+      request.enqueue({ type: 'selection', op: { type: 'set_frozen', selection: frozen } });
+      request.enqueue({ type: 'insertion', op: { type: 'text', text: '' } });
+    });
+    await waitForPresentation(editor);
+    expect(editor.published?.snapshot.trackedRanges.find((range) => range.id === 'review')).toBeUndefined();
+  });
+
   it('smoothly reveals a spellcheck result after its page surface was virtualized', async () => {
     const pageCount = 8;
     const errorId = 'far-spellcheck-error';

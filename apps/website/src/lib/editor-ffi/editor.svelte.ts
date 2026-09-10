@@ -335,8 +335,6 @@ export class Editor {
   #appliedWaiters = new Set<AppliedWaiter>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #publicationWaiters = new Set<PublicationWaiter>();
-  #freshRanges: TrackedRange[] = [];
-  #freshRangesFor: EditorSnapshot | undefined;
 
   #applied = $state.raw<EditorSnapshot>({
     revision: 0,
@@ -358,10 +356,6 @@ export class Editor {
     rootModifiers: [],
     trackedRanges: [],
   });
-  // Snapshot trackedRanges preserve semantic registry changes, while their rects can move on
-  // unrelated document edits. Resolve only active consumers and retain their revision geometry.
-  #resolvedTrackedRanges = new WeakMap<EditorSnapshot, Map<string, TrackedRange | undefined>>();
-
   #viewport = $state<Viewport>({ width: 0, height: 0, scale_factor: 1 });
   #appliedViewport: Viewport = { width: 0, height: 0, scale_factor: 1 };
   #applyViewportResize = debounce(() => {
@@ -635,7 +629,10 @@ export class Editor {
         pageData,
         rootAttrs,
         rootModifiers: fields.has('block') || fields.has('modifiers') ? core.root_modifiers() : previous.rootModifiers,
-        trackedRanges: fields.has('tracked_ranges') ? core.tracked_ranges() : previous.trackedRanges,
+        // Resolved ranges depend on document positions and layout as well as registration.
+        // Selection and IME-only ticks reuse the same immutable result.
+        trackedRanges:
+          fields.has('tracked_ranges') || fields.has('doc') || fields.has('page_sizes') ? core.tracked_ranges() : previous.trackedRanges,
       };
     });
   }
@@ -1513,18 +1510,6 @@ export class Editor {
   }
 
   trackedRangeForSnapshot(id: string, snapshot: EditorSnapshot): TrackedRange | undefined {
-    let resolved = this.#resolvedTrackedRanges.get(snapshot);
-    if (resolved?.has(id)) return resolved.get(id);
-    if (snapshot === this.#applied) {
-      const range = this.#invokeCore((core) => core.tracked_range(id));
-      if (!resolved) {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        resolved = new Map();
-        this.#resolvedTrackedRanges.set(snapshot, resolved);
-      }
-      resolved.set(id, range);
-      return range;
-    }
     return snapshot.trackedRanges.find((range) => range.id === id);
   }
 
@@ -2524,23 +2509,6 @@ export class Editor {
 
       if (result.type === 'failed') this.#reportError(result.error, `Failed to add prism review range: ${item.id}`);
     }
-  }
-
-  // 스냅숏의 trackedRanges는 코어가 tracked_ranges 필드를 낼 때만 갈린다(materializeSnapshot) — 본문이
-  // 리플로우해도 그 필드는 안 서므로 rects가 옛 자리에 굳는다. 여백은 rects로 좌표를 잡으니 지금 것을 직접 읽는다.
-  freshTrackedRanges(): TrackedRange[] {
-    // 레지스트리는 tick에서만 갈리고 그때마다 #applied가 새 객체가 된다 — 한 판에 한 번만 마샬한다
-    if (this.#freshRangesFor !== this.#applied) {
-      this.#freshRanges = this.#invokeCore((core) => core.tracked_ranges());
-      this.#freshRangesFor = this.#applied;
-      // 이 snapshot이 게시된 뒤 다음 판이 먼저 적용되어도, 호스트는 그 캔버스와 짝인 지금 좌표를 써야 한다.
-      // snapshot 사본에만 남은 stale id는 undefined로 고정해 옛 rect로 되돌아가지 않게 한다.
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- immutable snapshot cache installed into a WeakMap
-      const resolved = new Map<string, TrackedRange | undefined>(this.#applied.trackedRanges.map((range) => [range.id, undefined]));
-      for (const range of this.#freshRanges) resolved.set(range.id, range);
-      this.#resolvedTrackedRanges.set(this.#applied, resolved);
-    }
-    return this.#freshRanges;
   }
 
   clearPrismReviewRanges(): void {

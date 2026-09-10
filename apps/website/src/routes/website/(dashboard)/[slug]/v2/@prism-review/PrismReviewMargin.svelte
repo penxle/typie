@@ -542,10 +542,7 @@
 
     const current = editor;
     if (!current) return raw.map((place) => join(place, false));
-    // 스냅숏 사본의 trackedRanges는 코어가 그 필드를 낼 때만 갈린다 — 문단을 지워 range가 빠져도
-    // 사본에는 남아 자리 잃음이 다음 새로고침까지 드러나지 않는다. 판이 갈릴 때마다 지금 것을 받는다.
-    void current.appliedSnapshot.revision;
-    const alive = new Set(current.freshTrackedRanges().map((range) => range.id));
+    const alive = new Set(current.appliedSnapshot.trackedRanges.map((range) => range.id));
     return raw.map((place) =>
       join(
         place,

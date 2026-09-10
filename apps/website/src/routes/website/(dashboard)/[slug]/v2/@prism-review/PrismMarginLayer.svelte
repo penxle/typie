@@ -180,10 +180,7 @@
   // 의미 좌표는 판이 바뀔 때만 갱신한다. presentation 측정은 아래 effect 한 곳에서 수행한다.
   $effect(() => {
     const editor = ctx.editor;
-    void editor?.publishedRevision;
-    untrack(() => {
-      trackedRanges = new Map(editor?.freshTrackedRanges().map((range) => [range.id, range]));
-    });
+    trackedRanges = new Map(editor?.published?.snapshot.trackedRanges.map((range) => [range.id, range]));
   });
 
   // 항목 집합이나 현재 presentation geometry가 바뀌면 캐시된 의미 좌표를 화면에 다시 투영한다.
