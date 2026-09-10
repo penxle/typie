@@ -1,5 +1,5 @@
-//! Temporary perf probe for internal-selection DnD `Over` judgment across
-//! block-spanning selections.
+//! Perf probes for external-image DnD hit testing and internal-selection
+//! `Over` judgment across block-spanning selections.
 //! Run: cargo test -p editor-core --profile profiling perf_dnd_over -- --ignored --nocapture
 //! Profile: cargo test -p editor-core --profile profiling perf_dnd_over --no-run
 //!          samply record <target/profiling/deps/editor_core-*> perf_dnd_over_profile_target --ignored --nocapture
@@ -137,6 +137,68 @@ fn median(vals: &mut [Duration]) -> Duration {
 }
 
 type Scenario = (&'static str, (usize, usize), (usize, usize));
+
+#[test]
+#[ignore]
+fn perf_dnd_over_external_image() {
+    for n in [100, 1000, 5000] {
+        let fixture = build_fixture(n, 8);
+        let mut editor = Editor::new_test(fixture.state.clone());
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor.apply(Message::Dnd {
+            op: DndOp::EnterExternal {
+                payload: ExternalDndPayloadKind::ImageFiles,
+            },
+        });
+        let points = [
+            over_point(&editor, fixture.paras[n / 2]),
+            over_point(&editor, fixture.paras[n / 2 + 1]),
+        ];
+        let mut hit = Vec::new();
+        let mut judgment = Vec::new();
+        let mut over = Vec::new();
+        for round in 0..30 {
+            let (page, x, y) = points[round % points.len()];
+            let start = Instant::now();
+            std::hint::black_box(editor.view().drop_target_at(page, x, y));
+            hit.push(start.elapsed());
+            let start = Instant::now();
+            assert!(crate::handle::judge_apply_drop(
+                editor.state(),
+                &editor.resource.lock().unwrap(),
+                Position::new(fixture.paras[n / 2 + round % points.len()], 0),
+                &DndDropPayload::Files {
+                    request_id: String::new(),
+                    kinds: vec![AttachmentPlaceholderKind::Image],
+                    reuse_node_id: None,
+                },
+                InputModifiers::default(),
+                None,
+            ));
+            judgment.push(start.elapsed());
+            let start = Instant::now();
+            editor.apply(Message::Dnd {
+                op: DndOp::Over {
+                    page,
+                    x,
+                    y,
+                    reuse_node_id: None,
+                    modifiers: InputModifiers::default(),
+                },
+            });
+            over.push(start.elapsed());
+            assert!(editor.drop_indicator_for_test().is_some());
+        }
+        eprintln!(
+            "[external image n={n}] hit={:?} judgment={:?} over={:?}",
+            median(&mut hit),
+            median(&mut judgment),
+            median(&mut over)
+        );
+    }
+}
 
 fn scenarios(len: usize) -> Vec<Scenario> {
     vec![

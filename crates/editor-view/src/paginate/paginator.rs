@@ -225,7 +225,10 @@ impl Paginator {
         let terminal_child_index = terminal_child_index(measured);
 
         for (raw_child_index, child) in measured.children.iter().enumerate() {
-            let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
+            let is_doc_child = matches!(
+                child.content,
+                MeasuredContent::Box(_) | MeasuredContent::Atom(_) | MeasuredContent::PageBreak
+            );
 
             // 1. Gap absorption at page start (paginated only)
             if self.is_paginated()

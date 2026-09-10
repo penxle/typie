@@ -11,6 +11,21 @@ type EditorInstance = NonNullable<EditorContext['editor']>;
 
 const internalDndEditors = new WeakSet<EditorInstance>();
 const dndEdgeAutoScrolls = new WeakMap<EditorInstance, EditorEdgeAutoScroll>();
+const dndOverFrames = new WeakMap<EditorInstance, { id: number; update: () => void }>();
+
+const scheduleDndOver = (editor: EditorInstance, update: () => void): void => {
+  const pending = dndOverFrames.get(editor);
+  if (pending) {
+    pending.update = update;
+    return;
+  }
+  const frame = { id: 0, update };
+  frame.id = requestAnimationFrame(() => {
+    dndOverFrames.delete(editor);
+    frame.update();
+  });
+  dndOverFrames.set(editor, frame);
+};
 
 let EMPTY_DRAG_IMAGE: HTMLImageElement | null = null;
 const setEmptyDragImage = (dataTransfer: DataTransfer): void => {
@@ -33,7 +48,12 @@ const edgeAutoScrollFor = (editor: EditorInstance): EditorEdgeAutoScroll => {
   return edgeAutoScroll;
 };
 
-const stopDndEdgeAutoScroll = (editor: EditorInstance): void => {
+const stopDndHover = (editor: EditorInstance): void => {
+  const pending = dndOverFrames.get(editor);
+  if (pending) {
+    cancelAnimationFrame(pending.id);
+    dndOverFrames.delete(editor);
+  }
   dndEdgeAutoScrolls.get(editor)?.stop();
 };
 
@@ -146,13 +166,8 @@ const updateAttachmentDropTarget = (
   root: EventTarget | null,
   clientX: number,
   clientY: number,
-  dataTransfer: DataTransfer,
+  kinds: readonly AttachmentImportItem['kind'][] | undefined,
 ): string | null => {
-  if (hasInternalSelectionDrag(editor, dataTransfer)) {
-    setAttachmentDropTarget(ctx, null);
-    return null;
-  }
-  const kinds = hoverAttachmentKinds(dataTransfer);
   const nodeId = kinds ? (reusableAttachmentNode(ctx, editor, root, clientX, clientY, kinds)?.nodeId ?? null) : null;
   setAttachmentDropTarget(ctx, nodeId);
   return nodeId;
@@ -178,7 +193,7 @@ const dispatchDndOverAtClient = (
   ctx: EditorContext,
   editor: EditorInstance,
   root: EventTarget | null,
-  dataTransfer: DataTransfer,
+  kinds: readonly AttachmentImportItem['kind'][] | undefined,
   clientX: number,
   clientY: number,
   modifiers: InputModifiers,
@@ -186,7 +201,7 @@ const dispatchDndOverAtClient = (
   const local = editor.clientToLocal(clientX, clientY);
   if (!local) return false;
 
-  const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, clientX, clientY, dataTransfer);
+  const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, clientX, clientY, kinds);
   editor.updateNow(() => {
     editor.enqueue({
       type: 'dnd',
@@ -207,6 +222,7 @@ const dropEffectFromTransfer = (editor: EditorInstance, dataTransfer: DataTransf
 export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
   setAttachmentDropTarget(ctx, null);
   const editor = ctx.editor;
+  if (editor) stopDndHover(editor);
   const dataTransfer = event.dataTransfer;
   if (!editor || !dataTransfer || editor.isSelectionCollapsed) {
     event.preventDefault();
@@ -291,7 +307,7 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   const root = event.currentTarget;
   if (!editor || !dataTransfer || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
-    if (editor) stopDndEdgeAutoScroll(editor);
+    if (editor) stopDndHover(editor);
     return;
   }
 
@@ -299,42 +315,37 @@ export const handleDragOver = (ctx: EditorContext, event: DragEvent) => {
   if (!local || !hasTransferablePayload(editor, dataTransfer)) {
     setDropEffect(dataTransfer, 'none');
     setAttachmentDropTarget(ctx, null);
-    stopDndEdgeAutoScroll(editor);
+    stopDndHover(editor);
     return;
   }
 
   const modifiers = modifiersFromEvent(event);
-  const reuseNodeId = updateAttachmentDropTarget(ctx, editor, root, event.clientX, event.clientY, dataTransfer);
-  editor.updateNow(() => {
-    editor.enqueue({
-      type: 'dnd',
-      op: { type: 'over', page: local.page, x: local.x, y: local.y, reuse_node_id: reuseNodeId ?? undefined, modifiers },
+  // DataTransfer is only readable during the native event. Retain its kinds,
+  // then resolve the latest pointer against the layout at the next frame.
+  const kinds = hasInternalSelectionDrag(editor, dataTransfer) ? undefined : hoverAttachmentKinds(dataTransfer);
+  const updateAtClient = (clientX: number, clientY: number) => {
+    scheduleDndOver(editor, () => {
+      if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
+        setAttachmentDropTarget(ctx, null);
+        stopDndHover(editor);
+        return;
+      }
+      if (!dispatchDndOverAtClient(ctx, editor, root, kinds, clientX, clientY, modifiers)) {
+        setAttachmentDropTarget(ctx, null);
+      }
     });
-  });
-  if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
-    setAttachmentDropTarget(ctx, null);
-    stopDndEdgeAutoScroll(editor);
-    return;
-  }
+  };
   event.preventDefault();
   setDropEffect(dataTransfer, dropEffectFromTransfer(editor, dataTransfer, modifiers));
-  edgeAutoScrollFor(editor).update(editor, { clientX: event.clientX, clientY: event.clientY }, (clientX, clientY) => {
-    if (ctx.editor !== editor || editor.destroyed || editor.readOnly) {
-      setAttachmentDropTarget(ctx, null);
-      stopDndEdgeAutoScroll(editor);
-      return;
-    }
-
-    if (!dispatchDndOverAtClient(ctx, editor, root, dataTransfer, clientX, clientY, modifiers)) {
-      setAttachmentDropTarget(ctx, null);
-    }
-  });
+  updateAtClient(event.clientX, event.clientY);
+  edgeAutoScrollFor(editor).update(editor, { clientX: event.clientX, clientY: event.clientY }, updateAtClient);
 };
 
 export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
   const editor = ctx.editor;
   if (!editor || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
+    if (editor) stopDndHover(editor);
     return;
   }
 
@@ -346,7 +357,7 @@ export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
 
   setAttachmentDropTarget(ctx, null);
   editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'leave' } }));
-  stopDndEdgeAutoScroll(editor);
+  stopDndHover(editor);
 };
 
 export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: AttachmentImportFailureHandler) => {
@@ -356,7 +367,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
     setAttachmentDropTarget(ctx, null);
     return;
   }
-  stopDndEdgeAutoScroll(editor);
+  stopDndHover(editor);
   if (!dataTransfer || editor.readOnly) {
     setAttachmentDropTarget(ctx, null);
     return;
@@ -442,7 +453,7 @@ export const handleDragEnd = (ctx: EditorContext) => {
   const editor = ctx.editor;
   if (!editor) return;
   internalDndEditors.delete(editor);
-  stopDndEdgeAutoScroll(editor);
+  stopDndHover(editor);
   editor.gesture.handleNativeDragEnd();
   editor.endNativeDragAdmission({ restoreFocus: false });
   editor.updateNow(() => editor.enqueue({ type: 'dnd', op: { type: 'end' } }));

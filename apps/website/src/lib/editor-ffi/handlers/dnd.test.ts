@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from './dnd';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { AttachmentImportItem } from '../attachment-importer';
@@ -97,7 +97,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     readOnly,
     protectContent,
     isSelectionCollapsed: false,
-    clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
+    clientToLocal: vi.fn<(x: number, y: number) => { page: number; x: number; y: number }>(() => ({ page: 0, x: 10, y: 20 })),
     selectionHitTest: vi.fn(() => true),
     copySelection: vi.fn(() => ({ text: 'Hello', html: '<p>Hello</p>' })),
     endNativeDragAdmission: vi.fn(),
@@ -151,12 +151,15 @@ const targetAtPoint = (root: HTMLElement, nodeId: string): HTMLElement => {
 };
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
   edgeAutoScroll.onScroll = null;
   Object.defineProperty(document, 'elementFromPoint', {
     configurable: true,
     value: vi.fn(() => null),
   });
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe('handleDragStart', () => {
   it('starts internal selection drag and exposes html/plain data for external drops', () => {
@@ -282,12 +285,81 @@ describe('handleDragEnter', () => {
 });
 
 describe('handleDragOver', () => {
+  it('accepts native drag events immediately and applies only the latest point each frame', () => {
+    const { ctx, editor, messages } = createCtx();
+    editor.clientToLocal.mockImplementation((x: number, y: number) => ({ page: 0, x, y }));
+    const transfer = createDataTransfer({ types: ['text/plain'] });
+    const first = createDragEvent(transfer);
+    const last = { ...createDragEvent(transfer), clientX: 180, clientY: 260, altKey: true };
+
+    handleDragOver(ctx, first);
+    handleDragOver(ctx, last);
+
+    expect(first.preventDefault).toHaveBeenCalled();
+    expect(last.preventDefault).toHaveBeenCalled();
+    expect(transfer.dropEffect).toBe('copy');
+    expect(messages).toEqual([]);
+
+    vi.advanceTimersToNextFrame();
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        op: expect.objectContaining({ type: 'over', x: 180, y: 260, modifiers: expect.objectContaining({ alt: true }) }),
+      }),
+    ]);
+  });
+
+  it.each(['leave', 'end', 'drop'] as const)('does not apply a queued hover after %s', (end) => {
+    const { ctx, messages } = createCtx();
+    const transfer = createDataTransfer({ types: ['text/plain'], data: { 'text/plain': 'hello' } });
+    const event = createDragEvent(transfer);
+    handleDragOver(ctx, event);
+
+    if (end === 'leave') handleDragLeave(ctx, event);
+    else if (end === 'end') handleDragEnd(ctx);
+    else handleDrop(ctx, event, vi.fn());
+    const completed = [...messages];
+    vi.advanceTimersToNextFrame();
+
+    expect(messages).toEqual(completed);
+    expect(messages.at(-1)).toEqual(expect.objectContaining({ op: expect.objectContaining({ type: end }) }));
+  });
+
+  it('uses the drop coordinates immediately even before the queued hover frame', () => {
+    const { ctx, editor, messages } = createCtx();
+    editor.clientToLocal.mockImplementation((x, y) => ({ page: 0, x, y }));
+    const transfer = createDataTransfer({ types: ['text/plain'], data: { 'text/plain': 'hello' } });
+    handleDragOver(ctx, createDragEvent(transfer));
+
+    handleDrop(ctx, { ...createDragEvent(transfer), clientX: 190, clientY: 280 }, vi.fn());
+    vi.advanceTimersToNextFrame();
+
+    expect(messages).toEqual([
+      expect.objectContaining({ op: expect.objectContaining({ type: 'over', x: 190, y: 280 }) }),
+      expect.objectContaining({ op: expect.objectContaining({ type: 'drop', x: 190, y: 280 }) }),
+    ]);
+  });
+
+  it('retains attachment kinds after the native event data store becomes unavailable', () => {
+    const { ctx, attachmentState, extensionAreaEl, canReusePlaceholder } = createCtx();
+    targetAtPoint(extensionAreaEl, 'image-node');
+    canReusePlaceholder.mockImplementation((nodeId, kind) => nodeId === 'image-node' && kind === 'image');
+    const transfer = createDataTransfer({ items: [{ kind: 'file', type: 'image/png' }] });
+
+    handleDragOver(ctx, createDragEvent(transfer, extensionAreaEl));
+    Object.defineProperty(transfer, 'items', { value: [] });
+    vi.advanceTimersToNextFrame();
+
+    expect(attachmentState.attachmentDropTargetNodeId).toBe('image-node');
+  });
+
   it('prevents default when a transferable payload has editor-local coordinates', () => {
     const { ctx, messages, updateNow } = createCtx();
     const dataTransfer = createDataTransfer({ files: [createFile('image.png', 'image/png')] });
     const event = createDragEvent(dataTransfer);
 
     handleDragOver(ctx, event);
+    vi.advanceTimersToNextFrame();
 
     expect(messages).toEqual([
       {
@@ -313,6 +385,7 @@ describe('handleDragOver', () => {
     const event = createDragEvent(dataTransfer);
 
     handleDragOver(ctx, event);
+    vi.advanceTimersToNextFrame();
 
     expect(messages).toEqual([
       {
@@ -339,6 +412,7 @@ describe('handleDragOver', () => {
     const event = createDragEvent(dataTransfer);
 
     handleDragOver(ctx, event);
+    vi.advanceTimersToNextFrame();
 
     expect(messages).toEqual([
       {
@@ -368,6 +442,7 @@ describe('handleDragOver', () => {
     const event = createDragEvent(dataTransfer);
 
     handleDragOver(ctx, event);
+    vi.advanceTimersToNextFrame();
 
     expect(messages).toEqual([]);
     expect(updateNow).not.toHaveBeenCalled();
@@ -396,9 +471,11 @@ describe('handleDragOver', () => {
     const event = createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }), extensionAreaEl);
 
     handleDragOver(ctx, event);
+    vi.advanceTimersToNextFrame();
     expect(attachmentState.attachmentDropTargetNodeId).toBe('first-node');
 
     edgeAutoScroll.onScroll?.(150, 230);
+    vi.advanceTimersToNextFrame();
 
     expect(editor.clientToLocal).toHaveBeenLastCalledWith(150, 230);
     expect(document.elementFromPoint).toHaveBeenLastCalledWith(150, 230);
@@ -445,6 +522,7 @@ describe('external attachment target', () => {
     const dataTransfer = createDataTransfer({ files: [png] });
 
     handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
+    vi.advanceTimersToNextFrame();
 
     expect(attachmentState.attachmentDropTargetNodeId).toBe('image-node');
     expect(messages).toEqual([
@@ -476,6 +554,7 @@ describe('external attachment target', () => {
     const dataTransfer = createDataTransfer({ files: [png, pdf] });
 
     handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
+    vi.advanceTimersToNextFrame();
     handleDrop(ctx, createDragEvent(dataTransfer, extensionAreaEl), vi.fn());
 
     expect(importAtDrop).toHaveBeenCalledWith(
@@ -496,6 +575,7 @@ describe('external attachment target', () => {
     const dataTransfer = createDataTransfer({ files: [png, pdf] });
 
     handleDragOver(ctx, createDragEvent(dataTransfer, extensionAreaEl));
+    vi.advanceTimersToNextFrame();
 
     expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
     expect(messages.at(-1)).toEqual({
@@ -528,6 +608,7 @@ describe('external attachment target', () => {
     canReusePlaceholder.mockReturnValue(true);
 
     handleDragOver(ctx, createDragEvent(createDataTransfer({ files: [createFile('image.png', 'image/png')] }), extensionAreaEl));
+    vi.advanceTimersToNextFrame();
 
     expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
     expect(canReusePlaceholder).not.toHaveBeenCalled();
@@ -538,6 +619,7 @@ describe('external attachment target', () => {
 
     attachmentState.attachmentDropTargetNodeId = 'node';
     handleDragOver(ctx, createDragEvent(createDataTransfer(), extensionAreaEl));
+    vi.advanceTimersToNextFrame();
     expect(attachmentState.attachmentDropTargetNodeId).toBeNull();
 
     attachmentState.attachmentDropTargetNodeId = 'node';
