@@ -1,3 +1,4 @@
+import { fitImageSize } from '@typie/lib/image';
 import {
   AlignmentType,
   convertInchesToTwip, // cspell:disable-line
@@ -27,8 +28,9 @@ import {
   buildListItemParagraphV2,
   buildParagraphV2,
   buildPlaceholderTableV2,
+  FOLD_CELL_MARGINS,
 } from './blocks.ts';
-import { convertTableV2 } from './table.ts';
+import { convertTableV2, TABLE_CELL_MARGINS } from './table.ts';
 import { buildRunOptionsV2, runsToComponents } from './text.ts';
 import type { ExportFontFamily, PageLayout } from '../../core/types.ts';
 import type { NodeVisitorV2 } from '../../core/v2/types.ts';
@@ -42,6 +44,7 @@ export type ConvertContextV2 = {
   paragraphIndentTwips: number;
   docDefaults: DocDefaults;
   contentWidthPx: number;
+  contentHeightPx: number;
 };
 
 export type GenerateDocumentDocxV2Params = {
@@ -74,8 +77,21 @@ const docxVisitorV2: NodeVisitorV2<ConvertContextV2, FileChild[]> = {
       return [buildPlaceholderTableV2('[이미지를 불러올 수 없습니다]')];
     }
 
-    const displayWidth = ctx.contentWidthPx * Math.min(n.proportion, 1);
-    const displayHeight = displayWidth * (asset.height / asset.width);
+    const { width: displayWidth, height: displayHeight } = fitImageSize({
+      width: asset.width,
+      height: asset.height,
+      maxWidth: ctx.contentWidthPx,
+      proportion: n.proportion,
+      // Match the vertical cell margins used by the table/fold converters.
+      maxHeight: Math.max(
+        1,
+        n.ancestors.reduce((height, { node }) => {
+          if (node.type === 'table_cell') return height - (TABLE_CELL_MARGINS.top + TABLE_CELL_MARGINS.bottom) / 15;
+          if (node.type === 'fold_content') return height - (FOLD_CELL_MARGINS.top + FOLD_CELL_MARGINS.bottom) / 15;
+          return height;
+        }, ctx.contentHeightPx),
+      ),
+    });
 
     return [
       new Paragraph({
@@ -84,7 +100,7 @@ const docxVisitorV2: NodeVisitorV2<ConvertContextV2, FileChild[]> = {
           new ImageRun({
             type: mapFormat(asset.format) as 'jpg' | 'png' | 'gif' | 'bmp',
             data: asset.bytes,
-            transformation: { width: Math.round(displayWidth), height: Math.round(displayHeight) },
+            transformation: { width: displayWidth, height: displayHeight },
           }),
         ],
       }),
@@ -187,6 +203,7 @@ export async function generateDocumentDocxV2(params: GenerateDocumentDocxV2Param
     paragraphIndentTwips,
     docDefaults,
     contentWidthPx,
+    contentHeightPx: pageHeight - pageMarginTop - pageMarginBottom,
   };
 
   const bodyChunks = traverseV2(parsed, docxVisitorV2, ctx);

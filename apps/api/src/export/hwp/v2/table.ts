@@ -23,6 +23,8 @@ function borderType(style: TableV2<Uint8Array[]>['borderStyle']): number {
   }
 }
 
+export const TABLE_CELL_MARGINS = { left: 800, right: 800, top: 400, bottom: 400 };
+
 export function tableToRecordsV2(t: TableV2<Uint8Array[]>, ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
   const contentWidthPx = ctx.pageLayout.pageWidth - ctx.pageLayout.pageMarginLeft - ctx.pageLayout.pageMarginRight;
   const tableWidth = pxToHwpunit(contentWidthPx * Math.min(t.proportion, 1));
@@ -70,11 +72,6 @@ export function tableToRecordsV2(t: TableV2<Uint8Array[]>, ctx: HwpConvertContex
 
   return [
     ...makeInlineObjectParagraph(ctx, 0, 'tbl ', { sectionRecords }),
-    ...makeTableRecords(rows, rowCount, colCount, tableWidth, tableBorderFillId, tableBorderFillId, instanceId, {
-      left: 800,
-      right: 800,
-      top: 400,
-      bottom: 400,
-    }),
+    ...makeTableRecords(rows, rowCount, colCount, tableWidth, tableBorderFillId, tableBorderFillId, instanceId, TABLE_CELL_MARGINS),
   ];
 }

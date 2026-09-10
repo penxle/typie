@@ -1,5 +1,5 @@
 export type ExternalData =
-  | { type: 'image'; id?: string; proportion: number; uploadId?: string }
+  | { type: 'image'; id?: string; proportion: number; uploadId?: string; maxHeight?: number }
   | { type: 'file'; id?: string; uploadId?: string }
   | { type: 'embed'; id?: string }
   | { type: 'archived'; id?: string };

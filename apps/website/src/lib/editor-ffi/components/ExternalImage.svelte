@@ -2,9 +2,10 @@
   import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions, pointerCapture } from '@typie/ui/actions';
+  import { createFloatingActions, pointerCapture, tooltip } from '@typie/ui/actions';
   import { Icon, Img, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import { clamp } from '@typie/ui/utils';
   import { onDestroy } from 'svelte';
   import DownloadIcon from '~icons/lucide/download';
   import ExternalLinkIcon from '~icons/lucide/external-link';
@@ -16,33 +17,41 @@
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
+  import type { ContextMenuItem } from '../types';
 
   type Props = {
     element: ExternalElement;
+    onKeepMountedChange?: (keepMounted: boolean) => void;
   };
+
+  type ResizeSide = 'left' | 'right';
 
   type ResizeSession = {
     x: number;
     width: number;
     proportion: number;
-    reverse: boolean;
-    boundsWidth: number;
+    side: ResizeSide;
+    maxWidth: number;
   };
 
   const ACTION_SIZE = 28;
   const ACTION_INSET = 10;
   const ACTION_GAP = 6;
+  const RESIZE_HANDLE_WIDTH = 8;
+  const RESIZE_HANDLE_INSET = 10;
+  const RESIZE_HANDLE_GAP = 8;
   const RESIZE_HANDLE_MAX_HEIGHT = 72;
   const RESIZE_HANDLE_MIN_HEIGHT = 24;
   const UPLOAD_SPINNER_SIZE = 24;
   const UPLOAD_SPINNER_MIN_SIZE = 12;
 
-  let { element }: Props = $props();
+  let { element, onKeepMountedChange }: Props = $props();
 
   const ctx = getEditorContext();
 
   let proportion = $state(100);
-  let isResizing = $state(false);
+  let resizeSide = $state<ResizeSide | null>(null);
+  const isResizing = $derived(resizeSide !== null);
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
   let pickerOpened = $state(false);
@@ -51,6 +60,11 @@
 
   onDestroy(() => {
     publicationWait?.abort();
+    onKeepMountedChange?.(false);
+  });
+
+  $effect(() => {
+    onKeepMountedChange?.(isResizing || publicationOwned || enlarged);
   });
 
   const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
@@ -68,7 +82,8 @@
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
-  const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth));
+  const maxHeight = $derived(imageData?.max_height);
+  const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth, originalHeight, maxHeight));
   const liveHeight = $derived(originalWidth > 0 ? liveWidth * (originalHeight / originalWidth) : 0);
   const containerSize = $derived(
     calculateImageContainerSize({
@@ -76,6 +91,7 @@
       proportion,
       originalWidth,
       originalHeight,
+      maxHeight,
     }),
   );
   const displayedWidth = $derived(liveWidth * displayZoom);
@@ -90,6 +106,11 @@
   const resizeHandleVisualHeight = $derived(
     Math.max(RESIZE_HANDLE_MIN_HEIGHT, Math.min(liveHeight / 3, RESIZE_HANDLE_MAX_HEIGHT, displayedHeight)),
   );
+  const showBothResizeHandles = $derived(
+    displayedWidth >= RESIZE_HANDLE_INSET * displayZoom * 2 + RESIZE_HANDLE_WIDTH * 2 + RESIZE_HANDLE_GAP,
+  );
+  const resizeHandleSides = $derived<ResizeSide[]>(showBothResizeHandles ? ['left', 'right'] : [resizeSide ?? 'right']);
+  const resizeHandleInset = $derived(showBothResizeHandles ? RESIZE_HANDLE_INSET : 0);
   const uploadSpinnerVisualSize = $derived(Math.min(UPLOAD_SPINNER_SIZE, displayedWidth, displayedHeight));
   const showUploadSpinner = $derived(uploadSpinnerVisualSize >= UPLOAD_SPINNER_MIN_SIZE);
   const canEdit = $derived(!ctx.editor?.readOnly);
@@ -123,7 +144,7 @@
 
   const deleteNode = () => {
     const editor = ctx.editor;
-    if (!editor) return;
+    if (!editor || editor.readOnly) return;
 
     ctx.attachmentImporter.cancelNode(editor, element.node);
     editor.enqueue({
@@ -159,18 +180,7 @@
     picker.click();
   };
 
-  const getWidthBounds = (boundsWidth: number) => {
-    const maxWidth = originalWidth > 0 ? Math.min(originalWidth, boundsWidth) : boundsWidth;
-    const minWidth = Math.min(maxWidth, Math.max(boundsWidth * 0.1, 100));
-    return { minWidth, maxWidth };
-  };
-
-  const clampWidth = (width: number, boundsWidth: number) => {
-    const { minWidth, maxWidth } = getWidthBounds(boundsWidth);
-    return Math.max(minWidth, Math.min(maxWidth, width));
-  };
-
-  const handleResizeStart = (event: PointerEvent, reverse: boolean): ResizeSession | null => {
+  const handleResizeStart = (event: PointerEvent, side: ResizeSide): ResizeSession | null => {
     if (isResizing || !event.isPrimary || event.button !== 0) return null;
 
     event.preventDefault();
@@ -179,90 +189,90 @@
     publicationWait?.abort();
     publicationWait = undefined;
     publicationOwned = false;
-    isResizing = true;
+    resizeSide = side;
     return {
       x: event.clientX,
       width: liveWidth,
       proportion,
-      reverse,
-      boundsWidth: element.bounds.width,
+      side,
+      maxWidth: calculateImageWidth(element.bounds.width, 100, originalWidth, originalHeight, maxHeight),
     };
   };
 
   const handleResize = (session: ResizeSession, event: PointerEvent) => {
-    const { boundsWidth } = session;
-    if (boundsWidth <= 0) return;
+    const { maxWidth } = session;
+    if (maxWidth <= 0) return;
 
-    const dx = (ctx.editor?.clientDeltaToLocalDelta(event.clientX - session.x) ?? event.clientX - session.x) * (session.reverse ? -1 : 1);
-    const newWidth = clampWidth(session.width + dx * 2, boundsWidth);
-    proportion = (newWidth / boundsWidth) * 100;
+    const dx =
+      (ctx.editor?.clientDeltaToLocalDelta(event.clientX - session.x) ?? event.clientX - session.x) * (session.side === 'left' ? -1 : 1);
+    proportion = clamp(((session.width + dx * 2) / maxWidth) * 100, 10, 100);
   };
 
-  const handleResizeEnd = (session: ResizeSession, event: PointerEvent) => {
-    handleResize(session, event);
-    const finalProportion = Math.round(proportion);
+  const finishResize = (session: ResizeSession, action: 'commit' | 'cancel') => {
+    const finalProportion = action === 'commit' ? Math.round(proportion) : (imageData?.proportion ?? session.proportion);
     const editor = ctx.editor;
-    if (!editor) {
-      isResizing = false;
+    if (!editor || editor.destroyed) {
+      resizeSide = null;
       return;
     }
     const wait = new AbortController();
     publicationWait?.abort();
     publicationWait = wait;
     publicationOwned = true;
-    isResizing = false;
+    resizeSide = null;
+    proportion = finalProportion;
     let update: ReturnType<typeof editor.updateNow>;
     try {
-      update = editor.updateNow(() => {
-        editor.enqueue({
-          type: 'node',
-          op: {
-            type: 'set_attr',
-            id: element.node,
-            attr: {
-              type: 'image',
-              attr: { type: 'proportion', value: finalProportion },
+      if (action === 'commit') {
+        const commit = editor.updateNow((request) => {
+          request.enqueue({
+            type: 'node',
+            op: {
+              type: 'set_attr',
+              id: element.node,
+              attr: {
+                type: 'image',
+                attr: { type: 'proportion', value: finalProportion },
+              },
             },
-          },
+          });
         });
-      });
+        const accepted = commit?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
+        if (!accepted) proportion = imageData?.proportion ?? session.proportion;
+      }
+      // An offscreen image can unmount after this publication, before ResizeObserver
+      // reports the committed or restored size. Publish that height explicitly.
+      update = editor.updateNow(() => editor.setExternalElementHeight(element.node, liveHeight));
     } catch {
       publicationWait = undefined;
       publicationOwned = false;
       proportion = imageData?.proportion ?? session.proportion;
-      editor.focus();
+      if (action === 'commit') editor.focus();
       return;
     }
-    const accepted = update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
-    if (!update || !accepted) {
+    if (update) {
+      const release = () => {
+        if (publicationWait !== wait) return;
+        publicationWait = undefined;
+        publicationOwned = false;
+        proportion = imageData?.proportion ?? finalProportion;
+      };
+      void update.awaitPublished(wait.signal).then(release).catch(release);
+    } else {
       publicationWait = undefined;
       publicationOwned = false;
       proportion = imageData?.proportion ?? session.proportion;
-    } else {
-      void update
-        .awaitPublished(wait.signal)
-        .then(() => {
-          if (publicationWait !== wait) return;
-          publicationWait = undefined;
-          publicationOwned = false;
-          proportion = imageData?.proportion ?? finalProportion;
-        })
-        .catch(() => {
-          if (publicationWait !== wait) return;
-          publicationWait = undefined;
-          publicationOwned = false;
-          proportion = imageData?.proportion ?? finalProportion;
-        });
     }
-    editor.focus();
+    if (action === 'commit') editor.focus();
+  };
+
+  const handleResizeEnd = (session: ResizeSession, event: PointerEvent) => {
+    handleResize(session, event);
+    finishResize(session, 'commit');
   };
 
   const handleResizeCancel = (session: ResizeSession) => {
-    publicationWait?.abort();
-    publicationWait = undefined;
-    publicationOwned = false;
-    proportion = session.proportion;
-    isResizing = false;
+    finishResize(session, 'cancel');
   };
 
   const handleOpenInNewTab = () => {
@@ -304,15 +314,19 @@
       if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
         return [];
       }
-      return [
+      const items: ContextMenuItem[] = [
         { label: '이미지 내려받기', icon: DownloadIcon, onclick: () => void handleSaveAs() },
         { label: '새 탭에서 이미지 열기', icon: ExternalLinkIcon, onclick: handleOpenInNewTab },
       ];
+      if (canEdit) {
+        items.push({ label: '이미지 삭제', icon: Trash2Icon, variant: 'danger', onclick: deleteNode });
+      }
+      return items;
     });
   });
 </script>
 
-<ExternalElementWrapper {element} minHeight={stage === 'ready' ? undefined : '48px'}>
+<ExternalElementWrapper {element} minHeight={stage === 'ready' ? '0' : '48px'}>
   <div
     bind:this={containerEl}
     style:width={containerSize.width}
@@ -394,6 +408,7 @@
               event.stopPropagation();
             }}
             type="button"
+            use:tooltip={{ message: '이미지 확대 보기', arrow: false }}
           >
             <Icon icon={Maximize2Icon} size={16} />
           </button>
@@ -416,6 +431,7 @@
                 event.stopPropagation();
               }}
               type="button"
+              use:tooltip={{ message: '이미지 삭제', arrow: false }}
             >
               <Icon icon={Trash2Icon} size={16} />
             </button>
@@ -424,63 +440,40 @@
       {/if}
 
       {#if canEdit && stage === 'ready'}
-        <div class={flex({ position: 'absolute', top: '0', bottom: '0', left: '10px', alignItems: 'center', pointerEvents: 'none' })}>
-          <button
-            style:height={`${resizeHandleVisualHeight}px`}
-            style:transform={fixedControlTransform}
-            style:transform-origin="left center"
-            class={css({
-              borderRadius: '4px',
-              backgroundColor: 'white/50',
-              mixBlendMode: 'difference',
-              width: '8px',
-              cursor: 'col-resize',
-              opacity: '0',
-              transition: 'opacity',
-              zIndex: '10',
-              pointerEvents: 'auto',
-              _hover: { backgroundColor: 'white/40' },
-              _groupHover: { opacity: '100' },
-            })}
-            aria-label="이미지 크기 조절"
-            type="button"
-            use:pointerCapture={{
-              start: (event) => handleResizeStart(event, true),
-              move: handleResize,
-              end: handleResizeEnd,
-              cancel: handleResizeCancel,
-            }}
-          ></button>
-        </div>
-
-        <div class={flex({ position: 'absolute', top: '0', bottom: '0', right: '10px', alignItems: 'center', pointerEvents: 'none' })}>
-          <button
-            style:height={`${resizeHandleVisualHeight}px`}
-            style:transform={fixedControlTransform}
-            style:transform-origin="right center"
-            class={css({
-              borderRadius: '4px',
-              backgroundColor: 'white/50',
-              mixBlendMode: 'difference',
-              width: '8px',
-              cursor: 'col-resize',
-              opacity: '0',
-              transition: 'opacity',
-              zIndex: '10',
-              pointerEvents: 'auto',
-              _hover: { backgroundColor: 'white/40' },
-              _groupHover: { opacity: '100' },
-            })}
-            aria-label="이미지 크기 조절"
-            type="button"
-            use:pointerCapture={{
-              start: (event) => handleResizeStart(event, false),
-              move: handleResize,
-              end: handleResizeEnd,
-              cancel: handleResizeCancel,
-            }}
-          ></button>
-        </div>
+        {#each resizeHandleSides as side (side)}
+          <div
+            style:left={side === 'left' ? `${resizeHandleInset}px` : undefined}
+            style:right={side === 'right' ? `${resizeHandleInset}px` : undefined}
+            class={flex({ position: 'absolute', top: '0', bottom: '0', alignItems: 'center', pointerEvents: 'none' })}
+          >
+            <button
+              style:width={`${RESIZE_HANDLE_WIDTH}px`}
+              style:height={`${resizeHandleVisualHeight}px`}
+              style:transform={fixedControlTransform}
+              style:transform-origin={`${side} center`}
+              class={css({
+                borderRadius: '4px',
+                backgroundColor: 'white/50',
+                mixBlendMode: 'difference',
+                cursor: 'col-resize',
+                opacity: '0',
+                transition: 'opacity',
+                zIndex: '10',
+                pointerEvents: 'auto',
+                _hover: { backgroundColor: 'white/40' },
+                _groupHover: { opacity: '100' },
+              })}
+              aria-label="이미지 크기 조절"
+              type="button"
+              use:pointerCapture={{
+                start: (event) => handleResizeStart(event, side),
+                move: handleResize,
+                end: handleResizeEnd,
+                cancel: handleResizeCancel,
+              }}
+            ></button>
+          </div>
+        {/each}
       {/if}
     {:else}
       <div
@@ -539,6 +532,7 @@
               event.stopPropagation();
             }}
             type="button"
+            use:tooltip={{ message: '이미지 삭제', arrow: false }}
           >
             <Icon icon={Trash2Icon} size={16} />
           </button>

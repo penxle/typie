@@ -7,13 +7,14 @@
 
   type Props = {
     element: ExternalElement;
+    onKeepMountedChange?: (keepMounted: boolean) => void;
   };
 
-  let { element }: Props = $props();
+  let { element, onKeepMountedChange }: Props = $props();
 </script>
 
 {#if element.data.type === 'image'}
-  <ExternalImage {element} />
+  <ExternalImage {element} {onKeepMountedChange} />
 {:else if element.data.type === 'file'}
   <ExternalFile {element} />
 {:else if element.data.type === 'embed'}

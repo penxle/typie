@@ -1,21 +1,34 @@
 use editor_common::Rect;
 use editor_crdt::Dot;
 use editor_macros::ffi;
-use editor_model::{DocView, Node};
+use editor_model::{DocView, LayoutMode, Node};
 use editor_state::{Affinity, Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
 
 use crate::paginate::types::LayoutContent;
 use crate::query::layout_index::LayoutIndex;
+use crate::style::BorderMode;
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExternalElementData {
-    Image { id: Option<String>, proportion: u32 },
-    File { id: Option<String> },
-    Embed { id: Option<String> },
-    Archived { id: Option<String> },
+    Image {
+        id: Option<String>,
+        proportion: u32,
+        /// Full-page image height limit, independent of its current position.
+        #[serde(default)]
+        max_height: Option<f32>,
+    },
+    File {
+        id: Option<String>,
+    },
+    Embed {
+        id: Option<String>,
+    },
+    Archived {
+        id: Option<String>,
+    },
 }
 
 #[ffi]
@@ -38,14 +51,43 @@ pub(crate) fn page_external_elements(
     let Some(page) = layout_index.pages().get(page_idx) else {
         return Vec::new();
     };
+    let page_content_height = match view.root().map(|root| root.node()) {
+        Some(Node::Root(root)) => match *root.layout_mode.get() {
+            LayoutMode::Paginated {
+                page_height,
+                page_margin_top,
+                page_margin_bottom,
+                ..
+            } => Some(page_height as f32 - page_margin_top as f32 - page_margin_bottom as f32),
+            LayoutMode::Continuous { .. } => None,
+        },
+        _ => None,
+    };
     let mut elements = Vec::new();
     for entry in layout_index.entries_on_page(page_idx) {
         let Some(LayoutContent::Atom(atom)) = entry.content(layout_index) else {
             continue;
         };
-        let Some(data) = external_element_data(view, &atom.node) else {
+        let Some(mut data) = external_element_data(view, &atom.node) else {
             continue;
         };
+        if let ExternalElementData::Image { max_height, .. } = &mut data {
+            *max_height = page_content_height.map(|height| {
+                let mut height = height;
+                for ancestor in entry.ancestors() {
+                    if let Some(LayoutContent::Box(b)) = layout_index
+                        .box_entry(ancestor)
+                        .and_then(|entry| entry.content(layout_index))
+                    {
+                        height -= b.style.padding.top + b.style.padding.bottom;
+                        if b.style.border_mode != BorderMode::Collapse {
+                            height -= b.style.border.top + b.style.border.bottom;
+                        }
+                    }
+                }
+                height.max(1.0)
+            });
+        }
         let slot = Selection::new(
             Position {
                 node: atom.attachment.parent,
@@ -98,6 +140,7 @@ fn external_element_data(view: &DocView, id: &Dot) -> Option<ExternalElementData
         Node::Image(node) => Some(ExternalElementData::Image {
             id: node.id.get().clone(),
             proportion: *node.proportion.get(),
+            max_height: None,
         }),
         Node::File(node) => Some(ExternalElementData::File {
             id: node.id.get().clone(),
@@ -218,7 +261,8 @@ mod tests {
             el.data,
             ExternalElementData::Image {
                 id: None,
-                proportion: 100
+                proportion: 100,
+                max_height: None,
             },
             "image data must use the current projected node"
         );
@@ -259,9 +303,118 @@ mod tests {
             elements[0].data,
             ExternalElementData::Image {
                 id: Some("asset-1".to_string()),
-                proportion: 150
+                proportion: 150,
+                max_height: None,
             }
         );
+    }
+
+    #[test]
+    fn image_height_limit_uses_full_page_and_container_padding() {
+        use editor_model::{LayoutMode, RootNodeAttr};
+        use hashbrown::HashMap;
+
+        for (wrappers, expected_height) in [
+            (vec![], 800.0),
+            (
+                vec![NodeType::Table, NodeType::TableRow, NodeType::TableCell],
+                782.0,
+            ),
+            (vec![NodeType::Fold, NodeType::FoldContent], 766.0),
+        ] {
+            let mut parents = vec![Dot::ROOT];
+            let mut fold_states = HashMap::new();
+            let mut items = vec![
+                (
+                    Dot::new(1, 1),
+                    SeqItem::Block {
+                        node_type: NodeType::Paragraph,
+                        parents: parents.clone(),
+                        attrs: vec![],
+                    },
+                ),
+                (Dot::new(1, 2), SeqItem::Char('x')),
+            ];
+            for node_type in wrappers {
+                let id = Dot::new(1, items.len() as u64 + 1);
+                if node_type == NodeType::Fold {
+                    fold_states.insert(id, true);
+                }
+                items.push((
+                    id,
+                    SeqItem::Block {
+                        node_type,
+                        parents: parents.clone(),
+                        attrs: vec![],
+                    },
+                ));
+                parents.push(id);
+            }
+            let image = Dot::new(1, items.len() as u64 + 1);
+            let Node::Image(node) = NodeType::Image.into_node() else {
+                unreachable!()
+            };
+            items.push((
+                image,
+                SeqItem::BlockAtom {
+                    leaf: AtomLeaf::Image { node },
+                    parents,
+                },
+            ));
+            let mut doc = logs(&items);
+            doc.node_attrs = doc
+                .node_attrs
+                .apply(
+                    Dot::new(2, 1),
+                    NodeAttrOp {
+                        target: Dot::ROOT,
+                        attr: NodeAttr::Root {
+                            attr: RootNodeAttr::LayoutMode(LayoutMode::Paginated {
+                                page_width: 800,
+                                page_height: 1000,
+                                page_margin_top: 100,
+                                page_margin_bottom: 100,
+                                page_margin_left: 100,
+                                page_margin_right: 100,
+                            }),
+                        },
+                    },
+                )
+                .unwrap();
+            let projected = project_document(&doc).unwrap();
+            let view = DocView::new(&projected);
+            let make_index = |height| {
+                let measured = measure_node(
+                    &mut crate::measure::Measurer::new(),
+                    &view.root().unwrap(),
+                    600.0,
+                    &MeasureContext {
+                        external_heights: HashMap::from([(image, height)]),
+                        fold_states: fold_states.clone(),
+                        ..Default::default()
+                    },
+                    &mut Resource::new_test(),
+                );
+                let layout = Paginator::paginated(800.0, 1000.0, EdgeInsets::all(100.0))
+                    .paginate(MeasuredTree { root: measured });
+                LayoutIndex::new(layout.tree, &layout.pages)
+            };
+            // The initial placeholder follows text on page one. Once the host
+            // reports the fitted height, it moves intact to the next page.
+            for height in [1.0, expected_height] {
+                let index = make_index(height);
+                let elements = external_elements(&index, &view, None);
+                assert_eq!(elements.len(), 1);
+                let el = &elements[0];
+                assert!(
+                    matches!(el.data, ExternalElementData::Image { max_height: Some(h), .. } if h == expected_height),
+                    "expected {expected_height}: {:?}",
+                    el.data
+                );
+                assert_eq!(el.page_idx, usize::from(height > 1.0));
+                assert!(el.bounds.bottom() <= 900.001);
+            }
+        }
     }
 
     #[test]

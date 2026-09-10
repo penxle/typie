@@ -3,6 +3,8 @@ package co.typie.editor.external
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.ExternalElementData
 
 @Stable
 internal class EditorExternalElementState {
@@ -46,6 +48,18 @@ internal class EditorExternalImageElementState {
   val uploads = mutableStateMapOf<String, EditorImageUpload>()
   val resizeDrafts = mutableStateMapOf<String, EditorImageResizeDraft>()
 
+  fun displaySize(nodeId: String, data: ExternalElementData.Image, boundsWidth: Float): Size? {
+    val asset = data.id?.let(assets::get)
+    val upload = uploads[nodeId]
+    val originalWidth = (asset?.width ?: upload?.width ?: return null).toFloat()
+    val ratio = (asset?.ratio ?: upload?.ratio ?: return null).toFloat()
+    if (boundsWidth <= 0f || originalWidth <= 0f || !ratio.isFinite() || ratio <= 0f) return null
+    val draft = resizeDrafts[nodeId]
+    val maxSize =
+      draft?.maxSize ?: imageResizeMaxSize(boundsWidth, originalWidth, ratio, data.maxHeight)
+    return imageResizeSize(draft?.proportion ?: data.proportion.toFloat(), maxSize)
+  }
+
   fun clearResizeState(nodeId: String) {
     resizeDrafts.remove(nodeId)
   }
@@ -57,11 +71,7 @@ internal class EditorExternalImageElementState {
   }
 }
 
-internal data class EditorImageResizeDraft(
-  val proportion: Float,
-  val boundsWidth: Float,
-  val originalWidth: Float,
-)
+internal data class EditorImageResizeDraft(val proportion: Float, val maxSize: Size)
 
 @Stable
 internal class EditorExternalFileElementState {

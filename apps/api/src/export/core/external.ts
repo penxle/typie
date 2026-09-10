@@ -1,3 +1,4 @@
+import { fitImageSize } from '@typie/lib/image';
 import DataLoader from 'dataloader';
 import { decodeDbId, TableCode } from '#/db/index.ts';
 import { loadImageAssets } from './assets.ts';
@@ -15,9 +16,13 @@ export const computeDesiredSize = (external: ExternalElement, asset: Asset | und
         return { width: external.bounds.width, height: FALLBACK_HEIGHT };
       }
 
-      const widthLimit = external.bounds.width * external.data.proportion;
-      const width = Math.min(asset.width, widthLimit);
-      const height = width * (asset.height / asset.width);
+      const { width, height } = fitImageSize({
+        width: asset.width,
+        height: asset.height,
+        maxWidth: external.bounds.width,
+        maxHeight: external.data.maxHeight,
+        proportion: external.data.proportion,
+      });
 
       if (!Number.isFinite(height) || height <= 0) {
         return { width: external.bounds.width, height: FALLBACK_HEIGHT };

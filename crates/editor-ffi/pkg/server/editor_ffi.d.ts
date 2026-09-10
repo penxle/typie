@@ -801,7 +801,7 @@ export type EmbedNodeAttr = { type: "id"; value: string | undefined };
 
 export type ExternalDndPayloadKind = "text" | "html" | "image_files" | "files" | "mixed_files";
 
-export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
+export type ExternalElementData = { type: "image"; id: string | undefined; proportion: number; max_height?: number | undefined } | { type: "file"; id: string | undefined } | { type: "embed"; id: string | undefined } | { type: "archived"; id: string | undefined };
 
 export type FileNodeAttr = { type: "id"; value: string | undefined };
 

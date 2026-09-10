@@ -1,75 +1,22 @@
 package co.typie.editor.external
 
-import kotlin.math.max
+import androidx.compose.ui.geometry.Size
 import kotlin.math.min
-import kotlin.math.roundToInt
 
-internal const val IMAGE_MIN_WIDTH = 100f
 internal const val IMAGE_MIN_PROPORTION = 10
 internal const val IMAGE_MAX_PROPORTION = 100
 
-internal data class ImageResizeWidthBounds(val min: Float, val max: Float)
-
-internal fun imageResizeWidthBounds(
-  boundsWidth: Float,
-  originalWidth: Float,
-): ImageResizeWidthBounds {
-  val maxWidth = min(boundsWidth, if (originalWidth > 0f) originalWidth else boundsWidth)
-  val requestedMin = max(boundsWidth * (IMAGE_MIN_PROPORTION / 100f), IMAGE_MIN_WIDTH)
-  val minWidth = min(requestedMin, maxWidth)
-  return ImageResizeWidthBounds(min = minWidth, max = maxWidth)
-}
-
-internal fun clampImageResizeWidth(width: Float, boundsWidth: Float, originalWidth: Float): Float {
-  val bounds = imageResizeWidthBounds(boundsWidth = boundsWidth, originalWidth = originalWidth)
-  return width.coerceIn(bounds.min, bounds.max)
-}
-
-internal fun imageResizeProportionForWidth(width: Float, boundsWidth: Float): Int =
-  ((width / boundsWidth) * 100).roundToInt().coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
-
-internal fun imageResizeWidthForProportion(
-  proportion: Float,
-  boundsWidth: Float,
-  originalWidth: Float,
-): Float =
-  clampImageResizeWidth(
-    width = boundsWidth * (proportion / 100f),
-    boundsWidth = boundsWidth,
-    originalWidth = originalWidth,
-  )
-
-internal fun imageResizeHeightForProportion(
-  proportion: Float,
+internal fun imageResizeMaxSize(
   boundsWidth: Float,
   originalWidth: Float,
   imageRatio: Float,
-): Float =
-  imageResizeWidthForProportion(
-    proportion = proportion,
-    boundsWidth = boundsWidth,
-    originalWidth = originalWidth,
-  ) / imageRatio
-
-internal fun imageResizeDisplayPercent(
-  proportion: Float,
-  boundsWidth: Float,
-  originalWidth: Float,
-): Int {
-  val maxWidth = imageResizeWidthBounds(boundsWidth, originalWidth).max
-  if (maxWidth <= 0f) {
-    return IMAGE_MAX_PROPORTION
-  }
-  val width = imageResizeWidthForProportion(proportion, boundsWidth, originalWidth)
-  return ((width / maxWidth) * 100)
-    .roundToInt()
-    .coerceIn(IMAGE_MIN_PROPORTION, IMAGE_MAX_PROPORTION)
+  maxHeight: Float?,
+): Size {
+  val width = min(boundsWidth, originalWidth)
+  val height = min(width / imageRatio, maxHeight ?: Float.POSITIVE_INFINITY)
+  return Size(width = min(width, height * imageRatio), height = height)
 }
 
-internal fun imageResizeProportionRange(boundsWidth: Float, originalWidth: Float): IntRange {
-  val bounds = imageResizeWidthBounds(boundsWidth = boundsWidth, originalWidth = originalWidth)
-  return imageResizeProportionForWidth(bounds.min, boundsWidth)..imageResizeProportionForWidth(
-      bounds.max,
-      boundsWidth,
-    )
-}
+internal fun imageResizeSize(proportion: Float, maxSize: Size): Size =
+  maxSize *
+    (proportion.coerceIn(IMAGE_MIN_PROPORTION.toFloat(), IMAGE_MAX_PROPORTION.toFloat()) / 100f)
