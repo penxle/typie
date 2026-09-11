@@ -10,7 +10,10 @@ export const load = async (event) => {
         me {
           id
         }
-        stats
+
+        landingStats {
+          ...IndexPage_Hero_landingStats
+        }
       }
     `),
   );

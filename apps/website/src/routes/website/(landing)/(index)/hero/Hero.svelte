@@ -1,34 +1,63 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { clamp } from '@typie/ui/utils';
   import ActionRow from '$lib/landing/components/ActionRow.svelte';
-  import { perSecond, STATS_LABELS } from '$lib/landing/stats';
+  import { STATS_LABELS } from '$lib/landing/stats';
+  import { graphql } from '$mearie';
   import Headline from './Headline.svelte';
   import Reveal from './Reveal.svelte';
   import StatGrid from './StatGrid.svelte';
-  import type { Stats } from '$lib/landing/stats';
+  import type { IndexPage_Hero_landingStats$key } from '$mearie';
   import type { StatItem } from './StatGrid.svelte';
 
-  type Props = { stats: Stats; scrollTop: number };
+  type Props = { landingStats$key: IndexPage_Hero_landingStats$key; scrollTop: number };
 
-  let { stats, scrollTop }: Props = $props();
+  let { landingStats$key, scrollTop }: Props = $props();
+
+  const landingStats = createFragment(
+    graphql(`
+      fragment IndexPage_Hero_landingStats on LandingStats {
+        usersTotal {
+          current
+          perSecond
+        }
+
+        documentsTotal {
+          current
+          perSecond
+        }
+
+        charactersInput {
+          current
+          perSecond
+        }
+      }
+    `),
+    () => landingStats$key,
+  );
 
   const SIDE_FROM = 40;
   const SIDE_TO = 200;
 
   const items = $derived<readonly StatItem[]>([
-    { value: stats.usersTotal.current, unit: '명', label: STATS_LABELS.usersTotal, rate: perSecond(stats.usersTotal) },
     {
-      value: stats.charactersInput.current,
-      unit: '자',
-      label: STATS_LABELS.charactersInput,
-      rate: perSecond(stats.charactersInput),
+      value: Number(landingStats.data.usersTotal.current),
+      unit: '명',
+      label: STATS_LABELS.usersTotal,
+      rate: landingStats.data.usersTotal.perSecond,
     },
     {
-      value: stats.documentsTotal.current,
+      value: Number(landingStats.data.charactersInput.current),
+      unit: '자',
+      label: STATS_LABELS.charactersInput,
+      rate: landingStats.data.charactersInput.perSecond,
+    },
+    {
+      value: Number(landingStats.data.documentsTotal.current),
       unit: '개',
       label: STATS_LABELS.documentsTotal,
-      rate: perSecond(stats.documentsTotal),
+      rate: landingStats.data.documentsTotal.perSecond,
     },
   ]);
 

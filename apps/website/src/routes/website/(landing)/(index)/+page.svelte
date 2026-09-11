@@ -178,7 +178,7 @@
   <Header floating={scrollTop > HEADER_FLOATS_AFTER} />
 
   <div bind:this={content}>
-    <Hero {scrollTop} stats={query.data.stats} />
+    <Hero landingStats$key={query.data.landingStats} {scrollTop} />
 
     {#each FEATURES as feature, index (feature.id)}
       {@const value = progressOf(index)}
