@@ -7,7 +7,7 @@ import {
   samplePrismIconMorphTrajectory,
 } from './internal/prism-icon-morph.ts';
 import { createPrismModeRoute } from './internal/prism-mode-route.ts';
-import { mountPrismObject, PRISM_RENDER_SCALE_REFERENCE_SIZE, prismObjectDefaults } from './internal/prism-object.ts';
+import { mountPrismObject, PRISM_RENDER_SCALE_REFERENCE_SIZE, PRISM_SIZE_RANGE, prismObjectDefaults } from './internal/prism-object.ts';
 import { createPrismPointerInteraction } from './internal/prism-pointer-interaction.ts';
 import {
   createFixedPrismSpinnerTrajectory,
@@ -58,6 +58,7 @@ export type PrismRuntimeObjectOptions = {
   hdr?: PrismHdrMode;
   interactive?: boolean;
   preload?: boolean;
+  prismSize?: number;
   reducedMotion?: boolean;
   target: PrismTarget;
 };
@@ -131,6 +132,18 @@ function requireTarget(target: PrismTarget): void {
   if (target !== 'icon' && target !== 'prism' && target !== 'spinner') {
     throw new RangeError('Unknown Prism target.');
   }
+}
+
+function normalizePrismSize(prismSize: number | undefined): number {
+  if (prismSize === undefined) return PRISM_SIZE;
+  if (!Number.isFinite(prismSize) || prismSize < PRISM_SIZE_RANGE.minimum || prismSize > PRISM_SIZE_RANGE.maximum) {
+    throw new RangeError(`Prism size must be between ${PRISM_SIZE_RANGE.minimum} and ${PRISM_SIZE_RANGE.maximum}.`);
+  }
+  return prismSize;
+}
+
+export function resolvePrismCanvasSize(prismSize?: number): number {
+  return Math.round((normalizePrismSize(prismSize) / PRISM_SIZE) * CANVAS_SIZE);
 }
 
 function targetDuration(options: PrismTargetRequestOptions | undefined): number | null {
@@ -211,6 +224,8 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     if (runtimeDestroyed) throw new Error('Prism runtime is destroyed.');
     requireElement(element);
     requireTarget(initialOptions.target);
+    const prismSize = normalizePrismSize(initialOptions.prismSize);
+    const canvasSize = resolvePrismCanvasSize(prismSize);
     const document = element.ownerDocument ?? globalThis.document;
     const root = document.createElement('span');
     const svg = createPrismIconElement(document, ICON_SIZE);
@@ -219,14 +234,14 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const atlasCanvas = document.createElement('canvas');
     root.className = 'prism-object';
     root.style.setProperty('display', 'grid');
-    root.style.setProperty('height', `${CANVAS_SIZE}px`);
+    root.style.setProperty('height', `${canvasSize}px`);
     root.style.setProperty('place-items', 'center');
     root.style.setProperty('position', 'relative');
-    root.style.setProperty('width', `${CANVAS_SIZE}px`);
+    root.style.setProperty('width', `${canvasSize}px`);
     svg.style.setProperty('grid-area', '1 / 1');
     canvas.style.setProperty('grid-area', '1 / 1');
-    canvas.style.setProperty('height', `${CANVAS_SIZE}px`);
-    canvas.style.setProperty('width', `${CANVAS_SIZE}px`);
+    canvas.style.setProperty('height', `${canvasSize}px`);
+    canvas.style.setProperty('width', `${canvasSize}px`);
     atlas.style.setProperty('grid-area', '1 / 1');
     atlas.style.setProperty('height', `${SPINNER_SIZE}px`);
     atlas.style.setProperty('place-items', 'center');
@@ -281,7 +296,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     const pointerInteraction = createPrismPointerInteraction(element, {
       lightPeriod: prismObjectDefaults.lightPeriod,
       period: PRISM_PERIOD_SECONDS,
-      prismSize: PRISM_SIZE,
+      prismSize,
     });
 
     function snapshot(): PrismRuntimeSnapshot {
@@ -390,7 +405,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
           return;
         }
         const sample = pointerInteraction.sample(now);
-        currentSizeScale = (PRISM_SIZE / PRISM_RENDER_SCALE_REFERENCE_SIZE) * sample.scale;
+        currentSizeScale = (prismSize / PRISM_RENDER_SCALE_REFERENCE_SIZE) * sample.scale;
         sizeScaleOverride = currentSizeScale;
         controller.setRotationPhase(sample.phase);
         controller.setMorphPoseQuaternion(sample.orientation);
@@ -457,7 +472,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     function targetSizeScale(target: PrismTarget): number {
       if (target === 'icon') return PRISM_ICON_IDLE_RENDER_SCALE;
       if (target === 'spinner') return SPINNER_SIZE / PRISM_RENDER_SCALE_REFERENCE_SIZE;
-      return PRISM_SIZE / PRISM_RENDER_SCALE_REFERENCE_SIZE;
+      return prismSize / PRISM_RENDER_SCALE_REFERENCE_SIZE;
     }
 
     function updateJourneySizeScale(): void {
@@ -637,13 +652,13 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
     function ensureController(): Promise<PrismObjectController | null> {
       if (controllerPromise) return controllerPromise;
       controller = mountPrismObject(canvas, {
-        canvasSize: CANVAS_SIZE,
+        canvasSize,
         createRenderer,
         hdr,
         iconEdgeColor: edgeColor,
         iconSize: ICON_SIZE,
         period: PRISM_PERIOD_SECONDS,
-        prismSize: PRISM_SIZE,
+        prismSize,
         spinnerSize: SPINNER_SIZE,
         transitionProgress: route.snapshot.iconProgress,
         sizeScaleOverride,
@@ -653,7 +668,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
         createPrismIconMorphTrajectory({
           durationSeconds: PRISM_ICON_DURATION_SECONDS,
           iconSize: ICON_SIZE,
-          prismSize: PRISM_SIZE,
+          prismSize,
           prismVelocity: 1 / PRISM_PERIOD_SECONDS,
           startPhase: PRISM_ICON_IDLE_PHASE_TURNS,
           startProgress: 0,
@@ -735,7 +750,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       const trajectory = createPrismIconMorphTrajectory({
         durationSeconds,
         iconSize: ICON_SIZE,
-        prismSize: PRISM_SIZE,
+        prismSize,
         prismVelocity: 1 / PRISM_PERIOD_SECONDS,
         startAngularVelocity: action.startAngularVelocity,
         startEdgeHighlightProgress: action.startEdgeHighlightProgress,
@@ -780,7 +795,7 @@ export function createPrismRuntime(options: PrismRuntimeOptions): PrismRuntime {
       if (!controller || destroyed) return;
       if (sizeScaleOverride === null) {
         currentSizeScale =
-          resolvePrismSpinnerMorphChannels(sample.progress, PRISM_SIZE, SPINNER_SIZE).size / PRISM_RENDER_SCALE_REFERENCE_SIZE;
+          resolvePrismSpinnerMorphChannels(sample.progress, prismSize, SPINNER_SIZE).size / PRISM_RENDER_SCALE_REFERENCE_SIZE;
       }
       controller.setMorphPoseQuaternion(sample.orientation);
       controller.setRotationPhase(sample.phase);

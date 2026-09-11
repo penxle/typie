@@ -296,6 +296,8 @@ type PrismObjectOptions = Omit<typeof prismObjectDefaults, 'environmentLuminance
 type PrismObjectOptionsUpdate = Partial<PrismObjectOptions>;
 
 export const PRISM_RENDER_SCALE_REFERENCE_SIZE = 92;
+export const PRISM_SIZE_RANGE = { minimum: 48, maximum: 160 } as const;
+const PRISM_CANVAS_SIZE_RANGE = { minimum: 72, maximum: 320 } as const;
 const PRISM_OBJECT_REFERENCE_SIZE = 132;
 const SPINNER_OPTICAL_SCALE_CORRECTION = (0.876 * PRISM_RENDER_SCALE_REFERENCE_SIZE) / (PRISM_OBJECT_REFERENCE_SIZE * 0.98);
 
@@ -377,7 +379,11 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
   const spinnerElement = canvas.closest<HTMLElement>('.prism-object');
   const previousSpinnerSize = spinnerElement?.style.getPropertyValue('--prism-object-size') ?? '';
   function applySpinnerSize() {
-    const canvasSize = clamp(Number(options.canvasSize) || PRISM_RENDER_SCALE_REFERENCE_SIZE, 72, 320);
+    const canvasSize = clamp(
+      Number(options.canvasSize) || PRISM_RENDER_SCALE_REFERENCE_SIZE,
+      PRISM_CANVAS_SIZE_RANGE.minimum,
+      PRISM_CANVAS_SIZE_RANGE.maximum,
+    );
     spinnerElement?.style.setProperty('--prism-object-size', `${canvasSize}px`);
   }
   applySpinnerSize();
@@ -507,7 +513,9 @@ export function mountPrismObject(canvas: HTMLCanvasElement, initialOptions: Pris
       prismPlanes = resolvePrismObjectPlanes(spinnerMorphChannels.geometry);
     }
     const viewportScale = canvasRect.height / PRISM_OBJECT_REFERENCE_SIZE;
-    const prismScale = clamp(Number(options.prismSize) || PRISM_RENDER_SCALE_REFERENCE_SIZE, 48, 160) / PRISM_RENDER_SCALE_REFERENCE_SIZE;
+    const prismScale =
+      clamp(Number(options.prismSize) || PRISM_RENDER_SCALE_REFERENCE_SIZE, PRISM_SIZE_RANGE.minimum, PRISM_SIZE_RANGE.maximum) /
+      PRISM_RENDER_SCALE_REFERENCE_SIZE;
     const transitionChannels = iconMorphSample
       ? {
           geometry: [

@@ -1,8 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { getThemeContext } from '@typie/ui/context';
-  import Footer from './Footer.svelte';
-  import Header from './Header.svelte';
 
   const { children } = $props();
 
@@ -25,16 +23,9 @@
     minHeight: '[100dvh]',
     color: 'text.default',
     backgroundColor: 'surface.canvas',
-    fontFamily: 'Pretendard',
+    fontFamily: 'landing',
     wordBreak: 'keep-all',
   })}
-  data-element="root"
 >
-  <Header />
-
-  <div class={css({ paddingTop: { sm: '56px', lg: '64px' } })}>
-    {@render children()}
-  </div>
-
-  <Footer />
+  {@render children()}
 </div>

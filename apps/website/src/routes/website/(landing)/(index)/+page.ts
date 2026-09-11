@@ -10,6 +10,7 @@ export const load = async (event) => {
         me {
           id
         }
+        stats
       }
     `),
   );
