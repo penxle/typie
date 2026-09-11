@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { sql } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
 import { dbr, DocumentCharacterCountChanges, Documents, Entities, Plans, Sites, Subscriptions, Users } from '#/db/index.ts';
+import { getLandingStats } from '#/utils/landing-stats.ts';
 import { SYSTEM_USER_ID } from '#/utils/system-actor.ts';
 import { builder } from '../builder.ts';
 
@@ -328,6 +329,28 @@ builder.queryField('stats', (t) =>
 
       return result;
     },
+  }),
+);
+
+const LandingStat = builder.simpleObject('LandingStat', {
+  fields: (t) => ({
+    current: t.field({ type: 'BigInt' }),
+    perSecond: t.float(),
+  }),
+});
+
+const LandingStats = builder.simpleObject('LandingStats', {
+  fields: (t) => ({
+    usersTotal: t.field({ type: LandingStat }),
+    documentsTotal: t.field({ type: LandingStat }),
+    charactersInput: t.field({ type: LandingStat }),
+  }),
+});
+
+builder.queryField('landingStats', (t) =>
+  t.field({
+    type: LandingStats,
+    resolve: () => getLandingStats(),
   }),
 );
 

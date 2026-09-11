@@ -14,6 +14,7 @@ import {
 import { PrismWorkflowsPollCron } from './prism.ts';
 import { PrismCreditExpireCron, PrismCreditInvariantsCron, PrismCreditPurchaseReconcileCron } from './prism-credit.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
+import { StatsLandingCron } from './stats.ts';
 import {
   IapIngestJob,
   IapSyncJob,
@@ -60,6 +61,7 @@ export const crons = [
   PrismCreditInvariantsCron,
   PrismCreditPurchaseReconcileCron,
   PrismCreditExpireCron,
+  StatsLandingCron,
 ];
 
 export type Jobs = typeof jobs;

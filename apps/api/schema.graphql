@@ -888,6 +888,17 @@ The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://
 """
 scalar JSON
 
+type LandingStat {
+  current: BigInt!
+  perSecond: Float!
+}
+
+type LandingStats {
+  charactersInput: LandingStat!
+  documentsTotal: LandingStat!
+  usersTotal: LandingStat!
+}
+
 type LiteraryAnalysisProgress {
   current: Int!
   phase: String!
@@ -1700,6 +1711,7 @@ type Query {
   getBootstrap: JSON!
   image(imageId: ID!): Image!
   impersonation: Impersonation
+  landingStats: LandingStats!
   me: User
   note(noteId: ID!): Note!
   notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
