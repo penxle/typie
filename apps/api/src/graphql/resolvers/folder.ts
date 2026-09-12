@@ -8,6 +8,8 @@ import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { createFolderCore, renameFolderCore, updateFolderOptionCore } from '#/utils/entity-actions.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
+import { assertNoPublishedPublication, assertVisibilityRequestable } from '#/utils/publication.ts';
+import { unpublishByEntityIdsCore } from '#/utils/publication-unpublish.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityView, Folder, FolderView, IFolder, Image, isTypeOf } from '../objects.ts';
 
@@ -291,7 +293,11 @@ builder.mutationFields((t) => ({
 
       const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
 
-      await db.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
+      await db.transaction(async (tx) => {
+        await unpublishByEntityIdsCore(tx, { entityIds, now: dayjs() });
+
+        await tx.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
+      });
 
       if (folder.parentId) {
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
@@ -400,6 +406,8 @@ builder.mutationFields((t) => ({
         return folders.map((folder) => folder.id);
       }
 
+      if (input.visibility) assertVisibilityRequestable(input.visibility);
+
       const updatedEntities = await db.transaction(async (tx) => {
         const entityIds = folders.map((folder) => folder.entityId);
         const folderIds = folders.map((folder) => folder.id);
@@ -436,6 +444,16 @@ builder.mutationFields((t) => ({
             .then((rows) => rows.map(({ id }) => id));
 
           if (descendantEntityIds.length > 0) {
+            const descendantDocuments = await tx
+              .select({ id: Documents.id })
+              .from(Documents)
+              .where(inArray(Documents.entityId, descendantEntityIds));
+
+            await assertNoPublishedPublication(tx, {
+              documentIds: descendantDocuments.map(({ id }) => id),
+              visibility: input.visibility,
+            });
+
             const updatedDescendantEntities = await tx
               .update(Entities)
               .set({ visibility: input.visibility ?? undefined })

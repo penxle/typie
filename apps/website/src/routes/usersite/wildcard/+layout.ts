@@ -3,24 +3,14 @@ import { graphql } from '$mearie';
 
 export const load = async (event) => {
   return {
-    query: await loadQuery(
+    layoutQuery: await loadQuery(
       event,
       graphql(`
-        query UsersiteWildcard_Layout_Query {
-          me {
+        query UsersiteWildcardLayout_Query($origin: String!) {
+          spaceView(origin: $origin) {
             id
-            name
-            email
-
-            avatar {
-              id
-              url
-
-              ...Img_image
-            }
+            ...UsersiteHeader_spaceView
           }
-
-          ...AdminImpersonateBanner_query
         }
       `),
       {

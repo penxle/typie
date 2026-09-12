@@ -1,8 +1,7 @@
 import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
-import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, notInArray, sql } from 'drizzle-orm';
-import escape from 'escape-string-regexp';
+import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, lt, ne, notInArray, sql } from 'drizzle-orm';
 import { match } from 'ts-pattern';
 import {
   db,
@@ -33,6 +32,7 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { generatePinnedOrders, isPinnableEntityType, resolvePinSiteId } from '#/utils/pinned-entities.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
+import { isUsersiteApexOrigin, parseUsersiteSlug } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import {
   Entity,
@@ -668,24 +668,27 @@ builder.queryFields((t) => ({
     type: EntityView,
     args: { origin: t.arg.string(), slug: t.arg.string() },
     resolve: async (_, args, ctx) => {
-      const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`([^.]+)\.`)}$`);
-      const slug = args.origin.match(pattern)?.[1];
-      if (!slug) {
+      const siteSlug = parseUsersiteSlug(args.origin, env.USERSITE_URL);
+      if (!siteSlug && !isUsersiteApexOrigin(args.origin, env.USERSITE_URL)) {
         throw new TypieError({ code: 'invalid_hostname' });
       }
 
-      const site = await db
-        .select({ id: Sites.id })
-        .from(Sites)
-        .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
-        .then(firstOrThrowWith(new NotFoundError()));
+      const site = siteSlug
+        ? await db
+            .select({ id: Sites.id })
+            .from(Sites)
+            .where(and(eq(Sites.slug, siteSlug), eq(Sites.state, SiteState.ACTIVE)))
+            .then(firstOrThrowWith(new NotFoundError()))
+        : null;
 
       const entity = await db
-        .select()
+        .select(getTableColumns(Entities))
         .from(Entities)
+        .innerJoin(Sites, eq(Entities.siteId, Sites.id))
         .where(
           and(
-            eq(Entities.siteId, site.id),
+            site ? eq(Entities.siteId, site.id) : undefined,
+            eq(Sites.state, SiteState.ACTIVE),
             eq(Entities.state, EntityState.ACTIVE),
             ne(Entities.type, EntityType.DIVIDER),
             eq(

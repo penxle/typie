@@ -11,7 +11,7 @@
   let { input, result, onReady }: ActionBodyProps = $props();
 
   const VISIBILITY_LABELS: Record<EntityVisibility, string> = {
-    PUBLIC: '공개 조회',
+    PUBLIC: '발행됨',
     UNLISTED: '링크 조회',
     PRIVATE: '비공개',
   };

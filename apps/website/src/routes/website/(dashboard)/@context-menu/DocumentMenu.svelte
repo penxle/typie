@@ -541,7 +541,7 @@
 <MenuItem icon={Columns2Icon} onclick={() => handleAddPane('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddPane('vertical')}>아래에 열기</MenuItem>
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">게시 페이지에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">조회 페이지에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 
@@ -554,7 +554,7 @@
     }
   }}
 >
-  공유 및 게시
+  공유 및 발행
 </MenuItem>
 
 <MenuItem
@@ -753,7 +753,7 @@
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <div class={css({ fontWeight: 'medium' })}>
       {#if entity.visibility === EntityVisibility.PUBLIC}
-        <span class={css({ color: 'success.default' })}>공개 조회</span>
+        <span class={css({ color: 'success.default' })}>발행됨</span>
       {:else if entity.visibility === EntityVisibility.UNLISTED}
         <span class={css({ color: 'text.default' })}>링크 조회</span>
       {:else}

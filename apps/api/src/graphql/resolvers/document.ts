@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   DocumentAvailableAction,
   DocumentContentRating,
@@ -14,7 +13,6 @@ import dayjs from 'dayjs';
 import dedent from 'dedent';
 import { and, count, desc, eq, gte, inArray, lt, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { match } from 'ts-pattern';
 import { redis } from '#/cache.ts';
 import {
   db,
@@ -34,8 +32,8 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Images,
+  Publications,
   TableCode,
-  UserPersonalIdentities,
   Users,
   validateDbId,
 } from '#/db/index.ts';
@@ -46,14 +44,17 @@ import { enqueueJob } from '#/mq/index.ts';
 import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { readMergedGraph } from '#/utils/changeset.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
+import { groupAssetIds, loadExistingDocumentAssetIds } from '#/utils/document-assets.ts';
 import { publishBundle } from '#/utils/document-bundle.ts';
+import { checkDocumentViewAccess, getDocumentViewUnlockKey, RESTRICTED_EXCERPT } from '#/utils/document-view-access.ts';
 import { extractAssetIdsFromPlainDoc, extractPlainDocLayoutMode } from '#/utils/entity.ts';
 import { createDocumentCore, duplicateDocumentCore, updateDocumentCore, updateDocumentsOptionCore } from '#/utils/entity-actions.ts';
 import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
-import { getKoreanAge } from '#/utils/index.ts';
 import { assertDocumentPermission, assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { runPostCommitEffects } from '#/utils/post-commit.ts';
+import { unpublishByEntityIdsCore } from '#/utils/publication-unpublish.ts';
+import { publishedPublicationPredicate, publishedPublicationsBase } from '#/utils/publication-view-core.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import { builder } from '../builder.ts';
 import {
@@ -69,22 +70,23 @@ import {
   EntityView,
   File,
   IDocument,
+  IEditorDocument,
   Image,
   isTypeOf,
+  Publication,
+  PublicationView,
   User,
 } from '../objects.ts';
 import { resolveDocumentAssetsByIds } from './document-assets-by-ids.ts';
 import type { PlainDoc } from '@typie/editor-ffi/server';
 import type { Context, SessionContext } from '#/context.ts';
+import type { GroupedAssetIds } from '#/utils/document-assets.ts';
 import type { PostCommitEffect } from '#/utils/post-commit.ts';
 
-const DocumentAsset = builder.loadableUnion('DocumentAsset', {
+export const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed, DocumentArchivedNode],
   load: async (ids: string[]) => {
-    const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
-    const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
-    const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
-    const archivedIds = ids.filter((id) => decodeDbId(id) === TableCode.DOCUMENT_ARCHIVED_NODES);
+    const { imageIds, fileIds, embedIds, archivedIds } = groupAssetIds(ids);
 
     const [images, files, embeds, archivedNodes] = await Promise.all([
       imageIds.length > 0 ? db.select().from(Images).where(inArray(Images.id, imageIds)) : [],
@@ -99,14 +101,19 @@ const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   sort: true,
 });
 
-type MaterializedDocumentAssetIds = {
-  imageIds: string[];
-  fileIds: string[];
-  embedIds: string[];
-  archivedIds: string[];
-};
+export const DocumentViewBodyAvailableV2 = builder.simpleObject('DocumentViewBodyAvailableV2', {
+  fields: (t) => ({ graph: t.field({ type: 'Binary' }) }),
+});
 
-async function loadMaterializedDocumentAssetIds(documentId: string): Promise<MaterializedDocumentAssetIds> {
+export const DocumentViewBodyUnavailable = builder.simpleObject('DocumentViewBodyUnavailable', {
+  fields: (t) => ({ reason: t.field({ type: DocumentViewBodyUnavailableReason }) }),
+});
+
+export const DocumentViewBody = builder.unionType('DocumentViewBody', {
+  types: [DocumentViewBodyAvailableV2, DocumentViewBodyUnavailable],
+});
+
+async function loadMaterializedDocumentAssetIds(documentId: string): Promise<GroupedAssetIds> {
   const state = await db
     .select({ json: DocumentStates.json })
     .from(DocumentStates)
@@ -116,49 +123,12 @@ async function loadMaterializedDocumentAssetIds(documentId: string): Promise<Mat
   return extractAssetIdsFromPlainDoc(state.json as PlainDoc);
 }
 
-async function loadExistingDocumentAssetIds({ imageIds, fileIds, embedIds, archivedIds }: MaterializedDocumentAssetIds): Promise<string[]> {
-  const [existingImageIds, existingFileIds, existingEmbedIds, existingArchivedIds] = await Promise.all([
-    imageIds.length > 0
-      ? db
-          .select({ id: Images.id })
-          .from(Images)
-          .where(inArray(Images.id, imageIds))
-          .then((rows) => rows.map(({ id }) => id))
-      : [],
-    fileIds.length > 0
-      ? db
-          .select({ id: Files.id })
-          .from(Files)
-          .where(inArray(Files.id, fileIds))
-          .then((rows) => rows.map(({ id }) => id))
-      : [],
-    embedIds.length > 0
-      ? db
-          .select({ id: Embeds.id })
-          .from(Embeds)
-          .where(inArray(Embeds.id, embedIds))
-          .then((rows) => rows.map(({ id }) => id))
-      : [],
-    archivedIds.length > 0
-      ? db
-          .select({ id: DocumentArchivedNodes.id })
-          .from(DocumentArchivedNodes)
-          .where(inArray(DocumentArchivedNodes.id, archivedIds))
-          .then((rows) => rows.map(({ id }) => id))
-      : [],
-  ]);
-
-  return [...existingImageIds, ...existingFileIds, ...existingEmbedIds, ...existingArchivedIds];
-}
-
 async function loadReferencedDocumentAssetIds(documentId: string): Promise<string[]> {
   return await loadExistingDocumentAssetIds(await loadMaterializedDocumentAssetIds(documentId));
 }
 
 async function loadOwnedDocumentAssetIds(userId: string, ids: string[]): Promise<string[]> {
-  const imageIds = ids.filter((id) => decodeDbId(id) === TableCode.IMAGES);
-  const fileIds = ids.filter((id) => decodeDbId(id) === TableCode.FILES);
-  const embedIds = ids.filter((id) => decodeDbId(id) === TableCode.EMBEDS);
+  const { imageIds, fileIds, embedIds } = groupAssetIds(ids);
 
   const [ownedImageIds, ownedFileIds, ownedEmbedIds] = await Promise.all([
     imageIds.length > 0
@@ -187,7 +157,43 @@ async function loadOwnedDocumentAssetIds(userId: string, ids: string[]): Promise
   return [...ownedImageIds, ...ownedFileIds, ...ownedEmbedIds];
 }
 
+IEditorDocument.implement({
+  fields: (t) => ({
+    id: t.exposeID('id'),
+    fontFamilies: t.field({
+      type: [DocumentFontFamily],
+      args: {
+        sources: t.arg({
+          type: [FontFamilySource],
+          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
+        }),
+      },
+      resolve: async (self, args, ctx) => {
+        const documentId =
+          decodeDbId(self.id) === TableCode.PUBLICATIONS
+            ? await db
+                .select({ documentId: Publications.documentId })
+                .from(Publications)
+                .where(eq(Publications.id, self.id))
+                .then(firstOrThrow)
+                .then(({ documentId }) => documentId)
+            : self.id;
+
+        const entity = await db
+          .select({ userId: Entities.userId })
+          .from(Entities)
+          .innerJoin(Documents, eq(Documents.entityId, Entities.id))
+          .where(eq(Documents.id, documentId))
+          .then(firstOrThrow);
+
+        return await getDocumentFontFamilies(entity.userId, ctx.session?.userId ?? null, args.sources);
+      },
+    }),
+  }),
+});
+
 IDocument.implement({
+  interfaces: [IEditorDocument],
   fields: (t) => ({
     id: t.exposeID('id'),
     title: t.string({ resolve: (self) => self.title || '(제목 없음)' }),
@@ -238,32 +244,12 @@ IDocument.implement({
         });
       },
     }),
-
-    fontFamilies: t.field({
-      type: [DocumentFontFamily],
-      args: {
-        sources: t.arg({
-          type: [FontFamilySource],
-          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
-        }),
-      },
-      resolve: async (self, args, ctx) => {
-        const entity = await db
-          .select({ userId: Entities.userId })
-          .from(Entities)
-          .innerJoin(Documents, eq(Documents.entityId, Entities.id))
-          .where(eq(Documents.id, self.id))
-          .then(firstOrThrow);
-
-        return await getDocumentFontFamilies(entity.userId, ctx.session?.userId ?? null, args.sources);
-      },
-    }),
   }),
 });
 
 Document.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENTS),
-  interfaces: [IDocument],
+  interfaces: [IDocument, IEditorDocument],
   fields: (t) => ({
     view: t.expose('id', { type: DocumentView }),
     password: t.exposeString('password', { nullable: true }),
@@ -359,6 +345,31 @@ Document.implement({
 
     entity: t.expose('entityId', { type: Entity }),
 
+    publication: t.field({
+      type: Publication,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const entity = await ctx
+          .loader({
+            name: 'Document.publication.site',
+            load: async (ids: string[]) =>
+              await db.select({ id: Entities.id, siteId: Entities.siteId }).from(Entities).where(inArray(Entities.id, ids)),
+            key: ({ id }: { id: string }) => id,
+          })
+          .load(self.entityId);
+
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: entity.siteId });
+
+        const loader = ctx.loader({
+          name: 'Document.publication',
+          nullable: true,
+          load: async (ids: string[]) => await db.select().from(Publications).where(inArray(Publications.documentId, ids)),
+          key: (row) => row?.documentId,
+        });
+        return await loader.load(self.id);
+      },
+    }),
+
     heads: t.field({
       type: [DocumentHead],
       args: {
@@ -402,70 +413,25 @@ Document.implement({
   }),
 });
 
-async function checkDocumentViewAccess(
-  document: Pick<typeof Documents.$inferSelect, 'id' | 'contentRating' | 'password'>,
-  ctx: Context,
-): Promise<{ accessible: true } | { accessible: false; reason: DocumentViewBodyUnavailableReason }> {
-  if (document.contentRating !== DocumentContentRating.ALL) {
-    if (!ctx.session) {
-      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
-    }
-
-    const identity = await db
-      .select({
-        birthday: UserPersonalIdentities.birthDate,
-        expiresAt: UserPersonalIdentities.expiresAt,
-      })
-      .from(UserPersonalIdentities)
-      .where(eq(UserPersonalIdentities.userId, ctx.session.userId))
-      .then(first);
-
-    if (!identity) {
-      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
-    }
-
-    if (identity.expiresAt.isBefore(dayjs())) {
-      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_IDENTITY_VERIFICATION };
-    }
-
-    const minAge = match(document.contentRating)
-      .with(DocumentContentRating.R15, () => 15)
-      .with(DocumentContentRating.R19, () => 19)
-      .exhaustive();
-
-    if (getKoreanAge(identity.birthday) < minAge) {
-      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_MINIMUM_AGE };
-    }
-  }
-
-  if (document.password !== null) {
-    const passwordUnlock = await redis.get(
-      getDocumentViewUnlockKey({
-        documentId: document.id,
-        deviceId: ctx.deviceId,
-        password: document.password,
-      }),
-    );
-
-    if (passwordUnlock !== 'true') {
-      return { accessible: false, reason: DocumentViewBodyUnavailableReason.REQUIRE_PASSWORD };
-    }
-  }
-
-  return { accessible: true };
-}
-
-function getDocumentViewUnlockKey({ documentId, deviceId, password }: { documentId: string; deviceId: string; password: string }): string {
-  const passwordHash = createHash('sha256').update(password).digest('hex');
-
-  return `documentview:unlock:${documentId}:${deviceId}:${passwordHash}`;
-}
+const publishedPublicationLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'Publication.publishedByDocumentId',
+    nullable: true,
+    load: async (ids: string[]) =>
+      await publishedPublicationsBase(db).where(and(inArray(Publications.documentId, ids), publishedPublicationPredicate())),
+    key: (row) => row?.documentId,
+  });
 
 DocumentView.implement({
   isTypeOf: isTypeOf(TableCode.DOCUMENTS),
-  interfaces: [IDocument],
+  interfaces: [IDocument, IEditorDocument],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+    publication: t.field({
+      type: PublicationView,
+      nullable: true,
+      resolve: async (self, _, ctx) => await publishedPublicationLoader(ctx).load(self.id),
+    }),
     hasPassword: t.boolean({ resolve: (self) => !!self.password }),
     passwordUnlocked: t.boolean({
       resolve: async (self, _, ctx) => {
@@ -523,7 +489,7 @@ DocumentView.implement({
       resolve: async (self, _, ctx) => {
         const access = await checkDocumentViewAccess(self, ctx);
         if (!access.accessible) {
-          return '(미리보기가 제한된 문서입니다)';
+          return RESTRICTED_EXCERPT;
         }
 
         const stateLoader = ctx.loader({
@@ -545,16 +511,7 @@ DocumentView.implement({
     }),
 
     body: t.field({
-      type: t.builder.unionType('DocumentViewBody', {
-        types: [
-          t.builder.simpleObject('DocumentViewBodyAvailableV2', {
-            fields: (t) => ({ graph: t.field({ type: 'Binary' }) }),
-          }),
-          t.builder.simpleObject('DocumentViewBodyUnavailable', {
-            fields: (t) => ({ reason: t.field({ type: DocumentViewBodyUnavailableReason }) }),
-          }),
-        ],
-      }),
+      type: DocumentViewBody,
       resolve: async (self, _, ctx) => {
         const access = await checkDocumentViewAccess(self, ctx);
         if (!access.accessible) {
@@ -641,6 +598,11 @@ DocumentReaction.implement({
     id: t.exposeID('id'),
     emoji: t.expose('emoji', { type: 'String' }),
     document: t.expose('documentId', { type: DocumentView }),
+    publication: t.field({
+      type: PublicationView,
+      nullable: true,
+      resolve: async (self, _, ctx) => await publishedPublicationLoader(ctx).load(self.documentId),
+    }),
   }),
 });
 
@@ -800,13 +762,17 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      await db
-        .update(Entities)
-        .set({
-          state: EntityState.DELETED,
-          deletedAt: dayjs(),
-        })
-        .where(eq(Entities.id, entity.id));
+      await db.transaction(async (tx) => {
+        await unpublishByEntityIdsCore(tx, { entityIds: [entity.id], now: dayjs() });
+
+        await tx
+          .update(Entities)
+          .set({
+            state: EntityState.DELETED,
+            deletedAt: dayjs(),
+          })
+          .where(eq(Entities.id, entity.id));
+      });
 
       if (entity.parentId) {
         pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });

@@ -5,7 +5,6 @@ import { siteSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '#/context.ts';
 import { db, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Sites, TableCode, Users, validateDbId } from '#/db/index.ts';
@@ -22,8 +21,11 @@ import {
   RECENT_DOCUMENT_SORTS,
   toRecentDocumentsPage,
 } from '#/utils/recent-documents.ts';
+import { deleteSpacesBySiteIdsCore } from '#/utils/space.ts';
+import { buildSpacesBySiteQuery } from '#/utils/space-core.ts';
+import { parseUsersiteSlug } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
-import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
+import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, Space, User } from '../objects.ts';
 
 const RecentDocumentSort = builder.enumType('RecentDocumentSort', { values: RECENT_DOCUMENT_SORTS });
 
@@ -198,6 +200,22 @@ Site.implement({
       },
     }),
 
+    spaces: t.field({
+      type: [Space],
+      resolve: async (self, _, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+
+        const loader = ctx.loader({
+          name: 'Site.spaces',
+          many: true,
+          load: async (ids) => await buildSpacesBySiteQuery(db, { siteIds: ids }),
+          key: ({ siteId }) => siteId,
+        });
+
+        return await loader.load(self.id);
+      },
+    }),
+
     folderCount: t.int({
       resolve: async (self) => {
         const rows = await db.execute<{ count: number }>(
@@ -309,8 +327,7 @@ builder.queryFields((t) => ({
     type: SiteView,
     args: { origin: t.arg.string() },
     resolve: async (_, args) => {
-      const pattern = new RegExp(`^${escape(env.USERSITE_URL).replace(String.raw`\*\.`, String.raw`([^.]+)\.`)}$`);
-      const slug = args.origin.match(pattern)?.[1];
+      const slug = parseUsersiteSlug(args.origin, env.USERSITE_URL);
       if (!slug) {
         throw new TypieError({ code: 'invalid_hostname' });
       }
@@ -447,6 +464,8 @@ builder.mutationFields((t) => ({
         if (activeSites.length <= 1) {
           throw new TypieError({ code: 'cannot_delete_last_site' });
         }
+
+        await deleteSpacesBySiteIdsCore(tx, { siteIds: [input.siteId], now: dayjs() });
 
         return await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
       });

@@ -128,7 +128,7 @@
 
   const document = createFragment(
     graphql(`
-      fragment Editor_document on IDocument {
+      fragment Editor_document on IEditorDocument {
         id
 
         editorFontFamilies: fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
