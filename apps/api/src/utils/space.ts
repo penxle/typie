@@ -53,6 +53,7 @@ export const updateSpaceCore = async (
     description?: string | null;
     links?: SpaceLink[] | null;
     allowIndexing?: boolean | null;
+    allowDiscovery?: boolean | null;
     dateDisplay?: SpaceDateDisplay | null;
   },
 ) => {
@@ -69,6 +70,7 @@ export const updateSpaceCore = async (
   if (args.description !== undefined) set.description = args.description;
   if (args.links != null) set.links = normalizeSpaceLinks(args.links);
   if (args.allowIndexing != null) set.allowIndexing = args.allowIndexing;
+  if (args.allowDiscovery != null) set.allowDiscovery = args.allowDiscovery;
   if (args.dateDisplay != null) set.dateDisplay = args.dateDisplay;
   if (Object.keys(set).length === 0) return space;
 
@@ -86,10 +88,12 @@ export const deleteSpaceCore = async (executor: Database | Transaction, args: { 
 };
 
 export const deleteSpacesBySiteIdsCore = async (tx: Transaction, args: { siteIds: string[]; now: Dayjs }) => {
-  if (args.siteIds.length === 0) return;
+  if (args.siteIds.length === 0) return [];
   await unpublishBySiteIdsCore(tx, { siteIds: args.siteIds, now: args.now });
-  await tx
+  return await tx
     .update(Spaces)
     .set({ state: SpaceState.DELETED })
-    .where(and(inArray(Spaces.siteId, args.siteIds), eq(Spaces.state, SpaceState.ACTIVE)));
+    .where(and(inArray(Spaces.siteId, args.siteIds), eq(Spaces.state, SpaceState.ACTIVE)))
+    .returning({ id: Spaces.id })
+    .then((rows) => rows.map(({ id }) => id));
 };

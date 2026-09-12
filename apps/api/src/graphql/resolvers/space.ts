@@ -6,6 +6,7 @@ import { db, TableCode, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
 import { buildCollectionsBySpaceQuery, buildPinnedPublicationsQuery } from '#/utils/collection-core.ts';
+import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildPublicationsBySpaceQuery } from '#/utils/publication-core.ts';
 import { createSpaceCore, deleteSpaceCore, findActiveSpace, updateSpaceCore } from '#/utils/space.ts';
@@ -28,6 +29,7 @@ ISpace.implement({
     description: t.exposeString('description', { nullable: true }),
     links: t.field({ type: [SpaceLink], resolve: (self) => self.links }),
     allowIndexing: t.exposeBoolean('allowIndexing'),
+    allowDiscovery: t.exposeBoolean('allowDiscovery'),
     dateDisplay: t.expose('dateDisplay', { type: SpaceDateDisplay }),
     logo: t.field({ type: Image, nullable: true, resolve: (self) => self.logoId }),
     url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', () => self.slug) }),
@@ -108,6 +110,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const space = await createSpaceCore(db, { userId: ctx.session.userId, ...input });
       pubsub.publish('site:update', space.siteId, { scope: 'site' });
+      await enqueueDiscoverySpaceSync([space.id]);
       return space;
     },
   }),
@@ -122,11 +125,20 @@ builder.mutationFields((t) => ({
       description: t.input.string({ required: false }),
       links: t.input.field({ type: [SpaceLinkInput], required: false }),
       allowIndexing: t.input.boolean({ required: false }),
+      allowDiscovery: t.input.boolean({ required: false }),
       dateDisplay: t.input.field({ type: SpaceDateDisplay, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const space = await updateSpaceCore(db, { userId: ctx.session.userId, ...input });
       pubsub.publish('site:update', space.siteId, { scope: 'site' });
+      if (
+        input.name !== undefined ||
+        input.description !== undefined ||
+        input.allowIndexing !== undefined ||
+        input.allowDiscovery !== undefined
+      ) {
+        await enqueueDiscoverySpaceSync([space.id]);
+      }
       return space;
     },
   }),
@@ -137,6 +149,7 @@ builder.mutationFields((t) => ({
     resolve: async (_, { input }, ctx) => {
       const space = await deleteSpaceCore(db, { userId: ctx.session.userId, spaceId: input.spaceId, now: dayjs() });
       pubsub.publish('site:update', space.siteId, { scope: 'site' });
+      await enqueueDiscoverySpaceSync([space.id]);
       return space;
     },
   }),

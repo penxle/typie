@@ -1,9 +1,9 @@
 import { SearchHitType } from '@typie/lib/enums';
-import DOMPurify from 'isomorphic-dompurify';
 import { match } from 'ts-pattern';
 import { TableCode, validateDbId } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { sanitizeHighlight } from '#/utils/search-highlight.ts';
 import { filterVisibleSearchHits } from '#/utils/search-index.ts';
 import { decompose } from '#/utils/text.ts';
 import { builder } from '../builder.ts';
@@ -138,9 +138,9 @@ builder.queryFields((t) => ({
         if (hit._index === esIndex.documents) {
           return {
             type: SearchHitType.DOCUMENT,
-            title: sanitizeHtml(hit.highlight?.title?.[0]),
-            subtitle: sanitizeHtml(hit.highlight?.subtitle?.[0]),
-            text: sanitizeHtml(hit.highlight?.text?.[0]),
+            title: sanitizeHighlight(hit.highlight?.title?.[0]),
+            subtitle: sanitizeHighlight(hit.highlight?.subtitle?.[0]),
+            text: sanitizeHighlight(hit.highlight?.text?.[0]),
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             document: hit._id!,
           };
@@ -148,7 +148,7 @@ builder.queryFields((t) => ({
 
         return {
           type: SearchHitType.FOLDER,
-          name: sanitizeHtml(hit.highlight?.name?.[0]),
+          name: sanitizeHighlight(hit.highlight?.name?.[0]),
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           folder: hit._id!,
         };
@@ -163,11 +163,3 @@ builder.queryFields((t) => ({
     },
   }),
 }));
-
-/**
- * * Utils
- */
-
-const sanitizeHtml = (dirty: string | undefined) => {
-  return dirty ? DOMPurify.sanitize(dirty, { ALLOWED_TAGS: ['em'] }) : undefined;
-};

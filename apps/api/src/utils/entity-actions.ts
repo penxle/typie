@@ -18,6 +18,7 @@ import {
   UserPreferences,
 } from '#/db/index.ts';
 import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
+import { enqueueDiscoveryPublicationSync, enqueueDiscoverySyncForDocumentIds } from './discovery-index.ts';
 import { isPrivateVisibilityOnlyInput } from './documents-option-policy.ts';
 import {
   buildFreshV2Content,
@@ -267,8 +268,10 @@ export const deleteEntitiesCore = async (
     throw new TypieError({ code: 'site_mismatch' });
   }
 
+  let unpublishedPublicationIds: string[] = [];
+
   const deletedEntities = await executor.transaction(async (tx) => {
-    await unpublishByEntityIdsCore(tx, { entityIds: entities.map(({ id }) => id), now: dayjs() });
+    unpublishedPublicationIds = await unpublishByEntityIdsCore(tx, { entityIds: entities.map(({ id }) => id), now: dayjs() });
 
     const deletedEntities = await tx
       .update(Entities)
@@ -328,6 +331,7 @@ export const deleteEntitiesCore = async (
     }
 
     await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
+    await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
   });
 
   return deletedEntities;
@@ -810,6 +814,8 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
   );
   const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
 
+  let unpublishedPublicationIds: string[] = [];
+
   const movedEntities = await executor.transaction(async (tx) => {
     const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
     let lastOrder = args.lowerOrder ?? null;
@@ -835,7 +841,7 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
         )
         .then((rows) => rows.map(({ id }) => id));
 
-      await unpublishByEntityIdsCore(tx, { entityIds: movedEntityIds, now: dayjs() });
+      unpublishedPublicationIds = await unpublishByEntityIdsCore(tx, { entityIds: movedEntityIds, now: dayjs() });
     }
 
     for (const entity of entities) {
@@ -902,7 +908,7 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
     return movedEntities;
   });
 
-  await runAfterCommit(afterCommit, () => {
+  await runAfterCommit(afterCommit, async () => {
     if (targetParentId) {
       pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: targetParentId });
     } else {
@@ -924,6 +930,8 @@ export const moveEntitiesCore = async (executor: Database | Transaction, args: M
       publishRecentDocumentUpdates(siteId, 'VIEWED_AT', 'UPDATED_AT');
       publishRecentDocumentUpdates(targetSiteId, 'VIEWED_AT', 'UPDATED_AT');
     }
+
+    await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
   });
 
   return movedEntities;
@@ -1202,9 +1210,12 @@ export const updateDocumentsOptionCore = async (
     }
   });
 
-  await runAfterCommit(afterCommit, () => {
+  await runAfterCommit(afterCommit, async () => {
     for (const doc of documents) {
       pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
+    }
+    if (args.password !== undefined) {
+      await enqueueDiscoverySyncForDocumentIds(documents.map((doc) => doc.id));
     }
   });
 

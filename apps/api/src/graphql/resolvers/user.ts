@@ -66,6 +66,7 @@ import { env, stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
+import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
@@ -766,7 +767,7 @@ builder.mutationFields((t) => ({
   deleteUser: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      const { billingKey, purgedEntityIds } = await db.transaction(async (tx) => {
+      const { billingKey, purgedEntityIds, deletedSpaceIds } = await db.transaction(async (tx) => {
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         // 가드가 락 밖이면 조회 직후 갱신 잡이 청구를 커밋해 탈퇴 시점 과금이 남는다.
@@ -785,7 +786,7 @@ builder.mutationFields((t) => ({
           .where(eq(Sites.userId, ctx.session.userId))
           .then((sites) => sites.map((site) => site.id));
 
-        await deleteSpacesBySiteIdsCore(tx, { siteIds, now: dayjs() });
+        const deletedSpaceIds = await deleteSpacesBySiteIdsCore(tx, { siteIds, now: dayjs() });
 
         const purgedEntities = await tx
           .update(Entities)
@@ -821,10 +822,11 @@ builder.mutationFields((t) => ({
 
         await tx.update(Users).set({ state: UserState.DEACTIVATED }).where(eq(Users.id, ctx.session.userId));
 
-        return { billingKey, purgedEntityIds: purgedEntities.map((entity) => entity.id) };
+        return { billingKey, purgedEntityIds: purgedEntities.map((entity) => entity.id), deletedSpaceIds };
       });
 
       await enqueueSearchSyncForEntityIds(purgedEntityIds);
+      await enqueueDiscoverySpaceSync(deletedSpaceIds);
 
       if (billingKey) {
         try {

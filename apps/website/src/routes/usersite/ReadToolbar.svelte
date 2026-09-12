@@ -9,9 +9,15 @@
   import { getUsersiteChrome } from './chrome.svelte';
   import ThemeFlipButton from './ThemeFlipButton.svelte';
 
+  type Props = {
+    href?: string;
+  };
+
+  let { href }: Props = $props();
+
   const chrome = getUsersiteChrome();
 
-  const href = $derived(chrome.post?.url ?? page.url.origin);
+  const shareHref = $derived(href ?? chrome.post?.url ?? page.url.origin);
 
   const buttonStyle = css.raw({
     display: 'inline-flex',
@@ -70,7 +76,7 @@
   data-hidden={chrome.retreat || undefined}
 >
   <ThemeFlipButton style={buttonStyle} tooltipPlacement="top" via="toolbar" />
-  <ShareLinkPopover style={buttonStyle} {href} iconSize={18} />
+  <ShareLinkPopover style={buttonStyle} href={shareHref} iconSize={18} />
   <button
     class={css(buttonStyle)}
     aria-label="맨 위로"

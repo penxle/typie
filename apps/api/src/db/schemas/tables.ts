@@ -1275,6 +1275,7 @@ export const Spaces = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     allowIndexing: boolean('allow_indexing').notNull().default(true),
+    allowDiscovery: boolean('allow_discovery').notNull().default(true),
     dateDisplay: E._SpaceDateDisplay('date_display').notNull().default('PUBLISHED_AT'),
     state: E._SpaceState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
@@ -1332,6 +1333,7 @@ export const Publications = pgTable(
   },
   (t) => [
     index().on(t.spaceId, t.state, t.publishedAt),
+    index().on(t.state, t.publishedAt, t.id),
     uniqueIndex()
       .on(t.spaceId, t.pinnedOrder)
       .where(sql`${t.pinnedOrder} is not null`),
@@ -1388,7 +1390,7 @@ export const PublicationTags = pgTable(
     name: text('name').notNull(),
     order: text('order').notNull(),
   },
-  (t) => [unique().on(t.publicationId, t.name), index().on(t.spaceId, t.name)],
+  (t) => [unique().on(t.publicationId, t.name), index().on(t.spaceId, t.name), index().on(t.name)],
 );
 
 export const Subscriptions = pgTable(
