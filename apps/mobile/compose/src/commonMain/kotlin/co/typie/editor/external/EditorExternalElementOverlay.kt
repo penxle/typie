@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -13,11 +12,14 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.ExternalElement
@@ -27,7 +29,6 @@ import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.icons.Lucide
-import co.typie.ui.theme.AppShapes
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -66,11 +67,10 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   val uiState = LocalEditorUiState.current
   val density = LocalDensity.current
   val zoom = if (displayZoom.isFinite() && displayZoom > 0f) displayZoom else 1f
+  // Images report intrinsic geometry, so keep measuring them at the visible size for decoding.
+  val imageZoom = if (imageSize != null) zoom else 1f
+  val layerZoom = zoom / imageZoom
   var reportedHeight by remember(element.node) { mutableFloatStateOf(Float.NaN) }
-  val renderScope =
-    remember(zoom) {
-      EditorExternalElementRenderScope(zoom = zoom, shape = AppShapes.rounded(4.dp * zoom))
-    }
   val themeVariant = currentEditorThemeVariant()
   val selectionColor =
     remember(themeVariant) { EditorTheme.resolve(themeVariant).colors.getValue("selection") }
@@ -96,24 +96,40 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
           y = (element.bounds.y * zoom * density.density).roundToInt(),
         )
       }
-      .width((element.bounds.width * zoom).dp)
-      .graphicsLayer { alpha = if (reportedHeight.isNaN()) 0f else 1f }
+      .layout { measurable, constraints ->
+        val width = (element.bounds.width * imageZoom * density.density).roundToInt()
+        val placeable = measurable.measure(Constraints.fixedWidth(width))
+        layout(
+          constraints.constrainWidth((placeable.width * layerZoom).roundToInt()),
+          constraints.constrainHeight((placeable.height * layerZoom).roundToInt()),
+        ) {
+          placeable.placeWithLayer(0, 0) {
+            transformOrigin = TransformOrigin(0f, 0f)
+            scaleX = layerZoom
+            scaleY = layerZoom
+            alpha = if (reportedHeight.isNaN()) 0f else 1f
+          }
+        }
+      }
       .onSizeChanged { size ->
         if (imageSize == null) {
-          reportHeight(size.height.toFloat() / density.density / zoom)
+          reportHeight(size.height.toFloat() / density.density)
         }
       }
   ) {
-    context(renderScope) {
-      when (val data = element.data) {
-        is ExternalElementData.Image ->
-          EditorImageExternalElement(data = data, nodeId = element.node, size = imageSize)
-        is ExternalElementData.File -> EditorFileExternalElement(data = data, nodeId = element.node)
-        is ExternalElementData.Embed ->
-          EditorEmbedExternalElement(data = data, nodeId = element.node)
-        is ExternalElementData.Archived ->
-          EditorExternalElementPlaceholder(icon = Lucide.Archive, text = "보관된 블록")
-      }
+    when (val data = element.data) {
+      is ExternalElementData.Image ->
+        EditorImageExternalElement(
+          data = data,
+          nodeId = element.node,
+          size = imageSize,
+          zoom = imageZoom,
+        )
+      is ExternalElementData.File -> EditorFileExternalElement(data = data, nodeId = element.node)
+      is ExternalElementData.Embed ->
+        EditorEmbedExternalElement(data = data, nodeId = element.node, zoom = zoom)
+      is ExternalElementData.Archived ->
+        EditorExternalElementPlaceholder(icon = Lucide.Archive, text = "보관된 블록")
     }
 
     if (element.isSelected) {
