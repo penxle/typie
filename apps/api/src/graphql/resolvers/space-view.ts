@@ -21,7 +21,7 @@ import { parseUsersiteSlug } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { CollectionView, Image, ISpace, isTypeOf, PublicationView, SpaceView } from '../objects.ts';
 
-const SpacePublicationsPage = builder.simpleObject('SpacePublicationsPage', {
+export const SpacePublicationsPage = builder.simpleObject('SpacePublicationsPage', {
   fields: (t) => ({
     publications: t.field({ type: [PublicationView] }),
     hasMore: t.boolean(),

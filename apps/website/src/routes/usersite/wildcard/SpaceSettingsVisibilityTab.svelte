@@ -5,7 +5,7 @@
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
-  import { SettingsCard, SettingsRow } from '$lib/components';
+  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { publicationErrorCode } from '$lib/publication/error';
   import { publicationErrorMessage } from '$lib/publication/publish-form';
@@ -23,6 +23,7 @@
       fragment UsersiteWildcard_SpaceSettingsVisibilityTab_space on Space {
         id
         allowIndexing
+        allowDiscovery
       }
     `),
     () => space$key,
@@ -34,28 +35,46 @@
         updateSpace(input: $input) {
           id
           allowIndexing
+          allowDiscovery
         }
       }
     `),
   );
 
   let allowIndexing = $state(space.data.allowIndexing);
+  let allowDiscovery = $state(space.data.allowDiscovery);
 
   $effect(() => {
     allowIndexing = space.data.allowIndexing;
+    allowDiscovery = space.data.allowDiscovery;
   });
+
+  const save = async (input: { allowIndexing?: boolean; allowDiscovery?: boolean }, field: string) => {
+    try {
+      await updateSpace({ input: { spaceId: space.data.id, ...input } });
+      cache.invalidate({ __typename: 'Query', $field: 'spaceView' });
+      mixpanel.track('update_space', { field, via: 'space_page' });
+      Toast.success('스페이스 설정이 업데이트됐어요.');
+      return true;
+    } catch (err) {
+      Toast.error(publicationErrorMessage(publicationErrorCode(err)));
+      return false;
+    }
+  };
 
   const setAllowIndexing = async (checked: boolean) => {
     allowIndexing = checked;
-    try {
-      await updateSpace({ input: { spaceId: space.data.id, allowIndexing: checked } });
-      cache.invalidate({ __typename: 'Query', $field: 'spaceView' });
-      mixpanel.track('update_space', { field: 'allowIndexing', via: 'space_page' });
-      Toast.success('스페이스 설정이 업데이트됐어요.');
-    } catch (err) {
-      Toast.error(publicationErrorMessage(publicationErrorCode(err)));
+    if (!(await save({ allowIndexing: checked }, 'allowIndexing'))) {
       await tick();
       allowIndexing = space.data.allowIndexing;
+    }
+  };
+
+  const setAllowDiscovery = async (checked: boolean) => {
+    allowDiscovery = checked;
+    if (!(await save({ allowDiscovery: checked }, 'allowDiscovery'))) {
+      await tick();
+      allowDiscovery = space.data.allowDiscovery;
     }
   };
 </script>
@@ -66,6 +85,23 @@
   </div>
 
   <SettingsCard>
+    <SettingsRow>
+      {#snippet label()}
+        타이피 스퀘어에 노출
+      {/snippet}
+      {#snippet description()}
+        {allowIndexing ? '끄면 타이피 스퀘어 피드 및 검색에 스페이스와 글이 나오지 않아요.' : '검색 엔진에 노출을 켜야 쓸 수 있어요'}
+      {/snippet}
+      {#snippet value()}
+        <Switch
+          disabled={!allowIndexing}
+          bind:checked={() => allowIndexing && allowDiscovery, (checked) => void setAllowDiscovery(checked)}
+        />
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsDivider />
+
     <SettingsRow>
       {#snippet label()}
         검색 엔진에 노출

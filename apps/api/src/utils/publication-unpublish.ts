@@ -6,7 +6,7 @@ import type { Dayjs } from 'dayjs';
 import type { Transaction } from '#/db/index.ts';
 
 export const unpublishByEntityIdsCore = async (tx: Transaction, args: { entityIds: string[]; now: Dayjs }) => {
-  if (args.entityIds.length === 0) return;
+  if (args.entityIds.length === 0) return [];
   const affected = await tx
     .select({ publicationId: Publications.id, entityId: Documents.entityId, state: Publications.state })
     .from(Publications)
@@ -17,7 +17,7 @@ export const unpublishByEntityIdsCore = async (tx: Transaction, args: { entityId
         inArray(Publications.state, [PublicationState.PUBLISHED, PublicationState.SCHEDULED]),
       ),
     );
-  if (affected.length === 0) return;
+  if (affected.length === 0) return [];
   await tx
     .update(Publications)
     .set({ state: PublicationState.UNPUBLISHED, scheduledAt: null, unpublishedAt: args.now, pinnedOrder: null })
@@ -31,6 +31,7 @@ export const unpublishByEntityIdsCore = async (tx: Transaction, args: { entityId
   if (publishedEntityIds.length > 0) {
     await tx.update(Entities).set({ visibility: EntityVisibility.PRIVATE }).where(inArray(Entities.id, publishedEntityIds));
   }
+  return affected.map((row) => row.publicationId);
 };
 
 export const unpublishBySpaceIdCore = async (tx: Transaction, args: { spaceId: string; now: Dayjs }) => {
@@ -41,11 +42,11 @@ export const unpublishBySpaceIdCore = async (tx: Transaction, args: { spaceId: s
     .where(
       and(eq(Publications.spaceId, args.spaceId), inArray(Publications.state, [PublicationState.PUBLISHED, PublicationState.SCHEDULED])),
     );
-  await unpublishByEntityIdsCore(tx, { entityIds: rows.map((row) => row.entityId), now: args.now });
+  return await unpublishByEntityIdsCore(tx, { entityIds: rows.map((row) => row.entityId), now: args.now });
 };
 
 export const unpublishBySiteIdsCore = async (tx: Transaction, args: { siteIds: string[]; now: Dayjs }) => {
-  if (args.siteIds.length === 0) return;
+  if (args.siteIds.length === 0) return [];
   const rows = await buildPublishingEntityIdsBySiteQuery(tx, { siteIds: args.siteIds });
-  await unpublishByEntityIdsCore(tx, { entityIds: rows.map((row) => row.entityId), now: args.now });
+  return await unpublishByEntityIdsCore(tx, { entityIds: rows.map((row) => row.entityId), now: args.now });
 };
