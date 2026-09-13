@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as tables from '#/db/schemas/tables.ts';
 import {
   buildCollectionNeighborQuery,
+  buildIndexableSpaceSlugsQuery,
   buildPublishedCollectionIdsQuery,
   buildPublishedPublicationByIdQuery,
   buildPublishedPublicationsQuery,
@@ -28,6 +29,16 @@ test('space by slug requires an active space on an active site', () => {
   assert.match(query.sql, /"spaces"\."state" = /);
   assert.match(query.sql, /"sites"\."state" = /);
   assert.deepEqual(query.params, ['myspace', 'ACTIVE', 'ACTIVE']);
+});
+
+test('indexable space slugs require an active space that allows indexing on an active site, oldest first', () => {
+  const query = buildIndexableSpaceSlugsQuery(database).toSQL();
+  assert.match(query.sql, /inner join "sites"/);
+  assert.match(query.sql, /"spaces"\."state" = /);
+  assert.match(query.sql, /"spaces"\."allow_indexing" = /);
+  assert.match(query.sql, /"sites"\."state" = /);
+  assert.match(query.sql, /order by "spaces"\."created_at"/);
+  assert.deepEqual(query.params, ['ACTIVE', true, 'ACTIVE']);
 });
 
 test('published publications join active entities, order by published_at desc then id desc, and cut by keyset cursor', () => {

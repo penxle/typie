@@ -1,12 +1,12 @@
 import { SpaceAvailableAction } from '@typie/lib/enums';
-import { NotFoundError, TypieError } from '@typie/lib/errors';
+import { NotFoundError } from '@typie/lib/errors';
 import { and, eq, inArray } from 'drizzle-orm';
 import { Collections, db, firstOrThrowWith, Sites, TableCode, validateDbId } from '#/db/index.ts';
-import { env } from '#/env.ts';
 import { buildPinnedPublicationsQuery } from '#/utils/collection-core.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import {
   buildCollectionsByIdsQuery,
+  buildIndexableSpaceSlugsQuery,
   buildPublishedCollectionIdsQuery,
   buildPublishedPublicationCountQuery,
   buildPublishedPublicationsQuery,
@@ -17,7 +17,6 @@ import {
   clampPageSize,
   toPublicationsPage,
 } from '#/utils/publication-view-core.ts';
-import { parseUsersiteSlug } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { CollectionView, Image, ISpace, isTypeOf, PublicationView, SpaceView } from '../objects.ts';
 
@@ -188,13 +187,16 @@ SpaceView.implement({
 builder.queryFields((t) => ({
   spaceView: t.field({
     type: SpaceView,
-    args: { origin: t.arg.string() },
+    args: { slug: t.arg.string() },
     resolve: async (_, args) => {
-      const slug = parseUsersiteSlug(args.origin, env.USERSITE_URL);
-      if (!slug) {
-        throw new TypieError({ code: 'invalid_hostname' });
-      }
-      return await buildSpaceBySlugQuery(db, { slug }).then(firstOrThrowWith(new NotFoundError()));
+      return await buildSpaceBySlugQuery(db, { slug: args.slug }).then(firstOrThrowWith(new NotFoundError()));
+    },
+  }),
+
+  sitemapSpaceSlugs: t.stringList({
+    resolve: async () => {
+      const rows = await buildIndexableSpaceSlugsQuery(db);
+      return rows.map((row) => row.slug);
     },
   }),
 }));

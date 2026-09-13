@@ -5,4 +5,8 @@ export const parseUsersiteSlug = (origin: string, usersiteUrl: string): string |
   return origin.match(pattern)?.[1] ?? null;
 };
 
-export const isUsersiteApexOrigin = (origin: string, usersiteUrl: string) => origin === usersiteUrl.replace('*.', '');
+export const isUsersiteApexOrigin = (origin: string, usersiteUrl: string) => origin === usersiteApexUrl(usersiteUrl);
+
+export const usersiteApexUrl = (usersiteUrl: string) => usersiteUrl.replace('*.', '');
+
+export const spaceUrl = (usersiteUrl: string, slug: string) => `${usersiteApexUrl(usersiteUrl)}/@${slug}`;

@@ -15,6 +15,7 @@ import {
   updatePublicationCore,
 } from '#/utils/publication.ts';
 import { buildLatestVersionMetadataQuery } from '#/utils/publication-core.ts';
+import { spaceUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { Collection, Document, Image, isTypeOf, Publication, Space } from '../objects.ts';
 import type { Context } from '#/context.ts';
@@ -121,7 +122,7 @@ Publication.implement({
             key: ({ id }: { id: string }) => id,
           })
           .load(self.spaceId);
-        return `${env.USERSITE_URL.replace('*', () => space.slug)}/p/${self.id}`;
+        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.id}`;
       },
     }),
     hasUnpublishedChanges: t.boolean({

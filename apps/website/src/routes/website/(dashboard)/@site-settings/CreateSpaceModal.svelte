@@ -100,8 +100,8 @@
 
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <label class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.default' })} for="create-space-slug">주소</label>
-      <TextInput id="create-space-slug" rightItemAttached size="md" bind:value={form.fields.slug}>
-        {#snippet rightItem()}
+      <TextInput id="create-space-slug" leftItemAttached size="md" bind:value={form.fields.slug}>
+        {#snippet leftItem()}
           <span
             class={css({
               fontSize: '13px',
@@ -113,7 +113,7 @@
               alignItems: 'center',
             })}
           >
-            .{env.PUBLIC_USERSITE_HOST}
+            {env.PUBLIC_USERSITE_HOST}/@
           </span>
         {/snippet}
       </TextInput>

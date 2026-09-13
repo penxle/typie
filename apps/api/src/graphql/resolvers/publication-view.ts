@@ -19,6 +19,7 @@ import { checkDocumentViewAccess, getDocumentViewUnlockKey, RESTRICTED_EXCERPT }
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildLatestVersionGraphsQuery } from '#/utils/publication-core.ts';
 import { buildCollectionNeighborQuery, buildPublishedPublicationByIdQuery, deriveExcerpt } from '#/utils/publication-view-core.ts';
+import { spaceUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { CollectionView, DocumentReaction, IEditorDocument, Image, isTypeOf, PublicationView, SpaceView } from '../objects.ts';
 import { DocumentAsset, DocumentViewBody } from './document.ts';
@@ -222,7 +223,7 @@ PublicationView.implement({
     url: t.string({
       resolve: async (self, _, ctx) => {
         const space = await spaceLoader(ctx).load(self.spaceId);
-        return `${env.USERSITE_URL.replace('*', () => space.slug)}/p/${self.id}`;
+        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.id}`;
       },
     }),
     space: t.expose('spaceId', { type: SpaceView }),
