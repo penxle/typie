@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,10 +62,15 @@ internal fun EditorDocumentPlaceholder(
     ) ?: return
   val textColor = AppTheme.colors.textHint
   val fontSize = with(density) { placement.fontSizePx.dp.toSp() }
-  val lineHeight = with(density) { (placement.fontSizePx * placement.lineHeightRatio).dp.toSp() }
+  // Keep the engine's line-height ratio independent of Android's nonlinear font scaling.
+  val lineHeight = placement.lineHeightRatio.em
   val letterSpacing = placement.letterSpacingEm.em
   val textStyle =
-    TextStyle(fontSize = fontSize, lineHeight = lineHeight, letterSpacing = letterSpacing)
+    AppTheme.typography.body.copy(
+      fontSize = fontSize,
+      lineHeight = lineHeight,
+      letterSpacing = letterSpacing,
+    )
   val firstLineTextStyle =
     textStyle.copy(
       lineHeightStyle =
