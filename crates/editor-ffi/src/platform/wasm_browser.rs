@@ -9,7 +9,7 @@ pub type PlatformHandle = web_sys::HtmlElement;
 struct CanvasTile {
     bounds: [i32; 4],
     version: u64,
-    element: web_sys::HtmlElement,
+    element: web_sys::HtmlCanvasElement,
     context: web_sys::CanvasRenderingContext2d,
     pending: Option<(IRect, Vec<u8>)>,
 }
@@ -21,7 +21,6 @@ pub struct SurfaceHandle {
     tiles: Vec<CanvasTile>,
     prepared_frame: Option<u64>,
     tiles_changed: bool,
-    layout_changed: bool,
     mounted: bool,
 }
 
@@ -42,6 +41,9 @@ impl SurfaceHandle {
                     .map_err(Into::into)
             })
             .map_err(|_| FfiError::Surface("could not create tile container".into()))?;
+        container
+            .set_attribute("style", "position:absolute;left:0;top:0;")
+            .map_err(|_| FfiError::Surface("could not style tile container".into()))?;
         Ok(Self {
             handle,
             container,
@@ -49,7 +51,6 @@ impl SurfaceHandle {
             tiles: Vec::new(),
             prepared_frame: None,
             tiles_changed: true,
-            layout_changed: true,
             mounted: false,
         })
     }
@@ -70,7 +71,6 @@ impl SurfaceHandle {
         self.prepared_frame = None;
         self.tiles.clear();
         self.tiles_changed = true;
-        self.layout_changed = true;
         true
     }
 
@@ -152,40 +152,32 @@ impl SurfaceHandle {
             .create_element("canvas")?
             .dyn_into::<web_sys::HtmlCanvasElement>()?;
         let [left, top, right, bottom] = tile.bounds;
-        let width = (right - left + 2) as u32;
-        let height = (bottom - top + 2) as u32;
+        let width = (right - left) as u32;
+        let height = (bottom - top) as u32;
         canvas.set_width(width);
         canvas.set_height(height);
         canvas.set_attribute("data-tile-x", &left.to_string())?;
         canvas.set_attribute("data-tile-y", &top.to_string())?;
-        let element = document
-            .create_element("div")?
-            .dyn_into::<web_sys::HtmlElement>()?;
-        // Keep every tile on one integer pixel grid. Scaling the common container
-        // avoids separately rounded CSS bounds overlapping translucent pixels.
-        element.set_attribute(
-            "style",
-            &format!(
-                "position:absolute;overflow:hidden;left:{left}px;top:{top}px;width:{}px;height:{}px;",
-                right - left,
-                bottom - top,
-            ),
-        )?;
-        // Glyphs are already rasterized at the surface scale. Preserve those
-        // pixels when the browser places a tile between device pixels.
+        let scale = 1.0 / self.raster.scale_factor();
+        // Map the intrinsic canvas pixels directly to page coordinates. Scaling
+        // a clipped wrapper can resample glyphs, while fractional CSS bounds are
+        // rounded independently and can misalign adjacent tiles.
         canvas.set_attribute(
             "style",
-            &format!("position:absolute;left:-1px;top:-1px;width:{width}px;height:{height}px;image-rendering:pixelated;",),
+            &format!(
+                "position:absolute;left:0;top:0;width:{width}px;height:{height}px;image-rendering:pixelated;transform-origin:0 0;transform:matrix({scale},0,0,{scale},{},{});",
+                f64::from(left) * scale,
+                f64::from(top) * scale,
+            ),
         )?;
         let ctx = canvas
             .get_context("2d")?
             .ok_or_else(|| JsValue::from_str("2d context unavailable"))?
             .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-        element.append_child(&canvas)?;
         Ok(CanvasTile {
             bounds: tile.bounds,
             version: tile.version,
-            element,
+            element: canvas,
             context: ctx,
             pending: None,
         })
@@ -206,32 +198,20 @@ impl SurfaceHandle {
                 ) else {
                     return false;
                 };
+                // The raster gutter is outside this canvas and is clipped by
+                // putImageData, without a CSS clip boundary.
                 if tile
                     .context
                     .put_image_data(
                         &data,
-                        f64::from(dirty.x0 - tile.bounds[0] + 1),
-                        f64::from(dirty.y0 - tile.bounds[1] + 1),
+                        f64::from(dirty.x0 - tile.bounds[0]),
+                        f64::from(dirty.y0 - tile.bounds[1]),
                     )
                     .is_err()
                 {
                     return false;
                 }
             }
-        }
-        if self.layout_changed {
-            if self.container.set_attribute(
-                "style",
-                &format!(
-                    "position:absolute;left:0;top:0;width:{}px;height:{}px;transform-origin:0 0;transform:scale({});",
-                    self.raster.width,
-                    self.raster.height,
-                    1.0 / self.raster.scale_factor(),
-                ),
-            ).is_err() {
-                return false;
-            }
-            self.layout_changed = false;
         }
         if self.tiles_changed {
             let nodes = js_sys::Array::new();
