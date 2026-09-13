@@ -1,10 +1,12 @@
 package co.typie
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
 import co.typie.navigation.LocalNavigationStatusBarAppearanceController
 import co.typie.navigation.NavigationStatusBarAppearanceController
+import co.typie.platform.KeyboardExtensionPolicy
 import co.typie.ui.utils.LocalNativeShortcutRegistry
 import co.typie.ui.utils.NativeShortcutRegistry
 
@@ -17,6 +19,6 @@ fun MainViewController(
       LocalNativeShortcutRegistry provides shortcutRegistry,
       LocalNavigationStatusBarAppearanceController provides statusBarAppearanceController,
     ) {
-      App()
+      InterceptPlatformTextInput(interceptor = KeyboardExtensionPolicy.interceptor) { App() }
     }
   }
