@@ -29,7 +29,7 @@
 
   let tab = $state<'list' | 'link'>('list');
 
-  const domain = $derived(spaceUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') || `${spaceSlug}.typie.me`);
+  const domain = $derived(spaceUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') || `${env.PUBLIC_USERSITE_HOST}/@${spaceSlug}`);
   const previewImageUrl = $derived(
     qs.stringifyUrl({
       url: `${env.PUBLIC_API_URL}/og/preview`,

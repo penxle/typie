@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isUsersiteApexOrigin, parseUsersiteSlug } from './usersite-core.ts';
+import { isUsersiteApexOrigin, parseUsersiteSlug, spaceUrl, usersiteApexUrl } from './usersite-core.ts';
 
 const USERSITE_URL = 'https://*.typie.me';
 
@@ -24,4 +24,12 @@ test('isUsersiteApexOrigin accepts the apex origin and rejects wildcard and fore
   assert.equal(isUsersiteApexOrigin('https://typie.me', USERSITE_URL), true);
   assert.equal(isUsersiteApexOrigin('https://myspace.typie.me', USERSITE_URL), false);
   assert.equal(isUsersiteApexOrigin('https://typie.co', USERSITE_URL), false);
+});
+
+test('usersiteApexUrl strips the wildcard label', () => {
+  assert.equal(usersiteApexUrl(USERSITE_URL), 'https://typie.me');
+});
+
+test('spaceUrl places the slug under the apex origin with an @ prefix', () => {
+  assert.equal(spaceUrl(USERSITE_URL, 'myspace'), 'https://typie.me/@myspace');
 });

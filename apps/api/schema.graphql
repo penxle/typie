@@ -1909,8 +1909,9 @@ type Query {
   seed: Float!
   site(siteId: ID!): Site!
   siteView(origin: String!): SiteView!
+  sitemapSpaceSlugs: [String!]!
   space(spaceId: ID!): Space!
-  spaceView(origin: String!): SpaceView!
+  spaceView(slug: String!): SpaceView!
   stats: JSON!
   userView(id: ID!): UserView!
   widgets: [Widget!]!

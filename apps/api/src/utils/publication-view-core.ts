@@ -38,6 +38,14 @@ export const buildSpaceBySlugQuery = (executor: Executor, input: { slug: string 
     .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
     .where(and(eq(Spaces.slug, input.slug), eq(Spaces.state, SpaceState.ACTIVE), eq(Sites.state, SiteState.ACTIVE)));
 
+export const buildIndexableSpaceSlugsQuery = (executor: Executor) =>
+  executor
+    .select({ slug: Spaces.slug })
+    .from(Spaces)
+    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
+    .where(and(eq(Spaces.state, SpaceState.ACTIVE), eq(Spaces.allowIndexing, true), eq(Sites.state, SiteState.ACTIVE)))
+    .orderBy(Spaces.createdAt);
+
 type PublishedQueryInput = {
   spaceId: string;
   collectionId?: string;
