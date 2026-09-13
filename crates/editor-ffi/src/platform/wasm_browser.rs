@@ -171,9 +171,11 @@ impl SurfaceHandle {
                 bottom - top,
             ),
         )?;
+        // Glyphs are already rasterized at the surface scale. Preserve those
+        // pixels when the browser places a tile between device pixels.
         canvas.set_attribute(
             "style",
-            &format!("position:absolute;left:-1px;top:-1px;width:{width}px;height:{height}px;",),
+            &format!("position:absolute;left:-1px;top:-1px;width:{width}px;height:{height}px;image-rendering:pixelated;",),
         )?;
         let ctx = canvas
             .get_context("2d")?
