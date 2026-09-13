@@ -19,6 +19,7 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionEffects
+import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -30,39 +31,45 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorPointSelectionSemanticTest {
   @Test
-  fun `pointer selection commits marked text before moving in every dispatch path`() =
+  fun `pointer selection lets Android IME finish composition and commits before moving elsewhere`() =
     runTest(StandardTestDispatcher()) {
-      for (path in listOf("immediate", "suspending", "enqueued")) {
-        val fake =
-          FakeFfiEditor(
-            imeProvider = { _, _ ->
-              Ime(
-                text = "日本語 text",
-                windowStart = 0,
-                selection = ImeRange(3, 3),
-                composing = ImeRange(0, 3),
-              )
-            }
+      for (platform in Platform.entries) {
+        for (path in listOf("immediate", "suspending", "enqueued")) {
+          val fake =
+            FakeFfiEditor(
+              imeProvider = { _, _ ->
+                Ime(
+                  text = "日本語 text",
+                  windowStart = 0,
+                  selection = ImeRange(3, 3),
+                  composing = ImeRange(0, 3),
+                )
+              }
+            )
+          val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+          editor.setImeSessionActive(true)
+          fake.applySnapshot(editor)
+          val semantic = EditorPointSelectionSemantic(effects = UnusedEffects, platform = platform)
+          val point = PagePoint(page = 0, x = 100f, y = 20f)
+          val selection = SelectionOp.SetAt(page = 0, x = 100f, y = 20f)
+
+          when (path) {
+            "immediate" -> semantic.applySelection(editor, selection)
+            "suspending" -> semantic.dispatchCursorMove(editor, point)
+            "enqueued" -> semantic.enqueueCursorMove(editor, point)
+          }
+          testScheduler.runCurrent()
+
+          assertEquals(
+            if (platform == Platform.Android) {
+              listOf(Message.Selection(selection))
+            } else {
+              listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), Message.Selection(selection))
+            },
+            fake.enqueued,
+            "$platform/$path",
           )
-        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-        editor.setImeSessionActive(true)
-        fake.applySnapshot(editor)
-        val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
-        val point = PagePoint(page = 0, x = 100f, y = 20f)
-        val selection = SelectionOp.SetAt(page = 0, x = 100f, y = 20f)
-
-        when (path) {
-          "immediate" -> semantic.applySelection(editor, selection)
-          "suspending" -> semantic.dispatchCursorMove(editor, point)
-          "enqueued" -> semantic.enqueueCursorMove(editor, point)
         }
-        testScheduler.runCurrent()
-
-        assertEquals(
-          listOf(Message.TextInput(listOf(FlatImeOp.CommitAsIs)), Message.Selection(selection)),
-          fake.enqueued,
-          path,
-        )
       }
     }
 
@@ -71,7 +78,8 @@ class EditorPointSelectionSemanticTest {
     runTest(StandardTestDispatcher()) {
       val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      val semantic =
+        EditorPointSelectionSemantic(effects = UnusedEffects, platform = Platform.Desktop)
       var onAppliedCalled = false
 
       assertTrue(
@@ -91,7 +99,8 @@ class EditorPointSelectionSemanticTest {
   @Test
   fun `cursor move semantic does not own selection hit admission`() =
     runTest(StandardTestDispatcher()) {
-      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      val semantic =
+        EditorPointSelectionSemantic(effects = UnusedEffects, platform = Platform.Desktop)
       val rangeSelection =
         Selection(
           anchor = Position("text", 0, Affinity.Downstream),
@@ -128,7 +137,8 @@ class EditorPointSelectionSemanticTest {
           }
         }
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
-      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      val semantic =
+        EditorPointSelectionSemantic(effects = UnusedEffects, platform = Platform.Desktop)
       var onAppliedCalled = false
 
       assertFalse(
@@ -153,7 +163,8 @@ class EditorPointSelectionSemanticTest {
         FakeFfiEditor(cursorProvider = { cursorAt(x = 20f) }, selectionProvider = { selection })
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.publishSnapshot(editor)
-      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      val semantic =
+        EditorPointSelectionSemantic(effects = UnusedEffects, platform = Platform.Desktop)
 
       assertTrue(
         semantic.dispatchSelectionExtension(
@@ -195,7 +206,8 @@ class EditorPointSelectionSemanticTest {
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.publishSnapshot(editor)
       fake.enqueued.clear()
-      val semantic = EditorPointSelectionSemantic(effects = UnusedEffects)
+      val semantic =
+        EditorPointSelectionSemantic(effects = UnusedEffects, platform = Platform.Desktop)
 
       assertTrue(
         semantic.dispatchUnitSelection(

@@ -1034,6 +1034,101 @@ fn replacement_fires_on_commit_as_is() {
 }
 
 #[test]
+fn commit_after_cursor_move_does_not_replace_destination_text() {
+    let (s, p1) = state! {
+        doc { root { p1: paragraph { text("ㅎㅎ 본문") } } }
+        selection: (p1, 5)
+    };
+    let mut editor = editor_with_rules(s, vec![rule("ㅎㅎ", "웃음", false)]);
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose { text: "한".into() }],
+    });
+    editor.apply(Message::Selection {
+        op: SelectionOp::Set {
+            selection: Selection::collapsed(Position::new(p1, 2)),
+        },
+    });
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::CommitAsIs],
+    });
+
+    let (expected, ..) = state! {
+        doc { root { p1: paragraph { text("ㅎㅎ 본문한") } } }
+        selection: (p1, 2)
+    };
+    assert_state_eq!(editor.state(), &expected);
+    assert!(editor.state().composition.is_none());
+
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose { text: "ㄱ".into() }],
+    });
+    assert_eq!(flat_text(&editor), "\u{2028}ㅎㅎㄱ 본문한\u{2029}");
+    assert_eq!(caret_flat(&editor), 4);
+    assert_eq!(
+        editor.state().composition,
+        Some(Composition { start: 3, end: 4 })
+    );
+}
+
+#[test]
+fn commit_after_cursor_move_replaces_at_composition_and_preserves_selection() {
+    for (anchor, head, expected_anchor, expected_head) in [(2, 2, 2, 2), (6, 6, 7, 7), (6, 4, 7, 5)]
+    {
+        let (s, p1) = state! {
+            doc { root { p1: paragraph { text("ㅎㅎ 본문") } } }
+            selection: (p1, 3)
+        };
+        let mut editor = editor_with_rules(
+            s,
+            vec![rule("ㅎㅎ", "웃음", false), rule("한", "한글", false)],
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "한".into() }],
+        });
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::new(Position::new(p1, anchor), Position::new(p1, head)),
+            },
+        });
+        let moved_selection = editor.state().selection;
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
+        });
+
+        assert_eq!(flat_text(&editor), "\u{2028}ㅎㅎ 한글본문\u{2029}");
+        assert_eq!(
+            editor.state().selection,
+            Selection::new(
+                Position::new(p1, expected_anchor),
+                Position::new(p1, expected_head),
+            )
+            .normalize(&editor.state().view()),
+        );
+        assert!(editor.state().composition.is_none());
+
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(flat_text(&editor), "\u{2028}ㅎㅎ 한본문\u{2029}");
+        assert_eq!(editor.state().selection, moved_selection);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+
+        // Backspace acts on the moved selection, not on the replacement at the old composition.
+        key(&mut editor, Key::Backspace);
+        assert_eq!(
+            flat_text(&editor),
+            match (anchor, head) {
+                (2, 2) => "\u{2028}ㅎ 한글본문\u{2029}",
+                (6, 6) => "\u{2028}ㅎㅎ 한글본\u{2029}",
+                _ => "\u{2028}ㅎㅎ 한글\u{2029}",
+            },
+        );
+    }
+}
+
+#[test]
 fn commit_barrier_replaces_before_later_op_in_same_text_input() {
     let (s, ..) = state! {
         doc { root { p1: paragraph { text("") } } }

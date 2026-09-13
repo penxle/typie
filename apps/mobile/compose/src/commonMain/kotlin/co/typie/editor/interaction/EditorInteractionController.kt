@@ -25,12 +25,13 @@ internal class EditorInteractionController(
   override val effects: EditorInteractionEffects,
   override val geometry: EditorInteractionGeometry,
   private val uiStateProvider: () -> EditorUiState,
+  private val platformProvider: () -> Platform = { Platform.Desktop },
   override val semantics: EditorInteractionSemantics =
     EditorInteractionSemantics(
       effects = effects,
+      platform = platformProvider(),
       contextMenuStateProvider = { uiStateProvider().contextMenu },
     ),
-  private val platformProvider: () -> Platform = { Platform.Desktop },
   private val pointerInputEnabledProvider: () -> Boolean = { true },
   private val suppressedTapProvider: (Long) -> Boolean = { false },
   private val readOnlyProvider: () -> Boolean = { false },

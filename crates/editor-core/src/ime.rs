@@ -146,7 +146,8 @@ impl Editor {
         // composition is invisible to the editor) — and happens at moments that
         // already diverge for the IME (jumps, Enter, rewrites). Two violations
         // re-anchor unconditionally: the window no longer contains the cursor,
-        // and the hard cap that keeps the window bounded.
+        // and the hard cap on retained before-context. A live composition is
+        // still included below even when the cursor moves beyond that cap.
         let natural_start = sel_start.saturating_sub(before_limit);
         let window_start = match self.ime_window_anchor {
             Some(anchor) => {
@@ -169,6 +170,11 @@ impl Editor {
             }
             None => natural_start,
         };
+        // A native cursor move can leave composition behind until the IME ends
+        // it. Keep both ranges in the window so the host can report real offsets.
+        let window_start = state
+            .composition
+            .map_or(window_start, |c| window_start.min(c.start));
         // Keep trailing context relative to the whole composition, not its
         // internal caret. Otherwise moving inside marked text changes the
         // window's text and looks like an external edit to the IME.
@@ -414,6 +420,59 @@ mod tests {
             editor.state().composition,
             Some(Composition { start: 1, end: 2 })
         );
+    }
+
+    #[test]
+    fn ime_keeps_composition_visible_after_cursor_moves_until_ime_finishes_it() {
+        let (state, p1) = state! {
+            doc { root { p1: paragraph { text("abcdefghijklmnopqrstuvwxyz") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.ime(1, 1).unwrap().unwrap();
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "한".into() }],
+        });
+        let before = editor.ime(1, 1).unwrap().unwrap();
+        editor.view.layout(&editor.state);
+
+        // Android moves the cursor first, then lets the IME finish its preedit.
+        // The new cursor is beyond the window's normal re-anchoring hard cap.
+        editor.apply(Message::Selection {
+            op: SelectionOp::SetAt {
+                page: 0,
+                x: 9999.0,
+                y: 5.0,
+            },
+        });
+        let moved = editor.ime(1, 1).unwrap().unwrap();
+        assert_eq!(moved.selection, ImeRange { start: 28, end: 28 });
+        assert_eq!(moved.composing, before.composing);
+        assert!(moved.window_start <= 1, "{moved:?}");
+        assert!(
+            moved.text.contains("한abcdefghijklmnopqrstuvwxyz"),
+            "{moved:?}"
+        );
+
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
+        });
+        assert!(editor.state().composition.is_none());
+        assert_eq!(
+            editor.ime(1, 1).unwrap().unwrap().selection,
+            moved.selection
+        );
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㄱ".into() }],
+        });
+        let after = editor.ime(64, 64).unwrap().unwrap();
+        let doc = editor.state().view();
+        assert_eq!(
+            editor_state::flat_text(&doc, 0..editor_state::flat_size(&doc)),
+            "\u{2028}한abcdefghijklmnopqrstuvwxyzㄱ\u{2029}"
+        );
+        assert_eq!(after.composing, Some(ImeRange { start: 28, end: 29 }));
+        assert_eq!(editor.state().selection.unwrap().head.node, p1);
     }
 
     #[test]

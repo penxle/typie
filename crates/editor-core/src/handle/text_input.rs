@@ -8,7 +8,7 @@ use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{
     Affinity, Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState,
     ResolvedPosition, ResolvedPositionFlatExt, Selection, StablePosition, apply_pending,
-    as_gap_cursor, continuation_at, flat_chars, flat_segments_in_range, flat_size,
+    as_gap_cursor, continuation_at, flat_chars, flat_segments_in_range, flat_size, remap_selection,
     replacement_paint,
 };
 use editor_transaction::{HistoryMeta, MergeKind, Transaction};
@@ -320,7 +320,7 @@ struct FlatImeReduction {
     // must see the full replacement — trimming swallows a leading trigger
     // char that matches the selection's first character.
     untrimmed_text_change: Option<FlatImeTextChange>,
-    committed_composition: bool,
+    committed_composition_end: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -691,11 +691,11 @@ impl FlatImeState {
         let initial_sel_start = self.sel_start;
         let mut anchored_change: Option<FlatImeAnchoredChangeTracker> = None;
         let mut can_track_anchored_change = true;
-        let mut committed_composition = false;
+        let mut committed_composition_end = None;
 
         for op in ops {
             if matches!(op, FlatImeOp::CommitAsIs) && self.has_valid_composition() {
-                committed_composition = true;
+                committed_composition_end = self.comp.map(|(_, end)| end);
             }
             if let Some(change) = self.apply(op) {
                 if !can_track_anchored_change {
@@ -742,7 +742,7 @@ impl FlatImeState {
             state: self,
             text_change,
             untrimmed_text_change,
-            committed_composition,
+            committed_composition_end,
         }
     }
 }
@@ -979,7 +979,7 @@ fn handle_flat_ime_segment(
         return Ok(());
     }
 
-    let mut committed_composition = false;
+    let mut committed_composition_end = None;
     let mut tail_coordinates = None;
     let committed_insert = (|| -> Result<bool, EditorError> {
         let reach: Vec<_> = ops.iter().chain(tail.iter()).cloned().collect();
@@ -1022,7 +1022,7 @@ fn handle_flat_ime_segment(
             delete_paint = None;
         }
 
-        let reduced_committed_composition = reduced.committed_composition;
+        let reduced_committed_composition_end = reduced.committed_composition_end;
         let result = reduced.state;
         let untrimmed_text_change = reduced.untrimmed_text_change;
         let Some(text_change) = reduced.text_change else {
@@ -1132,6 +1132,7 @@ fn handle_flat_ime_segment(
                 let composition = result
                     .comp
                     .map(|(start, end)| (capture(start), capture(end)));
+                let committed_end = reduced_committed_composition_end.and_then(&mut capture);
                 let tail_positions = (!tail.is_empty()).then(|| {
                     (result.text.base..=result.text.base + result.text.chars.len())
                         .map(&mut capture)
@@ -1278,6 +1279,8 @@ fn handle_flat_ime_segment(
                 if has_text_delta && !tr.doc_changed() {
                     return Ok(());
                 }
+                committed_composition_end =
+                    committed_end.and_then(|end| end.resolve(tr, &inserted));
 
                 {
                     let composition = composition.and_then(|(start, end)| {
@@ -1335,16 +1338,42 @@ fn handle_flat_ime_segment(
         }
 
         editor.ime_delete_paint = next_delete_paint;
-        committed_composition = reduced_committed_composition;
-
         Ok(!text_change.insert.is_empty() && result.comp.is_none())
     })()?;
 
-    if committed_composition || committed_insert {
+    if committed_composition_end.is_some() || committed_insert {
         let resource = Arc::clone(&editor.resource);
         let resource = resource.lock().unwrap();
         editor.transact(|tr| {
+            // Finishing composition can arrive after the user moves the caret.
+            // Replace at the committed text, preserving the user's new selection.
+            let restore = if let Some(end) = committed_composition_end {
+                let view = tr.view();
+                let current = tr.selection().and_then(|s| s.resolve(&view));
+                if current.is_some_and(|s| s.is_collapsed() && s.head().to_flat() == end) {
+                    None
+                } else {
+                    let target = selection_from_flat_range(&view, end, end)?;
+                    let before = tr.state().clone();
+                    tr.set_selection(Some(target))?;
+                    Some(before)
+                }
+            } else {
+                None
+            };
             commands::optional!(commands::try_text_replacement(&resource))(tr)?;
+            if let Some(before) = restore {
+                let selection = before
+                    .selection
+                    .and_then(|s| remap_selection(s, &before, tr.state()))
+                    .ok_or(CommandError::Corrupted(
+                        "IME commit selection could not be restored".into(),
+                    ))?;
+                tr.set_selection(Some(selection))?;
+                tr.keep_pending_modifiers();
+                // Backspace at the moved caret must not undo this replacement.
+                tr.update_meta(|meta| meta.history = HistoryMeta::Record);
+            }
             Ok(())
         })?;
     }

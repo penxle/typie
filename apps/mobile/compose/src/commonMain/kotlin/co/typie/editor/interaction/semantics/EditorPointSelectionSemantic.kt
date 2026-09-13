@@ -10,19 +10,25 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorInteractionEffects
+import co.typie.platform.Platform
 import kotlin.concurrent.Volatile
 
-internal class EditorPointSelectionSemantic(private val effects: EditorInteractionEffects) {
+internal class EditorPointSelectionSemantic(
+  private val effects: EditorInteractionEffects,
+  private val platform: Platform,
+) {
   @Volatile private var pendingSelectionGeneration = 0L
 
   fun cancelPendingSelection() {
     pendingSelectionGeneration += 1
   }
 
+  // Android IMEs finish composition after updateSelection reports the new cursor
+  // together with the existing composing range, as a native EditText does.
   fun applySelection(editor: Editor, op: SelectionOp): EditorState? {
     val update =
       editor.updateNow {
-        if (editor.appliedState.ime?.composing != null) {
+        if (platform != Platform.Android && editor.appliedState.ime?.composing != null) {
           enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
         }
         enqueue(Message.Selection(op))
@@ -130,7 +136,7 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
 
   fun enqueueCursorMove(editor: Editor, point: PagePoint): Boolean {
     return editor.runCallback {
-      if (editor.appliedState.ime?.composing != null) {
+      if (platform != Platform.Android && editor.appliedState.ime?.composing != null) {
         editor.enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
       }
       editor.enqueue(
@@ -163,7 +169,7 @@ internal class EditorPointSelectionSemantic(private val effects: EditorInteracti
   ): Boolean {
     val update =
       editor.update(admit = { generation == pendingSelectionGeneration }) {
-        if (editor.appliedState.ime?.composing != null) {
+        if (platform != Platform.Android && editor.appliedState.ime?.composing != null) {
           enqueue(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
         }
         enqueue(Message.Selection(op))
