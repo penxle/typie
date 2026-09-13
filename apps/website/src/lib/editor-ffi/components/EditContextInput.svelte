@@ -240,12 +240,6 @@
             composing,
           ) ?? handleKeyDown(editor, event, composing);
       });
-      if (element && pendingCompositionDispatch && event.defaultPrevented) {
-        // Unlike a textarea, EditContext has no native default action after a
-        // consumed shortcut. Detaching it commits preedit before the action runs.
-        element.editContext = null;
-        element.editContext = editContext;
-      }
     }}
     onpaste={(event) => {
       if (editor.readOnly) {

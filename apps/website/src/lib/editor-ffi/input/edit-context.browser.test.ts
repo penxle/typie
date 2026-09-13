@@ -348,8 +348,33 @@ describe('EditContext input', () => {
 
   it('commits native composition before a page-break shortcut', async () => {
     await mountEditor();
-    await (cdp() as CDPSession).send('Input.imeSetComposition', { text: '日本', selectionStart: 2, selectionEnd: 2 });
+    const browser = cdp() as CDPSession;
+    await browser.send('Input.imeSetComposition', { text: '日本', selectionStart: 2, selectionEnd: 2 });
     await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+    await browser.send('Input.insertText', { text: '日本' });
     await expect.poll(() => editor.ime(64, 64)?.composing).toBeUndefined();
+  });
+
+  it.each([false, true])('pastes after committing Korean preedit once (text only: %s)', async (textOnly) => {
+    const context = await mountEditor('뒤');
+    const browser = cdp() as CDPSession;
+    const read = vi
+      .spyOn(navigator.clipboard, 'read')
+      .mockResolvedValue([new ClipboardItem({ 'text/plain': new Blob(['ABC'], { type: 'text/plain' }) })]);
+    try {
+      await browser.send('Input.imeSetComposition', { text: '한', selectionStart: 1, selectionEnd: 1 });
+      await userEvent.keyboard(textOnly ? '{Meta>}{Shift>}v{/Shift}{/Meta}' : '{Meta>}v{/Meta}');
+      // macOS delivers the native commit after the consumed paste keydown.
+      await browser.send('Input.insertText', { text: '한' });
+      await expect.poll(() => editor.proseText()).toBe('한ABC뒤');
+      expect(editor.ime(64, 64)?.composing).toBeUndefined();
+      expect(context.text).toBe('\u{2028}한ABC뒤\u{2029}');
+      expect(document.activeElement).toBe(editor.inputEl);
+      await browser.send('Input.imeSetComposition', { text: '한', selectionStart: 1, selectionEnd: 1 });
+      await browser.send('Input.insertText', { text: '한' });
+      expect(editor.proseText()).toBe('한ABC한뒤');
+    } finally {
+      read.mockRestore();
+    }
   });
 });
