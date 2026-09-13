@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.icons.Lucide
 import co.typie.ui.component.Img
@@ -22,11 +23,11 @@ import co.typie.ui.theme.AppTheme
 import coil3.compose.AsyncImage
 
 @Composable
-context(scope: EditorExternalElementRenderScope)
 internal fun EditorImageExternalElement(
   data: ExternalElementData.Image,
   nodeId: String,
   size: Size?,
+  zoom: Float,
 ) {
   val externalElementState = LocalEditorExternalElementState.current
   val imageState = externalElementState.images
@@ -47,14 +48,14 @@ internal fun EditorImageExternalElement(
   }
 
   if (size == null) return
-  val imageShape = AppShapes.rounded(scope.scaledDp(4f))
+  val imageShape = AppShapes.rounded(4.dp * zoom)
 
-  Box(modifier = Modifier.fillMaxWidth().height(scope.scaledDp(size.height))) {
+  Box(modifier = Modifier.fillMaxWidth().height(size.height.dp * zoom)) {
     Box(
       modifier =
         Modifier.align(Alignment.TopCenter)
-          .width(scope.scaledDp(size.width))
-          .height(scope.scaledDp(size.height))
+          .width(size.width.dp * zoom)
+          .height(size.height.dp * zoom)
           .clip(imageShape)
     ) {
       when {
@@ -78,8 +79,8 @@ internal fun EditorImageExternalElement(
         ) {
           Spinner(
             color = AppTheme.colors.textHint,
-            size = scope.scaledDp(24f),
-            strokeWidth = scope.scaledDp(2f),
+            size = 24.dp * zoom,
+            strokeWidth = 2.dp * zoom,
             sweepAngle = 270f,
           )
         }
@@ -89,7 +90,6 @@ internal fun EditorImageExternalElement(
 }
 
 @Composable
-context(scope: EditorExternalElementRenderScope)
 private fun ImagePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
   EditorExternalElementPlaceholder(
     icon = Lucide.Image,
@@ -103,8 +103,8 @@ private fun ImagePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean)
       if (resolvingAsset) {
         Spinner(
           color = AppTheme.colors.textHint,
-          size = scope.scaledDp(16f),
-          strokeWidth = scope.scaledDp(2f),
+          size = 16.dp,
+          strokeWidth = 2.dp,
           sweepAngle = 270f,
         )
       }

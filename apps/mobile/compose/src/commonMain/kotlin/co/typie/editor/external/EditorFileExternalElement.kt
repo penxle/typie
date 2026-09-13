@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.typie.editor.ffi.ExternalElementData
 import co.typie.icons.Lucide
 import co.typie.ui.component.Spinner
@@ -27,7 +28,6 @@ import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
 @Composable
-context(scope: EditorExternalElementRenderScope)
 internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: String) {
   val externalElementState = LocalEditorExternalElementState.current
   val fileState = externalElementState.files
@@ -50,33 +50,29 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
   }
 
   Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-    val cardShape = AppShapes.rounded(scope.scaledDp(8f))
+    val cardShape = AppShapes.rounded(8.dp)
     Row(
       modifier =
-        Modifier.widthIn(max = scope.scaledDp(400f))
+        Modifier.widthIn(max = 400.dp)
           .fillMaxWidth()
-          .height(scope.scaledDp(64f))
+          .height(64.dp)
           .clip(cardShape)
           .background(AppTheme.colors.surfaceInset, cardShape)
           .border(1.dp, AppTheme.colors.borderHairline, cardShape)
-          .padding(horizontal = scope.scaledDp(16f)),
+          .padding(horizontal = 16.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Icon(
         icon = Lucide.File,
         contentDescription = null,
-        modifier = Modifier.size(scope.scaledDp(20f)),
+        modifier = Modifier.size(20.dp),
         tint = AppTheme.colors.textMuted,
       )
-      Column(modifier = Modifier.padding(start = scope.scaledDp(12f)).weight(1f)) {
+      Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
         Text(
           text = displayName,
           color = AppTheme.colors.textDefault,
-          style =
-            AppTheme.typography.body.copy(
-              fontSize = scope.scaledSp(14f),
-              fontWeight = FontWeight.Medium,
-            ),
+          style = AppTheme.typography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -84,7 +80,7 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
           Text(
             text = displaySize,
             color = AppTheme.colors.textMuted,
-            style = AppTheme.typography.caption.copy(fontSize = scope.scaledSp(12f)),
+            style = AppTheme.typography.caption.copy(fontSize = 12.sp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
@@ -93,9 +89,9 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
       if (upload != null && asset == null) {
         Spinner(
           color = AppTheme.colors.textHint,
-          modifier = Modifier.padding(start = scope.scaledDp(12f)),
-          size = scope.scaledDp(20f),
-          strokeWidth = scope.scaledDp(2f),
+          modifier = Modifier.padding(start = 12.dp),
+          size = 20.dp,
+          strokeWidth = 2.dp,
           sweepAngle = 270f,
         )
       }
@@ -104,10 +100,9 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
 }
 
 @Composable
-context(scope: EditorExternalElementRenderScope)
 private fun FilePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) {
   Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-    Box(modifier = Modifier.widthIn(max = scope.scaledDp(400f)).fillMaxWidth()) {
+    Box(modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()) {
       EditorExternalElementPlaceholder(
         icon = Lucide.File,
         text =
@@ -120,8 +115,8 @@ private fun FilePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) 
           if (resolvingAsset) {
             Spinner(
               color = AppTheme.colors.textHint,
-              size = scope.scaledDp(16f),
-              strokeWidth = scope.scaledDp(2f),
+              size = 16.dp,
+              strokeWidth = 2.dp,
               sweepAngle = 270f,
             )
           }
