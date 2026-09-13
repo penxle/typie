@@ -28,7 +28,7 @@ export const load = async (event) => {
                     url
                   }
 
-                  ...UsersiteSpace_PublicationListItem_publicationView
+                  ...UsersiteApex_DiscoveryCard_publicationView
                 }
               }
 
@@ -37,6 +37,7 @@ export const load = async (event) => {
                 name
                 description
                 url
+                publicationCount
 
                 logo {
                   id

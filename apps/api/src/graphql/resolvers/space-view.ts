@@ -5,6 +5,7 @@ import { Collections, db, firstOrThrowWith, Sites, TableCode, validateDbId } fro
 import { buildPinnedPublicationsQuery } from '#/utils/collection-core.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import {
+  buildCollectionPublicationCountsQuery,
   buildCollectionsByIdsQuery,
   buildIndexableSpaceSlugsQuery,
   buildPublishedCollectionIdsQuery,
@@ -68,6 +69,18 @@ CollectionView.implement({
     name: t.exposeString('name'),
     description: t.exposeString('description', { nullable: true }),
     cover: t.field({ type: Image, nullable: true, resolve: (self) => self.coverId }),
+    publicationCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'CollectionView.publicationCount',
+          nullable: true,
+          load: async (ids: string[]) => await buildCollectionPublicationCountsQuery(db, { collectionIds: ids }),
+          key: (row) => row?.collectionId,
+        });
+        const row = await loader.load(self.id);
+        return row?.count ?? 0;
+      },
+    }),
     publications: t.field({
       type: [PublicationView],
       resolve: async (self) =>

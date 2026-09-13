@@ -8,11 +8,6 @@ export const load = async (event) => {
     graphql(`
       query UsersiteApexTagPage_Query($name: String!) {
         discovery {
-          tags {
-            name
-            count
-          }
-
           tag(name: $name) {
             name
             count
@@ -25,11 +20,9 @@ export const load = async (event) => {
 
                 space {
                   id
-                  name
-                  url
                 }
 
-                ...UsersiteSpace_PublicationListItem_publicationView
+                ...UsersiteApex_DiscoveryCard_publicationView
               }
             }
           }

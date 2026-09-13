@@ -2,15 +2,19 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Icon, TextInput } from '@typie/ui/components';
+  import { Icon } from '@typie/ui/components';
+  import { prefersReducedMotion } from '@typie/ui/state';
   import { pushEscapeHandler } from '@typie/ui/utils';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import SearchIcon from '~icons/lucide/search';
   import XIcon from '~icons/lucide/x';
   import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import AccountMenu from '../../AccountMenu.svelte';
   import { getUsersiteChrome } from '../../chrome.svelte';
-  import TypieMark from '../../TypieMark.svelte';
+  import ApexSearchPanel from './ApexSearchPanel.svelte';
+  import ApexWordmark from './ApexWordmark.svelte';
+  import { discoveryHomePath, discoveryLatestPath, discoveryTagsPath } from './paths';
   import type { UsersiteHeader_user$key } from '$mearie';
 
   type Props = {
@@ -22,20 +26,41 @@
 
   let { user$key, authorizeUrl, onLogout, initialQuery = '' }: Props = $props();
 
+  type TabId = 'home' | 'latest' | 'tags';
+
+  const TABS: { id: TabId; label: string; href: string }[] = [
+    { id: 'home', label: '홈', href: discoveryHomePath },
+    { id: 'latest', label: '최신', href: discoveryLatestPath },
+    { id: 'tags', label: '태그', href: discoveryTagsPath },
+  ];
+
   const chrome = getUsersiteChrome();
 
   let accountMenuOpen = $state(false);
+  let searchOpen = $state(false);
   let scrolled = $state(false);
-  let mobileSearchOpen = $state(false);
-  let mobileInput = $state<HTMLInputElement>();
   let query = $state(initialQuery);
+  let searchButton = $state<HTMLButtonElement>();
+  let root = $state<HTMLDivElement>();
+
+  const pathname = $derived<string>(page.url.pathname);
+  const activeTab = $derived<TabId | null>(
+    pathname === discoveryHomePath
+      ? 'home'
+      : pathname === discoveryLatestPath
+        ? 'latest'
+        : pathname === discoveryTagsPath || pathname.startsWith('/t/')
+          ? 'tags'
+          : null,
+  );
+  const currentTag = $derived(pathname.startsWith('/t/') ? decodeURIComponent(pathname.slice(3)) : null);
 
   $effect(() => {
     query = initialQuery;
   });
 
   $effect(() => {
-    chrome.hold = accountMenuOpen || mobileSearchOpen;
+    chrome.hold = accountMenuOpen || searchOpen;
   });
 
   $effect(() => {
@@ -43,80 +68,201 @@
     scrolled = window.scrollY > 2;
   });
 
-  const openMobileSearch = async () => {
-    mobileSearchOpen = true;
-    await tick();
-    mobileInput?.focus();
+  const closeSearch = ({ restoreFocus = false } = {}) => {
+    if (!searchOpen) return;
+    searchOpen = false;
+    if (restoreFocus) void tick().then(() => searchButton?.focus());
   };
 
-  const closeMobileSearch = () => {
-    mobileSearchOpen = false;
+  const toggleSearch = () => {
+    if (chrome.searchInput) {
+      chrome.searchInput.scrollIntoView({ block: 'center', behavior: prefersReducedMotion.current ? 'auto' : 'smooth' });
+      chrome.searchInput.focus({ preventScroll: true });
+      chrome.searchInput.select();
+      return;
+    }
+    if (searchOpen) closeSearch();
+    else searchOpen = true;
   };
 
   $effect(() => {
-    if (!mobileSearchOpen) return;
+    if (!searchOpen) return;
     return pushEscapeHandler(() => {
-      closeMobileSearch();
+      closeSearch({ restoreFocus: true });
       return true;
     });
   });
 
-  afterNavigate(() => {
-    closeMobileSearch();
+  $effect(() => {
+    if (!searchOpen) return;
+    const onpointerdown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (!target || !root?.contains(target)) {
+        closeSearch();
+        return;
+      }
+      if (target.closest('[data-search-panel], [data-search-scrim], [data-search-toggle]')) return;
+      closeSearch();
+    };
+    document.addEventListener('pointerdown', onpointerdown, { capture: true });
+    return () => document.removeEventListener('pointerdown', onpointerdown, { capture: true });
   });
+
+  afterNavigate(() => {
+    closeSearch();
+  });
+
+  const onTabClick = (e: MouseEvent, id: TabId) => {
+    if (id !== activeTab || pathname.startsWith('/t/')) return;
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion.current ? 'auto' : 'smooth' });
+  };
+
+  type Indicator = { x: number; width: number };
+
+  let desktopNav = $state<HTMLElement>();
+  let mobileNav = $state<HTMLElement>();
+  let desktopIndicator = $state<Indicator>({ x: 0, width: 0 });
+  let mobileIndicator = $state<Indicator>({ x: 0, width: 0 });
+  let indicatorReady = $state(false);
+
+  const measureNav = (nav: HTMLElement | undefined): Indicator => {
+    const link = nav?.querySelector<HTMLElement>('a[aria-current="page"]');
+    return link ? { x: link.offsetLeft, width: link.offsetWidth } : { x: 0, width: 0 };
+  };
+
+  const measureIndicators = () => {
+    desktopIndicator = measureNav(desktopNav);
+    mobileIndicator = measureNav(mobileNav);
+  };
+
+  $effect(() => {
+    void activeTab;
+    void tick().then(measureIndicators);
+  });
+
+  onMount(() => {
+    measureIndicators();
+    requestAnimationFrame(() => {
+      indicatorReady = true;
+    });
+    const observer = new ResizeObserver(measureIndicators);
+    if (desktopNav) observer.observe(desktopNav);
+    if (mobileNav) observer.observe(mobileNav);
+    return () => observer.disconnect();
+  });
+
+  const tabLink = css.raw({
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '15px',
+    fontWeight: 'medium',
+    color: 'text.hint',
+    transition: 'colors',
+    _hover: { color: 'text.muted' },
+    _currentPage: { color: 'text.default' },
+  });
+
+  const staticIndicator = css.raw({
+    '&:not([data-ready]) a[aria-current="page"]::after': {
+      content: '""',
+      position: 'absolute',
+      left: '0',
+      right: '0',
+      bottom: '-1px',
+      height: '2px',
+      backgroundColor: 'text.default',
+    },
+  });
+
+  const indicatorStyle = (ready: boolean) =>
+    css(
+      {
+        position: 'absolute',
+        left: '0',
+        bottom: '-1px',
+        height: '2px',
+        backgroundColor: 'text.default',
+        pointerEvents: 'none',
+        willChange: 'transform',
+      },
+      ready && {
+        transition: '[transform 200ms cubic-bezier(0.32, 0.72, 0, 1), width 200ms cubic-bezier(0.32, 0.72, 0, 1)]',
+        _motionReduce: { transition: '[none]' },
+      },
+    );
 </script>
 
-<div>
+<div bind:this={root} class={css({ position: 'relative' })}>
   <div
     class={css({
       position: 'relative',
+      zIndex: '3',
       height: '52px',
       borderBottomWidth: '1px',
       borderColor: 'transparent',
       backgroundColor: 'surface.default',
       transition: '[border-color 150ms ease-out]',
-      '&[data-scrolled]:not([data-merged])': { borderColor: 'border.default' },
+      md: {
+        '&[data-scrolled]:not([data-merged]), &[data-open]': { borderColor: 'border.default' },
+      },
       _motionReduce: { transition: '[none]' },
     })}
     data-merged={chrome.merged || undefined}
+    data-open={searchOpen || undefined}
     data-scrolled={scrolled || undefined}
   >
     <div
       class={flex({
         alignItems: 'center',
-        justifyContent: 'space-between',
         gap: '16px',
         height: 'full',
-        maxWidth: '1064px',
+        maxWidth: '1200px',
         marginX: 'auto',
         paddingX: { base: '20px', md: '40px' },
       })}
     >
-      <a
-        class={flex({
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: '0',
-          size: '32px',
-          marginLeft: '-4px',
-          borderRadius: '8px',
-          color: 'text.default',
-        })}
-        aria-label="타이피"
-        href="/"
-        use:tooltip={{ message: '타이피' }}
-      >
-        <TypieMark size={24} />
+      <a class={flex({ alignItems: 'center', flexShrink: '0', height: '32px' })} aria-label="타이피" href={discoveryHomePath}>
+        <ApexWordmark />
       </a>
 
-      <form class={css({ display: { base: 'none', md: 'block' }, flex: '1', maxWidth: '480px' })} action="/search" method="GET">
-        <TextInput name="q" leftIcon={SearchIcon} placeholder="글, 스페이스, 태그 검색" size="sm" type="search" bind:value={query} />
-      </form>
+      <nav
+        bind:this={desktopNav}
+        class={css(staticIndicator, {
+          display: { base: 'none', md: 'flex' },
+          position: 'relative',
+          alignSelf: 'stretch',
+          gap: '4px',
+          marginLeft: '20px',
+        })}
+        aria-label="메뉴"
+        data-ready={indicatorReady || undefined}
+      >
+        {#each TABS as tab (tab.id)}
+          <a
+            class={css(tabLink, { paddingX: '10px' })}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            href={tab.href}
+            onclick={(e) => onTabClick(e, tab.id)}
+          >
+            {tab.label}
+          </a>
+        {/each}
+        {#if indicatorReady}
+          <span
+            style:width={`${activeTab ? desktopIndicator.width : 0}px`}
+            style:transform={`translateX(${desktopIndicator.x}px)`}
+            class={indicatorStyle(indicatorReady)}
+            aria-hidden="true"
+          ></span>
+        {/if}
+      </nav>
 
-      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
+      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0', marginLeft: 'auto' })}>
         <button
+          bind:this={searchButton}
           class={flex({
-            display: { base: 'inline-flex', md: 'none' },
             alignItems: 'center',
             justifyContent: 'center',
             size: '32px',
@@ -126,14 +272,15 @@
             _hover: { color: 'text.default' },
             _expanded: { color: 'text.default' },
           })}
-          aria-controls="apex-mobile-search"
-          aria-expanded={mobileSearchOpen}
+          aria-controls="apex-search-panel"
+          aria-expanded={searchOpen}
           aria-label="검색"
-          onclick={() => (mobileSearchOpen ? closeMobileSearch() : void openMobileSearch())}
+          data-search-toggle
+          onclick={toggleSearch}
           type="button"
-          use:tooltip={{ message: '검색' }}
+          use:tooltip={{ message: searchOpen ? null : '검색' }}
         >
-          <Icon icon={mobileSearchOpen ? XIcon : SearchIcon} size={18} />
+          <Icon icon={searchOpen ? XIcon : SearchIcon} size={18} />
         </button>
 
         <AccountMenu {authorizeUrl} {onLogout} {user$key} bind:open={accountMenuOpen} />
@@ -141,22 +288,48 @@
     </div>
   </div>
 
-  {#if mobileSearchOpen}
-    <div
-      id="apex-mobile-search"
-      class={css({ display: { base: 'block', md: 'none' }, paddingX: '20px', paddingBottom: '12px', backgroundColor: 'surface.default' })}
-    >
-      <form action="/search" method="GET">
-        <TextInput
-          name="q"
-          leftIcon={SearchIcon}
-          placeholder="글, 스페이스, 태그 검색"
-          size="sm"
-          type="search"
-          bind:element={mobileInput}
-          bind:value={query}
-        />
-      </form>
-    </div>
+  {#if searchOpen}
+    <ApexSearchPanel id="apex-search-panel" {currentTag} onclose={() => closeSearch()} bind:query />
   {/if}
+
+  <nav
+    bind:this={mobileNav}
+    class={css(staticIndicator, {
+      display: { base: 'flex', md: 'none' },
+      position: 'relative',
+      zIndex: '3',
+      gap: '4px',
+      paddingX: '20px',
+      borderBottomWidth: '1px',
+      borderColor: 'border.hairline',
+      backgroundColor: 'surface.default',
+      transition: '[border-color 150ms ease-out]',
+      '&[data-scrolled]': { borderColor: 'border.default' },
+      '&[data-merged]': { borderColor: 'transparent' },
+      _motionReduce: { transition: '[none]' },
+    })}
+    aria-label="메뉴"
+    data-merged={chrome.merged || undefined}
+    data-ready={indicatorReady || undefined}
+    data-scrolled={scrolled || undefined}
+  >
+    {#each TABS as tab (tab.id)}
+      <a
+        class={css(tabLink, { height: '44px', paddingX: '12px', _first: { paddingLeft: '0' } })}
+        aria-current={activeTab === tab.id ? 'page' : undefined}
+        href={tab.href}
+        onclick={(e) => onTabClick(e, tab.id)}
+      >
+        {tab.label}
+      </a>
+    {/each}
+    {#if indicatorReady}
+      <span
+        style:width={`${activeTab ? mobileIndicator.width : 0}px`}
+        style:transform={`translateX(${mobileIndicator.x}px)`}
+        class={indicatorStyle(indicatorReady)}
+        aria-hidden="true"
+      ></span>
+    {/if}
+  </nav>
 </div>

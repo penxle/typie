@@ -24,6 +24,7 @@ import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm as wasmFfi } from '#/utils/wasm-ffi.ts';
 import type { Modifier, PlainDoc, PlainNodeEntry, PlainRootNode } from '@typie/editor-ffi/server';
 import type { Transaction } from '#/db/index.ts';
+import type { DocLayoutMode } from '#/db/schemas/json.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
@@ -208,17 +209,9 @@ export const calculateBlobSizeFromAssetIds = async (imageIds: string[], fileIds:
   return totalSize;
 };
 
-export type DocLayoutMode =
-  | {
-      type: 'paginated';
-      pageWidth: number;
-      pageHeight: number;
-      pageMarginTop: number;
-      pageMarginBottom: number;
-      pageMarginLeft: number;
-      pageMarginRight: number;
-    }
-  | { type: 'continuous'; maxWidth: number };
+export type { DocLayoutMode } from '#/db/schemas/json.ts';
+
+export const defaultDocLayoutMode = (): DocLayoutMode => ({ type: 'continuous', maxWidth: defaultValues.maxWidth });
 
 export const extractPlainDocLayoutMode = (plain: PlainDoc): DocLayoutMode => {
   const node = plain.root.node;

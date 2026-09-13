@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { css } from '@typie/styled-system/css';
   import { Helmet } from '@typie/ui/components';
   import { hydrateQuery } from '$lib/graphql';
-  import PublicationListSection from '../../PublicationListSection.svelte';
+  import DiscoverySectionHead from '../../../(site)/DiscoverySectionHead.svelte';
   import SeriesCards from '../../SeriesCards.svelte';
 
   let { data } = $props();
@@ -13,14 +12,6 @@
 
 <Helmet description={space.description ?? space.name} title="시리즈" trailing={space.name} />
 
-<div class={css({ display: { base: 'block', lg: 'none' } })}>
-  <SeriesCards collections={space.collections} />
-</div>
+<DiscoverySectionHead count={space.collections.length} title="시리즈" />
 
-<div class={css({ display: { base: 'none', lg: 'block' } })}>
-  <PublicationListSection
-    dateDisplay={space.dateDisplay}
-    initialHasMore={space.publications.hasMore}
-    publications={space.publications.publications}
-  />
-</div>
+<SeriesCards collections={space.collections} />

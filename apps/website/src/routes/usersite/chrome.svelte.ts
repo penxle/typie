@@ -16,7 +16,9 @@ export class UsersiteChrome {
   post = $state<ChromePost | null>(null);
   identityEls = $state<HTMLElement[]>([]);
   titleEl = $state<HTMLElement | null>(null);
+  searchInput = $state<HTMLInputElement | null>(null);
   headerHeight = $state(52);
+  stickyBottom = $state(52);
   scrollY = $state(0);
   retreat = $state(false);
   hold = $state(false);

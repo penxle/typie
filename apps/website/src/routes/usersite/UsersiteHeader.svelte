@@ -68,6 +68,7 @@
     void chrome.post;
     void chrome.titleEl;
     void chrome.identityEls;
+    void desktop.current;
     void stickyBottom;
     measure();
   });
@@ -87,7 +88,7 @@
       slot = '';
       progress = 0;
       const visible = chrome.identityEls.filter((el) => el.offsetParent !== null);
-      identityPast = visible.length > 0 && visible.every((el) => el.getBoundingClientRect().bottom <= h);
+      identityPast = desktop.current || visible.every((el) => el.getBoundingClientRect().bottom <= h);
     }
   };
 
@@ -132,16 +133,20 @@
   data-scrolled={scrolled || undefined}
 >
   <div
-    class={flex({
-      position: 'relative',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: '16px',
-      height: 'full',
-      maxWidth: '1064px',
-      marginX: 'auto',
-      paddingX: { base: '20px', md: '40px' },
-    })}
+    class={css(
+      {
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '16px',
+        height: 'full',
+        marginX: 'auto',
+        paddingX: { base: '20px', md: '40px' },
+      },
+      isPost && { maxWidth: '1064px' },
+      !isPost && { maxWidth: { base: '760px', lg: '1200px' } },
+    )}
   >
     <div class={flex({ alignItems: 'center', gap: '8px', flex: '1', minWidth: '0' })}>
       {#if isPost}
@@ -170,7 +175,7 @@
             justifyContent: 'center',
             flexShrink: '0',
             size: '32px',
-            marginLeft: '-4px',
+            marginLeft: '-6px',
             borderRadius: '8px',
             color: 'text.default',
           })}
@@ -178,7 +183,7 @@
           href="/"
           use:tooltip={{ message: '타이피' }}
         >
-          <TypieMark size={24} />
+          <TypieMark size={20} />
         </a>
 
         <div
@@ -187,7 +192,7 @@
             gap: '8px',
             minWidth: '0',
             transition: '[opacity 160ms ease-out]',
-            '&:not([data-past])': { opacity: '0', pointerEvents: 'none' },
+            lgDown: { '&:not([data-past])': { opacity: '0', pointerEvents: 'none' } },
             _motionReduce: { transition: '[none]' },
           })}
           data-past={identityPast || undefined}
@@ -214,8 +219,8 @@
             <Img
               style={css.raw({
                 flexShrink: '0',
-                size: '24px',
-                borderRadius: '6px',
+                size: '20px',
+                borderRadius: '5px',
                 objectFit: 'cover',
                 boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
               })}

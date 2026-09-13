@@ -3,16 +3,11 @@ import { graphql } from '$mearie';
 
 export const load = async (event) => {
   return {
-    feedQuery: await loadQuery(
+    latestQuery: await loadQuery(
       event,
       graphql(`
-        query UsersiteApexIndexPage_Query {
+        query UsersiteApexLatestPage_Query {
           discovery {
-            tags {
-              name
-              count
-            }
-
             publications {
               hasMore
 
@@ -21,11 +16,9 @@ export const load = async (event) => {
 
                 space {
                   id
-                  name
-                  url
                 }
 
-                ...UsersiteSpace_PublicationListItem_publicationView
+                ...UsersiteApex_DiscoveryCard_publicationView
               }
             }
           }

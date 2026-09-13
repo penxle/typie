@@ -3,6 +3,7 @@ import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
 import { EntityState, EntityType } from '@typie/lib/enums';
+import { titlePageColors } from '@typie/lib/title-page';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -11,7 +12,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Documents, Entities, first, Folders, Images, PublicationVersions } from '#/db/index.ts';
+import { db, Documents, Entities, first, Folders, Images, PublicationVersions, Spaces } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
 import { buildPublishedPublicationByPermalinkQuery } from '#/utils/publication-view-core.ts';
 import type { ReactNode } from 'react';
@@ -100,6 +101,43 @@ og.get('/p/:permalink', async (c) => {
   return await respondWithCard(c, await renderDocumentCard(version));
 });
 
+const COVER_WIDTH = 1280;
+const COVER_HEIGHT = 720;
+
+og.get('/cover/:permalink', async (c) => {
+  const permalink = c.req.param('permalink');
+
+  const publication = await buildPublishedPublicationByPermalinkQuery(db, { permalink }).then(first);
+
+  if (!publication) {
+    throw new HTTPException(404);
+  }
+
+  const [version, space] = await Promise.all([
+    db
+      .select({ title: PublicationVersions.title })
+      .from(PublicationVersions)
+      .where(eq(PublicationVersions.publicationId, publication.id))
+      .orderBy(desc(PublicationVersions.version))
+      .limit(1)
+      .then(first),
+    db.select({ name: Spaces.name }).from(Spaces).where(eq(Spaces.id, publication.spaceId)).then(first),
+  ]);
+
+  if (!version || !space) {
+    throw new HTTPException(404);
+  }
+
+  const title = version.title || '(제목 없음)';
+  const resp = await respondWithCard(c, renderTitlePageCover({ seed: publication.id + title, title, spaceName: space.name }), {
+    width: COVER_WIDTH,
+    height: COVER_HEIGHT,
+  });
+  resp.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+
+  return resp;
+});
+
 const PREVIEW_TEXT_LIMIT = 200;
 
 og.get('/preview', async (c) => {
@@ -146,10 +184,10 @@ og.get('/:entityId', async (c) => {
   return await respondWithCard(c, node);
 });
 
-const respondWithCard = async (c: ServerContext, node: Awaited<ReactNode>) => {
+const respondWithCard = async (c: ServerContext, node: Awaited<ReactNode>, size?: { width: number; height: number }) => {
   const svg = await satori(node, {
-    width: 1200,
-    height: 630,
+    width: size?.width ?? 1200,
+    height: size?.height ?? 630,
     fonts: [
       { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Medium.otf'], weight: 500 },
       { name: 'KoPubWorldDotum', data: fonts['KoPubWorldDotum-Bold.otf'], weight: 800 },
@@ -371,6 +409,68 @@ const renderDocumentCard = async ({
         >
           <span>TYPIE &mdash; 언제든 이어 쓰는 글쓰기 앱</span>
           <span style={{ fontFamily: 'DeepMindSans' }}>typie.co</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const renderTitlePageCover = ({ seed, title, spaceName }: { seed: string; title: string; spaceName: string }) => {
+  const colors = titlePageColors(seed);
+  const unit = COVER_WIDTH / 100;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        width: `${COVER_WIDTH}px`,
+        height: `${COVER_HEIGHT}px`,
+        padding: `${unit * 4.5}px`,
+        fontFamily: 'Pretendard',
+        backgroundColor: colors.background,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: `${unit * 2.8}px`,
+          padding: `${unit * 3}px ${unit * 9}px`,
+          border: `3px solid ${colors.frame}`,
+        }}
+      >
+        <div
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            fontSize: `${unit * 7.2}px`,
+            fontWeight: 800,
+            lineHeight: '1.3',
+            letterSpacing: `${-unit * 7.2 * 0.025}px`,
+            color: colors.title,
+            textAlign: 'center',
+            lineClamp: 3,
+            wordBreak: 'keep-all',
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ display: 'flex', width: `${unit * 9}px`, height: '3px', backgroundColor: colors.rule }} />
+        <div
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            fontSize: `${unit * 3.9}px`,
+            fontWeight: 500,
+            color: colors.caption,
+            textAlign: 'center',
+            lineClamp: 1,
+          }}
+        >
+          {spaceName}
         </div>
       </div>
     </div>

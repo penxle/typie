@@ -91,6 +91,7 @@ export const buildLatestVersionMetadataQuery = (executor: Executor, input: { pub
       thumbnailId: PublicationVersions.thumbnailId,
       excerpt: PublicationVersions.excerpt,
       assetIds: PublicationVersions.assetIds,
+      layoutMode: PublicationVersions.layoutMode,
       createdAt: PublicationVersions.createdAt,
     })
     .from(PublicationVersions)

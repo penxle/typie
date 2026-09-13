@@ -65,8 +65,9 @@
 
 <Menu
   style={css.raw({
-    borderRadius: '4px',
-    padding: '3px',
+    borderRadius: '6px',
+    padding: '7px',
+    color: 'text.muted',
     _hover: { backgroundColor: 'surface.hover' },
   })}
   placement="bottom-start"

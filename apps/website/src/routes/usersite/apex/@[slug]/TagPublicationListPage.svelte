@@ -1,21 +1,17 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
-  import { cubicOut } from 'svelte/easing';
-  import { fly } from 'svelte/transition';
   import { page } from '$app/state';
   import { graphql } from '$mearie';
-  import PublicationListItem from './PublicationListItem.svelte';
-  import type { SpaceDateDisplay } from '$mearie';
+  import DiscoveryCard from '../(site)/DiscoveryCard.svelte';
 
   type Props = {
     after: string | null;
     tagName: string;
-    dateDisplay: SpaceDateDisplay;
     showCollection?: boolean;
     onLoaded: (result: { hasMore: boolean; lastId: string | null }) => void;
   };
 
-  let { after, tagName, dateDisplay, showCollection = true, onLoaded }: Props = $props();
+  let { after, tagName, showCollection = true, onLoaded }: Props = $props();
 
   const query = createQuery(
     graphql(`
@@ -31,7 +27,7 @@
 
               publications {
                 id
-                ...UsersiteSpace_PublicationListItem_publicationView
+                ...UsersiteApex_DiscoveryCard_publicationView
               }
             }
           }
@@ -51,8 +47,6 @@
 
 {#if result}
   {#each result.publications as publication (publication.id)}
-    <div in:fly={{ y: 6, duration: 220, easing: cubicOut }}>
-      <PublicationListItem {dateDisplay} publicationView$key={publication} {showCollection} />
-    </div>
+    <DiscoveryCard context="space" enter publicationView$key={publication} {showCollection} />
   {/each}
 {/if}

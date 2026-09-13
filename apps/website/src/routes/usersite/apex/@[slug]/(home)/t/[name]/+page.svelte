@@ -13,11 +13,5 @@
 <Helmet description={space.name} title={tag.name} trailing={space.name} />
 
 {#key tag.name}
-  <TagView
-    active={tag.name}
-    dateDisplay={space.dateDisplay}
-    hasMore={tag.publications.hasMore}
-    publications={tag.publications.publications}
-    tags={space.tags}
-  />
+  <TagView active={tag.name} hasMore={tag.publications.hasMore} publications={tag.publications.publications} tags={space.tags} />
 {/key}

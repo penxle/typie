@@ -6,9 +6,12 @@ import {
   buildDiscoverablePublicationsByIdsQuery,
   buildDiscoverableSpacesByIdsQuery,
   buildDiscoveryPublicationsQuery,
+  buildDiscoveryRecentPublicationsQuery,
   buildDiscoveryTagCountsQuery,
   buildDiscoveryTagsQuery,
+  DISCOVERY_RECENT_SCAN_LIMIT,
   DISCOVERY_TAG_LIMIT,
+  pickFirstByKey,
 } from './discovery-core.ts';
 import type { Database } from '#/db/index.ts';
 
@@ -103,4 +106,30 @@ test('discovery tag counts aggregate only the named tags under the platform pred
   assert.match(query.sql, /group by "publication_tags"\."name"/);
   assert.doesNotMatch(query.sql, /limit /);
   assert.ok(query.params.includes('에세이') && query.params.includes('단편'));
+});
+
+test('recent discovery publications scan the newest discoverable rows with space and series ids only', () => {
+  const query = buildDiscoveryRecentPublicationsQuery(database, { limit: DISCOVERY_RECENT_SCAN_LIMIT }).toSQL();
+  assertDiscoverablePredicate(query.sql);
+  assert.match(query.sql, /^select "publications"\."id", "publications"\."space_id", "publications"\."collection_id" from/);
+  assert.match(query.sql, /order by "publications"\."published_at" desc, "publications"\."id" desc/);
+  assert.equal(query.params.at(-1), 200);
+});
+
+test('picking the first row per key keeps scan order, skips null keys and stops at the limit', () => {
+  const rows = [
+    { id: 'p1', key: 'a' },
+    { id: 'p2', key: 'a' },
+    { id: 'p3', key: null },
+    { id: 'p4', key: 'b' },
+    { id: 'p5', key: 'c' },
+  ];
+  assert.deepEqual(
+    pickFirstByKey(rows, (row) => row.key, 2).map((row) => row.id),
+    ['p1', 'p4'],
+  );
+  assert.deepEqual(
+    pickFirstByKey(rows, (row) => row.key, 10).map((row) => row.id),
+    ['p1', 'p4', 'p5'],
+  );
 });

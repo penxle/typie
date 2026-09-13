@@ -2,20 +2,20 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
-  import PublicationListItem from './PublicationListItem.svelte';
+  import { discoveryCardList } from '../(site)/discovery-styles';
+  import DiscoveryCard from '../(site)/DiscoveryCard.svelte';
   import PublicationListPage from './PublicationListPage.svelte';
   import TagPublicationListPage from './TagPublicationListPage.svelte';
-  import type { SpaceDateDisplay, UsersiteSpace_PublicationListItem_publicationView$key } from '$mearie';
+  import type { UsersiteApex_DiscoveryCard_publicationView$key } from '$mearie';
 
   type Props = {
-    publications: readonly ({ id: string } & UsersiteSpace_PublicationListItem_publicationView$key)[];
-    dateDisplay: SpaceDateDisplay;
+    publications: readonly ({ id: string } & UsersiteApex_DiscoveryCard_publicationView$key)[];
     initialHasMore?: boolean;
     tagName?: string | null;
     showCollection?: boolean;
   };
 
-  let { publications, dateDisplay, initialHasMore = false, tagName = null, showCollection = true }: Props = $props();
+  let { publications, initialHasMore = false, tagName = null, showCollection = true }: Props = $props();
 
   let cursors = $state<string[]>([]);
   let hasMore = $state(false);
@@ -36,16 +36,16 @@
 
 {#if publications.length > 0}
   <section>
-    <div class={flex({ flexDirection: 'column' })}>
-      {#each publications as publication, index (publication.id)}
-        <PublicationListItem {dateDisplay} first={index === 0} publicationView$key={publication} {showCollection} />
+    <div class={css(discoveryCardList)}>
+      {#each publications as publication (publication.id)}
+        <DiscoveryCard context="space" publicationView$key={publication} {showCollection} />
       {/each}
 
       {#each cursors as after (after)}
         {#if tagName === null}
-          <PublicationListPage {after} {dateDisplay} {onLoaded} {showCollection} />
+          <PublicationListPage {after} {onLoaded} {showCollection} />
         {:else}
-          <TagPublicationListPage {after} {dateDisplay} {onLoaded} {showCollection} {tagName} />
+          <TagPublicationListPage {after} {onLoaded} {showCollection} {tagName} />
         {/if}
       {/each}
     </div>

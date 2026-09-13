@@ -14,7 +14,7 @@
 
   type Props = {
     spaceView$key: UsersiteSpace_SpaceHeader_spaceView$key;
-    variant: 'rail' | 'compact';
+    variant: 'sidebar' | 'compact';
   };
 
   let { spaceView$key, variant }: Props = $props();
@@ -28,6 +28,11 @@
         name
         description
         availableActions
+        publicationCount
+
+        collections {
+          id
+        }
 
         links {
           label
@@ -44,30 +49,23 @@
   );
 
   const slug = $derived(currentSpaceSlug());
-  const logoSize = $derived(variant === 'rail' ? 48 : 40);
+  const sidebar = $derived(variant === 'sidebar');
 </script>
 
-<header class={flex({ flexDirection: 'column', gap: variant === 'rail' ? '12px' : '10px' })}>
+<header class={flex({ flexDirection: 'column', gap: '12px' })}>
   <div class={flex({ alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' })}>
-    <a
-      class={flex({ flexDirection: 'column', alignItems: 'flex-start', gap: variant === 'rail' ? '10px' : '8px', minWidth: '0' })}
-      href={spaceHomePath(slug)}
-    >
+    <a class={css({ flexShrink: '0' })} aria-label={space.data.name} href={spaceHomePath(slug)}>
       <Img
         style={css.raw({
-          flexShrink: '0',
-          size: variant === 'rail' ? '48px' : '40px',
-          borderRadius: variant === 'rail' ? '12px' : '10px',
+          size: sidebar ? '64px' : '48px',
+          borderRadius: sidebar ? '16px' : '12px',
           objectFit: 'cover',
           boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
         })}
         alt={`${space.data.name} 로고`}
         image$key={space.data.logo}
-        size={logoSize === 48 ? 96 : 64}
+        size={sidebar ? 128 : 96}
       />
-      <h1 class={css({ fontSize: '18px', fontWeight: 'bold', letterSpacing: '-0.02em', lineHeight: '[1.25]', lineClamp: '2' })}>
-        {space.data.name}
-      </h1>
     </a>
 
     {#if space.data.availableActions.includes('SETTINGS')}
@@ -101,19 +99,24 @@
     {/if}
   </div>
 
+  <a href={spaceHomePath(slug)}>
+    <h1 class={css({ fontSize: '20px', fontWeight: 'bold', letterSpacing: '-0.02em', lineHeight: '[1.25]', lineClamp: '2' })}>
+      {space.data.name}
+    </h1>
+  </a>
+
   {#if space.data.description}
-    <p class={css({ fontSize: '13px', lineHeight: '[1.6]', color: 'text.muted' })}>{space.data.description}</p>
+    <p class={css({ fontSize: '14px', lineHeight: '[1.6]', color: 'text.muted' })}>{space.data.description}</p>
   {/if}
 
+  <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '13px', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>
+    <span>글 {space.data.publicationCount}개</span>
+    <i class={css({ flexShrink: '0', size: '2px', borderRadius: 'full', backgroundColor: 'border.emphasis' })} aria-hidden="true"></i>
+    <span>시리즈 {space.data.collections.length}개</span>
+  </div>
+
   {#if space.data.links.length > 0}
-    <ul
-      class={flex({
-        flexDirection: variant === 'rail' ? 'column' : 'row',
-        flexWrap: 'wrap',
-        rowGap: '6px',
-        columnGap: variant === 'rail' ? '6px' : '14px',
-      })}
-    >
+    <ul class={flex({ flexWrap: 'wrap', rowGap: '6px', columnGap: '14px' })}>
       {#each space.data.links as link, index (index)}
         <li>
           <a

@@ -12,12 +12,11 @@ export const load = async (event) => {
             name
             description
             allowIndexing
-            dateDisplay
             publicationCount
 
             pinnedPublications {
               id
-              ...UsersiteSpace_PinnedTile_publicationView
+              ...UsersiteSpace_PinnedCard_publicationView
             }
 
             publications {
@@ -25,7 +24,7 @@ export const load = async (event) => {
 
               publications {
                 id
-                ...UsersiteSpace_PublicationListItem_publicationView
+                ...UsersiteApex_DiscoveryCard_publicationView
               }
             }
 
@@ -41,7 +40,7 @@ export const load = async (event) => {
             }
 
             ...UsersiteSpace_SpaceHeader_spaceView
-            ...UsersiteSpace_SpaceRail_spaceView
+            ...UsersiteSpace_SpaceSidebar_spaceView
           }
         }
       `),

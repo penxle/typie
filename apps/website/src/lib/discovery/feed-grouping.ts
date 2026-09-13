@@ -1,14 +1,9 @@
-export type FeedGroup<T> = { lead: T; more: number };
-
-export const groupConsecutiveBySpace = <T extends { space: { id: string } }>(items: readonly T[]): FeedGroup<T>[] => {
-  const groups: FeedGroup<T>[] = [];
+export const latestOfSpaceRuns = <T extends { space: { id: string } }>(items: readonly T[], previousSpaceId: string | null = null): T[] => {
+  const leads: T[] = [];
+  let lastSpaceId = previousSpaceId;
   for (const item of items) {
-    const last = groups.at(-1);
-    if (last && last.lead.space.id === item.space.id) {
-      last.more += 1;
-    } else {
-      groups.push({ lead: item, more: 0 });
-    }
+    if (item.space.id !== lastSpaceId) leads.push(item);
+    lastSpaceId = item.space.id;
   }
-  return groups;
+  return leads;
 };

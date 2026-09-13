@@ -1,19 +1,17 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import { env } from '$env/dynamic/public';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
   import { cleanupBrowserPushForLogout } from '$lib/push';
   import { setUsersiteChrome, UsersiteChrome } from '../../chrome.svelte';
-  import ReadToolbar from '../../ReadToolbar.svelte';
   import ApexHeader from './ApexHeader.svelte';
+  import { apexAuthorizeUrl } from './authorize-url';
 
   let { data, children } = $props();
 
@@ -28,6 +26,7 @@
 
   function syncStickyHeaderBottom(): void {
     stickyHeaderBottom = stickyHeader?.getBoundingClientRect().bottom ?? stickyHeaderHeight;
+    chrome.stickyBottom = stickyHeaderBottom;
   }
 
   $effect(() => {
@@ -63,19 +62,8 @@
     chrome.reset();
   });
 
-  const authorizeUrl = $derived(
-    qs.stringifyUrl({
-      url: `${env.PUBLIC_AUTH_URL}/authorize`,
-      query: {
-        client_id: env.PUBLIC_OIDC_CLIENT_ID,
-        response_type: 'code',
-        redirect_uri: `${page.url.origin}/authorize`,
-        state: serializeOAuthState({ redirect_uri: page.url.href }),
-      },
-    }),
-  );
+  const authorizeUrl = $derived(apexAuthorizeUrl(page.url));
 
-  const showToolbar = $derived(!query.data.me);
   const pathname = $derived<string>(page.url.pathname);
   const initialQuery = $derived(pathname === '/search' ? (page.url.searchParams.get('q') ?? '') : '');
 
@@ -109,11 +97,7 @@
     <ApexHeader {authorizeUrl} {initialQuery} onLogout={logout} user$key={query.data.me} />
   </header>
 
-  <main class={flex({ flexDirection: 'column', flex: '1', paddingBottom: showToolbar ? { base: '48px', md: '0' } : '0' })}>
+  <main class={flex({ flexDirection: 'column', flex: '1' })}>
     {@render children()}
   </main>
-
-  {#if showToolbar}
-    <ReadToolbar href={page.url.href} />
-  {/if}
 </div>
