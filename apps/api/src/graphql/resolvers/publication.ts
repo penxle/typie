@@ -122,7 +122,7 @@ Publication.implement({
             key: ({ id }: { id: string }) => id,
           })
           .load(self.spaceId);
-        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.id}`;
+        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.permalink}`;
       },
     }),
     hasUnpublishedChanges: t.boolean({

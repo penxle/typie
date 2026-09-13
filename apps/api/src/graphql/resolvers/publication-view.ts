@@ -69,6 +69,7 @@ PublicationView.implement({
   interfaces: [IEditorDocument],
   fields: (t) => ({
     documentId: t.exposeID('documentId'),
+    permalink: t.exposeString('permalink'),
     title: t.string({
       resolve: async (self, _, ctx) => {
         const version = await latestVersionLoader(ctx).load(self.id);
@@ -223,7 +224,7 @@ PublicationView.implement({
     url: t.string({
       resolve: async (self, _, ctx) => {
         const space = await spaceLoader(ctx).load(self.spaceId);
-        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.id}`;
+        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.permalink}`;
       },
     }),
     space: t.expose('spaceId', { type: SpaceView }),

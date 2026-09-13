@@ -64,6 +64,7 @@
     graphql(`
       fragment UsersiteSpacePublicationPage_PublicationViewV2_publicationView on PublicationView {
         id
+        permalink
         documentId
         title
         subtitle
@@ -78,6 +79,7 @@
 
         collection {
           id
+          permalink
           name
         }
 
@@ -280,7 +282,7 @@
     chrome.post = {
       title: document.title,
       url: document.url,
-      collection: document.collection ? { id: document.collection.id, name: document.collection.name } : null,
+      collection: document.collection ? { permalink: document.collection.permalink, name: document.collection.name } : null,
     };
     chrome.titleEl = titleEl ?? null;
 
@@ -490,7 +492,7 @@
 {#if document}
   <Helmet
     description={document.excerpt}
-    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/p/${publication.data.id}` }}
+    image={{ size: 'large', src: `${env.PUBLIC_API_URL}/og/p/${publication.data.permalink}` }}
     title={document.title}
     trailing={document.space.name}
   />
@@ -519,7 +521,7 @@
                 <span class={css({ fontSize: '13px', color: 'text.hint' })}>/</span>
                 <a
                   class={css({ fontSize: '13px', color: 'text.hint', _hover: { color: 'text.muted' } })}
-                  href={seriesPath(slug, document.collection.id)}
+                  href={seriesPath(slug, document.collection.permalink)}
                 >
                   {document.collection.name}
                 </a>

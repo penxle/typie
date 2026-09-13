@@ -6,13 +6,13 @@ export const load = async (event) => {
     seriesQuery: await loadQuery(
       event,
       graphql(`
-        query UsersiteSpaceSeriesPage_Query($slug: String!, $collectionId: ID!) {
+        query UsersiteSpaceSeriesPage_Query($slug: String!, $permalink: String!) {
           spaceView(slug: $slug) {
             id
             name
             dateDisplay
 
-            collection(collectionId: $collectionId) {
+            collection(permalink: $permalink) {
               id
               name
               description
@@ -23,7 +23,7 @@ export const load = async (event) => {
       `),
       {
         slug: event.params.slug,
-        collectionId: event.params.id,
+        permalink: event.params.permalink,
       },
     ),
   };

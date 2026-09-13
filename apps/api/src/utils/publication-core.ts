@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker';
 import { EntityState, EntityVisibility, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm';
@@ -163,3 +164,5 @@ export const buildDuePublicationsQuery = (executor: Executor, input: { now: Dayj
       ),
     )
     .for('update', { of: [Publications], skipLocked: true });
+
+export const generateNumericPermalink = () => faker.string.numeric({ length: 11, allowLeadingZeros: false });

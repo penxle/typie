@@ -6,7 +6,7 @@ export const load = async (event) => {
     query: await loadQuery(
       event,
       graphql(`
-        query UsersiteSpacePublicationPage_Query($slug: String!, $publicationId: ID!) {
+        query UsersiteSpacePublicationPage_Query($slug: String!, $permalink: String!) {
           me {
             id
 
@@ -17,7 +17,7 @@ export const load = async (event) => {
             id
             allowIndexing
 
-            publication(publicationId: $publicationId) {
+            publication(permalink: $permalink) {
               id
               ...UsersiteSpacePublicationPage_PublicationViewV2_publicationView
             }
@@ -26,7 +26,7 @@ export const load = async (event) => {
       `),
       {
         slug: event.params.slug,
-        publicationId: event.params.id,
+        permalink: event.params.permalink,
       },
     ),
   };

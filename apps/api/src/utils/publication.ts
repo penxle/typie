@@ -11,6 +11,7 @@ import { assertActiveSubscription } from './plan.ts';
 import {
   buildDuePublicationsQuery,
   buildPublishedDocumentIdsQuery,
+  generateNumericPermalink,
   hasUnpublishedChanges,
   normalizeTags,
   pickPublicationVersion,
@@ -211,6 +212,7 @@ export const publishDocumentCore = async (
           .insert(Publications)
           .values({
             documentId: document.id,
+            permalink: generateNumericPermalink(),
             spaceId: space.id,
             state: transition.state,
             collectionId: args.collectionId ?? null,

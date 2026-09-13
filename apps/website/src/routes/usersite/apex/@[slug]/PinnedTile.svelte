@@ -21,6 +21,7 @@
     graphql(`
       fragment UsersiteSpace_PinnedTile_publicationView on PublicationView {
         id
+        permalink
         title
         publishedAt
         updatedAt
@@ -61,7 +62,7 @@
     transition: 'common',
     _hover: { borderColor: 'border.default', '& img': { transform: 'scale(1.03)' } },
   })}
-  href={publicationPath(slug, publication.data.id)}
+  href={publicationPath(slug, publication.data.permalink)}
 >
   <div
     class={css({

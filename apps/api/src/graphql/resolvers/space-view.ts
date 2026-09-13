@@ -64,6 +64,7 @@ CollectionView.implement({
   isTypeOf: isTypeOf(TableCode.COLLECTIONS),
   fields: (t) => ({
     id: t.exposeID('id'),
+    permalink: t.exposeString('permalink'),
     name: t.exposeString('name'),
     description: t.exposeString('description', { nullable: true }),
     cover: t.field({ type: Image, nullable: true, resolve: (self) => self.coverId }),
@@ -123,9 +124,9 @@ SpaceView.implement({
     }),
     publication: t.field({
       type: PublicationView,
-      args: { publicationId: t.arg.id({ validate: validateDbId(TableCode.PUBLICATIONS) }) },
+      args: { permalink: t.arg.string() },
       resolve: async (self, args) =>
-        await buildPublishedPublicationsQuery(db, { spaceId: self.id, publicationId: args.publicationId, after: null, limit: 1 }).then(
+        await buildPublishedPublicationsQuery(db, { spaceId: self.id, permalink: args.permalink, after: null, limit: 1 }).then(
           firstOrThrowWith(new NotFoundError()),
         ),
     }),
@@ -141,12 +142,12 @@ SpaceView.implement({
     }),
     collection: t.field({
       type: CollectionView,
-      args: { collectionId: t.arg.id({ validate: validateDbId(TableCode.COLLECTIONS) }) },
+      args: { permalink: t.arg.string() },
       resolve: async (self, args) =>
         await db
           .select()
           .from(Collections)
-          .where(and(eq(Collections.id, args.collectionId), eq(Collections.spaceId, self.id)))
+          .where(and(eq(Collections.permalink, args.permalink), eq(Collections.spaceId, self.id)))
           .then(firstOrThrowWith(new NotFoundError())),
     }),
     tags: t.field({
@@ -169,14 +170,17 @@ SpaceView.implement({
     sitemap: t.stringList({
       resolve: async (self) => {
         if (!self.allowIndexing) return [];
-        const [publications, collections, tags] = await Promise.all([
+        const [publications, collectionIds, tags] = await Promise.all([
           buildPublishedPublicationsQuery(db, { spaceId: self.id, after: null, limit: 5000 }),
-          buildPublishedCollectionIdsQuery(db, { spaceId: self.id }),
+          buildPublishedCollectionIdsQuery(db, { spaceId: self.id }).then((rows) =>
+            rows.flatMap((row) => (row.collectionId ? [row.collectionId] : [])),
+          ),
           buildSpaceTagsQuery(db, { spaceId: self.id }),
         ]);
+        const collections = collectionIds.length === 0 ? [] : await buildCollectionsByIdsQuery(db, { collectionIds });
         return buildSitemapPaths({
-          publicationIds: publications.map((row) => row.id),
-          collectionIds: collections.flatMap((row) => (row.collectionId ? [row.collectionId] : [])),
+          publicationPermalinks: publications.map((row) => row.permalink),
+          collectionPermalinks: collections.map((row) => row.permalink),
           tagNames: tags.map((row) => row.name),
         });
       },

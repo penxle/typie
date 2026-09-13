@@ -5,8 +5,8 @@ describe('space paths', () => {
   it('builds every path under /@slug', () => {
     expect(spaceHomePath('my-space')).toBe('/@my-space');
     expect(seriesListPath('my-space')).toBe('/@my-space/s');
-    expect(seriesPath('my-space', 'c1')).toBe('/@my-space/s/c1');
-    expect(publicationPath('my-space', 'p1')).toBe('/@my-space/p/p1');
+    expect(seriesPath('my-space', '98765432109')).toBe('/@my-space/s/98765432109');
+    expect(publicationPath('my-space', '12345678901')).toBe('/@my-space/p/12345678901');
   });
 
   it('encodes the tag name', () => {

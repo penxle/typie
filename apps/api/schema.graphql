@@ -197,6 +197,7 @@ type CollectionView {
   description: String
   id: ID!
   name: String!
+  permalink: String!
   publications: [PublicationView!]!
 }
 
@@ -1838,6 +1839,7 @@ type PublicationView implements IEditorDocument {
   id: ID!
   nextInCollection: PublicationView
   passwordUnlocked: Boolean!
+  permalink: String!
   prevInCollection: PublicationView
   protectContent: Boolean!
   publishedAt: DateTime!
@@ -2209,7 +2211,7 @@ type SpaceView implements ISpace {
   allowDiscovery: Boolean!
   allowIndexing: Boolean!
   availableActions: [SpaceAvailableAction!]!
-  collection(collectionId: ID!): CollectionView!
+  collection(permalink: String!): CollectionView!
   collections: [CollectionView!]!
   dateDisplay: SpaceDateDisplay!
   description: String
@@ -2218,7 +2220,7 @@ type SpaceView implements ISpace {
   logo: Image!
   name: String!
   pinnedPublications: [PublicationView!]!
-  publication(publicationId: ID!): PublicationView!
+  publication(permalink: String!): PublicationView!
   publicationCount: Int!
   publications(after: ID, first: Int): SpacePublicationsPage!
   sitemap: [String!]!

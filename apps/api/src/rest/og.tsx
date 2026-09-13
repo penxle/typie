@@ -13,7 +13,7 @@ import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
 import { db, Documents, Entities, first, Folders, Images, PublicationVersions } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
-import { buildPublishedPublicationByIdQuery } from '#/utils/publication-view-core.ts';
+import { buildPublishedPublicationByPermalinkQuery } from '#/utils/publication-view-core.ts';
 import type { ReactNode } from 'react';
 import type { Env, ServerContext } from '#/context.ts';
 
@@ -75,10 +75,10 @@ const colors = {
   },
 };
 
-og.get('/p/:publicationId', async (c) => {
-  const publicationId = c.req.param('publicationId');
+og.get('/p/:permalink', async (c) => {
+  const permalink = c.req.param('permalink');
 
-  const publication = await buildPublishedPublicationByIdQuery(db, { publicationId }).then(first);
+  const publication = await buildPublishedPublicationByPermalinkQuery(db, { permalink }).then(first);
 
   if (!publication) {
     throw new HTTPException(404);

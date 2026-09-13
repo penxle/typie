@@ -939,6 +939,20 @@
       "when": 1789246917081,
       "tag": "0133_discovery",
       "breakpoints": false
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1789302551317,
+      "tag": "0134_publication-permalink",
+      "breakpoints": false
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1789302570917,
+      "tag": "0135_publication-permalink-constraints",
+      "breakpoints": false
     }
   ]
 }

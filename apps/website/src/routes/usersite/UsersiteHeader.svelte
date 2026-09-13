@@ -54,7 +54,7 @@
   const isPost = $derived(chrome.post !== null);
   const eyebrow = $derived(
     chrome.post?.collection
-      ? { label: chrome.post.collection.name, href: seriesPath(slug, chrome.post.collection.id) }
+      ? { label: chrome.post.collection.name, href: seriesPath(slug, chrome.post.collection.permalink) }
       : { label: space.data.name, href: spaceHomePath(slug) },
   );
   const hidden = $derived(isPost && chrome.retreat && !desktop.current);

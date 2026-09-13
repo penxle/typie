@@ -1294,6 +1294,7 @@ export const Collections = pgTable(
     spaceId: text('space_id')
       .notNull()
       .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    permalink: text('permalink').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     coverId: text('cover_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
@@ -1301,7 +1302,7 @@ export const Collections = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index().on(t.spaceId)],
+  (t) => [uniqueIndex().on(t.permalink), index().on(t.spaceId)],
 );
 
 export const Publications = pgTable(
@@ -1317,6 +1318,7 @@ export const Publications = pgTable(
     spaceId: text('space_id')
       .notNull()
       .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    permalink: text('permalink').notNull(),
     state: E._PublicationState('state').notNull(),
     collectionId: text('collection_id').references(() => Collections.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     collectionOrder: text('collection_order'),
@@ -1332,6 +1334,7 @@ export const Publications = pgTable(
       .default(sql`now()`),
   },
   (t) => [
+    uniqueIndex().on(t.permalink),
     index().on(t.spaceId, t.state, t.publishedAt),
     index().on(t.state, t.publishedAt, t.id),
     uniqueIndex()

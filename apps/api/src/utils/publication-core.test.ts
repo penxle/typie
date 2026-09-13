@@ -12,6 +12,7 @@ import {
   buildPublicationsBySpaceQuery,
   buildPublishedDocumentIdsQuery,
   buildPublishingEntityIdsBySiteQuery,
+  generateNumericPermalink,
   hasUnpublishedChanges,
   normalizeTags,
   pickPublicationVersion,
@@ -161,4 +162,10 @@ test('PUBLIC visibility is reserved for publishing and cannot be requested direc
   assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PUBLIC), 'visibility_public_reserved');
   assert.equal(resolveVisibilityRequestBlock(EntityVisibility.UNLISTED), null);
   assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PRIVATE), null);
+});
+
+test('generateNumericPermalink returns 11 digits without a leading zero', () => {
+  for (let i = 0; i < 100; i++) {
+    assert.match(generateNumericPermalink(), /^[1-9]\d{10}$/);
+  }
 });

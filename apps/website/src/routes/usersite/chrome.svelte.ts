@@ -4,7 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 export type ChromePost = {
   title: string;
   url: string;
-  collection: { id: string; name: string } | null;
+  collection: { permalink: string; name: string } | null;
 };
 
 const KEY = Symbol('usersite-chrome');

@@ -31,8 +31,10 @@
   const tab = $derived<SpaceHomeTab>(
     pathname === '/s' || pathname.startsWith('/s/') ? 'series' : pathname.startsWith('/t/') ? 'tags' : 'posts',
   );
-  const collectionId = $derived(pathname.startsWith('/s/') ? (page.params.id ?? null) : null);
-  const collection = $derived(collectionId ? (space.collections.find((item) => item.id === collectionId) ?? null) : null);
+  const collectionPermalink = $derived(pathname.startsWith('/s/') ? (page.params.permalink ?? null) : null);
+  const collection = $derived(
+    collectionPermalink ? (space.collections.find((item) => item.permalink === collectionPermalink) ?? null) : null,
+  );
   const tag = $derived(tab === 'tags' ? (page.params.name ?? null) : null);
   const desktopMode = $derived(collection ? 'series' : tag ? 'tag' : 'posts');
 

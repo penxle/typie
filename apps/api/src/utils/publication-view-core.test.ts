@@ -7,6 +7,7 @@ import {
   buildIndexableSpaceSlugsQuery,
   buildPublishedCollectionIdsQuery,
   buildPublishedPublicationByIdQuery,
+  buildPublishedPublicationByPermalinkQuery,
   buildPublishedPublicationsQuery,
   buildSitemapPaths,
   buildSpaceBySlugQuery,
@@ -54,7 +55,7 @@ test('published publications join active entities, order by published_at desc th
   assert.equal(query.params.at(-1), 21);
 });
 
-test('published publications can be narrowed to one collection, one tag, or one id', () => {
+test('published publications can be narrowed to one collection, one tag, or one permalink', () => {
   const byCollection = buildPublishedPublicationsQuery(database, {
     spaceId: 'SPC0A',
     collectionId: 'COL0A',
@@ -68,8 +69,18 @@ test('published publications can be narrowed to one collection, one tag, or one 
   assert.match(byTag.sql, /inner join "publication_tags"/);
   assert.match(byTag.sql, /"publication_tags"\."name" = /);
 
-  const byId = buildPublishedPublicationsQuery(database, { spaceId: 'SPC0A', publicationId: 'PUB0A', after: null, limit: 1 }).toSQL();
-  assert.match(byId.sql, /"publications"\."id" = /);
+  const byPermalink = buildPublishedPublicationsQuery(database, {
+    spaceId: 'SPC0A',
+    permalink: '12345678901',
+    after: null,
+    limit: 1,
+  }).toSQL();
+  assert.match(byPermalink.sql, /"publications"\."permalink" = /);
+  assert.ok(byPermalink.params.includes('12345678901'));
+
+  const byEmptyPermalink = buildPublishedPublicationsQuery(database, { spaceId: 'SPC0A', permalink: '', after: null, limit: 1 }).toSQL();
+  assert.match(byEmptyPermalink.sql, /"publications"\."permalink" = /);
+  assert.ok(byEmptyPermalink.params.includes(''));
 });
 
 test('the home publication list drops pinned rows only when excludePinned is set', () => {
@@ -136,6 +147,16 @@ test('a publication looked up by id is scoped to published rows on active entiti
   assert.deepEqual(query.params, ['PUB0A', 'PUBLISHED', 'ACTIVE']);
 });
 
+test('a publication looked up by permalink is scoped to published rows on active entities', () => {
+  const query = buildPublishedPublicationByPermalinkQuery(database, { permalink: '12345678901' }).toSQL();
+  assert.match(query.sql, /inner join "documents"/);
+  assert.match(query.sql, /inner join "entities"/);
+  assert.match(query.sql, /"publications"\."permalink" = /);
+  assert.match(query.sql, /"publications"\."state" = /);
+  assert.match(query.sql, /"entities"\."state" = /);
+  assert.deepEqual(query.params, ['12345678901', 'PUBLISHED', 'ACTIVE']);
+});
+
 test('page size clamps to the allowed range and pages report hasMore from the extra row', () => {
   assert.equal(clampPageSize(undefined), SPACE_PAGE_SIZE);
   assert.equal(clampPageSize(0), 1);
@@ -151,11 +172,8 @@ test('excerpt prefers the override and otherwise collapses whitespace to 200 cha
 });
 
 test('sitemap paths cover home, published posts, series and encoded tags', () => {
-  assert.deepEqual(buildSitemapPaths({ publicationIds: ['PUB0A'], collectionIds: ['COL0A'], tagNames: ['에세이', 'a b'] }), [
-    '/',
-    '/p/PUB0A',
-    '/s/COL0A',
-    '/t/%EC%97%90%EC%84%B8%EC%9D%B4',
-    '/t/a%20b',
-  ]);
+  assert.deepEqual(
+    buildSitemapPaths({ publicationPermalinks: ['12345678901'], collectionPermalinks: ['98765432109'], tagNames: ['에세이', 'a b'] }),
+    ['/', '/p/12345678901', '/s/98765432109', '/t/%EC%97%90%EC%84%B8%EC%9D%B4', '/t/a%20b'],
+  );
 });
