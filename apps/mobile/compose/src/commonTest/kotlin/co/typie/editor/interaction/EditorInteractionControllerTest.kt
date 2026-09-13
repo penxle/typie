@@ -236,7 +236,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `composition tap still moves on Android and with mouse or stylus on iOS`() =
+  fun `composition tap moves on Android without committing and commits for iOS mouse or stylus`() =
     runTest(StandardTestDispatcher()) {
       for ((platform, pointerType) in
         listOf(
@@ -265,10 +265,12 @@ class EditorInteractionControllerTest {
         controller.onPointerUp(1L, point, 40L)
         runCurrent()
         assertEquals(
-          listOf(
-            Message.TextInput(listOf(FlatImeOp.CommitAsIs)),
-            Message.Selection(SelectionOp.SetAt(0, 80f, 20f)),
-          ),
+          buildList {
+            if (platform != Platform.Android) {
+              add(Message.TextInput(listOf(FlatImeOp.CommitAsIs)))
+            }
+            add(Message.Selection(SelectionOp.SetAt(0, 80f, 20f)))
+          },
           fake.enqueued,
           "$platform $pointerType",
         )

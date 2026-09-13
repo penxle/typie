@@ -14,14 +14,16 @@ import co.typie.editor.interaction.semantics.EditorSelectionHapticSemantic
 import co.typie.editor.interaction.semantics.EditorTableColumnResizeSemantic
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemantic
 import co.typie.editor.runtime.EditorContextMenuState
+import co.typie.platform.Platform
 import kotlinx.coroutines.CoroutineScope
 
 internal class EditorInteractionSemantics(
   effects: EditorInteractionEffects,
   contextMenuStateProvider: () -> EditorContextMenuState,
   coroutineScope: CoroutineScope? = null,
+  platform: Platform = Platform.Desktop,
   val pointSelection: EditorPointSelectionSemantic =
-    EditorPointSelectionSemantic(effects = effects),
+    EditorPointSelectionSemantic(effects = effects, platform = platform),
   val contextMenu: EditorContextMenuSemantic =
     EditorContextMenuSemantic(stateProvider = contextMenuStateProvider),
   val selectionHandle: EditorSelectionHandleSemantic =
