@@ -117,7 +117,7 @@ class ImageResizeSecondaryToolbarDesktopTest {
       runOnIdle {
         val heights =
           fake.enqueued.filterIsInstance<Message.System>().mapNotNull {
-            (it.event as? SystemEvent.SetExternalHeight)?.height
+            (it.event as? SystemEvent.SetExternalHeights)?.heights?.singleOrNull()?.height
           }
         assertEquals(listOf(400f), heights)
         assertTrue(fake.enqueued.none { it is Message.Node })
@@ -230,7 +230,9 @@ class ImageResizeSecondaryToolbarDesktopTest {
         val height =
           fake.enqueued
             .filterIsInstance<Message.System>()
-            .mapNotNull { (it.event as? SystemEvent.SetExternalHeight)?.height }
+            .mapNotNull {
+              (it.event as? SystemEvent.SetExternalHeights)?.heights?.singleOrNull()?.height
+            }
             .last()
         assertEquals(draft.maxSize.height * draft.proportion / 100f, height, 0.0001f)
         assertTrue(fake.enqueued.none { it is Message.Node })

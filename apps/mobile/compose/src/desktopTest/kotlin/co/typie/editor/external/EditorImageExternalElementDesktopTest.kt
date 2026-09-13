@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -34,15 +33,13 @@ import kotlinx.coroutines.cancel
 @OptIn(ExperimentalTestApi::class)
 class EditorImageExternalElementDesktopTest {
   @Test
-  fun reportsImageHeightAcrossZoomNodeReplacementAndResize() = runComposeUiTest {
+  fun reportsPlaceholderHeightAgainAfterKnownImageDimensionsChange() = runComposeUiTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val fake = FakeFfiEditor()
     val editor = Editor(fake, scope, Dispatchers.Unconfined)
     val runtime = EditorRuntime(scope)
     val externalState = EditorExternalElementState()
-    externalState.put(EditorImageAsset("asset", "", "", 600, 3000, 0.2, null))
     val zoom = mutableFloatStateOf(1.05f)
-    val nodeId = mutableStateOf("image")
     val element =
       ExternalElement(
         pageIdx = 0,
@@ -53,7 +50,7 @@ class EditorImageExternalElementDesktopTest {
       )
     fun reportedHeights() =
       fake.enqueued.filterIsInstance<Message.System>().mapNotNull {
-        (it.event as? SystemEvent.SetExternalHeight)?.height
+        (it.event as? SystemEvent.SetExternalHeights)?.heights?.singleOrNull()?.height
       }
 
     try {
@@ -67,35 +64,30 @@ class EditorImageExternalElementDesktopTest {
           LocalEditorExternalElementState provides externalState,
         ) {
           Box(Modifier.requiredSize(1300.dp, 1800.dp)) {
-            EditorExternalElementOverlay(
-              listOf(element.copy(node = nodeId.value)),
-              displayZoom = zoom.floatValue,
-            )
+            EditorExternalElementOverlay(listOf(element), displayZoom = zoom.floatValue)
           }
         }
       }
       waitUntil { reportedHeights().isNotEmpty() }
       runOnIdle {
-        assertEquals(listOf(800f), reportedHeights())
+        assertEquals(listOf(48f), reportedHeights())
+        externalState.put(EditorImageAsset("asset", "", "", 600, 3000, 0.2, null))
+      }
+      waitForIdle()
+      runOnIdle {
+        assertEquals(listOf(48f), reportedHeights())
         zoom.floatValue = 2f
-      }
-      waitForIdle()
-      runOnIdle {
-        assertEquals(listOf(800f), reportedHeights())
-        nodeId.value = "second-image"
-      }
-      waitForIdle()
-      runOnIdle {
-        val reportedNodes =
-          fake.enqueued.filterIsInstance<Message.System>().mapNotNull {
-            (it.event as? SystemEvent.SetExternalHeight)?.nodeId
-          }
-        assertEquals(listOf("image", "second-image"), reportedNodes)
-        assertEquals(listOf(800f, 800f), reportedHeights())
-        externalState.images.resizeDrafts["second-image"] =
+        externalState.images.resizeDrafts["image"] =
           EditorImageResizeDraft(10f, imageResizeMaxSize(600f, 600f, 0.2f, 800f))
       }
-      waitUntil { reportedHeights().lastOrNull() == 80f }
+      waitForIdle()
+      runOnIdle {
+        // Known image heights belong to publication, including live resize.
+        assertEquals(listOf(48f), reportedHeights())
+        externalState.clear()
+      }
+      waitUntil { reportedHeights().size == 2 }
+      runOnIdle { assertEquals(listOf(48f, 48f), reportedHeights()) }
     } finally {
       runtime.clear()
       scope.cancel()

@@ -225,6 +225,11 @@ export interface ExternalElement {
     data: ExternalElementData;
 }
 
+export interface ExternalElementHeight {
+    node_id: Dot;
+    height: number;
+}
+
 export interface FontFamily {
     name: string;
     source: FontFamilySource;
@@ -887,7 +892,7 @@ export type SelectionPointUnit = "word" | "sentence" | "paragraph";
 
 export type StateField = "doc" | "root_attrs" | "selection" | "cursor" | "page_sizes" | "external_elements" | "table_overlays" | "link_rects" | "ime" | "modifiers" | "block" | "tracked_ranges" | "last_history_tag" | "placeholder";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_external_height"; node_id: Dot; height: number };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "set_external_heights"; heights: ExternalElementHeight[] };
 
 export type TabNodeAttr = void;
 

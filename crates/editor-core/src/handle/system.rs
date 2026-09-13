@@ -47,8 +47,12 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             Ok(())
         }
 
-        SystemEvent::SetExternalHeight { node_id, height } => {
-            editor.set_external_height(node_id, height);
+        SystemEvent::SetExternalHeights { heights } => {
+            editor.set_external_heights(
+                heights
+                    .into_iter()
+                    .map(|height| (height.node_id, height.height)),
+            );
             Ok(())
         }
 
@@ -562,9 +566,11 @@ mod tests {
         assert_eq!(before.bounds.height, 1.0);
 
         let events = editor.apply(Message::System {
-            event: SystemEvent::SetExternalHeight {
-                node_id: img,
-                height: 72.0,
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: img,
+                    height: 72.0,
+                }],
             },
         });
 
@@ -601,6 +607,78 @@ mod tests {
                 .expect("image external element after height update")
         };
         assert_eq!(after.bounds.height, 72.0);
+    }
+
+    #[test]
+    fn set_external_heights_updates_all_images_and_skips_unchanged_batches() {
+        let (state, first, second, p) = state! {
+            doc { root { first: image second: image p: paragraph { text("after") } } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let before_y = editor
+            .view
+            .cursor_metrics(&editor.state, &editor_state::Position::new(p, 0))
+            .unwrap()
+            .caret
+            .y;
+        let heights = vec![
+            ExternalElementHeight {
+                node_id: first,
+                height: 72.0,
+            },
+            ExternalElementHeight {
+                node_id: second,
+                height: 96.0,
+            },
+        ];
+        let events = editor.apply(Message::System {
+            event: SystemEvent::SetExternalHeights {
+                heights: heights.clone(),
+            },
+        });
+        let elements = editor.view.external_elements(&editor.state, None);
+        assert_eq!(
+            elements
+                .iter()
+                .find(|el| el.node == first)
+                .unwrap()
+                .bounds
+                .height,
+            72.0
+        );
+        assert_eq!(
+            elements
+                .iter()
+                .find(|el| el.node == second)
+                .unwrap()
+                .bounds
+                .height,
+            96.0
+        );
+        let after_y = editor
+            .view
+            .cursor_metrics(&editor.state, &editor_state::Position::new(p, 0))
+            .unwrap()
+            .caret
+            .y;
+        assert_eq!(after_y - before_y, 166.0);
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EditorEvent::RenderInvalidated))
+        );
+        assert!(events.iter().any(|event| matches!(event, EditorEvent::StateChanged { fields } if fields.contains(&StateField::ExternalElements))));
+        assert!(
+            editor
+                .apply(Message::System {
+                    event: SystemEvent::SetExternalHeights { heights }
+                })
+                .is_empty()
+        );
     }
 
     #[test]
@@ -645,9 +723,11 @@ mod tests {
         let before_y = table_y(&editor);
 
         let events = editor.apply(Message::System {
-            event: SystemEvent::SetExternalHeight {
-                node_id: img,
-                height: 72.0,
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: img,
+                    height: 72.0,
+                }],
             },
         });
 
@@ -682,9 +762,11 @@ mod tests {
         });
 
         let events = editor.apply(Message::System {
-            event: SystemEvent::SetExternalHeight {
-                node_id: img,
-                height: 0.0,
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: img,
+                    height: 0.0,
+                }],
             },
         });
 
@@ -1717,17 +1799,21 @@ mod tests {
             event: SystemEvent::Initialize,
         });
         editor.apply(Message::System {
-            event: SystemEvent::SetExternalHeight {
-                node_id: img,
-                height: 72.0,
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: img,
+                    height: 72.0,
+                }],
             },
         });
         assert!(!apply_and_report_change(
             &mut editor,
             Message::System {
-                event: SystemEvent::SetExternalHeight {
-                    node_id: img,
-                    height: 72.0,
+                event: SystemEvent::SetExternalHeights {
+                    heights: vec![crate::message::ExternalElementHeight {
+                        node_id: img,
+                        height: 72.0
+                    }]
                 },
             }
         ));
@@ -1746,9 +1832,11 @@ mod tests {
         assert!(apply_and_report_change(
             &mut editor,
             Message::System {
-                event: SystemEvent::SetExternalHeight {
-                    node_id: img,
-                    height: 72.0,
+                event: SystemEvent::SetExternalHeights {
+                    heights: vec![crate::message::ExternalElementHeight {
+                        node_id: img,
+                        height: 72.0
+                    }]
                 },
             }
         ));
@@ -1767,9 +1855,11 @@ mod tests {
         assert!(!apply_and_report_change(
             &mut editor,
             Message::System {
-                event: SystemEvent::SetExternalHeight {
-                    node_id: img,
-                    height: 0.0,
+                event: SystemEvent::SetExternalHeights {
+                    heights: vec![crate::message::ExternalElementHeight {
+                        node_id: img,
+                        height: 0.0
+                    }]
                 },
             }
         ));

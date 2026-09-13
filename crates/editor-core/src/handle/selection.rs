@@ -1266,7 +1266,11 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         for image in [image1, image2, image3] {
-            assert!(editor.view.set_external_height(&editor.state, image, 100.0));
+            assert!(
+                editor
+                    .view
+                    .set_external_heights(&editor.state, [(image, 100.0)])
+            );
         }
         editor.view.layout(&editor.state);
         let (head_page, head_x, head_y) = {
@@ -1443,7 +1447,11 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         for image in [image1, image2] {
-            assert!(editor.view.set_external_height(&editor.state, image, 100.0));
+            assert!(
+                editor
+                    .view
+                    .set_external_heights(&editor.state, [(image, 100.0)])
+            );
         }
         editor.view.layout(&editor.state);
         let (head_page, head_x, head_y) = {

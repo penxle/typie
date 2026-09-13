@@ -29,6 +29,7 @@ import co.typie.editor.external.imageResizeMaxSize
 import co.typie.editor.external.imageResizeSize
 import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ExternalElementHeight
 import co.typie.editor.ffi.ImageNodeAttr
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NodeAttr
@@ -101,7 +102,11 @@ internal fun ImageResizeSecondaryToolbar(
       val height =
         imageState.displaySize(nodeId, currentImage, currentElement.bounds.width)?.height
           ?: return@runCallback
-      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, height)))
+      editor.enqueue(
+        Message.System(
+          SystemEvent.SetExternalHeights(listOf(ExternalElementHeight(nodeId, height)))
+        )
+      )
     }
   }
 
@@ -133,7 +138,11 @@ internal fun ImageResizeSecondaryToolbar(
     imageState.resizeDrafts[nodeId] = currentDraft.copy(proportion = next)
     editor.runCallback {
       val height = imageResizeSize(next, currentDraft.maxSize).height
-      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, height)))
+      editor.enqueue(
+        Message.System(
+          SystemEvent.SetExternalHeights(listOf(ExternalElementHeight(nodeId, height)))
+        )
+      )
     }
   }
 
@@ -155,7 +164,11 @@ internal fun ImageResizeSecondaryToolbar(
             NodeOp.SetAttr(id = nodeId, attr = NodeAttr.Image(ImageNodeAttr.Proportion(next)))
           )
         )
-        enqueue(Message.System(SystemEvent.SetExternalHeight(nodeId, finalHeight)))
+        enqueue(
+          Message.System(
+            SystemEvent.SetExternalHeights(listOf(ExternalElementHeight(nodeId, finalHeight)))
+          )
+        )
       }
     }
     if (

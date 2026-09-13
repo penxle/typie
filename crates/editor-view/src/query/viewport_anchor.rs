@@ -519,7 +519,7 @@ mod tests {
         let state = State::new(projected, None);
         let mut view = View::new_test();
         view.layout(&state);
-        assert!(view.set_external_height(&state, image, 1_000.0));
+        assert!(view.set_external_heights(&state, [(image, 1_000.0)]));
         let before = view
             .external_elements(&state, None)
             .into_iter()
@@ -536,7 +536,7 @@ mod tests {
             .capture_page_point(captured_point.clone())
             .expect("point inside the image must produce an anchor");
 
-        assert!(view.set_external_height(&state, image, 1_400.0));
+        assert!(view.set_external_heights(&state, [(image, 1_400.0)]));
         let resolved = expect_resolved(
             view.capture_viewport_anchor_presentation()
                 .unwrap()
@@ -584,7 +584,7 @@ mod tests {
         let capture = presentation.capture_selection_head().unwrap();
         let provisional = capture.geometry.clone();
 
-        assert!(view.set_external_height(&state, image, 400.0));
+        assert!(view.set_external_heights(&state, [(image, 400.0)]));
         let measured = expect_resolved(
             view.capture_viewport_anchor_presentation()
                 .unwrap()

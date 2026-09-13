@@ -101,12 +101,11 @@ export async function generateDocumentPdfV2(params: GenerateDocumentPdfV2Params)
       const externals = editor.external_elements().map(mapExternalElement);
       if (externals.length > 0) {
         const assets = await resolveAssets(externals);
-        const requestId = editor.enqueue_request(
-          externals.map((ext) => {
-            const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
-            return { type: 'system', event: { type: 'set_external_height', node_id: ext.nodeId, height } };
-          }),
-        );
+        const heights = externals.map((ext) => {
+          const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
+          return { node_id: ext.nodeId, height };
+        });
+        const requestId = editor.enqueue_request([{ type: 'system', event: { type: 'set_external_heights', heights } }]);
         editor.tick_through(requestId);
       }
 

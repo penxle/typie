@@ -47,9 +47,8 @@ class FakeEditor {
   readOnly = false;
   failure: unknown = undefined;
   externalElements: ReturnType<typeof external>[] = [];
-  inflightImages = new Map<string, InflightImage>();
   inflightFiles = new Map<string, InflightFile>();
-  imageAssets = new Map<string, ImageAsset>();
+  images = { assets: new Map<string, ImageAsset>(), uploads: new Map<string, InflightImage>() };
   messages: Message[] = [];
   focus = vi.fn();
   updateEventsImpl: () => EditorEvent[] = () => [];
@@ -135,7 +134,7 @@ const installReceipt = (editor: FakeEditor, nodeIds: string[], options: { unrela
 
 const waitForIdle = async (editor: FakeEditor): Promise<void> => {
   await vi.waitFor(() => {
-    expect(editor.inflightImages.size + editor.inflightFiles.size).toBe(0);
+    expect(editor.images.uploads.size + editor.inflightFiles.size).toBe(0);
   });
 };
 
@@ -177,12 +176,12 @@ describe('attachment receipt mapping', () => {
       ),
     ).toBe(true);
 
-    expect(editor.inflightImages.has('image-node')).toBe(true);
+    expect(editor.images.uploads.has('image-node')).toBe(true);
     expect(editor.inflightFiles.has('file-node')).toBe(true);
     await waitForIdle(editor);
     expect(upload.uploadImageFile).toHaveBeenCalledWith(image);
     expect(upload.uploadFileAsFile).toHaveBeenCalledWith(document);
-    expect(editor.imageAssets.has('image-cover.png')).toBe(true);
+    expect(editor.images.assets.has('image-cover.png')).toBe(true);
     expect(ctx.fileAssets.has('file-notes.pdf')).toBe(true);
     expect(nodeMessages(editor)).toHaveLength(2);
     expect(nodeMessages(editor)).toContainEqual({
@@ -211,7 +210,7 @@ describe('attachment receipt mapping', () => {
 
     expect(accepted).toBe(false);
     expect(editor.terminal).toBe(false);
-    expect(editor.inflightImages.size).toBe(0);
+    expect(editor.images.uploads.size).toBe(0);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('no matching receipt'), expect.any(String));
@@ -257,7 +256,7 @@ describe('attachment receipt mapping', () => {
     expect(accepted).toBe(false);
     expect(editor.terminal).toBe(true);
     expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining(diagnostic) }));
-    expect(editor.inflightImages.size).toBe(0);
+    expect(editor.images.uploads.size).toBe(0);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
   });
@@ -269,7 +268,7 @@ describe('attachment receipt mapping', () => {
     editor.updateOutcomesImpl = () => [{ type: 'rejected' as const, reason: { type: 'invalid_argument' as const } }];
 
     expect(importer.importAtSelection([{ file: file('a.png', 'image/png'), kind: 'image' }], { onFailure: vi.fn() })).toBe(false);
-    expect(editor.inflightImages.size).toBe(0);
+    expect(editor.images.uploads.size).toBe(0);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('was rejected'), expect.any(String));
   });
@@ -298,7 +297,7 @@ describe('attachment receipt mapping', () => {
     configure(editor, error);
 
     expect(importer.importAtSelection([{ file: file('a.png', 'image/png'), kind: 'image' }], { onFailure: vi.fn() })).toBe(false);
-    expect(editor.inflightImages.size).toBe(0);
+    expect(editor.images.uploads.size).toBe(0);
     expect(consoleError).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('apply attachment placeholder request'), error);
   });
 
@@ -320,7 +319,7 @@ describe('attachment receipt mapping', () => {
       'pending',
       (editor: FakeEditor) => {
         editor.externalElements.push(external('destination', 'image'));
-        editor.inflightImages.set('destination', { uploadId: 'pending', width: 0, height: 0 });
+        editor.images.uploads.set('destination', { uploadId: 'pending', width: 0, height: 0 });
       },
     ],
   ])('rejects an explicitly supplied %s destination before requesting a replacement batch', async (_name, configure) => {
@@ -329,7 +328,7 @@ describe('attachment receipt mapping', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(vi.fn());
     configure(editor);
     installReceipt(editor, ['created']);
-    const inflightBefore = [...editor.inflightImages.entries()];
+    const inflightBefore = [...editor.images.uploads.entries()];
 
     const accepted = importer.importAtSelection([{ file: file('a.png', 'image/png'), kind: 'image' }], {
       existingNodeId: 'destination',
@@ -339,7 +338,7 @@ describe('attachment receipt mapping', () => {
 
     expect(accepted).toBe(false);
     expect(editor.messages).toEqual([]);
-    expect(editor.inflightImages.entries().toArray()).toEqual(inflightBefore);
+    expect(editor.images.uploads.entries().toArray()).toEqual(inflightBefore);
     expect(editor.externalElements.some(({ node }) => node === 'created')).toBe(false);
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
@@ -358,7 +357,7 @@ describe('attachment receipt mapping', () => {
     ).toBe(true);
 
     expect(editor.messages).toEqual([]);
-    expect(editor.inflightImages.has('existing')).toBe(true);
+    expect(editor.images.uploads.has('existing')).toBe(true);
     await waitForIdle(editor);
   });
 
@@ -383,7 +382,7 @@ describe('attachment receipt mapping', () => {
       type: 'insertion',
       op: { type: 'attachment_placeholders', kinds: ['file'] },
     });
-    expect(editor.inflightImages.has('existing')).toBe(true);
+    expect(editor.images.uploads.has('existing')).toBe(true);
     expect(editor.inflightFiles.has('tail-node')).toBe(true);
     await waitForIdle(editor);
     expect(
@@ -409,7 +408,7 @@ describe('attachment receipt mapping', () => {
     expect(accepted).toBe(false);
     expect(editor.terminal).toBe(true);
     expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining('existing destination node ID') }));
-    expect(editor.inflightImages.size).toBe(0);
+    expect(editor.images.uploads.size).toBe(0);
   });
 
   it('fails the editor when a drop receipt places the reuse candidate anywhere except first', () => {
@@ -432,7 +431,7 @@ describe('attachment receipt mapping', () => {
     expect(accepted).toBe(false);
     expect(editor.terminal).toBe(true);
     expect(editor.failure).toEqual(expect.objectContaining({ message: expect.stringContaining('reuse candidate') }));
-    expect(editor.inflightImages.size + editor.inflightFiles.size).toBe(0);
+    expect(editor.images.uploads.size + editor.inflightFiles.size).toBe(0);
   });
 
   it.each([
@@ -518,12 +517,12 @@ describe('attachment target lifecycle', () => {
         { onFailure: vi.fn() },
       ),
     ).toBe(true);
-    expect(editor.inflightImages.size).toBe(7);
-    expect(editor.inflightImages.values().every((pending) => pending.url === undefined)).toBe(true);
+    expect(editor.images.uploads.size).toBe(7);
+    expect(editor.images.uploads.values().every((pending) => pending.url === undefined)).toBe(true);
 
     await vi.waitFor(() => expect(upload.uploadImageFile).toHaveBeenCalledTimes(5));
     expect(createObjectURL).toHaveBeenCalledTimes(5);
-    expect([...editor.inflightImages.values()].filter((pending) => pending.url !== undefined)).toHaveLength(5);
+    expect([...editor.images.uploads.values()].filter((pending) => pending.url !== undefined)).toHaveLength(5);
     const firstUpload = uploads[0];
     const secondUpload = uploads[1];
     if (!firstUpload || !secondUpload) throw new Error('Expected the first two uploads');
@@ -558,7 +557,7 @@ describe('attachment target lifecycle', () => {
     ).toBe(true);
 
     await waitForIdle(editor);
-    expect(editor.imageAssets.get('image-asset')).toEqual(imageAsset('image-asset'));
+    expect(editor.images.assets.get('image-asset')).toEqual(imageAsset('image-asset'));
     expect(ctx.fileAssets.get('file-asset')).toEqual(fileAsset('file-asset'));
     expect(nodeMessages(editor)).toHaveLength(2);
     expect(nodeMessages(editor)).toContainEqual({
@@ -629,7 +628,7 @@ describe('attachment target lifecycle', () => {
     [
       'pending-token replacement',
       (_ctx: FakeContext, editor: FakeEditor) =>
-        editor.inflightImages.set('existing', { uploadId: 'replacement', url: 'blob:replacement', width: 10, height: 10 }),
+        editor.images.uploads.set('existing', { uploadId: 'replacement', url: 'blob:replacement', width: 10, height: 10 }),
     ],
   ])('treats %s during upload as stale without cache, commit, delete, or callback', async (_name, makeStale) => {
     const { ctx, editor, importer } = createImporter();
@@ -649,13 +648,13 @@ describe('attachment target lifecycle', () => {
     pending.resolve(imageAsset('uploaded'));
     await vi.waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:picture.png'));
 
-    expect(editor.imageAssets.size).toBe(0);
+    expect(editor.images.assets.size).toBe(0);
     expect(nodeMessages(editor)).toEqual([]);
     expect(onFailure).not.toHaveBeenCalled();
     if (_name === 'pending-token replacement') {
-      expect(editor.inflightImages.get('existing')?.uploadId).toBe('replacement');
+      expect(editor.images.uploads.get('existing')?.uploadId).toBe('replacement');
     } else {
-      expect(editor.inflightImages.has('existing')).toBe(false);
+      expect(editor.images.uploads.has('existing')).toBe(false);
     }
   });
 
@@ -675,7 +674,7 @@ describe('attachment target lifecycle', () => {
     await vi.waitFor(() => expect(upload.getImageDimensions).toHaveBeenCalledOnce());
     editor.readOnly = true;
     dimensions.resolve({ width: 100, height: 100 });
-    await vi.waitFor(() => expect(editor.inflightImages.size).toBe(0));
+    await vi.waitFor(() => expect(editor.images.uploads.size).toBe(0));
 
     expect(upload.uploadImageFile).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
@@ -769,8 +768,8 @@ describe('attachment target lifecycle', () => {
     await vi.waitFor(() => expect(upload.uploadImageFile).toHaveBeenCalledTimes(5));
     importer.cancelNode(editor as never, 'node-0');
     importer.cancelNode(editor as never, 'node-5');
-    expect(editor.inflightImages.has('node-0')).toBe(false);
-    expect(editor.inflightImages.has('node-5')).toBe(false);
+    expect(editor.images.uploads.has('node-0')).toBe(false);
+    expect(editor.images.uploads.has('node-5')).toBe(false);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:0.png');
 
     for (const [index, pending] of uploads.slice(0, 5).entries()) pending.resolve(imageAsset(`image-${index}`));
@@ -792,12 +791,12 @@ describe('attachment target lifecycle', () => {
     ).toBe(true);
     await vi.waitFor(() => expect(upload.uploadImageFile).toHaveBeenCalledOnce());
     const replacement = new FakeEditor();
-    replacement.inflightImages.set('other', { uploadId: 'other', url: 'blob:other', width: 1, height: 1 });
+    replacement.images.uploads.set('other', { uploadId: 'other', url: 'blob:other', width: 1, height: 1 });
     ctx.editor = replacement;
 
     importer.cancelEditor(editor as never);
-    expect(editor.inflightImages.size).toBe(0);
-    expect(replacement.inflightImages.has('other')).toBe(true);
+    expect(editor.images.uploads.size).toBe(0);
+    expect(replacement.images.uploads.has('other')).toBe(true);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:picture.png');
     expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:other');
     pending.resolve(imageAsset('uploaded'));
@@ -836,9 +835,9 @@ describe('placeholder reuse checks', () => {
     expect(importer.canReusePlaceholder('image-node', 'image')).toBe(true);
     expect(importer.canReusePlaceholder('image-node', 'file')).toBe(false);
     expect(importer.canReusePlaceholder('filled', 'image')).toBe(false);
-    editor.inflightImages.set('image-node', { uploadId: 'pending', width: 0, height: 0 });
+    editor.images.uploads.set('image-node', { uploadId: 'pending', width: 0, height: 0 });
     expect(importer.canReusePlaceholder('image-node', 'image')).toBe(false);
-    editor.inflightImages.clear();
+    editor.images.uploads.clear();
     editor.readOnly = true;
     expect(importer.canReusePlaceholder('image-node', 'image')).toBe(false);
     editor.readOnly = false;

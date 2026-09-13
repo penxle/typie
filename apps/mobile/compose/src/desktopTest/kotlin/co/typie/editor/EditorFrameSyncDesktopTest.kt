@@ -37,11 +37,17 @@ import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.external.EditorImageAsset
+import co.typie.editor.external.EditorImageResizeDraft
+import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ExternalElementHeight
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.interaction.EditorInteractionScope
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -89,6 +95,100 @@ import org.jetbrains.skia.Image
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 class EditorFrameSyncDesktopTest {
+  @Test
+  fun settlesOffscreenImageHeightBeforePublishingSelectionReveal() = runComposeUiTest {
+    val fixture = FrameSyncFixture(initialDoc = paginatedDocumentWithImage())
+    try {
+      val editor = fixture.editor
+      val image = editor.appliedState.externalElements.single()
+      fixture.externalElementState.put(EditorImageAsset("asset", "", "", 100, 10000, 0.01, null))
+      editor.updateNow {
+        enqueue(
+          Message.System(
+            SystemEvent.SetExternalHeights(listOf(ExternalElementHeight(image.node, 10000f)))
+          )
+        )
+      }
+      val stalePageCount = editor.appliedState.pageSizes.size
+      val update =
+        assertNotNull(
+          editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+            enqueue(
+              Message.Selection(
+                SelectionOp.SetAt(
+                  page = stalePageCount - 1,
+                  x = PageMargin,
+                  y = PageHeight - PageMargin,
+                )
+              )
+            )
+            bringIntoView(
+              EditorBringIntoViewTarget.CurrentSelectionHead,
+              policy = EditorBringIntoViewPolicy.CursorGuard,
+            )
+          }
+        )
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10000) { (editor.publishedRevision ?: -1L) >= update.revision }
+      waitForIdle()
+      val published = editor.publishedState
+      val publishedImage = published.externalElements.single()
+      val expectedHeight =
+        assertNotNull(
+            fixture.externalElementState.images.displaySize(
+              publishedImage.node,
+              publishedImage.data as ExternalElementData.Image,
+              publishedImage.bounds.width,
+            )
+          )
+          .height
+      assertEquals(expectedHeight, publishedImage.bounds.height)
+      assertTrue(published.pageSizes.size < stalePageCount)
+      assertFalse(assertNotNull(editor.publishedBundle).frames.containsKey(publishedImage.pageIdx))
+      val draws = fixture.drawsAfter(0).filter { it.snapshot.version >= update.revision }
+      assertTrue(draws.isNotEmpty())
+      assertTrue(
+        draws.all { it.snapshot.externalElements.single().bounds.height == expectedHeight }
+      )
+      assertEquals(null, fixture.bringIntoViewRequests.pendingRequest)
+      assertEquals(
+        EditorScrollIntentResult.NoScroll,
+        resolveEditorScrollIntent(
+          frame = fixture.scrollFrame(published),
+          target = EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
+          currentScroll = fixture.viewportState.scrollOffset.y,
+        ),
+      )
+
+      // Metadata and resize drafts must also reconcile while the image stays offscreen.
+      runOnIdle {
+        fixture.externalElementState.put(EditorImageAsset("asset", "", "", 100, 50, 2.0, null))
+      }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height == 50f
+      }
+      runOnIdle {
+        fixture.externalElementState.images.resizeDrafts[image.node] =
+          EditorImageResizeDraft(50f, Size(100f, 50f))
+      }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height == 25f
+      }
+      runOnIdle { fixture.externalElementState.images.clearResizeState(image.node) }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height == 50f
+      }
+      assertFalse(
+        assertNotNull(editor.publishedBundle)
+          .frames
+          .containsKey(editor.publishedState.externalElements.single().pageIdx)
+      )
+    } finally {
+      fixture.close()
+    }
+  }
+
   @Test
   fun frameJournalRejectsTextEditWithoutCursorNativeFrame() {
     val sample =
@@ -1557,6 +1657,7 @@ class EditorFrameSyncDesktopTest {
           LocalThemeMode provides ResolvedThemeMode.Light,
           LocalEditorRuntime provides fixture.runtime,
           LocalEditorUiState provides fixture.uiState,
+          LocalEditorExternalElementState provides fixture.externalElementState,
           LocalEditorZoomController provides zoomController,
           LocalEditorBringIntoViewRequests provides fixture.bringIntoViewRequests,
           LocalEditorInteractionScope provides interactionScope,

@@ -124,12 +124,14 @@ pub(crate) fn external_elements(
 ) -> Vec<ExternalElement> {
     let mut elements = Vec::new();
     for page_idx in 0..layout_index.pages().len() {
-        elements.extend(page_external_elements(
-            layout_index,
-            view,
-            page_idx,
-            selection,
-        ));
+        // Page queries include every overlapping atom. Document hosts need each
+        // atom once, anchored to the page where it starts, even while a previous
+        // external height still overflows the new layout's pages.
+        elements.extend(
+            page_external_elements(layout_index, view, page_idx, selection)
+                .into_iter()
+                .filter(|element| element.bounds.y >= 0.0),
+        );
     }
     elements
 }
@@ -267,6 +269,38 @@ mod tests {
             "image data must use the current projected node"
         );
         assert!(!el.is_selected);
+    }
+
+    #[test]
+    fn document_external_elements_include_an_oversized_image_once() {
+        let (doc, _, image, _) = image_doc();
+        let projected = project_document(&doc).unwrap();
+        let view = DocView::new(&projected);
+        let measured = measure_node(
+            &mut crate::measure::Measurer::new(),
+            &view.root().unwrap(),
+            352.0,
+            &MeasureContext {
+                external_heights: hashbrown::HashMap::from([(image, 500.0)]),
+                ..Default::default()
+            },
+            &mut Resource::new_test(),
+        );
+        let layout = Paginator::paginated(400.0, 220.0, EdgeInsets::all(24.0))
+            .paginate(MeasuredTree { root: measured });
+        let index = LayoutIndex::new(layout.tree, &layout.pages);
+
+        let page_elements: Vec<_> = (0..index.pages().len())
+            .flat_map(|page| page_external_elements(&index, &view, page, None))
+            .collect();
+        assert!(page_elements.len() > 1, "the image overlaps multiple pages");
+
+        let elements = external_elements(&index, &view, None);
+        assert_eq!(elements.len(), 1);
+        assert_eq!(elements[0].node, image);
+        assert_eq!(elements[0].page_idx, 0);
+        assert_eq!(elements[0].bounds.y, 24.0);
+        assert_eq!(elements[0].bounds.height, 500.0);
     }
 
     #[test]

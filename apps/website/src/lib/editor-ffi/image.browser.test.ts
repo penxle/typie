@@ -30,7 +30,11 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-async function mountImage(proportion = 100, originalHeight = 3000, { useWindowScroll = false } = {}) {
+async function mountImage(
+  proportion = 100,
+  originalHeight = 3000,
+  { useWindowScroll = false, resolveAsset = true, placeholder = false } = {},
+) {
   await initWasm();
   const doc: PlainDoc = {
     root: entry(
@@ -48,13 +52,14 @@ async function mountImage(proportion = 100, originalHeight = 3000, { useWindowSc
       },
       [
         entry({ type: 'paragraph' }, [entry({ type: 'text', text: 'Before the image' })]),
-        entry({ type: 'image', id: 'asset', proportion }),
+        entry({ type: 'image', id: placeholder ? undefined : 'asset', proportion }),
       ],
     ),
   };
   editor = await Editor.createFromDoc(doc, { width: 800, height: 1000, scale_factor: 1 });
   const url = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="${originalHeight}"/>`;
-  editor.imageAssets.set('asset', { id: 'asset', url, originalUrl: url, width: 600, height: originalHeight, placeholder: '' });
+  const asset = { id: 'asset', url, originalUrl: url, width: 600, height: originalHeight, placeholder: '' };
+  if (resolveAsset) editor.images.assets.set('asset', asset);
   const target = document.createElement('div');
   document.body.append(target);
   let scrollRoot: HTMLDivElement | undefined;
@@ -70,7 +75,7 @@ async function mountImage(proportion = 100, originalHeight = 3000, { useWindowSc
     },
   });
   await tick();
-  return { editor, scrollRoot };
+  return { editor, scrollRoot, asset };
 }
 
 it('fits a tall image on the next page and restores its requested size in continuous mode', async () => {
@@ -193,6 +198,51 @@ it('unmounts an idle image outside the rendered pages and mounts it again on ret
     expect(remounted).not.toBe(image);
     expect(remounted?.getBoundingClientRect().height).toBeCloseTo(400);
   });
+});
+
+it('sizes an unmounted image when its asset dimensions arrive', async () => {
+  const { editor, asset } = await mountImage(33, 333, { useWindowScroll: true, resolveAsset: false });
+  await vi.waitFor(() => expect(editor.externalElements[0]?.bounds.height).toBe(48));
+  window.scrollTo(0, 3000);
+  window.dispatchEvent(new Event('scroll'));
+  await vi.waitFor(() => expect(editor.published?.snapshot.pageData.has(0)).toBe(false));
+
+  editor.images.assets.set('asset', asset);
+
+  await vi.waitFor(() => expect(editor.externalElements[0]?.bounds.height).toBeCloseTo(109.89));
+  expect(editor.terminal).toBe(false);
+  expect(document.querySelector('img[alt="본문 이미지"]')).toBeNull();
+  window.scrollTo(0, 0);
+  window.dispatchEvent(new Event('scroll'));
+  await vi.waitFor(() => expect(document.querySelector('img[alt="본문 이미지"]')?.getBoundingClientRect().height).toBeCloseTo(109.89, 1));
+});
+
+it('restores the placeholder height after undoing image attachment without remounting', async () => {
+  const { editor } = await mountImage(100, 300, { placeholder: true });
+  await vi.waitFor(() => expect(editor.externalElements[0]?.bounds.height).toBe(48));
+  const node = editor.externalElements[0]?.node;
+  if (!node) throw new Error('Expected image external element');
+  const wrapper = document.querySelector(`[data-node-id="${node}"]`);
+  expect(wrapper).not.toBeNull();
+
+  editor.updateNow((request) =>
+    request.enqueue({
+      type: 'node',
+      op: { type: 'set_attr', id: node, attr: { type: 'image', attr: { type: 'id', value: 'asset' } } },
+    }),
+  );
+  await vi.waitFor(() => expect(editor.externalElements[0]?.bounds.height).toBe(300));
+  expect(document.querySelector(`[data-node-id="${node}"]`)).toBe(wrapper);
+
+  editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'undo' } }));
+  await vi.waitFor(() => {
+    expect(wrapper?.firstElementChild?.getBoundingClientRect().height).toBe(48);
+    expect(editor.externalElements[0]?.bounds.height).toBe(48);
+  });
+  expect(document.querySelector(`[data-node-id="${node}"]`)).toBe(wrapper);
+
+  editor.updateNow((request) => request.enqueue({ type: 'history', op: { type: 'redo' } }));
+  await vi.waitFor(() => expect(editor.externalElements[0]?.bounds.height).toBe(300));
 });
 
 it.each(['pointerup', 'pointercancel'] as const)('keeps an offscreen resize until %s restores the final height', async (endEvent) => {

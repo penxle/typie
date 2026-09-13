@@ -358,7 +358,7 @@
 
     for (const asset of assets) {
       if (asset.__typename === 'Image') {
-        editor.imageAssets.set(asset.id, {
+        editor.images.assets.set(asset.id, {
           id: asset.id,
           url: asset.url,
           originalUrl: asset.originalUrl,

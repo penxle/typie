@@ -8,12 +8,13 @@
 
   type Props = {
     element: ExternalElement;
+    height?: number;
     minHeight?: string;
     containerEl?: HTMLDivElement;
     children: Snippet;
   };
 
-  let { element, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
+  let { element, height, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
 
   const SELECTION_FOCUSED_ALPHA = 77 / 255;
   const SELECTION_UNFOCUSED_ALPHA = 48 / 255;
@@ -30,8 +31,11 @@
   $effect(() => {
     const editor = ctx.editor;
     const node = containerEl;
-    if (!editor || !node) return;
+    if (!editor || !node || height !== undefined) return;
 
+    // Another height source may have updated layout while DOM measurement was
+    // disabled. Each new observer must report its initial height again.
+    reportedHeight = undefined;
     const observer = new ResizeObserver((entries) => {
       const height = entries[0]?.contentRect.height ?? 0;
       if (height === reportedHeight || !Number.isFinite(height) || height <= 0) return;
@@ -59,7 +63,7 @@
     pointerEvents: 'auto',
     display: 'flex',
     justifyContent: 'center',
-    visibility: reportedHeight === undefined ? 'hidden' : 'visible',
+    visibility: height === undefined && reportedHeight === undefined ? 'hidden' : 'visible',
   })}
   data-external-element
   data-node-id={element.node}

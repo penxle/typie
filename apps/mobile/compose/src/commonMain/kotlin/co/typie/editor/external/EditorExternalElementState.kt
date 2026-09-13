@@ -4,7 +4,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ExternalElementHeight
 
 @Stable
 internal class EditorExternalElementState {
@@ -59,6 +61,16 @@ internal class EditorExternalImageElementState {
       draft?.maxSize ?: imageResizeMaxSize(boundsWidth, originalWidth, ratio, data.maxHeight)
     return imageResizeSize(draft?.proportion ?: data.proportion.toFloat(), maxSize)
   }
+
+  fun heightUpdates(elements: List<ExternalElement>): List<ExternalElementHeight> =
+    elements.mapNotNull { element ->
+      val data = element.data as? ExternalElementData.Image ?: return@mapNotNull null
+      val height =
+        displaySize(element.node, data, element.bounds.width)?.height ?: return@mapNotNull null
+      if (!height.isFinite() || height <= 0f || height == element.bounds.height)
+        return@mapNotNull null
+      ExternalElementHeight(element.node, height)
+    }
 
   fun clearResizeState(nodeId: String) {
     resizeDrafts.remove(nodeId)

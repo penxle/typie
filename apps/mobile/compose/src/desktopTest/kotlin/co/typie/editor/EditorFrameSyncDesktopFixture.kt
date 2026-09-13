@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.test.ExperimentalTestApi
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.external.EditorExternalElementState
 import co.typie.editor.ffi.Editor as FfiEditor
 import co.typie.editor.ffi.GraphIngest
 import co.typie.editor.ffi.Key
@@ -72,6 +73,7 @@ internal class FrameSyncFixture(
   val viewportState = EditorViewportState()
   val zoomController = EditorZoomController()
   val uiState = EditorUiState()
+  val externalElementState = EditorExternalElementState()
   val bringIntoViewRequests = EditorBringIntoViewRequests()
   private var drawSequence = 0L
   private val drawJournal = mutableListOf<DrawnPresentation>()
@@ -402,6 +404,26 @@ internal fun continuousDocumentWithOffscreenTable(): PlainDoc {
                   ),
               )
             )
+          }
+      )
+  )
+}
+
+internal fun paginatedDocumentWithImage(): PlainDoc {
+  val document = emptyPaginatedDocument()
+  return document.copy(
+    root =
+      document.root.copy(
+        children =
+          buildList {
+            add(
+              PlainNodeEntry(
+                node = PlainNode.Image(id = "asset"),
+                modifiers = emptyMap(),
+                children = emptyList(),
+              )
+            )
+            repeat(80) { add(paragraph("after image")) }
           }
       )
   )
