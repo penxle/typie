@@ -50,9 +50,15 @@ export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () =>
     void scroll.pendingRequest;
 
     const current = ++generation;
+    const imageHeights = editor.images.heightUpdates(editor.appliedSnapshot.externalElements);
+    // Image dimensions are known without mounting their DOM. Settle their layout
+    // before choosing pages or consuming a selection reveal for this publication.
     untrack(() => {
-      if (zoomDiffers(displayZoom, renderZoom)) return;
-      reconcilePublication(editor, scroll, surfaceHost, () => current === generation);
+      if (imageHeights.length > 0) {
+        editor.updateNow((request) => request.enqueue({ type: 'system', event: { type: 'set_external_heights', heights: imageHeights } }));
+      } else if (!zoomDiffers(displayZoom, renderZoom)) {
+        reconcilePublication(editor, scroll, surfaceHost, () => current === generation);
+      }
     });
   });
 }

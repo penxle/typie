@@ -8,6 +8,7 @@ import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
 import { isSelectionCollapsed, pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
 import { computeSelectionHandleVisual } from './gesture.svelte';
+import { defaultPaginatedLayout, setRootLayoutMode } from './root-attrs';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
 
@@ -1790,9 +1791,59 @@ describe('web editor frame synchronization', () => {
     expectActualCanvas(editor, 0, false);
   });
 
+  it('keeps one image mounted when switching to pages shorter than its measured height', async () => {
+    const plain = externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 });
+    plain.root.children.push(entry({ type: 'horizontal_rule' }), entry({ type: 'paragraph' }));
+    const { editor } = await mountEditor(plain);
+    const url = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="500"/>';
+    editor.images.assets.set('asset', { id: 'asset', url, originalUrl: url, width: 100, height: 500, placeholder: '' });
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(500);
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 10 } }));
+    await waitForPresentation(editor);
+    const image = document.querySelector('img[alt="본문 이미지"]');
+    expect(image).not.toBeNull();
+
+    const root = doc().root.node;
+    if (root.type !== 'root' || !root.layout_mode) throw new Error('Expected paginated root');
+    setRootLayoutMode(editor, root.layout_mode);
+
+    await expect.poll(() => editor.rootAttrs?.layout_mode.type).toBe('paginated');
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(PAGE_HEIGHT - PAGE_MARGIN * 2);
+    expect(editor.terminal).toBe(false);
+    expect(editor.externalElements).toHaveLength(1);
+    expect(document.querySelectorAll('img[alt="본문 이미지"]')).toHaveLength(1);
+    expect(document.querySelector('img[alt="본문 이미지"]')).toBe(image);
+  });
+
+  it('fits an offscreen tall image before revealing the caret in the new layout', async () => {
+    const plain = externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 });
+    plain.root.children.push(
+      entry({ type: 'horizontal_rule' }),
+      entry({ type: 'paragraph' }, [entry({ type: 'text', text: 'After image' })]),
+    );
+    const { editor, scrollRoot } = await mountEditor(plain);
+    const url = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10000"/>';
+    editor.images.assets.set('asset', { id: 'asset', url, originalUrl: url, width: 100, height: 10_000, placeholder: '' });
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(10_000);
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_flat', start: 5, end: 5 } }));
+    editor.focus();
+    await waitForPresentation(editor);
+    expect(editor.cursor).toBeDefined();
+
+    setRootLayoutMode(editor, defaultPaginatedLayout());
+
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(935);
+    await waitForPresentation(editor);
+    expect(editor.terminal).toBe(false);
+    expect(editor.externalElements).toHaveLength(1);
+    expect(editor.pageSizes).toHaveLength(2);
+    expect(editor.cursor?.page_idx).toBe(1);
+    expectSelectionHeadVisible(editor, scrollRoot, 'after fitting the image');
+  });
+
   it('keeps image component chrome fixed while content, inset, and gaps follow display zoom', async () => {
     const { editor } = await mountEditor(externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 }));
-    editor.imageAssets.set('asset', {
+    editor.images.assets.set('asset', {
       id: 'asset',
       url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
       originalUrl: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
@@ -1869,11 +1920,11 @@ describe('web editor frame synchronization', () => {
     expect(document.querySelectorAll('[aria-label="이미지 크기 조절"]')).toHaveLength(2);
   });
 
-  it('keeps uploading image status accessible while its spinner fits available space', async () => {
+  it('uses the actual uploading image size and keeps its status accessible', async () => {
     const { editor } = await mountEditor(externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 }));
     const image = editor.appliedSnapshot.externalElements[0];
     if (!image) throw new Error('Expected an image external element');
-    editor.inflightImages.set(image.node, {
+    editor.images.uploads.set(image.node, {
       uploadId: 'uploading-image',
       url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"/>',
       width: 40,
@@ -1884,6 +1935,9 @@ describe('web editor frame synchronization', () => {
     const status = document.querySelector<HTMLElement>('[role="status"][aria-label="이미지 업로드 중"]');
     const spinner = status?.querySelector<SVGElement>('svg');
     expect(spinner?.getBoundingClientRect().width).toBeCloseTo(24, 0);
+    await expect.poll(() => editor.appliedSnapshot.externalElements[0]?.bounds.height).toBe(40);
+    const wrapper = status?.closest<HTMLElement>('[data-external-element]');
+    expect(wrapper?.getBoundingClientRect().height).toBeCloseTo(40, 0);
 
     await setDisplayZoom(editor, 0.5);
     const compactSpinner = status?.querySelector<SVGElement>('svg');

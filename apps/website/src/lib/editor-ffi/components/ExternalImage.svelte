@@ -13,7 +13,7 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
-  import { calculateImageContainerSize, calculateImageWidth } from '../handlers/image';
+  import { calculateImageWidth } from '../handlers/image';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
@@ -49,28 +49,28 @@
 
   const ctx = getEditorContext();
 
-  let proportion = $state(100);
+  const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
+  const proportion = $derived(ctx.editor?.images.resizeDrafts.get(element.node) ?? imageData?.proportion ?? 100);
   let resizeSide = $state<ResizeSide | null>(null);
   const isResizing = $derived(resizeSide !== null);
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
   let pickerOpened = $state(false);
-  let publicationOwned = $state(false);
-  let publicationWait: AbortController | undefined;
+  let publicationWait = $state.raw<AbortController>();
 
   onDestroy(() => {
     publicationWait?.abort();
+    ctx.editor?.images.resizeDrafts.delete(element.node);
     onKeepMountedChange?.(false);
   });
 
   $effect(() => {
-    onKeepMountedChange?.(isResizing || publicationOwned || enlarged);
+    onKeepMountedChange?.(isResizing || publicationWait !== undefined || enlarged);
   });
 
-  const imageData = $derived(element.data.type === 'image' ? element.data : undefined);
   const imageId = $derived(imageData?.id || undefined);
-  const asset = $derived(imageId ? ctx.editor?.imageAssets.get(imageId) : undefined);
-  const inflight = $derived(ctx.editor?.inflightImages.get(element.node));
+  const asset = $derived(imageId ? ctx.editor?.images.assets.get(imageId) : undefined);
+  const inflight = $derived(ctx.editor?.images.uploads.get(element.node));
   const stage = $derived.by(() => {
     if (asset) return 'ready';
     if (inflight) return 'uploading';
@@ -83,17 +83,9 @@
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
   const maxHeight = $derived(imageData?.max_height);
-  const liveWidth = $derived(calculateImageWidth(element.bounds.width, proportion, originalWidth, originalHeight, maxHeight));
-  const liveHeight = $derived(originalWidth > 0 ? liveWidth * (originalHeight / originalWidth) : 0);
-  const containerSize = $derived(
-    calculateImageContainerSize({
-      boundsWidth: element.bounds.width,
-      proportion,
-      originalWidth,
-      originalHeight,
-      maxHeight,
-    }),
-  );
+  const imageSize = $derived(ctx.editor?.images.displaySize(element));
+  const liveWidth = $derived(imageSize?.width ?? calculateImageWidth(element.bounds.width, proportion, 0, 0));
+  const liveHeight = $derived(imageSize?.height ?? 0);
   const displayedWidth = $derived(liveWidth * displayZoom);
   const displayedHeight = $derived(liveHeight * displayZoom);
   const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
@@ -124,12 +116,6 @@
     placement: 'bottom',
     offset: 4,
     middleware: [flip(), hide()],
-  });
-
-  $effect(() => {
-    if (imageData && !isResizing && !publicationOwned) {
-      proportion = imageData.proportion;
-    }
   });
 
   $effect(() => {
@@ -188,7 +174,7 @@
 
     publicationWait?.abort();
     publicationWait = undefined;
-    publicationOwned = false;
+    ctx.editor?.images.resizeDrafts.set(element.node, proportion);
     resizeSide = side;
     return {
       x: event.clientX,
@@ -205,7 +191,7 @@
 
     const dx =
       (ctx.editor?.clientDeltaToLocalDelta(event.clientX - session.x) ?? event.clientX - session.x) * (session.side === 'left' ? -1 : 1);
-    proportion = clamp(((session.width + dx * 2) / maxWidth) * 100, 10, 100);
+    ctx.editor?.images.resizeDrafts.set(element.node, clamp(((session.width + dx * 2) / maxWidth) * 100, 10, 100));
   };
 
   const finishResize = (session: ResizeSession, action: 'commit' | 'cancel') => {
@@ -218,13 +204,17 @@
     const wait = new AbortController();
     publicationWait?.abort();
     publicationWait = wait;
-    publicationOwned = true;
     resizeSide = null;
-    proportion = finalProportion;
-    let update: ReturnType<typeof editor.updateNow>;
+    editor.images.resizeDrafts.set(element.node, finalProportion);
+    const release = () => {
+      if (publicationWait !== wait) return;
+      publicationWait = undefined;
+      editor.images.resizeDrafts.delete(element.node);
+    };
+    let update: ReturnType<typeof editor.updateNow> = null;
     try {
       if (action === 'commit') {
-        const commit = editor.updateNow((request) => {
+        update = editor.updateNow((request) => {
           request.enqueue({
             type: 'node',
             op: {
@@ -237,31 +227,23 @@
             },
           });
         });
-        const accepted = commit?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
-        if (!accepted) proportion = imageData?.proportion ?? session.proportion;
+        const accepted = update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
+        if (!accepted) editor.images.resizeDrafts.set(element.node, imageData?.proportion ?? session.proportion);
       }
-      // An offscreen image can unmount after this publication, before ResizeObserver
-      // reports the committed or restored size. Publish that height explicitly.
-      update = editor.updateNow(() => editor.setExternalElementHeight(element.node, liveHeight));
+      const heights = editor.images.heightUpdates(editor.appliedSnapshot.externalElements);
+      if (heights.length > 0) {
+        update =
+          editor.updateNow((request) => request.enqueue({ type: 'system', event: { type: 'set_external_heights', heights } })) ?? update;
+      }
     } catch {
-      publicationWait = undefined;
-      publicationOwned = false;
-      proportion = imageData?.proportion ?? session.proportion;
+      release();
       if (action === 'commit') editor.focus();
       return;
     }
     if (update) {
-      const release = () => {
-        if (publicationWait !== wait) return;
-        publicationWait = undefined;
-        publicationOwned = false;
-        proportion = imageData?.proportion ?? finalProportion;
-      };
       void update.awaitPublished(wait.signal).then(release).catch(release);
     } else {
-      publicationWait = undefined;
-      publicationOwned = false;
-      proportion = imageData?.proportion ?? session.proportion;
+      release();
     }
     if (action === 'commit') editor.focus();
   };
@@ -326,11 +308,11 @@
   });
 </script>
 
-<ExternalElementWrapper {element} minHeight={stage === 'ready' ? '0' : '48px'}>
+<ExternalElementWrapper {element} height={imageSize?.height} minHeight={imageSize ? '0' : '48px'}>
   <div
     bind:this={containerEl}
-    style:width={containerSize.width}
-    style:height={containerSize.height}
+    style:width={imageSize ? `${imageSize.width}px` : '100%'}
+    style:height={imageSize ? `${imageSize.height}px` : undefined}
     class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
     role="group"
   >

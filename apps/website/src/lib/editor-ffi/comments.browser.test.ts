@@ -102,7 +102,7 @@ describe('frozen comment registration', () => {
   it('enlarges a read-only image without opening its comment', async () => {
     await initWasm();
     editor = await Editor.createFromDoc(imageDoc, { width: 320, height: 180, scale_factor: 1 });
-    editor.imageAssets.set('asset', {
+    editor.images.assets.set('asset', {
       id: 'asset',
       url: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
       originalUrl: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',

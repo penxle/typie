@@ -100,7 +100,7 @@ class EditorExternalElementOverlayDesktopTest {
           )
         fun reportedHeights() =
           fake.enqueued.filterIsInstance<Message.System>().mapNotNull {
-            (it.event as? SystemEvent.SetExternalHeight)?.height
+            (it.event as? SystemEvent.SetExternalHeights)?.heights?.singleOrNull()?.height
           }
 
         try {

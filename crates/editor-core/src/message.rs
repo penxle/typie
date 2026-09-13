@@ -386,12 +386,18 @@ pub enum SystemEvent {
         family: String,
         weight: u16,
     },
-    SetExternalHeight {
-        node_id: Dot,
-        height: f32,
+    SetExternalHeights {
+        heights: Vec<ExternalElementHeight>,
     },
     #[ffi(skip)]
     FontsChanged,
+}
+
+#[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ExternalElementHeight {
+    pub node_id: Dot,
+    pub height: f32,
 }
 
 #[ffi]

@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -24,6 +24,7 @@ import co.typie.editor.EditorTheme
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.ffi.ExternalElement
 import co.typie.editor.ffi.ExternalElementData
+import co.typie.editor.ffi.ExternalElementHeight
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -78,16 +79,20 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
 
   fun reportHeight(height: Float) {
     if (height <= 0f || !height.isFinite()) return
-    val unchanged =
-      if (imageSize != null) reportedHeight == height else abs(reportedHeight - height) < 0.5f
-    if (unchanged) return
+    if (abs(reportedHeight - height) < 0.5f) return
     reportedHeight = height
     editor.runCallback {
-      editor.enqueue(Message.System(SystemEvent.SetExternalHeight(element.node, height)))
+      editor.enqueue(
+        Message.System(
+          SystemEvent.SetExternalHeights(listOf(ExternalElementHeight(element.node, height)))
+        )
+      )
     }
   }
 
-  LaunchedEffect(imageSize?.height) { imageSize?.height?.let(::reportHeight) }
+  // Known images are reconciled before publication. Keep the measurement cache
+  // current so returning to a placeholder reports its height again.
+  SideEffect { imageSize?.height?.let { reportedHeight = it } }
 
   Box(
     Modifier.offset {
@@ -107,7 +112,7 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
             transformOrigin = TransformOrigin(0f, 0f)
             scaleX = layerZoom
             scaleY = layerZoom
-            alpha = if (reportedHeight.isNaN()) 0f else 1f
+            alpha = if (imageSize == null && reportedHeight.isNaN()) 0f else 1f
           }
         }
       }

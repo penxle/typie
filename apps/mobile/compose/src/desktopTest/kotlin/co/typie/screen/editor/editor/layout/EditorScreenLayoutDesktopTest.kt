@@ -69,6 +69,8 @@ import co.typie.editor.EditorState
 import co.typie.editor.EditorZoomController
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.external.EditorExternalElementState
+import co.typie.editor.external.LocalEditorExternalElementState
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.interaction.EditorInteractionMode
@@ -1097,6 +1099,7 @@ class EditorScreenLayoutDesktopTest {
         )
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides remember { EditorUiState() },
@@ -1146,6 +1149,7 @@ class EditorScreenLayoutDesktopTest {
         )
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides remember { EditorUiState() },
@@ -1241,6 +1245,7 @@ class EditorScreenLayoutDesktopTest {
           editorBounds = EditorBoundsInContainer(),
         )
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides remember { EditorUiState() },
@@ -1309,6 +1314,7 @@ class EditorScreenLayoutDesktopTest {
       val subPaneScrollState = rememberScrollableState { delta -> delta }
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides remember { EditorUiState() },
@@ -1377,6 +1383,7 @@ class EditorScreenLayoutDesktopTest {
       val subPaneScrollState = rememberScrollableState { delta -> delta }
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides uiState,
@@ -1473,6 +1480,7 @@ class EditorScreenLayoutDesktopTest {
         )
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides rememberEditorBringIntoViewRequests(),
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides uiState,
@@ -1554,6 +1562,7 @@ class EditorScreenLayoutDesktopTest {
       }
 
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides fixture.uiState,
@@ -1642,6 +1651,7 @@ class EditorScreenLayoutDesktopTest {
         )
       }
       CompositionLocalProvider(
+        LocalEditorExternalElementState provides remember { EditorExternalElementState() },
         LocalEditorBringIntoViewRequests provides bringIntoViewRequests,
         LocalEditorInteractionScope provides interactionScope,
         LocalEditorUiState provides fixture.uiState,

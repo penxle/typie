@@ -18,7 +18,7 @@ export const calculateImageHeight = (width: number, originalWidth: number, origi
   return width * (originalHeight / originalWidth);
 };
 
-export const calculateImageContainerSize = ({
+export const calculateImageSize = ({
   boundsWidth,
   proportion,
   originalWidth,
@@ -30,12 +30,12 @@ export const calculateImageContainerSize = ({
   originalWidth: number;
   originalHeight: number;
   maxHeight?: number;
-}): { width: string; height: string | undefined } => {
+}): { width: number; height: number } | undefined => {
   if (originalWidth <= 0 || originalHeight <= 0) {
-    return { width: '100%', height: undefined };
+    return undefined;
   }
 
   const width = calculateImageWidth(boundsWidth, proportion, originalWidth, originalHeight, maxHeight);
   const height = calculateImageHeight(width, originalWidth, originalHeight);
-  return { width: `${width}px`, height: `${height}px` };
+  return { width, height };
 };

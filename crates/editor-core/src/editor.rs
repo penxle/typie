@@ -2094,8 +2094,11 @@ impl Editor {
         did_change
     }
 
-    pub(crate) fn set_external_height(&mut self, node_id: Dot, height: f32) -> bool {
-        let did_change = self.view.set_external_height(&self.state, node_id, height);
+    pub(crate) fn set_external_heights(
+        &mut self,
+        heights: impl IntoIterator<Item = (Dot, f32)>,
+    ) -> bool {
+        let did_change = self.view.set_external_heights(&self.state, heights);
         if did_change {
             self.push_event(EditorEvent::StateChanged {
                 fields: vec![
@@ -2770,9 +2773,11 @@ mod tests {
         assert!(editor.replace_viewport_anchor_presentation(displayed_revision));
 
         editor.apply(Message::System {
-            event: SystemEvent::SetExternalHeight {
-                node_id: image,
-                height: 200.0,
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: image,
+                    height: 200.0,
+                }],
             },
         });
         let current_revision = editor.revision();

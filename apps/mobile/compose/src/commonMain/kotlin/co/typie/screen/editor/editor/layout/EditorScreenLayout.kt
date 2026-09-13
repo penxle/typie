@@ -56,6 +56,9 @@ import co.typie.editor.SurfacePageSpan
 import co.typie.editor.VerticalSpan
 import co.typie.editor.body.resolveMeasuredPageLength
 import co.typie.editor.ext.unclippedBoundsInRoot
+import co.typie.editor.external.LocalEditorExternalElementState
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.interaction.EditorPlatformIndirectScaleBridge
 import co.typie.editor.interaction.EditorScreenPointerSequence
 import co.typie.editor.interaction.LocalEditorInteractionScope
@@ -251,23 +254,36 @@ internal fun EditorScreenLayout(
       ?.takeIf { it.isFinite() }
       ?.let { it > 0f } ?: true
   val appliedState = editor?.appliedState
+  val imageState = LocalEditorExternalElementState.current.images
+  val imageHeights = imageState.heightUpdates(appliedState?.externalElements.orEmpty())
+  if (editor != null && imageHeights.isNotEmpty()) {
+    SideEffect {
+      editor.runCallback {
+        editor.updateNow { enqueue(Message.System(SystemEvent.SetExternalHeights(imageHeights))) }
+      }
+    }
+  }
   val bringIntoViewRequest = appliedState?.let {
     bringIntoViewRequests.activateForVersion(it.version)
   }
   val ownedViewportAnchorState = remember { EditorViewportAnchorState() }
   val activeViewportAnchorState = viewportAnchorState ?: ownedViewportAnchorState
-  val surfacePreparation = editor?.let {
-    resolveAnchoredEditorSurfacePreparation(
-      editor = it,
-      scrollFrame = scrollFrame.withState(it.appliedState),
-      currentScrollOffset = state.viewportState.scrollOffset,
-      bringIntoViewRequest = bringIntoViewRequest,
-      anchorState = activeViewportAnchorState,
-      publishedBundle = it.publishedBundle,
-      smoothScrollEnabled = smoothScrollEnabled,
-      smoothRevealActive = smoothScrollSession.active,
-    )
-  }
+  // Known image geometry must settle before selecting pages or consuming a reveal.
+  val surfacePreparation =
+    editor
+      ?.takeIf { imageHeights.isEmpty() }
+      ?.let {
+        resolveAnchoredEditorSurfacePreparation(
+          editor = it,
+          scrollFrame = scrollFrame.withState(it.appliedState),
+          currentScrollOffset = state.viewportState.scrollOffset,
+          bringIntoViewRequest = bringIntoViewRequest,
+          anchorState = activeViewportAnchorState,
+          publishedBundle = it.publishedBundle,
+          smoothScrollEnabled = smoothScrollEnabled,
+          smoothRevealActive = smoothScrollSession.active,
+        )
+      }
   if (editor != null && surfacePreparation != null) {
     SideEffect {
       editor.requestSurfacePages(surfacePreparation.requiredPages, surfacePreparation.regions)
@@ -396,7 +412,11 @@ internal fun EditorScreenLayout(
         bringIntoViewRequests.activateForVersion(it.version)
       }
       val currentPreparation =
-        if (editor != null && currentAppliedState != null) {
+        if (
+          editor != null &&
+            currentAppliedState != null &&
+            imageState.heightUpdates(currentAppliedState.externalElements).isEmpty()
+        ) {
           resolveAnchoredEditorSurfacePreparation(
             editor = editor,
             scrollFrame = measuredScrollFrame.withState(currentAppliedState),

@@ -51,8 +51,8 @@ export class EditorAttachmentImporter {
     return data?.type === kind && (data.id === undefined || data.id === '');
   }
 
-  #pendingMap(editor: Editor, kind: AttachmentPlaceholderKind): Editor['inflightImages'] | Editor['inflightFiles'] {
-    return kind === 'image' ? editor.inflightImages : editor.inflightFiles;
+  #pendingMap(editor: Editor, kind: AttachmentPlaceholderKind): Editor['images']['uploads'] | Editor['inflightFiles'] {
+    return kind === 'image' ? editor.images.uploads : editor.inflightFiles;
   }
 
   #failReceiptInvariant(editor: Editor, message: string): void {
@@ -119,7 +119,7 @@ export class EditorAttachmentImporter {
 
     for (const target of targets) {
       if (target.item.kind === 'image') {
-        editor.inflightImages.set(target.nodeId, { uploadId: target.uploadId, width: 0, height: 0 });
+        editor.images.uploads.set(target.nodeId, { uploadId: target.uploadId, width: 0, height: 0 });
       } else {
         editor.inflightFiles.set(target.nodeId, {
           uploadId: target.uploadId,
@@ -152,15 +152,15 @@ export class EditorAttachmentImporter {
 
       objectUrl = URL.createObjectURL(target.item.file);
       if (!this.#isCurrent(target)) return;
-      target.editor.inflightImages.set(target.nodeId, { uploadId: target.uploadId, url: objectUrl, width: 0, height: 0 });
+      target.editor.images.uploads.set(target.nodeId, { uploadId: target.uploadId, url: objectUrl, width: 0, height: 0 });
 
       const { width, height } = await getImageDimensions(objectUrl);
       if (!this.#isCurrent(target)) return;
-      target.editor.inflightImages.set(target.nodeId, { uploadId: target.uploadId, url: objectUrl, width, height });
+      target.editor.images.uploads.set(target.nodeId, { uploadId: target.uploadId, url: objectUrl, width, height });
 
       const uploaded = await uploadImageFile(target.item.file);
       if (!this.#isCurrent(target)) return;
-      target.editor.imageAssets.set(uploaded.id, uploaded);
+      target.editor.images.assets.set(uploaded.id, uploaded);
       if (!this.#isCurrent(target)) return;
       const update = target.editor.updateNow(() => {
         target.editor.enqueue({
@@ -362,17 +362,17 @@ export class EditorAttachmentImporter {
   }
 
   cancelEditor(editor: Editor): void {
-    for (const pending of editor.inflightImages.values()) {
+    for (const pending of editor.images.uploads.values()) {
       if (pending.url !== undefined) URL.revokeObjectURL(pending.url);
     }
-    editor.inflightImages.clear();
+    editor.images.uploads.clear();
     editor.inflightFiles.clear();
   }
 
   cancelNode(editor: Editor, nodeId: string): void {
-    const image = editor.inflightImages.get(nodeId);
+    const image = editor.images.uploads.get(nodeId);
     if (image) {
-      editor.inflightImages.delete(nodeId);
+      editor.images.uploads.delete(nodeId);
       if (image.url !== undefined) URL.revokeObjectURL(image.url);
     }
     editor.inflightFiles.delete(nodeId);

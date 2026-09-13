@@ -8,6 +8,7 @@ import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { EditorAttachmentImporter } from './attachment-importer';
 import { IS_MAC, PAGE_GAP } from './constants';
 import { EditorRequest, EditorUpdate } from './editor-update';
+import { EditorExternalImageElementState } from './external-image-element-state';
 import { fontDataMissingHandler } from './fonts';
 import { isSelectionCollapsed, presentedPageElement, resolveCachedPageSpans, resolvePageAtY, roundToScale } from './geometry';
 import { TouchGestureController } from './gesture.svelte';
@@ -75,7 +76,6 @@ import type {
   EditorEventListener,
   EmbedAsset,
   FileAsset,
-  ImageAsset,
 } from './types';
 
 export type SpellcheckError = {
@@ -452,8 +452,7 @@ export class Editor {
   editBlockedHandler: (() => void) | null = null;
   escapeKeyHandler: (() => boolean) | null = null;
 
-  imageAssets = $state(new SvelteMap<string, ImageAsset>());
-  inflightImages = $state(new SvelteMap<string, { uploadId: string; url?: string; width: number; height: number }>());
+  readonly images = new EditorExternalImageElementState();
 
   contextMenu = $state({
     isOpen: false,
@@ -2168,7 +2167,7 @@ export class Editor {
   }
 
   setExternalElementHeight(nodeId: string, height: number): void {
-    this.enqueue({ type: 'system', event: { type: 'set_external_height', node_id: nodeId, height } });
+    this.enqueue({ type: 'system', event: { type: 'set_external_heights', heights: [{ node_id: nodeId, height }] } });
   }
 
   setThemeVariant(variant: ThemeVariant): void {

@@ -1063,18 +1063,35 @@ impl View {
         self.measurer.invalidate_with_ancestors(&nv);
     }
 
-    pub fn set_external_height(&mut self, state: &State, node: Dot, height: f32) -> bool {
-        if !height.is_finite()
-            || height <= 0.0
-            || (state.view().node(node).is_none() && state.view().leaf(node).is_none())
-        {
+    pub fn set_external_heights(
+        &mut self,
+        state: &State,
+        heights: impl IntoIterator<Item = (Dot, f32)>,
+    ) -> bool {
+        let mut changed = false;
+        let view = state.view();
+        for (node, height) in heights {
+            if !height.is_finite()
+                || height <= 0.0
+                || self.view_state.external_height(node) == Some(height)
+            {
+                continue;
+            }
+            let Some(owner) = view
+                .node(node)
+                .or_else(|| view.leaf(node).and_then(|leaf| leaf.parent()))
+            else {
+                continue;
+            };
+            self.view_state.external_heights.insert(node, height);
+            // Atom measurements live in their parent. Its ancestors depend on the
+            // new height, but sibling blocks keep their existing measurements.
+            self.measurer.invalidate_with_ancestors(&owner);
+            changed = true;
+        }
+        if !changed {
             return false;
         }
-        if self.view_state.external_height(node) == Some(height) {
-            return false;
-        }
-        self.view_state.external_heights.insert(node, height);
-        self.evict_measure_for(state, node);
         self.compute(state);
         self.view_state.preferred_x = None;
         true
@@ -2283,7 +2300,7 @@ mod incremental_tests {
     }
 
     #[test]
-    fn external_height_resize_remeasures_leaf_owner() {
+    fn external_heights_resize_remeasures_leaf_owners() {
         let mut g = OpGraph::<EditOp>::with_actor(1);
         let root = Dot::ROOT;
         let fold = g
@@ -2298,8 +2315,9 @@ mod incremental_tests {
             .unwrap()
             .id;
         let img = g.add_mut(seq_image(4, vec![root, fold, fc])).unwrap().id;
+        let root_img = g.add_mut(seq_image(5, vec![root])).unwrap().id;
         let unrelated = g
-            .add_mut(seq_block(5, NodeType::Paragraph, vec![root]))
+            .add_mut(seq_block(6, NodeType::Paragraph, vec![root]))
             .unwrap()
             .id;
         g.commit_mut();
@@ -2315,7 +2333,7 @@ mod incremental_tests {
         let before_fold = cached_arc(&mut view, &state, fold);
         let before_unrelated = cached_arc(&mut view, &state, unrelated);
 
-        assert!(view.set_external_height(&state, img, 200.0));
+        assert!(view.set_external_heights(&state, [(img, 200.0), (root_img, 120.0)]));
 
         let after_fold = cached_arc(&mut view, &state, fold);
         let after_unrelated = cached_arc(&mut view, &state, unrelated);
@@ -2330,5 +2348,36 @@ mod incremental_tests {
             Arc::ptr_eq(&before_unrelated, &after_unrelated),
             "unrelated block must stay cached (cache hit, no re-measure)"
         );
+        let elements = view.external_elements(&state, None);
+        assert_eq!(
+            elements
+                .iter()
+                .find(|el| el.node == img)
+                .unwrap()
+                .bounds
+                .height,
+            200.0
+        );
+        assert_eq!(
+            elements
+                .iter()
+                .find(|el| el.node == root_img)
+                .unwrap()
+                .bounds
+                .height,
+            120.0
+        );
+        assert!(!view.set_external_heights(
+            &state,
+            [
+                (img, 200.0),
+                (root_img, 0.0),
+                (root_img, -1.0),
+                (root_img, f32::NAN),
+                (root_img, f32::INFINITY),
+                (Dot::new(999, 999), 100.0),
+            ]
+        ));
+        assert!(!view.set_external_heights(&state, []));
     }
 }
