@@ -118,7 +118,7 @@
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                {space.slug}.{env.PUBLIC_USERSITE_HOST}
+                {env.PUBLIC_USERSITE_HOST}/@{space.slug}
                 <Icon icon={ArrowUpRightIcon} size={12} />
               </a>
             </div>

@@ -7,13 +7,13 @@
   import { prefersReducedMotion } from '@typie/ui/state';
   import { MediaQuery } from 'svelte/reactivity';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
-  import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import AccountMenu from './AccountMenu.svelte';
+  import { currentSpaceSlug } from './apex/@[slug]/current-space-slug';
+  import { seriesPath, spaceHomePath } from './apex/@[slug]/paths';
   import { getUsersiteChrome } from './chrome.svelte';
   import TypieMark from './TypieMark.svelte';
-  import { seriesPath } from './wildcard/paths';
   import type { UsersiteHeader_spaceView$key, UsersiteHeader_user$key } from '$mearie';
 
   type Props = {
@@ -50,11 +50,12 @@
   let slot = $state<'' | 'title'>('');
   let progress = $state(0);
 
+  const slug = $derived(currentSpaceSlug());
   const isPost = $derived(chrome.post !== null);
   const eyebrow = $derived(
     chrome.post?.collection
-      ? { label: chrome.post.collection.name, href: seriesPath(chrome.post.collection.id) }
-      : { label: space.data.name, href: '/' },
+      ? { label: chrome.post.collection.name, href: seriesPath(slug, chrome.post.collection.id) }
+      : { label: space.data.name, href: spaceHomePath(slug) },
   );
   const hidden = $derived(isPost && chrome.retreat && !desktop.current);
 
@@ -157,7 +158,7 @@
             _hover: { color: 'text.default' },
           })}
           aria-label={space.data.name}
-          href="/"
+          href={spaceHomePath(slug)}
           use:tooltip={{ message: space.data.name }}
         >
           <Icon icon={ChevronLeftIcon} size={16} />
@@ -174,9 +175,7 @@
             color: 'text.default',
           })}
           aria-label="타이피"
-          href={env.PUBLIC_WEBSITE_URL}
-          rel="noopener noreferrer"
-          target="_blank"
+          href="/"
           use:tooltip={{ message: '타이피' }}
         >
           <TypieMark size={24} />
@@ -210,7 +209,7 @@
               transition: 'colors',
               _hover: { color: 'text.muted' },
             })}
-            href="/"
+            href={spaceHomePath(slug)}
           >
             <Img
               style={css.raw({

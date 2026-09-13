@@ -81,8 +81,8 @@
 
   <div class={flex({ flexDirection: 'column', gap: '6px' })}>
     <label class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })} for="new-space-slug">주소</label>
-    <TextInput id="new-space-slug" style={css.raw({ height: '32px', fontSize: '13px' })} rightItemAttached bind:value={form.fields.slug}>
-      {#snippet rightItem()}
+    <TextInput id="new-space-slug" style={css.raw({ height: '32px', fontSize: '13px' })} leftItemAttached bind:value={form.fields.slug}>
+      {#snippet leftItem()}
         <span
           class={css({
             fontSize: '13px',
@@ -94,7 +94,7 @@
             alignItems: 'center',
           })}
         >
-          .{env.PUBLIC_USERSITE_HOST}
+          {env.PUBLIC_USERSITE_HOST}/@
         </span>
       {/snippet}
     </TextInput>
