@@ -8,8 +8,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,6 +24,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,6 +48,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -74,6 +74,8 @@ import co.typie.ui.theme.shadow
 import co.typie.ui.utils.matchesShortcut
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 internal val ContextMenuShape = AppShapes.squircle(AppShapes.lg)
 private val ContextMenuEdgePadding = 4.dp
@@ -108,16 +110,33 @@ internal fun EditorSelectionContextMenuOverlay(
   }
   var menuBounds by remember { mutableStateOf<Rect?>(null) }
   var submenuBounds by remember { mutableStateOf<Rect?>(null) }
-  var selectionItemBounds by remember { mutableStateOf<Rect?>(null) }
+  var selectionItemBoundsInMenu by remember { mutableStateOf<Rect?>(null) }
   var origin by remember { mutableStateOf(Offset.Zero) }
   val enterState = remember { MutableTransitionState(false) }
   enterState.targetState = true
-  val submenu = remember(mode) { MutableTransitionState(false) }
-  var pressGestureSession by remember { mutableStateOf<PressGestureSession?>(null) }
-  val parentSuspended = submenu.currentState || submenu.targetState || !submenu.isIdle
-  val closeTopMenu = {
-    if (submenu.targetState) submenu.targetState = false else actions.onDismiss()
+  var submenuOpen by remember(mode) { mutableStateOf(false) }
+  val submenuAnimation = remember(mode) { Animatable(0f) }
+  val submenuProgress by submenuAnimation.asState()
+  LaunchedEffect(submenuOpen, submenuAnimation) {
+    // Transition substitutes a spring when interrupted, which can keep expanding after close.
+    submenuAnimation.animateTo(
+      if (submenuOpen) 1f else 0f,
+      tween(ContextSubmenuAnimationMillis, easing = ContextMenuEnterEasing),
+    )
   }
+  var pressGestureSession by remember { mutableStateOf<PressGestureSession?>(null) }
+  val parentSuspended = submenuOpen || submenuProgress > 0f
+  // Keep the return trigger's contents stable while both menus move to the new selection.
+  val displayedActions = if (parentSuspended) remember { actions } else actions
+  val animationScope = rememberCoroutineScope()
+  val collapseSubmenu = {
+    if (submenuOpen) {
+      // Stop the intro before the close effect runs on the next frame.
+      animationScope.launch(start = CoroutineStart.UNDISPATCHED) { submenuAnimation.stop() }
+      submenuOpen = false
+    }
+  }
+  val closeTopMenu = { if (submenuOpen) collapseSubmenu() else actions.onDismiss() }
   PlatformBackHandler(enabled = visible, onBack = closeTopMenu)
   WindowInputHandler(
     enabled = visible && LocalNavigationForegroundInteractive.current,
@@ -128,14 +147,6 @@ internal fun EditorSelectionContextMenuOverlay(
       } else false
     },
   )
-  val submenuTransition = rememberTransition(submenu, label = "EditorContextSubmenu")
-  val submenuProgress by
-    submenuTransition.animateFloat(
-      transitionSpec = { tween(ContextSubmenuAnimationMillis, easing = ContextMenuEnterEasing) },
-      label = "reveal",
-    ) {
-      if (it) 1f else 0f
-    }
   val parentScale = 1f - 0.03f * submenuProgress
   val parentOpacity = 1f - 0.55f * submenuProgress
   val shape =
@@ -226,7 +237,7 @@ internal fun EditorSelectionContextMenuOverlay(
                     tween(ContextMenuAnimationMillis, easing = ContextMenuEnterEasing)
                   },
                 )
-                .onGloballyPositioned { menuBounds = it.boundsInWindow() },
+                .onPlaced { menuBounds = it.boundsInWindow() },
             transitionSpec = {
               fadeIn(tween(ContextMenuAnimationMillis, easing = ContextMenuEnterEasing))
                 .togetherWith(
@@ -249,23 +260,27 @@ internal fun EditorSelectionContextMenuOverlay(
                 Box(contentModifier.graphicsLayer { alpha = parentOpacity }) {
                   if (targetMode == EditorContextMenuMode.Compact) {
                     EditorCompactContextMenu(
-                      actions,
+                      displayedActions,
                       editorMutationEnabled,
                       onExpandMenu,
                       acceptsInput = visible,
                     )
                   } else {
                     EditorExpandedContextMenu(
-                      actions,
+                      displayedActions,
                       editorMutationEnabled,
                       acceptsInput = visible && !parentSuspended,
                       onSelectionMenuOpen = {
                         pressGestureSession = null
-                        submenu.targetState = true
+                        submenuOpen = true
                       },
                       onSelectionPressSession = { pressGestureSession = it },
-                      onSelectionItemBoundsChanged = {
-                        if (!parentSuspended) selectionItemBounds = it
+                      onSelectionItemBoundsChanged = { bounds ->
+                        if (!parentSuspended) {
+                          menuBounds?.let { parent ->
+                            selectionItemBoundsInMenu = bounds.translate(-parent.topLeft)
+                          }
+                        }
                       },
                     )
                   }
@@ -274,7 +289,7 @@ internal fun EditorSelectionContextMenuOverlay(
                   Box(
                     Modifier.matchParentSize()
                       .semantics { contentDescription = "상위 메뉴로 돌아가기" }
-                      .clickable(enabled = visible) { submenu.targetState = false }
+                      .clickable(enabled = visible) { collapseSubmenu() }
                   )
                 }
               }
@@ -284,21 +299,22 @@ internal fun EditorSelectionContextMenuOverlay(
       }
     }
     val parent = menuBounds
-    val item = selectionItemBounds
+    val item = selectionItemBoundsInMenu
     if (parentSuspended && parent != null && item != null) {
       val panePadding = with(LocalDensity.current) { PopoverDefaults.PanePadding.toPx() }
       EditorContextMenuLayout(
         anchor,
         overlaySize,
         visibleArea,
-        preferredTopLeft = Offset(parent.left - origin.x, item.top - origin.y - panePadding),
-        revealFrom =
+        revealFrom = {
+          val currentParent = requireNotNull(menuBounds)
           Rect(
-            left = parent.left - origin.x,
-            top = item.top - origin.y,
-            right = parent.right - origin.x,
-            bottom = item.bottom - origin.y,
-          ),
+            left = currentParent.left - origin.x,
+            top = currentParent.top + item.top - origin.y,
+            right = currentParent.right - origin.x,
+            bottom = currentParent.top + item.bottom - origin.y,
+          )
+        },
         revealProgress = submenuProgress,
       ) {
         EditorContextMenuSurface(
@@ -311,11 +327,11 @@ internal fun EditorSelectionContextMenuOverlay(
           // The initial header occupies exactly the trigger row; padding unfolds with the card.
           Box(Modifier.graphicsLayer { translationY = -panePadding * (1f - submenuProgress) }) {
             EditorSelectionContextSubmenu(
-              actions = actions,
-              acceptsInput = visible && submenu.targetState,
+              actions = displayedActions,
+              acceptsInput = visible && submenuOpen,
               pressGestureSession = pressGestureSession,
               revealProgress = submenuProgress,
-              onCollapse = { submenu.targetState = false },
+              onCollapse = collapseSubmenu,
             )
           }
         }
@@ -349,8 +365,7 @@ private fun EditorContextMenuLayout(
   anchor: EditorContextMenuAnchor,
   overlaySize: Size,
   visibleArea: EditorVisibleArea,
-  preferredTopLeft: Offset? = null,
-  revealFrom: Rect? = null,
+  revealFrom: (() -> Rect)? = null,
   revealProgress: Float = 1f,
   content: @Composable () -> Unit,
 ) {
@@ -392,35 +407,36 @@ private fun EditorContextMenuLayout(
         val height = measurable.maxIntrinsicHeight(width).coerceIn(0, contentConstraints.maxHeight)
         Size(width.toFloat(), height.toFloat())
       }
-    val placement =
-      resolveEditorContextMenuPlacement(
-        anchor = anchor,
-        menuSize = menuSize,
-        overlaySize = overlaySize,
-        visibleArea = visibleArea,
-        density = density.density,
-        preferredTopLeft = preferredTopLeft,
-      )
-
     val placeable =
       rootPlaceable
         ?: measurable.measure(
           Constraints.fixed(
             width = menuSize.width.roundToInt(),
             height =
-              lerp(requireNotNull(revealFrom).height, menuSize.height, revealProgress)
+              lerp(requireNotNull(revealFrom).invoke().height, menuSize.height, revealProgress)
                 .roundToInt()
                 .coerceIn(0, contentConstraints.maxHeight),
           )
         )
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
+      // The parent is placed first. Read its current position here, without a frame of lag.
+      val source = revealFrom?.invoke()
+      val placement =
+        resolveEditorContextMenuPlacement(
+          anchor = anchor,
+          menuSize = menuSize,
+          overlaySize = overlaySize,
+          visibleArea = visibleArea,
+          density = density.density,
+          preferredTopLeft = source?.topLeft?.minus(Offset(0f, PopoverDefaults.PanePadding.toPx())),
+        )
       if (placement != null) {
         val position =
-          if (revealFrom == null) placement.topLeft
+          if (source == null) placement.topLeft
           else
             Offset(
-              lerp(revealFrom.left, placement.topLeft.x, revealProgress),
-              lerp(revealFrom.top, placement.topLeft.y, revealProgress),
+              lerp(source.left, placement.topLeft.x, revealProgress),
+              lerp(source.top, placement.topLeft.y, revealProgress),
             )
         placeable.place(x = position.x.roundToInt(), y = position.y.roundToInt())
       }

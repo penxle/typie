@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -32,6 +33,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runComposeUiTest
@@ -300,7 +302,7 @@ class EditorContextMenuOverlayDesktopTest {
     var bounds = emptyList<Rect>()
     setMenuContent(
       mode = EditorContextMenuMode.Expanded,
-      anchor = EditorContextMenuAnchor(200f, 650f, 650f, atPointer = true),
+      anchor = { EditorContextMenuAnchor(200f, 650f, 650f, atPointer = true) },
       onBoundsInWindowChanged = { bounds = it },
     )
     mainClock.advanceTimeBy(400)
@@ -343,7 +345,121 @@ class EditorContextMenuOverlayDesktopTest {
       "Closing must retain the trigger row",
     )
     assertTrue(closing.last().top > closing.first().top + 60f)
+    assertTrue(
+      closing.zipWithNext().all { (a, b) -> b.top >= a.top - 1f },
+      "Closing must not jump upward before returning to the trigger: $closing",
+    )
     onNodeWithText("복사").assertIsDisplayed()
+  }
+
+  @Test
+  fun submenuCanReturnToItsTriggerWhenOpeningIsInterrupted() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    var bounds = emptyList<Rect>()
+    setMenuContent(
+      mode = EditorContextMenuMode.Expanded,
+      anchor = { EditorContextMenuAnchor(200f, 650f, 650f, atPointer = true) },
+      onBoundsInWindowChanged = { bounds = it },
+    )
+    mainClock.advanceTimeBy(400)
+    val trigger = onNodeWithText("선택 확장").fetchSemanticsNode().boundsInRoot
+    onNodeWithText("선택 확장").performClick()
+    mainClock.advanceTimeBy(96)
+    onNodeWithContentDescription("선택 확장 접기").performSemanticsAction(SemanticsActions.OnClick) {
+      it()
+    }
+    val closing = mutableListOf<Rect>()
+    repeat(20) {
+      mainClock.advanceTimeByFrame()
+      waitForIdle()
+      bounds.getOrNull(1)?.let(closing::add)
+    }
+    assertTrue(closing.size >= 2)
+    assertTrue(
+      closing.zipWithNext().all { (a, b) -> b.top >= a.top - 1f && b.height <= a.height + 1f },
+      "Interrupted opening must reverse without jumping: $closing",
+    )
+    assertEquals(trigger.top, closing.last().top, 1f)
+    assertEquals(trigger.height, closing.last().height, 1f)
+    onNodeWithContentDescription("선택 확장 접기").assertDoesNotExist()
+    onNodeWithText("선택 확장").assertIsDisplayed()
+  }
+
+  @Test
+  fun selectingAllRetainsSubmenuContentsUntilItReturnsToTheTrigger() = runComposeUiTest {
+    mainClock.autoAdvance = false
+    var units by mutableStateOf(SelectionExpansionUnit.entries.toSet())
+    var selections = 0
+    setMenuContent(
+      mode = EditorContextMenuMode.Expanded,
+      availableExpansionUnits = { units },
+      onSelectAll = {
+        selections++
+        units = setOf(SelectionExpansionUnit.All)
+      },
+    )
+    mainClock.advanceTimeBy(400)
+    onNodeWithText("선택 확장").performClick()
+    mainClock.advanceTimeBy(400)
+    onNodeWithText("전체 선택").performClick()
+    mainClock.advanceTimeByFrame()
+    waitForIdle()
+    onNodeWithText("단어 선택").assertExists()
+    mainClock.advanceTimeBy(400)
+    onNodeWithText("선택 확장").performClick()
+    mainClock.advanceTimeBy(400)
+    onNodeWithText("단어 선택").assertDoesNotExist()
+    onNodeWithText("전체 선택").performClick()
+    mainClock.advanceTimeBy(400)
+    assertEquals(2, selections)
+    onNodeWithText("선택 확장").assertIsDisplayed()
+  }
+
+  @Test
+  fun submenuCollapsesIntoItsMovingParentAfterSelectionExpansion() {
+    val lowerRight = EditorContextMenuAnchor(360f, 650f, 650f, atPointer = true)
+    val upperLeft = EditorContextMenuAnchor(40f, 100f, 100f, atPointer = true)
+    for ((start, destination) in listOf(lowerRight to upperLeft, upperLeft to lowerRight)) {
+      runComposeUiTest {
+        mainClock.autoAdvance = false
+        var anchor by mutableStateOf(start)
+        var bounds = emptyList<Rect>()
+        setMenuContent(
+          mode = EditorContextMenuMode.Expanded,
+          anchor = { anchor },
+          onExpandParagraph = { anchor = destination },
+          onBoundsInWindowChanged = { bounds = it },
+        )
+        mainClock.advanceTimeBy(400)
+        val originalParent = bounds.single()
+        onNodeWithText("선택 확장").performClick()
+        mainClock.advanceTimeBy(400)
+        onNodeWithText("문단 선택").performClick()
+        val closing = mutableListOf<Pair<Rect, Rect>>()
+        repeat(20) {
+          mainClock.advanceTimeByFrame()
+          waitForIdle()
+          if (bounds.size == 2) closing.add(bounds.first() to bounds.last())
+        }
+        assertTrue(
+          closing.any { (parent, _) -> (parent.center - originalParent.center).getDistance() > 1f },
+          "The parent must move before the submenu finishes collapsing: $closing",
+        )
+        closing.forEach { (parent, child) ->
+          assertEquals(
+            parent.center.x,
+            child.center.x,
+            1f,
+            "Both menus must use the same frame's horizontal position",
+          )
+        }
+        val child = closing.last().second
+        mainClock.advanceTimeBy(400)
+        val finalTrigger = onNodeWithText("선택 확장").fetchSemanticsNode().boundsInRoot
+        assertEquals(finalTrigger.top, child.top, 1f)
+        assertEquals(finalTrigger.height, child.height, 1f)
+      }
+    }
   }
 
   @Test
@@ -498,7 +614,7 @@ class EditorContextMenuOverlayDesktopTest {
     mainClock.autoAdvance = false
     var bounds: Rect? = null
     setMenuContent(
-      anchor = EditorContextMenuAnchor(200f, 100f, 320f),
+      anchor = { EditorContextMenuAnchor(200f, 100f, 320f) },
       onBoundsInWindowChanged = { bounds = it.firstOrNull() },
     )
     mainClock.advanceTimeBy(300)
@@ -552,7 +668,7 @@ class EditorContextMenuOverlayDesktopTest {
     var bounds = emptyList<Rect>()
     setMenuContent(
       editorMutationEnabled = false,
-      availableExpansionUnits = emptySet(),
+      availableExpansionUnits = { emptySet() },
       onBoundsInWindowChanged = { bounds = it },
     )
     val copy = onNodeWithText("복사").fetchSemanticsNode().boundsInRoot
@@ -583,7 +699,9 @@ class EditorContextMenuOverlayDesktopTest {
   fun expandedMenuShowsOnlyAvailableSelectionActions() = runComposeUiTest {
     setMenuContent(
       mode = EditorContextMenuMode.Expanded,
-      availableExpansionUnits = setOf(SelectionExpansionUnit.Word, SelectionExpansionUnit.Paragraph),
+      availableExpansionUnits = {
+        setOf(SelectionExpansionUnit.Word, SelectionExpansionUnit.Paragraph)
+      },
     )
     onNodeWithText("선택 확장").performClick()
     onNodeWithText("단어 선택").assertIsDisplayed()
@@ -612,7 +730,7 @@ class EditorContextMenuOverlayDesktopTest {
 
   @Test
   fun compactMenuCanExpandWithoutSelectionActions() = runComposeUiTest {
-    setMenuContent(availableExpansionUnits = emptySet())
+    setMenuContent(availableExpansionUnits = { emptySet() })
 
     waitForIdle()
 
@@ -756,7 +874,7 @@ class EditorContextMenuOverlayDesktopTest {
   }
 
   private fun androidx.compose.ui.test.ComposeUiTest.setMenuContent(
-    anchor: EditorContextMenuAnchor = EditorContextMenuAnchor(200f, 220f, 320f),
+    anchor: () -> EditorContextMenuAnchor = { EditorContextMenuAnchor(200f, 220f, 320f) },
     overlaySize: Size = Size(400f, 700f),
     fontScale: Float = 1f,
     showCopyCutActions: Boolean = true,
@@ -777,7 +895,9 @@ class EditorContextMenuOverlayDesktopTest {
     contextualItems: List<EditorContextMenuItem> = emptyList(),
     onComment: (() -> Unit)? = null,
     onBoundsInWindowChanged: (List<Rect>) -> Unit = {},
-    availableExpansionUnits: Set<SelectionExpansionUnit> = SelectionExpansionUnit.entries.toSet(),
+    availableExpansionUnits: () -> Set<SelectionExpansionUnit> = {
+      SelectionExpansionUnit.entries.toSet()
+    },
   ) {
     setContent {
       var currentMode by remember { mutableStateOf(mode) }
@@ -792,14 +912,14 @@ class EditorContextMenuOverlayDesktopTest {
           onHidden = onHidden,
           mode = currentMode,
           onExpandMenu = { currentMode = EditorContextMenuMode.Expanded },
-          anchor = anchor,
+          anchor = anchor(),
           overlaySize = overlaySize,
           visibleArea = visibleArea,
           editorMutationEnabled = editorMutationEnabled,
           actions =
             EditorContextMenuActions(
               showCopyCutActions = showCopyCutActions,
-              availableExpansionUnits = availableExpansionUnits,
+              availableExpansionUnits = availableExpansionUnits(),
               onCopy = onCopy,
               onCut = onCut,
               onPaste = onPaste,

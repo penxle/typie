@@ -177,7 +177,8 @@ private fun rememberAvailableExpansionUnits(editor: Editor): Set<SelectionExpans
       if (expansion.word) add(SelectionExpansionUnit.Word)
       if (expansion.sentence) add(SelectionExpansionUnit.Sentence)
       if (expansion.paragraph) add(SelectionExpansionUnit.Paragraph)
-      if (expansion.all) add(SelectionExpansionUnit.All)
+      // Keep the selection submenu reachable even when the document is already selected.
+      add(SelectionExpansionUnit.All)
     }
   }
 }
