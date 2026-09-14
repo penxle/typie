@@ -7,6 +7,7 @@ import { canPinMore } from './collection-core.ts';
 import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription } from './plan.ts';
+import { generateNumericPermalink } from './publication-core.ts';
 import { findActiveSpace } from './space.ts';
 import type { Database, Transaction } from '#/db/index.ts';
 
@@ -34,7 +35,13 @@ export const createCollectionCore = async (
   await loadSpaceForWrite(executor, args.userId, args.spaceId);
   return await executor
     .insert(Collections)
-    .values({ spaceId: args.spaceId, name: args.name, description: args.description ?? null, coverId: args.coverId ?? null })
+    .values({
+      spaceId: args.spaceId,
+      permalink: generateNumericPermalink(),
+      name: args.name,
+      description: args.description ?? null,
+      coverId: args.coverId ?? null,
+    })
     .returning()
     .then(firstOrThrow);
 };

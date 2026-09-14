@@ -31,6 +31,7 @@ export const load = async (event) => {
 
             collections {
               id
+              permalink
               ...UsersiteSpace_SeriesCard_collectionView
             }
 

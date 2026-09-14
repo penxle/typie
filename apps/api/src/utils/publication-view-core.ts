@@ -50,7 +50,7 @@ type PublishedQueryInput = {
   spaceId: string;
   collectionId?: string;
   tagName?: string;
-  publicationId?: string;
+  permalink?: string;
   excludePinned?: boolean;
   after: string | null;
   limit: number;
@@ -69,7 +69,7 @@ export const buildPublishedPublicationsQuery = (executor: Executor, input: Publi
         eq(Publications.spaceId, input.spaceId),
         publishedPublicationPredicate(),
         input.collectionId ? eq(Publications.collectionId, input.collectionId) : undefined,
-        input.publicationId ? eq(Publications.id, input.publicationId) : undefined,
+        input.permalink === undefined ? undefined : eq(Publications.permalink, input.permalink),
         input.excludePinned ? isNull(Publications.pinnedOrder) : undefined,
         input.after
           ? sql`(${Publications.publishedAt}, ${Publications.id}) < (select ${Publications.publishedAt}, ${Publications.id} from ${Publications} where ${Publications.id} = ${input.after})`
@@ -127,12 +127,15 @@ export const buildPublishedCollectionIdsQuery = (executor: Executor, input: { sp
 export const buildPublishedPublicationByIdQuery = (executor: Executor, input: { publicationId: string }) =>
   publishedPublicationsBase(executor).where(and(eq(Publications.id, input.publicationId), publishedPublicationPredicate()));
 
+export const buildPublishedPublicationByPermalinkQuery = (executor: Executor, input: { permalink: string }) =>
+  publishedPublicationsBase(executor).where(and(eq(Publications.permalink, input.permalink), publishedPublicationPredicate()));
+
 export const buildCollectionsByIdsQuery = (executor: Executor, input: { collectionIds: string[] }) =>
   executor.select().from(Collections).where(inArray(Collections.id, input.collectionIds)).orderBy(asc(Collections.createdAt));
 
-export const buildSitemapPaths = (input: { publicationIds: string[]; collectionIds: string[]; tagNames: string[] }) => [
+export const buildSitemapPaths = (input: { publicationPermalinks: string[]; collectionPermalinks: string[]; tagNames: string[] }) => [
   '/',
-  ...input.publicationIds.map((id) => `/p/${id}`),
-  ...input.collectionIds.map((id) => `/s/${id}`),
+  ...input.publicationPermalinks.map((permalink) => `/p/${permalink}`),
+  ...input.collectionPermalinks.map((permalink) => `/s/${permalink}`),
   ...input.tagNames.map((name) => `/t/${encodeURIComponent(name)}`),
 ];

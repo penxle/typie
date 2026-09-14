@@ -25,6 +25,7 @@
 
         collections {
           id
+          permalink
           name
 
           cover {
@@ -74,7 +75,7 @@
             })}
             aria-current={collection.id === activeCollectionId ? 'page' : undefined}
             data-sveltekit-noscroll
-            href={collection.id === activeCollectionId ? spaceHomePath(slug) : seriesPath(slug, collection.id)}
+            href={collection.id === activeCollectionId ? spaceHomePath(slug) : seriesPath(slug, collection.permalink)}
           >
             <div class={css({ flexShrink: '0', size: '24px', borderRadius: '6px', backgroundColor: 'surface.canvas', overflow: 'hidden' })}>
               {#if collection.cover}

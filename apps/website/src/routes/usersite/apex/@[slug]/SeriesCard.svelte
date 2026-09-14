@@ -20,6 +20,7 @@
     graphql(`
       fragment UsersiteSpace_SeriesCard_collectionView on CollectionView {
         id
+        permalink
         name
         description
 
@@ -54,7 +55,7 @@
     _hover: { '& .series-name': { color: 'text.muted' } },
   })}
   data-sveltekit-noscroll
-  href={seriesPath(slug, collection.data.id)}
+  href={seriesPath(slug, collection.data.permalink)}
 >
   <div class={css({ flexShrink: '0', size: '56px', borderRadius: '10px', backgroundColor: 'surface.canvas', overflow: 'hidden' })}>
     {#if collection.data.cover}

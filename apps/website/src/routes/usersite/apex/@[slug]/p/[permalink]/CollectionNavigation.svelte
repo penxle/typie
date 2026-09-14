@@ -26,6 +26,7 @@
 
         prevInCollection {
           id
+          permalink
           title
           hasPassword
           passwordUnlocked
@@ -38,6 +39,7 @@
 
         nextInCollection {
           id
+          permalink
           title
           hasPassword
           passwordUnlocked
@@ -81,7 +83,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.hover' },
         })}
-        href={publicationPath(slug, prev.id)}
+        href={publicationPath(slug, prev.permalink)}
       >
         {#if prev.thumbnail}
           <div
@@ -142,7 +144,7 @@
           transition: 'background',
           _hover: { backgroundColor: 'surface.hover' },
         })}
-        href={publicationPath(slug, next.id)}
+        href={publicationPath(slug, next.permalink)}
       >
         {#if next.thumbnail}
           <div
