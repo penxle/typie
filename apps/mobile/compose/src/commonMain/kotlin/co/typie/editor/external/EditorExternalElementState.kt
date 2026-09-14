@@ -15,6 +15,36 @@ internal class EditorExternalElementState {
   val embeds = EditorExternalEmbedElementState()
   val resolutions = mutableStateMapOf<String, EditorAssetResolution>()
 
+  // Null heights need Compose measurement. Match the content rendered by each component.
+  fun displayHeight(element: ExternalElement): Float? =
+    when (val data = element.data) {
+      is ExternalElementData.Image ->
+        if (
+          data.id?.let(images.assets::containsKey) == true ||
+            images.uploads.containsKey(element.node)
+        )
+          images.displaySize(element.node, data, element.bounds.width)?.height
+        else EditorExternalElementPlaceholderHeight.value
+      is ExternalElementData.File ->
+        if (
+          data.id?.let(files.assets::containsKey) == true || files.uploads.containsKey(element.node)
+        )
+          EditorFileCardHeight.value
+        else EditorExternalElementPlaceholderHeight.value
+      is ExternalElementData.Embed ->
+        if (data.id?.let(embeds.assets::containsKey) == true) null
+        else EditorExternalElementPlaceholderHeight.value
+      is ExternalElementData.Archived -> EditorExternalElementPlaceholderHeight.value
+    }
+
+  fun heightUpdates(elements: List<ExternalElement>): List<ExternalElementHeight> =
+    elements.mapNotNull { element ->
+      val height = displayHeight(element) ?: return@mapNotNull null
+      if (!height.isFinite() || height <= 0f || height == element.bounds.height)
+        return@mapNotNull null
+      ExternalElementHeight(element.node, height)
+    }
+
   fun put(asset: EditorExternalAsset) {
     when (asset) {
       is EditorImageAsset -> images.assets[asset.id] = asset
@@ -61,16 +91,6 @@ internal class EditorExternalImageElementState {
       draft?.maxSize ?: imageResizeMaxSize(boundsWidth, originalWidth, ratio, data.maxHeight)
     return imageResizeSize(draft?.proportion ?: data.proportion.toFloat(), maxSize)
   }
-
-  fun heightUpdates(elements: List<ExternalElement>): List<ExternalElementHeight> =
-    elements.mapNotNull { element ->
-      val data = element.data as? ExternalElementData.Image ?: return@mapNotNull null
-      val height =
-        displaySize(element.node, data, element.bounds.width)?.height ?: return@mapNotNull null
-      if (!height.isFinite() || height <= 0f || height == element.bounds.height)
-        return@mapNotNull null
-      ExternalElementHeight(element.node, height)
-    }
 
   fun clearResizeState(nodeId: String) {
     resizeDrafts.remove(nodeId)

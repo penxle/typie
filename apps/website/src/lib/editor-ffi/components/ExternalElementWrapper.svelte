@@ -3,23 +3,24 @@
   import { getThemeContext } from '@typie/ui/context';
   import { THEME_COLORS } from '$lib/editor-ffi/theme';
   import { getEditorContext } from '../editor.svelte';
+  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT, getExternalElementHeight } from '../external-element-height';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { Snippet } from 'svelte';
 
   type Props = {
     element: ExternalElement;
-    height?: number;
     minHeight?: string;
     containerEl?: HTMLDivElement;
     children: Snippet;
   };
 
-  let { element, height, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
+  let { element, minHeight = `${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`, containerEl = $bindable(), children }: Props = $props();
 
   const SELECTION_FOCUSED_ALPHA = 77 / 255;
   const SELECTION_UNFOCUSED_ALPHA = 48 / 255;
 
   const ctx = getEditorContext();
+  const height = $derived(getExternalElementHeight(ctx, element));
   const theme = getThemeContext();
 
   let reportedHeight = $state<number>();

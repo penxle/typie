@@ -11,6 +11,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
   import { getEditorContext } from '../editor.svelte';
+  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT } from '../external-element-height';
   import { createDeleteEmbedNodeMessage, processEmbedUpload } from '../handlers/embed-flow';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
@@ -136,7 +137,7 @@
   };
 </script>
 
-<ExternalElementWrapper {element} minHeight={asset ? undefined : '48px'}>
+<ExternalElementWrapper {element}>
   <div class={css({ position: 'relative', width: 'full' })} bind:clientWidth={componentWidth} bind:clientHeight={componentHeight}>
     {#if asset}
       {#if asset.html}
@@ -240,13 +241,13 @@
       {/if}
     {:else}
       <div
+        style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
         class={flex({
           justifyContent: 'space-between',
           alignItems: 'center',
           borderRadius: '4px',
           backgroundColor: 'surface.inset',
           width: 'full',
-          height: '48px',
           paddingX: '14px',
           paddingY: '12px',
         })}

@@ -119,8 +119,13 @@ class EditorExternalElementOverlayDesktopTest {
               }
             }
           }
-          waitUntil { reportedHeights().isNotEmpty() }
-          val originalHeight = runOnIdle { reportedHeights().single() }
+          val needsMeasurement = asset !is EditorFileAsset
+          if (needsMeasurement) waitUntil { reportedHeights().isNotEmpty() } else waitForIdle()
+          val originalHeight = runOnIdle {
+            if (needsMeasurement) reportedHeights().single() else 64f
+          }
+          val expectedReports = if (needsMeasurement) listOf(originalHeight) else emptyList()
+          runOnIdle { assertEquals(expectedReports, reportedHeights()) }
           if (hasThumbnail) {
             waitUntil { thumbnailSizes.isNotEmpty() }
             assertEquals(Size(708, 708), thumbnailSizes.single())
@@ -133,7 +138,7 @@ class EditorExternalElementOverlayDesktopTest {
             listOf(0.13f to 46, 0.128f to 45, 0.127f to 45, 2.1f to 743)) {
             runOnIdle { zoom.floatValue = scale }
             waitForIdle()
-            runOnIdle { assertEquals(listOf(originalHeight), reportedHeights()) }
+            runOnIdle { assertEquals(expectedReports, reportedHeights()) }
             assertEquals(
               originalTextHeight * scale / 2f,
               onNodeWithText("report.txt").fetchSemanticsNode().boundsInRoot.height,
@@ -148,8 +153,12 @@ class EditorExternalElementOverlayDesktopTest {
             externalState.clear()
             externalState.resolutions["asset"] = EditorAssetResolution.Unavailable
           }
-          waitUntil { reportedHeights().lastOrNull() == 48f }
-          runOnIdle { assertEquals(listOf(originalHeight, 48f), reportedHeights()) }
+          waitForIdle()
+          runOnIdle { assertEquals(expectedReports, reportedHeights()) }
+
+          runOnIdle { externalState.put(asset) }
+          if (needsMeasurement) waitUntil { reportedHeights().size == 2 } else waitForIdle()
+          runOnIdle { assertEquals(expectedReports + expectedReports, reportedHeights()) }
         } finally {
           SingletonImageLoader.setUnsafe(previousImageLoader)
           imageLoader.shutdown()

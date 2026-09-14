@@ -13,6 +13,7 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
+  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT, getExternalElementHeightUpdates } from '../external-element-height';
   import { calculateImageWidth } from '../handlers/image';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
@@ -83,7 +84,7 @@
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
   const maxHeight = $derived(imageData?.max_height);
-  const imageSize = $derived(ctx.editor?.images.displaySize(element));
+  const imageSize = $derived(imageSrc ? ctx.editor?.images.displaySize(element) : undefined);
   const liveWidth = $derived(imageSize?.width ?? calculateImageWidth(element.bounds.width, proportion, 0, 0));
   const liveHeight = $derived(imageSize?.height ?? 0);
   const displayedWidth = $derived(liveWidth * displayZoom);
@@ -230,7 +231,7 @@
         const accepted = update?.commandOutcomes.every((outcome) => outcome.type === 'applied') ?? false;
         if (!accepted) editor.images.resizeDrafts.set(element.node, imageData?.proportion ?? session.proportion);
       }
-      const heights = editor.images.heightUpdates(editor.appliedSnapshot.externalElements);
+      const heights = getExternalElementHeightUpdates(ctx, editor.appliedSnapshot.externalElements);
       if (heights.length > 0) {
         update =
           editor.updateNow((request) => request.enqueue({ type: 'system', event: { type: 'set_external_heights', heights } })) ?? update;
@@ -308,7 +309,7 @@
   });
 </script>
 
-<ExternalElementWrapper {element} height={imageSize?.height} minHeight={imageSize ? '0' : '48px'}>
+<ExternalElementWrapper {element} minHeight={imageSize ? '0' : `${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}>
   <div
     bind:this={containerEl}
     style:width={imageSize ? `${imageSize.width}px` : '100%'}
@@ -459,6 +460,7 @@
       {/if}
     {:else}
       <div
+        style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
         class={cx(
           flex({
             justifyContent: 'space-between',
@@ -466,7 +468,6 @@
             borderRadius: '4px',
             backgroundColor: 'surface.inset',
             width: 'full',
-            height: '48px',
           }),
           isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
         )}

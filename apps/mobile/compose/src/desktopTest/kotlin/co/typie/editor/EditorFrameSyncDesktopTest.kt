@@ -37,6 +37,7 @@ import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.EditorImageResizeDraft
 import co.typie.editor.external.LocalEditorExternalElementState
@@ -45,6 +46,7 @@ import co.typie.editor.ffi.ExternalElementHeight
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.PlainNode
 import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.ffi.SystemEvent
@@ -96,8 +98,76 @@ import org.jetbrains.skia.Image
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 class EditorFrameSyncDesktopTest {
   @Test
+  fun settlesOffscreenPlaceholdersAndFileMetadataBeforePublication() = runComposeUiTest {
+    val fixture =
+      FrameSyncFixture(
+        initialDoc =
+          paginatedDocumentWithExternalElements(
+            listOf(
+              PlainNode.Image("image"),
+              PlainNode.File("file"),
+              PlainNode.Embed("embed"),
+              PlainNode.Archived("archived"),
+            )
+          )
+      )
+    try {
+      val editor = fixture.editor
+      editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+        enqueue(
+          Message.Selection(
+            SelectionOp.SetAt(
+              page = editor.appliedState.pageSizes.lastIndex,
+              x = PageMargin,
+              y = PageHeight - PageMargin,
+            )
+          )
+        )
+        bringIntoView(
+          EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
+        )
+      }
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10000) { editor.publishedRevision != null }
+      waitForIdle()
+      val draws = fixture.drawsAfter(0)
+      assertTrue(draws.isNotEmpty())
+      assertTrue(
+        draws.all { draw -> draw.snapshot.externalElements.all { it.bounds.height == 48f } }
+      )
+      assertTrue(
+        editor.publishedState.externalElements.all {
+          !assertNotNull(editor.publishedBundle).frames.containsKey(it.pageIdx)
+        }
+      )
+
+      runOnIdle {
+        fixture.externalElementState.put(EditorFileAsset("file", "report.txt", "", 100L))
+      }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements
+          .single { it.data is ExternalElementData.File }
+          .bounds
+          .height == 64f
+      }
+      runOnIdle { fixture.externalElementState.files.assets.clear() }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.all { it.bounds.height == 48f }
+      }
+      assertTrue(
+        editor.publishedState.externalElements.all {
+          !assertNotNull(editor.publishedBundle).frames.containsKey(it.pageIdx)
+        }
+      )
+    } finally {
+      fixture.close()
+    }
+  }
+
+  @Test
   fun settlesOffscreenImageHeightBeforePublishingSelectionReveal() = runComposeUiTest {
-    val fixture = FrameSyncFixture(initialDoc = paginatedDocumentWithImage())
+    val fixture = FrameSyncFixture(initialDoc = paginatedDocumentWithExternalElements())
     try {
       val editor = fixture.editor
       val image = editor.appliedState.externalElements.single()
@@ -178,6 +248,10 @@ class EditorFrameSyncDesktopTest {
       runOnIdle { fixture.externalElementState.images.clearResizeState(image.node) }
       waitUntil(timeoutMillis = 10000) {
         editor.publishedState.externalElements.single().bounds.height == 50f
+      }
+      runOnIdle { fixture.externalElementState.images.assets.clear() }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height == 48f
       }
       assertFalse(
         assertNotNull(editor.publishedBundle)

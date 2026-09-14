@@ -60,10 +60,11 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
   }
 
   val editor = LocalEditorRuntime.current.editor ?: return
-  val imageState = LocalEditorExternalElementState.current.images
+  val externalState = LocalEditorExternalElementState.current
+  val knownHeight = externalState.displayHeight(element)
   val imageSize =
     (element.data as? ExternalElementData.Image)?.let {
-      imageState.displaySize(element.node, it, element.bounds.width)
+      externalState.images.displaySize(element.node, it, element.bounds.width)
     }
   val uiState = LocalEditorUiState.current
   val density = LocalDensity.current
@@ -90,9 +91,9 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
     }
   }
 
-  // Known images are reconciled before publication. Keep the measurement cache
-  // current so returning to a placeholder reports its height again.
-  SideEffect { imageSize?.height?.let { reportedHeight = it } }
+  // Known heights are reconciled before publication. Keep the measurement cache
+  // current so returning to content that needs measurement reports its height again.
+  SideEffect { knownHeight?.let { reportedHeight = it } }
 
   Box(
     Modifier.offset {
@@ -112,12 +113,12 @@ private fun EditorExternalElement(element: ExternalElement, displayZoom: Float) 
             transformOrigin = TransformOrigin(0f, 0f)
             scaleX = layerZoom
             scaleY = layerZoom
-            alpha = if (imageSize == null && reportedHeight.isNaN()) 0f else 1f
+            alpha = if (knownHeight == null && reportedHeight.isNaN()) 0f else 1f
           }
         }
       }
       .onSizeChanged { size ->
-        if (imageSize == null) {
+        if (knownHeight == null) {
           reportHeight(size.height.toFloat() / density.density)
         }
       }

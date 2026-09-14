@@ -19,6 +19,8 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
+internal val EditorExternalElementPlaceholderHeight = 48.dp
+
 @Composable
 internal fun EditorExternalElementPlaceholder(
   icon: IconData,
@@ -28,7 +30,7 @@ internal fun EditorExternalElementPlaceholder(
   val shape = AppShapes.rounded(4.dp)
   Row(
     modifier =
-      Modifier.height(48.dp)
+      Modifier.height(EditorExternalElementPlaceholderHeight)
         .fillMaxWidth()
         .clip(shape)
         .background(AppTheme.colors.surfaceInset, shape)

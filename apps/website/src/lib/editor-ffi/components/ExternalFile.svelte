@@ -11,6 +11,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { formatFileSize } from '$lib/utils/format';
   import { getEditorContext } from '../editor.svelte';
+  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT, EXTERNAL_FILE_CARD_HEIGHT } from '../external-element-height';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
@@ -106,6 +107,7 @@
 <ExternalElementWrapper {element}>
   {#if hasFile}
     <div
+      style:height={`${EXTERNAL_FILE_CARD_HEIGHT}px`}
       class={cx(
         'group',
         flex({
@@ -115,7 +117,6 @@
           borderColor: 'border.hairline',
           borderRadius: '8px',
           paddingX: '16px',
-          paddingY: '12px',
           backgroundColor: 'surface.inset',
           transition: 'common',
           _hover: { borderColor: 'border.emphasis' },
@@ -138,7 +139,7 @@
           {displayName}
         </span>
         {#if displaySize}
-          <span class={css({ fontSize: '12px', color: 'text.muted' })}>
+          <span class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
             {displaySize}
           </span>
         {/if}
@@ -192,6 +193,7 @@
     </div>
   {:else}
     <div
+      style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
       class={cx(
         'group',
         flex({
@@ -200,7 +202,6 @@
           borderRadius: '4px',
           backgroundColor: 'surface.inset',
           width: 'full',
-          height: '48px',
         }),
         isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
       )}
