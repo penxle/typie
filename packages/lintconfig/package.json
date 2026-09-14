@@ -8,7 +8,9 @@
     "./prettier": "./prettier.js"
   },
   "scripts": {
-    "lint:eslint": "eslint --max-warnings 0 ."
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

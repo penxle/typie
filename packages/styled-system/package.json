@@ -27,6 +27,8 @@
     "codegen": "panda codegen",
     "generate": "node scripts/generate-theme.ts",
     "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'",
     "lint:typecheck": "tsc",
     "test": "vitest run"
   },

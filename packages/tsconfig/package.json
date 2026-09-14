@@ -6,5 +6,9 @@
   "exports": {
     ".": "./tsconfig.json",
     "./node": "./tsconfig.node.json"
+  },
+  "scripts": {
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'"
   }
 }
