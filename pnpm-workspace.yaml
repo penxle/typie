@@ -38,3 +38,4 @@ minimumReleaseAgeExclude:
 patchedDependencies:
   '@iframely/embed.js@1.11.0': patches/@iframely__embed.js@1.11.0.patch
   '@mearie/core@0.8.1': patches/@mearie__core@0.8.1.patch
+  svelte@5.57.0: patches/svelte@5.57.0.patch
