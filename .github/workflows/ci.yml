@@ -29,7 +29,7 @@ jobs:
         linter: [eslint, prettier, spellcheck, svelte, syncpack, typecheck]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/setup@v2
