@@ -8,6 +8,7 @@ overrides:
   ioredis: ^5.11.1
 
 patchedDependencies:
+  '@iframely/embed.js@1.11.0': ffda9f8bb1aadbb3401fc463fcf4b228ee223f281c478a77f1d446a36301f103
   '@mearie/core@0.8.1': cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416
 
 importers:
@@ -549,6 +550,9 @@ importers:
       '@iconify-json/twemoji':
         specifier: ^1.2.5
         version: 1.2.5
+      '@iframely/embed.js':
+        specifier: 1.11.0
+        version: 1.11.0(patch_hash=ffda9f8bb1aadbb3401fc463fcf4b228ee223f281c478a77f1d446a36301f103)
       '@mearie/core':
         specifier: ^0.8.1
         version: 0.8.1(patch_hash=cfb699f35b5b8753d3ccd535222bba55de7f71f523611369eac36a4b88c7c416)
@@ -2837,6 +2841,9 @@ packages:
 
   '@iconify/utils@3.1.4':
     resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
+
+  '@iframely/embed.js@1.11.0':
+    resolution: {integrity: sha512-XOFwT4aiS9E+eOHkkmSrxFf8fIPtPeXqQ52GYWrtM1xg7g16sYECwS9sj0xU1RHKf/wVWUcyw2TyM7zEJknKAA==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -11458,6 +11465,8 @@ snapshots:
       '@antfu/install-pkg': 1.1.0
       '@iconify/types': 2.0.0
       import-meta-resolve: 4.2.0
+
+  '@iframely/embed.js@1.11.0(patch_hash=ffda9f8bb1aadbb3401fc463fcf4b228ee223f281c478a77f1d446a36301f103)': {}
 
   '@img/colour@1.1.0': {}
 

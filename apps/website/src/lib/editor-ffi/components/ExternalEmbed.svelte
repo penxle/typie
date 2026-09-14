@@ -13,6 +13,7 @@
   import { getEditorContext } from '../editor.svelte';
   import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT } from '../external-element-height';
   import { createDeleteEmbedNodeMessage, processEmbedUpload } from '../handlers/embed-flow';
+  import EmbedHtml from './EmbedHtml.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
@@ -31,6 +32,7 @@
   const embedData = $derived(element.data.type === 'embed' ? element.data : undefined);
   const embedId = $derived(embedData?.id || undefined);
   const asset = $derived(embedId ? ctx.editor?.embedAssets.get(embedId) : undefined);
+  const html = $derived(asset?.html);
   const inflight = $derived(ctx.editor?.inflightEmbeds.get(element.node));
   const canEdit = $derived(!ctx.editor?.readOnly);
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
@@ -39,6 +41,8 @@
   let error = $state(false);
   let componentWidth = $state(0);
   let componentHeight = $state(0);
+
+  const layoutReady = $derived(componentHeight > 0 && Math.abs(componentHeight - element.bounds.height) < 1);
 
   const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
   const visibleActionCount = $derived.by(() => {
@@ -140,50 +144,70 @@
 <ExternalElementWrapper {element}>
   <div class={css({ position: 'relative', width: 'full' })} bind:clientWidth={componentWidth} bind:clientHeight={componentHeight}>
     {#if asset}
-      {#if asset.html}
-        <div class={css({ display: 'contents' }, canEdit && { pointerEvents: 'none' })}>
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html asset.html}
-        </div>
-      {:else}
-        <div class={flex({ borderWidth: '1px', borderColor: 'border.hairline', borderRadius: '6px' })}>
-          <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px', gap: '4px', minWidth: '0' })}>
-            <p class={css({ fontSize: '14px', fontWeight: 'medium', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
-              {asset.title ?? '(제목 없음)'}
-            </p>
-            {#if asset.description}
-              <p class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
-                {asset.description}
-              </p>
-            {/if}
-            <p
-              class={css({
-                fontSize: '12px',
-                color: 'text.muted',
-                marginTop: 'auto',
-                overflow: 'hidden',
-                whiteSpace: 'nowrap',
-                textOverflow: 'ellipsis',
-              })}
-            >
-              {new URL(asset.url).origin}
-            </p>
-          </div>
-          {#if asset.thumbnailUrl}
-            <img
-              class={css({
-                flexShrink: '0',
-                borderTopRightRadius: '5px',
-                borderBottomRightRadius: '5px',
-                size: '118px',
-                objectFit: 'cover',
-              })}
-              alt={asset.title ?? '(제목 없음)'}
-              src={asset.thumbnailUrl}
-            />
-          {/if}
-        </div>
-      {/if}
+      {#key html}
+        <EmbedHtml
+          class={css({ display: 'contents' }, canEdit && { pointerEvents: 'none' })}
+          {html}
+          {layoutReady}
+          scrollRoot={ctx.editor?.scrollRootEl ?? null}
+        >
+          {#snippet fallback()}
+            <div class={flex({ borderWidth: '1px', borderColor: 'border.hairline', borderRadius: '6px' })}>
+              <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px', gap: '4px', minWidth: '0' })}>
+                <p
+                  class={css({
+                    fontSize: '14px',
+                    fontWeight: 'medium',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                  })}
+                >
+                  {asset.title ?? '(제목 없음)'}
+                </p>
+                {#if asset.description}
+                  <p
+                    class={css({
+                      fontSize: '12px',
+                      color: 'text.muted',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      textOverflow: 'ellipsis',
+                    })}
+                  >
+                    {asset.description}
+                  </p>
+                {/if}
+                <p
+                  class={css({
+                    fontSize: '12px',
+                    color: 'text.muted',
+                    marginTop: 'auto',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                  })}
+                >
+                  {new URL(asset.url).origin}
+                </p>
+              </div>
+              {#if asset.thumbnailUrl}
+                <img
+                  class={css({
+                    flexShrink: '0',
+                    borderTopRightRadius: '5px',
+                    borderBottomRightRadius: '5px',
+                    size: '118px',
+                    objectFit: 'cover',
+                  })}
+                  alt={asset.title ?? '(제목 없음)'}
+                  src={asset.thumbnailUrl}
+                />
+              {/if}
+            </div>
+          {/snippet}
+        </EmbedHtml>
+      {/key}
 
       {#if visibleActionCount > 0}
         <div

@@ -64,7 +64,7 @@
     pointerEvents: 'auto',
     display: 'flex',
     justifyContent: 'center',
-    visibility: height === undefined && reportedHeight === undefined ? 'hidden' : 'visible',
+    visibility: height === undefined && reportedHeight === undefined ? 'hidden' : undefined,
   })}
   data-external-element
   data-node-id={element.node}

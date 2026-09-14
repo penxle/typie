@@ -16,14 +16,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.external.EditorExternalElementOverlay
+import co.typie.editor.ffi.ExternalElementData
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.ThemeVariant
@@ -206,6 +209,10 @@ internal fun EditorView(
       val publishedState = publishedBundle?.snapshot ?: EditorState.Initial
       val publishedVersion = publishedState.version
       val publishedPageCount = publishedState.pageSizes.size
+      val externalElementsByPage =
+        remember(publishedState.externalElements) {
+          publishedState.externalElements.groupBy { it.pageIdx }
+        }
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
         repeat(publishedPageCount) { index ->
           val size = publishedState.pageSizes[index]
@@ -214,8 +221,10 @@ internal fun EditorView(
           val pageCursor =
             publishedState.cursor?.takeIf { pagePresented && sessionActive && it.pageIdx == index }
           val pageExternalElements =
-            if (pagePresented && sessionActive) {
-              publishedState.externalElements.filter { it.pageIdx == index }
+            if (sessionActive) {
+              val elements = externalElementsByPage[index].orEmpty()
+              if (pagePresented) elements
+              else elements.filter { it.data is ExternalElementData.Embed }
             } else {
               emptyList()
             }
@@ -265,11 +274,18 @@ internal fun EditorView(
                 }
               },
               foregroundOverlay = {
-                if (pagePresented && sessionActive) {
+                if (sessionActive) {
+                  // Measure embeds before their page has a frame, without drawing
+                  // the unpublished content or exposing its accessibility tree.
                   EditorExternalElementOverlay(
                     elements = pageExternalElements,
                     displayZoom = displayZoom,
+                    modifier =
+                      if (pagePresented) Modifier
+                      else Modifier.drawWithContent {}.clearAndSetSemantics {},
                   )
+                }
+                if (pagePresented && sessionActive) {
                   EditorCursorOverlay(
                     cursor = pageCursor,
                     focused = uiState.focused,

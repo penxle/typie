@@ -36,4 +36,5 @@ minimumReleaseAgeExclude:
   - '@mearie/vite@0.1.8'
   - mearie@0.1.8
 patchedDependencies:
+  '@iframely/embed.js@1.11.0': patches/@iframely__embed.js@1.11.0.patch
   '@mearie/core@0.8.1': patches/@mearie__core@0.8.1.patch

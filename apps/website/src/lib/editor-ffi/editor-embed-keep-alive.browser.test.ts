@@ -125,7 +125,7 @@ describe('viewer embed keep-alive', () => {
     expect(document.querySelector('[data-keep-alive-embed]')).toBe(initialIframe);
   });
 
-  it('requires a reinserted embed node to materialize again after document deletion', async () => {
+  it('mounts a reinserted embed even while its page has no frame', async () => {
     await mountViewer();
     expect(document.querySelector('[data-keep-alive-embed]')).not.toBeNull();
 
@@ -138,10 +138,13 @@ describe('viewer embed keep-alive', () => {
 
     editor?.setDoc(documentWithEmbed(true));
     await vi.waitFor(() => expect(editor?.published?.snapshot.externalElements).toHaveLength(1));
-    expect(document.querySelector('[data-keep-alive-embed]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[data-keep-alive-embed]')).not.toBeNull());
+    const iframe = document.querySelector('[data-keep-alive-embed]');
+    expect(iframe?.closest<HTMLElement>('[data-document-embed]')?.inert).toBe(true);
 
     window.scrollTo(0, 0);
     window.dispatchEvent(new Event('scroll'));
-    await vi.waitFor(() => expect(document.querySelector('[data-keep-alive-embed]')).not.toBeNull());
+    await vi.waitFor(() => expect(editor?.published?.snapshot.pageData.has(0)).toBe(true));
+    expect(document.querySelector('[data-keep-alive-embed]')).toBe(iframe);
   });
 });

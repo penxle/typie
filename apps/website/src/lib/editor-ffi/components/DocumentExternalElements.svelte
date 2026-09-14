@@ -12,9 +12,8 @@
 
   let { editor }: Props = $props();
 
-  // Keep iframe state after its first materialized page. Images only outlive their
+  // Embeds mount independently of page frames. Images only outlive their
   // rendered pages while an interaction or its publication is still active.
-  const mountedNodes = new SvelteSet<string>();
   const keepMountedImageNodes = new SvelteSet<string>();
   const layoutMode = $derived(editor.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
@@ -30,22 +29,20 @@
     void editor.publishedRevision;
     return editor.externalElements.filter((element) => element.data.type === 'embed' || element.data.type === 'image');
   });
-  const elements = $derived(documentElements.filter((element) => mountedNodes.has(element.node)));
+  const elements = $derived(
+    documentElements.filter(
+      (element) =>
+        element.data.type === 'embed' ||
+        keepMountedImageNodes.has(element.node) ||
+        editor.pageExternalElements(element.page_idx).some((candidate) => candidate.node === element.node),
+    ),
+  );
 
   $effect(() => {
-    void editor.publishedRevision;
     const documentNodes = new Set(documentElements.map((element) => element.node));
-    for (const node of mountedNodes) {
+    for (const node of keepMountedImageNodes) {
       if (documentNodes.has(node)) continue;
-      mountedNodes.delete(node);
       keepMountedImageNodes.delete(node);
-    }
-    for (const element of documentElements) {
-      if (editor.pageExternalElements(element.page_idx).some((candidate) => candidate.node === element.node)) {
-        mountedNodes.add(element.node);
-      } else if (element.data.type === 'image' && !keepMountedImageNodes.has(element.node)) {
-        mountedNodes.delete(element.node);
-      }
     }
   });
 </script>

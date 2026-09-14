@@ -21,6 +21,7 @@
     "@iconify-json/lucide": "^1.2.127",
     "@iconify-json/simple-icons": "^1.2.94",
     "@iconify-json/twemoji": "^1.2.5",
+    "@iframely/embed.js": "1.11.0",
     "@mearie/core": "^0.8.1",
     "@mearie/svelte": "^0.5.1",
     "@opentelemetry/api": "^1.9.1",
