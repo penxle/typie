@@ -1107,7 +1107,7 @@ describe('EditorScrollScope', () => {
       geometry: { pointX: 0, pointY: 200, rect: undefined },
       targetScrollLeft: null,
       targetScrollTop: 0,
-      attachmentAchieved: true,
+      attachmentAchieved: false,
     });
   });
 
@@ -1150,7 +1150,7 @@ describe('EditorScrollScope', () => {
       geometry: { pointX: 0, pointY: 500, rect: undefined },
       targetScrollLeft: null,
       targetScrollTop: 0,
-      attachmentAchieved: true,
+      attachmentAchieved: false,
     });
     expect(scrollTo).not.toHaveBeenCalled();
   });

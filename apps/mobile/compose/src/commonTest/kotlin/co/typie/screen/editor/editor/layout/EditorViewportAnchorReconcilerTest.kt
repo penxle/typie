@@ -281,6 +281,43 @@ class EditorViewportAnchorReconcilerTest {
     }
 
   @Test
+  fun `publication skips vertical anchor correction at the scroll origin`() = runTest {
+    val initial = frame(visibleArea())
+    val candidate = initial.copy(state = initial.state.copy(version = 2L))
+    val editor =
+      Editor(
+        FakeFfiEditor(
+          resolveViewportAnchorProvider = { _, _ ->
+            ViewportAnchorResolution.Resolved(selectionGeometry(500f))
+          }
+        ),
+        this,
+        StandardTestDispatcher(testScheduler),
+      )
+    for (scrollY in listOf(0f, 100f)) {
+      val anchorState =
+        EditorViewportAnchorState().apply {
+          attachViewport(viewportAnchor, anchorGeometry(200f), Offset(0f, scrollY))
+        }
+      val publication =
+        reconcileViewportAnchorPublication(
+          editor = editor,
+          anchorState = anchorState,
+          publishedBundle = PublishedBundle(snapshot = initial.state, frames = emptyMap()),
+          candidateState = candidate.state,
+          measuredScrollFrame = candidate,
+          currentScrollOffset = Offset(0f, scrollY),
+          maximumScrollY = 600f,
+          contentOriginY = 0f,
+        )
+          as EditorViewportAnchorPublication.Ready
+      assertEquals(if (scrollY == 0f) 0f else 400f, publication.scrollOffset.y)
+      assertEquals(scrollY != 0f, publication.attachmentAchieved)
+      assertEquals(200f - scrollY, anchorState.pointAttachmentY)
+    }
+  }
+
+  @Test
   fun `publication proceeds when a live anchor has no candidate geometry`() = runTest {
     val visibleArea = visibleArea()
     val candidateFrame = frame(visibleArea).let { it.copy(state = it.state.copy(version = 2L)) }

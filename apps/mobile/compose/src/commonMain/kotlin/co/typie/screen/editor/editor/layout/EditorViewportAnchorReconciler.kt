@@ -131,11 +131,14 @@ internal fun reconcileViewportAnchorPublication(
             }
           },
         )
-      if (!anchorScroll.attachmentAchieved) anchorState.deferAttachment()
+      // At the scroll origin, skip vertical correction and leave the attachment unchanged.
+      if (currentScrollY != 0f && !anchorScroll.attachmentAchieved) anchorState.deferAttachment()
       EditorViewportAnchorPublication.Ready(
-        scrollOffset = anchorScroll.scrollOffset,
+        scrollOffset =
+          if (currentScrollY == 0f) anchorScroll.scrollOffset.copy(y = 0f)
+          else anchorScroll.scrollOffset,
         geometry = geometry,
-        attachmentAchieved = anchorScroll.attachmentAchieved,
+        attachmentAchieved = currentScrollY != 0f && anchorScroll.attachmentAchieved,
       )
     }
   }

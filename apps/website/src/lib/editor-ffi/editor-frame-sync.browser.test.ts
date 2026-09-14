@@ -111,6 +111,7 @@ afterEach(async () => {
   editor?.destroy();
   editor = undefined;
   document.body.replaceChildren();
+  window.scrollTo(0, 0);
   vi.unstubAllGlobals();
 });
 
@@ -281,6 +282,7 @@ async function mountEditor(
   plain: PlainDoc,
   options: {
     readOnly?: boolean;
+    useWindowScroll?: boolean;
     typewriterEnabled?: boolean;
     withZoom?: boolean;
     withViewportLifecycle?: boolean;
@@ -303,6 +305,7 @@ async function mountEditor(
       editor,
       onReady: harness.resolve,
       readOnly: options.readOnly,
+      useWindowScroll: options.useWindowScroll,
       typewriterEnabled: options.typewriterEnabled,
       userId: `frame-sync-${crypto.randomUUID()}`,
       withZoom: options.withZoom,
@@ -1917,8 +1920,10 @@ describe('web editor frame synchronization', () => {
     await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(10_000);
     editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_flat', start: 5, end: 5 } }));
     editor.focus();
+    await editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     await waitForPresentation(editor);
     expect(editor.cursor).toBeDefined();
+    expectSelectionHeadVisible(editor, scrollRoot, 'before changing the layout');
 
     setRootLayoutMode(editor, defaultPaginatedLayout());
 
@@ -2036,6 +2041,80 @@ describe('web editor frame synchronization', () => {
     await setDisplayZoom(editor, 0.2);
     expect(status?.isConnected).toBe(true);
     expect(status?.querySelector('svg')).toBeNull();
+  });
+
+  describe('viewer scroll while leading embeds load', () => {
+    async function mountViewer(paginated = false) {
+      window.scrollTo(0, 0);
+      const plain: PlainDoc = {
+        root: entry(
+          {
+            type: 'root',
+            layout_mode: paginated
+              ? {
+                  type: 'paginated',
+                  page_width: PAGE_WIDTH,
+                  page_height: 700,
+                  page_margin_top: PAGE_MARGIN,
+                  page_margin_bottom: PAGE_MARGIN,
+                  page_margin_left: PAGE_MARGIN,
+                  page_margin_right: PAGE_MARGIN,
+                }
+              : { type: 'continuous', max_width: PAGE_WIDTH },
+          },
+          [
+            ...Array.from({ length: 3 }, (_, index) => entry({ type: 'embed', id: `embed-${index}` })),
+            entry({ type: 'paragraph' }, [entry({ type: 'text', text: 'Following body text '.repeat(500) })]),
+          ],
+        ),
+      };
+      const result = await mountEditor(plain, { readOnly: true, useWindowScroll: true });
+      await expect.poll(() => result.editor.externalElements.map((element) => element.bounds.height)).toEqual([48, 48, 48]);
+      return result;
+    }
+
+    async function loadEmbeds(instance: Editor, height: number) {
+      for (let index = 0; index < 3; index += 1) {
+        instance.embedAssets.set(`embed-${index}`, {
+          id: `embed-${index}`,
+          url: 'https://example.com',
+          title: null,
+          description: null,
+          thumbnailUrl: null,
+          html: `<div data-embed-content style="height: ${height}px"></div>`,
+        });
+      }
+      await expect.poll(() => instance.externalElements.map((element) => element.bounds.height)).toEqual([height, height, height]);
+      await nextAnimationFrame();
+    }
+
+    it.each([false, true])('stays at the scroll origin when leading embeds grow (paginated: %s)', async (paginated) => {
+      const { editor } = await mountViewer(paginated);
+      expect(window.scrollY).toBe(0);
+      await loadEmbeds(editor, 400);
+      expect(window.scrollY).toBe(0);
+      await loadEmbeds(editor, 600);
+      expect(window.scrollY).toBe(0);
+    });
+
+    it('keeps the reading position when leading embeds grow after scrolling into the document', async () => {
+      const { editor } = await mountViewer();
+      await loadEmbeds(editor, 400);
+      expect(window.scrollY).toBe(0);
+      window.scrollTo(0, 2000);
+      window.dispatchEvent(new Event('scroll'));
+      await tick();
+      await nextAnimationFrame();
+      const before = window.scrollY;
+      await loadEmbeds(editor, 600);
+      expect(Math.abs(window.scrollY - (before + (600 - 400) * 3))).toBeLessThanOrEqual(COORDINATE_TOLERANCE_PX);
+
+      window.scrollTo(0, 0);
+      window.dispatchEvent(new Event('scroll'));
+      await tick();
+      await loadEmbeds(editor, 800);
+      expect(window.scrollY).toBe(0);
+    });
   });
 
   it.each(['continuous', 'paginated'] as const)('lays out offscreen embed HTML before mounting its iframe in %s layout', async (mode) => {
