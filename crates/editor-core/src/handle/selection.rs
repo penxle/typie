@@ -1313,6 +1313,31 @@ mod tests {
         assert_eq!(resolved.to().node(), root);
         assert_eq!(resolved.to().offset(), 3);
         assert!(!editor.undo_history.can_undo());
+
+        let target =
+            expand_unit_at(&Position::new(root, 2), &view).expect("anchor image selection");
+        let target = target.resolve(&view).expect("anchor image resolves");
+        let rect = editor.view.selection_rects(&target)[0].clone();
+        editor.apply(Message::Selection {
+            op: SelectionOp::ExtendTo {
+                anchor: Position::new(root, 2),
+                head_page: rect.page_idx,
+                head_x: rect.rect.x + rect.rect.width / 2.0,
+                head_y: rect.rect.y + rect.rect.height / 2.0,
+                base_selection: None,
+                unit: None,
+                allow_collapse: true,
+            },
+        });
+        let sel = editor.state().selection.expect("selection exists in test");
+        let view = editor.state().view();
+        assert_eq!(
+            editor_state::selection_kind(&sel, &view),
+            editor_state::SelectionKind::Unit,
+        );
+        let resolved = sel.resolve(&view).expect("selection resolves in test");
+        assert_eq!(resolved.from().offset(), 2);
+        assert_eq!(resolved.to().offset(), 3);
     }
 
     #[test]

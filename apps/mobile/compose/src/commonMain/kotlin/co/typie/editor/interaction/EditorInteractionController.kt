@@ -288,7 +288,7 @@ internal class EditorInteractionController(
   }
 
   fun tryClaimScrollbarDirectDrag(): Boolean {
-    if (mode != EditorInteractionMode.Idle || gestures.hasPendingHandleGesture) {
+    if (mode != EditorInteractionMode.Idle || gestures.hasPendingHandleOrCursorGesture) {
       return false
     }
     cancel()

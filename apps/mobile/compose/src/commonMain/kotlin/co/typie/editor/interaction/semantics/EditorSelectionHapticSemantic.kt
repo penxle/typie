@@ -27,8 +27,12 @@ internal class EditorSelectionHapticSemantic(private val effects: EditorInteract
       previousEndpointsSnapshot != null &&
         currentEndpoints != null &&
         !previousEndpointsSnapshot.hasSameHandlePositionsAs(currentEndpoints)
-    val longPressSelectionMoved =
-      mode.isLongPressing &&
+    val handlesJustCollapsed =
+      previousEndpointsSnapshot != null &&
+        currentSelection != null &&
+        currentSelection.isCollapsed()
+    val selectionMovedDuringDrag =
+      (mode.isLongPressing || mode == EditorInteractionMode.CursorDragging) &&
         previousSelectionSnapshot != null &&
         currentSelection != null &&
         previousSelectionSnapshot != currentSelection &&
@@ -36,8 +40,9 @@ internal class EditorSelectionHapticSemantic(private val effects: EditorInteract
 
     if (
       handlesJustAppeared ||
-        (mode == EditorInteractionMode.SelectionHandleDragging && anyHandleMoved) ||
-        longPressSelectionMoved
+        (mode == EditorInteractionMode.SelectionHandleDragging &&
+          (anyHandleMoved || handlesJustCollapsed)) ||
+        selectionMovedDuringDrag
     ) {
       effects.performSelectionHaptic()
     }
