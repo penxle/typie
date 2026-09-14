@@ -6,7 +6,9 @@ type Parameter = {
   rootMargin?: string;
 };
 
-export const infiniteScroll: Action<HTMLElement, Parameter> = (element, params) => {
+export const infiniteScroll: Action<HTMLElement, Parameter> = (element, initial) => {
+  let params = $state.raw(initial);
+
   $effect(() => {
     const { onLoadMore, enabled = true, rootMargin = '100px' } = params;
 
@@ -27,4 +29,10 @@ export const infiniteScroll: Action<HTMLElement, Parameter> = (element, params) 
       observer.disconnect();
     };
   });
+
+  return {
+    update: (next) => {
+      params = next;
+    },
+  };
 };
