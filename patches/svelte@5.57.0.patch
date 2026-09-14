@@ -1,0 +1,17 @@
+diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
+index 8251f7929844cf66a09fae3db2140172274e2c31..906ed62c703bf8d1417d513c1c1116066ea16cd0 100644
+--- a/src/internal/client/reactivity/batch.js
++++ b/src/internal/client/reactivity/batch.js
+@@ -373,6 +373,12 @@ export class Batch {
+ 			this.#defer_effects(render_effects);
+ 			this.#defer_effects(effects);
+ 			earlier_batch.#merge(this);
++
++			if (updates.length > 0 && batch.linked) {
++				current_batch = batch;
++				batch.#process();
++			}
++
+ 			return;
+ 		}
+ 
