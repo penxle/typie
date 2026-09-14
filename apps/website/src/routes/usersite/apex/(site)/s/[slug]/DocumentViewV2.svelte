@@ -12,7 +12,7 @@
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { z } from 'zod';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
@@ -26,8 +26,9 @@
   import { browserScaleFactor } from '$lib/editor-ffi/zoom';
   import { unwrapError } from '$lib/graphql';
   import BodyUnavailable from '$lib/usersite/BodyUnavailable.svelte';
+  import { parseDocumentViewLayoutMode } from '$lib/usersite/document-view-layout';
   import DocumentDomMirror from '$lib/usersite/DocumentDomMirror.svelte';
-  import DocumentViewSkeleton from '$lib/usersite/DocumentViewSkeleton.svelte';
+  import DocumentViewFrame from '$lib/usersite/DocumentViewFrame.svelte';
   import ReadOnlyTouchSelectionSuppress from '$lib/usersite/ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from '$lib/usersite/ShareLinkPopover.svelte';
   import { graphql } from '$mearie';
@@ -80,6 +81,7 @@
             hasPassword
             protectContent
             allowReaction
+            layoutMode
 
             state {
               __typename
@@ -228,16 +230,11 @@
   const theme = getThemeContext();
   const ctx = setupEditorContext();
 
-  let hydrated = $state(false);
   let editorReady = $state(false);
   let editorFailure = $state<EditorFailure>();
   let editorForDocumentId = $state<string | null>(null);
   let fallbackBodySurface = $state<HTMLDivElement>();
   let destroyed = false;
-
-  onMount(() => {
-    hydrated = true;
-  });
 
   const document = $derived(entityView.data.node.__typename === 'DocumentView' ? entityView.data.node : null);
   const folderAncestors = $derived(entityView.data.ancestors.filter((ancestor) => ancestor.node.__typename === 'FolderView'));
@@ -380,7 +377,8 @@
     }
   });
 
-  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const layoutMode = $derived(parseDocumentViewLayoutMode(document?.layoutMode));
+  const isPaginated = $derived(layoutMode.type === 'paginated');
 
   const authorizeUrl = $derived(
     qs.stringifyUrl({
@@ -560,78 +558,42 @@
         </div>
       {/snippet}
 
-      <div class={css({ position: 'relative', isolation: 'isolate' })}>
-        {#if hydrated && !editorReady}
-          <!-- 오버레이여야 한다 — 인플로우로 두면 에디터가 스켈레톤 높이만큼 밀려나 첫 페이지가
-               뷰포트 준비 범위 밖으로 벗어나고, 첫 프레임을 기다리는 ready 게이트와 교착한다. -->
-          <div
-            class={css({
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              zIndex: 'editorOverlay',
-              minHeight: '[100dvh]',
-              backgroundColor: 'surface.default',
-            })}
-          >
-            <div
-              style:max-width="640px"
-              style:padding-inline="20px"
-              class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
-            >
+      {#key document.id}
+        <div class={css({ position: 'relative', isolation: 'isolate' })}>
+          <DocumentViewFrame {layoutMode} ready={editorReady} bind:bodySurface={fallbackBodySurface}>
+            {#snippet header()}
               {@render documentHeader()}
-              <div bind:this={fallbackBodySurface}>
-                <DocumentViewSkeleton />
-              </div>
-              {@render documentFooter()}
-            </div>
-          </div>
-        {/if}
+            {/snippet}
 
-        {#key document.id}
-          <div class={flex({ flexDirection: 'column' })}>
+            {#snippet footer()}
+              {@render documentFooter()}
+            {/snippet}
+
             {#if document.protectContent}
               <ContentProtect>
-                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
-                  {#snippet header()}
-                    {@render documentHeader()}
-                  {/snippet}
-
-                  {#snippet footer()}
-                    {@render documentFooter()}
-                  {/snippet}
-                </EditorComponent>
+                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll />
               </ContentProtect>
             {:else}
-              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
-                {#snippet header()}
-                  {@render documentHeader()}
-                {/snippet}
-
-                {#snippet footer()}
-                  {@render documentFooter()}
-                {/snippet}
-              </EditorComponent>
+              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll />
             {/if}
-          </div>
+          </DocumentViewFrame>
 
           <DocumentDomMirror
             editor={editorReady && editorForDocumentId === document.id ? ctx.editor : undefined}
             excerpt={document.excerpt}
           />
-        {/key}
 
-        {#if activeEditorFailure && failureSurface}
-          <EditorFailureOverlay
-            id={`usersite-editor-${document.id}`}
-            actionLabel="새로고침"
-            contentPosition="viewport"
-            onAction={() => location.reload()}
-            surfaceElement={failureSurface}
-          />
-        {/if}
-      </div>
+          {#if activeEditorFailure && failureSurface}
+            <EditorFailureOverlay
+              id={`usersite-editor-${document.id}`}
+              actionLabel="새로고침"
+              contentPosition="viewport"
+              onAction={() => location.reload()}
+              surfaceElement={failureSurface}
+            />
+          {/if}
+        </div>
+      {/key}
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>

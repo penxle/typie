@@ -6,7 +6,7 @@ import { createDbId } from './id.ts';
 import { bytea, datetime } from './types.ts';
 import type { ConclusionAnchors, Context, ResolvedAnchor, ReviewOutcome, RunUsage } from '@typie/prism';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { CouponCondition, PlanRules } from './json.ts';
+import type { CouponCondition, DocLayoutMode, PlanRules } from './json.ts';
 
 export const DocumentArchivedNodes = pgTable('document_archived_nodes', {
   id: text('id')
@@ -1371,6 +1371,7 @@ export const PublicationVersions = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    layoutMode: jsonb('layout_mode').$type<DocLayoutMode>(),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

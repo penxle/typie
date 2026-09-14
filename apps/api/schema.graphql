@@ -198,6 +198,7 @@ type CollectionView {
   id: ID!
   name: String!
   permalink: String!
+  publicationCount: Int!
   publications: [PublicationView!]!
 }
 
@@ -376,6 +377,17 @@ type DiscoveryPublicationHit {
   title: String
 }
 
+type DiscoveryRecentCollection {
+  collection: CollectionView!
+  publication: PublicationView!
+  space: SpaceView!
+}
+
+type DiscoveryRecentSpace {
+  publication: PublicationView!
+  space: SpaceView!
+}
+
 type DiscoverySearchResult {
   publications: [DiscoveryPublicationHit!]!
   spaces: [SpaceView!]!
@@ -389,7 +401,10 @@ type DiscoveryTag {
 }
 
 type DiscoveryView {
+  allTags: [DiscoveryTag!]!
   publications(after: ID, first: Int): SpacePublicationsPage!
+  recentCollections(first: Int! = 4): [DiscoveryRecentCollection!]!
+  recentSpaces(first: Int! = 5): [DiscoveryRecentSpace!]!
   search(query: String!): DiscoverySearchResult
   tag(name: String!): DiscoveryTag
   tags: [DiscoveryTag!]!
@@ -632,6 +647,7 @@ type DocumentView implements IDocument & IEditorDocument {
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   hasPassword: Boolean!
   id: ID!
+  layoutMode: JSON!
   nullableTitle: String
   passwordUnlocked: Boolean!
   protectContent: Boolean!
@@ -1837,12 +1853,14 @@ type PublicationView implements IEditorDocument {
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   hasPassword: Boolean!
   id: ID!
+  layoutMode: JSON!
   nextInCollection: PublicationView
   passwordUnlocked: Boolean!
   permalink: String!
   prevInCollection: PublicationView
   protectContent: Boolean!
   publishedAt: DateTime!
+  reactionCount: Int!
   reactions: [DocumentReaction!]!
   space: SpaceView!
   subtitle: String

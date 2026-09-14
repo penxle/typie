@@ -78,77 +78,111 @@
 </script>
 
 <div
-  bind:this={container}
   class={css({
     position: 'sticky',
     top: '[var(--usersite-sticky-header-bottom, 0px)]',
     zIndex: '10',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
+    width: 'full',
     borderBottomWidth: '1px',
     borderColor: 'border.hairline',
     backgroundColor: 'surface.default',
-    transition: '[box-shadow 150ms ease-out, border-color 150ms ease-out]',
+    transition: '[border-color 150ms ease-out]',
     '&[data-stuck]': { borderColor: 'border.default' },
+    _motionReduce: { transition: '[none]' },
   })}
-  aria-label="스페이스 내용"
-  role="tablist"
   use:stuck={{ onchange: (node, value) => chrome.setStuck(node, value) }}
 >
-  <span
-    style:width={`${indicator.width}px`}
-    style:transform={`translateX(${indicator.x}px)`}
-    class={css(
-      { position: 'absolute', left: '0', bottom: '-1px', height: '2px', backgroundColor: 'text.default', willChange: 'transform' },
-      ready && { transition: '[transform 200ms cubic-bezier(0.32, 0.72, 0, 1), width 200ms cubic-bezier(0.32, 0.72, 0, 1)]' },
-    )}
-    aria-hidden="true"
-  ></span>
+  <div
+    bind:this={container}
+    class={css({
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      maxWidth: { base: '760px', lg: '1200px' },
+      '&:not([data-ready]) [role="tab"][aria-selected="true"]::after': {
+        content: '""',
+        position: 'absolute',
+        left: '0',
+        right: '0',
+        bottom: '-1px',
+        height: '2px',
+        backgroundColor: 'text.default',
+      },
+      marginX: 'auto',
+      paddingX: { base: '20px', md: '40px' },
+    })}
+    aria-label="스페이스 내용"
+    data-ready={ready || undefined}
+    role="tablist"
+  >
+    {#each items as item (item.id)}
+      <button
+        bind:this={buttons[item.id]}
+        id={`space-tab-${item.id}`}
+        class={css({
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          height: '44px',
+          paddingX: '12px',
+          fontSize: '15px',
+          fontWeight: 'medium',
+          color: 'text.hint',
+          transition: 'colors',
+          _hover: { color: 'text.muted' },
+          _selected: { color: 'text.default' },
+          _first: { paddingLeft: '0' },
+          _disabled: { color: 'text.hint', opacity: '[0.45]', cursor: 'default' },
+        })}
+        aria-controls={`space-panel-${item.id}`}
+        aria-disabled={item.disabled}
+        aria-selected={tab === item.id}
+        disabled={item.disabled}
+        onclick={() => select(item.id)}
+        {onkeydown}
+        role="tab"
+        tabindex={tab === item.id ? 0 : -1}
+        type="button"
+      >
+        {item.label}
+        {#if item.count > 0}
+          <span
+            class={css({
+              marginLeft: '5px',
+              fontSize: '12px',
+              fontWeight: 'normal',
+              color: 'text.hint',
+              fontVariantNumeric: 'tabular-nums',
+            })}
+          >
+            {item.count}
+          </span>
+        {/if}
+      </button>
+    {/each}
 
-  {#each items as item (item.id)}
-    <button
-      bind:this={buttons[item.id]}
-      id={`space-tab-${item.id}`}
-      class={css({
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        height: '44px',
-        paddingX: '12px',
-        fontSize: '15px',
-        fontWeight: 'medium',
-        color: 'text.hint',
-        transition: 'colors',
-        _hover: { color: 'text.muted' },
-        _selected: { color: 'text.default' },
-        _first: { paddingLeft: '0' },
-        _disabled: { color: 'text.hint', opacity: '[0.45]', cursor: 'default' },
-      })}
-      aria-controls={`space-panel-${item.id}`}
-      aria-disabled={item.disabled}
-      aria-selected={tab === item.id}
-      disabled={item.disabled}
-      onclick={() => select(item.id)}
-      {onkeydown}
-      role="tab"
-      tabindex={tab === item.id ? 0 : -1}
-      type="button"
-    >
-      {item.label}
-      {#if item.count > 0}
-        <span
-          class={css({ marginLeft: '5px', fontSize: '12px', fontWeight: 'normal', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}
-        >
-          {item.count}
-        </span>
-      {/if}
-    </button>
-  {/each}
+    {#if ready}
+      <span
+        style:width={`${indicator.width}px`}
+        style:transform={`translateX(${indicator.x}px)`}
+        class={css({
+          position: 'absolute',
+          left: '0',
+          bottom: '-1px',
+          height: '2px',
+          backgroundColor: 'text.default',
+          willChange: 'transform',
+          transition: '[transform 200ms cubic-bezier(0.32, 0.72, 0, 1), width 200ms cubic-bezier(0.32, 0.72, 0, 1)]',
+        })}
+        aria-hidden="true"
+      ></span>
+    {/if}
 
-  {#if trailing}
-    <div class={css({ marginLeft: 'auto' })}>
-      {@render trailing()}
-    </div>
-  {/if}
+    {#if trailing}
+      <div class={css({ marginLeft: 'auto' })}>
+        {@render trailing()}
+      </div>
+    {/if}
+  </div>
 </div>

@@ -16,9 +16,15 @@ import {
 import { env } from '#/env.ts';
 import { groupAssetIds, loadExistingDocumentAssetIds } from '#/utils/document-assets.ts';
 import { checkDocumentViewAccess, getDocumentViewUnlockKey, RESTRICTED_EXCERPT } from '#/utils/document-view-access.ts';
+import { defaultDocLayoutMode } from '#/utils/entity.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildLatestVersionGraphsQuery } from '#/utils/publication-core.ts';
-import { buildCollectionNeighborQuery, buildPublishedPublicationByIdQuery, deriveExcerpt } from '#/utils/publication-view-core.ts';
+import {
+  buildCollectionNeighborQuery,
+  buildPublishedPublicationByIdQuery,
+  buildReactionCountsQuery,
+  deriveExcerpt,
+} from '#/utils/publication-view-core.ts';
 import { spaceUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { CollectionView, DocumentReaction, IEditorDocument, Image, isTypeOf, PublicationView, SpaceView } from '../objects.ts';
@@ -168,6 +174,13 @@ PublicationView.implement({
         return document.allowReaction;
       },
     }),
+    layoutMode: t.field({
+      type: 'JSON',
+      resolve: async (self, _, ctx) => {
+        const version = await latestVersionLoader(ctx).load(self.id);
+        return version.layoutMode ?? defaultDocLayoutMode();
+      },
+    }),
     reactions: t.field({
       type: [DocumentReaction],
       resolve: async (self, _, ctx) => {
@@ -183,6 +196,20 @@ PublicationView.implement({
           key: ({ documentId }: { documentId: string }) => documentId,
         });
         return await loader.load(self.documentId);
+      },
+    }),
+    reactionCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const document = await documentLoader(ctx).load(self.documentId);
+        if (!document.allowReaction) return 0;
+        const loader = ctx.loader({
+          name: 'PublicationView.reactionCount',
+          nullable: true,
+          load: async (ids: string[]) => await buildReactionCountsQuery(db, { documentIds: ids }),
+          key: (row) => row?.documentId,
+        });
+        const row = await loader.load(self.documentId);
+        return row?.count ?? 0;
       },
     }),
     body: t.field({

@@ -48,6 +48,32 @@ export const buildDiscoveryPublicationsQuery = (executor: Executor, input: { tag
     .limit(input.limit);
 };
 
+export const DISCOVERY_RECENT_SCAN_LIMIT = 200;
+
+export const buildDiscoveryRecentPublicationsQuery = (executor: Executor, input: { limit: number }) =>
+  discoverablePublicationScope(
+    executor
+      .select({ id: Publications.id, spaceId: Publications.spaceId, collectionId: Publications.collectionId })
+      .from(Publications)
+      .$dynamic(),
+  )
+    .where(discoverablePublicationPredicate())
+    .orderBy(desc(Publications.publishedAt), desc(Publications.id))
+    .limit(input.limit);
+
+export const pickFirstByKey = <T>(rows: readonly T[], key: (row: T) => string | null, limit: number): T[] => {
+  const seen = new Set<string>();
+  const picked: T[] = [];
+  for (const row of rows) {
+    const value = key(row);
+    if (value === null || seen.has(value)) continue;
+    seen.add(value);
+    picked.push(row);
+    if (picked.length === limit) break;
+  }
+  return picked;
+};
+
 export const buildDiscoveryTagsQuery = (executor: Executor, input: { name?: string; limit?: number }) => {
   const query = discoverablePublicationScope(executor.select({ name: PublicationTags.name, count: count() }).from(Publications).$dynamic())
     .innerJoin(PublicationTags, eq(PublicationTags.publicationId, Publications.id))

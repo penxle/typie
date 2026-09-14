@@ -1,0 +1,1 @@
+ALTER TABLE "publication_versions" ADD COLUMN "layout_mode" jsonb;

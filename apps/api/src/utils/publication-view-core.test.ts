@@ -4,11 +4,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as tables from '#/db/schemas/tables.ts';
 import {
   buildCollectionNeighborQuery,
+  buildCollectionPublicationCountsQuery,
   buildIndexableSpaceSlugsQuery,
   buildPublishedCollectionIdsQuery,
   buildPublishedPublicationByIdQuery,
   buildPublishedPublicationByPermalinkQuery,
   buildPublishedPublicationsQuery,
+  buildReactionCountsQuery,
   buildSitemapPaths,
   buildSpaceBySlugQuery,
   buildSpaceTagQuery,
@@ -176,4 +178,23 @@ test('sitemap paths cover home, published posts, series and encoded tags', () =>
     buildSitemapPaths({ publicationPermalinks: ['12345678901'], collectionPermalinks: ['98765432109'], tagNames: ['에세이', 'a b'] }),
     ['/', '/p/12345678901', '/s/98765432109', '/t/%EC%97%90%EC%84%B8%EC%9D%B4', '/t/a%20b'],
   );
+});
+
+test('series publication counts group published rows on active entities by series', () => {
+  const query = buildCollectionPublicationCountsQuery(database, { collectionIds: ['COL0A', 'COL0B'] }).toSQL();
+  assert.match(query.sql, /inner join "documents"/);
+  assert.match(query.sql, /inner join "entities"/);
+  assert.match(query.sql, /"publications"\."collection_id" in \(/);
+  assert.match(query.sql, /"publications"\."state" = /);
+  assert.match(query.sql, /"entities"\."state" = /);
+  assert.match(query.sql, /group by "publications"\."collection_id"/);
+  assert.ok(query.params.includes('COL0A') && query.params.includes('COL0B'));
+});
+
+test('reaction counts group reactions by document', () => {
+  const query = buildReactionCountsQuery(database, { documentIds: ['DOC0A'] }).toSQL();
+  assert.match(query.sql, /from "document_reactions"/);
+  assert.match(query.sql, /"document_reactions"\."document_id" in \(/);
+  assert.match(query.sql, /group by "document_reactions"\."document_id"/);
+  assert.deepEqual(query.params, ['DOC0A']);
 });

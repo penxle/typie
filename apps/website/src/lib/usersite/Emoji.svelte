@@ -4,9 +4,10 @@
 
   type Props = {
     emoji: string;
+    size?: 16 | 18 | 20;
   };
 
-  let { emoji }: Props = $props();
+  let { emoji, size = 16 }: Props = $props();
 </script>
 
-<Icon icon={emojis[emoji]} />
+<Icon icon={emojis[emoji]} {size} />

@@ -1,6 +1,6 @@
 import { EntityState, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
 import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { Collections, Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
+import { Collections, DocumentReactions, Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '#/db/index.ts';
 
@@ -118,6 +118,18 @@ export const buildPublishedPublicationCountQuery = (executor: Executor, input: {
   publishedPublicationScope(executor.select({ count: count() }).from(Publications).$dynamic()).where(
     and(eq(Publications.spaceId, input.spaceId), publishedPublicationPredicate()),
   );
+
+export const buildCollectionPublicationCountsQuery = (executor: Executor, input: { collectionIds: string[] }) =>
+  publishedPublicationScope(executor.select({ collectionId: Publications.collectionId, count: count() }).from(Publications).$dynamic())
+    .where(and(inArray(Publications.collectionId, input.collectionIds), publishedPublicationPredicate()))
+    .groupBy(Publications.collectionId);
+
+export const buildReactionCountsQuery = (executor: Executor, input: { documentIds: string[] }) =>
+  executor
+    .select({ documentId: DocumentReactions.documentId, count: count() })
+    .from(DocumentReactions)
+    .where(inArray(DocumentReactions.documentId, input.documentIds))
+    .groupBy(DocumentReactions.documentId);
 
 export const buildPublishedCollectionIdsQuery = (executor: Executor, input: { spaceId: string }) =>
   publishedPublicationScope(executor.selectDistinct({ collectionId: Publications.collectionId }).from(Publications).$dynamic()).where(

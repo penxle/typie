@@ -953,6 +953,13 @@
       "when": 1789302570917,
       "tag": "0135_publication-permalink-constraints",
       "breakpoints": false
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1789343259135,
+      "tag": "0136_publication-version-layout-mode",
+      "breakpoints": false
     }
   ]
 }

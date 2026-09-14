@@ -1,9 +1,7 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
-  import { Icon } from '@typie/ui/components';
-  import dayjs from 'dayjs';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import { currentSpaceSlug } from './current-space-slug';
@@ -31,8 +29,6 @@
 
         publications {
           id
-          title
-          publishedAt
         }
       }
     `),
@@ -40,24 +36,44 @@
   );
 
   const slug = $derived(currentSpaceSlug());
-  const latest = $derived(collection.data.publications.toSorted((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0] ?? null);
+
+  const meta = css.raw({
+    marginTop: '6px',
+    fontSize: '12px',
+    color: 'text.hint',
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  });
 </script>
 
 <a
   class={css({
     display: 'flex',
-    gap: '14px',
-    width: 'full',
-    paddingY: '16px',
-    borderBottomWidth: '1px',
+    gap: '16px',
+    minWidth: '0',
+    padding: '16px',
+    borderWidth: '1px',
     borderColor: 'border.hairline',
-    textAlign: 'left',
-    _hover: { '& .series-name': { color: 'text.muted' } },
+    borderRadius: '12px',
+    transition: 'common',
+    _hover: { borderColor: 'border.default' },
   })}
-  data-sveltekit-noscroll
   href={seriesPath(slug, collection.data.permalink)}
 >
-  <div class={css({ flexShrink: '0', size: '56px', borderRadius: '10px', backgroundColor: 'surface.canvas', overflow: 'hidden' })}>
+  <div
+    style:background-color={collection.data.cover ? undefined : titlePageColors(collection.data.name).base}
+    class={css({
+      flexShrink: '0',
+      width: '64px',
+      height: '96px',
+      borderRadius: '6px',
+      backgroundColor: 'surface.inset',
+      boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
+      overflow: 'hidden',
+    })}
+  >
     {#if collection.data.cover}
       <Img
         style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
@@ -69,26 +85,12 @@
   </div>
 
   <div class={css({ flex: '1', minWidth: '0' })}>
-    <div class={css({ fontSize: '16px', fontWeight: 'semibold', transition: 'colors' })}>
-      <span class="series-name">{collection.data.name}</span>
-      <span
-        class={css({ marginLeft: '8px', fontSize: '12px', fontWeight: 'normal', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}
-      >
-        글 {collection.data.publications.length}개
-      </span>
-    </div>
+    <div class={css({ fontSize: '16px', fontWeight: 'semibold', lineHeight: '[1.4]' })}>{collection.data.name}</div>
     {#if collection.data.description}
-      <p class={css({ marginTop: '3px', fontSize: '13px', lineHeight: '[1.5]', color: 'text.muted', lineClamp: '2' })}>
+      <p class={css({ marginTop: '4px', fontSize: '13px', lineHeight: '[1.5]', color: 'text.muted', lineClamp: '2' })}>
         {collection.data.description}
       </p>
     {/if}
-    {#if latest}
-      <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.hint', fontVariantNumeric: 'tabular-nums', lineClamp: '1' })}>
-        최근 글 <b class={css({ fontWeight: 'medium', color: 'text.muted' })}>{latest.title}</b>
-        · {dayjs(latest.publishedAt).format('YYYY. M. D.')}
-      </p>
-    {/if}
+    <p class={css(meta)}>글 {collection.data.publications.length}개</p>
   </div>
-
-  <Icon style={css.raw({ flexShrink: '0', alignSelf: 'center', color: 'text.hint' })} icon={ChevronRightIcon} size={16} />
 </a>

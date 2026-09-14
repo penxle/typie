@@ -12,7 +12,6 @@
   import { hydrateQuery } from '$lib/graphql';
   import { cleanupBrowserPushForLogout } from '$lib/push';
   import { setUsersiteChrome, UsersiteChrome } from '../../chrome.svelte';
-  import ReadToolbar from '../../ReadToolbar.svelte';
   import UsersiteHeader from '../../UsersiteHeader.svelte';
 
   let { data, children } = $props();
@@ -76,8 +75,6 @@
     }),
   );
 
-  const showToolbar = $derived(!query.data.me);
-
   const logout = () => {
     mixpanel.track('logout', { via: 'header' });
     const logoutUrl = qs.stringifyUrl({
@@ -114,11 +111,7 @@
     />
   </header>
 
-  <main class={flex({ flexDirection: 'column', flex: '1', paddingBottom: showToolbar ? { base: '48px', md: '0' } : '0' })}>
+  <main class={flex({ flexDirection: 'column', flex: '1' })}>
     {@render children()}
   </main>
-
-  {#if showToolbar}
-    <ReadToolbar href={chrome.post?.url ?? layoutQuery.data.spaceView.url} />
-  {/if}
 </div>

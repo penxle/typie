@@ -3,13 +3,14 @@
 
   type Props = {
     name: string;
-    count: number;
+    count?: number;
     href: string;
     current: boolean;
     size?: 'sm' | 'lg';
+    noscroll?: boolean;
   };
 
-  let { name, count, href, current, size = 'sm' }: Props = $props();
+  let { name, count, href, current, size = 'sm', noscroll = true }: Props = $props();
 </script>
 
 <a
@@ -37,9 +38,11 @@
     size === 'lg' && { height: '32px', paddingX: '12px', fontSize: '13px' },
   )}
   aria-current={current ? 'page' : undefined}
-  data-sveltekit-noscroll
+  data-sveltekit-noscroll={noscroll ? '' : 'off'}
   {href}
 >
   {name}
-  <b class={css({ fontWeight: 'medium', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>{count}</b>
+  {#if count !== undefined}
+    <b class={css({ fontWeight: 'medium', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>{count}</b>
+  {/if}
 </a>

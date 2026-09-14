@@ -11,7 +11,15 @@
 </script>
 
 {#if collections.length > 0}
-  <div>
+  <div
+    class={css({
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      columnGap: '24px',
+      rowGap: '12px',
+      '@media (min-width: 640px)': { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', rowGap: '16px' },
+    })}
+  >
     {#each collections as collection (collection.id)}
       <SeriesCard collectionView$key={collection} />
     {/each}

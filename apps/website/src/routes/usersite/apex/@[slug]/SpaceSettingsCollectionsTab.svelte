@@ -231,7 +231,7 @@
           <button class={css({ cursor: 'pointer' })} disabled={coverUploading} onclick={handleCoverUpload} type="button">
             <LoadableImg
               id={formCoverId}
-              style={css.raw({ size: '72px', borderRadius: '6px', objectFit: 'cover' })}
+              style={css.raw({ width: '48px', height: '72px', borderRadius: '6px', objectFit: 'cover' })}
               alt="표지"
               size={128}
             />
@@ -252,7 +252,8 @@
         {:else}
           <button
             class={center({
-              size: '72px',
+              width: '48px',
+              height: '72px',
               borderWidth: '1px',
               borderStyle: 'dashed',
               borderRadius: '6px',

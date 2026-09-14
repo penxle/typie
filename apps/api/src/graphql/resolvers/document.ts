@@ -454,6 +454,19 @@ DocumentView.implement({
     protectContent: t.exposeBoolean('protectContent'),
     allowReaction: t.exposeBoolean('allowReaction'),
 
+    layoutMode: t.field({
+      type: 'JSON',
+      resolve: async (self) => {
+        const state = await db
+          .select({ json: DocumentStates.json })
+          .from(DocumentStates)
+          .where(eq(DocumentStates.documentId, self.id))
+          .then(firstOrThrow);
+
+        return extractPlainDocLayoutMode(state.json as PlainDoc);
+      },
+    }),
+
     thumbnail: t.field({
       type: Image,
       nullable: true,

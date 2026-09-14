@@ -8,17 +8,17 @@
   import { getThemeContext } from '@typie/ui/context';
   import { createForm, FormError } from '@typie/ui/form';
   import { Toast } from '@typie/ui/notification';
-  import { comma, serializeOAuthState } from '@typie/ui/utils';
+  import { serializeOAuthState } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { nanoid } from 'nanoid';
   import qs from 'query-string';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { z } from 'zod';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';
-  import SmileIcon from '~icons/lucide/smile';
   import { page } from '$app/state';
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
@@ -28,17 +28,20 @@
   import { browserScaleFactor } from '$lib/editor-ffi/zoom';
   import { unwrapError } from '$lib/graphql';
   import BodyUnavailable from '$lib/usersite/BodyUnavailable.svelte';
+  import { parseDocumentViewLayoutMode } from '$lib/usersite/document-view-layout';
   import DocumentDomMirror from '$lib/usersite/DocumentDomMirror.svelte';
-  import DocumentViewSkeleton from '$lib/usersite/DocumentViewSkeleton.svelte';
+  import DocumentViewFrame from '$lib/usersite/DocumentViewFrame.svelte';
   import ReadOnlyTouchSelectionSuppress from '$lib/usersite/ReadOnlyTouchSelectionSuppress.svelte';
   import ShareLinkPopover from '$lib/usersite/ShareLinkPopover.svelte';
   import { graphql } from '$mearie';
   import { getUsersiteChrome } from '../../../../chrome.svelte';
   import { currentSpaceSlug } from '../../current-space-slug';
   import { seriesPath, spaceHomePath, tagPath } from '../../paths';
-  import CollectionNavigation from './CollectionNavigation.svelte';
+  import TagChip from '../../TagChip.svelte';
   import PublicationActionMenu from './PublicationActionMenu.svelte';
-  import PublicationEmojiReaction from './PublicationEmojiReaction.svelte';
+  import PublicationReactions from './PublicationReactions.svelte';
+  import PublicationRecent from './PublicationRecent.svelte';
+  import PublicationSpaceCard from './PublicationSpaceCard.svelte';
   import type {
     UsersiteSpacePublicationPage_PublicationViewV2_publicationView$key,
     UsersiteSpacePublicationPage_PublicationViewV2_user$key,
@@ -76,16 +79,21 @@
         updatedAt
         tags
         url
+        layoutMode
 
         collection {
           id
           permalink
           name
+
+          publications {
+            id
+          }
         }
 
-        reactions {
+        thumbnail {
           id
-          emoji
+          ...Img_image
         }
 
         documentBody: body {
@@ -146,9 +154,10 @@
         }
 
         ...Editor_document
-        ...UsersiteSpacePublicationPage_PublicationEmojiReaction_publicationView
         ...UsersiteSpacePublicationPage_PublicationActionMenu_publicationView
-        ...UsersiteSpacePublicationPage_CollectionNavigation_publicationView
+        ...UsersiteSpacePublicationPage_PublicationReactions_publicationView
+        ...UsersiteSpacePublicationPage_PublicationSpaceCard_publicationView
+        ...UsersiteSpacePublicationPage_PublicationRecent_publicationView
       }
     `),
     () => publicationView$key,
@@ -264,18 +273,21 @@
   const theme = getThemeContext();
   const ctx = setupEditorContext();
 
-  let hydrated = $state(false);
   let editorReady = $state(false);
   let editorFailure = $state<EditorFailure>();
   let editorForDocumentId = $state<string | null>(null);
   let fallbackBodySurface = $state<HTMLDivElement>();
   let destroyed = false;
 
-  onMount(() => {
-    hydrated = true;
-  });
-
   const document = $derived(publication.data);
+  const seriesPosition = $derived(
+    document.collection ? document.collection.publications.findIndex((item) => item.id === document.id) + 1 : 0,
+  );
+  const displayDate = $derived(
+    document.space.dateDisplay === 'NONE'
+      ? null
+      : dayjs(document.space.dateDisplay === 'PUBLISHED_AT' ? document.publishedAt : document.updatedAt).format('YYYY. M. D.'),
+  );
 
   $effect(() => {
     if (!document) return;
@@ -430,7 +442,8 @@
     }
   });
 
-  const isPaginated = $derived(ctx.editor?.rootAttrs?.layout_mode.type === 'paginated');
+  const layoutMode = $derived(parseDocumentViewLayoutMode(document.layoutMode));
+  const isPaginated = $derived(layoutMode.type === 'paginated');
 
   const authorizeUrl = $derived(
     qs.stringifyUrl({
@@ -502,114 +515,190 @@
       <ReadOnlyTouchSelectionSuppress enabled={ctx.editor?.gesture.gestureActive ?? false} />
 
       {#snippet documentHeader()}
-        <div class={css({ paddingTop: { base: '48px', md: '80px' } })}>
+        <div class={css({ paddingTop: { base: '32px', md: '48px' } })}>
           <div class={flex({ direction: 'column', width: 'full' })}>
-            <nav class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' })}>
-              <a class={flex({ alignItems: 'center', gap: '6px' })} href={spaceHomePath(slug)}>
-                <Img
-                  style={css.raw({ size: '18px', borderRadius: '4px', objectFit: 'cover' })}
-                  alt={`${document.space.name} 로고`}
-                  image$key={document.space.logo}
-                  size={24}
-                />
-                <span class={css({ fontSize: '13px', color: 'text.hint', _hover: { color: 'text.muted' } })}>
+            <a
+              class={flex({
+                alignItems: 'center',
+                gap: '12px',
+                minWidth: '0',
+                width: 'fit',
+                maxWidth: 'full',
+                _hover: { '& [data-space-name]': { color: 'text.muted' } },
+              })}
+              href={spaceHomePath(slug)}
+            >
+              <Img
+                style={css.raw({
+                  flexShrink: '0',
+                  size: '36px',
+                  borderRadius: '9px',
+                  objectFit: 'cover',
+                  boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
+                })}
+                alt={`${document.space.name} 로고`}
+                image$key={document.space.logo}
+                size={96}
+              />
+              <span class={flex({ flexDirection: 'column', minWidth: '0' })}>
+                <span
+                  class={css({ fontSize: '14px', fontWeight: 'semibold', lineHeight: '[1.4]', transition: 'colors', truncate: true })}
+                  data-space-name
+                >
                   {document.space.name}
                 </span>
-              </a>
+                {#if displayDate || seriesPosition > 0}
+                  <span
+                    class={flex({
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '12px',
+                      lineHeight: '[1.45]',
+                      color: 'text.hint',
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    })}
+                  >
+                    {#if displayDate}
+                      <span>{displayDate}</span>
+                    {/if}
+                    {#if displayDate && seriesPosition > 0}
+                      <i
+                        class={css({ flexShrink: '0', size: '2px', borderRadius: 'full', backgroundColor: 'border.emphasis' })}
+                        aria-hidden="true"
+                      ></i>
+                    {/if}
+                    {#if seriesPosition > 0}
+                      <span>{seriesPosition}번째 글</span>
+                    {/if}
+                  </span>
+                {/if}
+              </span>
+            </a>
 
-              {#if document.collection}
-                <span class={css({ fontSize: '13px', color: 'text.hint' })}>/</span>
-                <a
-                  class={css({ fontSize: '13px', color: 'text.hint', _hover: { color: 'text.muted' } })}
-                  href={seriesPath(slug, document.collection.permalink)}
-                >
-                  {document.collection.name}
-                </a>
-              {/if}
-            </nav>
-
-            <div bind:this={titleEl} class={css({ fontSize: { base: '24px', lg: '28px' }, fontWeight: 'bold' })}>
-              {document.title}
-            </div>
-
-            {#if document.subtitle}
-              <div class={css({ marginTop: '8px', fontSize: { base: '14px', lg: '16px' }, fontWeight: 'medium' })}>
-                {document.subtitle}
-              </div>
-            {/if}
-
-            {#if document.hasPassword}
+            {#if document.thumbnail}
               <div
-                class={flex({
-                  alignItems: 'center',
-                  gap: '4px',
-                  marginTop: document.subtitle ? '10px' : '12px',
-                  width: 'fit',
-                  paddingX: '8px',
-                  paddingY: '4px',
-                  borderRadius: 'full',
-                  borderWidth: '1px',
-                  borderColor: 'border.hairline',
+                class={css({
+                  marginTop: '24px',
+                  aspectRatio: '[16 / 9]',
+                  borderRadius: '8px',
                   backgroundColor: 'surface.canvas',
-                  fontSize: '12px',
-                  fontWeight: 'medium',
-                  color: 'text.muted',
+                  overflow: 'hidden',
+                  isolation: 'isolate',
                 })}
               >
-                <Icon icon={LockOpenIcon} size={12} />
-                <span>비밀번호 확인 후 열람 중</span>
+                <Img
+                  style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
+                  alt={document.title}
+                  image$key={document.thumbnail}
+                  progressive
+                  size={1024}
+                />
               </div>
             {/if}
 
-            {#if document.tags.length > 0}
-              <div class={flex({ flexWrap: 'wrap', gap: '6px', marginTop: '12px' })}>
-                {#each document.tags as tag (tag)}
-                  <a
+            {#if document.collection}
+              <a
+                class={flex({
+                  alignItems: 'center',
+                  gap: '2px',
+                  width: 'fit',
+                  maxWidth: 'full',
+                  marginTop: '28px',
+                  fontSize: '13px',
+                  fontWeight: 'medium',
+                  color: 'text.muted',
+                  transition: 'colors',
+                  _hover: { color: 'text.default' },
+                })}
+                href={seriesPath(slug, document.collection.permalink)}
+              >
+                <span class={css({ truncate: true })}>{document.collection.name}</span>
+                <Icon icon={ChevronRightIcon} size={14} />
+              </a>
+            {/if}
+
+            <div
+              class={flex({
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '16px',
+                marginTop: document.collection ? '12px' : '28px',
+              })}
+            >
+              <div class={flex({ flexDirection: 'column', minWidth: '0' })}>
+                <h1
+                  bind:this={titleEl}
+                  class={css({
+                    fontSize: { base: '26px', md: '32px' },
+                    fontWeight: 'bold',
+                    lineHeight: '[1.35]',
+                    letterSpacing: '-0.02em',
+                    textWrap: 'balance',
+                  })}
+                >
+                  {document.title}
+                </h1>
+
+                {#if document.subtitle}
+                  <p
                     class={css({
-                      paddingX: '8px',
-                      paddingY: '4px',
+                      marginTop: '8px',
+                      fontSize: { base: '15px', md: '17px' },
+                      fontWeight: 'medium',
+                      lineHeight: '[1.5]',
+                      color: 'text.muted',
+                    })}
+                  >
+                    {document.subtitle}
+                  </p>
+                {/if}
+
+                {#if document.hasPassword}
+                  <div
+                    class={flex({
+                      alignItems: 'center',
+                      gap: '5px',
+                      marginTop: '16px',
+                      width: 'fit',
+                      height: '26px',
+                      paddingX: '10px',
                       borderRadius: 'full',
                       borderWidth: '1px',
                       borderColor: 'border.hairline',
-                      backgroundColor: 'surface.canvas',
                       fontSize: '12px',
-                      fontWeight: 'medium',
                       color: 'text.muted',
-                      _hover: { color: 'text.default' },
                     })}
-                    href={tagPath(slug, tag)}
                   >
-                    {tag}
-                  </a>
-                {/each}
-              </div>
-            {/if}
-
-            <div class={flex({ align: 'center', justify: 'space-between', marginTop: '24px', paddingBottom: '16px' })}>
-              <div class={flex({ align: 'center', gap: '8px', fontSize: '13px', color: 'text.hint' })}>
-                {#if document.allowReaction && document.reactions.length > 0}
-                  <div class={flex({ align: 'center', gap: '3px' })}>
-                    <Icon icon={SmileIcon} />
-                    <span>{comma(document.reactions.length)}</span>
+                    <Icon icon={LockOpenIcon} size={12} />
+                    <span>비밀번호 확인 후 열람 중</span>
                   </div>
                 {/if}
-
-                {#if document.space.dateDisplay !== 'NONE'}
-                  <span>
-                    {dayjs(document.space.dateDisplay === 'PUBLISHED_AT' ? document.publishedAt : document.updatedAt).format('YYYY. M. D.')}
-                  </span>
-                {/if}
               </div>
 
-              <div class={flex({ align: 'center', marginLeft: 'auto', gap: '12px', color: 'text.muted' })}>
-                <ShareLinkPopover href={document.url} />
-
+              <div
+                class={flex({
+                  flexShrink: '0',
+                  alignItems: 'center',
+                  gap: '2px',
+                  marginTop: '4px',
+                  marginRight: '-6px',
+                  color: 'text.muted',
+                })}
+              >
+                <ShareLinkPopover
+                  style={css.raw({ marginLeft: '0', padding: '8px', borderRadius: '6px' })}
+                  href={document.url}
+                  iconSize={16}
+                />
                 <PublicationActionMenu publicationView$key={document} />
               </div>
             </div>
 
-            {#if !isPaginated}
-              <HorizontalDivider style={css.raw({ marginBottom: '24px' })} />
+            {#if isPaginated}
+              <div class={css({ height: '32px' })}></div>
+            {:else}
+              <HorizontalDivider style={css.raw({ marginTop: '32px', marginBottom: '32px' })} color="secondary" />
             {/if}
           </div>
         </div>
@@ -618,104 +707,84 @@
       {#snippet documentFooter()}
         <div
           class={flex({
-            align: 'flex-start',
-            justify: 'space-between',
-            gap: '8px',
-            marginTop: '20px',
-            paddingBottom: '10px',
+            flexDirection: 'column',
+            gap: '32px',
+            paddingTop: '40px',
+            paddingBottom: { base: '60px', lg: '80px' },
             width: 'full',
           })}
         >
-          <PublicationEmojiReaction publicationView$key={document} />
+          <div class={flex({ alignItems: 'center', flexWrap: 'wrap', gap: '6px', minWidth: '0' })}>
+            {#each document.tags as tag (tag)}
+              <TagChip name={tag} current={false} href={tagPath(slug, tag)} noscroll={false} />
+            {/each}
+            <ShareLinkPopover
+              style={css.raw({ padding: '8px', borderRadius: '6px', marginRight: '-6px' })}
+              href={document.url}
+              iconSize={16}
+            />
+          </div>
 
-          {#if document.protectContent}
-            <div class={flex({ align: 'center', gap: '12px', marginLeft: 'auto', color: 'text.muted' })}>
-              <ShareLinkPopover href={document.url} />
+          <PublicationReactions publicationView$key={document} />
 
-              <PublicationActionMenu publicationView$key={document} />
-            </div>
-          {:else}
-            <div class={flex({ align: 'center', marginLeft: 'auto' })}>
-              <ShareLinkPopover href={document.url} />
-            </div>
-          {/if}
-        </div>
+          <div class={css({ marginTop: '8px' })}>
+            <PublicationSpaceCard publicationView$key={document} />
+          </div>
 
-        <div class={css({ paddingBottom: { base: '60px', lg: '80px' } })}>
-          <CollectionNavigation publicationView$key={document} />
+          <div class={css({ marginTop: '4px' })}>
+            <PublicationRecent publicationView$key={document} />
+          </div>
         </div>
       {/snippet}
 
-      <div class={css({ position: 'relative', isolation: 'isolate' })}>
-        {#if hydrated && !editorReady}
-          <div
-            class={css({
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              zIndex: 'editorOverlay',
-              minHeight: '[100dvh]',
-              backgroundColor: 'surface.default',
-            })}
-          >
-            <div
-              style:max-width="640px"
-              style:padding-inline="20px"
-              class={flex({ flexDirection: 'column', width: 'full', marginX: 'auto' })}
-            >
+      {#key document.id}
+        <div class={css({ position: 'relative', isolation: 'isolate' })}>
+          <DocumentViewFrame {layoutMode} ready={editorReady} bind:bodySurface={fallbackBodySurface}>
+            {#snippet header()}
               {@render documentHeader()}
-              <div bind:this={fallbackBodySurface}>
-                <DocumentViewSkeleton />
-              </div>
-              {@render documentFooter()}
-            </div>
-          </div>
-        {/if}
+            {/snippet}
 
-        {#key document.id}
-          <div class={flex({ flexDirection: 'column' })}>
+            {#snippet footer()}
+              {@render documentFooter()}
+            {/snippet}
+
             {#if document.protectContent}
               <ContentProtect>
-                <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
-                  {#snippet header()}
-                    {@render documentHeader()}
-                  {/snippet}
-
-                  {#snippet footer()}
-                    {@render documentFooter()}
-                  {/snippet}
-                </EditorComponent>
+                <EditorComponent
+                  style={css.raw({ paddingBottom: isPaginated ? '40px' : '0' })}
+                  active={false}
+                  document$key={document}
+                  onReady={handleEditorReady}
+                  useWindowScroll
+                />
               </ContentProtect>
             {:else}
-              <EditorComponent active={false} document$key={document} onReady={handleEditorReady} useWindowScroll>
-                {#snippet header()}
-                  {@render documentHeader()}
-                {/snippet}
-
-                {#snippet footer()}
-                  {@render documentFooter()}
-                {/snippet}
-              </EditorComponent>
+              <EditorComponent
+                style={css.raw({ paddingBottom: isPaginated ? '40px' : '0' })}
+                active={false}
+                document$key={document}
+                onReady={handleEditorReady}
+                useWindowScroll
+              />
             {/if}
-          </div>
+          </DocumentViewFrame>
 
           <DocumentDomMirror
             editor={editorReady && editorForDocumentId === document.id ? ctx.editor : undefined}
             excerpt={document.excerpt}
           />
-        {/key}
 
-        {#if activeEditorFailure && failureSurface}
-          <EditorFailureOverlay
-            id={`usersite-editor-${document.id}`}
-            actionLabel="새로고침"
-            contentPosition="viewport"
-            onAction={() => location.reload()}
-            surfaceElement={failureSurface}
-          />
-        {/if}
-      </div>
+          {#if activeEditorFailure && failureSurface}
+            <EditorFailureOverlay
+              id={`usersite-editor-${document.id}`}
+              actionLabel="새로고침"
+              contentPosition="viewport"
+              onAction={() => location.reload()}
+              surfaceElement={failureSurface}
+            />
+          {/if}
+        </div>
+      {/key}
     {/if}
   {:else if document.documentBody.__typename === 'DocumentViewBodyUnavailable'}
     <div class={flex({ align: 'center', justify: 'center', minHeight: '[100dvh]', fontSize: '16px', fontWeight: 'medium' })}>

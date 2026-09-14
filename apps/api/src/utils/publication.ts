@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { first, firstOrThrow } from '#/db/index.ts';
 import { Collections, Documents, Entities, Publications, PublicationTags, PublicationVersions } from '#/db/schemas/tables.ts';
 import { getDurableHeads, readMergedGraph } from './changeset.ts';
-import { extractAssetIdsFromPlainDoc } from './entity.ts';
+import { extractAssetIdsFromPlainDoc, extractPlainDocLayoutMode } from './entity.ts';
 import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription } from './plan.ts';
@@ -147,6 +147,7 @@ const writeVersion = async (
       thumbnailId: input.thumbnailId,
       excerpt: input.excerpt,
       assetIds: flattenAssetIds(extractAssetIdsFromPlainDoc(snapshot.plain)),
+      layoutMode: extractPlainDocLayoutMode(snapshot.plain),
     })
     .returning()
     .then(firstOrThrow);

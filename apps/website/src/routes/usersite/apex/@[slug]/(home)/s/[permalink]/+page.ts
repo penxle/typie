@@ -10,7 +10,6 @@ export const load = async (event) => {
           spaceView(slug: $slug) {
             id
             name
-            dateDisplay
 
             collection(permalink: $permalink) {
               id

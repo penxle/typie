@@ -10,7 +10,6 @@ export const load = async (event) => {
           spaceView(slug: $slug) {
             id
             name
-            dateDisplay
 
             tags {
               name
@@ -26,7 +25,7 @@ export const load = async (event) => {
 
                 publications {
                   id
-                  ...UsersiteSpace_PublicationListItem_publicationView
+                  ...UsersiteApex_DiscoveryCard_publicationView
                 }
               }
             }

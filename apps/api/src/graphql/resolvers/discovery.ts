@@ -1,13 +1,16 @@
 import { inArray } from 'drizzle-orm';
 import { db, Documents, TableCode, validateDbId } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
-import { getDiscoveryTags } from '#/utils/discovery.ts';
+import { getAllDiscoveryTags, getDiscoveryTags } from '#/utils/discovery.ts';
 import {
   buildDiscoverablePublicationsByIdsQuery,
   buildDiscoverableSpacesByIdsQuery,
   buildDiscoveryPublicationsQuery,
+  buildDiscoveryRecentPublicationsQuery,
   buildDiscoveryTagCountsQuery,
   buildDiscoveryTagsQuery,
+  DISCOVERY_RECENT_SCAN_LIMIT,
+  pickFirstByKey,
 } from '#/utils/discovery-core.ts';
 import {
   buildPublicationSearchRequest,
@@ -21,7 +24,7 @@ import { clampPageSize, toPublicationsPage } from '#/utils/publication-view-core
 import { sanitizeHighlight } from '#/utils/search-highlight.ts';
 import { decompose } from '#/utils/text.ts';
 import { builder } from '../builder.ts';
-import { PublicationView, SpaceView } from '../objects.ts';
+import { CollectionView, PublicationView, SpaceView } from '../objects.ts';
 import { SpacePublicationsPage } from './space-view.ts';
 
 const loadPage = async (input: { tagName?: string; first?: number | null; after?: string | null }) => {
@@ -49,6 +52,34 @@ const DiscoveryTag = builder.objectRef<{ name: string; count: number }>('Discove
   }),
 });
 
+const DiscoveryRecentSpace = builder.objectRef<{ spaceId: string; publicationId: string }>('DiscoveryRecentSpace').implement({
+  fields: (t) => ({
+    space: t.expose('spaceId', { type: SpaceView }),
+    publication: t.expose('publicationId', { type: PublicationView }),
+  }),
+});
+
+const DiscoveryRecentCollection = builder
+  .objectRef<{ collectionId: string; spaceId: string; publicationId: string }>('DiscoveryRecentCollection')
+  .implement({
+    fields: (t) => ({
+      collection: t.expose('collectionId', { type: CollectionView }),
+      space: t.expose('spaceId', { type: SpaceView }),
+      publication: t.expose('publicationId', { type: PublicationView }),
+    }),
+  });
+
+const DISCOVERY_RECENT_LIMIT_MAX = 10;
+
+type RecentPublicationRow = { id: string; spaceId: string; collectionId: string | null };
+
+const loadRecentPublications = () => {
+  let rows: Promise<RecentPublicationRow[]> | undefined;
+  return async () => await (rows ??= buildDiscoveryRecentPublicationsQuery(db, { limit: DISCOVERY_RECENT_SCAN_LIMIT }).execute());
+};
+
+const clampRecentLimit = (first: number) => Math.min(Math.max(first, 1), DISCOVERY_RECENT_LIMIT_MAX);
+
 const DiscoveryPublicationHit = builder
   .objectRef<{ publicationId: string; title: string | null; excerpt: string | null }>('DiscoveryPublicationHit')
   .implement({
@@ -71,7 +102,7 @@ const emptySearchResult = { publications: [], spaces: [], tags: [] };
 
 type Highlight = Record<string, string[] | undefined> | undefined;
 
-const DiscoveryView = builder.objectRef<Record<string, never>>('DiscoveryView').implement({
+const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<RecentPublicationRow[]> }>('DiscoveryView').implement({
   fields: (t) => ({
     publications: t.field({
       type: SpacePublicationsPage,
@@ -84,6 +115,31 @@ const DiscoveryView = builder.objectRef<Record<string, never>>('DiscoveryView').
     tags: t.field({
       type: [DiscoveryTag],
       resolve: async () => await getDiscoveryTags(),
+    }),
+    allTags: t.field({
+      type: [DiscoveryTag],
+      resolve: async () => await getAllDiscoveryTags(),
+    }),
+    recentSpaces: t.field({
+      type: [DiscoveryRecentSpace],
+      args: { first: t.arg.int({ defaultValue: 5 }) },
+      resolve: async (self, args) => {
+        const rows = await self.recentPublications();
+        return pickFirstByKey(rows, (row) => row.spaceId, clampRecentLimit(args.first)).map((row) => ({
+          spaceId: row.spaceId,
+          publicationId: row.id,
+        }));
+      },
+    }),
+    recentCollections: t.field({
+      type: [DiscoveryRecentCollection],
+      args: { first: t.arg.int({ defaultValue: 4 }) },
+      resolve: async (self, args) => {
+        const rows = await self.recentPublications();
+        return pickFirstByKey(rows, (row) => row.collectionId, clampRecentLimit(args.first)).flatMap((row) =>
+          row.collectionId ? [{ collectionId: row.collectionId, spaceId: row.spaceId, publicationId: row.id }] : [],
+        );
+      },
     }),
     tag: t.field({
       type: DiscoveryTag,
@@ -176,6 +232,6 @@ const DiscoveryView = builder.objectRef<Record<string, never>>('DiscoveryView').
 builder.queryFields((t) => ({
   discovery: t.field({
     type: DiscoveryView,
-    resolve: () => ({}),
+    resolve: () => ({ recentPublications: loadRecentPublications() }),
   }),
 }));
