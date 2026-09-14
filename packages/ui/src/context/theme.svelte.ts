@@ -1,4 +1,6 @@
 import { DARK_VARIANTS, DEFAULT_DARK_VARIANT, DEFAULT_LIGHT_VARIANT, LIGHT_VARIANTS } from '@typie/styled-system/presets';
+import { getAbortSignal } from 'svelte';
+import { on } from 'svelte/events';
 import { MediaQuery } from 'svelte/reactivity';
 import Cookies from 'universal-cookie';
 import { browser } from '$app/environment';
@@ -24,12 +26,28 @@ const COOKIE = 'typie-th';
 const COOKIE_LIGHT_VARIANT = 'typie-th-lv';
 const COOKIE_DARK_VARIANT = 'typie-th-dv';
 
+const browserForcesDarkTheme = (): boolean => {
+  if (window.matchMedia('(forced-colors: active)').matches) return false;
+
+  // Auto Dark Theme can override colors without reporting a dark media query.
+  // Request light on the probe independently of the current page theme.
+  // https://developer.chrome.com/blog/auto-dark-theme
+  const probe = document.createElement('div');
+  probe.style.cssText = 'display: none; color-scheme: light; background-color: Canvas';
+  document.documentElement.append(probe);
+  const color = window.getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return color.startsWith('rgb(') && color !== 'rgb(255, 255, 255)';
+};
+
 export class ThemeState {
   #cookies = new Cookies();
 
   #overrideTheme = $state<EffectiveTheme>();
   #currentTheme = $state<Theme>('auto');
+  #browserForcesDark = $state(false);
   #effectiveTheme = $derived.by<EffectiveTheme>(() => {
+    if (this.#browserForcesDark) return 'dark';
     const value = this.#overrideTheme ?? this.#currentTheme;
     if (value === 'auto') {
       return this.#prefersDark.current ? 'dark' : 'light';
@@ -74,10 +92,23 @@ export class ThemeState {
     }
 
     if (browser) {
+      this.#browserForcesDark = browserForcesDarkTheme();
       document.documentElement.dataset.theme = this.#effectiveTheme;
       document.documentElement.dataset.variantLight = this.#effectiveLightVariant;
       document.documentElement.dataset.variantDark = this.#effectiveDarkVariant;
     }
+
+    $effect(() => {
+      void this.#prefersDark.current;
+      const refresh = () => {
+        this.#browserForcesDark = browserForcesDarkTheme();
+      };
+      refresh();
+      const options = { signal: getAbortSignal() };
+      on(window, 'focus', refresh, options);
+      on(window, 'pageshow', refresh, options);
+      on(document, 'visibilitychange', refresh, options);
+    });
 
     $effect(() => {
       void this.#effectiveTheme;
