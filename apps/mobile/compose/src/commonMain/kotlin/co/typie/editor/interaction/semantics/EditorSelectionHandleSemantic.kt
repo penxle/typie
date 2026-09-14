@@ -18,10 +18,14 @@ internal class EditorSelectionHandleSemantic(
     point: PagePoint,
     anchor: Position,
     baseSelection: Selection? = null,
+    allowCollapse: Boolean = false,
   ): SelectionOp.ExtendTo? {
     val op =
-      point.selectionHandleExtensionOp(anchor = anchor, baseSelection = baseSelection)
-        ?: return null
+      point.selectionHandleExtensionOp(
+        anchor = anchor,
+        baseSelection = baseSelection,
+        allowCollapse = allowCollapse,
+      ) ?: return null
     editor.runCallback { editor.enqueue(Message.Selection(op)) } ?: return null
     return op
   }
@@ -74,6 +78,7 @@ internal class EditorSelectionHandleSemantic(
 internal fun PagePoint.selectionHandleExtensionOp(
   anchor: Position,
   baseSelection: Selection? = null,
+  allowCollapse: Boolean = false,
 ): SelectionOp.ExtendTo? {
   if (page < 0) {
     return null
@@ -84,6 +89,6 @@ internal fun PagePoint.selectionHandleExtensionOp(
     headX = x,
     headY = y,
     baseSelection = baseSelection,
-    allowCollapse = false,
+    allowCollapse = allowCollapse,
   )
 }

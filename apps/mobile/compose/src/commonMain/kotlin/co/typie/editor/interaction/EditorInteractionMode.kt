@@ -6,6 +6,7 @@ internal enum class EditorInteractionMode {
   ViewportZooming,
   AuxiliaryGesture,
   SelectionHandleDragging,
+  CursorDragging,
   TableCellHandleDragging,
   LongPressSelecting,
   LongPressWordSelecting,
@@ -27,6 +28,7 @@ internal val EditorInteractionMode.isAuxiliaryGesture: Boolean
 internal val EditorInteractionMode.isSelecting: Boolean
   get() =
     this == EditorInteractionMode.SelectionHandleDragging ||
+      this == EditorInteractionMode.CursorDragging ||
       this == EditorInteractionMode.TableCellHandleDragging ||
       this == EditorInteractionMode.LongPressSelecting ||
       this == EditorInteractionMode.LongPressWordSelecting ||
@@ -65,6 +67,10 @@ internal sealed interface EditorInteractionEvent {
   data object SelectionHandleDragStart : EditorInteractionEvent
 
   data object SelectionHandleDragEnd : EditorInteractionEvent
+
+  data object CursorDragStart : EditorInteractionEvent
+
+  data object CursorDragEnd : EditorInteractionEvent
 
   data object DoubleTapDragStart : EditorInteractionEvent
 
@@ -114,6 +120,8 @@ internal fun EditorInteractionMode.canApply(event: EditorInteractionEvent): Bool
     EditorInteractionEvent.SelectionHandleDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.SelectionHandleDragEnd ->
       this == EditorInteractionMode.SelectionHandleDragging
+    EditorInteractionEvent.CursorDragStart -> this == EditorInteractionMode.Idle
+    EditorInteractionEvent.CursorDragEnd -> this == EditorInteractionMode.CursorDragging
     EditorInteractionEvent.DoubleTapDragStart -> this == EditorInteractionMode.Idle
     EditorInteractionEvent.DoubleTapDragEnd -> this == EditorInteractionMode.DoubleTapSelecting
     EditorInteractionEvent.MouseSelectionStart -> this == EditorInteractionMode.Idle
@@ -191,6 +199,9 @@ private fun reduceSelection(
   when {
     event == EditorInteractionEvent.SelectionHandleDragStart ->
       EditorInteractionMode.SelectionHandleDragging
+    event == EditorInteractionEvent.CursorDragStart -> EditorInteractionMode.CursorDragging
+    event == EditorInteractionEvent.CursorDragEnd && mode == EditorInteractionMode.CursorDragging ->
+      EditorInteractionMode.Idle
     event == EditorInteractionEvent.SelectionHandleDragEnd &&
       mode == EditorInteractionMode.SelectionHandleDragging -> EditorInteractionMode.Idle
     event == EditorInteractionEvent.LongPressStart -> EditorInteractionMode.LongPressSelecting

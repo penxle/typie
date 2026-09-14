@@ -10,6 +10,7 @@ import co.typie.editor.interaction.contains
 import co.typie.editor.interaction.gestures.EditorSelectionHandleTableCellHandoff
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.resolveActiveTableCellSelection
+import co.typie.platform.Platform
 import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorSelectionHandleDragSession {
@@ -198,6 +199,11 @@ internal class EditorSelectionHandleDragSession {
         point = point,
         anchor = drag.anchor,
         baseSelection = drag.baseSelection,
+        allowCollapse =
+          context.platform == Platform.iOS &&
+            context.editing &&
+            !context.readOnly &&
+            drag.baseSelection == null,
       ) ?: return false
     drag.latestExtension = op
     return true

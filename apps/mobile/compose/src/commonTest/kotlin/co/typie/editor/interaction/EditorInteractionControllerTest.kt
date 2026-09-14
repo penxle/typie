@@ -2105,6 +2105,205 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `selection handle haptic fires for shrink collapse and reexpand`() =
+    runTest(StandardTestDispatcher()) {
+      val anchor = Position("text", 0, Affinity.Downstream)
+      var selection = Selection(anchor, Position("text", 5, Affinity.Downstream))
+      fun endpoints(toX: Float) =
+        SelectionEndpoints(
+          from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+          to = PageRect(pageIdx = 0, rect = Rect(x = toX, y = 20f, width = 0f, height = 8f)),
+          fromPosition = anchor,
+          toPosition = selection.head,
+        )
+      var currentEndpoints: SelectionEndpoints? = endpoints(70f)
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          selectionEndpointsProvider = { currentEndpoints },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.iOS },
+        )
+      controller.onEditorStateChanged(editor.publishedState)
+      assertTrue(controller.pointerDownOnSelectionHandle(Offset(70f, 24f)))
+      val hapticDeltas = mutableListOf<Int>()
+      for ((offset, x) in listOf(4 to 60f, 0 to 10f, 2 to 35f)) {
+        val before = host.selectionHapticCount
+        assertTrue(controller.moveSelectionHandlePointer(Offset(x, 24f)))
+        selection = Selection(anchor, Position("text", offset, Affinity.Downstream))
+        currentEndpoints = if (offset == 0) null else endpoints(x)
+        fake.publishSnapshot(editor)
+        controller.onEditorStateChanged(editor.publishedState)
+        hapticDeltas += host.selectionHapticCount - before
+        controller.onEditorStateChanged(editor.publishedState)
+        assertEquals(before + hapticDeltas.last(), host.selectionHapticCount)
+      }
+      controller.cancel()
+      assertEquals(listOf(1, 1, 1), hapticDeltas, "shrink, collapse, reexpand")
+    }
+
+  @Test
+  fun `ios caret drag starts before long press and preserves the grab offset`() =
+    runTest(StandardTestDispatcher()) {
+      for (cancel in listOf(false, true)) {
+        val position = Position("text", 3, Affinity.Downstream)
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { Selection(position, position) },
+            cursorProvider = { cursorAt(40f) },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        host.uiState.updateFocus(true)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.iOS },
+          )
+        val driver = TestPanGestureDriver(shouldCatchTouch = false)
+        controller.updateTapSlop(8f)
+        controller.onPointerDown(1L, Offset(42f, 6f), 0L, touchPanDriver = driver)
+        controller.onPointerMove(1L, Offset(45f, 6f), 10L)
+        assertFalse(controller.interactionMode.isSelecting)
+        assertTrue(controller.onPointerMove(1L, Offset(62f, 36f), 30L))
+        assertTrue(controller.interactionMode.isSelecting)
+        assertEquals(0, driver.startCount)
+        assertEquals(
+          SelectionOp.SetAt(page = 0, x = 60f, y = 36f),
+          fake.enqueued.filterIsInstance<Message.Selection>().last().op,
+        )
+        assertTrue(host.scrollGestureLockActive)
+        assertNull(host.scheduledLongPressDispatchAtMillis)
+        assertEquals(Offset(60f, 36f), controller.magnifierPosition)
+
+        if (cancel) controller.cancel() else controller.onPointerUp(1L, Offset(62f, 36f), 40L)
+        assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+        assertFalse(host.scrollGestureLockActive)
+        assertFalse(editor.imeNotificationsPaused)
+        assertNull(controller.magnifierPosition)
+        assertFalse(host.uiState.contextMenu.visible)
+      }
+    }
+
+  @Test
+  fun `caret drag leaves other platforms distant touches and scroll catch to pan`() =
+    runTest(StandardTestDispatcher()) {
+      for (scenario in 0..3) {
+        val position = Position("text", 3, Affinity.Downstream)
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { Selection(position, position) },
+            cursorProvider = { cursorAt(40f) },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        host.uiState.updateFocus(true)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { if (scenario == 0) Platform.Android else Platform.iOS },
+            readOnlyProvider = { scenario == 3 },
+          )
+        controller.updateTapSlop(8f)
+        val driver = TestPanGestureDriver(shouldCatchTouch = scenario == 2)
+        val down = Offset(if (scenario == 1) 90f else 42f, 6f)
+        controller.onPointerDown(1L, down, 0L, touchPanDriver = driver)
+        controller.onPointerMove(1L, down + Offset(0f, 30f), 30L)
+        assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+        assertTrue(fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+        controller.cancel()
+      }
+    }
+
+  @Test
+  fun `ios selection handle drag keeps its anchor across collapsed publication`() =
+    runTest(StandardTestDispatcher()) {
+      for (fromHandle in listOf(true, false)) {
+        var selection =
+          Selection(
+            anchor = Position("text", 0, Affinity.Downstream),
+            head = Position("text", 5, Affinity.Downstream),
+          )
+        val anchor = if (fromHandle) selection.head else selection.anchor
+        var endpoints: SelectionEndpoints? =
+          SelectionEndpoints(
+            from = PageRect(pageIdx = 0, rect = Rect(x = 10f, y = 20f, width = 0f, height = 8f)),
+            to = PageRect(pageIdx = 0, rect = Rect(x = 70f, y = 20f, width = 0f, height = 8f)),
+            fromPosition = selection.anchor,
+            toPosition = selection.head,
+          )
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { selection },
+            selectionEndpointsProvider = { endpoints },
+            onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.iOS },
+          )
+        val down = Offset(if (fromHandle) 10f else 70f, 24f)
+        val collapsedPoint = Offset(if (fromHandle) 70f else 10f, 24f)
+
+        assertTrue(controller.pointerDownOnSelectionHandle(down))
+        assertTrue(controller.moveSelectionHandlePointer(collapsedPoint))
+        val collapse = (fake.enqueued.last() as Message.Selection).op as SelectionOp.ExtendTo
+        assertTrue(collapse.allowCollapse)
+        assertEquals(anchor, collapse.anchor)
+
+        selection = Selection(anchor, anchor)
+        endpoints = null
+        fake.publishSnapshot(editor)
+        assertEquals(EditorInteractionMode.SelectionHandleDragging, controller.interactionMode)
+        assertTrue(editor.imeNotificationsPaused)
+        assertTrue(host.scrollGestureLockActive)
+
+        val crossedPoint = collapsedPoint + Offset(if (fromHandle) 15f else -15f, 0f)
+        assertTrue(controller.moveSelectionHandlePointer(crossedPoint))
+        val crossed = (fake.enqueued.last() as Message.Selection).op as SelectionOp.ExtendTo
+        assertEquals(anchor, crossed.anchor)
+        assertEquals(crossedPoint.x, crossed.headX)
+        assertTrue(crossed.allowCollapse)
+
+        assertTrue(controller.moveSelectionHandlePointer(collapsedPoint))
+        assertTrue(controller.upSelectionHandlePointer())
+        advanceUntilIdle()
+        controller.presentAppliedState(editor)
+        assertEquals(Selection(anchor, anchor), editor.publishedState.selection)
+        assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+        assertFalse(editor.imeNotificationsPaused)
+        assertFalse(host.scrollGestureLockActive)
+        assertNull(controller.magnifierPosition)
+        assertFalse(host.uiState.contextMenu.visible)
+      }
+    }
+
+  @Test
   fun `from selection handle drag extends selection from to endpoint anchor`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -5175,6 +5374,7 @@ class EditorInteractionControllerTest {
     var launchInteractionCount = 0
     var focused = false
     var softwareKeyboardRequestCount = 0
+    var selectionHapticCount = 0
     val uiState = EditorUiState()
     var scrollGestureLockActive = false
     var point: PagePoint? = PagePoint(page = 0, x = 10f, y = 20f)
@@ -5291,7 +5491,9 @@ class EditorInteractionControllerTest {
       scrollGestureLockActive = locked
     }
 
-    override fun performSelectionHaptic() = Unit
+    override fun performSelectionHaptic() {
+      selectionHapticCount += 1
+    }
 
     override fun requestPointerSelectionHead(version: Long) {
       requestedBringIntoViewVersions += version
