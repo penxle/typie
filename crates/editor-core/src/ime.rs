@@ -1,3 +1,4 @@
+use editor_common::Rect;
 use editor_macros::ffi;
 use editor_state::{Position, ResolvedPosition, ResolvedPositionFlatExt, Selection};
 use serde::{Deserialize, Serialize};
@@ -202,7 +203,7 @@ impl Editor {
         }))
     }
 
-    /// First visual line of a flat character range, or the caret for an empty range.
+    /// First visual line of a flat character range, or a zero-width caret rect for an empty range.
     /// The revision must match the layout whose text offsets the caller is using.
     pub fn first_rect_for_range(
         &self,
@@ -225,7 +226,10 @@ impl Editor {
                 .filter(|head| head.resolve(&doc).is_some_and(|p| p.to_flat() == start))
                 .unwrap_or(from);
             let cursor = self.view().cursor_metrics(state, &from)?;
-            return Some(editor_view::PageRect::new(cursor.page_idx, cursor.caret));
+            return Some(editor_view::PageRect::new(
+                cursor.page_idx,
+                Rect::from_xywh(cursor.caret.x, cursor.caret.y, 0.0, cursor.caret.height),
+            ));
         }
         let selection = Selection::new(from, to).resolve(&doc)?;
         self.view()
@@ -811,7 +815,11 @@ mod tests {
             let actual = editor
                 .first_rect_for_range(editor.revision(), flat, flat)
                 .unwrap();
-            assert_eq!(actual.rect, up.caret);
+            assert_eq!(actual.page_idx, up.page_idx);
+            assert_eq!(actual.rect.x, up.caret.x);
+            assert_eq!(actual.rect.y, up.caret.y);
+            assert_eq!(actual.rect.width, 0.0);
+            assert_eq!(actual.rect.height, up.caret.height);
             return;
         }
         panic!("fixture must contain a soft wrap");
@@ -831,6 +839,8 @@ mod tests {
         assert_eq!(range.rect.x, start.rect.x);
         assert_eq!(range.rect.right(), end.rect.x);
         assert!(range.rect.height > 1.0);
+        assert_eq!(start.rect.width, 0.0);
+        assert_eq!(end.rect.width, 0.0);
         assert!(start.rect.x < end.rect.x);
         editor.apply(Message::Selection {
             op: crate::SelectionOp::SetFlat { start: 2, end: 2 },

@@ -16,6 +16,7 @@
   const visible = $derived(
     !!editor && isCaretVisible({ hasCursor: !!cursor, hasPoint: !!point, focused: editor.focused, readOnly: editor.readOnly }),
   );
+  const displayZoom = $derived(editor?.safeDisplayZoom() ?? 1);
 
   const resetAnimation = () => {
     for (const a of element?.getAnimations() ?? []) {
@@ -46,6 +47,7 @@
   $effect(() => {
     if (!editor || !element) return;
     void cursor;
+    void editor.publishedRevision;
     resetAnimation();
   });
 </script>
@@ -54,7 +56,7 @@
   bind:this={element}
   style:left={`${point?.x ?? -9999}px`}
   style:top={`${point?.y ?? -9999}px`}
-  style:width={`${cursor?.caret.width ?? 1}px`}
+  style:width={`${1 / displayZoom}px`}
   style:height={`${cursor?.caret.height ?? 0}px`}
   style:visibility={visible ? 'visible' : 'hidden'}
   class={css({

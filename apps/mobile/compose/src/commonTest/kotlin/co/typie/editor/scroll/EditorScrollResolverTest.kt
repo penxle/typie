@@ -5,6 +5,7 @@ import co.typie.editor.EditorState
 import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CaretMetrics as FfiCaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -30,7 +31,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 580f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 580f, 20f),
                 line = FfiRect(0f, 580f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 620f)),
@@ -57,7 +58,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 580f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 580f, 20f),
                 line = FfiRect(0f, 580f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 620f)),
@@ -85,7 +86,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 580f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 580f, 20f),
                 line = FfiRect(0f, 580f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 620f)),
@@ -114,7 +115,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 1,
-                caret = FfiRect(0f, 100f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 100f, 20f),
                 line = FfiRect(0f, 100f, 0f, 20f),
               ),
             pageSizes =
@@ -143,7 +144,7 @@ class EditorScrollResolverTest {
               cursor =
                 CursorMetrics(
                   pageIdx = 1,
-                  caret = FfiRect(0f, 100f, 0f, 20f),
+                  caret = FfiCaretMetrics(0f, 100f, 20f),
                   line = FfiRect(0f, 100f, 0f, 20f),
                 ),
               pageSizes =
@@ -174,7 +175,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 1,
-                caret = FfiRect(0f, 100f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 100f, 20f),
                 line = FfiRect(0f, 100f, 0f, 20f),
               ),
             pageSizes =
@@ -203,7 +204,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 1,
-                caret = FfiRect(0f, 280f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 280f, 20f),
                 line = FfiRect(0f, 280f, 0f, 20f),
               ),
             pageSizes =
@@ -234,7 +235,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 20f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 20f, 20f),
                 line = FfiRect(0f, 20f, 0f, 20f),
               ),
             selection = Selection(anchor = anchor, head = head),
@@ -266,7 +267,7 @@ class EditorScrollResolverTest {
     val cursor =
       CursorMetrics(
         pageIdx = 0,
-        caret = FfiRect(0f, 500f, 0f, 20f),
+        caret = FfiCaretMetrics(0f, 500f, 20f),
         line = FfiRect(0f, 500f, 0f, 20f),
       )
     val collapsedState =
@@ -291,7 +292,7 @@ class EditorScrollResolverTest {
         cursor =
           CursorMetrics(
             pageIdx = 0,
-            caret = FfiRect(0f, 500f, 0f, 20f),
+            caret = FfiCaretMetrics(0f, 500f, 20f),
             line = FfiRect(0f, 500f, 0f, 20f),
           ),
         pageSizes = listOf(PageSize(width = 300f, height = 900f)),
@@ -349,7 +350,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 500f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 500f, 20f),
                 line = FfiRect(0f, 500f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 900f)),
@@ -389,7 +390,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 250f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 250f, 20f),
                 line = FfiRect(0f, 250f, 0f, 20f),
               ),
             pageSizes = listOf(PageSize(width = 300f, height = 900f)),
@@ -496,7 +497,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = 0,
-                caret = FfiRect(0f, 580f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 580f, 20f),
                 line = FfiRect(0f, 580f, 0f, 20f),
               ),
             selection = null,
@@ -648,7 +649,7 @@ class EditorScrollResolverTest {
             cursor =
               CursorMetrics(
                 pageIdx = pageSizes.lastIndex,
-                caret = FfiRect(0f, 580f, 0f, 20f),
+                caret = FfiCaretMetrics(0f, 580f, 20f),
                 line = FfiRect(0f, 580f, 0f, 20f),
               ),
             pageSizes = pageSizes,

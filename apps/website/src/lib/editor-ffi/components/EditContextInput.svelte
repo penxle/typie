@@ -3,7 +3,7 @@
   import { Toast } from '@typie/ui/notification';
   import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
-  import { pageRectToClientRect } from '../geometry';
+  import { caretPageRect, pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
   import { deferPasteShortcutDuringComposition, handleCopy, handleCut, handlePaste, requestPaste } from '../handlers/clipboard';
   import { handleKeyDown } from '../handlers/keyboard';
@@ -42,7 +42,7 @@
   const inputRect = $derived.by(() => {
     void viewportOverlay.change;
     if (!editor || editor.terminal || !editor.cursor) return null;
-    return pageRectToClientRect(editor, { page_idx: editor.cursor.page_idx, rect: editor.cursor.caret });
+    return pageRectToClientRect(editor, caretPageRect(editor.cursor));
   });
 
   const syncGeometry = () => {

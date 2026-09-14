@@ -6,7 +6,7 @@ import { page } from 'vitest/browser';
 import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
-import { isSelectionCollapsed, pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
+import { caretPageRect, isSelectionCollapsed, pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
 import { computeSelectionHandleVisual } from './gesture.svelte';
 import { defaultPaginatedLayout, setRootLayoutMode } from './root-attrs';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
@@ -2379,7 +2379,7 @@ describe('web editor frame synchronization', () => {
     await expect
       .poll(() => {
         const current = editor.published?.snapshot.cursor;
-        const expected = current && pageRectToClientRect(editor, { page_idx: current.page_idx, rect: current.caret });
+        const expected = current && pageRectToClientRect(editor, caretPageRect(current));
         return expected && input
           ? Math.abs(Number.parseFloat(input.style.left) - expected.left) <= 0.5 &&
               Math.abs(Number.parseFloat(input.style.top) - expected.top) <= 0.5
@@ -2389,6 +2389,26 @@ describe('web editor frame synchronization', () => {
 
     const screenshot = await page.screenshot({ element: scrollRoot, save: false });
     expect(screenshot.startsWith('iVBOR')).toBe(true);
+  });
+
+  it('keeps the caret one CSS pixel wide across document zoom', async () => {
+    const { editor } = await mountEditor(doc('caret zoom'), { displayZoom: 2 });
+    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+    await waitForPresentation(editor);
+    editor.focus();
+    await tick();
+
+    const caret = document.querySelector<HTMLElement>('[data-editor-caret]');
+    expect(caret).not.toBeNull();
+    await expect.poll(() => caret?.parentElement === editor.pageEls[0]).toBe(true);
+    expect(editor.safeDisplayZoom()).toBe(2);
+    expect(editor.pageEls[0]?.style.transform).toBe('scale(2)');
+    expect(Number.parseFloat(caret?.style.width ?? '') * editor.safeDisplayZoom()).toBeCloseTo(1);
+    await expect.poll(() => caret?.getBoundingClientRect().width).toBeCloseTo(1);
+
+    await setDisplayZoom(editor, 0.5);
+    expect(Number.parseFloat(caret?.style.width ?? '') * editor.safeDisplayZoom()).toBeCloseTo(1);
+    await expect.poll(() => caret?.getBoundingClientRect().width).toBeCloseTo(1);
   });
 
   it('hides document overlays and interaction when the published cursor page has no frame', async () => {

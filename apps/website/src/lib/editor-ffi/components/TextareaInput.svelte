@@ -2,7 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { Toast } from '@typie/ui/notification';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { pageRectToClientRect } from '../geometry';
+  import { caretPageRect, pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
   import { deferPasteShortcutDuringComposition, handleCopy, handleCut, handlePaste, requestPaste } from '../handlers/clipboard';
   import { handleKeyDown } from '../handlers/keyboard';
@@ -65,7 +65,7 @@
     const cursor = editor?.cursor;
     if (!cursor) return null;
 
-    const rect = pageRectToClientRect(editor, { page_idx: cursor.page_idx, rect: cursor.caret });
+    const rect = pageRectToClientRect(editor, caretPageRect(cursor));
     if (!rect) return null;
 
     return {

@@ -2,6 +2,7 @@ package co.typie.editor.runtime
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import co.typie.editor.ffi.CaretMetrics as FfiCaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Size
@@ -134,7 +135,7 @@ class EditorUiStateTest {
       state.cursorRectInRoot(
         CursorMetrics(
           pageIdx = 2,
-          caret = FfiRect(x = 10f, y = 20f, width = 1f, height = 18f),
+          caret = FfiCaretMetrics(x = 10f, y = 20f, height = 18f),
           line = FfiRect(x = 0f, y = 18f, width = 100f, height = 20f),
         )
       )
@@ -142,7 +143,7 @@ class EditorUiStateTest {
     assertNotNull(rect)
     assertEquals(230f, rect.left)
     assertEquals(360f, rect.top)
-    assertEquals(233f, rect.right)
+    assertEquals(230f, rect.right)
     assertEquals(414f, rect.bottom)
     assertEquals(Offset(200f, -600f), state.unclippedTextOffsetInRoot())
 
@@ -164,7 +165,7 @@ class EditorUiStateTest {
       state.cursorRectInRoot(
         CursorMetrics(
           pageIdx = 0,
-          caret = FfiRect(x = 0f, y = 0f, width = 1f, height = 18f),
+          caret = FfiCaretMetrics(x = 0f, y = 0f, height = 18f),
           line = FfiRect(x = 0f, y = 0f, width = 100f, height = 20f),
         )
       )

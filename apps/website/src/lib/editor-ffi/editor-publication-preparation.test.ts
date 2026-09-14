@@ -34,7 +34,7 @@ describe('editor publication preparation', () => {
     const candidate = snapshot({
       cursor: {
         page_idx: 0,
-        caret: { x: 100, y: caretY, width: 1, height: 20 },
+        caret: { x: 100, y: caretY, height: 20 },
         line: { x: 100, y: caretY, width: 1, height: 20 },
       },
       pageSizes: [{ width: 640, height: 10_000 }],

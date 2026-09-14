@@ -16,7 +16,7 @@ pub(crate) mod selection;
 pub(crate) mod viewport_anchor;
 pub(crate) mod visit;
 
-pub use cursor::CursorMetrics;
+pub use cursor::{CaretMetrics, CursorMetrics};
 pub use hit_test::{ExtendingHit, ExtendingHitSource};
 pub use placeholder::PlaceholderMetrics;
 pub use pointer_style::PointerStyle;

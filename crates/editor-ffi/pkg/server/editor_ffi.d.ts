@@ -154,6 +154,12 @@ export interface CapturedViewportAnchor {
     geometry: ResolvedViewportAnchor;
 }
 
+export interface CaretMetrics {
+    x: number;
+    y: number;
+    height: number;
+}
+
 export interface ChangesetEntry {
     id: string;
     bytes: Uint8Array;
@@ -199,7 +205,7 @@ export interface ConsolidateResult {
 
 export interface CursorMetrics {
     page_idx: number;
-    caret: Rect;
+    caret: CaretMetrics;
     line: Rect;
 }
 

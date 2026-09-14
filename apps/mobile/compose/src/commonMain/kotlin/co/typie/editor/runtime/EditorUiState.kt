@@ -108,7 +108,10 @@ class EditorUiState {
   internal fun unclippedTextOffsetInRoot(): Offset? = pagePositionsInRoot[0]?.position
 
   fun cursorRectInRoot(cursor: CursorMetrics?): Rect? = cursor?.let {
-    pageRectInRoot(it.pageIdx, it.caret)
+    pageRectInRoot(
+      it.pageIdx,
+      FfiRect(x = it.caret.x, y = it.caret.y, width = 0f, height = it.caret.height),
+    )
   }
 
   internal fun pageRectInRoot(page: Int, rect: FfiRect): Rect? {

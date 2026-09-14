@@ -274,6 +274,7 @@ internal fun EditorView(
                     cursor = pageCursor,
                     focused = uiState.focused,
                     displayZoom = displayZoom,
+                    revision = publishedVersion,
                   )
                 }
               },

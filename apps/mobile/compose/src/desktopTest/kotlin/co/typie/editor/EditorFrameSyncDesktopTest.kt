@@ -1401,10 +1401,7 @@ class EditorFrameSyncDesktopTest {
     val expectedHighlightY = rootBounds.top + highlightDocumentY - presentation.scrollY
     val pixels = image.toPixelMap()
     val pageLeft = (pixels.width - presentation.snapshot.pageSizes[cursor.pageIdx].width) / 2f
-    val cursorX =
-      (pageLeft + cursor.caret.x + cursor.caret.width / 2f)
-        .roundToInt()
-        .coerceIn(0, pixels.width - 1)
+    val cursorX = (pageLeft + cursor.caret.x).roundToInt().coerceIn(0, pixels.width - 1)
     val highlightX = (pageLeft + HighlightSampleInset).roundToInt().coerceIn(0, pixels.width - 1)
     val actualCursorY =
       ((cursorX - CursorScanRadius).coerceAtLeast(0)..(cursorX + CursorScanRadius).coerceAtMost(
