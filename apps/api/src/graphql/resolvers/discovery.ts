@@ -5,6 +5,7 @@ import { getAllDiscoveryTags, getDiscoveryTags } from '#/utils/discovery.ts';
 import {
   buildDiscoverablePublicationsByIdsQuery,
   buildDiscoverableSpacesByIdsQuery,
+  buildDiscoveryFeedQuery,
   buildDiscoveryPublicationsQuery,
   buildDiscoveryRecentPublicationsQuery,
   buildDiscoveryTagCountsQuery,
@@ -111,6 +112,18 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
         after: t.arg.id({ required: false, validate: validateDbId(TableCode.PUBLICATIONS) }),
       },
       resolve: async (_, args) => await loadPage({ first: args.first, after: args.after }),
+    }),
+    feed: t.field({
+      type: SpacePublicationsPage,
+      args: {
+        first: t.arg.int({ required: false }),
+        after: t.arg.id({ required: false, validate: validateDbId(TableCode.PUBLICATIONS) }),
+      },
+      resolve: async (_, args) => {
+        const limit = clampPageSize(args.first);
+        const rows = await buildDiscoveryFeedQuery(db, { after: args.after ?? null, limit: limit + 1 });
+        return toPublicationsPage(rows, limit);
+      },
     }),
     tags: t.field({
       type: [DiscoveryTag],

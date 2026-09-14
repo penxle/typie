@@ -402,6 +402,7 @@ type DiscoveryTag {
 
 type DiscoveryView {
   allTags: [DiscoveryTag!]!
+  feed(after: ID, first: Int): SpacePublicationsPage!
   publications(after: ID, first: Int): SpacePublicationsPage!
   recentCollections(first: Int! = 4): [DiscoveryRecentCollection!]!
   recentSpaces(first: Int! = 5): [DiscoveryRecentSpace!]!

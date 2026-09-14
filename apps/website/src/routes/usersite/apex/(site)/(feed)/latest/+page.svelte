@@ -13,4 +13,4 @@
 <Helmet title="최신 글" />
 
 <DiscoveryPageHead title="최신 글" />
-<DiscoveryCardList initialHasMore={publications.hasMore} publications={publications.publications} />
+<DiscoveryCardList initialHasMore={publications.hasMore} publications={publications.publications} source={{ kind: 'publications' }} />
