@@ -24,7 +24,7 @@ use crate::block_state::BlockState;
 use crate::dnd::DndState;
 use crate::error::EditorError;
 use crate::event::{EditorEvent, FontData};
-use crate::handle;
+use crate::handle::{self, AutoReplacement};
 use crate::ime::ImeWindowAnchor;
 use crate::message::*;
 use crate::recent_edits::{
@@ -315,6 +315,7 @@ pub struct Editor {
     pub(crate) state: State,
     pub(crate) view: View,
     pub(crate) undo_history: UndoHistory,
+    pub(crate) auto_replacement: Option<AutoReplacement>,
     pub(crate) renderer: Renderer,
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) tracked_ranges: TrackedRangeRegistry,
@@ -385,6 +386,7 @@ impl Editor {
             state,
             view: View::new(viewport, Arc::clone(&resource)),
             undo_history: UndoHistory::new(Duration::from_millis(300)),
+            auto_replacement: None,
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),
@@ -1873,7 +1875,12 @@ impl Editor {
         // pre-transaction view.
         let undoable = !recorded.is_empty() || transient_fields_changed(&self.state, &state);
         let merge = typing_run(meta.merge, &self.state, &state);
-
+        if undoable
+            || self.state.composition != state.composition
+            || self.state.pending_modifiers != state.pending_modifiers
+        {
+            self.auto_replacement = None;
+        }
         match meta.history {
             HistoryMeta::Skip if undoable => self.undo_history.invalidate_last_tag(),
             HistoryMeta::Skip => self.undo_history.clear_last_tag(),
@@ -1898,6 +1905,9 @@ impl Editor {
             _ => self.undo_history.clear_last_tag(),
         }
 
+        if undoable {
+            self.auto_replacement = AutoReplacement::from_history(&state, &self.undo_history);
+        }
         self.state = state;
         if !ops.is_empty() || prev_composition != self.state.composition {
             self.set_composition_target_ranges(Vec::new());
@@ -2070,6 +2080,7 @@ impl Editor {
         if would_change {
             self.focused = focused;
             if !focused {
+                self.auto_replacement = None;
                 self.composition_target_ranges.clear();
             }
             self.invalidate_render();
@@ -2267,25 +2278,21 @@ impl Editor {
     }
 
     pub(crate) fn try_undo(&mut self) -> bool {
+        self.auto_replacement = None;
         let current = capture_transient(&self.state);
         let result = self.undo_history.undo(self.state.projected_mut(), current);
         self.apply_undo_result(result, true)
     }
 
     pub(crate) fn try_redo(&mut self) -> bool {
+        self.auto_replacement = None;
         let current = capture_transient(&self.state);
         let result = self.undo_history.redo(self.state.projected_mut(), current);
-        self.apply_undo_result(result, false)
-    }
-
-    pub(crate) fn try_undo_auto_replacement(&mut self) -> bool {
-        let is_auto = self
-            .last_history_tag()
-            .is_some_and(|t| matches!(t, HistoryTag::AutoReplacement));
-        if !is_auto {
-            return false;
+        let changed = self.apply_undo_result(result, false);
+        if changed {
+            self.auto_replacement = AutoReplacement::from_history(&self.state, &self.undo_history);
         }
-        self.try_undo()
+        changed
     }
 
     /// Apply a batch of remote changesets as a single unit. A sync burst enqueues
@@ -2313,6 +2320,7 @@ impl Editor {
         // `O(N)` `StableResolveCtx` rebuild + restore entirely. This is the duplicate
         // re-receive hot path (a sync burst re-delivering known changesets).
         if !applied_ops.is_empty() {
+            self.auto_replacement = None;
             next.selection = frozen.and_then(|f| {
                 let view = next.view();
                 let ctx =
@@ -2338,6 +2346,7 @@ impl Editor {
     }
 
     fn apply_set_doc(&mut self, plain: PlainDoc) -> Result<(), EditorError> {
+        self.auto_replacement = None;
         self.state = State::from_plain(&plain).map_err(|error| EditorError::General {
             msg: format!("{error:?}"),
         })?;
@@ -2627,6 +2636,7 @@ impl Editor {
             state,
             view: View::new_test(),
             undo_history: UndoHistory::new(Duration::from_millis(300)),
+            auto_replacement: None,
             renderer: Renderer::new(Arc::clone(&resource)),
             resource,
             tracked_ranges: TrackedRangeRegistry::new(),

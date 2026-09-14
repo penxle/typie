@@ -110,6 +110,59 @@ describe('EditContext input', () => {
     expect(editor.proseText()).toBe('😀a\n\nbX');
   });
 
+  it.each([' ', '.', '。', '/'])('replaces Korean text before the final composition separator %j', async (separator) => {
+    const host = await initWasm();
+    host.set_text_replacement_rules([{ id: 'laugh', matchPattern: 'ㅎㅎ', substitute: '웃음소리', regex: false }]);
+    const context = await mountEditor('ㅎ');
+    editor.updateNow(() => editor.enqueue({ type: 'selection', op: { type: 'set_flat', start: 2, end: 2 } }));
+    await tick();
+    context.dispatchEvent(new CompositionEvent('compositionstart'));
+    input(context, 2, 2, 'ㅎ');
+    // EditContext can report isComposing=false even while native preedit is active.
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: separator, isComposing: false, bubbles: true, cancelable: true }));
+    input(context, 2, 3, `ㅎ${separator}`);
+    context.dispatchEvent(new CompositionEvent('compositionend', { data: `ㅎ${separator}` }));
+    await tick();
+    expect(editor.proseText()).toBe(`웃음소리${separator}`);
+    expect(context.text).toBe(`\u{2028}웃음소리${separator}\u{2029}`);
+    await userEvent.keyboard('{Backspace}');
+    expect(editor.proseText()).toBe(separator === ' ' ? 'ㅎㅎ' : `ㅎㅎ${separator}`);
+  });
+
+  it.each([' ', '.', '👩‍💻'])('replaces native Korean composition ending in %j without a printable keydown', async (separator) => {
+    const host = await initWasm();
+    host.set_text_replacement_rules([{ id: 'laugh', matchPattern: 'ㅎㅎ', substitute: '웃음소리', regex: false }]);
+    const context = await mountEditor('ㅎ');
+    editor.updateNow(() => editor.enqueue({ type: 'selection', op: { type: 'set_flat', start: 2, end: 2 } }));
+    await tick();
+    const browser = cdp() as CDPSession;
+    await browser.send('Input.imeSetComposition', { text: 'ㅎ', selectionStart: 1, selectionEnd: 1 });
+    await browser.send('Input.insertText', { text: `ㅎ${separator}` });
+    await expect.poll(() => editor.ime(64, 64)?.composing).toBeUndefined();
+    expect(editor.proseText()).toBe(`웃음소리${separator}`);
+    expect(context.text).toBe(`\u{2028}웃음소리${separator}\u{2029}`);
+    await userEvent.keyboard('{Backspace}');
+    expect(editor.proseText()).toBe(separator === ' ' ? 'ㅎㅎ' : `ㅎㅎ${separator}`);
+  });
+
+  it.each([false, true])('keeps an appended key in preedit when composition continues (next update: %s)', async (nextUpdate) => {
+    const host = await initWasm();
+    host.set_text_replacement_rules([
+      { id: 'prefix', matchPattern: 'にほ', substitute: 'wrong', regex: false },
+      { id: 'complete', matchPattern: nextUpdate ? 'にほん' : 'にほn', substitute: 'complete', regex: false },
+    ]);
+    const context = await mountEditor();
+    context.dispatchEvent(new CompositionEvent('compositionstart'));
+    input(context, 1, 1, 'にほ');
+    editor.inputEl?.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true }));
+    input(context, 1, 3, 'にほn');
+    if (nextUpdate) input(context, 1, 4, 'にほん');
+    await expect.poll(() => editor.proseText()).toBe(nextUpdate ? 'にほん' : 'にほn');
+    context.dispatchEvent(new CompositionEvent('compositionend'));
+    await tick();
+    expect(editor.proseText()).toBe('complete');
+  });
+
   it('keeps the active Japanese clause and updates its decoration without changing text', async () => {
     const context = await mountEditor();
     context.dispatchEvent(new CompositionEvent('compositionstart'));

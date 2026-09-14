@@ -30,8 +30,6 @@ const createImeHarness = (initialContext: ImeContext) => {
     compositionStart: (data = '') => adapter.handleCompositionStart(compositionEvent(input, data)),
     compositionUpdate: (data: string) => adapter.handleCompositionUpdate(compositionEvent(input, data)),
     compositionEnd: () => adapter.handleCompositionEnd(),
-    composingKeyDown: (key: string) =>
-      adapter.handleKeyDown({ key, isComposing: true, ctrlKey: false, metaKey: false, altKey: false } as KeyboardEvent),
     beforeCompositionInput: (text: string) => adapter.handleBeforeInput(beforeInputEvent(input, 'insertCompositionText', text)),
     beforeTextInput: (text: string) => {
       const event = beforeInputEvent(input, 'insertText', text);
@@ -1210,7 +1208,7 @@ describe('ImeInputAdapter', () => {
     ]);
   });
 
-  it('inserts an appended composition key at the caret produced by commit', () => {
+  it('passes the final preedit and separator to the core before committing', () => {
     const ime = createImeHarness(context('ㅠ'));
 
     ime.syncFromEditor();
@@ -1218,7 +1216,6 @@ describe('ImeInputAdapter', () => {
     ime.beforeCompositionInput('ㅠ');
     ime.applyNativeInput('ㅠㅠ', 2);
 
-    ime.composingKeyDown(' ');
     ime.compositionUpdate('ㅠ ');
     ime.beforeCompositionInput('ㅠ ');
     ime.applyNativeInput('ㅠㅠ ', 3);
@@ -1232,12 +1229,18 @@ describe('ImeInputAdapter', () => {
           { type: 'compose', text: 'ㅠ' },
         ],
       },
+      {
+        type: 'text_input',
+        ops: [
+          { type: 'set_composition', start: 21, end: 22 },
+          { type: 'compose', text: 'ㅠ ' },
+        ],
+      },
       { type: 'text_input', ops: [{ type: 'commit_as_is' }] },
-      { type: 'text_input', ops: [{ type: 'replace_selection', text: ' ' }] },
     ]);
   });
 
-  it('applies an appended composition key when the composition continues', async () => {
+  it('applies an appended composition key immediately while composition continues', () => {
     const ime = createImeHarness(context(''));
 
     ime.syncFromEditor();
@@ -1245,12 +1248,9 @@ describe('ImeInputAdapter', () => {
     ime.beforeCompositionInput('にほ');
     ime.applyNativeInput('にほ', 2);
 
-    ime.composingKeyDown('n');
     ime.compositionUpdate('にほn');
     ime.beforeCompositionInput('にほn');
     ime.applyNativeInput('にほn', 3);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(ime.messages).toEqual([
       {

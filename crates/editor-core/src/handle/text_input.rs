@@ -3,7 +3,6 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use editor_commands::{self as commands, CommandError, CommandResult};
-use editor_common::HistoryTag;
 use editor_model::{DocView, Modifier, ModifierType};
 use editor_state::{
     Affinity, Composition, FLAT_CLOSE, FLAT_OPEN, FlatSegment, Position, ProjectedState,
@@ -16,6 +15,10 @@ use editor_transaction::{HistoryMeta, MergeKind, Transaction};
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::handle::paragraph_break::apply_paragraph_break;
+use crate::handle::text_replacement::{
+    finish_auto_replacement_separator, take_auto_replacement_for_text, trailing_input_separator,
+    try_undo_auto_replacement,
+};
 use crate::message::*;
 
 mod coordinates;
@@ -890,7 +893,13 @@ fn flat_ime_ops_form_plain_backspace(editor: &Editor, ops: &[FlatImeOp]) -> bool
         .iter()
         .any(|c| is_token(*c))
     {
-        return false;
+        // Android can delete only the opening token at a paragraph start.
+        // The remembered separator tells us this is the Enter just typed.
+        return change.deleted_from(&initial.text) == [FLAT_OPEN]
+            && editor
+                .auto_replacement
+                .as_ref()
+                .is_some_and(|r| r.ends_with_paragraph_break());
     }
     let doc = editor.state().view();
     let Some(caret) = ResolvedPosition::from_flat(&doc, initial.sel_end) else {
@@ -914,8 +923,48 @@ fn flat_ime_ops_have_direct_backspace_shape(ops: &[FlatImeOp]) -> bool {
 }
 
 pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(), EditorError> {
+    let mut input = if ops.iter().any(|op| matches!(op, FlatImeOp::CommitAsIs))
+        && !editor
+            .resource
+            .lock()
+            .unwrap()
+            .text_replacement_rules()
+            .is_empty()
+    {
+        FlatImeState::from_editor(editor, &ops)
+    } else {
+        None
+    };
     let mut normalized = Vec::with_capacity(ops.len());
     for op in ops {
+        if let Some(input) = &mut input
+            && matches!(op, FlatImeOp::CommitAsIs)
+            && input.has_valid_composition()
+            && let Some((start, end)) = input.comp
+            && input.sel_start == end
+            && input.sel_end == end
+        {
+            let text: String = input.text.slice(start..end).iter().collect();
+            let resource = editor.resource.lock().unwrap();
+            if let Some(separator) = trailing_input_separator(&text, &resource)
+                && separator.len() < text.len()
+            {
+                // A native IME can commit the preedit and its terminating
+                // separator together. Preserve the same replacement boundary
+                // as CommitAsIs followed by a separate text insertion. The
+                // virtual input stays unchanged, including later coordinates.
+                normalized.push(FlatImeOp::Compose {
+                    text: text[..text.len() - separator.len()].into(),
+                });
+                normalized.push(FlatImeOp::CommitAsIs);
+                normalized.push(FlatImeOp::ReplaceSelection {
+                    text: separator.into(),
+                });
+                input.apply(&op);
+                continue;
+            }
+        }
+        let normalized_start = normalized.len();
         // Delete after first so the before count retains its original base.
         // Two disjoint sides must never become a replacement of the selection.
         match op {
@@ -928,6 +977,11 @@ pub fn handle_flat_ime_ops(editor: &mut Editor, ops: Vec<FlatImeOp>) -> Result<(
                 normalized.push(FlatImeOp::DeleteSurroundingUtf16 { before, after: 0 });
             }
             _ => normalized.push(op),
+        }
+        if let Some(input) = &mut input {
+            for op in &normalized[normalized_start..] {
+                input.apply(op);
+            }
         }
     }
     let mut ops = normalized;
@@ -965,10 +1019,7 @@ fn handle_flat_ime_segment(
     let plain_backspace = flat_ime_ops_form_plain_backspace(editor, ops);
     let standalone_backspace = plain_backspace && flat_ime_ops_have_direct_backspace_shape(ops);
 
-    if matches!(editor.last_history_tag(), Some(HistoryTag::AutoReplacement))
-        && plain_backspace
-        && editor.try_undo_auto_replacement()
-    {
+    if plain_backspace && try_undo_auto_replacement(editor)? {
         if !editor.state().pending_modifiers.is_empty() {
             editor.transact(|tr| {
                 tr.update_meta(|m| m.history = HistoryMeta::Skip);
@@ -981,6 +1032,7 @@ fn handle_flat_ime_segment(
 
     let mut committed_composition_end = None;
     let mut tail_coordinates = None;
+    let mut separator_replacement = None;
     let committed_insert = (|| -> Result<bool, EditorError> {
         let reach: Vec<_> = ops.iter().chain(tail.iter()).cloned().collect();
         let initial = match FlatImeState::from_editor(editor, &reach) {
@@ -1028,6 +1080,17 @@ fn handle_flat_ime_segment(
         let Some(text_change) = reduced.text_change else {
             return Ok(false);
         };
+        if initial.comp.is_none()
+            && result.comp.is_none()
+            && initial.sel_start == initial.sel_end
+            && text_change.replace_start == initial.sel_end
+            && text_change.replace_end == initial.sel_end
+            && result.sel_start == result.sel_end
+            && result.sel_end == initial.sel_end + text_change.insert.len()
+        {
+            let text: String = text_change.insert.iter().collect();
+            separator_replacement = take_auto_replacement_for_text(editor, &text);
+        }
         let del = text_change.deleted_from(&initial.text);
 
         let del_opens = count_opens(del);
@@ -1341,6 +1404,7 @@ fn handle_flat_ime_segment(
         Ok(!text_change.insert.is_empty() && result.comp.is_none())
     })()?;
 
+    finish_auto_replacement_separator(editor, separator_replacement);
     if committed_composition_end.is_some() || committed_insert {
         let resource = Arc::clone(&editor.resource);
         let resource = resource.lock().unwrap();

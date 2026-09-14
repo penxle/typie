@@ -15,6 +15,7 @@ mod remote;
 mod selection;
 mod system;
 mod text_input;
+mod text_replacement;
 mod tracked_range;
 mod view;
 
@@ -38,5 +39,6 @@ pub use node::handle_node_op;
 pub use selection::handle_selection_op;
 pub use system::handle_system_event;
 pub use text_input::handle_flat_ime_ops;
+pub(crate) use text_replacement::AutoReplacement;
 pub use tracked_range::handle_tracked_range_op;
 pub use view::handle_view_op;
