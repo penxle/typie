@@ -1156,40 +1156,540 @@ fn commit_barrier_replaces_before_later_op_in_same_text_input() {
 
 #[test]
 fn commit_barrier_matches_split_delivery_including_undo() {
-    let (s, ..) = state! {
-        doc { root { p1: paragraph { text("") } } }
-        selection: (p1, 0)
-    };
-    let rules = vec![rule("ㅠㅠ", "하하하", false)];
-    let mut batched = editor_with_rules(s.clone(), rules.clone());
-    let mut split = editor_with_rules(s, rules);
+    for pattern in ["ㅠㅠ", "ㅠㅠ ", "unmatched"] {
+        let (s, ..) = state! {
+            doc { root { p1: paragraph { text("") } } }
+            selection: (p1, 0)
+        };
+        let rules = vec![rule(pattern, "하하하", false)];
+        let mut split = editor_with_rules(s.clone(), rules.clone());
+        let mut batched = editor_with_rules(s.clone(), rules.clone());
+        let mut combined = editor_with_rules(s, rules);
 
-    for editor in [&mut batched, &mut split] {
-        type_text(editor, "ㅠ");
-        editor.apply(Message::TextInput {
-            ops: vec![FlatImeOp::Compose { text: "ㅠ".into() }],
+        for editor in [&mut split, &mut batched, &mut combined] {
+            type_text(editor, "ㅠ");
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::Compose { text: "ㅠ".into() }],
+            });
+        }
+        split.apply(Message::TextInput {
+            ops: vec![FlatImeOp::CommitAsIs],
         });
+        split.apply(Message::TextInput {
+            ops: vec![FlatImeOp::ReplaceSelection { text: " ".into() }],
+        });
+        batched.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::ReplaceSelection { text: " ".into() },
+            ],
+        });
+        combined.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose {
+                    text: "ㅠ ".into()
+                },
+                FlatImeOp::CommitAsIs,
+            ],
+        });
+
+        assert_state_eq!(batched.state(), split.state());
+        assert_state_eq!(combined.state(), split.state());
+        for undo in [true, true, true, true, false, false, false, false] {
+            for editor in [&mut split, &mut batched, &mut combined] {
+                editor.apply(Message::History {
+                    op: if undo {
+                        HistoryOp::Undo
+                    } else {
+                        HistoryOp::Redo
+                    },
+                });
+            }
+            assert_state_eq!(batched.state(), split.state());
+            assert_state_eq!(combined.state(), split.state());
+        }
     }
-    batched.apply(Message::TextInput {
+}
+
+#[test]
+fn backspace_after_commit_separator_restores_replacement_in_split_and_batched_ime_input() {
+    for (separator, restored, offset) in [
+        (" ", "ㅎㅎ", 2),
+        (".", "ㅎㅎ.", 3),
+        ("。", "ㅎㅎ。", 3),
+        ("!", "ㅎㅎ!", 3),
+        ("\t", "ㅎㅎ\t", 3),
+        ("🙂", "ㅎㅎ🙂", 3),
+        ("👩‍💻", "ㅎㅎ👩‍💻", 5),
+    ] {
+        for delivery in 0..4 {
+            for backspace in 0..4 {
+                let (initial, ..) = state! {
+                    doc { root { p: paragraph {} } }
+                    selection: (p, 0)
+                };
+                let mut editor = editor_with_rules(initial, vec![rule("ㅎㅎ", "웃음소리", false)]);
+                type_text(&mut editor, "ㅎ");
+                editor.apply(Message::TextInput {
+                    ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+                });
+                let commit = FlatImeOp::CommitAsIs;
+                let insert = FlatImeOp::ReplaceSelection {
+                    text: separator.into(),
+                };
+                match delivery {
+                    0 => {
+                        editor.apply(Message::TextInput { ops: vec![commit] });
+                        editor.apply(Message::TextInput { ops: vec![insert] });
+                    }
+                    1 => {
+                        editor.apply(Message::TextInput {
+                            ops: vec![commit, insert],
+                        });
+                    }
+                    2 => {
+                        editor.apply(Message::TextInput {
+                            ops: vec![
+                                FlatImeOp::Compose {
+                                    text: format!("ㅎ{separator}"),
+                                },
+                                commit,
+                            ],
+                        });
+                    }
+                    _ => {
+                        editor.apply(Message::TextInput {
+                            ops: vec![FlatImeOp::Compose {
+                                text: format!("ㅎ{separator}"),
+                            }],
+                        });
+                        editor.apply(Message::TextInput { ops: vec![commit] });
+                    }
+                }
+                assert_eq!(
+                    flat_text(&editor),
+                    format!("\u{2028}웃음소리{separator}\u{2029}")
+                );
+                let before_cancel = editor.state().clone();
+                match backspace {
+                    0 => key(&mut editor, Key::Backspace),
+                    1 => {
+                        editor.apply(Message::TextInput {
+                            ops: vec![FlatImeOp::DeleteSurrounding {
+                                before: separator.chars().count(),
+                                after: 0,
+                            }],
+                        });
+                    }
+                    2 => {
+                        editor.apply(Message::TextInput {
+                            ops: vec![FlatImeOp::DeleteSurroundingUtf16 {
+                                before: separator.encode_utf16().count(),
+                                after: 0,
+                            }],
+                        });
+                    }
+                    _ => {
+                        let caret = caret_flat(&editor);
+                        editor.apply(Message::TextInput {
+                            ops: vec![
+                                FlatImeOp::SetSelection {
+                                    start: caret - separator.chars().count(),
+                                    end: caret,
+                                },
+                                FlatImeOp::ReplaceSelection {
+                                    text: String::new(),
+                                },
+                            ],
+                        });
+                    }
+                }
+                assert_eq!(flat_text(&editor), format!("\u{2028}{restored}\u{2029}"));
+                assert_eq!(caret_flat(&editor), offset + 1);
+                let expected = editor.state().clone();
+                editor.apply(Message::History {
+                    op: HistoryOp::Undo,
+                });
+                assert_state_eq!(editor.state(), &before_cancel);
+                editor.apply(Message::History {
+                    op: HistoryOp::Redo,
+                });
+                assert_state_eq!(editor.state(), &expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn combined_commit_separator_remaps_following_native_selection_and_composition() {
+    for (separator, expected, caret) in [
+        (".", "\u{2028}웃음소리.가\u{2029}", 7),
+        ("\r\n", "\u{2028}웃음소리\u{2029}\u{2028}가\u{2029}", 8),
+    ] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ㅎ") } } }
+            selection: (p, 1)
+        };
+        let mut editor = editor_with_rules(initial, vec![rule("ㅎㅎ", "웃음소리", false)]);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        let native_caret = 3 + separator.chars().count();
+        editor.apply(Message::TextInput {
+            ops: vec![
+                FlatImeOp::Compose {
+                    text: format!("ㅎ{separator}"),
+                },
+                FlatImeOp::CommitAsIs,
+                FlatImeOp::SetSelection {
+                    start: native_caret,
+                    end: native_caret,
+                },
+                FlatImeOp::Compose { text: "가".into() },
+            ],
+        });
+        assert_eq!(flat_text(&editor), expected);
+        assert_eq!(caret_flat(&editor), caret);
+        assert!(editor.state().composition.is_some());
+    }
+}
+
+#[test]
+fn combined_commit_separator_uses_composition_after_two_sided_deletion() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph { text("앞A뒤ㅎ") } } }
+        selection: (p, 4)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("ㅎㅎ", "웃음소리", false)]);
+    editor.apply(Message::TextInput {
+        ops: vec![FlatImeOp::Compose {
+            text: "ㅎ.".into()
+        }],
+    });
+    editor.apply(Message::TextInput {
         ops: vec![
+            FlatImeOp::SetSelection { start: 2, end: 3 },
+            FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 1,
+            },
+            FlatImeOp::SetSelection { start: 5, end: 5 },
             FlatImeOp::CommitAsIs,
-            FlatImeOp::ReplaceSelection { text: " ".into() },
         ],
     });
-    split.apply(Message::TextInput {
-        ops: vec![FlatImeOp::CommitAsIs],
-    });
-    split.apply(Message::TextInput {
-        ops: vec![FlatImeOp::ReplaceSelection { text: " ".into() }],
-    });
+    assert_eq!(flat_text(&editor), "\u{2028}A웃음소리.\u{2029}");
+    key(&mut editor, Key::Backspace);
+    assert_eq!(flat_text(&editor), "\u{2028}Aㅎㅎ.\u{2029}");
+}
 
-    assert_state_eq!(batched.state(), split.state());
-    for editor in [&mut batched, &mut split] {
+#[test]
+fn backspace_after_replacement_paragraph_separator_preserves_paragraph_and_formatting() {
+    for ime in [false, true] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("a") [bold] text("b") [italic] } } }
+            selection: (p, 2)
+        };
+        let mut editor = editor_with_rules(initial, vec![rule("abc", "X\nY", false)]);
+        type_text(&mut editor, "c");
+        if ime {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "\n".into() }],
+            });
+        } else {
+            key(&mut editor, Key::Enter);
+        }
+        let before_cancel = editor.state().clone();
+        if ime {
+            editor.apply(Message::TextInput {
+                ops: vec![FlatImeOp::DeleteSurrounding {
+                    before: 1,
+                    after: 0,
+                }],
+            });
+        } else {
+            key(&mut editor, Key::Backspace);
+        }
+        let (expected, ..) = state! {
+            doc { root {
+                paragraph carry([italic]) { text("a") [bold] text("bc") [italic] }
+                p: paragraph carry([italic]) {}
+            } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &expected);
         editor.apply(Message::History {
             op: HistoryOp::Undo,
         });
+        assert_state_eq!(editor.state(), &before_cancel);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), &expected);
     }
-    assert_state_eq!(batched.state(), split.state());
+}
+
+#[test]
+fn replacement_cancellation_preserves_tab_and_line_break_across_input_routes() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph { text("ab") } } }
+        selection: (p, 2)
+    };
+    for separator in [
+        Message::Key {
+            event: KeyEvent {
+                key: Key::Tab,
+                modifiers: InputModifiers::default(),
+            },
+        },
+        Message::Insertion {
+            op: InsertionOp::Text { text: "\t".into() },
+        },
+        Message::Key {
+            event: KeyEvent {
+                key: Key::Enter,
+                modifiers: InputModifiers {
+                    shift: true,
+                    ..Default::default()
+                },
+            },
+        },
+        Message::Insertion {
+            op: InsertionOp::Break { kind: Break::Line },
+        },
+    ] {
+        let mut editor = editor_with_rules(initial.clone(), vec![rule("abc", "XYZ", false)]);
+        type_text(&mut editor, "c");
+        editor.apply(separator.clone());
+        let before_cancel = editor.state().clone();
+        key(&mut editor, Key::Backspace);
+
+        let mut expected = Editor::new_test(initial.clone());
+        type_text(&mut expected, "c");
+        expected.apply(separator);
+        assert_state_eq!(editor.state(), expected.state());
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_state_eq!(editor.state(), &before_cancel);
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_state_eq!(editor.state(), expected.state());
+    }
+}
+
+#[test]
+fn replacement_separator_cancel_expires_on_next_input_or_cursor_movement() {
+    for next in ["z", " ", ".", "가", "1", "\u{0301}"] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph {} } }
+            selection: (p, 0)
+        };
+        let mut editor = editor_with_rules(initial, vec![rule("abc", "XYZ", false)]);
+        type_text(&mut editor, "abc");
+        type_text(&mut editor, " ");
+        type_text(&mut editor, next);
+        key(&mut editor, Key::Backspace);
+        key(&mut editor, Key::Backspace);
+        assert!(
+            !flat_text(&editor).contains("abc"),
+            "new input {next:?} must expire cancellation"
+        );
+    }
+
+    let (initial, p) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("abc", "XYZ", false)]);
+    type_text(&mut editor, "abc");
+    type_text(&mut editor, ".");
+    for offset in [0, 4] {
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set {
+                selection: Selection::collapsed(Position::new(p, offset)),
+            },
+        });
+    }
+    key(&mut editor, Key::Backspace);
+    assert_eq!(flat_text(&editor), "\u{2028}XYZ\u{2029}");
+}
+
+#[test]
+fn replacement_cancellation_only_survives_enter_that_inserts_a_paragraph() {
+    let (list, ..) = state! {
+        doc { root { bullet_list { list_item { p: paragraph { text("ab") } } } } }
+        selection: (p, 2)
+    };
+    let (paragraph, ..) = state! {
+        doc { root { p: paragraph { text("ab") } } }
+        selection: (p, 2)
+    };
+    let (after_list_exit, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let (after_paragraph_break, ..) = state! {
+        doc { root { paragraph { text("abc") } p: paragraph {} } }
+        selection: (p, 0)
+    };
+    for (initial, expected) in [(list, after_list_exit), (paragraph, after_paragraph_break)] {
+        for enter in [
+            Message::Key {
+                event: KeyEvent {
+                    key: Key::Enter,
+                    modifiers: InputModifiers::default(),
+                },
+            },
+            Message::Insertion {
+                op: InsertionOp::Break {
+                    kind: Break::Paragraph,
+                },
+            },
+            Message::TextInput {
+                ops: vec![FlatImeOp::ReplaceSelection { text: "\n".into() }],
+            },
+        ] {
+            let mut editor =
+                editor_with_rules(initial.clone(), vec![rule("^abc(.*)$", "$1", true)]);
+            type_text(&mut editor, "c");
+            editor.apply(enter);
+            key(&mut editor, Key::Backspace);
+            assert_state_eq!(editor.state(), &expected);
+        }
+    }
+}
+
+#[test]
+fn noop_redo_does_not_restore_replacement_cancellation_after_refocus() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("abc", "XYZ", false)]);
+    editor.apply(Message::System {
+        event: SystemEvent::SetFocused { focused: true },
+    });
+    type_text(&mut editor, "abc");
+    for focused in [false, true] {
+        editor.apply(Message::System {
+            event: SystemEvent::SetFocused { focused },
+        });
+    }
+    editor.apply(Message::History {
+        op: HistoryOp::Redo,
+    });
+    key(&mut editor, Key::Backspace);
+    assert_eq!(flat_text(&editor), "\u{2028}XY\u{2029}");
+}
+
+#[test]
+fn backspace_after_composition_commit_and_page_break_preserves_replacement() {
+    for backspace in [
+        Message::Key {
+            event: KeyEvent {
+                key: Key::Backspace,
+                modifiers: InputModifiers::default(),
+            },
+        },
+        Message::TextInput {
+            ops: vec![FlatImeOp::DeleteSurrounding {
+                before: 1,
+                after: 0,
+            }],
+        },
+    ] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("ㅎ") } } }
+            selection: (p, 1)
+        };
+        let mut editor = editor_with_rules(initial, vec![rule("ㅎㅎ", "웃음소리", false)]);
+        editor.apply(Message::TextInput {
+            ops: vec![FlatImeOp::Compose { text: "ㅎ".into() }],
+        });
+        editor
+            .enqueue_request(vec![
+                Message::TextInput {
+                    ops: vec![FlatImeOp::CommitAsIs],
+                },
+                Message::Insertion {
+                    op: InsertionOp::Break { kind: Break::Page },
+                },
+            ])
+            .unwrap();
+        editor.tick().unwrap();
+        let (after_break, ..) = state! {
+            doc { root { paragraph { text("웃음소리") page_break } p: paragraph {} } }
+            selection: (p, 0)
+        };
+        assert_state_eq!(editor.state(), &after_break);
+        editor.apply(backspace.clone());
+        let (after_backspace, ..) = state! {
+            doc { root { p: paragraph { text("웃음소리") } } }
+            selection: (p, 4)
+        };
+        assert_state_eq!(editor.state(), &after_backspace);
+        editor.apply(backspace.clone());
+        assert_eq!(flat_text(&editor), "\u{2028}웃음소\u{2029}");
+    }
+}
+
+#[test]
+fn replacement_separator_cancellation_is_consumed_and_preserves_separator_formatting() {
+    for tab in [false, true] {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("a") [bold] text("b") [italic] } } }
+            selection: (p, 2)
+        };
+        let mut editor = editor_with_rules(initial, vec![rule("abc", "X", false)]);
+        type_text(&mut editor, "c");
+        let expected = if tab {
+            key(&mut editor, Key::Tab);
+            let (expected, ..) = state! {
+                doc { root { p: paragraph { text("a") [bold] text("bc") [italic] tab [bold] } } }
+                selection: (p, 4)
+            };
+            expected
+        } else {
+            type_text(&mut editor, ".");
+            let (expected, ..) = state! {
+                doc { root { p: paragraph { text("a") [bold] text("bc") [italic] text(".") [bold] } } }
+                selection: (p, 4, <)
+            };
+            expected
+        };
+        key(&mut editor, Key::Backspace);
+        assert_state_eq!(editor.state(), &expected);
+        key(&mut editor, Key::Backspace);
+        assert_eq!(flat_text(&editor), "\u{2028}abc\u{2029}");
+        key(&mut editor, Key::Backspace);
+        assert_eq!(flat_text(&editor), "\u{2028}ab\u{2029}");
+    }
+}
+
+#[test]
+fn replacement_separator_cancel_keeps_earlier_undo_and_redo_entries_usable() {
+    let (initial, ..) = state! {
+        doc { root { p: paragraph {} } }
+        selection: (p, 0)
+    };
+    let mut editor = editor_with_rules(initial, vec![rule("abc", "X", false)]);
+    type_text(&mut editor, "abc");
+    type_text(&mut editor, ".");
+    key(&mut editor, Key::Backspace);
+    assert_eq!(flat_text(&editor), "\u{2028}abc.\u{2029}");
+    for expected in ["X.", "X", "abc", ""] {
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
+        });
+        assert_eq!(flat_text(&editor), format!("\u{2028}{expected}\u{2029}"));
+    }
+    for expected in ["abc", "X", "X.", "abc."] {
+        editor.apply(Message::History {
+            op: HistoryOp::Redo,
+        });
+        assert_eq!(flat_text(&editor), format!("\u{2028}{expected}\u{2029}"));
+    }
 }
 
 #[test]

@@ -1,10 +1,11 @@
+use editor_model::Modifier;
 use editor_transaction::Transaction;
 
 use crate::CommandResult;
 use crate::helpers::{consume_pending_modifiers, insert_tab_at_caret};
 
-pub fn insert_tab(tr: &mut Transaction) -> CommandResult {
-    let changed = insert_tab_at_caret(tr, None)?;
+pub fn insert_tab(tr: &mut Transaction, paint_override: Option<Vec<Modifier>>) -> CommandResult {
+    let changed = insert_tab_at_caret(tr, paint_override.as_deref())?;
     if changed {
         consume_pending_modifiers(tr)?;
     }
@@ -24,7 +25,7 @@ mod tests {
             doc { root { t1: paragraph { text("Hello") } } }
             selection: (t1, 0) -> (t1, 3)
         };
-        transact_fail!(initial, |tr| insert_tab(&mut tr));
+        transact_fail!(initial, |tr| insert_tab(&mut tr, None));
     }
 
     #[test]
@@ -33,7 +34,7 @@ mod tests {
             doc { root { t1: paragraph { text("Hello") } } }
             selection: (t1, 2)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { t: paragraph { text("He") tab text("llo") } } }
             selection: (t, 3)
@@ -47,7 +48,7 @@ mod tests {
             doc { root { p1: paragraph { text("Hello") } } }
             selection: (p1, 5)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("Hello") tab } } }
             selection: (p1, 6)
@@ -61,7 +62,7 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph { tab } } }
             selection: (p1, 1)
@@ -75,10 +76,27 @@ mod tests {
             doc { root { p1: paragraph { text("Hello") [bold] } } }
             selection: (p1, 5)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("Hello") [bold] tab [bold] } } }
             selection: (p1, 6)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn paint_override_preserves_tab_formatting_instead_of_copying_neighbor() {
+        let (initial, ..) = state! {
+            doc { root { p: paragraph { text("a") [bold] } } }
+            selection: (p, 1)
+        };
+        let (actual, ..) = transact!(initial, |tr| insert_tab(
+            &mut tr,
+            Some(vec![Modifier::Italic])
+        ));
+        let (expected, ..) = state! {
+            doc { root { p: paragraph { text("a") [bold] tab [italic] } } }
+            selection: (p, 2)
         };
         assert_state_eq!(&actual, &expected);
     }
@@ -90,7 +108,7 @@ mod tests {
             selection: (p1, 5)
             pending_modifiers: [bold]
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("Hello") tab [bold] } } }
             selection: (p1, 6)
@@ -105,7 +123,7 @@ mod tests {
             doc { root { t1: paragraph { text("Hi") [font_size(2400)] } } }
             selection: (t1, 2)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph { text("Hi") [font_size(2400)] tab [font_size(2400)] } } }
             selection: (p1, 3)
@@ -119,7 +137,7 @@ mod tests {
             doc { root { p1: paragraph carry([font_size(2400)]) {} } }
             selection: (p1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| insert_tab(&mut tr, None));
         let (expected, ..) = state! {
             doc { root { p1: paragraph carry([font_size(2400)]) { tab [font_size(2400)] } } }
             selection: (p1, 1)

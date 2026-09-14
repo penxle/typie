@@ -173,7 +173,6 @@
         editor.editBlockedHandler?.();
       }
       editor.updateNow(() => {
-        inputAdapter.handleKeyDown(e);
         pendingCompositionDispatch =
           deferPasteShortcutDuringComposition(
             e,

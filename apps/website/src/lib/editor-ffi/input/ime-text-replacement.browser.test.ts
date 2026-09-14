@@ -94,8 +94,6 @@ describe('web IME text replacement', () => {
       input.setSelectionRange(selection, selection);
       input.dispatchEvent(new InputEvent('input', { inputType, data, isComposing: true, bubbles: true }));
     },
-    composingKeyDown: (key: string) =>
-      input.dispatchEvent(new KeyboardEvent('keydown', { key, isComposing: true, bubbles: true, cancelable: true })),
   });
 
   afterEach(async () => {
@@ -279,7 +277,7 @@ describe('web IME text replacement', () => {
     expect(input.selectionEnd).toBe(6);
   });
 
-  it('replaces a Korean match when macOS appends Space to the final composition update', async () => {
+  it.each([' ', '.'])('replaces Korean preedit ending in %j and cancels through native Backspace', async (separator) => {
     const { editor, input } = await mountEditor();
     const events = imeEvents(input);
 
@@ -288,7 +286,6 @@ describe('web IME text replacement', () => {
     events.beforeCompositionInput('ㅠ');
     events.applyNativeInput('\u{2028}ㅠ\u{2029}', 2, 'insertCompositionText', 'ㅠ');
 
-    events.composingKeyDown('ㅠ');
     events.composition('compositionupdate', 'ㅠ');
     events.beforeCompositionInput('ㅠ');
     events.applyNativeInput('\u{2028}ㅠ\u{2029}', 2, 'insertCompositionText', 'ㅠ');
@@ -298,14 +295,19 @@ describe('web IME text replacement', () => {
     events.beforeCompositionInput('ㅠ');
     events.applyNativeInput('\u{2028}ㅠㅠ\u{2029}', 3, 'insertCompositionText', 'ㅠ');
 
-    events.composingKeyDown(' ');
-    events.composition('compositionupdate', 'ㅠ ');
-    events.beforeCompositionInput('ㅠ ');
-    events.applyNativeInput('\u{2028}ㅠㅠ \u{2029}', 4, 'insertCompositionText', 'ㅠ ');
-    events.composition('compositionend', 'ㅠ ');
+    events.composition('compositionupdate', `ㅠ${separator}`);
+    events.beforeCompositionInput(`ㅠ${separator}`);
+    events.applyNativeInput(`\u{2028}ㅠㅠ${separator}\u{2029}`, 4, 'insertCompositionText', `ㅠ${separator}`);
+    events.composition('compositionend', `ㅠ${separator}`);
 
     await new Promise(requestAnimationFrame);
-    expect(editor.proseText()).toBe('하하하 ');
+    expect(editor.proseText()).toBe(`하하하${separator}`);
+    input.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+    input.setRangeText('', input.selectionStart - 1, input.selectionEnd, 'end');
+    input.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true }));
+    await new Promise(requestAnimationFrame);
+    expect(editor.proseText()).toBe(separator === ' ' ? 'ㅠㅠ' : 'ㅠㅠ.');
+    expect(input.value).toBe(separator === ' ' ? '\u{2028}ㅠㅠ\u{2029}' : '\u{2028}ㅠㅠ.\u{2029}');
   });
 
   it('inserts text after a replacement when insertText arrives before compositionend', async () => {
@@ -332,7 +334,7 @@ describe('web IME text replacement', () => {
     expect(editor.proseText()).toBe('하하하 ');
   });
 
-  it('applies a deferred composition tail and its following edit in one input admission', async () => {
+  it('keeps subsequent preedit updates after an appended IME key', async () => {
     const { editor, input } = await mountEditor();
     const events = imeEvents(input);
 
@@ -341,7 +343,6 @@ describe('web IME text replacement', () => {
     events.beforeCompositionInput('にほ');
     events.applyNativeInput('\u{2028}にほ\u{2029}', 3, 'insertCompositionText', 'にほ');
 
-    events.composingKeyDown('n');
     events.composition('compositionupdate', 'にほn');
     events.beforeCompositionInput('にほn');
     events.applyNativeInput('\u{2028}にほn\u{2029}', 4, 'insertCompositionText', 'にほn');

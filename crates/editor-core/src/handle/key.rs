@@ -7,29 +7,45 @@ use editor_transaction::HistoryMeta;
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::handle::paragraph_break::apply_paragraph_break;
+use crate::handle::text_replacement::{
+    InputSeparator, finish_auto_replacement_separator, take_auto_replacement_for_separator,
+    try_undo_auto_replacement,
+};
 use crate::message::*;
 
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
     match (event.key, event.modifiers) {
-        (Key::Enter, m) if m.shift => editor.transact(|tr| {
-            commands::first!(
-                tr,
-                commands::materialize_gap_paragraph(),
-                commands::insert_paragraph_before_unit_selection(),
-                |tr| commands::chain!(
+        (Key::Enter, m) if m.shift => {
+            let replacement =
+                take_auto_replacement_for_separator(editor, InputSeparator::LineBreak);
+            editor.transact(|tr| {
+                commands::first!(
                     tr,
-                    commands::optional!(commands::ensure_paragraph()),
-                    commands::optional!(commands::delete_selection()),
-                    commands::insert_hard_break(),
-                ),
-            )?;
+                    commands::materialize_gap_paragraph(),
+                    commands::insert_paragraph_before_unit_selection(),
+                    |tr| commands::chain!(
+                        tr,
+                        commands::optional!(commands::ensure_paragraph()),
+                        commands::optional!(commands::delete_selection()),
+                        commands::insert_hard_break(),
+                    ),
+                )?;
+                Ok(())
+            })?;
+            finish_auto_replacement_separator(editor, replacement);
             Ok(())
-        }),
-        (Key::Enter, _) => editor.transact(|tr| {
-            apply_paragraph_break(tr)?;
+        }
+        (Key::Enter, _) => {
+            let replacement =
+                take_auto_replacement_for_separator(editor, InputSeparator::ParagraphBreak);
+            editor.transact(|tr| {
+                apply_paragraph_break(tr)?;
+                Ok(())
+            })?;
+            finish_auto_replacement_separator(editor, replacement);
             Ok(())
-        }),
-        (Key::Backspace, _) if editor.try_undo_auto_replacement() => {
+        }
+        (Key::Backspace, _) if try_undo_auto_replacement(editor)? => {
             if !editor.state().pending_modifiers.is_empty() {
                 editor.transact(|tr| {
                     tr.update_meta(|m| m.history = HistoryMeta::Skip);
@@ -109,33 +125,38 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
             }
             Ok(())
         }),
-        (Key::Tab, _) => editor.transact(|tr| {
-            let verdict = match tr.selection() {
-                Some(selection) => commands::judge_indent_list(&tr.view(), &selection),
-                None => commands::Verdict::NotApplicable,
-            };
-            let applied = match verdict {
-                commands::Verdict::Change(_) => {
-                    let materialized = commands::materialize_synthetic_selection_blocks(tr)?;
-                    let sunk = commands::first!(
+        (Key::Tab, _) => {
+            let replacement = take_auto_replacement_for_separator(editor, InputSeparator::Tab);
+            editor.transact(|tr| {
+                let verdict = match tr.selection() {
+                    Some(selection) => commands::judge_indent_list(&tr.view(), &selection),
+                    None => commands::Verdict::NotApplicable,
+                };
+                let applied = match verdict {
+                    commands::Verdict::Change(_) => {
+                        let materialized = commands::materialize_synthetic_selection_blocks(tr)?;
+                        let sunk = commands::first!(
+                            tr,
+                            commands::sink_list_items_in_range(),
+                            commands::sink_list_item_at_caret(),
+                        )?;
+                        materialized || sunk
+                    }
+                    commands::Verdict::AbsorbOnly => false,
+                    commands::Verdict::NotApplicable => commands::chain!(
                         tr,
-                        commands::sink_list_items_in_range(),
-                        commands::sink_list_item_at_caret(),
-                    )?;
-                    materialized || sunk
+                        commands::optional!(commands::materialize_synthetic_selection_blocks()),
+                        commands::insert_tab(None),
+                    )?,
+                };
+                if applied {
+                    tr.clear_pending_format()?;
                 }
-                commands::Verdict::AbsorbOnly => false,
-                commands::Verdict::NotApplicable => commands::chain!(
-                    tr,
-                    commands::optional!(commands::materialize_synthetic_selection_blocks()),
-                    commands::insert_tab(),
-                )?,
-            };
-            if applied {
-                tr.clear_pending_format()?;
-            }
+                Ok(())
+            })?;
+            finish_auto_replacement_separator(editor, replacement);
             Ok(())
-        }),
+        }
         (Key::Escape, _) => editor.transact(|tr| {
             if let Some(current) = tr.selection() {
                 match selection_kind(&current, &tr.view()) {

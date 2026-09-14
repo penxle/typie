@@ -12,6 +12,10 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
 use crate::handle::paragraph_break::apply_list_paragraph_break;
+use crate::handle::text_replacement::{
+    InputSeparator, finish_auto_replacement_separator, take_auto_replacement_for_separator,
+    take_auto_replacement_for_text,
+};
 use crate::message::*;
 
 pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), EditorError> {
@@ -32,6 +36,16 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
         }
     }
 
+    let separator_replacement = match &op {
+        InsertionOp::Text { text } => take_auto_replacement_for_text(editor, text),
+        InsertionOp::Break {
+            kind: Break::Paragraph,
+        } => take_auto_replacement_for_separator(editor, InputSeparator::ParagraphBreak),
+        InsertionOp::Break { kind: Break::Line } => {
+            take_auto_replacement_for_separator(editor, InputSeparator::LineBreak)
+        }
+        _ => None,
+    };
     let mut placeholder_node_ids = None;
     editor.transact(|tr| {
         match &op {
@@ -191,6 +205,8 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
             Ok(())
         })?;
     }
+
+    finish_auto_replacement_separator(editor, separator_replacement);
 
     if let InsertionOp::AttachmentPlaceholders { request_id, .. } = op
         && let Some(node_ids) = placeholder_node_ids

@@ -884,6 +884,7 @@ dependencies = [
  "editor-view",
  "enum-map",
  "hashbrown 0.17.1",
+ "icu_properties",
  "itertools",
  "log",
  "proptest",

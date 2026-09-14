@@ -52,6 +52,7 @@ editor-view = { path = "../editor-view" }
 enum-map.workspace = true
 itertools.workspace = true
 hashbrown.workspace = true
+icu_properties.workspace = true
 log.workspace = true
 serde.workspace = true
 strum.workspace = true
