@@ -12,9 +12,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -51,7 +53,7 @@ class EditorImeSnapshotGatingTest {
   }
 
   @Test
-  fun `ime session activation refreshes the snapshot`() = runTest {
+  fun `ime session activation refreshes the snapshot before yielding`() = runTest {
     Dispatchers.setMain(StandardTestDispatcher(testScheduler))
     try {
       var imeCalls = 0
@@ -70,7 +72,7 @@ class EditorImeSnapshotGatingTest {
       assertEquals(0, imeCalls)
 
       editor.setImeSessionActive(true)
-      editor.refreshImeSnapshot()
+      launch(start = CoroutineStart.UNDISPATCHED) { editor.refreshImeSnapshot() }
 
       assertEquals(1, imeCalls)
       assertEquals(ime, editor.appliedState.ime)
