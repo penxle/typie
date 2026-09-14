@@ -35,6 +35,35 @@ const flattenAssetIds = (grouped: ReturnType<typeof extractAssetIdsFromPlainDoc>
   ...grouped.archivedIds,
 ];
 
+export const insertPublicationVersion = async (
+  tx: Transaction,
+  args: {
+    publicationId: string;
+    version: number;
+    document: { title: string | null; subtitle: string | null };
+    input: { thumbnailId: string | null; excerpt: string | null };
+    snapshot: PublicationSnapshot;
+  },
+) =>
+  await tx
+    .insert(PublicationVersions)
+    .values({
+      publicationId: args.publicationId,
+      version: args.version,
+      title: args.document.title,
+      subtitle: args.document.subtitle,
+      graph: args.snapshot.graph,
+      text: args.snapshot.text,
+      characterCount: args.snapshot.characterCount,
+      heads: args.snapshot.heads,
+      thumbnailId: args.input.thumbnailId,
+      excerpt: args.input.excerpt,
+      assetIds: flattenAssetIds(extractAssetIdsFromPlainDoc(args.snapshot.plain)),
+      layoutMode: extractPlainDocLayoutMode(args.snapshot.plain),
+    })
+    .returning()
+    .then(firstOrThrow);
+
 export const findPublicationByDocument = async (executor: Executor, documentId: string) =>
   await executor.select().from(Publications).where(eq(Publications.documentId, documentId)).then(first);
 
@@ -133,24 +162,7 @@ const writeVersion = async (
   };
   const picked = pickPublicationVersion(latest ?? null, snap);
   if (latest && picked.reuse) return { version: latest, created: false };
-  const version = await tx
-    .insert(PublicationVersions)
-    .values({
-      publicationId,
-      version: picked.version,
-      title: document.title,
-      subtitle: document.subtitle,
-      graph: snapshot.graph,
-      text: snapshot.text,
-      characterCount: snapshot.characterCount,
-      heads: snapshot.heads,
-      thumbnailId: input.thumbnailId,
-      excerpt: input.excerpt,
-      assetIds: flattenAssetIds(extractAssetIdsFromPlainDoc(snapshot.plain)),
-      layoutMode: extractPlainDocLayoutMode(snapshot.plain),
-    })
-    .returning()
-    .then(firstOrThrow);
+  const version = await insertPublicationVersion(tx, { publicationId, version: picked.version, document, input, snapshot });
   return { version, created: true };
 };
 
