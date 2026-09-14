@@ -12,4 +12,7 @@ const indexPrefix = production ? 'prod' : 'dev';
 export const esIndex = {
   documents: `${indexPrefix}-documents`,
   folders: `${indexPrefix}-folders`,
+  publications: `${indexPrefix}-publications`,
+  spaces: `${indexPrefix}-spaces`,
+  tags: `${indexPrefix}-tags`,
 } as const;

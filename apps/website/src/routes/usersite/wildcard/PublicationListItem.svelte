@@ -15,9 +15,20 @@
     dateDisplay: SpaceDateDisplay;
     first?: boolean;
     showCollection?: boolean;
+    showSpace?: boolean;
+    titleHtml?: string | null;
+    excerptHtml?: string | null;
   };
 
-  let { publicationView$key, dateDisplay, first = false, showCollection = true }: Props = $props();
+  let {
+    publicationView$key,
+    dateDisplay,
+    first = false,
+    showCollection = true,
+    showSpace = false,
+    titleHtml = null,
+    excerptHtml = null,
+  }: Props = $props();
 
   const publication = createFragment(
     graphql(`
@@ -40,6 +51,19 @@
         thumbnail {
           id
           ...Img_image
+        }
+
+        url
+
+        space {
+          id
+          name
+          url
+
+          logo {
+            id
+            ...Img_image
+          }
         }
       }
     `),
@@ -64,9 +88,29 @@
     cursor: 'pointer',
     _hover: { '& .publication-title': { color: 'text.muted' }, '& .publication-thumbnail img': { transform: 'scale(1.03)' } },
   })}
-  href={`/p/${publication.data.id}`}
+  href={publication.data.url}
 >
   <div class={css({ flex: '1', minWidth: '0' })}>
+    {#if showSpace}
+      <div class={flex({ alignItems: 'center', gap: '6px', marginBottom: '6px', minWidth: '0' })}>
+        <Img
+          style={css.raw({
+            flexShrink: '0',
+            size: '20px',
+            borderRadius: '5px',
+            objectFit: 'cover',
+            boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
+          })}
+          alt={`${publication.data.space.name} 로고`}
+          image$key={publication.data.space.logo}
+          size={48}
+        />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted', truncate: true })}>
+          {publication.data.space.name}
+        </span>
+      </div>
+    {/if}
+
     <div class={flex({ alignItems: 'center', gap: '6px' })}>
       {#if publication.data.hasPassword}
         <Icon
@@ -87,7 +131,14 @@
           lineClamp: '2',
         })}
       >
-        <span class={cx(css({ transition: 'colors' }), 'publication-title')}>{publication.data.title}</span>
+        <span class={cx(css({ transition: 'colors', '& em': { fontStyle: 'normal', color: 'accent.default' } }), 'publication-title')}>
+          {#if titleHtml}
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            {@html titleHtml}
+          {:else}
+            {publication.data.title}
+          {/if}
+        </span>
       </h2>
     </div>
 
@@ -99,7 +150,7 @@
       </h3>
     {/if}
 
-    {#if publication.data.excerpt}
+    {#if excerptHtml || publication.data.excerpt}
       <p
         class={css({
           marginTop: '6px',
@@ -109,9 +160,15 @@
           letterSpacing: '-0.005em',
           color: 'text.muted',
           lineClamp: '2',
+          '& em': { fontStyle: 'normal', color: 'accent.default' },
         })}
       >
-        {publication.data.excerpt}
+        {#if excerptHtml}
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html excerptHtml}
+        {:else}
+          {publication.data.excerpt}
+        {/if}
       </p>
     {/if}
 

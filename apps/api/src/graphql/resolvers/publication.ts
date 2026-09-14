@@ -6,6 +6,7 @@ import { db, Documents, Entities, firstOrThrow, PublicationTags, Spaces, TableCo
 import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
 import { liveKey } from '#/utils/changeset.ts';
+import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
 import {
   cancelScheduledPublicationCore,
   computeHasUnpublishedChanges,
@@ -168,6 +169,7 @@ builder.mutationFields((t) => ({
         scheduledAt: input.scheduledAt ?? null,
         now: dayjs(),
       });
+      await enqueueDiscoveryPublicationSync([publication.id]);
       await publishSiteUpdate(publication.documentId);
       return publication;
     },
@@ -184,6 +186,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const publication = await updatePublicationCore(db, { userId: ctx.session.userId, ...input, now: dayjs() });
+      await enqueueDiscoveryPublicationSync([publication.id]);
       await publishSiteUpdate(publication.documentId);
       return publication;
     },
@@ -194,6 +197,7 @@ builder.mutationFields((t) => ({
     input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
     resolve: async (_, { input }, ctx) => {
       const publication = await unpublishDocumentCore(db, { userId: ctx.session.userId, documentId: input.documentId, now: dayjs() });
+      await enqueueDiscoveryPublicationSync([publication.id]);
       await publishSiteUpdate(publication.documentId);
       return publication;
     },
@@ -208,6 +212,7 @@ builder.mutationFields((t) => ({
         publicationId: input.publicationId,
         now: dayjs(),
       });
+      await enqueueDiscoveryPublicationSync([publication.id]);
       await publishSiteUpdate(publication.documentId);
       return publication;
     },

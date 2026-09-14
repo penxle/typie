@@ -369,6 +369,31 @@ input DeleteWidgetInput {
   widgetId: ID!
 }
 
+type DiscoveryPublicationHit {
+  excerpt: String
+  publication: PublicationView!
+  title: String
+}
+
+type DiscoverySearchResult {
+  publications: [DiscoveryPublicationHit!]!
+  spaces: [SpaceView!]!
+  tags: [DiscoveryTag!]!
+}
+
+type DiscoveryTag {
+  count: Int!
+  name: String!
+  publications(after: ID, first: Int): SpacePublicationsPage!
+}
+
+type DiscoveryView {
+  publications(after: ID, first: Int): SpacePublicationsPage!
+  search(query: String!): DiscoverySearchResult
+  tag(name: String!): DiscoveryTag
+  tags: [DiscoveryTag!]!
+}
+
 input DismissRecentEntityInput {
   entityId: ID!
 }
@@ -894,6 +919,7 @@ interface ISite {
 }
 
 interface ISpace {
+  allowDiscovery: Boolean!
   allowIndexing: Boolean!
   dateDisplay: SpaceDateDisplay!
   description: String
@@ -1857,6 +1883,7 @@ type Query {
   adminUsers(limit: Int! = 20, offset: Int! = 0, role: UserRole, search: String, state: UserState): AdminUsersResult!
   creditCode(code: String!): CreditCode!
   defaultPlanRule: PlanRule!
+  discovery: DiscoveryView!
   document(slug: String!): Document!
   documentById(documentId: ID!): Document!
   entities(entityIds: [ID!], slugs: [String!]): [Entity!]!
@@ -2124,6 +2151,7 @@ type SiteView implements ISite {
 }
 
 type Space implements ISpace {
+  allowDiscovery: Boolean!
   allowIndexing: Boolean!
   collections: [Collection!]!
   createdAt: DateTime!
@@ -2177,6 +2205,7 @@ type SpaceTag {
 }
 
 type SpaceView implements ISpace {
+  allowDiscovery: Boolean!
   allowIndexing: Boolean!
   availableActions: [SpaceAvailableAction!]!
   collection(collectionId: ID!): CollectionView!
@@ -2478,6 +2507,7 @@ input UpdateSiteSlugInput {
 }
 
 input UpdateSpaceInput {
+  allowDiscovery: Boolean
   allowIndexing: Boolean
   dateDisplay: SpaceDateDisplay
   description: String

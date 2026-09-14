@@ -5,6 +5,7 @@ import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import { db, Documents, DocumentStates, Entities, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
+import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
 import { createFolderCore, renameFolderCore, updateFolderOptionCore } from '#/utils/entity-actions.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
@@ -293,10 +294,12 @@ builder.mutationFields((t) => ({
 
       const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
 
-      await db.transaction(async (tx) => {
-        await unpublishByEntityIdsCore(tx, { entityIds, now: dayjs() });
+      const unpublishedPublicationIds = await db.transaction(async (tx) => {
+        const publicationIds = await unpublishByEntityIdsCore(tx, { entityIds, now: dayjs() });
 
         await tx.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
+
+        return publicationIds;
       });
 
       if (folder.parentId) {
@@ -322,6 +325,7 @@ builder.mutationFields((t) => ({
       for (const document of deletedDocuments) {
         await enqueueJob('search:index:document', document.id);
       }
+      await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
       if (deletedDocuments.length > 0) {
         publishRecentDocumentUpdates(folder.siteId, 'VIEWED_AT', 'UPDATED_AT');
       }

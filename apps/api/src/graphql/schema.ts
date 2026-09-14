@@ -28,6 +28,7 @@ import './resolvers/publication.ts';
 import './resolvers/collection.ts';
 import './resolvers/space-view.ts';
 import './resolvers/publication-view.ts';
+import './resolvers/discovery.ts';
 import './resolvers/text.ts';
 import './resolvers/unfurl.ts';
 import './resolvers/user.ts';

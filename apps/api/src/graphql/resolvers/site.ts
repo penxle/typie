@@ -10,6 +10,7 @@ import { clearLoaders } from '#/context.ts';
 import { db, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Sites, TableCode, Users, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
+import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
 import { generateRandomAvatar, persistBlobAsImage } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildPinnedEntitiesBatchQuery } from '#/utils/pinned-entities.ts';
@@ -454,7 +455,9 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
-      return await db.transaction(async (tx) => {
+      let deletedSpaceIds: string[] = [];
+
+      const site = await db.transaction(async (tx) => {
         const activeSites = await tx
           .select({ id: Sites.id })
           .from(Sites)
@@ -465,10 +468,14 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'cannot_delete_last_site' });
         }
 
-        await deleteSpacesBySiteIdsCore(tx, { siteIds: [input.siteId], now: dayjs() });
+        deletedSpaceIds = await deleteSpacesBySiteIdsCore(tx, { siteIds: [input.siteId], now: dayjs() });
 
         return await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
       });
+
+      await enqueueDiscoverySpaceSync(deletedSpaceIds);
+
+      return site;
     },
   }),
 }));

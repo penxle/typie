@@ -43,6 +43,7 @@ import * as spellcheck from '#/external/spellcheck.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { readMergedGraph } from '#/utils/changeset.ts';
+import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { groupAssetIds, loadExistingDocumentAssetIds } from '#/utils/document-assets.ts';
 import { publishBundle } from '#/utils/document-bundle.ts';
@@ -762,8 +763,8 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      await db.transaction(async (tx) => {
-        await unpublishByEntityIdsCore(tx, { entityIds: [entity.id], now: dayjs() });
+      const unpublishedPublicationIds = await db.transaction(async (tx) => {
+        const publicationIds = await unpublishByEntityIdsCore(tx, { entityIds: [entity.id], now: dayjs() });
 
         await tx
           .update(Entities)
@@ -772,6 +773,8 @@ builder.mutationFields((t) => ({
             deletedAt: dayjs(),
           })
           .where(eq(Entities.id, entity.id));
+
+        return publicationIds;
       });
 
       if (entity.parentId) {
@@ -784,6 +787,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('search:index:document', input.documentId);
+      await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
 
       return input.documentId;
     },
