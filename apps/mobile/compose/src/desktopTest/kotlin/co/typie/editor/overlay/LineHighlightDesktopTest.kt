@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.trackEditorInteractionSurfaceBounds
+import co.typie.editor.ffi.CaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
 import co.typie.editor.runtime.EditorUiState
@@ -28,7 +29,7 @@ class LineHighlightDesktopTest {
     val cursor =
       CursorMetrics(
         pageIdx = 0,
-        caret = Rect(x = 0f, y = 10f, width = 1f, height = 10f),
+        caret = CaretMetrics(x = 0f, y = 10f, height = 10f),
         line = Rect(x = 0f, y = 10f, width = 100f, height = 10f),
       )
 

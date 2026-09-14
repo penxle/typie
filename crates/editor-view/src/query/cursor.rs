@@ -2,11 +2,30 @@ use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 #[ffi]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CaretMetrics {
+    pub x: f32,
+    pub y: f32,
+    pub height: f32,
+}
+
+impl CaretMetrics {
+    pub fn new(x: f32, y: f32, height: f32) -> Self {
+        Self { x, y, height }
+    }
+
+    pub fn bottom(&self) -> f32 {
+        self.y + self.height
+    }
+}
+
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CursorMetrics {
     pub page_idx: usize,
-    pub caret: Rect,
+    pub caret: CaretMetrics,
     pub line: Rect,
 }
 
@@ -45,10 +64,9 @@ pub(crate) fn cursor_metrics(
                 }
             };
             let cursor_height = cursor_ascent + cursor_descent;
-            let caret = Rect::from_xywh(
+            let caret = CaretMetrics::new(
                 entry.rect.x + x,
                 page_rect.rect.y + l.baseline - cursor_ascent,
-                1.0,
                 cursor_height,
             );
             Some(CursorMetrics {
@@ -202,7 +220,6 @@ mod tests {
             l.cursor_ascent + l.cursor_descent,
             "caret.height must equal cursor_ascent + cursor_descent"
         );
-        assert_eq!(cm.caret.width, 1.0, "caret.width must be 1.0");
         assert_eq!(cm.page_idx, 0, "page_idx must be 0");
     }
 

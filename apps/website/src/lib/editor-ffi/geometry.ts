@@ -1,5 +1,5 @@
 import type { ReferenceElement } from '@floating-ui/dom';
-import type { PageRect, Selection } from '@typie/editor-ffi/browser';
+import type { CursorMetrics, PageRect, Selection } from '@typie/editor-ffi/browser';
 import type { Editor, EditorSnapshot } from './editor.svelte';
 import type { RevealTargetSpan } from './scroll';
 
@@ -127,6 +127,13 @@ export function selectionHeadRect(snapshot: EditorSnapshot | undefined): PageRec
   const head = selection.head;
   const to = endpoints.to_position;
   return head.node === to.node && head.offset === to.offset && head.affinity === to.affinity ? endpoints.to : endpoints.from;
+}
+
+export function caretPageRect(cursor: CursorMetrics): PageRect {
+  return {
+    page_idx: cursor.page_idx,
+    rect: { x: cursor.caret.x, y: cursor.caret.y, width: 0, height: cursor.caret.height },
+  };
 }
 
 export function presentedPageElement(editor: Editor, page: number): HTMLDivElement | undefined {

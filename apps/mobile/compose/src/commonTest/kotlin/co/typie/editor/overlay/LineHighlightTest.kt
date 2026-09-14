@@ -2,6 +2,7 @@ package co.typie.editor.overlay
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.EditorViewportTransform
+import co.typie.editor.ffi.CaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
 import co.typie.editor.runtime.EditorBoundsInContainer
@@ -13,7 +14,7 @@ class LineHighlightTest {
   private val cursor =
     CursorMetrics(
       pageIdx = 1,
-      caret = Rect(x = 120f, y = 80f, width = 1f, height = 18f),
+      caret = CaretMetrics(x = 120f, y = 80f, height = 18f),
       line = Rect(x = 40f, y = 72f, width = 280f, height = 24f),
     )
 

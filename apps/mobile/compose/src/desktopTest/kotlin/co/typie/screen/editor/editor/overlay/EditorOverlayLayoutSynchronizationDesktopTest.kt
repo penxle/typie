@@ -33,6 +33,7 @@ import co.typie.editor.body.trackEditorContentBounds
 import co.typie.editor.body.trackEditorInteractionSurfaceBounds
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
+import co.typie.editor.ffi.CaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
@@ -329,7 +330,7 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
     val cursor =
       CursorMetrics(
         pageIdx = 1,
-        caret = co.typie.editor.ffi.Rect(x = 0f, y = 10f, width = 1f, height = 10f),
+        caret = CaretMetrics(x = 0f, y = 10f, height = 10f),
         line = co.typie.editor.ffi.Rect(x = 0f, y = 10f, width = 100f, height = 10f),
       )
     mainClock.autoAdvance = false

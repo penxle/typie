@@ -8,13 +8,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalCursorBlinkEnabled
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
+private const val EditorCaretWidthDp = 2f
+
 @Composable
-internal fun EditorCursorOverlay(cursor: CursorMetrics?, focused: Boolean, displayZoom: Float) {
+internal fun EditorCursorOverlay(
+  cursor: CursorMetrics?,
+  focused: Boolean,
+  displayZoom: Float,
+  revision: Long,
+) {
   if (!focused) {
     return
   }
@@ -22,9 +30,11 @@ internal fun EditorCursorOverlay(cursor: CursorMetrics?, focused: Boolean, displ
   val currentCursor = cursor ?: return
   val rect = resolveEditorCursorOverlayRect(cursor = currentCursor, displayZoom = displayZoom)
   val alpha = remember { Animatable(1f) }
+  val blinkEnabled = LocalCursorBlinkEnabled.current
 
-  LaunchedEffect(rect.x, rect.y) {
+  LaunchedEffect(revision, currentCursor, blinkEnabled) {
     alpha.snapTo(1f)
+    if (!blinkEnabled) return@LaunchedEffect
     while (true) {
       delay(500)
       alpha.snapTo(0f)
@@ -41,4 +51,9 @@ internal fun EditorCursorOverlay(cursor: CursorMetrics?, focused: Boolean, displ
 }
 
 internal fun resolveEditorCursorOverlayRect(cursor: CursorMetrics, displayZoom: Float): Rect =
-  cursor.caret.scale(displayZoom)
+  Rect(
+    x = cursor.caret.x * displayZoom,
+    y = cursor.caret.y * displayZoom,
+    width = EditorCaretWidthDp,
+    height = cursor.caret.height * displayZoom,
+  )

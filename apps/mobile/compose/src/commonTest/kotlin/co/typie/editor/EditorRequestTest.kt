@@ -2,6 +2,7 @@ package co.typie.editor
 
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.Alignment
+import co.typie.editor.ffi.CaretMetrics
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.HistoryTag
@@ -208,7 +209,7 @@ class EditorRequestTest {
   fun update_applies_state_from_tick() =
     runTest(dispatcher) {
       val fakeCursor =
-        CursorMetrics(pageIdx = 0, caret = Rect(1f, 2f, 3f, 4f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(1f, 2f, 4f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
@@ -265,7 +266,7 @@ class EditorRequestTest {
   fun update_returns_applied_snapshot_before_visual_publication() =
     runTest(dispatcher) {
       val fakeCursor =
-        CursorMetrics(pageIdx = 0, caret = Rect(1f, 2f, 3f, 4f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(1f, 2f, 4f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
@@ -644,7 +645,7 @@ class EditorRequestTest {
   fun updateNow_enqueues_ticks_and_applies_inline() =
     runTest(dispatcher) {
       val fakeCursor =
-        CursorMetrics(pageIdx = 0, caret = Rect(5f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(5f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
@@ -690,7 +691,7 @@ class EditorRequestTest {
   fun insert_template_fragment_calls_inner_ticks_and_commits() =
     runTest(dispatcher) {
       val fakeCursor =
-        CursorMetrics(pageIdx = 0, caret = Rect(5f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(5f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
@@ -781,7 +782,7 @@ class EditorRequestTest {
   fun updateNow_applies_consecutive_revisions() =
     runTest(dispatcher) {
       val cursorA =
-        CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(1f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },
@@ -1072,7 +1073,7 @@ class EditorRequestTest {
   fun update_cancelled_before_resume_keeps_native_and_applied_state_in_sync() =
     runTest(dispatcher) {
       val fakeCursor =
-        CursorMetrics(pageIdx = 0, caret = Rect(1f, 0f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
+        CursorMetrics(pageIdx = 0, caret = CaretMetrics(1f, 0f, 0f), line = Rect(0f, 0f, 0f, 0f))
       val fake =
         FakeFfiEditor(
           onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Cursor))) },

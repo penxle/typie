@@ -5,6 +5,7 @@ import co.typie.editor.Editor
 import co.typie.editor.FakeFfiEditor
 import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Affinity
+import co.typie.editor.ffi.CaretMetrics
 import co.typie.editor.ffi.CommandOutcome
 import co.typie.editor.ffi.CommandRejection
 import co.typie.editor.ffi.CursorMetrics
@@ -229,7 +230,7 @@ class EditorPointSelectionSemanticTest {
   private fun cursorAt(x: Float): CursorMetrics =
     CursorMetrics(
       pageIdx = 0,
-      caret = Rect(x = x, y = 0f, width = 1f, height = 12f),
+      caret = CaretMetrics(x = x, y = 0f, height = 12f),
       line = Rect(x = 0f, y = 0f, width = 100f, height = 12f),
     )
 

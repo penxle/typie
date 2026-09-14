@@ -6,7 +6,7 @@
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
   import { reconcileComments } from '$lib/editor-ffi/comments';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { isSelectionCollapsed, selectionHeadRect } from '$lib/editor-ffi/geometry';
+  import { caretPageRect, isSelectionCollapsed, selectionHeadRect } from '$lib/editor-ffi/geometry';
   import { FocusReturnSession } from '$lib/focus-return-session';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
@@ -213,7 +213,7 @@
     if (snapshot.cursor) {
       activeAnchor = {
         type: 'page_rects',
-        rects: [{ page_idx: snapshot.cursor.page_idx, rect: snapshot.cursor.caret }],
+        rects: [caretPageRect(snapshot.cursor)],
       };
     } else {
       const rect = selectionHeadRect(snapshot);
