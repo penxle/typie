@@ -33,7 +33,7 @@ import kotlinx.coroutines.cancel
 @OptIn(ExperimentalTestApi::class)
 class EditorImageExternalElementDesktopTest {
   @Test
-  fun reportsPlaceholderHeightAgainAfterKnownImageDimensionsChange() = runComposeUiTest {
+  fun leavesImageAndPlaceholderHeightsToPublication() = runComposeUiTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val fake = FakeFfiEditor()
     val editor = Editor(fake, scope, Dispatchers.Unconfined)
@@ -68,14 +68,14 @@ class EditorImageExternalElementDesktopTest {
           }
         }
       }
-      waitUntil { reportedHeights().isNotEmpty() }
+      waitForIdle()
       runOnIdle {
-        assertEquals(listOf(48f), reportedHeights())
+        assertEquals(emptyList(), reportedHeights())
         externalState.put(EditorImageAsset("asset", "", "", 600, 3000, 0.2, null))
       }
       waitForIdle()
       runOnIdle {
-        assertEquals(listOf(48f), reportedHeights())
+        assertEquals(emptyList(), reportedHeights())
         zoom.floatValue = 2f
         externalState.images.resizeDrafts["image"] =
           EditorImageResizeDraft(10f, imageResizeMaxSize(600f, 600f, 0.2f, 800f))
@@ -83,11 +83,11 @@ class EditorImageExternalElementDesktopTest {
       waitForIdle()
       runOnIdle {
         // Known image heights belong to publication, including live resize.
-        assertEquals(listOf(48f), reportedHeights())
+        assertEquals(emptyList(), reportedHeights())
         externalState.clear()
       }
-      waitUntil { reportedHeights().size == 2 }
-      runOnIdle { assertEquals(listOf(48f, 48f), reportedHeights()) }
+      waitForIdle()
+      runOnIdle { assertEquals(emptyList(), reportedHeights()) }
     } finally {
       runtime.clear()
       scope.cancel()

@@ -254,12 +254,14 @@ internal fun EditorScreenLayout(
       ?.takeIf { it.isFinite() }
       ?.let { it > 0f } ?: true
   val appliedState = editor?.appliedState
-  val imageState = LocalEditorExternalElementState.current.images
-  val imageHeights = imageState.heightUpdates(appliedState?.externalElements.orEmpty())
-  if (editor != null && imageHeights.isNotEmpty()) {
+  val externalState = LocalEditorExternalElementState.current
+  val externalHeights = externalState.heightUpdates(appliedState?.externalElements.orEmpty())
+  if (editor != null && externalHeights.isNotEmpty()) {
     SideEffect {
       editor.runCallback {
-        editor.updateNow { enqueue(Message.System(SystemEvent.SetExternalHeights(imageHeights))) }
+        editor.updateNow {
+          enqueue(Message.System(SystemEvent.SetExternalHeights(externalHeights)))
+        }
       }
     }
   }
@@ -268,10 +270,10 @@ internal fun EditorScreenLayout(
   }
   val ownedViewportAnchorState = remember { EditorViewportAnchorState() }
   val activeViewportAnchorState = viewportAnchorState ?: ownedViewportAnchorState
-  // Known image geometry must settle before selecting pages or consuming a reveal.
+  // Known external heights must settle before selecting pages or consuming a reveal.
   val surfacePreparation =
     editor
-      ?.takeIf { imageHeights.isEmpty() }
+      ?.takeIf { externalHeights.isEmpty() }
       ?.let {
         resolveAnchoredEditorSurfacePreparation(
           editor = it,
@@ -415,7 +417,7 @@ internal fun EditorScreenLayout(
         if (
           editor != null &&
             currentAppliedState != null &&
-            imageState.heightUpdates(currentAppliedState.externalElements).isEmpty()
+            externalState.heightUpdates(currentAppliedState.externalElements).isEmpty()
         ) {
           resolveAnchoredEditorSurfacePreparation(
             editor = editor,

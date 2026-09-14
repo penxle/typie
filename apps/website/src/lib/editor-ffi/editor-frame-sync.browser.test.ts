@@ -323,7 +323,10 @@ async function setDisplayZoom(editor: Editor, displayZoom: number): Promise<void
   await nextAnimationFrame();
 }
 
-async function mountEditorWithPublishedReady(plain: PlainDoc, options: { headerHeight?: number } = {}) {
+async function mountEditorWithPublishedReady(
+  plain: PlainDoc,
+  options: { headerHeight?: number; onPublishedReady?: (editor: Editor) => void } = {},
+) {
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
   const target = document.createElement('div');
   document.body.append(target);
@@ -336,6 +339,7 @@ async function mountEditorWithPublishedReady(plain: PlainDoc, options: { headerH
       onReady: mountedReady.resolve,
       onPublishedReady: () => {
         publishedReady = true;
+        if (editor) options.onPublishedReady?.(editor);
       },
       userId: `frame-sync-ready-${crypto.randomUUID()}`,
       headerHeight: options.headerHeight,
@@ -1791,6 +1795,85 @@ describe('web editor frame synchronization', () => {
     expectActualCanvas(editor, 0, false);
   });
 
+  it('lays out offscreen placeholders before the first publication', async () => {
+    const plain = paginatedDocWithPageBreaks(12);
+    plain.root.children.push(
+      entry({ type: 'image', id: 'image', proportion: 100 }),
+      entry({ type: 'file', id: 'file' }),
+      entry({ type: 'embed', id: 'embed' }),
+      entry({ type: 'archived', id: 'archived' }),
+    );
+    let firstHeights: number[] | undefined;
+    const { editor, publishedReady } = await mountEditorWithPublishedReady(plain, {
+      onPublishedReady: (editor) => {
+        firstHeights = editor.externalElements.map((element) => element.bounds.height);
+      },
+    });
+    await expect.poll(publishedReady).toBe(true);
+    expect(firstHeights).toEqual([48, 48, 48, 48]);
+    for (const element of editor.externalElements) {
+      expect(editor.published?.frames.has(element.page_idx)).toBe(false);
+      expect(document.querySelector(`[data-node-id="${element.node}"]`)).toBeNull();
+    }
+  });
+
+  it('updates offscreen file card heights as uploads and assets change', async () => {
+    const plain = paginatedDocWithPageBreaks(12);
+    plain.root.children.push(entry({ type: 'file', id: 'file' }));
+    const { editor, context } = await mountEditor(plain);
+    const element = editor.externalElements[0];
+    if (!element) throw new Error('Expected a file element');
+    expect(element.bounds.height).toBe(48);
+    expect(editor.published?.frames.has(element.page_idx)).toBe(false);
+    expect(document.querySelector(`[data-node-id="${element.node}"]`)).toBeNull();
+
+    editor.inflightFiles.set(element.node, { uploadId: 'upload', name: 'document.pdf', size: 1024 });
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(64);
+
+    context.fileAssets.set('file', { id: 'file', name: 'document.pdf', size: '1024', url: '/document.pdf' });
+    editor.inflightFiles.delete(element.node);
+    await tick();
+    await waitForPresentation(editor);
+    expect(editor.externalElements[0]?.bounds.height).toBe(64);
+
+    context.fileAssets.delete('file');
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(48);
+    expect(document.querySelector(`[data-node-id="${element.node}"]`)).toBeNull();
+  });
+
+  it('keeps narrow file cards at 64px while uploading and ready', async () => {
+    const plain = doc();
+    const root = plain.root.node;
+    if (root.type !== 'root' || root.layout_mode?.type !== 'paginated') throw new Error('Expected paginated root');
+    root.layout_mode.page_width = 200;
+    plain.root.children = [entry({ type: 'file', id: 'file' })];
+    const { editor, context } = await mountEditor(plain);
+    const element = editor.externalElements[0];
+    if (!element) throw new Error('Expected a file element');
+    const wrapper = document.querySelector<HTMLElement>(`[data-node-id="${element.node}"]`);
+    if (!wrapper) throw new Error('Expected a mounted file element');
+    const name = 'A long document filename that cannot fit on one line.pdf';
+
+    editor.inflightFiles.set(element.node, { uploadId: 'upload', name, size: 1024 });
+    await expect.poll(() => wrapper.getBoundingClientRect().height).toBe(64);
+    expect(editor.externalElements[0]?.bounds.height).toBe(64);
+
+    context.fileAssets.set('file', { id: 'file', name, size: '1024', url: '/document.pdf' });
+    editor.inflightFiles.delete(element.node);
+    await tick();
+    await waitForPresentation(editor);
+    expect(wrapper.getBoundingClientRect().height).toBe(64);
+    expect(editor.externalElements[0]?.bounds.height).toBe(64);
+    const labels = [...wrapper.querySelectorAll('span')];
+    expect(labels).toHaveLength(2);
+    for (const label of labels) {
+      expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
+      expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
+      expect(label.clientWidth).toBeGreaterThan(0);
+      expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    }
+  });
+
   it('keeps one image mounted when switching to pages shorter than its measured height', async () => {
     const plain = externalComponentDoc({ type: 'image', id: 'asset', proportion: 100 });
     plain.root.children.push(entry({ type: 'horizontal_rule' }), entry({ type: 'paragraph' }));
@@ -1946,6 +2029,29 @@ describe('web editor frame synchronization', () => {
     await setDisplayZoom(editor, 0.2);
     expect(status?.isConnected).toBe(true);
     expect(status?.querySelector('svg')).toBeNull();
+  });
+
+  it('resumes embed measurement after returning from a fixed placeholder', async () => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'embed', id: 'embed' }));
+    const asset = {
+      id: 'embed',
+      url: 'https://example.com',
+      title: null,
+      description: null,
+      thumbnailUrl: null,
+      html: '<div style="height: 120px"></div>',
+    };
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(48);
+    editor.embedAssets.set('embed', asset);
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(120);
+
+    editor.embedAssets.delete('embed');
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(48);
+
+    editor.embedAssets.set('embed', asset);
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(120);
+    const wrapper = document.querySelector<HTMLElement>('[data-external-element]');
+    expect(wrapper?.getBoundingClientRect().height).toBe(120);
   });
 
   it('keeps embed component chrome fixed and removes it when the embed cannot contain one action', async () => {

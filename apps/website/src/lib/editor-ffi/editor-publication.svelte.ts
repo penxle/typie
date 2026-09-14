@@ -1,4 +1,5 @@
 import { flushSync, untrack } from 'svelte';
+import { getExternalElementHeightUpdates } from './external-element-height';
 import { applyMinimumRevealTargetHeight, pageRectsToRevealTargetSpan } from './geometry';
 import { nearestSurfacePage, requiredSurfacePages } from './required-surface-pages';
 import { requiredSurfaceTiles } from './required-surface-tiles';
@@ -50,12 +51,14 @@ export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () =>
     void scroll.pendingRequest;
 
     const current = ++generation;
-    const imageHeights = editor.images.heightUpdates(editor.appliedSnapshot.externalElements);
-    // Image dimensions are known without mounting their DOM. Settle their layout
+    const externalHeights = getExternalElementHeightUpdates(ctx, editor.appliedSnapshot.externalElements);
+    // Some external heights are known without mounting their DOM. Settle their layout
     // before choosing pages or consuming a selection reveal for this publication.
     untrack(() => {
-      if (imageHeights.length > 0) {
-        editor.updateNow((request) => request.enqueue({ type: 'system', event: { type: 'set_external_heights', heights: imageHeights } }));
+      if (externalHeights.length > 0) {
+        editor.updateNow((request) =>
+          request.enqueue({ type: 'system', event: { type: 'set_external_heights', heights: externalHeights } }),
+        );
       } else if (!zoomDiffers(displayZoom, renderZoom)) {
         reconcilePublication(editor, scroll, surfaceHost, () => current === generation);
       }

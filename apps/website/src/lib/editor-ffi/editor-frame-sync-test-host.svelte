@@ -1,5 +1,8 @@
 <script lang="ts" module>
+  import type { EditorContext } from './editor.svelte';
+
   export type EditorFrameSyncTestHarness = {
+    context: EditorContext;
     extensionArea: HTMLDivElement;
     scrollRoot: HTMLDivElement;
   };
@@ -138,7 +141,7 @@
     const currentExtensionArea = extensionArea;
     const currentScrollRoot = scrollRoot;
     ready = true;
-    untrack(() => onReady?.({ extensionArea: currentExtensionArea, scrollRoot: currentScrollRoot }));
+    untrack(() => onReady?.({ context: ctx, extensionArea: currentExtensionArea, scrollRoot: currentScrollRoot }));
   });
 
   onDestroy(() => {

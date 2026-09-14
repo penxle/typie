@@ -4,6 +4,7 @@
   import { Button, Icon, Modal } from '@typie/ui/components';
   import ArchiveIcon from '~icons/lucide/archive';
   import { getEditorContext } from '../editor.svelte';
+  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT } from '../external-element-height';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
@@ -27,13 +28,13 @@
 <ExternalElementWrapper {element}>
   <div class={css({ width: 'full' })}>
     <div
+      style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
       class={flex({
         justifyContent: 'space-between',
         alignItems: 'center',
         borderRadius: '4px',
         backgroundColor: 'surface.inset',
         width: 'full',
-        height: '48px',
       })}
     >
       <div

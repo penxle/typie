@@ -27,6 +27,8 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
+internal val EditorFileCardHeight = 64.dp
+
 @Composable
 internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: String) {
   val externalElementState = LocalEditorExternalElementState.current
@@ -55,7 +57,7 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
       modifier =
         Modifier.widthIn(max = 400.dp)
           .fillMaxWidth()
-          .height(64.dp)
+          .height(EditorFileCardHeight)
           .clip(cardShape)
           .background(AppTheme.colors.surfaceInset, cardShape)
           .border(1.dp, AppTheme.colors.borderHairline, cardShape)

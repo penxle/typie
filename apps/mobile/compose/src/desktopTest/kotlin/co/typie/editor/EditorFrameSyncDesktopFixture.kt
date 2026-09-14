@@ -409,20 +409,18 @@ internal fun continuousDocumentWithOffscreenTable(): PlainDoc {
   )
 }
 
-internal fun paginatedDocumentWithImage(): PlainDoc {
+internal fun paginatedDocumentWithExternalElements(
+  nodes: List<PlainNode> = listOf(PlainNode.Image(id = "asset"))
+): PlainDoc {
   val document = emptyPaginatedDocument()
   return document.copy(
     root =
       document.root.copy(
         children =
           buildList {
-            add(
-              PlainNodeEntry(
-                node = PlainNode.Image(id = "asset"),
-                modifiers = emptyMap(),
-                children = emptyList(),
-              )
-            )
+            for (node in nodes) {
+              add(PlainNodeEntry(node = node, modifiers = emptyMap(), children = emptyList()))
+            }
             repeat(80) { add(paragraph("after image")) }
           }
       )
