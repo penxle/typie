@@ -90,7 +90,7 @@
     <div class={flex({ flexDirection: 'column', gap: '6px' })}>
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
         <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>공유 및 게시</div>
+          <div class={css({ fontSize: '13px', fontWeight: 'semibold', color: 'text.muted' })}>공유 및 발행</div>
 
           {#if user.data.id === document.data.entity.user.id}
             <a
@@ -98,7 +98,7 @@
               href={document.data.entity.url}
               rel="noopener noreferrer"
               target="_blank"
-              use:tooltip={{ message: '게시 페이지에서 열기' }}
+              use:tooltip={{ message: '조회 페이지에서 열기' }}
             >
               <Icon style={css.raw({ color: 'text.muted', _groupHover: { color: 'text.default' } })} icon={ExternalLinkIcon} size={14} />
             </a>
@@ -140,7 +140,7 @@
               userSelect: 'none',
             })}
           >
-            공개 조회
+            발행됨
           </div>
         {:else if document.data.entity.visibility === EntityVisibility.UNLISTED}
           <div

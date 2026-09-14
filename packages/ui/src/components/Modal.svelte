@@ -89,6 +89,7 @@
     bind:this={trapEl}
     style:padding={`${overlayPadding}px`}
     class={center({ position: 'fixed', inset: '0', zIndex: 'modal', userSelect: 'none' })}
+    data-focus-trap
     use:focusTrap={{
       initialFocus,
       fallbackFocus: '[role="none"]',

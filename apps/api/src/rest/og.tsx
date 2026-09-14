@@ -3,7 +3,7 @@ import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
 import { EntityState, EntityType } from '@typie/lib/enums';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import ky from 'ky';
@@ -11,9 +11,11 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Documents, Entities, first, Folders, Images } from '#/db/index.ts';
+import { db, Documents, Entities, first, Folders, Images, PublicationVersions } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
-import type { Env } from '#/context.ts';
+import { buildPublishedPublicationByIdQuery } from '#/utils/publication-view-core.ts';
+import type { ReactNode } from 'react';
+import type { Env, ServerContext } from '#/context.ts';
 
 export const og = new Hono<Env>();
 
@@ -73,6 +75,53 @@ const colors = {
   },
 };
 
+og.get('/p/:publicationId', async (c) => {
+  const publicationId = c.req.param('publicationId');
+
+  const publication = await buildPublishedPublicationByIdQuery(db, { publicationId }).then(first);
+
+  if (!publication) {
+    throw new HTTPException(404);
+  }
+
+  const version = await db
+    .select({ title: PublicationVersions.title, subtitle: PublicationVersions.subtitle, thumbnailPath: Images.path })
+    .from(PublicationVersions)
+    .leftJoin(Images, eq(Images.id, PublicationVersions.thumbnailId))
+    .where(eq(PublicationVersions.publicationId, publication.id))
+    .orderBy(desc(PublicationVersions.version))
+    .limit(1)
+    .then(first);
+
+  if (!version) {
+    throw new HTTPException(404);
+  }
+
+  return await respondWithCard(c, await renderDocumentCard(version));
+});
+
+const PREVIEW_TEXT_LIMIT = 200;
+
+og.get('/preview', async (c) => {
+  const title = c.req.query('title')?.slice(0, PREVIEW_TEXT_LIMIT) || null;
+  const subtitle = c.req.query('subtitle')?.slice(0, PREVIEW_TEXT_LIMIT) || null;
+  const thumbnailId = c.req.query('thumbnailId');
+
+  const thumbnailPath = thumbnailId
+    ? await db
+        .select({ path: Images.path })
+        .from(Images)
+        .where(eq(Images.id, thumbnailId))
+        .then(first)
+        .then((row) => row?.path ?? null)
+    : null;
+
+  const resp = await respondWithCard(c, await renderDocumentCard({ title, subtitle, thumbnailPath }));
+  resp.headers.set('Cache-Control', 'public, max-age=300');
+
+  return resp;
+});
+
 og.get('/:entityId', async (c) => {
   const entityId = c.req.param('entityId');
 
@@ -94,6 +143,10 @@ og.get('/:entityId', async (c) => {
     })
     .exhaustive();
 
+  return await respondWithCard(c, node);
+});
+
+const respondWithCard = async (c: ServerContext, node: Awaited<ReactNode>) => {
   const svg = await satori(node, {
     width: 1200,
     height: 630,
@@ -134,7 +187,7 @@ og.get('/:entityId', async (c) => {
       'Content-Type': 'image/png',
     },
   });
-});
+};
 
 const renderFolder = async (entityId: string) => {
   const folder = await db
@@ -236,6 +289,18 @@ const renderDocument = async (entityId: string) => {
     throw new HTTPException(404);
   }
 
+  return await renderDocumentCard(document);
+};
+
+const renderDocumentCard = async ({
+  title,
+  subtitle,
+  thumbnailPath,
+}: {
+  title: string | null;
+  subtitle: string | null;
+  thumbnailPath: string | null;
+}) => {
   return (
     <div
       style={{
@@ -271,10 +336,10 @@ const renderDocument = async (entityId: string) => {
                 wordBreak: 'break-all',
               }}
             >
-              {document.title ?? '(제목 없음)'}
+              {title ?? '(제목 없음)'}
             </div>
 
-            {document.subtitle && (
+            {subtitle && (
               <div
                 style={{
                   display: 'block',
@@ -284,18 +349,13 @@ const renderDocument = async (entityId: string) => {
                   lineClamp: 1,
                 }}
               >
-                {document.subtitle}
+                {subtitle}
               </div>
             )}
           </div>
 
-          {document.thumbnailPath && (
-            <img
-              src={await toDataUri(document.thumbnailPath)}
-              width={200}
-              height={200}
-              style={{ objectFit: 'cover', borderRadius: '12px' }}
-            />
+          {thumbnailPath && (
+            <img src={await toDataUri(thumbnailPath)} width={200} height={200} style={{ objectFit: 'cover', borderRadius: '12px' }} />
           )}
         </div>
 

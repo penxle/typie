@@ -7,12 +7,10 @@
   import { pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
-  import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import ChevronsUpDownIcon from '~icons/lucide/chevrons-up-down';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import PlusIcon from '~icons/lucide/plus';
   import SettingsIcon from '~icons/lucide/settings';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -42,7 +40,6 @@
         sites {
           id
           name
-          url
 
           logo {
             id
@@ -286,28 +283,6 @@
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SettingsIcon} size={14} />
             <span>작업실 설정</span>
           </button>
-
-          <a
-            class={flex({
-              alignItems: 'center',
-              gap: '8px',
-              paddingX: '8px',
-              paddingY: '6px',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 'medium',
-              color: 'text.default',
-              transition: 'common',
-              _hover: { backgroundColor: 'surface.hover' },
-            })}
-            href={site.url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ExternalLinkIcon} size={14} />
-            <span>게시 페이지 열기</span>
-            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ArrowUpRightIcon} size={12} />
-          </a>
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
 

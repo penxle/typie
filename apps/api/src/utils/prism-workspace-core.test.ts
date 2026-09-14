@@ -358,13 +358,14 @@ test('입력 미러: update-sharing', () => {
     ids: ['E1'],
     visibility: 'PRIVATE',
   });
-  assert.deepEqual(UpdateSharingInput.parse({ ids: ['E1'], visibility: 'PUBLIC', recursive: true }), {
+  assert.deepEqual(UpdateSharingInput.parse({ ids: ['E1'], visibility: 'UNLISTED', recursive: true }), {
     ids: ['E1'],
-    visibility: 'PUBLIC',
+    visibility: 'UNLISTED',
     recursive: true,
   });
-  assert.equal(UpdateSharingInput.safeParse({ ids: [], visibility: 'PUBLIC' }).success, false);
-  assert.equal(UpdateSharingInput.safeParse({ ids: Array.from({ length: 21 }, (_, i) => `E${i}`), visibility: 'PUBLIC' }).success, false);
+  assert.equal(UpdateSharingInput.safeParse({ ids: [], visibility: 'UNLISTED' }).success, false);
+  assert.equal(UpdateSharingInput.safeParse({ ids: Array.from({ length: 21 }, (_, i) => `E${i}`), visibility: 'UNLISTED' }).success, false);
+  assert.equal(UpdateSharingInput.safeParse({ ids: ['E1'], visibility: 'PUBLIC' }).success, false);
   assert.equal(UpdateSharingInput.safeParse({ ids: ['E1'], visibility: 'SECRET' }).success, false);
 });
 

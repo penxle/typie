@@ -157,6 +157,10 @@ input CancelPrismRunInput {
   sessionId: ID!
 }
 
+input CancelScheduledPublicationInput {
+  publicationId: ID!
+}
+
 type CharacterCountChange {
   additions: Int!
   date: DateTime!
@@ -178,6 +182,24 @@ input ClosePrismReviewThreadInput {
   threadId: ID!
 }
 
+type Collection {
+  cover: Image
+  createdAt: DateTime!
+  description: String
+  id: ID!
+  name: String!
+  publications: [Publication!]!
+  space: Space!
+}
+
+type CollectionView {
+  cover: Image
+  description: String
+  id: ID!
+  name: String!
+  publications: [PublicationView!]!
+}
+
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -189,6 +211,13 @@ input CopyEntitiesInput {
 enum CouponState {
   ACTIVE
   DISABLED
+}
+
+input CreateCollectionInput {
+  coverId: ID
+  description: String
+  name: String!
+  spaceId: ID!
 }
 
 input CreateDividerInput {
@@ -245,6 +274,13 @@ input CreateSiteInput {
   name: String!
 }
 
+input CreateSpaceInput {
+  logoId: ID
+  name: String!
+  siteId: ID!
+  slug: String!
+}
+
 input CreateTextReplacementInput {
   lowerOrder: String
   match: String!
@@ -273,6 +309,10 @@ enum CreditCodeState {
 }
 
 scalar DateTime
+
+input DeleteCollectionInput {
+  collectionId: ID!
+}
 
 input DeleteDocumentCommentInput {
   clientId: String!
@@ -317,6 +357,10 @@ input DeleteSiteInput {
   siteId: ID!
 }
 
+input DeleteSpaceInput {
+  spaceId: ID!
+}
+
 input DeleteTextReplacementInput {
   textReplacementId: ID!
 }
@@ -335,7 +379,7 @@ type Divider implements IDivider {
   id: ID!
 }
 
-type Document implements IDocument {
+type Document implements IDocument & IEditorDocument {
   allowReaction: Boolean!
   assets: [DocumentAsset!]!
   assetsByIds(ids: [ID!]!): [DocumentAsset!]!
@@ -356,6 +400,7 @@ type Document implements IDocument {
   prismReviewLineages: [PrismReviewLineage!]!
   prismReviewRounds: [PrismReviewRound!]!
   protectContent: Boolean!
+  publication: Publication
   reactionCount: Int!
   state: DocumentState
   subtitle: String
@@ -507,6 +552,7 @@ type DocumentReaction {
   document: DocumentView!
   emoji: String!
   id: ID!
+  publication: PublicationView
 }
 
 type DocumentSpellingError {
@@ -548,7 +594,7 @@ enum DocumentType {
   TEMPLATE
 }
 
-type DocumentView implements IDocument {
+type DocumentView implements IDocument & IEditorDocument {
   allowReaction: Boolean!
   assets: [DocumentAsset!]!
   assetsByIds(ids: [ID!]!): [DocumentAsset!]!
@@ -563,6 +609,7 @@ type DocumentView implements IDocument {
   nullableTitle: String
   passwordUnlocked: Boolean!
   protectContent: Boolean!
+  publication: PublicationView
   reactions: [DocumentReaction!]!
   state: DocumentViewState
   subtitle: String
@@ -797,7 +844,7 @@ interface IDivider {
   id: ID!
 }
 
-interface IDocument {
+interface IDocument implements IEditorDocument {
   assets: [DocumentAsset!]!
   assetsByIds(ids: [ID!]!): [DocumentAsset!]!
   createdAt: DateTime!
@@ -809,6 +856,11 @@ interface IDocument {
   title: String!
   type: DocumentType!
   updatedAt: DateTime!
+}
+
+interface IEditorDocument {
+  fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
+  id: ID!
 }
 
 interface IEntity {
@@ -836,6 +888,18 @@ interface ISite {
   dateDisplay: SiteDateDisplay!
   id: ID!
   logo: Image!
+  name: String!
+  slug: String!
+  url: String!
+}
+
+interface ISpace {
+  allowIndexing: Boolean!
+  dateDisplay: SpaceDateDisplay!
+  description: String
+  id: ID!
+  links: [SpaceLink!]!
+  logo: Image
   name: String!
   slug: String!
   url: String!
@@ -950,6 +1014,12 @@ input MoveNoteInput {
   upperOrder: String
 }
 
+input MovePublicationInCollectionInput {
+  lowerOrder: String
+  publicationId: ID!
+  upperOrder: String
+}
+
 input MoveTextReplacementInput {
   lowerOrder: String
   textReplacementId: ID!
@@ -979,11 +1049,13 @@ type Mutation {
   authorizeSingleSignOn(input: AuthorizeSingleSignOnInput!): String!
   cancelPlanChange: Subscription_!
   cancelPrismRun(input: CancelPrismRunInput!): PrismSession!
+  cancelScheduledPublication(input: CancelScheduledPublicationInput!): Publication!
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
   closePrismReviewThread(input: ClosePrismReviewThreadInput!): PrismReviewThread!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
+  createCollection(input: CreateCollectionInput!): Collection!
   createDivider(input: CreateDividerInput!): Divider!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
@@ -992,10 +1064,12 @@ type Mutation {
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
   createSite(input: CreateSiteInput!): Site!
+  createSpace(input: CreateSpaceInput!): Space!
   createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
   deleteBillingKey: Boolean!
+  deleteCollection(input: DeleteCollectionInput!): Collection!
   deleteDocument(input: DeleteDocumentInput!): Document!
   deleteDocumentComment(input: DeleteDocumentCommentInput!): DocumentCommentThread!
   deleteDocumentCommentThread(input: DeleteDocumentCommentThreadInput!): DocumentCommentThread!
@@ -1006,6 +1080,7 @@ type Mutation {
   deletePrismReviewThreadComment(input: DeletePrismReviewThreadCommentInput!): PrismReviewThread!
   deletePrismSession(input: DeletePrismSessionInput!): PrismSession!
   deleteSite(input: DeleteSiteInput!): Site!
+  deleteSpace(input: DeleteSpaceInput!): Space!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
   deleteUserGoal: User!
@@ -1024,6 +1099,7 @@ type Mutation {
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
+  movePublicationInCollection(input: MovePublicationInCollectionInput!): Publication!
   moveTextReplacement(input: MoveTextReplacementInput!): TextReplacementNode!
   moveWidget(input: MoveWidgetInput!): Widget!
   persistBlobAsAvatar(input: PersistBlobAsAvatarInput!): Image!
@@ -1031,7 +1107,9 @@ type Mutation {
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   pinEntities(input: PinEntitiesInput!): [Entity!]!
+  pinPublication(input: PinPublicationInput!): Publication!
   preparePrismReview(input: PreparePrismReviewInput!): PrismReviewSnapshot!
+  publishDocument(input: PublishDocumentInput!): Publication!
   purchasePrismCreditPack(input: PurchasePrismCreditPackInput!): PrismCreditPurchase!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
@@ -1067,12 +1145,16 @@ type Mutation {
   undoPrismDocumentEdit(input: UndoPrismDocumentEditInput!): PrismDocumentEdit!
   unfurlEmbed(input: UnfurlEmbedInput!): Embed!
   unlockDocumentView(input: UnlockDocumentViewInput!): DocumentView!
+  unlockPublicationView(input: UnlockPublicationViewInput!): PublicationView!
   unpinEntity(input: UnpinEntityInput!): Entity!
+  unpinPublication(input: UnpinPublicationInput!): Publication!
+  unpublishDocument(input: UnpublishDocumentInput!): Publication!
   unregisterPushNotificationToken(input: UnregisterPushNotificationTokenInput!): Boolean!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBillingKeyWithEasyPay(input: UpdateBillingKeyWithEasyPayInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
+  updateCollection(input: UpdateCollectionInput!): Collection!
   updateDocument(input: UpdateDocumentInput!): Document!
   updateDocumentComment(input: UpdateDocumentCommentInput!): DocumentCommentThread!
   updateDocumentHeadExclusion(input: UpdateDocumentHeadExclusionInput!): DocumentHead!
@@ -1090,8 +1172,10 @@ type Mutation {
   updatePreferences(input: UpdatePreferencesInput!): User!
   updatePrismReviewThreadComment(input: UpdatePrismReviewThreadCommentInput!): PrismReviewThread!
   updatePrismSessionToolPolicy(input: UpdatePrismSessionToolPolicyInput!): PrismSession!
+  updatePublication(input: UpdatePublicationInput!): Publication!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
+  updateSpace(input: UpdateSpaceInput!): Space!
   updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
   updateUser(input: UpdateUserInput!): User!
   updateUserGoal(input: UpdateUserGoalInput!): User!
@@ -1193,6 +1277,12 @@ input PersistBlobAsImageInput {
 input PinEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
+  upperOrder: String
+}
+
+input PinPublicationInput {
+  lowerOrder: String
+  publicationId: ID!
   upperOrder: String
 }
 
@@ -1680,6 +1770,71 @@ type PrismWorkflowTranscript {
   turns: [PrismTranscriptTurn!]!
 }
 
+type Publication {
+  characterCount: Int!
+  collection: Collection
+  collectionOrder: String
+  document: Document!
+  excerpt: String
+  hasUnpublishedChanges: Boolean!
+  id: ID!
+  pinnedOrder: String
+  publishedAt: DateTime
+  scheduledAt: DateTime
+  space: Space!
+  state: PublicationState!
+  subtitle: String
+  tags: [String!]!
+  thumbnail: Image
+  title: String
+  unpublishedAt: DateTime
+  updatedAt: DateTime!
+  url: String!
+}
+
+enum PublicationState {
+  PUBLISHED
+  SCHEDULED
+  UNPUBLISHED
+}
+
+type PublicationView implements IEditorDocument {
+  allowReaction: Boolean!
+  assets: [DocumentAsset!]!
+  availableActions: [DocumentAvailableAction!]!
+  body: DocumentViewBody!
+  collection: CollectionView
+  documentId: ID!
+  editUrl: String
+  excerpt: String!
+  fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
+  hasPassword: Boolean!
+  id: ID!
+  nextInCollection: PublicationView
+  passwordUnlocked: Boolean!
+  prevInCollection: PublicationView
+  protectContent: Boolean!
+  publishedAt: DateTime!
+  reactions: [DocumentReaction!]!
+  space: SpaceView!
+  subtitle: String
+  tags: [String!]!
+  thumbnail: Image
+  title: String!
+  updatedAt: DateTime!
+  url: String!
+}
+
+input PublishDocumentInput {
+  collectionId: ID
+  documentId: ID!
+  excerpt: String
+  scheduledAt: DateTime
+  spaceId: ID!
+  tags: [String!]!
+  thumbnailId: ID
+}
+
 input PurchasePrismCreditPackInput {
   pack: PrismCreditPack!
 }
@@ -1727,6 +1882,8 @@ type Query {
   seed: Float!
   site(siteId: ID!): Site!
   siteView(origin: String!): SiteView!
+  space(spaceId: ID!): Space!
+  spaceView(origin: String!): SpaceView!
   stats: JSON!
   userView(id: ID!): UserView!
   widgets: [Widget!]!
@@ -1937,6 +2094,7 @@ type Site implements ISite {
   pinnedEntities: [Entity!]!
   recentDocuments(limit: Int! = 5, sort: RecentDocumentSort!): RecentDocumentsResult!
   slug: String!
+  spaces: [Space!]!
   url: String!
   user: User!
   view: SiteView!
@@ -1962,6 +2120,81 @@ type SiteView implements ISite {
   logo: Image!
   name: String!
   slug: String!
+  url: String!
+}
+
+type Space implements ISpace {
+  allowIndexing: Boolean!
+  collections: [Collection!]!
+  createdAt: DateTime!
+  dateDisplay: SpaceDateDisplay!
+  description: String
+  id: ID!
+  links: [SpaceLink!]!
+  logo: Image
+  name: String!
+  pinnedPublications: [Publication!]!
+  publications(states: [PublicationState!]): [Publication!]!
+  site: Site!
+  slug: String!
+  url: String!
+}
+
+enum SpaceAvailableAction {
+  SETTINGS
+}
+
+enum SpaceDateDisplay {
+  NONE
+  PUBLISHED_AT
+  UPDATED_AT
+}
+
+type SpaceLink {
+  label: String!
+  url: String!
+}
+
+input SpaceLinkInput {
+  label: String!
+  url: String!
+}
+
+type SpacePublicationsPage {
+  hasMore: Boolean!
+  publications: [PublicationView!]!
+}
+
+enum SpaceState {
+  ACTIVE
+  DELETED
+}
+
+type SpaceTag {
+  count: Int!
+  name: String!
+  publications(after: ID, first: Int): SpacePublicationsPage!
+}
+
+type SpaceView implements ISpace {
+  allowIndexing: Boolean!
+  availableActions: [SpaceAvailableAction!]!
+  collection(collectionId: ID!): CollectionView!
+  collections: [CollectionView!]!
+  dateDisplay: SpaceDateDisplay!
+  description: String
+  id: ID!
+  links: [SpaceLink!]!
+  logo: Image!
+  name: String!
+  pinnedPublications: [PublicationView!]!
+  publication(publicationId: ID!): PublicationView!
+  publicationCount: Int!
+  publications(after: ID, first: Int): SpacePublicationsPage!
+  sitemap: [String!]!
+  slug: String!
+  tag(name: String!): SpaceTag!
+  tags: [SpaceTag!]!
   url: String!
 }
 
@@ -2074,8 +2307,21 @@ input UnlockDocumentViewInput {
   password: String!
 }
 
+input UnlockPublicationViewInput {
+  password: String!
+  publicationId: ID!
+}
+
 input UnpinEntityInput {
   entityId: ID!
+}
+
+input UnpinPublicationInput {
+  publicationId: ID!
+}
+
+input UnpublishDocumentInput {
+  documentId: ID!
 }
 
 input UnregisterPushNotificationTokenInput {
@@ -2100,6 +2346,13 @@ input UpdateBillingKeyWithEasyPayInput {
 
 input UpdateBootstrapInput {
   bootstrap: JSON!
+}
+
+input UpdateCollectionInput {
+  collectionId: ID!
+  coverId: ID
+  description: String
+  name: String
 }
 
 input UpdateDocumentCommentInput {
@@ -2204,6 +2457,14 @@ input UpdatePrismSessionToolPolicyInput {
   sessionId: ID!
 }
 
+input UpdatePublicationInput {
+  collectionId: ID
+  excerpt: String
+  publicationId: ID!
+  tags: [String!]!
+  thumbnailId: ID
+}
+
 input UpdateSiteInput {
   dateDisplay: SiteDateDisplay
   logoId: ID
@@ -2214,6 +2475,17 @@ input UpdateSiteInput {
 input UpdateSiteSlugInput {
   siteId: ID!
   slug: String!
+}
+
+input UpdateSpaceInput {
+  allowIndexing: Boolean
+  dateDisplay: SpaceDateDisplay
+  description: String
+  links: [SpaceLinkInput!]
+  logoId: ID
+  name: String
+  slug: String
+  spaceId: ID!
 }
 
 input UpdateTextReplacementInput {

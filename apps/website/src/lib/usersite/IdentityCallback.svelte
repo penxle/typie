@@ -1,0 +1,106 @@
+<script lang="ts">
+  import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
+  import { css } from '@typie/styled-system/css';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { token } from '@typie/styled-system/tokens';
+  import { Helmet, RingSpinner } from '@typie/ui/components';
+  import { Toast } from '@typie/ui/notification';
+  import mixpanel from 'mixpanel-browser';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import Logo from '$assets/logos/logo.svg?component';
+  import { unwrapError } from '$lib/graphql';
+  import { graphql } from '$mearie';
+
+  const [verifyPersonalIdentity] = createMutation(
+    graphql(`
+      mutation IdentityCallback_VerifyPersonalIdentity_Mutation($input: VerifyPersonalIdentityInput!) {
+        verifyPersonalIdentity(input: $input) {
+          id
+        }
+      }
+    `),
+  );
+
+  onMount(async () => {
+    const redirectUri = sessionStorage.getItem('redirect_uri');
+    sessionStorage.removeItem('redirect_uri');
+
+    try {
+      const identityVerificationId = page.url.searchParams.get('identityVerificationId');
+      if (!identityVerificationId) {
+        throw new Error('identityVerificationId is missing');
+      }
+
+      await verifyPersonalIdentity({
+        input: {
+          identityVerificationId,
+        },
+      });
+
+      mixpanel.track('verify_personal_identity_success');
+      Toast.success('본인인증이 완료되었어요');
+    } catch (err) {
+      const errorMessages: Record<string, string> = {
+        identity_verification_failed: '인증에 실패했습니다.',
+        same_identity_exists: '이미 다른 계정에 인증된 정보입니다.',
+      };
+
+      const error = unwrapError(err);
+      if (error instanceof TypieError) {
+        const message = errorMessages[error.code] || error.code;
+        Toast.error(message);
+      }
+    } finally {
+      await goto(redirectUri ?? '/', { replaceState: true });
+    }
+  });
+</script>
+
+<Helmet title="본인인증 중..." />
+
+<div
+  style:--grid-line-color={token('colors.border.default')}
+  style:--cross-line-color={token('colors.border.hairline')}
+  style:--grid-size="30px"
+  style:--line-thickness="1px"
+  class={center({
+    padding: '20px',
+    width: '[100dvw]',
+    minHeight: '[100dvh]',
+    height: 'full',
+    overflowY: 'auto',
+    backgroundColor: 'surface.canvas',
+    backgroundImage:
+      '[repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) calc(var(--grid-size) - var(--line-thickness)), var(--grid-line-color) var(--grid-size)), repeating-linear-gradient(0deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size)), repeating-linear-gradient(90deg, transparent, transparent calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2 - var(--line-thickness)), var(--cross-line-color) calc(var(--grid-size) / 2), transparent calc(var(--grid-size) / 2), transparent var(--grid-size))]',
+    backgroundSize: 'var(--grid-size) var(--grid-size)',
+  })}
+>
+  <div
+    class={css({
+      borderRadius: '12px',
+      padding: { base: '24px', lg: '48px' },
+      maxWidth: '400px',
+      width: 'full',
+      backgroundColor: 'surface.default',
+      boxShadow: 'md',
+    })}
+  >
+    <div class={flex({ flexDirection: 'column', gap: '24px' })}>
+      <div class={flex({ justifyContent: 'flex-start' })}>
+        <Logo class={css({ height: '32px' })} />
+      </div>
+
+      <div class={flex({ flexDirection: 'column', gap: '4px' })}>
+        <h1 class={css({ fontSize: { base: '22px', lg: '24px' }, fontWeight: 'extrabold' })}>본인인증 중...</h1>
+        <div class={css({ fontSize: { base: '13px', lg: '14px' }, color: 'text.muted' })}>잠시만 기다려주세요.</div>
+      </div>
+
+      <div class={center({ height: '100px' })}>
+        <RingSpinner style={css.raw({ size: '50px', color: 'text.muted' })} />
+      </div>
+    </div>
+  </div>
+</div>

@@ -1257,6 +1257,140 @@ export const Sites = pgTable(
   (t) => [uniqueIndex().on(t.slug), index().on(t.userId, t.state)],
 );
 
+export const Spaces = pgTable(
+  'spaces',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.SPACES, { length: 'short' })),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    logoId: text('logo_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    description: text('description'),
+    links: jsonb('links')
+      .$type<{ label: string; url: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    allowIndexing: boolean('allow_indexing').notNull().default(true),
+    dateDisplay: E._SpaceDateDisplay('date_display').notNull().default('PUBLISHED_AT'),
+    state: E._SpaceState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [uniqueIndex().on(t.slug), index().on(t.siteId, t.state)],
+);
+
+export const Collections = pgTable(
+  'collections',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.COLLECTIONS, { length: 'short' })),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    coverId: text('cover_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.spaceId)],
+);
+
+export const Publications = pgTable(
+  'publications',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PUBLICATIONS, { length: 'short' })),
+    documentId: text('document_id')
+      .notNull()
+      .unique()
+      .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    state: E._PublicationState('state').notNull(),
+    collectionId: text('collection_id').references(() => Collections.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    collectionOrder: text('collection_order'),
+    pinnedOrder: text('pinned_order'),
+    publishedAt: datetime('published_at'),
+    scheduledAt: datetime('scheduled_at'),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+    unpublishedAt: datetime('unpublished_at'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index().on(t.spaceId, t.state, t.publishedAt),
+    uniqueIndex()
+      .on(t.spaceId, t.pinnedOrder)
+      .where(sql`${t.pinnedOrder} is not null`),
+    uniqueIndex()
+      .on(t.collectionId, t.collectionOrder)
+      .where(sql`${t.collectionId} is not null`),
+    index()
+      .on(t.state, t.scheduledAt)
+      .where(sql`${t.state} = 'SCHEDULED'`),
+  ],
+);
+
+export const PublicationVersions = pgTable(
+  'publication_versions',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PUBLICATION_VERSIONS)),
+    publicationId: text('publication_id')
+      .notNull()
+      .references(() => Publications.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    version: integer('version').notNull(),
+    title: text('title'),
+    subtitle: text('subtitle'),
+    graph: bytea('graph').notNull(),
+    text: text('text').notNull(),
+    characterCount: integer('character_count').notNull(),
+    heads: bytea('heads').notNull(),
+    thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    excerpt: text('excerpt'),
+    assetIds: text('asset_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique().on(t.publicationId, t.version)],
+);
+
+export const PublicationTags = pgTable(
+  'publication_tags',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.PUBLICATION_TAGS)),
+    publicationId: text('publication_id')
+      .notNull()
+      .references(() => Publications.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    order: text('order').notNull(),
+  },
+  (t) => [unique().on(t.publicationId, t.name), index().on(t.spaceId, t.name)],
+);
+
 export const Subscriptions = pgTable(
   'subscriptions',
   {

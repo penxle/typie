@@ -21,7 +21,7 @@
 <div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '140px' })}>
   <div class={flex({ alignItems: 'center', gap: '4px', fontWeight: 'semibold' })}>
     {#if visibility === EntityVisibility.PUBLIC}
-      <span>공개 조회</span>
+      <span>발행됨</span>
     {:else if visibility === EntityVisibility.UNLISTED}
       <span>링크 조회</span>
     {:else}
