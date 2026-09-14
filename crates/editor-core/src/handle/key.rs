@@ -2256,6 +2256,39 @@ mod tests {
     }
 
     #[test]
+    fn tab_and_shift_enter_in_fold_title_preserve_state() {
+        for (key, shift) in [(Key::Tab, false), (Key::Enter, true)] {
+            for offset in [0, 2, 5] {
+                let (mut state, title) = state! {
+                    doc { root {
+                        fold {
+                            title: fold_title { text("Hello") }
+                            fold_content { paragraph {} }
+                        }
+                        paragraph {}
+                    } }
+                    selection: (title, 0)
+                    pending_modifiers: [bold]
+                };
+                state.selection = Some(Selection::collapsed(Position::new(title, offset)));
+                let mut editor = Editor::new_test(state.clone());
+                handle_key_event(
+                    &mut editor,
+                    KeyEvent {
+                        key,
+                        modifiers: InputModifiers {
+                            shift,
+                            ..Default::default()
+                        },
+                    },
+                )
+                .unwrap();
+                assert_state_eq!(editor.state(), &state);
+            }
+        }
+    }
+
+    #[test]
     fn tab_first_item_no_op_preserves_pending_format() {
         let (state, ..) = state! {
             doc {

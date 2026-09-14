@@ -430,15 +430,28 @@ fn insert_atom_at_caret(
     plain: PlainNode,
     paint_override: Option<&[Modifier]>,
 ) -> CommandResult {
-    materialize_caret_block(tr)?;
-
     let Some(selection) = tr.selection() else {
         return Ok(false);
     };
     if selection.anchor != selection.head {
         return Ok(false);
     }
-    let pos = selection.head;
+    {
+        let view = tr.view();
+        let block = view
+            .node(selection.head.node)
+            .ok_or(CommandError::NodeNotFound(selection.head.node))?;
+        if !block.spec().content.matches(plain.as_type()) {
+            return Ok(false);
+        }
+    }
+
+    materialize_caret_block(tr)?;
+
+    let pos = tr
+        .selection()
+        .ok_or_else(|| CommandError::Corrupted("materialized caret selection missing".into()))?
+        .head;
     let block = pos.node;
 
     let mut paint = match paint_override {
@@ -497,6 +510,34 @@ mod tests {
     use editor_transaction::Step;
 
     use super::*;
+
+    #[test]
+    fn inline_atoms_in_synthetic_fold_title_are_no_ops() {
+        let (mut initial, ..) = state! {
+            doc { root { fold paragraph {} } }
+            selection: none
+            pending_modifiers: [bold]
+        };
+        let title = initial
+            .view()
+            .root()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .child_blocks()
+            .next()
+            .unwrap()
+            .id();
+        initial.selection = Some(Selection::collapsed(Position::new(title, 0)));
+
+        let mut tr = Transaction::new(&initial);
+        assert!(!crate::commands::insert_tab(&mut tr, None).unwrap());
+        assert!(!crate::commands::insert_hard_break(&mut tr).unwrap());
+        let (actual, records, ..) = tr.commit();
+        assert!(records.is_empty());
+        crate::test_utils::assert_state_eq!(&actual, &initial);
+    }
 
     fn root_id(state: &State) -> Dot {
         state.view().root().unwrap().id()
