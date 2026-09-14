@@ -2,7 +2,7 @@ import '../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
@@ -676,6 +676,35 @@ function expectActualCanvas(editor: Editor, pageIndex: number, requirePaintedPix
 }
 
 describe('web editor frame synchronization', () => {
+  it('keeps window scrolling when the visual viewport event arrives before the window event', async () => {
+    const { context } = await mountEditor(continuousDoc('public viewer scrolling '.repeat(300)), {
+      readOnly: true,
+      useWindowScroll: true,
+    });
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) throw new Error('Expected a visual viewport');
+
+    window.scrollTo({ top: 100, behavior: 'instant' });
+    window.dispatchEvent(new Event('scroll'));
+    await tick();
+    await nextAnimationFrame();
+
+    for (const top of [300, 600, 900]) {
+      window.scrollTo({ top, behavior: 'instant' });
+      visualViewport.dispatchEvent(new Event('scroll'));
+      await tick();
+
+      expect(Math.abs(window.scrollY - top)).toBeLessThanOrEqual(COORDINATE_TOLERANCE_PX);
+      expect(context.scroll?.lastScrollWasAuto).toBe(false);
+      window.dispatchEvent(new Event('scroll'));
+      await nextAnimationFrame();
+      expect(Math.abs(window.scrollY - top)).toBeLessThanOrEqual(COORDINATE_TOLERANCE_PX);
+    }
+
+    await userEvent.keyboard('{PageDown}');
+    await expect.poll(() => window.scrollY).toBeGreaterThan(900 + window.innerHeight / 2);
+  });
+
   it('keeps rendering while browser smart zoom narrows and pans the visual viewport', async () => {
     const visualViewport = Object.assign(new EventTarget(), {
       offsetLeft: 0,

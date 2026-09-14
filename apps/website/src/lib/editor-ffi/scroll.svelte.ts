@@ -160,8 +160,10 @@ export class EditorScrollScope {
   #pendingRequest: EditorBringIntoViewRequest | null = null;
   #keepVisibleTarget = $state<EditorScrollIntoViewTarget | null>(null);
   #destroyed = false;
+  // Destinations requested by the app, consumed by the next distinct scroll observation.
   #expectedScrollTop: number | null = null;
   #expectedScrollLeft: number | null = null;
+  #lastObservedScroll: EditorViewportScrollPosition | null = null;
   #smoothRequest: EditorBringIntoViewRequest | null = null;
   #smoothMotion: SmoothScrollMotion | null = null;
   #smoothAnimationFrame: number | null = null;
@@ -310,6 +312,10 @@ export class EditorScrollScope {
     if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null, attachmentAchieved: false };
     const metrics = this.viewportMetrics(snapshot, true);
     if (!metrics) return { type: 'unavailable' };
+
+    // Establish the initial position before any scroll events arrive.
+    this.#lastObservedScroll ??= { left: metrics.scrollLeft, top: metrics.scrollTop };
+
     const selectionCapture = this.#editor.captureSelectionViewportAnchor(snapshot.revision);
     if (selectionCapture && this.#viewportAnchor.needsSelectionAdoption(selectionCapture.identity)) {
       const selectionGeometry = resolveViewportAnchorGeometry(selectionCapture.geometry, metrics.layout);
@@ -434,6 +440,13 @@ export class EditorScrollScope {
     if (!viewport) return;
     const scrollLeft = viewport.getScrollLeft();
     const scrollTop = viewport.getScrollTop();
+
+    // visualViewport and window can report the same movement. Keep the first
+    // observation's auto/user classification when the second event arrives.
+    const previousScroll = this.#lastObservedScroll;
+    if (previousScroll?.left === scrollLeft && previousScroll.top === scrollTop) return;
+    this.#lastObservedScroll = { left: scrollLeft, top: scrollTop };
+
     const hasExpectedScroll = this.#expectedScrollLeft !== null || this.#expectedScrollTop !== null;
     const expectedLeftMatches = this.#expectedScrollLeft === null || Math.abs(scrollLeft - this.#expectedScrollLeft) <= 1;
     const expectedTopMatches = this.#expectedScrollTop === null || Math.abs(scrollTop - this.#expectedScrollTop) <= 1;

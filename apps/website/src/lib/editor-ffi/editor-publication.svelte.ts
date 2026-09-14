@@ -1,4 +1,5 @@
 import { flushSync, untrack } from 'svelte';
+import { on } from 'svelte/events';
 import { getExternalElementHeightUpdates } from './external-element-height';
 import { applyMinimumRevealTargetHeight, pageRectsToRevealTargetSpan } from './geometry';
 import { nearestSurfacePage, requiredSurfacePages } from './required-surface-pages';
@@ -22,14 +23,23 @@ export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () =>
 
   $effect(() => {
     const editor = ctx.editor;
-    const viewport = window.visualViewport;
-    if (!editor || !viewport) return;
-    const requestPublication = () => editor.requestPublication();
-    viewport.addEventListener('resize', requestPublication);
-    viewport.addEventListener('scroll', requestPublication);
+    const scroll = ctx.scroll;
+    const visualViewport = window.visualViewport;
+    if (!editor || !scroll || !visualViewport) return;
+
+    const offResize = on(visualViewport, 'resize', () => editor.requestPublication());
+    const offScroll = on(visualViewport, 'scroll', () => {
+      // Firefox can fire this before window.scroll. Observe the new position first
+      // so publication does not restore the viewport anchor to the old position.
+      if (editor.scrollViewport?.target === window) {
+        scroll.observeViewportScroll();
+      }
+      editor.requestPublication();
+    });
+
     return () => {
-      viewport.removeEventListener('resize', requestPublication);
-      viewport.removeEventListener('scroll', requestPublication);
+      offResize();
+      offScroll();
     };
   });
 

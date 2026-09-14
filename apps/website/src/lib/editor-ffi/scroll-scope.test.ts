@@ -1017,6 +1017,8 @@ describe('EditorScrollScope', () => {
 
     expect(scope.lastScrollRevision).toBe(1);
     expect(scope.lastScrollWasAuto).toBe(true);
+    scope.observeViewportScroll();
+    expect(scope.lastScrollWasAuto).toBe(true);
     expect(scope.prepareViewportAnchorPublication(candidate)).toMatchObject({
       type: 'ready',
       targetScrollLeft: 300,
