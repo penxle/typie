@@ -1813,7 +1813,14 @@ describe('web editor frame synchronization', () => {
     expect(firstHeights).toEqual([48, 48, 48, 48]);
     for (const element of editor.externalElements) {
       expect(editor.published?.frames.has(element.page_idx)).toBe(false);
-      expect(document.querySelector(`[data-node-id="${element.node}"]`)).toBeNull();
+      const node = document.querySelector<HTMLElement>(`[data-node-id="${element.node}"]`);
+      if (element.data.type === 'embed') {
+        expect(node).not.toBeNull();
+        expect(getComputedStyle(node as HTMLElement).visibility).toBe('hidden');
+        expect(node?.closest<HTMLElement>('[data-document-embed]')?.inert).toBe(true);
+      } else {
+        expect(node).toBeNull();
+      }
     }
   });
 
@@ -2029,6 +2036,140 @@ describe('web editor frame synchronization', () => {
     await setDisplayZoom(editor, 0.2);
     expect(status?.isConnected).toBe(true);
     expect(status?.querySelector('svg')).toBeNull();
+  });
+
+  it.each(['continuous', 'paginated'] as const)('lays out offscreen embed HTML before mounting its iframe in %s layout', async (mode) => {
+    const plain = mode === 'continuous' ? continuousDoc('before embed '.repeat(600)) : paginatedDocWithPageBreaks(12);
+    plain.root.children.push(entry({ type: 'embed', id: 'embed' }));
+    const { editor, scrollRoot } = await mountEditor(plain);
+    expect(editor.externalElements[0]?.bounds.height).toBe(48);
+    editor.embedAssets.set('embed', {
+      id: 'embed',
+      url: 'https://example.com',
+      title: null,
+      description: null,
+      thumbnailUrl: null,
+      html: '<div data-embed-content style="position: relative; aspect-ratio: 2"><iframe src="about:blank" style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div>',
+    });
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(editor.externalElements[0].bounds.width / 2);
+    const content = document.querySelector<HTMLElement>('[data-embed-content]');
+    if (!content) throw new Error('Expected mounted embed layout');
+    expect(content.querySelector('iframe')).toBeNull();
+    expect(content.getBoundingClientRect().top).toBeGreaterThan(scrollRoot.getBoundingClientRect().bottom);
+    if (mode === 'paginated') {
+      expect(editor.published?.frames.has(editor.externalElements[0].page_idx)).toBe(false);
+      expect(content.closest<HTMLElement>('[data-document-embed]')?.inert).toBe(true);
+      expect(getComputedStyle(content).visibility).toBe('hidden');
+    }
+
+    content.style.aspectRatio = '1';
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(editor.externalElements[0].bounds.width);
+    const layout = editor.rootAttrs?.layout_mode;
+    if (!layout) throw new Error('Expected a layout');
+    setRootLayoutMode(editor, layout.type === 'continuous' ? { ...layout, max_width: 240 } : { ...layout, page_width: 240 });
+    await expect.poll(() => editor.externalElements[0]?.bounds.width).toBe(mode === 'continuous' ? 240 : 240 - PAGE_MARGIN * 2);
+    await expect.poll(() => editor.externalElements[0]?.bounds.height === editor.externalElements[0]?.bounds.width).toBe(true);
+    expect(content.querySelector('iframe')).toBeNull();
+
+    content.scrollIntoView({ block: 'center' });
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await expect.poll(() => content.querySelector('iframe')).not.toBeNull();
+    const iframe = content.querySelector('iframe');
+    content.style.aspectRatio = '2';
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(editor.externalElements[0].bounds.width / 2);
+
+    scrollRoot.scrollTop = 0;
+    scrollRoot.dispatchEvent(new Event('scroll'));
+    await tick();
+    expect(content.querySelector('iframe')).toBe(iframe);
+
+    const asset = editor.embedAssets.get('embed');
+    if (!asset) throw new Error('Expected an embed asset');
+    editor.embedAssets.set('embed', { ...asset, title: 'Updated title' });
+    await tick();
+    expect(document.querySelector('[data-embed-content] iframe')).toBe(iframe);
+  });
+
+  it('reflects hosted embed size messages in pagination before visiting its page', async () => {
+    const plain = paginatedDocWithPageBreaks(12);
+    plain.root.children.push(entry({ type: 'embed', id: 'embed' }));
+    const { editor } = await mountEditor(plain);
+    editor.embedAssets.set('embed', {
+      id: 'embed',
+      url: 'https://example.com',
+      title: null,
+      description: null,
+      thumbnailUrl: null,
+      html: '<div style="max-width: 660px"><div style="position: relative; height: 0; padding-bottom: 63%; padding-top: 284px"><iframe data-dynamic-embed src="https://iframely.net/example" srcdoc="" sandbox style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div></div>',
+    });
+    await expect.poll(() => document.querySelector('[data-dynamic-embed]')).not.toBeNull();
+    const iframe = document.querySelector<HTMLIFrameElement>('[data-dynamic-embed]');
+    await import('@iframely/embed.js');
+    for (const height of [640, 300]) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: iframe?.contentWindow,
+          origin: 'https://iframely.net',
+          data: JSON.stringify({ method: 'resize', height }),
+        }),
+      );
+      await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(height);
+      expect(editor.published?.frames.has(editor.externalElements[0].page_idx)).toBe(false);
+      expect(document.querySelector('[data-dynamic-embed]')).toBe(iframe);
+    }
+    expect(editor.terminal).toBe(false);
+  });
+
+  it.each([undefined, 'https://example.com/unavailable'])('restores the asset card after widget cancellation with URL %s', async (url) => {
+    const { editor } = await mountEditor(externalComponentDoc({ type: 'embed', id: 'embed' }));
+    const asset = {
+      id: 'embed',
+      url: 'https://example.com/original',
+      title: 'Original embed title',
+      description: 'Original embed description',
+      thumbnailUrl: null,
+      html: '<div style="position: relative; height: 400px"><iframe data-cancel-embed src="https://iframely.net/example" srcdoc="" sandbox style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div>',
+    };
+    editor.embedAssets.set('embed', asset);
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(400);
+    const source = document.querySelector<HTMLIFrameElement>('[data-cancel-embed]')?.contentWindow;
+    if (!source) throw new Error('Expected a hosted iframe');
+    await import('@iframely/embed.js');
+    const cancel = () =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source,
+          origin: 'https://iframely.net',
+          data: JSON.stringify({ method: 'cancelWidget', url }),
+        }),
+      );
+    cancel();
+    await expect.poll(() => document.querySelector('[data-cancel-embed]')).toBeNull();
+    const wrapper = document.querySelector<HTMLElement>('[data-external-element]');
+    expect(wrapper?.textContent).toContain(asset.title);
+    expect(wrapper?.textContent).toContain(asset.description);
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    document.querySelector<HTMLButtonElement>('[aria-label="링크 열기"]')?.click();
+    expect(open).toHaveBeenCalledWith(asset.url, '_blank', 'noopener,noreferrer');
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBeLessThan(400);
+    expect(editor.externalElements[0]?.bounds.height).toBeGreaterThan(0);
+    expect(wrapper?.getBoundingClientRect().height).toBeCloseTo(editor.externalElements[0].bounds.height, 0);
+
+    editor.embedAssets.set('embed', { ...asset, title: 'Updated embed title' });
+    await tick();
+    expect(wrapper?.textContent).toContain('Updated embed title');
+    expect(document.querySelector('[data-cancel-embed]')).toBeNull();
+
+    editor.embedAssets.set('embed', {
+      ...asset,
+      html: '<div style="position: relative; height: 120px"><iframe data-replacement-embed src="https://iframely.net/replacement" srcdoc="" sandbox style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div>',
+    });
+    await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(120);
+    cancel();
+    await tick();
+    expect(document.querySelector('[data-replacement-embed]')).not.toBeNull();
+    expect(editor.externalElements[0]?.bounds.height).toBe(120);
+    expect(editor.terminal).toBe(false);
   });
 
   it('resumes embed measurement after returning from a fixed placeholder', async () => {

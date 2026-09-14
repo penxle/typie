@@ -1,0 +1,152 @@
+diff --git a/src/intersection.js b/src/intersection.js
+index 5ec2f8dd081a4e492e23966df9f05fc2c8aa432b..aea8b5d2d1c1966a5779733b656adc3575c97984 100644
+--- a/src/intersection.js
++++ b/src/intersection.js
+@@ -5,12 +5,18 @@ var observers = {};
+ 
+ function getObserver(options) {
+     var optionsKey = JSON.stringify(options);
+-    var observer = observers[optionsKey];
+-    if (!observer) {
++    var registration = observers[optionsKey];
++    if (!registration) {
+ 
+-        observer = new IntersectionObserver(function(entries) {
++        registration = {targets: new Set()};
++
++        registration.observer = new IntersectionObserver(function(entries) {
+ 
+             entries.forEach(function(entry) {
++                // An entry may have been queued before its iframe was unloaded.
++                if (!registration.targets.has(entry.target) || !entry.target.contentWindow) {
++                    return;
++                }
+                 messaging.postMessage({
+                     method: 'intersection',
+                     entry: {
+@@ -22,9 +28,9 @@ function getObserver(options) {
+ 
+         }, getObserverOptions(options));
+ 
+-        observers[optionsKey] = observer;
++        observers[optionsKey] = registration;
+     }
+-    return observer;
++    return registration;
+ }
+ 
+ function getObserverOptions(options) {
+@@ -50,7 +56,7 @@ if ('IntersectionObserver' in window &&
+     });
+ 
+     iframely.on('message', function(widget, message) {
+-        if (message.method === 'send-intersections' && widget.iframe) {
++        if (message.method === 'send-intersections' && widget && widget.iframe) {
+ 
+             var options = message.options;
+ 
+@@ -60,7 +66,23 @@ if ('IntersectionObserver' in window &&
+                 };
+             }
+ 
+-            getObserver(options).observe(widget.iframe);
++            var registration = getObserver(options);
++            registration.targets.add(widget.iframe);
++            registration.observer.observe(widget.iframe);
+         }
+     });
++
++    iframely.on('unload', function(iframe) {
++        Object.keys(observers).forEach(function(key) {
++            var registration = observers[key];
++            if (!registration.targets.delete(iframe)) {
++                return;
++            }
++            registration.observer.unobserve(iframe);
++            if (registration.targets.size === 0) {
++                registration.observer.disconnect();
++                delete observers[key];
++            }
++        });
++    });
+ }
+diff --git a/src/lazy-img-placeholder.js b/src/lazy-img-placeholder.js
+index 56c9458b79ba00bd1ae16a508b1d50a0f605b942..6a1b37b9117aac13d98e1b4efd1f96a1cc2da610 100644
+--- a/src/lazy-img-placeholder.js
++++ b/src/lazy-img-placeholder.js
+@@ -50,6 +50,13 @@ iframely.on('message', function(widget, message) {
+     }
+ });
+ 
++iframely.on('unload', function(iframe) {
++    var waitingWidget = findWaitingWidget({iframe: iframe});
++    if (waitingWidget) {
++        waitingWidget.deactivate();
++    }
++});
++
+ 
+ function addPlaceholderThumbnail(widget, href, imageUrl) {
+ 
+@@ -217,12 +224,12 @@ function WaitingWidget(widget) {
+     var iframe = widget.iframe;
+ 
+     var that = this;
+-    function iframeOnLoad() {
++    this.onLoad = function() {
+         // Bind method to self.
+         that.iframeOnLoad();
+-    }
++    };
+ 
+-    iframely.addEventListener(iframe, 'load', iframeOnLoad);
++    iframely.addEventListener(iframe, 'load', this.onLoad);
+ 
+     this.registerLoadingTimeout();
+ 
+@@ -238,17 +245,26 @@ WaitingWidget.prototype.iframeOnLoad = function() {
+         return;
+     }
+ 
+-    this.deactivate();
++    this.clearLoadingTimeout();
+ 
+     var that = this;
+-    setTimeout(function() {
++    // Stay registered until the delayed fade finishes so unload can cancel it.
++    this.fadeTimeoutId = setTimeout(function() {
+         hidePlaceholderThumbnail(that.widget);
++        that.deactivate();
+     }, iframely.LAZY_IFRAME_FADE_TIMEOUT);
+ };
+ 
+ WaitingWidget.prototype.deactivate = function() {
+     this.clearLoadingTimeout();
+-    removeWaitingWidget(this);
++    clearTimeout(this.fadeTimeoutId);
++    var iframe = this.widget.iframe;
++    if (iframe.removeEventListener) {
++        iframe.removeEventListener('load', this.onLoad, false);
++    } else if (iframe.detachEvent) {
++        iframe.detachEvent('onload', this.onLoad);
++    }
++    removeWaitingWidget(this.widget);
+ };
+ 
+ WaitingWidget.prototype.clearLoadingTimeout = function() {
+diff --git a/src/utils.js b/src/utils.js
+index 1276d1517901d454c0044d74c7ffddb484af05e2..0f5aa22adb73d8f96cc8f9196ded532b464b46d0 100644
+--- a/src/utils.js
++++ b/src/utils.js
+@@ -25,6 +25,11 @@ iframely.load = function() {
+     iframely.trigger.apply(this, args);
+ };
+ 
++// Release resources when a host application removes an individual iframe.
++iframely.unload = function(iframe) {
++    iframely.trigger('unload', iframe);
++};
++
+ var getIframeWrapper = exports.getIframeWrapper = function(iframe, checkClass) {
+ 
+     var aspectWrapper = iframe.parentNode;

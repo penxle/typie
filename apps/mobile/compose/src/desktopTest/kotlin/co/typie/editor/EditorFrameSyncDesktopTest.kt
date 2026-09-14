@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.Density
@@ -37,6 +38,7 @@ import co.typie.editor.body.resolveContinuousLayoutViewportWidth
 import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.body.resolvePageContentTop
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.external.EditorEmbedAsset
 import co.typie.editor.external.EditorFileAsset
 import co.typie.editor.external.EditorImageAsset
 import co.typie.editor.external.EditorImageResizeDraft
@@ -97,6 +99,65 @@ import org.jetbrains.skia.Image
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 class EditorFrameSyncDesktopTest {
+  @Test
+  fun measuresOffscreenEmbedCardsWithoutPageFrames() = runComposeUiTest {
+    val fixture =
+      FrameSyncFixture(
+        initialDoc = paginatedDocumentWithExternalElements(listOf(PlainNode.Embed("embed")))
+      )
+    try {
+      val editor = fixture.editor
+      editor.updateNowWithBringIntoView(fixture.bringIntoViewRequests) {
+        enqueue(
+          Message.Selection(
+            SelectionOp.SetAt(
+              page = editor.appliedState.pageSizes.lastIndex,
+              x = PageMargin,
+              y = PageHeight - PageMargin,
+            )
+          )
+        )
+        bringIntoView(
+          EditorBringIntoViewTarget.CurrentSelectionHead,
+          policy = EditorBringIntoViewPolicy.CursorGuard,
+        )
+      }
+      setFrameSyncContent(fixture)
+      waitUntil(timeoutMillis = 10000) { editor.publishedRevision != null }
+      waitUntil(timeoutMillis = 10000) {
+        val bundle = editor.publishedBundle
+        bundle != null &&
+          !bundle.frames.containsKey(bundle.snapshot.externalElements.single().pageIdx)
+      }
+      waitForIdle()
+      val element = editor.publishedState.externalElements.single()
+      assertFalse(assertNotNull(editor.publishedBundle).frames.containsKey(element.pageIdx))
+      assertEquals(48f, element.bounds.height)
+
+      runOnIdle {
+        fixture.externalElementState.put(
+          EditorEmbedAsset("embed", "https://example.com", "Offscreen embed", null, null, null)
+        )
+      }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height != 48f
+      }
+      assertTrue(editor.publishedState.externalElements.single().bounds.height > 48f)
+      assertFalse(
+        assertNotNull(editor.publishedBundle)
+          .frames
+          .containsKey(editor.publishedState.externalElements.single().pageIdx)
+      )
+      onNodeWithText("Offscreen embed").assertDoesNotExist()
+      runOnIdle { fixture.externalElementState.embeds.assets.clear() }
+      waitUntil(timeoutMillis = 10000) {
+        editor.publishedState.externalElements.single().bounds.height == 48f
+      }
+    } finally {
+      fixture.close()
+    }
+  }
+
   @Test
   fun settlesOffscreenPlaceholdersAndFileMetadataBeforePublication() = runComposeUiTest {
     val fixture =
