@@ -478,13 +478,22 @@ internal constructor(
 
   // IME materialization is a Host read preference, not a core mutation. It keeps
   // the same applied revision instead of creating an empty barrier tick.
-  internal suspend fun refreshImeSnapshot() {
-    invokeCore {
-      if (!imeSessionActive.load()) return@invokeCore
-      val ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
-      if (appliedState.ime != ime) {
-        appliedState = appliedState.copy(ime = ime)
+  internal fun refreshImeSnapshot() {
+    try {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          ensureActive()
+          if (!imeSessionActive.load()) return@withPriorityLock
+          val ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
+          if (appliedState.ime != ime) {
+            appliedState = appliedState.copy(ime = ime)
+          }
+        }
       }
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: Throwable) {
+      throw claimEffectFailure(error)
     }
   }
 

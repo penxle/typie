@@ -53,6 +53,7 @@ import co.typie.platform.Clipboard
 import co.typie.platform.IncomingContentCandidates
 import co.typie.platform.Platform
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -611,7 +612,7 @@ internal class EditorInputNode(
     registerTextInputClient(this, if (sessionEnabled) textInputClient else null)
     focusedJob =
       if (sessionEnabled) {
-        editor.launchEffect(coroutineScope = coroutineScope) {
+        editor.launchEffect(coroutineScope = coroutineScope, start = CoroutineStart.UNDISPATCHED) {
           val uninstallPlatformSessionEffects =
             platformInputBridge.installSessionEffects(
               dispatchBindingOnUnmatchedKeyUp = { key, modifiers ->

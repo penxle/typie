@@ -43,6 +43,7 @@ dependencyResolutionManagement {
         }
       }
       filter {
+        includeVersion("androidx.compose.ui", "ui-android", "1.12.0")
         includeVersion("org.jetbrains.compose.ui", "ui-iosarm64", "1.12.0")
         includeVersion("org.jetbrains.compose.ui", "ui-iossimulatorarm64", "1.12.0")
         includeVersion("org.jetbrains.compose.foundation", "foundation-iosarm64", "1.12.0")
