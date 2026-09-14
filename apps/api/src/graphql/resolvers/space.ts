@@ -10,6 +10,7 @@ import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildPublicationsBySpaceQuery } from '#/utils/publication-core.ts';
 import { createSpaceCore, deleteSpaceCore, findActiveSpace, updateSpaceCore } from '#/utils/space.ts';
+import { spaceUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { Collection, Image, ISpace, isTypeOf, Publication, Site, Space } from '../objects.ts';
 
@@ -32,7 +33,7 @@ ISpace.implement({
     allowDiscovery: t.exposeBoolean('allowDiscovery'),
     dateDisplay: t.expose('dateDisplay', { type: SpaceDateDisplay }),
     logo: t.field({ type: Image, nullable: true, resolve: (self) => self.logoId }),
-    url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', () => self.slug) }),
+    url: t.string({ resolve: (self) => spaceUrl(env.USERSITE_URL, self.slug) }),
   }),
 });
 

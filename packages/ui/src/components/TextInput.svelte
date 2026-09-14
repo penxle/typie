@@ -16,6 +16,7 @@
       hidden?: boolean;
       leftItem?: Snippet;
       rightItem?: Snippet;
+      leftItemAttached?: boolean;
       rightItemAttached?: boolean;
       autofocus?: boolean;
     };
@@ -31,6 +32,7 @@
     hidden = false,
     leftItem,
     rightItem,
+    leftItemAttached = false,
     rightItemAttached = false,
     autofocus = false,
     ...rest
@@ -111,7 +113,11 @@
   });
 </script>
 
-<label class={css(recipe.raw({ size }), rightItemAttached && { paddingRight: '0' }, style)} for={name} {hidden}>
+<label
+  class={css(recipe.raw({ size }), leftItemAttached && { paddingLeft: '0' }, rightItemAttached && { paddingRight: '0' }, style)}
+  for={name}
+  {hidden}
+>
   {#if leftIcon}
     <div class={flex({ align: 'center', marginRight: '8px' })}>
       <Icon icon={leftIcon} size={18} />
@@ -119,7 +125,12 @@
   {/if}
 
   {#if leftItem}
-    <div class={css({ marginRight: '8px' })}>
+    <div
+      class={css({
+        marginRight: '8px',
+        ...(leftItemAttached && { height: 'full', display: 'flex', alignItems: 'center' }),
+      })}
+    >
       {@render leftItem()}
     </div>
   {/if}
