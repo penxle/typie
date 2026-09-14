@@ -1,7 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Button } from '@typie/ui/components';
+  import { infiniteScroll } from '@typie/ui/actions';
+  import { Button, RingSpinner } from '@typie/ui/components';
   import { latestOfSpaceRuns } from '$lib/discovery/feed-grouping';
   import { discoveryCardList } from './discovery-styles';
   import DiscoveryCard from './DiscoveryCard.svelte';
@@ -45,6 +46,13 @@
     lastSpaceId = result.lastSpaceId ?? lastSpaceId;
     pending = false;
   };
+
+  const loadMore = () => {
+    const after = lastId;
+    if (pending || !after || pages.some((page) => page.after === after)) return;
+    pending = true;
+    pages = [...pages, { after, previousSpaceId: lastSpaceId }];
+  };
 </script>
 
 {#if publications.length > 0}
@@ -59,21 +67,17 @@
   </div>
 
   {#if hasMore && lastId}
-    <div class={flex({ justifyContent: 'center', marginTop: '24px' })}>
-      <Button
-        loading={pending}
-        onclick={() => {
-          const after = lastId;
-          if (after && pages.every((page) => page.after !== after)) {
-            pending = true;
-            pages = [...pages, { after, previousSpaceId: lastSpaceId }];
-          }
-        }}
-        size="sm"
-        variant="secondary"
-      >
-        더 보기
-      </Button>
+    <div
+      class={flex({ justifyContent: 'center', minHeight: '20px', marginTop: '24px', lgDown: { display: 'none' } })}
+      use:infiniteScroll={{ onLoadMore: loadMore, enabled: !pending, rootMargin: '0px 0px 600px 0px' }}
+    >
+      {#if pending}
+        <RingSpinner style={css.raw({ size: '20px', color: 'text.muted' })} />
+      {/if}
+    </div>
+
+    <div class={flex({ justifyContent: 'center', marginTop: '24px', lg: { display: 'none' } })}>
+      <Button loading={pending} onclick={loadMore} size="sm" variant="secondary">더 보기</Button>
     </div>
   {/if}
 {:else}
