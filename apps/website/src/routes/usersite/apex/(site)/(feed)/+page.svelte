@@ -7,12 +7,12 @@
   let { data } = $props();
 
   const feedQuery = $derived(hydrateQuery(() => data.feedQuery));
-  const publications = $derived(feedQuery.data.discovery.publications);
+  const feed = $derived(feedQuery.data.discovery.feed);
 </script>
 
 <Helmet title="타이피" trailing={null} />
 
 <section>
   <DiscoverySectionHead title="최신 글" />
-  <DiscoveryCardList initialHasMore={publications.hasMore} publications={publications.publications} />
+  <DiscoveryCardList initialHasMore={feed.hasMore} publications={feed.publications} source={{ kind: 'feed' }} />
 </section>

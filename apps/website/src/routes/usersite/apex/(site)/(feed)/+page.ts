@@ -7,15 +7,11 @@ export const load = async (event) => {
     graphql(`
       query UsersiteApexIndexPage_Query {
         discovery {
-          publications {
+          feed {
             hasMore
 
             publications {
               id
-
-              space {
-                id
-              }
 
               ...UsersiteApex_DiscoveryCard_publicationView
             }

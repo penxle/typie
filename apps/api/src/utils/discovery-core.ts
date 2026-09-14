@@ -1,5 +1,5 @@
 import { EntityState, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
-import { and, asc, count, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '#/db/index.ts';
@@ -45,6 +45,39 @@ export const buildDiscoveryPublicationsQuery = (executor: Executor, input: { tag
       ),
     )
     .orderBy(desc(Publications.publishedAt), desc(Publications.id))
+    .limit(input.limit);
+};
+
+export const buildDiscoveryFeedQuery = (executor: Executor, input: { after: string | null; limit: number }) => {
+  const prevSpaceId = sql<
+    string | null
+  >`lag(${Publications.spaceId}) over (order by ${Publications.publishedAt} desc, ${Publications.id} desc)`.as('prev_space_id');
+  const feed = discoverablePublicationScope(
+    executor
+      .select({ ...getTableColumns(Publications), prevSpaceId })
+      .from(Publications)
+      .$dynamic(),
+  )
+    .where(
+      and(
+        discoverablePublicationPredicate(),
+        input.after
+          ? sql`(${Publications.publishedAt}, ${Publications.id}) <= (select ${Publications.publishedAt}, ${Publications.id} from ${Publications} where ${Publications.id} = ${input.after})`
+          : undefined,
+      ),
+    )
+    .as('feed_publications');
+
+  const publicationKeys = Object.keys(getTableColumns(Publications)) as (keyof typeof Publications.$inferSelect)[];
+  const selection = Object.fromEntries(publicationKeys.map((key) => [key, feed[key]])) as {
+    [K in (typeof publicationKeys)[number]]: (typeof feed)[K];
+  };
+
+  return executor
+    .select(selection)
+    .from(feed)
+    .where(and(sql`${feed.prevSpaceId} is distinct from ${feed.spaceId}`, input.after ? ne(feed.id, input.after) : undefined))
+    .orderBy(desc(feed.publishedAt), desc(feed.id))
     .limit(input.limit);
 };
 

@@ -5,6 +5,7 @@ import * as tables from '#/db/schemas/tables.ts';
 import {
   buildDiscoverablePublicationsByIdsQuery,
   buildDiscoverableSpacesByIdsQuery,
+  buildDiscoveryFeedQuery,
   buildDiscoveryPublicationsQuery,
   buildDiscoveryRecentPublicationsQuery,
   buildDiscoveryTagCountsQuery,
@@ -55,6 +56,28 @@ test('discovery publications can be narrowed to one tag across every space', () 
   assert.match(query.sql, /"publication_tags"\."name" = /);
   assert.doesNotMatch(query.sql, /"publications"\."space_id" = \$/);
   assert.ok(query.params.includes('에세이'));
+});
+
+test('discovery feed keeps only the newest post of each consecutive same-space run, ordered newest first', () => {
+  const query = buildDiscoveryFeedQuery(database, { after: null, limit: 21 }).toSQL();
+  assertDiscoverablePredicate(query.sql);
+  assert.match(
+    query.sql,
+    /lag\("publications"\."space_id"\) over \(order by "publications"\."published_at" desc, "publications"\."id" desc\)/,
+  );
+  assert.match(query.sql, /"prev_space_id" is distinct from "feed_publications"\."space_id"/);
+  assert.match(query.sql, /order by "feed_publications"\."published_at" desc, "feed_publications"\."id" desc/);
+  assert.doesNotMatch(query.sql, /<= \(select/);
+  assert.doesNotMatch(query.sql, /"feed_publications"\."id" <> /);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 21]);
+});
+
+test('discovery feed cursor keeps the cursor row inside the window and drops it from the page', () => {
+  const query = buildDiscoveryFeedQuery(database, { after: 'PUB0Z', limit: 21 }).toSQL();
+  assert.match(query.sql, /\("publications"\."published_at", "publications"\."id"\) <= \(select/);
+  assert.match(query.sql, /"feed_publications"\."id" <> \$\d+/);
+  assert.match(query.sql, /limit /);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 'PUB0Z', 21]);
 });
 
 test('discovery tags aggregate discoverable rows by name, most used first, limited when asked', () => {

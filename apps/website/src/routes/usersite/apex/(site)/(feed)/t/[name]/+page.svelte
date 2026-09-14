@@ -16,6 +16,10 @@
   <DiscoveryPageHead sub={`글 ${tag.count}개`} title={`#${tag.name}`} />
 
   {#key tag.name}
-    <DiscoveryCardList initialHasMore={tag.publications.hasMore} publications={tag.publications.publications} tagName={tag.name} />
+    <DiscoveryCardList
+      initialHasMore={tag.publications.hasMore}
+      publications={tag.publications.publications}
+      source={{ kind: 'tag', name: tag.name }}
+    />
   {/key}
 {/if}

@@ -18,10 +18,6 @@ export const load = async (event) => {
               publications {
                 id
 
-                space {
-                  id
-                }
-
                 ...UsersiteApex_DiscoveryCard_publicationView
               }
             }
