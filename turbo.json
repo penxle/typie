@@ -20,9 +20,29 @@
       "persistent": true,
       "cache": false
     },
-    "lint:eslint": {
-      "dependsOn": ["codegen"]
+    "@typie/lintconfig#lintconfig": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.editorconfig",
+        "$TURBO_ROOT$/.gitignore",
+        "$TURBO_ROOT$/.prettierignore",
+        "$TURBO_ROOT$/eslint.config.js",
+        "$TURBO_ROOT$/prettier.config.js"
+      ]
     },
+    "lint:eslint": {
+      "dependsOn": ["codegen", "@typie/lintconfig#lintconfig"]
+    },
+    "lint:prettier": {
+      "dependsOn": ["@typie/lintconfig#lintconfig"]
+    },
+    "//#lint:prettier:root": {
+      "dependsOn": ["@typie/lintconfig#lintconfig"]
+    },
+    "lint:spellcheck": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.gitignore", "$TURBO_ROOT$/cspell.json", "$TURBO_ROOT$/cspell.txt"]
+    },
+    "//#lint:spellcheck:root": {},
     "lint:svelte": {
       "dependsOn": ["^codegen", "codegen"]
     },

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate-icons": "node scripts/generate-icons.js"
+    "generate-icons": "node scripts/generate-icons.js",
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.127",

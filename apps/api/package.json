@@ -13,6 +13,8 @@
     "dev:node": "node --watch --watch-preserve-output src/main.ts",
     "dev:tsdown": "tsdown --watch",
     "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'",
     "lint:typecheck": "tsc",
     "start": "node --import ./src/instrumentation.ts src/main.ts",
     "test": "node --test 'src/**/*.test.ts'"

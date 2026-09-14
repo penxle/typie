@@ -21,5 +21,9 @@
   "types": "pkg/browser/editor_ffi.d.ts",
   "files": [
     "pkg"
-  ]
+  ],
+  "scripts": {
+    "lint:prettier": "prettier --check --ignore-unknown --ignore-path ../../.gitignore --ignore-path ../../.prettierignore '**/*'",
+    "lint:spellcheck": "cspell --no-progress --no-must-find-files --relative '**/*'"
+  }
 }
