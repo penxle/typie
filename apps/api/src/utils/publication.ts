@@ -213,7 +213,7 @@ export const publishDocumentCore = async (
                 ? existing.collectionOrder
                 : await nextCollectionOrder(tx, args.collectionId)
               : null,
-            publishedAt: existing.publishedAt ?? transition.publishedAt,
+            publishedAt: transition.publishedAt,
             scheduledAt: transition.scheduledAt,
             unpublishedAt: null,
             updatedAt: args.now,
@@ -340,7 +340,7 @@ export const promoteDuePublicationsCore = async (tx: Transaction, args: { now: D
       .update(Publications)
       .set({
         state: PublicationState.PUBLISHED,
-        publishedAt: row.publishedAt ?? row.scheduledAt ?? args.now,
+        publishedAt: row.scheduledAt ?? args.now,
         scheduledAt: null,
         unpublishedAt: null,
       })

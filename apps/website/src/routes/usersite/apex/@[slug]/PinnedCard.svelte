@@ -11,6 +11,7 @@
   import SmileIcon from '~icons/lucide/smile';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
+  import { pickSpaceDate } from './space-date';
   import type { UsersiteSpace_PinnedCard_publicationView$key } from '$mearie';
 
   type Props = {
@@ -26,6 +27,7 @@
         title
         excerpt
         publishedAt
+        updatedAt
         reactionCount
         hasPassword
         passwordUnlocked
@@ -40,12 +42,18 @@
           id
           ...Img_image
         }
+
+        space {
+          id
+          dateDisplay
+        }
       }
     `),
     () => publicationView$key,
   );
 
-  const publishedAt = $derived(dayjs(publication.data.publishedAt).valueOf());
+  const date = $derived(pickSpaceDate(publication.data.space.dateDisplay, publication.data));
+  const timestamp = $derived(date === null ? null : dayjs(date).valueOf());
 </script>
 
 <a
@@ -132,23 +140,27 @@
     {/if}
   </div>
 
-  <div
-    class={flex({
-      alignItems: 'center',
-      gap: '6px',
-      marginTop: 'auto',
-      paddingTop: '12px',
-      fontSize: '12px',
-      color: 'text.hint',
-      fontVariantNumeric: 'tabular-nums',
-    })}
-  >
-    <TimeAgo timestamp={publishedAt} />
-    {#if publication.data.reactionCount > 0}
-      <span class={flex({ alignItems: 'center', gap: '3px', flexShrink: '0', marginLeft: 'auto' })}>
-        <Icon icon={SmileIcon} size={14} />
-        {comma(publication.data.reactionCount)}
-      </span>
-    {/if}
-  </div>
+  {#if timestamp !== null || publication.data.reactionCount > 0}
+    <div
+      class={flex({
+        alignItems: 'center',
+        gap: '6px',
+        marginTop: 'auto',
+        paddingTop: '12px',
+        fontSize: '12px',
+        color: 'text.hint',
+        fontVariantNumeric: 'tabular-nums',
+      })}
+    >
+      {#if timestamp !== null}
+        <TimeAgo {timestamp} />
+      {/if}
+      {#if publication.data.reactionCount > 0}
+        <span class={flex({ alignItems: 'center', gap: '3px', flexShrink: '0', marginLeft: 'auto' })}>
+          <Icon icon={SmileIcon} size={14} />
+          {comma(publication.data.reactionCount)}
+        </span>
+      {/if}
+    </div>
+  {/if}
 </a>

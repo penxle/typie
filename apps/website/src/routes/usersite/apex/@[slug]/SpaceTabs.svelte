@@ -14,9 +14,10 @@
     counts: { posts: number; series: number; tags: number };
     onselect: (tab: SpaceHomeTab) => void;
     trailing?: Snippet;
+    height?: number;
   };
 
-  let { tab, counts, onselect, trailing }: Props = $props();
+  let { tab, counts, onselect, trailing, height = $bindable(0) }: Props = $props();
 
   const chrome = getUsersiteChrome();
 
@@ -90,6 +91,7 @@
     '&[data-stuck]': { borderColor: 'border.default' },
     _motionReduce: { transition: '[none]' },
   })}
+  bind:offsetHeight={height}
   use:stuck={{ onchange: (node, value) => chrome.setStuck(node, value) }}
 >
   <div

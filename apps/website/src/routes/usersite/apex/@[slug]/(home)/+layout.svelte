@@ -45,6 +45,7 @@
   const chrome = getUsersiteChrome();
   let identityEl = $state<HTMLDivElement>();
   let viewportHeight = $state(0);
+  let tabsHeight = $state(45);
 
   $effect(() => {
     chrome.identityEls = identityEl ? [identityEl] : [];
@@ -92,9 +93,11 @@
   counts={{ posts: space.publicationCount, series: space.collections.length, tags: space.tags.length }}
   onselect={selectTab}
   {tab}
+  bind:height={tabsHeight}
 />
 
 <div
+  style:--usersite-space-tabs-height={`${tabsHeight}px`}
   class={css({
     display: 'grid',
     gridTemplateColumns: { base: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 300px' },
@@ -130,5 +133,5 @@
     {/key}
   </section>
 
-  <SpaceSidebar {activeCollectionId} {activeTag} headerBottom={chrome.headerHeight} spaceView$key={space} {viewportHeight} />
+  <SpaceSidebar {activeCollectionId} {activeTag} headerBottom={chrome.headerHeight + tabsHeight} spaceView$key={space} {viewportHeight} />
 </div>
