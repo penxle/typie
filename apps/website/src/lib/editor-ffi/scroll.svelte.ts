@@ -375,13 +375,14 @@ export class EditorScrollScope {
       metrics.scrollLeft,
       metrics.maximumScrollLeft,
     );
-    if (!targetScroll.attachmentAchieved) this.#viewportAnchor.deferAttachment();
+    // At the scroll origin, skip vertical correction and leave the attachment unchanged.
+    if (metrics.scrollTop !== 0 && !targetScroll.attachmentAchieved) this.#viewportAnchor.deferAttachment();
     return {
       type: 'ready',
       geometry,
       targetScrollLeft: targetScroll.scroll.left === metrics.scrollLeft ? null : targetScroll.scroll.left,
-      targetScrollTop: targetScroll.scroll.top,
-      attachmentAchieved: targetScroll.attachmentAchieved,
+      targetScrollTop: metrics.scrollTop === 0 ? 0 : targetScroll.scroll.top,
+      attachmentAchieved: metrics.scrollTop !== 0 && targetScroll.attachmentAchieved,
     };
   }
 
