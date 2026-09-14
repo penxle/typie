@@ -484,6 +484,9 @@ internal constructor(
         mutex.withPriorityLock(escalationMillis = 0) {
           ensureActive()
           if (!imeSessionActive.load()) return@withPriorityLock
+          // Check under the lock after any pending selection snapshot has been installed.
+          // Before the first tick, the core selection has not been read yet.
+          if (appliedState.version != 0L && appliedState.selection == null) return@withPriorityLock
           val ime = inner.ime(IME_SNAPSHOT_WINDOW, IME_SNAPSHOT_WINDOW)
           if (appliedState.ime != ime) {
             appliedState = appliedState.copy(ime = ime)
