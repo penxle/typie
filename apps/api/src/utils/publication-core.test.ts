@@ -78,6 +78,11 @@ test('resolvePublishTransition publishes now, schedules, and rejects an already 
     publishedAt: now,
     scheduledAt: null,
   });
+  assert.deepEqual(resolvePublishTransition({ currentState: PublicationState.UNPUBLISHED, scheduledAt: null, now }), {
+    state: PublicationState.PUBLISHED,
+    publishedAt: now,
+    scheduledAt: null,
+  });
   assert.deepEqual(resolvePublishTransition({ currentState: PublicationState.UNPUBLISHED, scheduledAt: later, now }), {
     state: PublicationState.SCHEDULED,
     publishedAt: null,

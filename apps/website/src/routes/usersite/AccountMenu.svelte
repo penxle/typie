@@ -106,7 +106,7 @@
 
     <a class={css(menuRow)} href={env.PUBLIC_WEBSITE_URL} role="menuitem" tabindex="-1">
       <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={HouseIcon} size={14} />
-      <span>내 홈으로</span>
+      <span>에디터 바로가기</span>
     </a>
 
     <ThemeSegment via="header" />

@@ -37,6 +37,7 @@
   import { getUsersiteChrome } from '../../../../chrome.svelte';
   import { currentSpaceSlug } from '../../current-space-slug';
   import { seriesPath, spaceHomePath, tagPath } from '../../paths';
+  import { pickSpaceDate } from '../../space-date';
   import TagChip from '../../TagChip.svelte';
   import PublicationActionMenu from './PublicationActionMenu.svelte';
   import PublicationReactions from './PublicationReactions.svelte';
@@ -283,11 +284,10 @@
   const seriesPosition = $derived(
     document.collection ? document.collection.publications.findIndex((item) => item.id === document.id) + 1 : 0,
   );
-  const displayDate = $derived(
-    document.space.dateDisplay === 'NONE'
-      ? null
-      : dayjs(document.space.dateDisplay === 'PUBLISHED_AT' ? document.publishedAt : document.updatedAt).format('YYYY. M. D.'),
-  );
+  const displayDate = $derived.by(() => {
+    const date = pickSpaceDate(document.space.dateDisplay, document);
+    return date === null ? null : dayjs(date).format('YYYY. M. D.');
+  });
 
   $effect(() => {
     if (!document) return;

@@ -87,6 +87,20 @@
   <SettingsCard>
     <SettingsRow>
       {#snippet label()}
+        검색 엔진에 노출
+      {/snippet}
+      {#snippet description()}
+        끄면 검색 엔진이 스페이스와 글을 색인하지 않도록 요청해요.
+      {/snippet}
+      {#snippet value()}
+        <Switch bind:checked={() => allowIndexing, (checked) => void setAllowIndexing(checked)} />
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsDivider />
+
+    <SettingsRow>
+      {#snippet label()}
         타이피 스퀘어에 노출
       {/snippet}
       {#snippet description()}
@@ -97,20 +111,6 @@
           disabled={!allowIndexing}
           bind:checked={() => allowIndexing && allowDiscovery, (checked) => void setAllowDiscovery(checked)}
         />
-      {/snippet}
-    </SettingsRow>
-
-    <SettingsDivider />
-
-    <SettingsRow>
-      {#snippet label()}
-        검색 엔진에 노출
-      {/snippet}
-      {#snippet description()}
-        끄면 검색 엔진이 스페이스와 글을 색인하지 않도록 요청해요.
-      {/snippet}
-      {#snippet value()}
-        <Switch bind:checked={() => allowIndexing, (checked) => void setAllowIndexing(checked)} />
       {/snippet}
     </SettingsRow>
   </SettingsCard>

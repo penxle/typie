@@ -63,7 +63,7 @@
     flexDirection: 'column',
     gap: '36px',
     minWidth: '0',
-    lg: { position: 'sticky', top: '[calc(var(--usersite-sticky-header-bottom, 52px) + 28px)]' },
+    lg: { position: 'sticky', top: '[calc(var(--usersite-sticky-header-bottom, 52px) + var(--usersite-space-tabs-height, 45px) + 28px)]' },
   })}
   use:twoWaySticky={{ headerBottom, viewportHeight }}
 >

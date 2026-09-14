@@ -13,6 +13,7 @@
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import { seriesPath, tagPath } from '../@[slug]/paths';
+  import { pickSpaceDate } from '../@[slug]/space-date';
   import { discoveryTagPath } from './paths';
   import type { UsersiteApex_DiscoveryCard_publicationView$key } from '$mearie';
 
@@ -44,6 +45,7 @@
         excerpt
         tags
         publishedAt
+        updatedAt
         reactionCount
         hasPassword
         passwordUnlocked
@@ -65,6 +67,7 @@
           name
           slug
           url
+          dateDisplay
 
           logo {
             id
@@ -76,7 +79,12 @@
     () => publicationView$key,
   );
 
-  const publishedAt = $derived(dayjs(publication.data.publishedAt).valueOf());
+  const date = $derived(
+    context === 'space' ? pickSpaceDate(publication.data.space.dateDisplay, publication.data) : publication.data.publishedAt,
+  );
+  const timestamp = $derived(date === null ? null : dayjs(date).valueOf());
+  const showCollectionName = $derived(context === 'space' && showCollection && !!publication.data.collection);
+  const hasMeta = $derived(context !== 'space' || showCollectionName || timestamp !== null);
   const tagHref = (tag: string) => (context === 'space' ? tagPath(publication.data.space.slug, tag) : discoveryTagPath(tag));
   const hasExcerpt = $derived(!!(excerptHtml || publication.data.excerpt));
 
@@ -106,55 +114,61 @@
   in:fly={enter ? { y: 6, duration: 220, easing: cubicOut } : { duration: 0 }}
 >
   <div class={css({ minWidth: '0' })}>
-    <div class={css(meta, { height: '20px', marginBottom: '8px' })}>
-      {#if context === 'space'}
-        {#if showCollection && publication.data.collection}
+    {#if hasMeta}
+      <div class={css(meta, { height: '20px', marginBottom: '8px' })}>
+        {#if context === 'space'}
+          {#if showCollectionName && publication.data.collection}
+            <a
+              class={css({
+                minWidth: '0',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontWeight: 'medium',
+                color: 'text.muted',
+                transition: 'colors',
+                _hover: { color: 'text.default' },
+              })}
+              href={seriesPath(publication.data.space.slug, publication.data.collection.permalink)}
+            >
+              {publication.data.collection.name}
+            </a>
+            {#if timestamp !== null}
+              <i class={css(dot)} aria-hidden="true"></i>
+            {/if}
+          {/if}
+        {:else}
           <a
-            class={css({
+            class={flex({
+              alignItems: 'center',
+              gap: '6px',
               minWidth: '0',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
               fontWeight: 'medium',
               color: 'text.muted',
-              transition: 'colors',
-              _hover: { color: 'text.default' },
+              _hover: { '& span': { color: 'text.default' } },
             })}
-            href={seriesPath(publication.data.space.slug, publication.data.collection.permalink)}
+            href={publication.data.space.url}
           >
-            {publication.data.collection.name}
+            <Img
+              style={css.raw({
+                flexShrink: '0',
+                size: '20px',
+                borderRadius: '5px',
+                objectFit: 'cover',
+                boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
+              })}
+              alt={`${publication.data.space.name} 로고`}
+              image$key={publication.data.space.logo}
+              size={48}
+            />
+            <span class={css({ overflow: 'hidden', textOverflow: 'ellipsis', transition: 'colors' })}>{publication.data.space.name}</span>
           </a>
           <i class={css(dot)} aria-hidden="true"></i>
         {/if}
-      {:else}
-        <a
-          class={flex({
-            alignItems: 'center',
-            gap: '6px',
-            minWidth: '0',
-            fontWeight: 'medium',
-            color: 'text.muted',
-            _hover: { '& span': { color: 'text.default' } },
-          })}
-          href={publication.data.space.url}
-        >
-          <Img
-            style={css.raw({
-              flexShrink: '0',
-              size: '20px',
-              borderRadius: '5px',
-              objectFit: 'cover',
-              boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
-            })}
-            alt={`${publication.data.space.name} 로고`}
-            image$key={publication.data.space.logo}
-            size={48}
-          />
-          <span class={css({ overflow: 'hidden', textOverflow: 'ellipsis', transition: 'colors' })}>{publication.data.space.name}</span>
-        </a>
-        <i class={css(dot)} aria-hidden="true"></i>
-      {/if}
-      <TimeAgo timestamp={publishedAt} />
-    </div>
+        {#if timestamp !== null}
+          <TimeAgo {timestamp} />
+        {/if}
+      </div>
+    {/if}
 
     <a
       class={flex({

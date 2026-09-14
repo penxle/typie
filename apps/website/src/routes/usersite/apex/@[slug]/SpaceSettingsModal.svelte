@@ -5,11 +5,13 @@
   import { Icon, Modal } from '@typie/ui/components';
   import LibraryIcon from '~icons/lucide/library';
   import OrbitIcon from '~icons/lucide/orbit';
+  import PaletteIcon from '~icons/lucide/palette';
   import SearchIcon from '~icons/lucide/search';
   import TextIcon from '~icons/lucide/text';
   import { graphql } from '$mearie';
   import SpaceSettingsAboutTab from './SpaceSettingsAboutTab.svelte';
   import SpaceSettingsCollectionsTab from './SpaceSettingsCollectionsTab.svelte';
+  import SpaceSettingsDesignTab from './SpaceSettingsDesignTab.svelte';
   import SpaceSettingsGeneralTab from './SpaceSettingsGeneralTab.svelte';
   import SpaceSettingsVisibilityTab from './SpaceSettingsVisibilityTab.svelte';
   import type { Component } from 'svelte';
@@ -38,6 +40,7 @@
           name
 
           ...UsersiteSpace_SpaceSettingsGeneralTab_space
+          ...UsersiteSpace_SpaceSettingsDesignTab_space
           ...UsersiteSpace_SpaceSettingsAboutTab_space
           ...UsersiteSpace_SpaceSettingsCollectionsTab_space
           ...UsersiteSpace_SpaceSettingsVisibilityTab_space
@@ -56,6 +59,12 @@
       label: '일반',
       icon: OrbitIcon,
       component: SpaceSettingsGeneralTab,
+    },
+    {
+      path: 'design',
+      label: '디자인',
+      icon: PaletteIcon,
+      component: SpaceSettingsDesignTab,
     },
     {
       path: 'about',
