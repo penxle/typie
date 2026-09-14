@@ -191,6 +191,8 @@ internal constructor(
     get() = failure.load()
 
   private val mutex = PriorityMutex()
+  // Serialize full-document reads separately so they cannot delay editor updates.
+  private val proseDispatcher = Dispatchers.Default.limitedParallelism(1)
   private val disposed: AtomicBoolean = AtomicBoolean(false)
   private val failure: AtomicReference<Throwable?> = AtomicReference(null)
   private val imeSessionActive: AtomicBoolean = AtomicBoolean(false)
@@ -578,13 +580,13 @@ internal constructor(
     inner.findMatches(query, SearchOptions(matchWholeWord = matchWholeWord))
   }
 
-  suspend fun proseText(): String = invokeCore { inner.proseText() }
+  suspend fun proseText(): String = readProseText(annotated = false)
 
   suspend fun proseToSelection(start: Int, end: Int): Selection? = invokeCore {
     inner.proseToSelection(start, end)
   }
 
-  suspend fun proseTextAnnotated(): String = invokeCore { inner.proseTextAnnotated() }
+  suspend fun proseTextAnnotated(): String = readProseText(annotated = true)
 
   suspend fun proseToSelectionAnnotated(start: Int, end: Int): Selection? = invokeCore {
     inner.proseToSelectionAnnotated(start, end)
@@ -1785,6 +1787,20 @@ internal constructor(
         } catch (e: Throwable) {
           throw claimEffectFailure(e)
         }
+      }
+    }
+
+  private suspend fun readProseText(annotated: Boolean): String =
+    withContext(proseDispatcher) {
+      try {
+        ensureActive()
+        // The core captures an immutable document under its own lock. Traversal
+        // can then run without holding the mutex for tick/snapshot publication.
+        if (annotated) inner.proseTextAnnotated() else inner.proseText()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Throwable) {
+        throw claimEffectFailure(e)
       }
     }
 
