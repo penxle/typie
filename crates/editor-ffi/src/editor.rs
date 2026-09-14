@@ -1050,10 +1050,10 @@ impl Editor {
     }
 
     pub fn prose_text(&self) -> EditorResult<String> {
-        self.with_inner(|inner| {
-            let view = inner.editor.state().view();
-            Ok(editor_state::prose(&view).text().to_string())
-        })
+        // Share the copy-on-write document under the lock, then traverse it
+        // without blocking IME queries or edits to the live editor.
+        let projected = self.with_inner(|inner| Ok(inner.editor.state().projected.clone()))?;
+        Ok(editor_state::prose(&projected.view()).text().to_string())
     }
 
     pub fn prose_to_selection(
@@ -1071,10 +1071,10 @@ impl Editor {
     }
 
     pub fn prose_text_annotated(&self) -> EditorResult<String> {
-        self.with_inner(|inner| {
-            let view = inner.editor.state().view();
-            Ok(editor_state::prose_annotated(&view).text().to_string())
-        })
+        let projected = self.with_inner(|inner| Ok(inner.editor.state().projected.clone()))?;
+        Ok(editor_state::prose_annotated(&projected.view())
+            .text()
+            .to_string())
     }
 
     pub fn prose_to_selection_annotated(

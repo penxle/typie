@@ -6,10 +6,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -18,6 +20,54 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 
 class EditorMainThreadBlockingDesktopTest {
+  @Test
+  fun proseReadDoesNotBlockImeActivationOrEditorUpdates(): Unit = runBlocking {
+    val readEntered = CountDownLatch(1)
+    val releaseRead = CountDownLatch(1)
+    val editorDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    val uiExecutor = Executors.newSingleThreadExecutor()
+    val editorScope = CoroutineScope(SupervisorJob() + editorDispatcher)
+    val editor =
+      Editor(
+        inner =
+          FakeFfiEditor(
+            selectionProvider = { FakeFfiEditor.EmptySelection },
+            proseTextAnnotatedProvider = {
+              readEntered.countDown()
+              check(releaseRead.await(5, TimeUnit.SECONDS))
+              ""
+            },
+          ),
+        scope = editorScope,
+        dispatcher = editorDispatcher,
+      )
+
+    try {
+      editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
+      val read = editorScope.async { editor.proseTextAnnotated() }
+      assertTrue(readEntered.await(5, TimeUnit.SECONDS))
+
+      val activation = uiExecutor.submit {
+        editor.setImeSessionActive(true)
+        editor.refreshImeSnapshot()
+      }
+      activation.get(1, TimeUnit.SECONDS)
+      assertEquals(FakeFfiEditor.EmptyIme, editor.appliedState.ime)
+
+      // Releasing the mutex alone is insufficient if the read still occupies
+      // the single-threaded editor dispatcher.
+      withTimeout(1_000) { editor.update { enqueue(Message.System(SystemEvent.Initialize)) } }
+      releaseRead.countDown()
+      withTimeout(5_000) { read.await() }
+    } finally {
+      releaseRead.countDown()
+      editor.dispose()
+      editorScope.cancel()
+      editorDispatcher.close()
+      uiExecutor.shutdownNow()
+    }
+  }
+
   @Test
   fun noOpSurfaceResizeDoesNotBlockUiWhileTickOwnsEditorMutex() {
     assertUiRemainsResponsiveWhileTickOwnsEditorMutex { editor ->
