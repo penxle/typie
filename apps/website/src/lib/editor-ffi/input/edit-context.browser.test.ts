@@ -83,14 +83,19 @@ describe('EditContext input', () => {
 
   const backgroundAt = (offset: number) => {
     const rect = editor.firstRectForRange(offset, offset + 1);
-    const canvas = document.querySelector<HTMLCanvasElement>(`canvas[data-page-canvas="${rect?.page_idx}"]`);
+    if (!rect) throw new Error('Editor character is not rendered');
+    const surface = document.querySelector(`[data-page-surface="${rect.page_idx}"]`);
+    // Sample the character's left padding inside its rendered tile, excluding line spacing.
+    const x = Math.floor((rect.rect.x + 1) * editor.surfaceScaleFactor);
+    const y = Math.floor((rect.rect.y + rect.rect.height / 2) * editor.surfaceScaleFactor);
+    const canvas = [...(surface?.querySelectorAll('canvas') ?? [])].find((tile) => {
+      const left = Number(tile.dataset.tileX);
+      const top = Number(tile.dataset.tileY);
+      return x >= left && y >= top && x < left + tile.width && y < top + tile.height;
+    });
     const context = canvas?.getContext('2d');
-    if (!rect || !canvas || !context) throw new Error('Editor page is not rendered');
-    const scale = canvas.width / editor.pageSizes[rect.page_idx].width;
-    // Sample the character's left padding inside the text band, excluding line spacing.
-    return [
-      ...context.getImageData(Math.floor((rect.rect.x + 1) * scale), Math.floor((rect.rect.y + rect.rect.height / 2) * scale), 1, 1).data,
-    ];
+    if (!canvas || !context) throw new Error('Editor page is not rendered');
+    return [...context.getImageData(x - Number(canvas.dataset.tileX), y - Number(canvas.dataset.tileY), 1, 1).data];
   };
 
   afterEach(async () => {
