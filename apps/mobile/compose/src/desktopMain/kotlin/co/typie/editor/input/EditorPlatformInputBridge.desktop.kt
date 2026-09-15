@@ -7,7 +7,6 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
-import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.NavigationOp
@@ -40,7 +39,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
   actual fun bindInputSession(
     session: PlatformTextInputSessionScope,
     request: PlatformTextInputMethodRequest,
-    cursor: () -> CursorMetrics?,
+    beginFloatingCursor: () -> EditorFloatingCursorSession?,
     viewportTransform: () -> EditorViewportTransform,
     dispatch: (List<Message>) -> Unit,
   ): PlatformTextInputMethodRequest = request

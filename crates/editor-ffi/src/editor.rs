@@ -400,20 +400,22 @@ impl Editor {
     }
 
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
+        self.with_inner(|inner| Ok(inner.editor.cursor().into_ffi()?))
+    }
+
+    pub fn cursor_at(
+        &self,
+        revision: Complex<editor_core::Revision>,
+        page: u32,
+        x: f32,
+        y: f32,
+    ) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
+        let revision = revision.from_ffi()?;
         self.with_inner(|inner| {
-            let state = inner.editor.state();
-            let Some(selection) = state.selection.as_ref() else {
-                return Ok(None);
-            };
-            if selection.is_collapsed() {
-                Ok(inner
-                    .editor
-                    .view()
-                    .cursor_metrics(state, &selection.head)
-                    .into_ffi()?)
-            } else {
-                Ok(None)
-            }
+            Ok(inner
+                .editor
+                .cursor_at(revision, page as usize, x, y)
+                .into_ffi()?)
         })
     }
 

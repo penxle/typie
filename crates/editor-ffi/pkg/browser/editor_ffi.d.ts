@@ -806,6 +806,7 @@ declare class Editor {
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    cursor_at(revision: Revision, page: number, x: number, y: number): CursorMetrics | undefined;
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
     detach_surface(page: number): void;

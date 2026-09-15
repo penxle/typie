@@ -18,7 +18,6 @@ import androidx.compose.ui.text.TextRange
 import co.typie.editor.EditorState
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.KeyModifier
-import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Movement
@@ -43,7 +42,7 @@ internal actual class EditorPlatformInputBridge actual constructor() {
   actual fun bindInputSession(
     session: PlatformTextInputSessionScope,
     request: PlatformTextInputMethodRequest,
-    cursor: () -> CursorMetrics?,
+    beginFloatingCursor: () -> EditorFloatingCursorSession?,
     viewportTransform: () -> EditorViewportTransform,
     dispatch: (List<Message>) -> Unit,
   ): PlatformTextInputMethodRequest =
@@ -56,23 +55,23 @@ internal actual class EditorPlatformInputBridge actual constructor() {
 
       override fun onTextInputViewAttached(view: UIView) {
         uninstall?.invoke()
-        val floatingCursorSession = EditorFloatingCursorSession()
+        var floatingCursorSession: EditorFloatingCursorSession? = null
         val textInputGeneration = EditorTextInputBridge.installOn(view)
         val floatingCursorGeneration =
           EditorFloatingCursorBridge.installOn(
             view,
-            onBegin = { floatingCursorSession.begin(cursor()) },
+            onBegin = { floatingCursorSession = beginFloatingCursor() },
             onUpdate = { dx, dy ->
               floatingCursorSession
-                .update(dx.toFloat(), dy.toFloat(), viewportTransform())
+                ?.update(dx.toFloat(), dy.toFloat(), viewportTransform())
                 ?.let(dispatch)
             },
-            onEnd = { floatingCursorSession.end() },
+            onEnd = { floatingCursorSession = null },
           )
         attachedView = view
         uninstall = {
           EditorFloatingCursorBridge.clearHandlersForInstallWithGeneration(floatingCursorGeneration)
-          floatingCursorSession.end()
+          floatingCursorSession = null
           EditorTextInputBridge.uninstallWithGeneration(textInputGeneration)
         }
       }

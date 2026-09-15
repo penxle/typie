@@ -12,6 +12,7 @@ import co.touchlab.kermit.Logger
 import co.typie.editor.ffi.CapturedViewportAnchor
 import co.typie.editor.ffi.CharacterCounts
 import co.typie.editor.ffi.ClipboardPayload
+import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.FrameKey
@@ -966,6 +967,18 @@ internal constructor(
             ime.projectWindowUtf16Index(range.min),
             ime.projectWindowUtf16Index(range.max),
           )
+        }
+      }
+    }
+  }
+
+  internal fun cursorAt(revision: Long, point: PagePoint): CursorMetrics? {
+    if (terminal) return null
+    return withFailureFallback(defaultValue = { null }) {
+      runBlocking {
+        mutex.withPriorityLock(escalationMillis = 0) {
+          if (terminal) return@withPriorityLock null
+          inner.cursorAt(Revision(revision), point.page, point.x, point.y)
         }
       }
     }

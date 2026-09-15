@@ -724,6 +724,33 @@ impl Editor {
         self.view.cursor_hit_rects(&self.state)
     }
 
+    pub fn cursor(&self) -> Option<editor_view::CursorMetrics> {
+        let selection = self.state.selection.as_ref()?;
+        if !selection.is_collapsed() {
+            return None;
+        }
+        self.view.cursor_metrics(&self.state, &selection.head)
+    }
+
+    /// Caret geometry at a page point without changing the selection.
+    pub fn cursor_at(
+        &self,
+        revision: Revision,
+        page_idx: usize,
+        x: f32,
+        y: f32,
+    ) -> Option<editor_view::CursorMetrics> {
+        if revision != self.revision() {
+            return None;
+        }
+        let selection = self.view.hit_test(page_idx, x, y)?;
+        if !selection.is_collapsed() {
+            return None;
+        }
+        self.view
+            .cursor_metrics(self.view.layout_state()?, &selection.head)
+    }
+
     pub fn interactive_regions(&self) -> Vec<editor_view::InteractiveRegion> {
         self.view.interactive_regions(&self.state)
     }
@@ -4745,6 +4772,162 @@ mod tests {
         assert!(!editor.selection_hit_test(0, x01, y01));
         assert!(editor.selection_hit_test(0, x10, y10));
         assert!(!editor.selection_hit_test(0, x11, y11));
+    }
+
+    #[test]
+    fn cursor_at_paragraph_break_handle_uses_the_rendered_line() {
+        let (initial, p1, _p2) = state! {
+            doc { root {
+                p1: paragraph { text("abc") }
+                p2: paragraph { text("def") }
+            } }
+            selection: (p1, 0) -> (p2, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.set_direct_touch_interaction(true);
+        let before = editor.state.selection;
+        let endpoint = editor.selection_endpoints().unwrap().to;
+        let revision = editor.revision();
+        let y = endpoint.rect.y + endpoint.rect.height / 2.0;
+        let initial_cursor = editor
+            .cursor_at(revision, endpoint.page_idx, endpoint.rect.x, y)
+            .unwrap();
+        let last = editor
+            .view
+            .cursor_metrics(&editor.state, &Position::new(p1, 3))
+            .unwrap();
+        let previous = editor
+            .view
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
+            .unwrap();
+        assert_eq!(initial_cursor, last);
+        assert!(initial_cursor.caret.x < endpoint.rect.x);
+        for dx in [-10.0, 0.1] {
+            assert_eq!(
+                editor.cursor_at(revision, endpoint.page_idx, endpoint.rect.x + dx, y),
+                Some(initial_cursor.clone()),
+            );
+        }
+        assert_eq!(
+            editor.cursor_at(revision, endpoint.page_idx, previous.caret.x, y),
+            Some(previous),
+        );
+        assert_eq!(editor.state.selection, before);
+    }
+
+    #[test]
+    fn cursor_queries_reject_the_gesture_revision_after_layout_changes() {
+        let (initial, image, _p1) = state! {
+            doc { root { image: image p1: paragraph { text("hello world") } } }
+            selection: (p1, 2) -> (p1, 8)
+        };
+        let mut editor = Editor::new_test(initial);
+        let resize = |height| Message::System {
+            event: SystemEvent::SetExternalHeights {
+                heights: vec![crate::message::ExternalElementHeight {
+                    node_id: image,
+                    height,
+                }],
+            },
+        };
+        editor.apply(resize(200.0));
+        let revision = editor.revision();
+        let before = editor.state.selection;
+        let position = editor.selection_endpoints().unwrap().from_position;
+        let cursor = editor
+            .view
+            .cursor_metrics(&editor.state, &position)
+            .unwrap();
+        editor.apply(resize(201.0));
+
+        assert_eq!(editor.state.selection, before);
+        assert!(
+            editor
+                .cursor_at(
+                    revision,
+                    cursor.page_idx,
+                    cursor.caret.x - 0.1,
+                    cursor.line.y + cursor.line.height / 2.0
+                )
+                .is_none()
+        );
+        assert!(
+            editor
+                .cursor_at(
+                    editor.revision(),
+                    cursor.page_idx,
+                    cursor.caret.x,
+                    cursor.line.y + cursor.line.height / 2.0,
+                )
+                .unwrap()
+                .line
+                .y
+                > cursor.line.y
+        );
+    }
+
+    #[test]
+    fn editor_cursor_at_resolves_caret_without_collapsing_selection() {
+        let (initial, p1) = state! {
+            doc { root { p1: paragraph { text("hello world") } } }
+            selection: (p1, 2) -> (p1, 8)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let before = crate::test_utils::EditorSnapshot::capture(&editor);
+        let revision = editor.revision();
+        let current = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 2))
+            .unwrap();
+        let next = editor
+            .view()
+            .cursor_metrics(&editor.state, &Position::new(p1, 3))
+            .unwrap();
+        let y = current.line.y + current.line.height / 2.0;
+        let small_dx = (next.caret.x - current.caret.x) / 4.0;
+
+        assert_eq!(
+            editor.cursor_at(revision, current.page_idx, current.caret.x + small_dx, y),
+            Some(current),
+        );
+        assert_eq!(
+            editor.cursor_at(revision, next.page_idx, next.caret.x, y),
+            Some(next),
+        );
+        assert_eq!(crate::test_utils::EditorSnapshot::capture(&editor), before);
+        assert!(editor.cursor_at(revision.next(), 0, 0.0, y).is_none());
+    }
+
+    #[test]
+    fn editor_cursor_at_rejects_unit_selection() {
+        let (initial, image, _p1) = state! {
+            doc { root { image: image p1: paragraph { text("after") } } }
+            selection: (p1, 0)
+        };
+        let mut editor = Editor::new_test(initial);
+        editor.apply(Message::System {
+            event: crate::message::SystemEvent::Initialize,
+        });
+        let element = editor
+            .view()
+            .external_elements(&editor.state, None)
+            .into_iter()
+            .find(|element| element.node == image)
+            .unwrap();
+
+        assert!(
+            editor
+                .cursor_at(
+                    editor.revision(),
+                    element.page_idx,
+                    element.bounds.x + element.bounds.width / 2.0,
+                    element.bounds.y + element.bounds.height / 2.0,
+                )
+                .is_none()
+        );
     }
 
     #[test]

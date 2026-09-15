@@ -295,6 +295,8 @@ internal class FakeFfiEditor(
 
   override fun cursor(): CursorMetrics? = cursorProvider()
 
+  override fun cursorAt(revision: Revision, page: Int, x: Float, y: Float): CursorMetrics? = null
+
   override fun placeholder(): PlaceholderMetrics? {
     placeholderCallCount += 1
     return placeholderProvider()
