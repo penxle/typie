@@ -575,6 +575,42 @@ mod tests {
     }
 
     #[test]
+    fn cached_measurement_tracks_inserted_and_removed_page_break() {
+        let mut cache = SegmentCache::default();
+        let mut res = Resource::new_test();
+        for has_break in [false, true, false] {
+            let mut children = vec![ch('a')];
+            if has_break {
+                children.push(SeqItem::Atom(AtomLeaf::PageBreak));
+            }
+            let pd = project_document(&build_logs(children)).unwrap();
+            let view = DocView::new(&pd);
+            let para = view.root().unwrap().child_blocks().next().unwrap();
+            let (cached, _) = measure_paragraph(
+                &para,
+                200.0,
+                Alignment::Left,
+                0.0,
+                None,
+                None,
+                Some(&mut cache),
+                &mut res,
+            );
+            let (fresh, _) = measure_paragraph(
+                &para,
+                200.0,
+                Alignment::Left,
+                0.0,
+                None,
+                None,
+                None,
+                &mut res,
+            );
+            assert_eq!(cached, fresh, "page break present: {has_break}");
+        }
+    }
+
+    #[test]
     fn seg_cache_reuse_matches_uncached() {
         use super::seg_cache::SegmentCache;
         let logs = build_logs(vec![

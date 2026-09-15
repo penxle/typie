@@ -3,7 +3,7 @@ use editor_state::Affinity;
 use editor_state::{Position, ResolvedPosition, Selection};
 
 use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
-use super::{grapheme, hard_break, paragraph_break};
+use super::{grapheme, hard_break, trailing_break};
 use crate::paginate::types::{
     ChildAttachment, LayoutAtom, LayoutContent, LayoutLine, LayoutNode, SpacingKind,
 };
@@ -129,7 +129,7 @@ fn drag_exact_selection_for_entry(
 ) -> Option<Selection> {
     hard_break::drag_selection_for_entry(layout_index, view, entry, point)
         .or_else(|| {
-            paragraph_break::drag_selection_for_entry(
+            trailing_break::drag_selection_for_entry(
                 layout_index,
                 view,
                 anchor,
@@ -222,16 +222,14 @@ fn drag_boundary_fallback(
             after.or(before)
         }
     })?;
-    if direct_touch_interaction
-        && let Some(selection) = paragraph_break::drag_selection_for_entry(
-            layout_index,
-            view,
-            anchor,
-            candidate.entry,
-            point,
-            true,
-        )
-    {
+    if let Some(selection) = trailing_break::drag_selection_for_entry(
+        layout_index,
+        view,
+        anchor,
+        candidate.entry,
+        point,
+        direct_touch_interaction,
+    ) {
         return Some(selection);
     }
     Some(candidate.selection)

@@ -8,11 +8,11 @@ pub(crate) mod interactive;
 pub(crate) mod layout_index;
 pub(crate) mod link;
 pub(crate) mod navigation;
-pub(crate) mod paragraph_break;
 pub(crate) mod placeholder;
 pub(crate) mod pointer_style;
 pub(crate) mod segmentation;
 pub(crate) mod selection;
+pub(crate) mod trailing_break;
 pub(crate) mod viewport_anchor;
 pub(crate) mod visit;
 
