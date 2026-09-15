@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { enqueueDiscoveryPublicationSync, enqueueDiscoverySpaceSync, enqueueDiscoverySyncForDocumentIds } from './discovery-index.ts';
+import { enqueueDiscoveryPublicationSync, enqueueDiscoverySiteSync, enqueueDiscoverySyncForDocumentIds } from './discovery-index.ts';
 
 test('publication sync enqueues one job per unique publication id in order', async () => {
   const jobs: { name: string; id: string }[] = [];
@@ -10,7 +10,7 @@ test('publication sync enqueues one job per unique publication id in order', asy
       jobs.push({ name: 'search:index:publication', id });
     },
     // eslint-disable-next-line @typescript-eslint/no-empty-function -- only the publication jobs are under test here
-    enqueueSpaceIndexJob: async () => {},
+    enqueueSiteIndexJob: async () => {},
   });
   assert.deepEqual(jobs, [
     { name: 'search:index:publication', id: 'PUB0B' },
@@ -18,19 +18,19 @@ test('publication sync enqueues one job per unique publication id in order', asy
   ]);
 });
 
-test('space sync enqueues one job per unique space id and nothing for an empty list', async () => {
+test('site sync enqueues one job per unique site id and nothing for an empty list', async () => {
   const jobs: string[] = [];
   const deps = {
     findPublicationIdsByDocumentIds: async () => [],
-    // eslint-disable-next-line @typescript-eslint/no-empty-function -- only the space jobs are under test here
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- only the site jobs are under test here
     enqueuePublicationIndexJob: async () => {},
-    enqueueSpaceIndexJob: async (id: string) => {
+    enqueueSiteIndexJob: async (id: string) => {
       jobs.push(id);
     },
   };
-  await enqueueDiscoverySpaceSync(['SPC0A', 'SPC0A', 'SPC0B'], deps);
-  await enqueueDiscoverySpaceSync([], deps);
-  assert.deepEqual(jobs, ['SPC0A', 'SPC0B']);
+  await enqueueDiscoverySiteSync(['S0A', 'S0A', 'S0B'], deps);
+  await enqueueDiscoverySiteSync([], deps);
+  assert.deepEqual(jobs, ['S0A', 'S0B']);
 });
 
 test('document sync resolves publications for the documents and enqueues only those', async () => {
@@ -44,7 +44,7 @@ test('document sync resolves publications for the documents and enqueues only th
       jobs.push(id);
     },
     // eslint-disable-next-line @typescript-eslint/no-empty-function -- only the publication jobs are under test here
-    enqueueSpaceIndexJob: async () => {},
+    enqueueSiteIndexJob: async () => {},
   });
   assert.deepEqual(jobs, ['PUB0A']);
 });

@@ -266,6 +266,7 @@ export const Entities = pgTable(
     parentId: text('parent_id').references((): AnyPgColumn => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     slug: text('slug').notNull(),
     permalink: text('permalink').notNull(),
+    number: text('number').notNull(),
     type: E._EntityType('type').notNull(),
     order: text('order').notNull(),
     depth: integer('depth').notNull().default(0),
@@ -286,6 +287,7 @@ export const Entities = pgTable(
   (t) => [
     uniqueIndex().on(t.slug),
     uniqueIndex().on(t.permalink),
+    uniqueIndex().on(t.number),
     unique().on(t.siteId, t.parentId, t.order).nullsNotDistinct(),
     index().on(t.userId, t.state),
     index().on(t.siteId, t.state),
@@ -1248,27 +1250,6 @@ export const Sites = pgTable(
       .references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
-    state: E._SiteState('state').notNull().default('ACTIVE'),
-    dateDisplay: E._SiteDateDisplay('date_display').notNull().default('UPDATED_AT'),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [uniqueIndex().on(t.slug), index().on(t.userId, t.state)],
-);
-
-export const Spaces = pgTable(
-  'spaces',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.SPACES, { length: 'short' })),
-    siteId: text('site_id')
-      .notNull()
-      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    slug: text('slug').notNull(),
-    name: text('name').notNull(),
-    logoId: text('logo_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     description: text('description'),
     links: jsonb('links')
       .$type<{ label: string; url: string }[]>()
@@ -1276,33 +1257,13 @@ export const Spaces = pgTable(
       .default(sql`'[]'::jsonb`),
     allowIndexing: boolean('allow_indexing').notNull().default(true),
     allowDiscovery: boolean('allow_discovery').notNull().default(true),
-    dateDisplay: E._SpaceDateDisplay('date_display').notNull().default('PUBLISHED_AT'),
-    state: E._SpaceState('state').notNull().default('ACTIVE'),
+    state: E._SiteState('state').notNull().default('ACTIVE'),
+    dateDisplay: E._SiteDateDisplay('date_display').notNull().default('UPDATED_AT'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex().on(t.slug), index().on(t.siteId, t.state)],
-);
-
-export const Collections = pgTable(
-  'collections',
-  {
-    id: text('id')
-      .primaryKey()
-      .$defaultFn(() => createDbId(TableCode.COLLECTIONS, { length: 'short' })),
-    spaceId: text('space_id')
-      .notNull()
-      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    permalink: text('permalink').notNull(),
-    name: text('name').notNull(),
-    description: text('description'),
-    coverId: text('cover_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    createdAt: datetime('created_at')
-      .notNull()
-      .default(sql`now()`),
-  },
-  (t) => [uniqueIndex().on(t.permalink), index().on(t.spaceId)],
+  (t) => [uniqueIndex().on(t.slug), index().on(t.userId, t.state)],
 );
 
 export const Publications = pgTable(
@@ -1315,13 +1276,10 @@ export const Publications = pgTable(
       .notNull()
       .unique()
       .references(() => Documents.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    spaceId: text('space_id')
+    siteId: text('site_id')
       .notNull()
-      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    permalink: text('permalink').notNull(),
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     state: E._PublicationState('state').notNull(),
-    collectionId: text('collection_id').references(() => Collections.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    collectionOrder: text('collection_order'),
     pinnedOrder: text('pinned_order'),
     publishedAt: datetime('published_at'),
     scheduledAt: datetime('scheduled_at'),
@@ -1334,15 +1292,11 @@ export const Publications = pgTable(
       .default(sql`now()`),
   },
   (t) => [
-    uniqueIndex().on(t.permalink),
-    index().on(t.spaceId, t.state, t.publishedAt),
+    index().on(t.siteId, t.state, t.publishedAt),
     index().on(t.state, t.publishedAt, t.id),
     uniqueIndex()
-      .on(t.spaceId, t.pinnedOrder)
+      .on(t.siteId, t.pinnedOrder)
       .where(sql`${t.pinnedOrder} is not null`),
-    uniqueIndex()
-      .on(t.collectionId, t.collectionOrder)
-      .where(sql`${t.collectionId} is not null`),
     index()
       .on(t.state, t.scheduledAt)
       .where(sql`${t.state} = 'SCHEDULED'`),
@@ -1388,13 +1342,13 @@ export const PublicationTags = pgTable(
     publicationId: text('publication_id')
       .notNull()
       .references(() => Publications.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    spaceId: text('space_id')
+    siteId: text('site_id')
       .notNull()
-      .references(() => Spaces.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     name: text('name').notNull(),
     order: text('order').notNull(),
   },
-  (t) => [unique().on(t.publicationId, t.name), index().on(t.spaceId, t.name), index().on(t.name)],
+  (t) => [unique().on(t.publicationId, t.name), index().on(t.siteId, t.name), index().on(t.name)],
 );
 
 export const Subscriptions = pgTable(

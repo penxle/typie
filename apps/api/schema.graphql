@@ -182,26 +182,6 @@ input ClosePrismReviewThreadInput {
   threadId: ID!
 }
 
-type Collection {
-  cover: Image
-  createdAt: DateTime!
-  description: String
-  id: ID!
-  name: String!
-  publications: [Publication!]!
-  space: Space!
-}
-
-type CollectionView {
-  cover: Image
-  description: String
-  id: ID!
-  name: String!
-  permalink: String!
-  publicationCount: Int!
-  publications: [PublicationView!]!
-}
-
 input CopyEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
@@ -213,13 +193,6 @@ input CopyEntitiesInput {
 enum CouponState {
   ACTIVE
   DISABLED
-}
-
-input CreateCollectionInput {
-  coverId: ID
-  description: String
-  name: String!
-  spaceId: ID!
 }
 
 input CreateDividerInput {
@@ -276,13 +249,6 @@ input CreateSiteInput {
   name: String!
 }
 
-input CreateSpaceInput {
-  logoId: ID
-  name: String!
-  siteId: ID!
-  slug: String!
-}
-
 input CreateTextReplacementInput {
   lowerOrder: String
   match: String!
@@ -311,10 +277,6 @@ enum CreditCodeState {
 }
 
 scalar DateTime
-
-input DeleteCollectionInput {
-  collectionId: ID!
-}
 
 input DeleteDocumentCommentInput {
   clientId: String!
@@ -359,10 +321,6 @@ input DeleteSiteInput {
   siteId: ID!
 }
 
-input DeleteSpaceInput {
-  spaceId: ID!
-}
-
 input DeleteTextReplacementInput {
   textReplacementId: ID!
 }
@@ -377,35 +335,28 @@ type DiscoveryPublicationHit {
   title: String
 }
 
-type DiscoveryRecentCollection {
-  collection: CollectionView!
+type DiscoveryRecentSite {
   publication: PublicationView!
-  space: SpaceView!
-}
-
-type DiscoveryRecentSpace {
-  publication: PublicationView!
-  space: SpaceView!
+  site: SiteView!
 }
 
 type DiscoverySearchResult {
   publications: [DiscoveryPublicationHit!]!
-  spaces: [SpaceView!]!
+  sites: [SiteView!]!
   tags: [DiscoveryTag!]!
 }
 
 type DiscoveryTag {
   count: Int!
   name: String!
-  publications(after: ID, first: Int): SpacePublicationsPage!
+  publications(after: ID, first: Int): SitePublicationsPage!
 }
 
 type DiscoveryView {
   allTags: [DiscoveryTag!]!
-  feed(after: ID, first: Int): SpacePublicationsPage!
-  publications(after: ID, first: Int): SpacePublicationsPage!
-  recentCollections(first: Int! = 4): [DiscoveryRecentCollection!]!
-  recentSpaces(first: Int! = 5): [DiscoveryRecentSpace!]!
+  feed(after: ID, first: Int): SitePublicationsPage!
+  publications(after: ID, first: Int): SitePublicationsPage!
+  recentSites(first: Int! = 5): [DiscoveryRecentSite!]!
   search(query: String!): DiscoverySearchResult
   tag(name: String!): DiscoveryTag
   tags: [DiscoveryTag!]!
@@ -928,22 +879,13 @@ interface IFolder {
 }
 
 interface ISite {
-  dateDisplay: SiteDateDisplay!
-  id: ID!
-  logo: Image!
-  name: String!
-  slug: String!
-  url: String!
-}
-
-interface ISpace {
   allowDiscovery: Boolean!
   allowIndexing: Boolean!
-  dateDisplay: SpaceDateDisplay!
+  dateDisplay: SiteDateDisplay!
   description: String
   id: ID!
-  links: [SpaceLink!]!
-  logo: Image
+  links: [SiteLink!]!
+  logo: Image!
   name: String!
   slug: String!
   url: String!
@@ -1058,12 +1000,6 @@ input MoveNoteInput {
   upperOrder: String
 }
 
-input MovePublicationInCollectionInput {
-  lowerOrder: String
-  publicationId: ID!
-  upperOrder: String
-}
-
 input MoveTextReplacementInput {
   lowerOrder: String
   textReplacementId: ID!
@@ -1099,7 +1035,6 @@ type Mutation {
   checkSpellingDocumentV2(input: CheckSpellingDocumentV2Input!): [DocumentSpellingErrorV2!]!
   closePrismReviewThread(input: ClosePrismReviewThreadInput!): PrismReviewThread!
   copyEntities(input: CopyEntitiesInput!): [Entity!]!
-  createCollection(input: CreateCollectionInput!): Collection!
   createDivider(input: CreateDividerInput!): Divider!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentComment(input: CreateDocumentCommentInput!): DocumentCommentThread!
@@ -1108,12 +1043,10 @@ type Mutation {
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
   createSite(input: CreateSiteInput!): Site!
-  createSpace(input: CreateSpaceInput!): Space!
   createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
   deleteBillingKey: Boolean!
-  deleteCollection(input: DeleteCollectionInput!): Collection!
   deleteDocument(input: DeleteDocumentInput!): Document!
   deleteDocumentComment(input: DeleteDocumentCommentInput!): DocumentCommentThread!
   deleteDocumentCommentThread(input: DeleteDocumentCommentThreadInput!): DocumentCommentThread!
@@ -1124,7 +1057,6 @@ type Mutation {
   deletePrismReviewThreadComment(input: DeletePrismReviewThreadCommentInput!): PrismReviewThread!
   deletePrismSession(input: DeletePrismSessionInput!): PrismSession!
   deleteSite(input: DeleteSiteInput!): Site!
-  deleteSpace(input: DeleteSpaceInput!): Space!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
   deleteUserGoal: User!
@@ -1143,7 +1075,6 @@ type Mutation {
   moveEntities(input: MoveEntitiesInput!): [Entity!]!
   moveEntity(input: MoveEntityInput!): Entity!
   moveNote(input: MoveNoteInput!): Note!
-  movePublicationInCollection(input: MovePublicationInCollectionInput!): Publication!
   moveTextReplacement(input: MoveTextReplacementInput!): TextReplacementNode!
   moveWidget(input: MoveWidgetInput!): Widget!
   persistBlobAsAvatar(input: PersistBlobAsAvatarInput!): Image!
@@ -1154,6 +1085,8 @@ type Mutation {
   pinPublication(input: PinPublicationInput!): Publication!
   preparePrismReview(input: PreparePrismReviewInput!): PrismReviewSnapshot!
   publishDocument(input: PublishDocumentInput!): Publication!
+  publishDocuments(input: PublishDocumentsInput!): [Publication!]!
+  publishFolderDocuments(input: PublishFolderDocumentsInput!): [Publication!]!
   purchasePrismCreditPack(input: PurchasePrismCreditPackInput!): PrismCreditPurchase!
   purgeEntities(input: PurgeEntitiesInput!): Site!
   reactPrismReviewRound(input: ReactPrismReviewRoundInput!): PrismReviewRound!
@@ -1193,12 +1126,13 @@ type Mutation {
   unpinEntity(input: UnpinEntityInput!): Entity!
   unpinPublication(input: UnpinPublicationInput!): Publication!
   unpublishDocument(input: UnpublishDocumentInput!): Publication!
+  unpublishDocuments(input: UnpublishDocumentsInput!): [Publication!]!
+  unpublishFolderDocuments(input: UnpublishFolderDocumentsInput!): [Publication!]!
   unregisterPushNotificationToken(input: UnregisterPushNotificationTokenInput!): Boolean!
   unresolveDocumentCommentThread(input: UnresolveDocumentCommentThreadInput!): DocumentCommentThread!
   updateBillingKey(input: UpdateBillingKeyInput!): UserBillingKey!
   updateBillingKeyWithEasyPay(input: UpdateBillingKeyWithEasyPayInput!): UserBillingKey!
   updateBootstrap(input: UpdateBootstrapInput!): JSON!
-  updateCollection(input: UpdateCollectionInput!): Collection!
   updateDocument(input: UpdateDocumentInput!): Document!
   updateDocumentComment(input: UpdateDocumentCommentInput!): DocumentCommentThread!
   updateDocumentHeadExclusion(input: UpdateDocumentHeadExclusionInput!): DocumentHead!
@@ -1219,7 +1153,6 @@ type Mutation {
   updatePublication(input: UpdatePublicationInput!): Publication!
   updateSite(input: UpdateSiteInput!): Site!
   updateSiteSlug(input: UpdateSiteSlugInput!): Site!
-  updateSpace(input: UpdateSpaceInput!): Space!
   updateTextReplacement(input: UpdateTextReplacementInput!): TextReplacementNode!
   updateUser(input: UpdateUserInput!): User!
   updateUserGoal(input: UpdateUserGoalInput!): User!
@@ -1816,8 +1749,6 @@ type PrismWorkflowTranscript {
 
 type Publication {
   characterCount: Int!
-  collection: Collection
-  collectionOrder: String
   document: Document!
   excerpt: String
   hasUnpublishedChanges: Boolean!
@@ -1825,7 +1756,7 @@ type Publication {
   pinnedOrder: String
   publishedAt: DateTime
   scheduledAt: DateTime
-  space: Space!
+  site: Site!
   state: PublicationState!
   subtitle: String
   tags: [String!]!
@@ -1844,26 +1775,27 @@ enum PublicationState {
 
 type PublicationView implements IEditorDocument {
   allowReaction: Boolean!
+  ancestors: [SiteFolderView!]!
   assets: [DocumentAsset!]!
   availableActions: [DocumentAvailableAction!]!
   body: DocumentViewBody!
-  collection: CollectionView
   documentId: ID!
   editUrl: String
   excerpt: String!
+  folder: SiteFolderView
   fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   hasPassword: Boolean!
   id: ID!
   layoutMode: JSON!
-  nextInCollection: PublicationView
+  next: PublicationView
+  number: String!
   passwordUnlocked: Boolean!
-  permalink: String!
-  prevInCollection: PublicationView
+  prev: PublicationView
   protectContent: Boolean!
   publishedAt: DateTime!
   reactionCount: Int!
   reactions: [DocumentReaction!]!
-  space: SpaceView!
+  site: SiteView!
   subtitle: String
   tags: [String!]!
   thumbnail: Image
@@ -1873,13 +1805,25 @@ type PublicationView implements IEditorDocument {
 }
 
 input PublishDocumentInput {
-  collectionId: ID
   documentId: ID!
   excerpt: String
   scheduledAt: DateTime
-  spaceId: ID!
   tags: [String!]!
   thumbnailId: ID
+}
+
+input PublishDocumentsInput {
+  addTags: [String!]
+  documentIds: [ID!]!
+  removeTags: [String!]
+  scheduledAt: DateTime
+}
+
+input PublishFolderDocumentsInput {
+  addTags: [String!]
+  folderIds: [ID!]!
+  removeTags: [String!]
+  scheduledAt: DateTime
 }
 
 input PurchasePrismCreditPackInput {
@@ -1909,8 +1853,9 @@ type Query {
   documentById(documentId: ID!): Document!
   entities(entityIds: [ID!], slugs: [String!]): [Entity!]!
   entity(entityId: ID, slug: String): Entity!
-  entityView(origin: String!, slug: String!): EntityView!
+  entityView(slug: String!): EntityView!
   folder(id: ID!): Folder!
+  folderDocuments(folderIds: [ID!]!): [Document!]!
   getBootstrap: JSON!
   image(imageId: ID!): Image!
   impersonation: Impersonation
@@ -1929,10 +1874,8 @@ type Query {
   search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
   seed: Float!
   site(siteId: ID!): Site!
-  siteView(origin: String!): SiteView!
-  sitemapSpaceSlugs: [String!]!
-  space(spaceId: ID!): Space!
-  spaceView(slug: String!): SpaceView!
+  siteView(slug: String!): SiteView!
+  sitemapSiteSlugs: [String!]!
   stats: JSON!
   userView(id: ID!): UserView!
   widgets: [Widget!]!
@@ -2129,8 +2072,11 @@ enum SingleSignOnProvider {
 }
 
 type Site implements ISite {
+  allowDiscovery: Boolean!
+  allowIndexing: Boolean!
   dateDisplay: SiteDateDisplay!
   deletedEntities: [Entity!]!
+  description: String
   documentCount: Int!
   documentTemplates: [Document!]!
   entities: [Entity!]!
@@ -2138,21 +2084,55 @@ type Site implements ISite {
   folderCount: Int!
   id: ID!
   lastRootEntity: Entity
+  links: [SiteLink!]!
   logo: Image!
   name: String!
   pinnedEntities: [Entity!]!
   recentDocuments(limit: Int! = 5, sort: RecentDocumentSort!): RecentDocumentsResult!
   slug: String!
-  spaces: [Space!]!
   url: String!
   user: User!
   view: SiteView!
 }
 
+enum SiteAvailableAction {
+  SETTINGS
+}
+
 enum SiteDateDisplay {
-  CREATED_AT
   NONE
+  PUBLISHED_AT
   UPDATED_AT
+}
+
+union SiteEntryView = PublicationView | SiteFolderView
+
+type SiteFolderView {
+  ancestors: [SiteFolderView!]!
+  children: [SiteEntryView!]!
+  folderCount: Int!
+  id: ID!
+  name: String!
+  number: String!
+  publicationCount: Int!
+  site: SiteView!
+  thumbnail: Image
+  url: String!
+}
+
+type SiteLink {
+  label: String!
+  url: String!
+}
+
+input SiteLinkInput {
+  label: String!
+  url: String!
+}
+
+type SitePublicationsPage {
+  hasMore: Boolean!
+  publications: [PublicationView!]!
 }
 
 enum SiteState {
@@ -2160,92 +2140,34 @@ enum SiteState {
   DELETED
 }
 
+type SiteTag {
+  count: Int!
+  name: String!
+  publications(after: ID, first: Int): SitePublicationsPage!
+}
+
 union SiteUpdateStreamPayload = Entity | Site
 
 type SiteView implements ISite {
+  allowDiscovery: Boolean!
+  allowIndexing: Boolean!
+  availableActions: [SiteAvailableAction!]!
   dateDisplay: SiteDateDisplay!
-  entities: [EntityView!]!
-  id: ID!
-  logo: Image!
-  name: String!
-  slug: String!
-  url: String!
-}
-
-type Space implements ISpace {
-  allowDiscovery: Boolean!
-  allowIndexing: Boolean!
-  collections: [Collection!]!
-  createdAt: DateTime!
-  dateDisplay: SpaceDateDisplay!
   description: String
+  entries: [SiteEntryView!]!
+  folder(number: String!): SiteFolderView!
   id: ID!
-  links: [SpaceLink!]!
-  logo: Image
-  name: String!
-  pinnedPublications: [Publication!]!
-  publications(states: [PublicationState!]): [Publication!]!
-  site: Site!
-  slug: String!
-  url: String!
-}
-
-enum SpaceAvailableAction {
-  SETTINGS
-}
-
-enum SpaceDateDisplay {
-  NONE
-  PUBLISHED_AT
-  UPDATED_AT
-}
-
-type SpaceLink {
-  label: String!
-  url: String!
-}
-
-input SpaceLinkInput {
-  label: String!
-  url: String!
-}
-
-type SpacePublicationsPage {
-  hasMore: Boolean!
-  publications: [PublicationView!]!
-}
-
-enum SpaceState {
-  ACTIVE
-  DELETED
-}
-
-type SpaceTag {
-  count: Int!
-  name: String!
-  publications(after: ID, first: Int): SpacePublicationsPage!
-}
-
-type SpaceView implements ISpace {
-  allowDiscovery: Boolean!
-  allowIndexing: Boolean!
-  availableActions: [SpaceAvailableAction!]!
-  collection(permalink: String!): CollectionView!
-  collections: [CollectionView!]!
-  dateDisplay: SpaceDateDisplay!
-  description: String
-  id: ID!
-  links: [SpaceLink!]!
+  links: [SiteLink!]!
   logo: Image!
   name: String!
   pinnedPublications: [PublicationView!]!
-  publication(permalink: String!): PublicationView!
+  publication(number: String!): PublicationView!
   publicationCount: Int!
-  publications(after: ID, first: Int): SpacePublicationsPage!
+  recentPublications(after: ID, first: Int): SitePublicationsPage!
   sitemap: [String!]!
   slug: String!
-  tag(name: String!): SpaceTag!
-  tags: [SpaceTag!]!
+  tag(name: String!): SiteTag!
+  tags: [SiteTag!]!
   url: String!
 }
 
@@ -2375,6 +2297,14 @@ input UnpublishDocumentInput {
   documentId: ID!
 }
 
+input UnpublishDocumentsInput {
+  documentIds: [ID!]!
+}
+
+input UnpublishFolderDocumentsInput {
+  folderIds: [ID!]!
+}
+
 input UnregisterPushNotificationTokenInput {
   token: String!
 }
@@ -2397,13 +2327,6 @@ input UpdateBillingKeyWithEasyPayInput {
 
 input UpdateBootstrapInput {
   bootstrap: JSON!
-}
-
-input UpdateCollectionInput {
-  collectionId: ID!
-  coverId: ID
-  description: String
-  name: String
 }
 
 input UpdateDocumentCommentInput {
@@ -2509,7 +2432,6 @@ input UpdatePrismSessionToolPolicyInput {
 }
 
 input UpdatePublicationInput {
-  collectionId: ID
   excerpt: String
   publicationId: ID!
   tags: [String!]!
@@ -2517,7 +2439,11 @@ input UpdatePublicationInput {
 }
 
 input UpdateSiteInput {
+  allowDiscovery: Boolean
+  allowIndexing: Boolean
   dateDisplay: SiteDateDisplay
+  description: String
+  links: [SiteLinkInput!]
   logoId: ID
   name: String
   siteId: ID!
@@ -2526,18 +2452,6 @@ input UpdateSiteInput {
 input UpdateSiteSlugInput {
   siteId: ID!
   slug: String!
-}
-
-input UpdateSpaceInput {
-  allowDiscovery: Boolean
-  allowIndexing: Boolean
-  dateDisplay: SpaceDateDisplay
-  description: String
-  links: [SpaceLinkInput!]
-  logoId: ID
-  name: String
-  slug: String
-  spaceId: ID!
 }
 
 input UpdateTextReplacementInput {

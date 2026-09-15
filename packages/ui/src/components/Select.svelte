@@ -4,7 +4,6 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
-  import MinusIcon from '~icons/lucide/minus';
   import { Icon, Menu, MenuItem } from '../components';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Component } from 'svelte';
@@ -12,7 +11,6 @@
   type Props = {
     style?: SystemStyleObject;
     value: T;
-    values?: T[];
     items: {
       icon?: Component;
       label: string;
@@ -26,23 +24,9 @@
     chevron?: boolean;
   };
 
-  let { style, value = $bindable(), values, items = [], disabled, onselect, chevron = true }: Props = $props();
+  let { style, value = $bindable(), items = [], disabled, onselect, chevron = true }: Props = $props();
 
-  const selectedValues = $derived(values ?? [value]);
-  const isIndeterminate = $derived(selectedValues.some((v) => selectedValues[0] !== v));
-
-  const displayItem = $derived(
-    (() => {
-      if (isIndeterminate) {
-        const selectedItems = items.filter((item) => selectedValues.includes(item.value));
-        return {
-          label: selectedItems.map((item) => item.label).join(', '),
-          icon: MinusIcon,
-        };
-      }
-      return items.find((item) => item.value === selectedValues[0]);
-    })(),
-  );
+  const displayItem = $derived(items.find((item) => item.value === value));
 </script>
 
 <Menu disableAutoUpdate {disabled} listStyle={css.raw({ minWidth: '[initial]', maxWidth: '280px' })} offset={4} placement="bottom-end">
@@ -134,12 +118,8 @@
           </div>
         </div>
 
-        {#if selectedValues.includes(item.value)}
-          {#if isIndeterminate}
-            <Icon style={css.raw({ color: 'accent.default' })} icon={MinusIcon} size={14} />
-          {:else}
-            <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
-          {/if}
+        {#if item.value === value}
+          <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={14} />
         {:else}
           <div style:width="14px"></div>
         {/if}

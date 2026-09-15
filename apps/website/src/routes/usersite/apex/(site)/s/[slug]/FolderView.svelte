@@ -316,7 +316,7 @@
 
                     {#if entityView.data.site.dateDisplay !== 'NONE'}
                       <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.hint' })}>
-                        {dayjs(entityView.data.site.dateDisplay === 'CREATED_AT' ? entity.node.createdAt : entity.node.updatedAt).format(
+                        {dayjs(entityView.data.site.dateDisplay === 'PUBLISHED_AT' ? entity.node.createdAt : entity.node.updatedAt).format(
                           'YYYY. M. D.',
                         )}
                       </p>

@@ -1,35 +1,35 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { EntityVisibility } from '@typie/lib/enums';
-  import { css, cx } from '@typie/styled-system/css';
+  import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CopyIcon from '~icons/lucide/copy';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
   import SendIcon from '~icons/lucide/send';
   import { publicationErrorCode } from '$lib/publication/error';
-  import { publicationErrorMessage } from '$lib/publication/publish-form';
+  import { publicationErrorMessage, sharedValue } from '$lib/publication/publish-form';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import OptionCard from './OptionCard.svelte';
   import { groupLabelStyle, linkFieldButtonStyle, linkFieldInputStyle, linkFieldStyle } from './publish-styles';
   import ReadingSettings from './ReadingSettings.svelte';
   import type { DashboardLayout_Share_VisibilityStep_document$key } from '$mearie';
 
   type Props = {
-    document$key: DashboardLayout_Share_VisibilityStep_document$key;
+    documents$key: DashboardLayout_Share_VisibilityStep_document$key[];
     onPublishStep: () => void;
   };
 
-  let { document$key, onPublishStep }: Props = $props();
+  let { documents$key, onPublishStep }: Props = $props();
 
-  const document = createFragment(
+  const documents = createFragment(
     graphql(`
       fragment DashboardLayout_Share_VisibilityStep_document on Document {
         id
@@ -43,15 +43,12 @@
         publication {
           id
           state
-          publishedAt
-          scheduledAt
-          url
         }
 
         ...DashboardLayout_Share_ReadingSettings_document
       }
     `),
-    () => document$key,
+    () => documents$key,
   );
 
   const [updateDocumentsOption] = createMutation(
@@ -69,10 +66,17 @@
     `),
   );
 
-  const publication = $derived(document.data.publication);
-  const published = $derived(publication?.state === 'PUBLISHED');
-  const scheduled = $derived(publication?.state === 'SCHEDULED');
-  const visibility = $derived(document.data.entity.visibility);
+  const multiple = $derived(documents.data.length > 1);
+  const publishedCount = $derived(documents.data.filter((document) => document.publication?.state === 'PUBLISHED').length);
+  const changeable = $derived(documents.data.filter((document) => document.publication?.state !== 'PUBLISHED'));
+  const changeableIds = $derived(changeable.map((document) => document.id));
+  const allPublished = $derived(changeableIds.length === 0);
+  const anyPublishing = $derived(documents.data.some((document) => document.publication && document.publication.state !== 'UNPUBLISHED'));
+  const visibility = $derived(sharedValue(changeable.map((document) => document.entity.visibility)));
+  const mixed = $derived(multiple && changeable.length > 1 && visibility === undefined);
+
+  const countOf = (value: EntityVisibility) => changeable.filter((document) => document.entity.visibility === value).length;
+  const hint = (value: EntityVisibility) => (mixed ? `${countOf(value)}개` : null);
 
   let copied = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -87,9 +91,9 @@
     (event.currentTarget as HTMLInputElement).select();
   };
 
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(document.data.entity.url);
-    mixpanel.track('copy_document_share_url', { tab: 'view', count: 1 });
+  const copyLinks = async () => {
+    await navigator.clipboard.writeText(documents.data.map((document) => document.entity.url).join('\n'));
+    mixpanel.track('copy_document_share_url', { tab: 'view', count: documents.data.length });
 
     if (timer) clearTimeout(timer);
     copied = true;
@@ -97,152 +101,63 @@
   };
 
   const setVisibility = async (next: EntityVisibility) => {
-    if (visibility === next || published) return;
+    if (visibility === next || changeableIds.length === 0) return;
     if (next !== EntityVisibility.PRIVATE && !SubscribeModal.gate('share_document')) return;
 
     try {
-      await updateDocumentsOption({ input: { documentIds: [document.data.id], visibility: next } });
-      mixpanel.track('update_document_option', { visibility: next, via: 'share_modal' });
+      await updateDocumentsOption({ input: { documentIds: changeableIds, visibility: next } });
+      mixpanel.track('update_document_option', { visibility: next, via: 'share_modal', count: changeableIds.length });
     } catch (err) {
       Toast.error(publicationErrorMessage(publicationErrorCode(err)));
     }
   };
 </script>
 
-{#snippet optionCard(selected: boolean, disabledCard: boolean, head: import('svelte').Snippet, cardBody?: import('svelte').Snippet)}
-  <div
-    class={css({
-      borderWidth: '1px',
-      borderColor: selected ? 'accent.default' : 'border.hairline',
-      borderRadius: '8px',
-      backgroundColor: 'surface.default',
-      transition: 'common',
-      _hover: { borderColor: selected || disabledCard ? undefined : 'border.emphasis' },
-    })}
-  >
-    {@render head()}
-
-    {#if cardBody}
-      <div
-        class={flex({
-          flexDirection: 'column',
-          gap: '14px',
-          paddingX: '12px',
-          paddingY: '14px',
-          borderTopWidth: '1px',
-          borderColor: 'border.hairline',
-        })}
-      >
-        {@render cardBody()}
-      </div>
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet optionIcon(icon: typeof LockIcon, selected: boolean)}
-  <span
-    class={center({
-      flexShrink: '0',
-      size: '32px',
-      borderRadius: '8px',
-      color: selected ? 'text.default' : 'text.muted',
-      backgroundColor: selected ? 'surface.active' : 'surface.inset',
-      transition: 'common',
-    })}
-  >
-    <Icon {icon} size={16} />
-  </span>
-{/snippet}
-
-{#snippet optionRadio(selected: boolean)}
-  <span
-    class={center({
-      flexShrink: '0',
-      size: '16px',
-      borderWidth: '[1.5px]',
-      borderColor: selected ? 'accent.default' : 'border.emphasis',
-      borderRadius: 'full',
-      transition: 'common',
-    })}
-  >
-    {#if selected}
-      <span class={css({ size: '8px', borderRadius: 'full', backgroundColor: 'accent.default' })}></span>
-    {/if}
-  </span>
-{/snippet}
-
-{#snippet option(value: EntityVisibility, icon: typeof LockIcon, label: string, description: string, cardBody?: import('svelte').Snippet)}
-  {@const selected = visibility === value}
-
-  {#snippet head()}
-    <button
-      class={flex({
-        alignItems: 'center',
-        gap: '12px',
-        width: 'full',
-        paddingX: '12px',
-        paddingY: '11px',
-        textAlign: 'left',
-        _disabled: { opacity: '45', cursor: 'not-allowed' },
-      })}
-      aria-checked={selected}
-      disabled={published}
-      onclick={() => setVisibility(value)}
-      role="radio"
-      type="button"
-    >
-      {@render optionIcon(icon, selected)}
-
-      <span class={flex({ flexDirection: 'column', gap: '2px', flex: '1', minWidth: '0' })}>
-        <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>{label}</span>
-        <span class={css({ overflow: 'hidden', fontSize: '12px', textOverflow: 'ellipsis', color: 'text.hint' })}>{description}</span>
-      </span>
-
-      {@render optionRadio(selected)}
-    </button>
-  {/snippet}
-
-  {@render optionCard(selected, published, head, selected ? cardBody : undefined)}
-{/snippet}
-
 {#snippet linkBody()}
-  <div class={css(linkFieldStyle)}>
-    <input
-      class={css(linkFieldInputStyle)}
-      aria-label="공유 링크"
-      autocomplete="off"
-      onclick={selectUrl}
-      onfocus={selectUrl}
-      readonly
-      spellcheck="false"
-      value={document.data.entity.url}
-    />
-
-    <button
-      class={center(linkFieldButtonStyle)}
-      aria-label="링크 복사"
-      onclick={copyLink}
-      type="button"
-      use:tooltip={{ message: copied ? '복사되었어요' : '링크 복사', placement: 'top', keepOnClick: true }}
-    >
+  {#if multiple}
+    <Button style={css.raw({ alignSelf: 'flex-start', gap: '6px' })} onclick={copyLinks} size="sm" variant="secondary">
       <Icon style={copied ? css.raw({ color: 'success.default' }) : undefined} icon={copied ? CheckIcon : CopyIcon} size={14} />
-    </button>
+      {copied ? '복사되었어요' : `링크 ${documents.data.length}개 복사`}
+    </Button>
+  {:else}
+    <div class={css(linkFieldStyle)}>
+      <input
+        class={css(linkFieldInputStyle)}
+        aria-label="공유 링크"
+        autocomplete="off"
+        onclick={selectUrl}
+        onfocus={selectUrl}
+        readonly
+        spellcheck="false"
+        value={documents.data[0].entity.url}
+      />
 
-    <a
-      class={center(linkFieldButtonStyle)}
-      aria-label="글 보기"
-      href={document.data.entity.url}
-      rel="noopener noreferrer"
-      target="_blank"
-      use:tooltip={{ message: '글 보기', placement: 'top' }}
-    >
-      <Icon icon={ExternalLinkIcon} size={14} />
-    </a>
-  </div>
+      <button
+        class={center(linkFieldButtonStyle)}
+        aria-label="링크 복사"
+        onclick={copyLinks}
+        type="button"
+        use:tooltip={{ message: copied ? '복사되었어요' : '링크 복사', placement: 'top', keepOnClick: true }}
+      >
+        <Icon style={copied ? css.raw({ color: 'success.default' }) : undefined} icon={copied ? CheckIcon : CopyIcon} size={14} />
+      </button>
+
+      <a
+        class={center(linkFieldButtonStyle)}
+        aria-label="글 보기"
+        href={documents.data[0].entity.url}
+        rel="noopener noreferrer"
+        target="_blank"
+        use:tooltip={{ message: '글 보기', placement: 'top' }}
+      >
+        <Icon icon={ExternalLinkIcon} size={14} />
+      </a>
+    </div>
+  {/if}
 
   <div class={flex({ flexDirection: 'column', gap: '8px' })}>
     <div class={css({ fontSize: '12px', fontWeight: 'semibold', color: 'text.hint' })}>읽기 설정</div>
-    <ReadingSettings document$key={document.data} />
+    <ReadingSettings documents$key={documents.data} />
   </div>
 {/snippet}
 
@@ -252,45 +167,49 @@
 
     <div class={flex({ flexDirection: 'column', gap: '8px' })}>
       <div class={flex({ flexDirection: 'column', gap: '8px' })} aria-label="공개 범위" role="radiogroup">
-        {@render option(EntityVisibility.PRIVATE, LockIcon, '비공개', '나만 볼 수 있어요.')}
-        {@render option(EntityVisibility.UNLISTED, LinkIcon, '링크가 있는 사람', '링크가 있는 누구나 볼 수 있어요.', linkBody)}
+        <OptionCard
+          description="나만 볼 수 있어요."
+          disabled={allPublished}
+          hint={hint(EntityVisibility.PRIVATE)}
+          icon={LockIcon}
+          label="비공개"
+          onclick={() => setVisibility(EntityVisibility.PRIVATE)}
+          selected={visibility === EntityVisibility.PRIVATE}
+        />
+        <OptionCard
+          body={linkBody}
+          description="링크가 있는 누구나 볼 수 있어요."
+          disabled={allPublished}
+          hint={hint(EntityVisibility.UNLISTED)}
+          icon={LinkIcon}
+          label="링크가 있는 사람"
+          onclick={() => setVisibility(EntityVisibility.UNLISTED)}
+          selected={visibility === EntityVisibility.UNLISTED}
+        />
       </div>
 
-      {#snippet publishHead()}
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '12px',
-            width: 'full',
-            paddingX: '12px',
-            paddingY: '11px',
-            textAlign: 'left',
-            _hover: { '& .publish-chevron': { color: 'text.muted', translateX: '2px' } },
-          })}
-          onclick={onPublishStep}
-          type="button"
-        >
-          {@render optionIcon(SendIcon, published || scheduled)}
-
-          <span class={flex({ flexDirection: 'column', gap: '2px', flex: '1', minWidth: '0' })}>
-            <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>스페이스에 발행</span>
-
-            <span class={css({ overflow: 'hidden', fontSize: '12px', textOverflow: 'ellipsis', color: 'text.hint' })}>
-              스페이스에 글로 올려 누구나 읽을 수 있게 해요.
-            </span>
-          </span>
-
-          <span class={cx('publish-chevron', center({ flexShrink: '0', color: 'text.hint', translate: 'auto', transition: 'common' }))}>
-            <Icon icon={ChevronRightIcon} size={16} />
-          </span>
-        </button>
-      {/snippet}
-
-      {@render optionCard(published || scheduled, false, publishHead)}
+      <OptionCard
+        description="스페이스에 글로 올려 누구나 읽을 수 있게 해요."
+        icon={SendIcon}
+        label="스페이스에 발행"
+        onclick={onPublishStep}
+        selected={anyPublishing}
+        trailing="chevron"
+      />
     </div>
 
-    {#if published}
+    {#if mixed}
+      <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
+        공개 범위가 서로 달라요. 고르면 글 {changeableIds.length}개에 모두 적용돼요.
+      </p>
+    {/if}
+
+    {#if allPublished}
       <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.</p>
+    {:else if publishedCount > 0}
+      <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
+        발행 중인 글 {publishedCount}개는 공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.
+      </p>
     {/if}
   </section>
 </div>

@@ -7,7 +7,7 @@ export const load = async (event) => {
       event,
       graphql(`
         query UsersiteSpaceTagPage_Query($slug: String!, $name: String!) {
-          spaceView(slug: $slug) {
+          siteView(slug: $slug) {
             id
             name
 

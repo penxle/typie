@@ -10,7 +10,7 @@ export const GET: RequestHandler = async (event) => {
     event,
     graphql(`
       query UsersiteApexSitemapRoot_Query {
-        sitemapSpaceSlugs
+        sitemapSiteSlugs
         discovery {
           tags {
             name
@@ -23,7 +23,7 @@ export const GET: RequestHandler = async (event) => {
 
   return sitemap(event, [
     '/',
-    ...query.data.sitemapSpaceSlugs.map((slug) => spaceHomePath(slug)),
+    ...query.data.sitemapSiteSlugs.map((slug) => spaceHomePath(slug)),
     ...query.data.discovery.tags.map((tag) => discoveryTagPath(tag.name)),
   ]);
 };

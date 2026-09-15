@@ -34,17 +34,6 @@ export const unpublishByEntityIdsCore = async (tx: Transaction, args: { entityId
   return affected.map((row) => row.publicationId);
 };
 
-export const unpublishBySpaceIdCore = async (tx: Transaction, args: { spaceId: string; now: Dayjs }) => {
-  const rows = await tx
-    .select({ entityId: Documents.entityId })
-    .from(Publications)
-    .innerJoin(Documents, eq(Publications.documentId, Documents.id))
-    .where(
-      and(eq(Publications.spaceId, args.spaceId), inArray(Publications.state, [PublicationState.PUBLISHED, PublicationState.SCHEDULED])),
-    );
-  return await unpublishByEntityIdsCore(tx, { entityIds: rows.map((row) => row.entityId), now: args.now });
-};
-
 export const unpublishBySiteIdsCore = async (tx: Transaction, args: { siteIds: string[]; now: Dayjs }) => {
   if (args.siteIds.length === 0) return [];
   const rows = await buildPublishingEntityIdsBySiteQuery(tx, { siteIds: args.siteIds });

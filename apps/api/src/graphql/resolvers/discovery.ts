@@ -4,7 +4,7 @@ import { elasticsearch, esIndex } from '#/search.ts';
 import { getAllDiscoveryTags, getDiscoveryTags } from '#/utils/discovery.ts';
 import {
   buildDiscoverablePublicationsByIdsQuery,
-  buildDiscoverableSpacesByIdsQuery,
+  buildDiscoverableSitesByIdsQuery,
   buildDiscoveryFeedQuery,
   buildDiscoveryPublicationsQuery,
   buildDiscoveryRecentPublicationsQuery,
@@ -25,8 +25,8 @@ import { clampPageSize, toPublicationsPage } from '#/utils/publication-view-core
 import { sanitizeHighlight } from '#/utils/search-highlight.ts';
 import { decompose } from '#/utils/text.ts';
 import { builder } from '../builder.ts';
-import { CollectionView, PublicationView, SpaceView } from '../objects.ts';
-import { SpacePublicationsPage } from './space-view.ts';
+import { PublicationView, SiteView } from '../objects.ts';
+import { SitePublicationsPage } from './site-view.ts';
 
 const loadPage = async (input: { tagName?: string; first?: number | null; after?: string | null }) => {
   const limit = clampPageSize(input.first);
@@ -43,7 +43,7 @@ const DiscoveryTag = builder.objectRef<{ name: string; count: number }>('Discove
     name: t.exposeString('name'),
     count: t.exposeInt('count'),
     publications: t.field({
-      type: SpacePublicationsPage,
+      type: SitePublicationsPage,
       args: {
         first: t.arg.int({ required: false }),
         after: t.arg.id({ required: false, validate: validateDbId(TableCode.PUBLICATIONS) }),
@@ -53,26 +53,16 @@ const DiscoveryTag = builder.objectRef<{ name: string; count: number }>('Discove
   }),
 });
 
-const DiscoveryRecentSpace = builder.objectRef<{ spaceId: string; publicationId: string }>('DiscoveryRecentSpace').implement({
+const DiscoveryRecentSite = builder.objectRef<{ siteId: string; publicationId: string }>('DiscoveryRecentSite').implement({
   fields: (t) => ({
-    space: t.expose('spaceId', { type: SpaceView }),
+    site: t.expose('siteId', { type: SiteView }),
     publication: t.expose('publicationId', { type: PublicationView }),
   }),
 });
 
-const DiscoveryRecentCollection = builder
-  .objectRef<{ collectionId: string; spaceId: string; publicationId: string }>('DiscoveryRecentCollection')
-  .implement({
-    fields: (t) => ({
-      collection: t.expose('collectionId', { type: CollectionView }),
-      space: t.expose('spaceId', { type: SpaceView }),
-      publication: t.expose('publicationId', { type: PublicationView }),
-    }),
-  });
-
 const DISCOVERY_RECENT_LIMIT_MAX = 10;
 
-type RecentPublicationRow = { id: string; spaceId: string; collectionId: string | null };
+type RecentPublicationRow = { id: string; siteId: string };
 
 const loadRecentPublications = () => {
   let rows: Promise<RecentPublicationRow[]> | undefined;
@@ -94,19 +84,19 @@ const DiscoveryPublicationHit = builder
 const DiscoverySearchResult = builder.simpleObject('DiscoverySearchResult', {
   fields: (t) => ({
     publications: t.field({ type: [DiscoveryPublicationHit] }),
-    spaces: t.field({ type: [SpaceView] }),
+    sites: t.field({ type: [SiteView] }),
     tags: t.field({ type: [DiscoveryTag] }),
   }),
 });
 
-const emptySearchResult = { publications: [], spaces: [], tags: [] };
+const emptySearchResult = { publications: [], sites: [], tags: [] };
 
 type Highlight = Record<string, string[] | undefined> | undefined;
 
 const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<RecentPublicationRow[]> }>('DiscoveryView').implement({
   fields: (t) => ({
     publications: t.field({
-      type: SpacePublicationsPage,
+      type: SitePublicationsPage,
       args: {
         first: t.arg.int({ required: false }),
         after: t.arg.id({ required: false, validate: validateDbId(TableCode.PUBLICATIONS) }),
@@ -114,7 +104,7 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
       resolve: async (_, args) => await loadPage({ first: args.first, after: args.after }),
     }),
     feed: t.field({
-      type: SpacePublicationsPage,
+      type: SitePublicationsPage,
       args: {
         first: t.arg.int({ required: false }),
         after: t.arg.id({ required: false, validate: validateDbId(TableCode.PUBLICATIONS) }),
@@ -133,25 +123,15 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
       type: [DiscoveryTag],
       resolve: async () => await getAllDiscoveryTags(),
     }),
-    recentSpaces: t.field({
-      type: [DiscoveryRecentSpace],
+    recentSites: t.field({
+      type: [DiscoveryRecentSite],
       args: { first: t.arg.int({ defaultValue: 5 }) },
       resolve: async (self, args) => {
         const rows = await self.recentPublications();
-        return pickFirstByKey(rows, (row) => row.spaceId, clampRecentLimit(args.first)).map((row) => ({
-          spaceId: row.spaceId,
+        return pickFirstByKey(rows, (row) => row.siteId, clampRecentLimit(args.first)).map((row) => ({
+          siteId: row.siteId,
           publicationId: row.id,
         }));
-      },
-    }),
-    recentCollections: t.field({
-      type: [DiscoveryRecentCollection],
-      args: { first: t.arg.int({ defaultValue: 4 }) },
-      resolve: async (self, args) => {
-        const rows = await self.recentPublications();
-        return pickFirstByKey(rows, (row) => row.collectionId, clampRecentLimit(args.first)).flatMap((row) =>
-          row.collectionId ? [{ collectionId: row.collectionId, spaceId: row.spaceId, publicationId: row.id }] : [],
-        );
       },
     }),
     tag: t.field({
@@ -174,24 +154,24 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
         if (!query) return emptySearchResult;
         const decomposedQuery = decompose(query);
 
-        const [publicationResult, spaceResult, tagResult] = await Promise.all([
+        const [publicationResult, siteResult, tagResult] = await Promise.all([
           elasticsearch.search(buildPublicationSearchRequest({ index: esIndex.publications, query, decomposedQuery })),
-          elasticsearch.search(buildSpaceSearchRequest({ index: esIndex.spaces, query, decomposedQuery })),
+          elasticsearch.search(buildSpaceSearchRequest({ index: esIndex.sites, query, decomposedQuery })),
           elasticsearch.search(buildTagSearchRequest({ index: esIndex.tags, query, decomposedQuery })),
         ]);
 
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const publicationHits = publicationResult.hits.hits.map((hit) => ({ id: hit._id!, highlight: hit.highlight as Highlight }));
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const spaceHits = spaceResult.hits.hits.map((hit) => ({ id: hit._id! }));
+        const siteHits = siteResult.hits.hits.map((hit) => ({ id: hit._id! }));
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const tagHits = tagResult.hits.hits.map((hit) => ({ id: hit._id! }));
 
-        const [publications, spaces, tagCounts] = await Promise.all([
+        const [publications, sites, tagCounts] = await Promise.all([
           publicationHits.length > 0
             ? buildDiscoverablePublicationsByIdsQuery(db, { publicationIds: publicationHits.map((hit) => hit.id) })
             : [],
-          spaceHits.length > 0 ? buildDiscoverableSpacesByIdsQuery(db, { spaceIds: spaceHits.map((hit) => hit.id) }) : [],
+          siteHits.length > 0 ? buildDiscoverableSitesByIdsQuery(db, { siteIds: siteHits.map((hit) => hit.id) }) : [],
           tagHits.length > 0 ? buildDiscoveryTagCountsQuery(db, { names: tagHits.map((hit) => hit.id) }) : [],
         ]);
 
@@ -227,13 +207,13 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
           }),
         );
 
-        const spaceById = new Map(spaces.map((row) => [row.id, row]));
+        const siteById = new Map(sites.map((row) => [row.id, row]));
         const countByName = new Map(tagCounts.map((row) => [row.name, row.count]));
 
         return {
           publications: publicationEntries,
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          spaces: filterHitsByIds(spaceHits, spaceById.keys()).map((hit) => spaceById.get(hit.id)!),
+          sites: filterHitsByIds(siteHits, siteById.keys()).map((hit) => siteById.get(hit.id)!),
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           tags: filterHitsByIds(tagHits, countByName.keys()).map((hit) => ({ name: hit.id, count: countByName.get(hit.id)! })),
         };

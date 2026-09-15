@@ -8,7 +8,7 @@ export const GET = async (event) => {
     event,
     graphql(`
       query UsersiteSpaceSitemap_Query($slug: String!) {
-        spaceView(slug: $slug) {
+        siteView(slug: $slug) {
           id
           sitemap
         }
@@ -22,6 +22,6 @@ export const GET = async (event) => {
   const base = spaceHomePath(event.params.slug);
   return sitemap(
     event,
-    query.data.spaceView.sitemap.filter((path) => path !== '/').map((path) => `${base}${path}`),
+    query.data.siteView.sitemap.filter((path) => path !== '/').map((path) => `${base}${path}`),
   );
 };

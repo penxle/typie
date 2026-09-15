@@ -1,18 +1,8 @@
 import { DocumentAvailableAction } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { desc, inArray } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import {
-  db,
-  DocumentReactions,
-  Documents,
-  Entities,
-  firstOrThrowWith,
-  PublicationTags,
-  Spaces,
-  TableCode,
-  validateDbId,
-} from '#/db/index.ts';
+import { db, DocumentReactions, Documents, firstOrThrowWith, PublicationTags, TableCode, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { groupAssetIds, loadExistingDocumentAssetIds } from '#/utils/document-assets.ts';
 import { checkDocumentViewAccess, getDocumentViewUnlockKey, RESTRICTED_EXCERPT } from '#/utils/document-view-access.ts';
@@ -20,16 +10,18 @@ import { defaultDocLayoutMode } from '#/utils/entity.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildLatestVersionGraphsQuery } from '#/utils/publication-core.ts';
 import {
-  buildCollectionNeighborQuery,
   buildPublishedPublicationByIdQuery,
+  buildPublishedPublicationsByEntityIdsQuery,
   buildReactionCountsQuery,
   deriveExcerpt,
 } from '#/utils/publication-view-core.ts';
-import { spaceUrl } from '#/utils/usersite-core.ts';
+import { visibleAncestors, visibleNeighbors } from '#/utils/site-tree-core.ts';
+import { publicationUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
-import { CollectionView, DocumentReaction, IEditorDocument, Image, isTypeOf, PublicationView, SpaceView } from '../objects.ts';
+import { DocumentReaction, IEditorDocument, Image, isTypeOf, PublicationView, SiteFolderView, SiteView } from '../objects.ts';
 import { DocumentAsset, DocumentViewBody } from './document.ts';
-import { latestVersionLoader } from './publication.ts';
+import { latestVersionLoader, publicationEntityLoader } from './publication.ts';
+import { siteLoader, siteTreeLoader } from './site-view.ts';
 import type { Context } from '#/context.ts';
 
 const latestVersionGraphLoader = (ctx: Context) =>
@@ -46,36 +38,30 @@ const documentLoader = (ctx: Context) =>
     key: ({ id }: { id: string }) => id,
   });
 
-const entityLoader = (ctx: Context) =>
-  ctx.loader({
-    name: 'PublicationView.entity',
-    load: async (ids: string[]) =>
-      await db
-        .select({ documentId: Documents.id, siteId: Entities.siteId, slug: Entities.slug })
-        .from(Documents)
-        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-        .where(inArray(Documents.id, ids)),
-    key: ({ documentId }: { documentId: string }) => documentId,
-  });
-
-const spaceLoader = (ctx: Context) =>
-  ctx.loader({
-    name: 'PublicationView.space',
-    load: async (ids: string[]) => await db.select().from(Spaces).where(inArray(Spaces.id, ids)),
-    key: ({ id }: { id: string }) => id,
-  });
-
 const isOwner = async (ctx: Context, siteId: string) =>
   await assertSitePermission({ userId: ctx.session?.userId, siteId })
     .then(() => true)
     .catch(() => false);
+
+const neighborPublication = async (ctx: Context, self: { siteId: string; documentId: string }, direction: 'prev' | 'next') => {
+  const [entity, { tree }] = await Promise.all([publicationEntityLoader(ctx).load(self.documentId), siteTreeLoader(ctx).load(self.siteId)]);
+  const neighbor = visibleNeighbors(tree, entity.entityId)[direction];
+  if (!neighbor) return null;
+  const rows = await buildPublishedPublicationsByEntityIdsQuery(db, { entityIds: [neighbor.id] });
+  return rows[0] ?? null;
+};
 
 PublicationView.implement({
   isTypeOf: isTypeOf(TableCode.PUBLICATIONS),
   interfaces: [IEditorDocument],
   fields: (t) => ({
     documentId: t.exposeID('documentId'),
-    permalink: t.exposeString('permalink'),
+    number: t.string({
+      resolve: async (self, _, ctx) => {
+        const entity = await publicationEntityLoader(ctx).load(self.documentId);
+        return entity.number;
+      },
+    }),
     title: t.string({
       resolve: async (self, _, ctx) => {
         const version = await latestVersionLoader(ctx).load(self.id);
@@ -121,30 +107,36 @@ PublicationView.implement({
         return tags.map((tag) => tag.name);
       },
     }),
-    collection: t.field({ type: CollectionView, nullable: true, resolve: (self) => self.collectionId }),
-    prevInCollection: t.field({
-      type: PublicationView,
+    folder: t.field({
+      type: SiteFolderView,
       nullable: true,
-      resolve: async (self) =>
-        self.collectionId && self.collectionOrder
-          ? await buildCollectionNeighborQuery(db, {
-              collectionId: self.collectionId,
-              collectionOrder: self.collectionOrder,
-              direction: 'prev',
-            }).then((rows) => rows[0] ?? null)
-          : null,
+      resolve: async (self, _, ctx) => {
+        const [entity, { tree }] = await Promise.all([
+          publicationEntityLoader(ctx).load(self.documentId),
+          siteTreeLoader(ctx).load(self.siteId),
+        ]);
+        return visibleAncestors(tree, entity.entityId).at(-1)?.id ?? null;
+      },
     }),
-    nextInCollection: t.field({
+    ancestors: t.field({
+      type: [SiteFolderView],
+      resolve: async (self, _, ctx) => {
+        const [entity, { tree }] = await Promise.all([
+          publicationEntityLoader(ctx).load(self.documentId),
+          siteTreeLoader(ctx).load(self.siteId),
+        ]);
+        return visibleAncestors(tree, entity.entityId).map((row) => row.id);
+      },
+    }),
+    prev: t.field({
       type: PublicationView,
       nullable: true,
-      resolve: async (self) =>
-        self.collectionId && self.collectionOrder
-          ? await buildCollectionNeighborQuery(db, {
-              collectionId: self.collectionId,
-              collectionOrder: self.collectionOrder,
-              direction: 'next',
-            }).then((rows) => rows[0] ?? null)
-          : null,
+      resolve: async (self, _, ctx) => await neighborPublication(ctx, self, 'prev'),
+    }),
+    next: t.field({
+      type: PublicationView,
+      nullable: true,
+      resolve: async (self, _, ctx) => await neighborPublication(ctx, self, 'next'),
     }),
     hasPassword: t.boolean({
       resolve: async (self, _, ctx) => {
@@ -236,25 +228,23 @@ PublicationView.implement({
     }),
     availableActions: t.field({
       type: [DocumentAvailableAction],
-      resolve: async (self, _, ctx) => {
-        const entity = await entityLoader(ctx).load(self.documentId);
-        return (await isOwner(ctx, entity.siteId)) ? [DocumentAvailableAction.EDIT] : [];
-      },
+      resolve: async (self, _, ctx) => ((await isOwner(ctx, self.siteId)) ? [DocumentAvailableAction.EDIT] : []),
     }),
     editUrl: t.string({
       nullable: true,
       resolve: async (self, _, ctx) => {
-        const entity = await entityLoader(ctx).load(self.documentId);
-        return (await isOwner(ctx, entity.siteId)) ? `${env.WEBSITE_URL}/${entity.slug}` : null;
+        if (!(await isOwner(ctx, self.siteId))) return null;
+        const entity = await publicationEntityLoader(ctx).load(self.documentId);
+        return `${env.WEBSITE_URL}/${entity.slug}`;
       },
     }),
     url: t.string({
       resolve: async (self, _, ctx) => {
-        const space = await spaceLoader(ctx).load(self.spaceId);
-        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.permalink}`;
+        const [site, entity] = await Promise.all([siteLoader(ctx).load(self.siteId), publicationEntityLoader(ctx).load(self.documentId)]);
+        return publicationUrl(env.USERSITE_URL, site.slug, entity.number);
       },
     }),
-    space: t.expose('spaceId', { type: SpaceView }),
+    site: t.expose('siteId', { type: SiteView }),
   }),
 });
 

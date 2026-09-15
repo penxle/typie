@@ -1,6 +1,6 @@
-import { EntityState, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
-import { and, asc, count, desc, eq, getTableColumns, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { Collections, DocumentReactions, Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
+import { EntityState, PublicationState, SiteState } from '@typie/lib/enums';
+import { and, asc, count, desc, eq, exists, getTableColumns, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { DocumentReactions, Documents, Entities, Publications, PublicationTags, Sites } from '#/db/schemas/tables.ts';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '#/db/index.ts';
 
@@ -15,10 +15,10 @@ export const publishedPublicationPredicate = () =>
 export const publishedPublicationsBase = (executor: Executor) =>
   publishedPublicationScope(executor.select(getTableColumns(Publications)).from(Publications).$dynamic());
 
-export const SPACE_PAGE_SIZE = 20;
-export const SPACE_PAGE_SIZE_MAX = 50;
+export const SITE_PAGE_SIZE = 20;
+export const SITE_PAGE_SIZE_MAX = 50;
 
-export const clampPageSize = (first: number | null | undefined) => Math.min(Math.max(first ?? SPACE_PAGE_SIZE, 1), SPACE_PAGE_SIZE_MAX);
+export const clampPageSize = (first: number | null | undefined) => Math.min(Math.max(first ?? SITE_PAGE_SIZE, 1), SITE_PAGE_SIZE_MAX);
 
 export const toPublicationsPage = <T>(rows: T[], limit: number) => ({
   publications: rows.slice(0, limit),
@@ -31,26 +31,30 @@ export const deriveExcerpt = (text: string, override: string | null): string => 
   return collapsed.length <= 200 ? collapsed : collapsed.slice(0, 200) + '...';
 };
 
-export const buildSpaceBySlugQuery = (executor: Executor, input: { slug: string }) =>
+export const buildSiteBySlugQuery = (executor: Executor, input: { slug: string }) =>
   executor
-    .select(getTableColumns(Spaces))
-    .from(Spaces)
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
-    .where(and(eq(Spaces.slug, input.slug), eq(Spaces.state, SpaceState.ACTIVE), eq(Sites.state, SiteState.ACTIVE)));
+    .select()
+    .from(Sites)
+    .where(and(eq(Sites.slug, input.slug), eq(Sites.state, SiteState.ACTIVE)));
 
-export const buildIndexableSpaceSlugsQuery = (executor: Executor) =>
+const publishedInSite = (executor: Executor) =>
   executor
-    .select({ slug: Spaces.slug })
-    .from(Spaces)
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
-    .where(and(eq(Spaces.state, SpaceState.ACTIVE), eq(Spaces.allowIndexing, true), eq(Sites.state, SiteState.ACTIVE)))
-    .orderBy(Spaces.createdAt);
+    .select({ id: Publications.id })
+    .from(Publications)
+    .where(and(eq(Publications.siteId, Sites.id), eq(Publications.state, PublicationState.PUBLISHED)));
+
+export const buildIndexableSiteSlugsQuery = (executor: Executor) =>
+  executor
+    .select({ slug: Sites.slug })
+    .from(Sites)
+    .where(and(eq(Sites.state, SiteState.ACTIVE), eq(Sites.allowIndexing, true), exists(publishedInSite(executor))))
+    .orderBy(Sites.createdAt);
 
 type PublishedQueryInput = {
-  spaceId: string;
-  collectionId?: string;
+  siteId: string;
   tagName?: string;
-  permalink?: string;
+  number?: string;
+  entityIds?: string[];
   excludePinned?: boolean;
   after: string | null;
   limit: number;
@@ -66,43 +70,40 @@ export const buildPublishedPublicationsQuery = (executor: Executor, input: Publi
   return joined
     .where(
       and(
-        eq(Publications.spaceId, input.spaceId),
+        eq(Publications.siteId, input.siteId),
         publishedPublicationPredicate(),
-        input.collectionId ? eq(Publications.collectionId, input.collectionId) : undefined,
-        input.permalink === undefined ? undefined : eq(Publications.permalink, input.permalink),
+        input.number === undefined ? undefined : eq(Entities.number, input.number),
+        input.entityIds === undefined ? undefined : inArray(Entities.id, input.entityIds),
         input.excludePinned ? isNull(Publications.pinnedOrder) : undefined,
         input.after
           ? sql`(${Publications.publishedAt}, ${Publications.id}) < (select ${Publications.publishedAt}, ${Publications.id} from ${Publications} where ${Publications.id} = ${input.after})`
           : undefined,
       ),
     )
-    .orderBy(...(input.collectionId ? [asc(Publications.collectionOrder)] : [desc(Publications.publishedAt), desc(Publications.id)]))
+    .orderBy(desc(Publications.publishedAt), desc(Publications.id))
     .limit(input.limit);
 };
 
-export const buildCollectionNeighborQuery = (
-  executor: Executor,
-  input: { collectionId: string; collectionOrder: string; direction: 'prev' | 'next' },
-) =>
-  publishedPublicationsBase(executor)
-    .where(
-      and(
-        eq(Publications.collectionId, input.collectionId),
-        publishedPublicationPredicate(),
-        input.direction === 'prev'
-          ? lt(Publications.collectionOrder, input.collectionOrder)
-          : gt(Publications.collectionOrder, input.collectionOrder),
-      ),
-    )
-    .orderBy(input.direction === 'prev' ? desc(Publications.collectionOrder) : asc(Publications.collectionOrder))
-    .limit(1);
+export const buildPublishedPublicationNumbersQuery = (executor: Executor, input: { siteId: string; limit: number }) =>
+  publishedPublicationScope(executor.select({ number: Entities.number }).from(Publications).$dynamic())
+    .where(and(eq(Publications.siteId, input.siteId), publishedPublicationPredicate()))
+    .orderBy(desc(Publications.publishedAt), desc(Publications.id))
+    .limit(input.limit);
 
-const buildSpaceTagsScope = (executor: Executor, input: { spaceId: string; name?: string }) =>
+export const buildPublishedPublicationsByEntityIdsQuery = (executor: Executor, input: { entityIds: string[] }) =>
+  publishedPublicationScope(
+    executor
+      .select({ ...getTableColumns(Publications), entityId: Entities.id })
+      .from(Publications)
+      .$dynamic(),
+  ).where(and(inArray(Entities.id, input.entityIds), publishedPublicationPredicate()));
+
+const buildSiteTagsScope = (executor: Executor, input: { siteId: string; name?: string }) =>
   publishedPublicationScope(executor.select({ name: PublicationTags.name, count: count() }).from(Publications).$dynamic())
     .innerJoin(PublicationTags, eq(PublicationTags.publicationId, Publications.id))
     .where(
       and(
-        eq(Publications.spaceId, input.spaceId),
+        eq(Publications.siteId, input.siteId),
         publishedPublicationPredicate(),
         input.name === undefined ? undefined : eq(PublicationTags.name, input.name),
       ),
@@ -110,19 +111,19 @@ const buildSpaceTagsScope = (executor: Executor, input: { spaceId: string; name?
     .groupBy(PublicationTags.name)
     .orderBy(desc(count()), asc(PublicationTags.name));
 
-export const buildSpaceTagsQuery = (executor: Executor, input: { spaceId: string }) => buildSpaceTagsScope(executor, input);
+export const buildSiteTagsQuery = (executor: Executor, input: { siteId: string }) => buildSiteTagsScope(executor, input);
 
-export const buildSpaceTagQuery = (executor: Executor, input: { spaceId: string; name: string }) => buildSpaceTagsScope(executor, input);
+export const buildSiteTagQuery = (executor: Executor, input: { siteId: string; name: string }) => buildSiteTagsScope(executor, input);
 
-export const buildPublishedPublicationCountQuery = (executor: Executor, input: { spaceId: string }) =>
+export const buildPublishedPublicationCountQuery = (executor: Executor, input: { siteId: string }) =>
   publishedPublicationScope(executor.select({ count: count() }).from(Publications).$dynamic()).where(
-    and(eq(Publications.spaceId, input.spaceId), publishedPublicationPredicate()),
+    and(eq(Publications.siteId, input.siteId), publishedPublicationPredicate()),
   );
 
-export const buildCollectionPublicationCountsQuery = (executor: Executor, input: { collectionIds: string[] }) =>
-  publishedPublicationScope(executor.select({ collectionId: Publications.collectionId, count: count() }).from(Publications).$dynamic())
-    .where(and(inArray(Publications.collectionId, input.collectionIds), publishedPublicationPredicate()))
-    .groupBy(Publications.collectionId);
+export const buildPinnedPublicationsQuery = (executor: Executor, input: { siteIds: string[] }) =>
+  publishedPublicationsBase(executor)
+    .where(and(inArray(Publications.siteId, input.siteIds), publishedPublicationPredicate(), isNotNull(Publications.pinnedOrder)))
+    .orderBy(asc(Publications.siteId), asc(Publications.pinnedOrder));
 
 export const buildReactionCountsQuery = (executor: Executor, input: { documentIds: string[] }) =>
   executor
@@ -131,23 +132,18 @@ export const buildReactionCountsQuery = (executor: Executor, input: { documentId
     .where(inArray(DocumentReactions.documentId, input.documentIds))
     .groupBy(DocumentReactions.documentId);
 
-export const buildPublishedCollectionIdsQuery = (executor: Executor, input: { spaceId: string }) =>
-  publishedPublicationScope(executor.selectDistinct({ collectionId: Publications.collectionId }).from(Publications).$dynamic()).where(
-    and(eq(Publications.spaceId, input.spaceId), publishedPublicationPredicate(), isNotNull(Publications.collectionId)),
-  );
-
 export const buildPublishedPublicationByIdQuery = (executor: Executor, input: { publicationId: string }) =>
   publishedPublicationsBase(executor).where(and(eq(Publications.id, input.publicationId), publishedPublicationPredicate()));
 
-export const buildPublishedPublicationByPermalinkQuery = (executor: Executor, input: { permalink: string }) =>
-  publishedPublicationsBase(executor).where(and(eq(Publications.permalink, input.permalink), publishedPublicationPredicate()));
+export const buildPublishedPublicationByNumberQuery = (executor: Executor, input: { number: string }) =>
+  publishedPublicationsBase(executor).where(and(eq(Entities.number, input.number), publishedPublicationPredicate()));
 
-export const buildCollectionsByIdsQuery = (executor: Executor, input: { collectionIds: string[] }) =>
-  executor.select().from(Collections).where(inArray(Collections.id, input.collectionIds)).orderBy(asc(Collections.createdAt));
-
-export const buildSitemapPaths = (input: { publicationPermalinks: string[]; collectionPermalinks: string[]; tagNames: string[] }) => [
+export const buildSitemapPaths = (input: { publicationNumbers: string[]; folderNumbers: string[]; tagNames: string[] }) => [
   '/',
-  ...input.publicationPermalinks.map((permalink) => `/p/${permalink}`),
-  ...input.collectionPermalinks.map((permalink) => `/s/${permalink}`),
+  ...input.folderNumbers.map((number) => `/f/${number}`),
+  ...input.publicationNumbers.map((number) => `/p/${number}`),
   ...input.tagNames.map((name) => `/t/${encodeURIComponent(name)}`),
 ];
+
+export const PIN_LIMIT = 3;
+export const canPinMore = (currentCount: number) => currentCount < PIN_LIMIT;

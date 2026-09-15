@@ -7,14 +7,14 @@ export const load = async (event) => {
   const query = await loadQuery(
     event,
     graphql(`
-      query UsersiteApexSlugPage_Query($origin: String!, $slug: String!) {
+      query UsersiteApexSlugPage_Query($slug: String!) {
         me {
           id
 
           ...UsersiteApexSlugPage_DocumentViewV2_user
         }
 
-        entityView(origin: $origin, slug: $slug) {
+        entityView(slug: $slug) {
           id
           slug
 
@@ -37,7 +37,6 @@ export const load = async (event) => {
       }
     `),
     {
-      origin: event.url.origin,
       slug: event.params.slug,
     },
   );

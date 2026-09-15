@@ -1,6 +1,6 @@
-import { EntityState, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
+import { EntityState, PublicationState, SiteState } from '@typie/lib/enums';
 import { asc, eq, inArray } from 'drizzle-orm';
-import { Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
+import { Documents, Entities, Publications, PublicationTags, Sites } from '#/db/schemas/tables.ts';
 import { decompose } from './text.ts';
 import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
@@ -9,11 +9,10 @@ type Executor = Database | Transaction;
 
 export type PublicationIndexRow = {
   id: string;
-  spaceId: string;
+  siteId: string;
   state: PublicationState;
   publishedAt: Dayjs | null;
   entityState: EntityState;
-  spaceState: SpaceState;
   siteState: SiteState;
   allowIndexing: boolean;
   allowDiscovery: boolean;
@@ -21,7 +20,7 @@ export type PublicationIndexRow = {
 };
 
 export type PublicationIndexDocument = {
-  space_id: string;
+  site_id: string;
   discoverable: boolean;
   title: string | null;
   title_decomposed: string | null;
@@ -33,17 +32,16 @@ export type PublicationIndexDocument = {
   published_at: Dayjs | null;
 };
 
-export type SpaceIndexRow = {
+export type SiteIndexRow = {
   id: string;
   name: string;
   description: string | null;
-  state: SpaceState;
-  siteState: SiteState;
+  state: SiteState;
   allowIndexing: boolean;
   allowDiscovery: boolean;
 };
 
-export type SpaceIndexDocument = {
+export type SiteIndexDocument = {
   name: string;
   name_decomposed: string | null;
   description: string | null;
@@ -59,21 +57,19 @@ export const buildPublicationIndexRowsQuery = (executor: Executor, input: { publ
   executor
     .select({
       id: Publications.id,
-      spaceId: Publications.spaceId,
+      siteId: Publications.siteId,
       state: Publications.state,
       publishedAt: Publications.publishedAt,
       entityState: Entities.state,
-      spaceState: Spaces.state,
       siteState: Sites.state,
-      allowIndexing: Spaces.allowIndexing,
-      allowDiscovery: Spaces.allowDiscovery,
+      allowIndexing: Sites.allowIndexing,
+      allowDiscovery: Sites.allowDiscovery,
       password: Documents.password,
     })
     .from(Publications)
     .innerJoin(Documents, eq(Publications.documentId, Documents.id))
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .innerJoin(Spaces, eq(Publications.spaceId, Spaces.id))
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
+    .innerJoin(Sites, eq(Publications.siteId, Sites.id))
     .where(inArray(Publications.id, input.publicationIds));
 
 export const buildPublicationTagNamesQuery = (executor: Executor, input: { publicationIds: string[] }) =>
@@ -83,23 +79,21 @@ export const buildPublicationTagNamesQuery = (executor: Executor, input: { publi
     .where(inArray(PublicationTags.publicationId, input.publicationIds))
     .orderBy(asc(PublicationTags.publicationId), asc(PublicationTags.order));
 
-export const buildSpaceIndexRowsQuery = (executor: Executor, input: { spaceIds: string[] }) =>
+export const buildSiteIndexRowsQuery = (executor: Executor, input: { siteIds: string[] }) =>
   executor
     .select({
-      id: Spaces.id,
-      name: Spaces.name,
-      description: Spaces.description,
-      state: Spaces.state,
-      siteState: Sites.state,
-      allowIndexing: Spaces.allowIndexing,
-      allowDiscovery: Spaces.allowDiscovery,
+      id: Sites.id,
+      name: Sites.name,
+      description: Sites.description,
+      state: Sites.state,
+      allowIndexing: Sites.allowIndexing,
+      allowDiscovery: Sites.allowDiscovery,
     })
-    .from(Spaces)
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
-    .where(inArray(Spaces.id, input.spaceIds));
+    .from(Sites)
+    .where(inArray(Sites.id, input.siteIds));
 
-export const buildSpaceTagNamesQuery = (executor: Executor, input: { spaceIds: string[] }) =>
-  executor.selectDistinct({ name: PublicationTags.name }).from(PublicationTags).where(inArray(PublicationTags.spaceId, input.spaceIds));
+export const buildSiteTagNamesQuery = (executor: Executor, input: { siteIds: string[] }) =>
+  executor.selectDistinct({ name: PublicationTags.name }).from(PublicationTags).where(inArray(PublicationTags.siteId, input.siteIds));
 
 export const toPublicationIndexDocument = (input: {
   row: PublicationIndexRow;
@@ -110,12 +104,11 @@ export const toPublicationIndexDocument = (input: {
   if (!version) return null;
   if (row.state !== PublicationState.PUBLISHED) return null;
   if (row.entityState !== EntityState.ACTIVE) return null;
-  if (row.spaceState !== SpaceState.ACTIVE) return null;
   if (row.siteState !== SiteState.ACTIVE) return null;
   if (row.password !== null) return null;
 
   return {
-    space_id: row.spaceId,
+    site_id: row.siteId,
     discoverable: row.allowIndexing && row.allowDiscovery,
     title: version.title,
     title_decomposed: decompose(version.title),
@@ -128,9 +121,8 @@ export const toPublicationIndexDocument = (input: {
   };
 };
 
-export const toSpaceIndexDocument = (row: SpaceIndexRow): SpaceIndexDocument | null => {
-  if (row.state !== SpaceState.ACTIVE) return null;
-  if (row.siteState !== SiteState.ACTIVE) return null;
+export const toSiteIndexDocument = (row: SiteIndexRow): SiteIndexDocument | null => {
+  if (row.state !== SiteState.ACTIVE) return null;
   if (!row.allowIndexing || !row.allowDiscovery) return null;
 
   return { name: row.name, name_decomposed: decompose(row.name), description: row.description };

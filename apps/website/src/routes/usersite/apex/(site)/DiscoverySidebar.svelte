@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, TimeAgo } from '@typie/ui/components';
@@ -71,12 +70,12 @@
     </section>
   {/if}
 
-  {#if discovery.recentSpaces.length > 0}
+  {#if discovery.recentSites.length > 0}
     <div>
       <h2 class={css(heading)}>새 글을 올린 스페이스</h2>
       <div class={css(rows)}>
-        {#each discovery.recentSpaces as item (item.space.id)}
-          <a class={css(row)} href={item.space.url}>
+        {#each discovery.recentSites as item (item.site.id)}
+          <a class={css(row)} href={item.site.url}>
             <Img
               style={css.raw({
                 flexShrink: '0',
@@ -85,53 +84,15 @@
                 objectFit: 'cover',
                 boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.06)]',
               })}
-              alt={`${item.space.name} 로고`}
-              image$key={item.space.logo}
+              alt={`${item.site.name} 로고`}
+              image$key={item.site.logo}
               size={96}
             />
             <div class={css({ flex: '1', minWidth: '0' })}>
-              <div class={css(rowName)} data-row-name>{item.space.name}</div>
+              <div class={css(rowName)} data-row-name>{item.site.name}</div>
               <div class={css(rowText)}>{item.publication.title}</div>
             </div>
             <TimeAgo style={css.raw(rowMeta, { flexShrink: '0' })} timestamp={dayjs(item.publication.publishedAt).valueOf()} />
-          </a>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  {#if discovery.recentCollections.length > 0}
-    <div>
-      <h2 class={css(heading)}>새 회차가 올라온 시리즈</h2>
-      <div class={css(rows)}>
-        {#each discovery.recentCollections as item (item.collection.id)}
-          <a class={css(row)} href={`${item.space.url}/s/${item.collection.permalink}`}>
-            <div
-              style:background-color={item.collection.cover ? undefined : titlePageColors(item.collection.name).base}
-              class={css({
-                position: 'relative',
-                flexShrink: '0',
-                width: '36px',
-                height: '54px',
-                borderRadius: '6px',
-                backgroundColor: 'surface.inset',
-                boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
-                overflow: 'hidden',
-              })}
-            >
-              {#if item.collection.cover}
-                <Img
-                  style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-                  alt={item.collection.name}
-                  image$key={item.collection.cover}
-                  size={96}
-                />
-              {/if}
-            </div>
-            <div class={css({ flex: '1', minWidth: '0' })}>
-              <div class={css(rowName)} data-row-name>{item.collection.name}</div>
-              <div class={css(rowMeta)}>{item.space.name} · 글 {item.collection.publicationCount}개</div>
-            </div>
           </a>
         {/each}
       </div>

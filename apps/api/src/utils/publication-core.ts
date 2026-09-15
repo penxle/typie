@@ -1,8 +1,7 @@
-import { faker } from '@faker-js/faker';
-import { EntityState, EntityVisibility, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
+import { EntityState, EntityVisibility, PublicationState, SiteState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm';
-import { Documents, Entities, Publications, PublicationVersions, Sites, Spaces } from '#/db/schemas/tables.ts';
+import { Documents, Entities, Publications, PublicationVersions, Sites } from '#/db/schemas/tables.ts';
 import type { Dayjs } from 'dayjs';
 import type { Database, Transaction } from '#/db/index.ts';
 
@@ -109,11 +108,11 @@ export const buildLatestVersionGraphsQuery = (executor: Executor, input: { publi
     .where(inArray(PublicationVersions.publicationId, input.publicationIds))
     .orderBy(asc(PublicationVersions.publicationId), desc(PublicationVersions.version));
 
-export const buildPublicationsBySpaceQuery = (executor: Executor, input: { spaceIds: string[]; states: PublicationState[] }) =>
+export const buildPublicationsBySiteQuery = (executor: Executor, input: { siteIds: string[]; states: PublicationState[] }) =>
   executor
     .select()
     .from(Publications)
-    .where(and(inArray(Publications.spaceId, input.spaceIds), inArray(Publications.state, input.states)))
+    .where(and(inArray(Publications.siteId, input.siteIds), inArray(Publications.state, input.states)))
     .orderBy(desc(Publications.publishedAt), desc(Publications.id));
 
 export const buildPublishedDocumentIdsQuery = (executor: Executor, input: { documentIds: string[] }) =>
@@ -127,9 +126,11 @@ export const buildPublishingEntityIdsBySiteQuery = (executor: Executor, input: {
     .select({ entityId: Documents.entityId })
     .from(Publications)
     .innerJoin(Documents, eq(Publications.documentId, Documents.id))
-    .innerJoin(Spaces, eq(Publications.spaceId, Spaces.id))
     .where(
-      and(inArray(Spaces.siteId, input.siteIds), inArray(Publications.state, [PublicationState.PUBLISHED, PublicationState.SCHEDULED])),
+      and(
+        inArray(Publications.siteId, input.siteIds),
+        inArray(Publications.state, [PublicationState.PUBLISHED, PublicationState.SCHEDULED]),
+      ),
     );
 
 export const resolvePublishedVisibilityBlock = (requested: EntityVisibility): string | null => {
@@ -146,7 +147,7 @@ export const buildDuePublicationsQuery = (executor: Executor, input: { now: Dayj
     .select({
       id: Publications.id,
       documentId: Publications.documentId,
-      spaceId: Publications.spaceId,
+      siteId: Publications.siteId,
       scheduledAt: Publications.scheduledAt,
       publishedAt: Publications.publishedAt,
     })
@@ -154,16 +155,62 @@ export const buildDuePublicationsQuery = (executor: Executor, input: { now: Dayj
     .innerJoin(Documents, eq(Publications.documentId, Documents.id))
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
     .innerJoin(Sites, eq(Entities.siteId, Sites.id))
-    .innerJoin(Spaces, eq(Publications.spaceId, Spaces.id))
     .where(
       and(
         eq(Publications.state, PublicationState.SCHEDULED),
         lte(Publications.scheduledAt, input.now),
         eq(Entities.state, EntityState.ACTIVE),
         eq(Sites.state, SiteState.ACTIVE),
-        eq(Spaces.state, SpaceState.ACTIVE),
       ),
     )
     .for('update', { of: [Publications], skipLocked: true });
 
-export const generateNumericPermalink = () => faker.string.numeric({ length: 11, allowLeadingZeros: false });
+export type BulkPublishInput = {
+  addTags?: readonly string[];
+  removeTags?: readonly string[];
+  scheduledAt?: Dayjs | null;
+};
+
+export type BulkPublishExisting = {
+  state: PublicationState;
+  scheduledAt: Dayjs | null;
+  tags: readonly string[];
+};
+
+export type BulkPublishStep =
+  | { kind: 'republish'; documentId: string; tags: string[] }
+  | { kind: 'publish'; documentId: string; tags: string[]; scheduledAt: Dayjs | null; currentState: PublicationState | null };
+
+export const mergeTags = (existing: readonly string[], add: readonly string[] = [], remove: readonly string[] = []): string[] => {
+  const removed = new Set(normalizeTags(remove));
+  return normalizeTags([...existing, ...add]).filter((tag) => !removed.has(tag));
+};
+
+export const resolveBulkPublishPlan = (
+  documents: readonly { documentId: string; existing: BulkPublishExisting | null }[],
+  input: BulkPublishInput,
+): BulkPublishStep[] =>
+  documents.map(({ documentId, existing }) => {
+    const tags = mergeTags(existing?.tags ?? [], input.addTags, input.removeTags);
+
+    if (existing?.state === PublicationState.PUBLISHED) {
+      return { kind: 'republish', documentId, tags };
+    }
+
+    const scheduledAt =
+      input.scheduledAt === undefined ? (existing?.state === PublicationState.SCHEDULED ? existing.scheduledAt : null) : input.scheduledAt;
+
+    return { kind: 'publish', documentId, tags, scheduledAt, currentState: existing?.state ?? null };
+  });
+
+export type BulkPublishSummary = { published: number; scheduled: number; unpublished: number };
+
+export const summarizePublicationStates = (states: readonly (PublicationState | null)[]): BulkPublishSummary => {
+  const summary = { published: 0, scheduled: 0, unpublished: 0 };
+  for (const state of states) {
+    if (state === PublicationState.PUBLISHED) summary.published += 1;
+    else if (state === PublicationState.SCHEDULED) summary.scheduled += 1;
+    else summary.unpublished += 1;
+  }
+  return summary;
+};

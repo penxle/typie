@@ -17,10 +17,10 @@ export const load = async (event) => {
       event,
       graphql(`
         query UsersiteSpaceLayout_Query($slug: String!) {
-          spaceView(slug: $slug) {
+          siteView(slug: $slug) {
             id
             url
-            ...UsersiteHeader_spaceView
+            ...UsersiteHeader_siteView
           }
         }
       `),

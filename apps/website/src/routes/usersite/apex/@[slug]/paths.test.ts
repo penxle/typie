@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { lowercaseSpaceRedirectPath, publicationPath, seriesListPath, seriesPath, spaceHomePath, tagPath } from './paths';
+import { folderPath, lowercaseSpaceRedirectPath, publicationPath, spaceHomePath, tagPath } from './paths';
 
 describe('space paths', () => {
   it('builds every path under /@slug', () => {
     expect(spaceHomePath('my-space')).toBe('/@my-space');
-    expect(seriesListPath('my-space')).toBe('/@my-space/s');
-    expect(seriesPath('my-space', '98765432109')).toBe('/@my-space/s/98765432109');
+    expect(folderPath('my-space', '98765432109')).toBe('/@my-space/f/98765432109');
     expect(publicationPath('my-space', '12345678901')).toBe('/@my-space/p/12345678901');
   });
 
@@ -27,7 +26,7 @@ describe('lowercaseSpaceRedirectPath', () => {
   });
 
   it('cuts the percent-encoded slug segment from the pathname', () => {
-    expect(lowercaseSpaceRedirectPath('/@My%53pace/s', 'MySpace')).toBe('/@myspace/s');
+    expect(lowercaseSpaceRedirectPath('/@My%53pace/f/1', 'MySpace')).toBe('/@myspace/f/1');
   });
 
   it('returns null when the lowercased slug is not a valid slug', () => {

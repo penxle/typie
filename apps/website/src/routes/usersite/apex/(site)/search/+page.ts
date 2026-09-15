@@ -22,7 +22,7 @@ export const load = async (event) => {
                 publication {
                   id
 
-                  space {
+                  site {
                     id
                     name
                     url
@@ -32,7 +32,7 @@ export const load = async (event) => {
                 }
               }
 
-              spaces {
+              sites {
                 id
                 name
                 description

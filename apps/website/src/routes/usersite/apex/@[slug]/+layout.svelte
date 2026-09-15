@@ -105,7 +105,7 @@
     <UsersiteHeader
       {authorizeUrl}
       onLogout={logout}
-      spaceView$key={layoutQuery.data.spaceView}
+      siteView$key={layoutQuery.data.siteView}
       stickyBottom={stickyHeaderBottom}
       user$key={query.data.me}
     />

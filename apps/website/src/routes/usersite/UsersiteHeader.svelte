@@ -8,27 +8,28 @@
   import { MediaQuery } from 'svelte/reactivity';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import { Img } from '$lib/components';
+  import { chromeHidden, readingProgress, titleSlot } from '$lib/usersite/post-chrome';
   import { graphql } from '$mearie';
   import AccountMenu from './AccountMenu.svelte';
   import { currentSpaceSlug } from './apex/@[slug]/current-space-slug';
-  import { seriesPath, spaceHomePath } from './apex/@[slug]/paths';
+  import { spaceHomePath } from './apex/@[slug]/paths';
   import { getUsersiteChrome } from './chrome.svelte';
   import TypieMark from './TypieMark.svelte';
-  import type { UsersiteHeader_spaceView$key, UsersiteHeader_user$key } from '$mearie';
+  import type { UsersiteHeader_siteView$key, UsersiteHeader_user$key } from '$mearie';
 
   type Props = {
-    spaceView$key: UsersiteHeader_spaceView$key;
+    siteView$key: UsersiteHeader_siteView$key;
     user$key: UsersiteHeader_user$key | null | undefined;
     authorizeUrl: string;
     stickyBottom: number;
     onLogout: () => void;
   };
 
-  let { spaceView$key, user$key, authorizeUrl, stickyBottom, onLogout }: Props = $props();
+  let { siteView$key, user$key, authorizeUrl, stickyBottom, onLogout }: Props = $props();
 
   const space = createFragment(
     graphql(`
-      fragment UsersiteHeader_spaceView on SpaceView {
+      fragment UsersiteHeader_siteView on SiteView {
         id
         name
 
@@ -38,7 +39,7 @@
         }
       }
     `),
-    () => spaceView$key,
+    () => siteView$key,
   );
 
   const chrome = getUsersiteChrome();
@@ -52,12 +53,8 @@
 
   const slug = $derived(currentSpaceSlug());
   const isPost = $derived(chrome.post !== null);
-  const eyebrow = $derived(
-    chrome.post?.collection
-      ? { label: chrome.post.collection.name, href: seriesPath(slug, chrome.post.collection.permalink) }
-      : { label: space.data.name, href: spaceHomePath(slug) },
-  );
-  const hidden = $derived(isPost && chrome.retreat && !desktop.current);
+  const eyebrow = $derived(chrome.post?.eyebrow ?? { label: space.data.name, href: spaceHomePath(slug) });
+  const hidden = $derived(chromeHidden({ post: isPost, retreat: chrome.retreat, desktop: desktop.current }));
 
   $effect(() => {
     chrome.hold = accountMenuOpen;
@@ -78,11 +75,8 @@
     scrolled = window.scrollY > 2;
 
     if (chrome.post) {
-      const titleBottom = chrome.titleEl?.getBoundingClientRect().bottom;
-      slot = titleBottom !== undefined && titleBottom <= h ? 'title' : '';
-
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      slot = titleSlot(chrome.titleEl?.getBoundingClientRect().bottom, h);
+      progress = readingProgress(window.scrollY, document.documentElement.scrollHeight, window.innerHeight);
       identityPast = false;
     } else {
       slot = '';

@@ -7,6 +7,7 @@
   import { Icon, Menu, MenuItem, Switch } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import { tick, untrack } from 'svelte';
   import BanIcon from '~icons/lucide/ban';
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -20,7 +21,7 @@
   import UsersRoundIcon from '~icons/lucide/users-round';
   import XIcon from '~icons/lucide/x';
   import { publicationErrorCode } from '$lib/publication/error';
-  import { publicationErrorMessage } from '$lib/publication/publish-form';
+  import { publicationErrorMessage, sharedValue } from '$lib/publication/publish-form';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import PropertyRow from './PropertyRow.svelte';
@@ -28,12 +29,12 @@
   import type { DashboardLayout_Share_ReadingSettings_document$key } from '$mearie';
 
   type Props = {
-    document$key: DashboardLayout_Share_ReadingSettings_document$key;
+    documents$key: DashboardLayout_Share_ReadingSettings_document$key[];
   };
 
-  let { document$key }: Props = $props();
+  let { documents$key }: Props = $props();
 
-  const document = createFragment(
+  const documents = createFragment(
     graphql(`
       fragment DashboardLayout_Share_ReadingSettings_document on Document {
         id
@@ -43,7 +44,7 @@
         protectContent
       }
     `),
-    () => document$key,
+    () => documents$key,
   );
 
   const [updateDocumentsOption] = createMutation(
@@ -78,9 +79,21 @@
     { icon: BanIcon, label: '비허용', value: false },
   ];
 
-  let protectContent = $state(document.data.protectContent);
+  const MIXED = '여러 값';
 
-  const password = $derived(document.data.password);
+  const documentIds = $derived(documents.data.map((document) => document.id));
+  const password = $derived(sharedValue(documents.data.map((document) => document.password)));
+  const passwordMixed = $derived(password === undefined);
+  const contentRating = $derived(sharedValue(documents.data.map((document) => document.contentRating)));
+  const allowReaction = $derived(sharedValue(documents.data.map((document) => document.allowReaction)));
+  const protectValues = $derived(documents.data.map((document) => document.protectContent));
+
+  let protectContent = $state(false);
+
+  $effect(() => {
+    const shared = sharedValue(protectValues);
+    untrack(() => (protectContent = shared ?? false));
+  });
 
   let editing = $state(false);
   let draft = $state('');
@@ -93,12 +106,21 @@
     if (!SubscribeModal.gate('share_document')) return false;
 
     try {
-      await updateDocumentsOption({ input: { documentIds: [document.data.id], ...option } });
-      mixpanel.track('update_document_option', { ...option, via: 'share_modal' });
+      await updateDocumentsOption({ input: { documentIds, ...option } });
+      mixpanel.track('update_document_option', { ...option, via: 'share_modal', count: documentIds.length });
       return true;
     } catch (err) {
       Toast.error(publicationErrorMessage(publicationErrorCode(err)));
       return false;
+    }
+  };
+
+  const toggleProtect = async () => {
+    const next = protectContent;
+    const saved = await update({ protectContent: next });
+    if (!saved) {
+      await tick();
+      protectContent = !next;
     }
   };
 
@@ -202,6 +224,32 @@
   </span>
 {/snippet}
 
+{#snippet passwordActions(clearable: boolean)}
+  <button
+    class={center(passwordIconButtonStyle)}
+    aria-label="비밀번호 변경"
+    data-primary
+    onclick={startEditing}
+    type="button"
+    use:tooltip={{ message: '변경', placement: 'top' }}
+  >
+    <Icon icon={PencilIcon} size={14} />
+  </button>
+
+  {#if clearable}
+    <button
+      class={center(css.raw(passwordIconButtonStyle, { _hover: { color: 'danger.default', backgroundColor: 'surface.hover' } }))}
+      aria-label="비밀번호 해제"
+      disabled={saving}
+      onclick={() => clearPassword()}
+      type="button"
+      use:tooltip={{ message: '해제', placement: 'top' }}
+    >
+      <Icon icon={XIcon} size={14} />
+    </button>
+  {/if}
+{/snippet}
+
 <div class={flex({ flexDirection: 'column', gap: '1px', marginX: '-8px' })}>
   <PropertyRow icon={LockKeyholeIcon} label="비밀번호 보호">
     {#if editing}
@@ -257,6 +305,9 @@
           <Icon icon={CheckIcon} size={14} />
         </button>
       </span>
+    {:else if passwordMixed}
+      <span class={css(passwordValueStyle, { color: 'text.hint' })}>{MIXED}</span>
+      {@render passwordActions(true)}
     {:else if password}
       <span class={css(passwordValueStyle, revealed ? {} : { letterSpacing: '[0.12em]' })}>
         {revealed ? password : '•'.repeat(password.length)}
@@ -272,27 +323,7 @@
         <Icon icon={revealed ? EyeOffIcon : EyeIcon} size={14} />
       </button>
 
-      <button
-        class={center(passwordIconButtonStyle)}
-        aria-label="비밀번호 변경"
-        data-primary
-        onclick={startEditing}
-        type="button"
-        use:tooltip={{ message: '변경', placement: 'top' }}
-      >
-        <Icon icon={PencilIcon} size={14} />
-      </button>
-
-      <button
-        class={center(css.raw(passwordIconButtonStyle, { _hover: { color: 'danger.default', backgroundColor: 'surface.hover' } }))}
-        aria-label="비밀번호 해제"
-        disabled={saving}
-        onclick={() => clearPassword()}
-        type="button"
-        use:tooltip={{ message: '해제', placement: 'top' }}
-      >
-        <Icon icon={XIcon} size={14} />
-      </button>
+      {@render passwordActions(true)}
     {:else}
       <button class={css(propertyTriggerStyle, { color: 'text.hint' })} data-primary onclick={startEditing} type="button">없음</button>
     {/if}
@@ -307,7 +338,8 @@
       placement="bottom-start"
     >
       {#snippet button()}
-        <span>{RATING_ITEMS.find((item) => item.value === document.data.contentRating)?.label}</span>
+        {@const current = RATING_ITEMS.find((item) => item.value === contentRating)}
+        <span class={current ? undefined : css({ color: 'text.hint' })}>{current?.label ?? MIXED}</span>
         <Icon style={propertyChevronStyle} icon={ChevronDownIcon} size={14} />
       {/snippet}
 
@@ -316,7 +348,7 @@
           <span class={css({ flex: '1' })}>{item.label}</span>
 
           {#snippet suffix()}
-            {@render menuCheck(document.data.contentRating === item.value)}
+            {@render menuCheck(contentRating === item.value)}
           {/snippet}
         </MenuItem>
       {/each}
@@ -332,10 +364,12 @@
       placement="bottom-start"
     >
       {#snippet button()}
-        {@const current = REACTION_ITEMS.find((item) => item.value === document.data.allowReaction)}
+        {@const current = REACTION_ITEMS.find((item) => item.value === allowReaction)}
         {#if current}
           <Icon style={css.raw({ flexShrink: '0', color: 'text.muted' })} icon={current.icon} size={14} />
           <span>{current.label}</span>
+        {:else}
+          <span class={css({ color: 'text.hint' })}>{MIXED}</span>
         {/if}
         <Icon style={propertyChevronStyle} icon={ChevronDownIcon} size={14} />
       {/snippet}
@@ -345,7 +379,7 @@
           <span class={css({ flex: '1' })}>{item.label}</span>
 
           {#snippet suffix()}
-            {@render menuCheck(document.data.allowReaction === item.value)}
+            {@render menuCheck(allowReaction === item.value)}
           {/snippet}
         </MenuItem>
       {/each}
@@ -353,6 +387,6 @@
   </PropertyRow>
 
   <PropertyRow hint="우클릭, 복사 및 다운로드 제한" icon={ShieldIcon} label="내용 보호">
-    <Switch onchange={() => update({ protectContent })} bind:checked={protectContent} />
+    <Switch onchange={toggleProtect} values={protectValues} bind:checked={protectContent} />
   </PropertyRow>
 </div>

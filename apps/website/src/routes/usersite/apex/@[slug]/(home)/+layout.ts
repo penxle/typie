@@ -7,31 +7,29 @@ export const load = async (event) => {
       event,
       graphql(`
         query UsersiteSpaceHomeLayout_Query($slug: String!) {
-          spaceView(slug: $slug) {
+          siteView(slug: $slug) {
             id
             name
             description
             allowIndexing
-            publicationCount
 
             pinnedPublications {
               id
               ...UsersiteSpace_PinnedCard_publicationView
             }
 
-            publications {
-              hasMore
+            entries {
+              __typename
 
-              publications {
+              ... on PublicationView {
                 id
                 ...UsersiteApex_DiscoveryCard_publicationView
               }
-            }
 
-            collections {
-              id
-              permalink
-              ...UsersiteSpace_SeriesCard_collectionView
+              ... on SiteFolderView {
+                id
+                ...UsersiteSpace_FolderTile_folderView
+              }
             }
 
             tags {
@@ -39,8 +37,8 @@ export const load = async (event) => {
               count
             }
 
-            ...UsersiteSpace_SpaceHeader_spaceView
-            ...UsersiteSpace_SpaceSidebar_spaceView
+            ...UsersiteSpace_SpaceHeader_siteView
+            ...UsersiteSpace_SpaceSidebar_siteView
           }
         }
       `),

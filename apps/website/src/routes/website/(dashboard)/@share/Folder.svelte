@@ -1,47 +1,39 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { EntityVisibility } from '@typie/lib/enums';
-  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button, HorizontalDivider, Icon, RingSpinner, Select } from '@typie/ui/components';
-  import { createForm, FormError } from '@typie/ui/form';
+  import { Button, Icon, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import { z } from 'zod';
-  import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
-  import GlobeIcon from '~icons/lucide/globe';
-  import ImageIcon from '~icons/lucide/image';
+  import CopyIcon from '~icons/lucide/copy';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import Layers2Icon from '~icons/lucide/layers-2';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
-  import Trash2Icon from '~icons/lucide/trash-2';
-  import { Img } from '$lib/components';
   import { publicationErrorCode } from '$lib/publication/error';
-  import { publicationErrorMessage } from '$lib/publication/publish-form';
-  import { uploadBlobAsImage } from '$lib/utils';
+  import { publicationErrorMessage, sharedValue } from '$lib/publication/publish-form';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import OptionCard from './OptionCard.svelte';
+  import { groupLabelStyle, linkFieldButtonStyle, linkFieldInputStyle, linkFieldStyle } from './publish-styles';
+  import ShareHeader from './ShareHeader.svelte';
   import type { DashboardLayout_Share_Folder_folder$key } from '$mearie';
 
   type Props = {
     folders$key: DashboardLayout_Share_Folder_folder$key[];
+    onclose: () => void;
   };
 
-  let { folders$key }: Props = $props();
+  let { folders$key, onclose }: Props = $props();
 
   const folders = createFragment(
     graphql(`
       fragment DashboardLayout_Share_Folder_folder on Folder {
         id
         name
-
-        thumbnail {
-          id
-          ...Img_image
-        }
 
         entity {
           id
@@ -53,21 +45,11 @@
     () => folders$key,
   );
 
-  const isSingleFolder = $derived(folders.data.length === 1);
-  const folderIds = $derived(folders.data.map((f) => f.id));
-
-  const isPublic = $derived(folders.data.some((f) => f.entity.visibility === EntityVisibility.PUBLIC));
-
   const [updateFoldersOption] = createMutation(
     graphql(`
       mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
         updateFoldersOption(input: $input) {
           id
-
-          thumbnail {
-            id
-            ...Img_image
-          }
 
           entity {
             id
@@ -93,323 +75,170 @@
     `),
   );
 
+  const multiple = $derived(folders.data.length > 1);
+  const folderIds = $derived(folders.data.map((folder) => folder.id));
+  const visibility = $derived(sharedValue(folders.data.map((folder) => folder.entity.visibility)));
+  const mixed = $derived(multiple && visibility === undefined);
+
+  const countOf = (value: EntityVisibility) => folders.data.filter((folder) => folder.entity.visibility === value).length;
+  const hint = (value: EntityVisibility) => (mixed ? `${countOf(value)}개` : null);
+
   let copied = $state(false);
-  let timer: NodeJS.Timeout | undefined;
-
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let recursiveState = $state<'idle' | 'inflight' | 'success'>('idle');
-  let recursiveTimer: NodeJS.Timeout | undefined;
-  let thumbnailUploading = $state(false);
-
-  const form = createForm({
-    schema: z.object({
-      visibility: z.nativeEnum(EntityVisibility),
-    }),
-    submitOn: 'change',
-    onSubmit: async (data) => {
-      if (folders.data.length === 0) return;
-
-      if (!SubscribeModal.gate('share_folder')) {
-        return;
-      }
-
-      const dirtyFields = form.getDirtyFields();
-      const updateData: {
-        folderIds: string[];
-        visibility?: EntityVisibility;
-      } = { folderIds };
-
-      if ('visibility' in dirtyFields) {
-        updateData.visibility = data.visibility;
-      }
-
-      if (Object.keys(updateData).length > 1) {
-        await updateFoldersOption({ input: updateData });
-        mixpanel.track('update_folder_option', { visibility: data.visibility, count: folderIds.length });
-      }
-    },
-    onError: (error) => {
-      if (error instanceof TypieError) {
-        const message = publicationErrorMessage(error.code);
-        Toast.error(message);
-        throw new FormError('visibility', message);
-      }
-    },
-    defaultValues: {
-      visibility: folders.data[0].entity.visibility,
-    },
-  });
-
-  $effect(() => {
-    void form;
-  });
+  let recursiveTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     return () => {
-      if (recursiveTimer) {
-        clearTimeout(recursiveTimer);
-      }
+      if (timer) clearTimeout(timer);
+      if (recursiveTimer) clearTimeout(recursiveTimer);
     };
   });
 
-  const visibilityIndeterminate = $derived(
-    folders.data.length > 1 && folders.data.some((f) => f.entity.visibility !== folders.data[0].entity.visibility),
-  );
-  const thumbnailIndeterminate = $derived(
-    folders.data.length > 1 && folders.data.some((f) => f.thumbnail?.id !== folders.data[0].thumbnail?.id),
-  );
+  const selectUrl = (event: Event) => {
+    (event.currentTarget as HTMLInputElement).select();
+  };
 
-  const handleCopyLink = () => {
-    if (folders.data.length === 0) return;
-
-    const urls = folders.data.map((f) => f.entity.url).join('\n');
-    navigator.clipboard.writeText(urls);
+  const copyLinks = async () => {
+    await navigator.clipboard.writeText(folders.data.map((folder) => folder.entity.url).join('\n'));
     mixpanel.track('copy_folder_share_url', { count: folders.data.length });
 
-    if (timer) {
-      clearTimeout(timer);
-    }
-
+    if (timer) clearTimeout(timer);
     copied = true;
     timer = setTimeout(() => (copied = false), 2000);
   };
 
-  const handleThumbnailUpload = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
+  const setVisibility = async (next: EntityVisibility) => {
+    if (visibility === next) return;
+    if (!SubscribeModal.gate('share_folder')) return;
 
-    input.addEventListener('change', async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-
-      if (!SubscribeModal.gate('share_folder')) {
-        return;
-      }
-
-      thumbnailUploading = true;
-      try {
-        const image = await uploadBlobAsImage(file);
-        await updateFoldersOption({ input: { folderIds, thumbnailId: image.id } });
-        mixpanel.track('update_folder_thumbnail', { count: folders.data.length });
-      } finally {
-        thumbnailUploading = false;
-      }
-    });
-
-    input.click();
+    try {
+      await updateFoldersOption({ input: { folderIds, visibility: next } });
+      mixpanel.track('update_folder_option', { visibility: next, count: folderIds.length });
+    } catch (err) {
+      Toast.error(publicationErrorMessage(publicationErrorCode(err)));
+    }
   };
 
-  const handleThumbnailRemove = async () => {
-    if (!SubscribeModal.gate('share_folder')) {
+  const applyRecursive = async () => {
+    if (recursiveState === 'inflight' || visibility === undefined) return;
+    if (recursiveTimer) clearTimeout(recursiveTimer);
+    if (!SubscribeModal.gate('share_folder')) return;
+
+    recursiveState = 'inflight';
+
+    try {
+      await updateFoldersOption({ input: { folderIds, visibility, recursive: true } });
+      recursiveState = 'success';
+      mixpanel.track('update_folder_option', { visibility, recursive: true });
+    } catch (err) {
+      recursiveState = 'idle';
+      Toast.error(publicationErrorMessage(publicationErrorCode(err)));
       return;
     }
 
-    await updateFoldersOption({ input: { folderIds, thumbnailId: null } });
-    mixpanel.track('remove_folder_thumbnail', { count: folders.data.length });
+    recursiveTimer = setTimeout(() => {
+      recursiveState = 'idle';
+    }, 2000);
   };
 </script>
 
-<div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px', paddingX: '16px', paddingY: '12px' })}>
-  <div class={flex({ gap: '[0.5ch]', fontSize: '12px', fontWeight: 'medium' })}>
-    <span class={css({ wordBreak: 'break-all', lineClamp: '1', fontWeight: 'semibold' })}>
-      {isSingleFolder ? folders.data[0].name : `${folders.data.length}개의 폴더`}
-    </span>
-    <span class={css({ flexShrink: '0' })}>공유 및 발행</span>
-  </div>
+{#snippet linkBody()}
+  {#if multiple}
+    <Button style={css.raw({ alignSelf: 'flex-start', gap: '6px' })} onclick={copyLinks} size="sm" variant="secondary">
+      <Icon style={copied ? css.raw({ color: 'success.default' }) : undefined} icon={copied ? CheckIcon : CopyIcon} size={14} />
+      {copied ? '복사되었어요' : `링크 ${folders.data.length}개 복사`}
+    </Button>
+  {:else}
+    <div class={css(linkFieldStyle)}>
+      <input
+        class={css(linkFieldInputStyle)}
+        aria-label="공유 링크"
+        autocomplete="off"
+        onclick={selectUrl}
+        onfocus={selectUrl}
+        readonly
+        spellcheck="false"
+        value={folders.data[0].entity.url}
+      />
 
-  <button
-    class={flex({ alignItems: 'center', gap: '4px', flexShrink: '0' })}
-    onclick={handleCopyLink}
-    type="button"
-    use:tooltip={{
-      message: visibilityIndeterminate
-        ? null
-        : form.fields.visibility === EntityVisibility.PRIVATE
-          ? '지금은 링크가 있어도 나만 볼 수 있어요'
-          : '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요',
-      placement: 'top',
-      keepOnClick: true,
-    }}
-  >
-    {#if copied}
-      <Icon style={css.raw({ color: 'accent.default' })} icon={CheckIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.default' })}>복사되었어요</div>
-    {:else}
-      <Icon style={css.raw({ color: 'text.default' })} icon={LinkIcon} size={12} />
-      <div class={css({ fontSize: '12px', color: 'text.default' })}>
-        {isSingleFolder ? '조회 링크 복사' : '조회 링크 모두 복사'}
-      </div>
-    {/if}
-  </button>
-</div>
+      <button
+        class={center(linkFieldButtonStyle)}
+        aria-label="링크 복사"
+        onclick={copyLinks}
+        type="button"
+        use:tooltip={{ message: copied ? '복사되었어요' : '링크 복사', placement: 'top', keepOnClick: true }}
+      >
+        <Icon style={copied ? css.raw({ color: 'success.default' }) : undefined} icon={copied ? CheckIcon : CopyIcon} size={14} />
+      </button>
 
-<HorizontalDivider />
+      <a
+        class={center(linkFieldButtonStyle)}
+        aria-label="조회 페이지에서 열기"
+        href={folders.data[0].entity.url}
+        rel="noopener noreferrer"
+        target="_blank"
+        use:tooltip={{ message: '조회 페이지에서 열기', placement: 'top' }}
+      >
+        <Icon icon={ExternalLinkIcon} size={14} />
+      </a>
+    </div>
+  {/if}
+{/snippet}
 
-<div class={flex({ flexDirection: 'column', gap: '16px', paddingX: '16px', paddingTop: '16px', paddingBottom: '24px' })}>
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>폴더 조회 권한</div>
+<ShareHeader {onclose} subtitle={multiple ? `폴더 ${folders.data.length}개` : folders.data[0].name} title="공유" />
 
-    <div class={flex({ alignItems: 'center', justifyContent: 'space-between', height: '24px' })}>
-      <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.muted' })} icon={BlendIcon} size={14} />
-        <div class={css({ fontSize: '12px', color: 'text.muted' })}>공개 범위</div>
-      </div>
+<div class={flex({ flexDirection: 'column', gap: '24px', paddingTop: '2px', paddingX: '24px', paddingBottom: '24px' })}>
+  <section class={flex({ flexDirection: 'column', gap: '10px' })}>
+    <div class={css(groupLabelStyle)}>공개 범위</div>
 
-      <Select
-        items={[
-          ...(isPublic ? [{ icon: GlobeIcon, label: '공개', value: EntityVisibility.PUBLIC }] : []),
-          {
-            icon: LinkIcon,
-            label: '링크가 있는 사람',
-            description: '링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요.',
-            value: EntityVisibility.UNLISTED,
-          },
-          {
-            icon: LockIcon,
-            label: '비공개',
-            description: '나만 볼 수 있어요.',
-            value: EntityVisibility.PRIVATE,
-          },
-        ]}
-        values={folders.data.map((f) => f.entity.visibility)}
-        bind:value={form.fields.visibility}
+    <div class={flex({ flexDirection: 'column', gap: '8px' })} aria-label="공개 범위" role="radiogroup">
+      <OptionCard
+        description="나만 볼 수 있어요."
+        hint={hint(EntityVisibility.PRIVATE)}
+        icon={LockIcon}
+        label="비공개"
+        onclick={() => setVisibility(EntityVisibility.PRIVATE)}
+        selected={visibility === EntityVisibility.PRIVATE}
+      />
+      <OptionCard
+        body={linkBody}
+        description="링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요."
+        hint={hint(EntityVisibility.UNLISTED)}
+        icon={LinkIcon}
+        label="링크가 있는 사람"
+        onclick={() => setVisibility(EntityVisibility.UNLISTED)}
+        selected={visibility === EntityVisibility.UNLISTED}
       />
     </div>
 
-    <HorizontalDivider />
+    {#if mixed}
+      <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
+        공개 범위가 서로 달라요. 고르면 폴더 {folders.data.length}개에 모두 적용돼요.
+      </p>
+    {/if}
 
-    <Button
-      style={css.raw({ marginLeft: 'auto', minWidth: '200px', height: '26px', gap: '4px', fontSize: '12px' })}
-      disabled={form.fields.visibility === EntityVisibility.PUBLIC}
-      onclick={async () => {
-        if (recursiveState === 'inflight') {
-          return;
-        }
+    <div class={flex({ alignItems: 'center', justifyContent: 'flex-end', gap: '8px' })}>
+      <span class={css({ fontSize: '12px', color: 'text.hint' })}>발행된 글은 그대로 두고 나머지에 적용돼요.</span>
 
-        if (recursiveTimer) {
-          clearTimeout(recursiveTimer);
-        }
-
-        if (!SubscribeModal.gate('share_folder')) {
-          return;
-        }
-
-        recursiveState = 'inflight';
-
-        try {
-          await updateFoldersOption({ input: { folderIds, visibility: form.fields.visibility, recursive: true } });
-
-          recursiveState = 'success';
-          mixpanel.track('update_folder_option', { visibility: form.fields.visibility, recursive: true });
-        } catch (err) {
-          recursiveState = 'idle';
-          Toast.error(publicationErrorMessage(publicationErrorCode(err)));
-          return;
-        }
-
-        recursiveTimer = setTimeout(() => {
-          recursiveState = 'idle';
-        }, 2000);
-      }}
-      size="sm"
-      variant="secondary"
-    >
-      {#if recursiveState === 'inflight'}
-        <RingSpinner style={css.raw({ size: '14px' })} />
-        적용 중...
-      {:else if recursiveState === 'success'}
-        <Icon icon={CheckIcon} size={14} />
-        적용됨
-      {:else}
-        <Icon icon={Layers2Icon} size={14} />
-        하위 항목에 동일한 설정 적용하기
-      {/if}
-    </Button>
-  </div>
-
-  <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-    <div class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.muted' })}>썸네일</div>
-
-    <div class={flex({ alignItems: 'center', justifyContent: 'space-between' })}>
-      <div class={flex({ alignItems: 'center', gap: '8px' })}>
-        <Icon style={css.raw({ color: 'text.muted' })} icon={ImageIcon} />
-        <div class={css({ fontSize: '12px', color: 'text.muted' })}>미리보기 이미지</div>
-      </div>
-
-      <div class={flex({ gap: '8px', alignItems: 'center' })}>
-        {#if thumbnailIndeterminate}
-          <button
-            class={center({
-              width: '64px',
-              height: '36px',
-              borderRadius: '6px',
-              backgroundColor: 'surface.inset',
-              fontSize: '10px',
-              color: 'text.hint',
-            })}
-            disabled={thumbnailUploading}
-            onclick={handleThumbnailUpload}
-            type="button"
-          >
-            {thumbnailUploading ? '...' : '다름'}
-          </button>
-        {:else if folders.data[0].thumbnail}
-          <div class={flex({ alignItems: 'center', gap: '4px' })}>
-            <button
-              class={css({ position: 'relative', cursor: 'pointer' })}
-              disabled={thumbnailUploading}
-              onclick={handleThumbnailUpload}
-              type="button"
-            >
-              <Img
-                style={css.raw({
-                  width: '64px',
-                  height: '36px',
-                  borderRadius: '6px',
-                  objectFit: 'cover',
-                })}
-                alt="썸네일"
-                image$key={folders.data[0].thumbnail}
-                size={128}
-              />
-            </button>
-            <button
-              class={center({
-                size: '24px',
-                borderRadius: '4px',
-                color: 'text.muted',
-                _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
-              })}
-              onclick={handleThumbnailRemove}
-              type="button"
-              use:tooltip={{ message: '삭제', placement: 'top' }}
-            >
-              <Icon icon={Trash2Icon} size={14} />
-            </button>
-          </div>
+      <Button
+        style={css.raw({ minWidth: '200px', gap: '4px' })}
+        disabled={visibility === undefined}
+        onclick={applyRecursive}
+        size="sm"
+        variant="secondary"
+      >
+        {#if recursiveState === 'inflight'}
+          <RingSpinner style={css.raw({ size: '14px' })} />
+          적용 중...
+        {:else if recursiveState === 'success'}
+          <Icon icon={CheckIcon} size={14} />
+          적용됨
         {:else}
-          <button
-            class={center({
-              width: '64px',
-              height: '36px',
-              borderWidth: '1px',
-              borderStyle: 'dashed',
-              borderRadius: '6px',
-              color: 'text.muted',
-              _hover: { backgroundColor: 'surface.hover' },
-            })}
-            disabled={thumbnailUploading}
-            onclick={handleThumbnailUpload}
-            type="button"
-          >
-            {#if thumbnailUploading}
-              <span class={css({ fontSize: '10px' })}>...</span>
-            {:else}
-              <Icon icon={ImageIcon} size={14} />
-            {/if}
-          </button>
+          <Icon icon={Layers2Icon} size={14} />
+          하위 항목에 동일한 설정 적용하기
         {/if}
-      </div>
+      </Button>
     </div>
-  </div>
+  </section>
 </div>

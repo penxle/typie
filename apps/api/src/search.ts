@@ -13,6 +13,6 @@ export const esIndex = {
   documents: `${indexPrefix}-documents`,
   folders: `${indexPrefix}-folders`,
   publications: `${indexPrefix}-publications`,
-  spaces: `${indexPrefix}-spaces`,
+  sites: `${indexPrefix}-sites`,
   tags: `${indexPrefix}-tags`,
 } as const;

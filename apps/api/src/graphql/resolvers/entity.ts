@@ -32,7 +32,7 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { generatePinnedOrders, isPinnableEntityType, resolvePinSiteId } from '#/utils/pinned-entities.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
-import { isUsersiteApexOrigin, parseUsersiteSlug } from '#/utils/usersite-core.ts';
+import { siteUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import {
   Entity,
@@ -450,9 +450,6 @@ EntityView.implement({
     children: t.field({
       type: [EntityView],
       resolve: async (self) => {
-        const visibilities =
-          self.visibility === EntityVisibility.PUBLIC ? [EntityVisibility.PUBLIC] : [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
-
         return await db
           .select()
           .from(Entities)
@@ -461,7 +458,7 @@ EntityView.implement({
               eq(Entities.parentId, self.id),
               eq(Entities.state, EntityState.ACTIVE),
               ne(Entities.type, EntityType.DIVIDER),
-              inArray(Entities.visibility, visibilities),
+              inArray(Entities.visibility, [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED]),
             ),
           )
           .orderBy(asc(Entities.order));
@@ -499,19 +496,7 @@ EntityView.implement({
       resolve: async (self) => {
         if (self.type !== EntityType.DOCUMENT) return null;
 
-        let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
-
-        if (self.parentId) {
-          const parent = await db
-            .select({ visibility: Entities.visibility })
-            .from(Entities)
-            .where(eq(Entities.id, self.parentId))
-            .then(first);
-
-          if (parent?.visibility === EntityVisibility.UNLISTED) {
-            visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
-          }
-        }
+        const visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
 
         return await db
           .select()
@@ -538,19 +523,7 @@ EntityView.implement({
       resolve: async (self) => {
         if (self.type !== EntityType.DOCUMENT) return null;
 
-        let visibilities: EntityVisibility[] = [EntityVisibility.PUBLIC];
-
-        if (self.parentId) {
-          const parent = await db
-            .select({ visibility: Entities.visibility })
-            .from(Entities)
-            .where(eq(Entities.id, self.parentId))
-            .then(first);
-
-          if (parent?.visibility === EntityVisibility.UNLISTED) {
-            visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
-          }
-        }
+        const visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
 
         return await db
           .select()
@@ -666,28 +639,14 @@ builder.queryFields((t) => ({
 
   entityView: t.field({
     type: EntityView,
-    args: { origin: t.arg.string(), slug: t.arg.string() },
+    args: { slug: t.arg.string() },
     resolve: async (_, args, ctx) => {
-      const siteSlug = parseUsersiteSlug(args.origin, env.USERSITE_URL);
-      if (!siteSlug && !isUsersiteApexOrigin(args.origin, env.USERSITE_URL)) {
-        throw new TypieError({ code: 'invalid_hostname' });
-      }
-
-      const site = siteSlug
-        ? await db
-            .select({ id: Sites.id })
-            .from(Sites)
-            .where(and(eq(Sites.slug, siteSlug), eq(Sites.state, SiteState.ACTIVE)))
-            .then(firstOrThrowWith(new NotFoundError()))
-        : null;
-
       const entity = await db
         .select(getTableColumns(Entities))
         .from(Entities)
         .innerJoin(Sites, eq(Entities.siteId, Sites.id))
         .where(
           and(
-            site ? eq(Entities.siteId, site.id) : undefined,
             eq(Sites.state, SiteState.ACTIVE),
             eq(Entities.state, EntityState.ACTIVE),
             ne(Entities.type, EntityType.DIVIDER),
@@ -738,7 +697,7 @@ builder.queryFields((t) => ({
         .then(firstOrThrowWith(new NotFoundError()));
 
       return {
-        siteUrl: env.USERSITE_URL.replace('*', () => entity.siteSlug),
+        siteUrl: siteUrl(env.USERSITE_URL, entity.siteSlug),
         entitySlug: entity.entitySlug,
       };
     },

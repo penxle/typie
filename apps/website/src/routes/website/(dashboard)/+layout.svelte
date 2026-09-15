@@ -494,7 +494,7 @@
     if (open === 'subscribe') {
       SubscribeModalState.show('desktop_open_param');
       deepLink = true;
-    } else if (open?.startsWith('preference/')) {
+    } else if (open?.startsWith('preference/') || open?.startsWith('site-settings/')) {
       pushState('', { shallowRoute: `/${open}` });
       deepLink = true;
     }
