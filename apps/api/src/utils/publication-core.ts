@@ -1,4 +1,4 @@
-import { EntityState, EntityVisibility, PublicationState, SiteState } from '@typie/lib/enums';
+import { EntityState, EntityType, EntityVisibility, PublicationState, SiteState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm';
 import { Documents, Entities, Publications, PublicationVersions, Sites } from '#/db/schemas/tables.ts';
@@ -139,8 +139,8 @@ export const resolvePublishedVisibilityBlock = (requested: EntityVisibility): st
   return null;
 };
 
-export const resolveVisibilityRequestBlock = (requested: EntityVisibility): string | null =>
-  requested === EntityVisibility.PUBLIC ? 'visibility_public_reserved' : null;
+export const resolveVisibilityRequestBlock = (requested: EntityVisibility, type: EntityType): string | null =>
+  type === EntityType.DOCUMENT && requested === EntityVisibility.PUBLIC ? 'visibility_public_reserved' : null;
 
 export const buildDuePublicationsQuery = (executor: Executor, input: { now: Dayjs }) =>
   executor

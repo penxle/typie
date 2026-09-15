@@ -31,6 +31,30 @@ export const load = async (event) => {
                 publishedAt
               }
             }
+
+            recentSeries {
+              folder {
+                id
+                number
+                name
+                publicationCount
+                url
+
+                thumbnail {
+                  id
+                  ...Img_image
+                }
+
+                site {
+                  id
+                  name
+                }
+              }
+
+              publication {
+                id
+              }
+            }
           }
         }
       `),

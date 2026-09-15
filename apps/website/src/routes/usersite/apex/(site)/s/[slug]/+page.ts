@@ -29,6 +29,11 @@ export const load = async (event) => {
                 url
               }
             }
+
+            ... on FolderView {
+              id
+              seriesUrl
+            }
           }
 
           ...UsersiteApexSlugPage_DocumentViewV2_entityView
@@ -45,7 +50,12 @@ export const load = async (event) => {
   const target = resolveLinkShareRedirect({
     requestedSlug: event.params.slug,
     entitySlug: query.data.entityView.slug,
-    publicationUrl: node.__typename === 'DocumentView' ? (node.publication?.url ?? null) : null,
+    publicationUrl:
+      node.__typename === 'DocumentView'
+        ? (node.publication?.url ?? null)
+        : node.__typename === 'FolderView'
+          ? (node.seriesUrl ?? null)
+          : null,
   });
 
   if (target) {

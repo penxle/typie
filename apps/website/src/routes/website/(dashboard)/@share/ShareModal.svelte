@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
+  import { EntityVisibility } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
@@ -22,6 +23,11 @@
 
             ... on Folder {
               id
+
+              entity {
+                id
+                visibility
+              }
 
               ...DashboardLayout_Share_Folder_folder
             }
@@ -88,11 +94,27 @@
   );
 
   let step = $state<'visibility' | 'publish'>('visibility');
+  let folderStep = $state<'visibility' | 'series'>('visibility');
   let steppedFor = $state<string | null>(null);
 
   $effect(() => {
     if (app.state.shareOpen.length === 0) {
-      untrack(() => (steppedFor = null));
+      untrack(() => {
+        steppedFor = null;
+        folderStep = 'visibility';
+      });
+      return;
+    }
+
+    if (allFolders) {
+      const key = folderNodes.map((node) => node.id).join(',');
+      const series = folderNodes.length === 1 && folderNodes[0].entity.visibility === EntityVisibility.PUBLIC;
+
+      untrack(() => {
+        if (steppedFor === key) return;
+        steppedFor = key;
+        folderStep = series ? 'series' : 'visibility';
+      });
       return;
     }
 
@@ -108,8 +130,10 @@
     });
   });
 
+  const wide = $derived((allDocuments && step === 'publish') || (allFolders && folderStep === 'series'));
+
   const modalStyle = $derived(
-    allDocuments && step === 'publish'
+    wide
       ? css.raw({ maxWidth: '880px', height: 'full', maxHeight: '680px', padding: '0', overflow: 'hidden' })
       : css.raw({ maxWidth: '480px', padding: '0' }),
   );
@@ -126,7 +150,7 @@
     {:else if allDocuments}
       <DocumentsShare documents$key={documentNodes} onclose={close} bind:step />
     {:else if allFolders}
-      <Folder folders$key={folderNodes} onclose={close} />
+      <Folder folders$key={folderNodes} onclose={close} bind:step={folderStep} />
     {/if}
   {/if}
 </Modal>

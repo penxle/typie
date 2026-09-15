@@ -15,6 +15,7 @@ export const load = async (event) => {
               id
               number
               name
+              description
               folderCount
               publicationCount
 

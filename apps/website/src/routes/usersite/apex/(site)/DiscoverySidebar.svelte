@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Icon, TimeAgo } from '@typie/ui/components';
@@ -93,6 +94,43 @@
               <div class={css(rowText)}>{item.publication.title}</div>
             </div>
             <TimeAgo style={css.raw(rowMeta, { flexShrink: '0' })} timestamp={dayjs(item.publication.publishedAt).valueOf()} />
+          </a>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if discovery.recentSeries.length > 0}
+    <div>
+      <h2 class={css(heading)}>새 글이 올라온 시리즈</h2>
+      <div class={css(rows)}>
+        {#each discovery.recentSeries as item (item.folder.id)}
+          <a class={css(row)} href={item.folder.url}>
+            <div
+              style:background-color={item.folder.thumbnail ? undefined : titlePageColors(item.folder.id).background}
+              class={css({
+                flexShrink: '0',
+                width: '36px',
+                height: '54px',
+                borderRadius: '4px',
+                backgroundColor: 'surface.inset',
+                boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
+                overflow: 'hidden',
+              })}
+            >
+              {#if item.folder.thumbnail}
+                <Img
+                  style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
+                  alt={item.folder.name}
+                  image$key={item.folder.thumbnail}
+                  size={96}
+                />
+              {/if}
+            </div>
+            <div class={css({ flex: '1', minWidth: '0' })}>
+              <div class={css(rowName)} data-row-name>{item.folder.name}</div>
+              <div class={css(rowMeta)}>{item.folder.site.name} · 글 {item.folder.publicationCount}개</div>
+            </div>
           </a>
         {/each}
       </div>

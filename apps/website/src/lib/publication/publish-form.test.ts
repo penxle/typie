@@ -201,6 +201,7 @@ describe('publicationErrorMessage', () => {
   it('아는 코드는 전용 문구, 모르는 코드와 null은 기본 문구다', () => {
     expect(publicationErrorMessage('site_pin_limit')).toBe('고정은 3개까지 할 수 있어요.');
     expect(publicationErrorMessage('publication_link_share_blocked')).toBe('공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.');
+    expect(publicationErrorMessage('series_unpublish_required')).toBe('공개 방식을 바꾸려면 먼저 시리즈를 삭제해야 해요.');
     expect(publicationErrorMessage('unknown_code')).toBe('잠시 후 다시 시도해 주세요');
     expect(publicationErrorMessage(null)).toBe('잠시 후 다시 시도해 주세요');
   });

@@ -23,10 +23,12 @@ import {
 import { checkDocumentViewAccess, RESTRICTED_EXCERPT } from '#/utils/document-view-access.ts';
 import { clampPageSize, toPublicationsPage } from '#/utils/publication-view-core.ts';
 import { sanitizeHighlight } from '#/utils/search-highlight.ts';
+import { pathAncestors } from '#/utils/site-tree-core.ts';
 import { decompose } from '#/utils/text.ts';
 import { builder } from '../builder.ts';
-import { PublicationView, SiteView } from '../objects.ts';
-import { SitePublicationsPage } from './site-view.ts';
+import { PublicationView, SiteFolderView, SiteView } from '../objects.ts';
+import { SitePublicationsPage, siteTreeLoader } from './site-view.ts';
+import type { SiteTree } from '#/utils/site-tree-core.ts';
 
 const loadPage = async (input: { tagName?: string; first?: number | null; after?: string | null }) => {
   const limit = clampPageSize(input.first);
@@ -60,9 +62,16 @@ const DiscoveryRecentSite = builder.objectRef<{ siteId: string; publicationId: s
   }),
 });
 
+const DiscoveryRecentSeries = builder.objectRef<{ folderEntityId: string; publicationId: string }>('DiscoveryRecentSeries').implement({
+  fields: (t) => ({
+    folder: t.expose('folderEntityId', { type: SiteFolderView }),
+    publication: t.expose('publicationId', { type: PublicationView }),
+  }),
+});
+
 const DISCOVERY_RECENT_LIMIT_MAX = 10;
 
-type RecentPublicationRow = { id: string; siteId: string };
+type RecentPublicationRow = { id: string; siteId: string; documentId: string };
 
 const loadRecentPublications = () => {
   let rows: Promise<RecentPublicationRow[]> | undefined;
@@ -132,6 +141,38 @@ const DiscoveryView = builder.objectRef<{ recentPublications: () => Promise<Rece
           siteId: row.siteId,
           publicationId: row.id,
         }));
+      },
+    }),
+    recentSeries: t.field({
+      type: [DiscoveryRecentSeries],
+      args: { first: t.arg.int({ defaultValue: 4 }) },
+      resolve: async (self, args, ctx) => {
+        const rows = await self.recentPublications();
+        if (rows.length === 0) return [];
+        const documents = await db
+          .select({ id: Documents.id, entityId: Documents.entityId })
+          .from(Documents)
+          .where(
+            inArray(
+              Documents.id,
+              rows.map((row) => row.documentId),
+            ),
+          );
+        const entityByDocument = new Map(documents.map((row) => [row.id, row.entityId]));
+        const trees = await siteTreeLoader(ctx).loadMany([...new Set(rows.map((row) => row.siteId))]);
+        const treeBySite = new Map<string, SiteTree>();
+        for (const loaded of trees) {
+          if (loaded instanceof Error) throw loaded;
+          treeBySite.set(loaded.id, loaded.tree);
+        }
+        const withFolder = rows.flatMap((row) => {
+          const entityId = entityByDocument.get(row.documentId);
+          const tree = treeBySite.get(row.siteId);
+          if (!entityId || !tree) return [];
+          const folder = pathAncestors(tree, entityId).at(-1);
+          return folder ? [{ folderEntityId: folder.id, publicationId: row.id }] : [];
+        });
+        return pickFirstByKey(withFolder, (row) => row.folderEntityId, clampRecentLimit(args.first));
       },
     }),
     tag: t.field({

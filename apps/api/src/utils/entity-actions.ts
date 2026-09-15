@@ -1163,7 +1163,7 @@ export const updateDocumentsOptionCore = async (
   }
 
   if (args.visibility) {
-    assertVisibilityRequestable(args.visibility);
+    assertVisibilityRequestable(args.visibility, EntityType.DOCUMENT);
     await assertNoPublishedPublication(executor, {
       documentIds: documents.map((doc) => doc.id),
       visibility: args.visibility,
@@ -1255,7 +1255,7 @@ export const updateFolderOptionCore = async (
   });
 
   await assertActiveSubscription({ userId: args.userId });
-  assertVisibilityRequestable(args.visibility);
+  assertVisibilityRequestable(args.visibility, EntityType.FOLDER);
 
   const changedFolderEntityIds = await executor.transaction(async (tx) => {
     const changedFolderEntityIds = [folder.entityId];

@@ -151,6 +151,8 @@ export const Folders = pgTable(
       .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     name: text('name').notNull(),
     thumbnailId: text('thumbnail_id').references(() => Images.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    description: text('description'),
+    pinned: boolean('pinned').notNull().default(false),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),

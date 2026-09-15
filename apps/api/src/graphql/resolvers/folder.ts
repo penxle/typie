@@ -3,6 +3,7 @@ import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { and, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import { db, Documents, DocumentStates, Entities, firstOrThrow, Folders, TableCode, validateDbId } from '#/db/index.ts';
+import { env } from '#/env.ts';
 import { enqueueJob } from '#/mq/index.ts';
 import { publishRecentDocumentUpdates, pubsub } from '#/pubsub.ts';
 import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
@@ -11,12 +12,28 @@ import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { assertVisibilityRequestable, findPublishedDocumentIds } from '#/utils/publication.ts';
 import { unpublishByEntityIdsCore } from '#/utils/publication-unpublish.ts';
+import { isPathFolder } from '#/utils/site-tree-core.ts';
+import { folderUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityView, Folder, FolderView, IFolder, Image, isTypeOf } from '../objects.ts';
+import { siteLoader, siteTreeLoader } from './site-view.ts';
+import type { Context } from '#/context.ts';
 
 /**
  * * Types
  */
+
+const resolveSeriesUrl = async (ctx: Context, entityId: string) => {
+  const entity = await db
+    .select({ id: Entities.id, siteId: Entities.siteId, number: Entities.number, visibility: Entities.visibility })
+    .from(Entities)
+    .where(eq(Entities.id, entityId))
+    .then(firstOrThrow);
+  if (entity.visibility !== EntityVisibility.PUBLIC) return null;
+  const [{ tree }, site] = await Promise.all([siteTreeLoader(ctx).load(entity.siteId), siteLoader(ctx).load(entity.siteId)]);
+  if (!isPathFolder(tree, entity.id)) return null;
+  return folderUrl(env.USERSITE_URL, site.slug, entity.number);
+};
 
 IFolder.implement({
   fields: (t) => ({
@@ -34,7 +51,16 @@ Folder.implement({
 
     entity: t.expose('entityId', { type: Entity }),
 
+    seriesUrl: t.string({
+      nullable: true,
+      resolve: async (self, _, ctx) => await resolveSeriesUrl(ctx, self.entityId),
+    }),
+
     createdAt: t.expose('createdAt', { type: 'DateTime' }),
+
+    description: t.exposeString('description', { nullable: true }),
+
+    pinned: t.exposeBoolean('pinned'),
 
     maxDescendantFoldersDepth: t.int({
       resolve: async (self) => {
@@ -145,6 +171,11 @@ FolderView.implement({
   interfaces: [IFolder],
   fields: (t) => ({
     entity: t.expose('entityId', { type: EntityView }),
+
+    seriesUrl: t.string({
+      nullable: true,
+      resolve: async (self, _, ctx) => await resolveSeriesUrl(ctx, self.entityId),
+    }),
 
     folderCount: t.int({
       resolve: async (self) => {
@@ -376,6 +407,8 @@ builder.mutationFields((t) => ({
       folderIds: t.input.idList({ validate: { items: validateDbId(TableCode.FOLDERS) } }),
       visibility: t.input.field({ type: EntityVisibility, required: false }),
       thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
+      description: t.input.string({ required: false }),
+      pinned: t.input.boolean({ required: false }),
       recursive: t.input.boolean({ required: false, defaultValue: false }),
     },
     resolve: async (_, { input }, ctx) => {
@@ -406,11 +439,27 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'site_mismatch' });
       }
 
-      if (!input.visibility && input.thumbnailId === undefined) {
+      if (!input.visibility && input.thumbnailId === undefined && input.description === undefined && typeof input.pinned !== 'boolean') {
         return folders.map((folder) => folder.id);
       }
 
-      if (input.visibility) assertVisibilityRequestable(input.visibility);
+      if (input.visibility) assertVisibilityRequestable(input.visibility, EntityType.FOLDER);
+
+      if (input.visibility && input.visibility !== EntityVisibility.PUBLIC && folders.length > 1) {
+        const published = await db
+          .select({ id: Entities.id })
+          .from(Entities)
+          .where(
+            and(
+              inArray(
+                Entities.id,
+                folders.map((folder) => folder.entityId),
+              ),
+              eq(Entities.visibility, EntityVisibility.PUBLIC),
+            ),
+          );
+        if (published.length > 0) throw new TypieError({ code: 'series_unpublish_required', status: 400 });
+      }
 
       const updatedEntities = await db.transaction(async (tx) => {
         const entityIds = folders.map((folder) => folder.entityId);
@@ -428,6 +477,16 @@ builder.mutationFields((t) => ({
 
         if (input.thumbnailId !== undefined) {
           await tx.update(Folders).set({ thumbnailId: input.thumbnailId }).where(inArray(Folders.id, folderIds));
+        }
+
+        if (input.description !== undefined || typeof input.pinned === 'boolean') {
+          await tx
+            .update(Folders)
+            .set({
+              ...(input.description !== undefined && { description: input.description?.trim() || null }),
+              ...(typeof input.pinned === 'boolean' && { pinned: input.pinned }),
+            })
+            .where(inArray(Folders.id, folderIds));
         }
 
         if (input.recursive && input.visibility) {
@@ -458,6 +517,17 @@ builder.mutationFields((t) => ({
               visibility: input.visibility,
             });
             const skippedEntityIds = new Set(descendantDocuments.filter(({ id }) => published.has(id)).map(({ entityId }) => entityId));
+            const publishedFolderEntityIds = await tx
+              .select({ id: Entities.id })
+              .from(Entities)
+              .where(
+                and(
+                  inArray(Entities.id, descendantEntityIds),
+                  eq(Entities.type, EntityType.FOLDER),
+                  eq(Entities.visibility, EntityVisibility.PUBLIC),
+                ),
+              );
+            for (const { id } of publishedFolderEntityIds) skippedEntityIds.add(id);
             const targetEntityIds = descendantEntityIds.filter((id) => !skippedEntityIds.has(id));
 
             if (targetEntityIds.length > 0) {

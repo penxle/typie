@@ -29,7 +29,7 @@ export const hashText = (text: string): number => {
 
 export const titlePageColors = (seed: string): TitlePageColors => TITLE_PAGE_PALETTE[hashText(seed) % TITLE_PAGE_PALETTE.length];
 
-const TITLE_PAGE_COVER_REVISION = 3;
+const TITLE_PAGE_COVER_REVISION = 5;
 
 export const titlePageCoverVersion = (input: { title: string; spaceName: string }): string =>
   hashText(`${TITLE_PAGE_COVER_REVISION}\n${input.title}\n${input.spaceName}`).toString(36);

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FolderIcon from '~icons/lucide/folder';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import { currentSpaceSlug } from './current-space-slug';
@@ -26,6 +26,7 @@
         name
         folderCount
         publicationCount
+        description
 
         thumbnail {
           id
@@ -40,66 +41,63 @@
 </script>
 
 <a
-  class={css({
-    display: 'block',
+  class={flex({
+    alignItems: 'center',
+    gap: '16px',
     minWidth: '0',
-    borderWidth: '1px',
+    paddingY: '14px',
+    borderTopWidth: '1px',
     borderColor: 'border.hairline',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    isolation: 'isolate',
-    _hover: {
-      '& [data-folder-name]': { color: 'text.muted' },
-      '& [data-folder-cover]': { transform: 'scale(1.03)' },
-    },
+    _first: { paddingTop: '4px', borderTopWidth: '0' },
+    _hover: { '& [data-folder-name]': { color: 'text.muted' } },
   })}
   href={folderPath(slug, folder.data.number)}
 >
-  <div class={css({ aspectRatio: '[16 / 9]', backgroundColor: 'surface.canvas', color: 'text.hint', overflow: 'hidden' })}>
-    <div
-      class={flex({
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 'full',
-        height: 'full',
-        transition: '[transform 240ms cubic-bezier(0.32, 0.72, 0, 1)]',
-        _motionReduce: { transition: '[none]' },
+  <div
+    style:background-color={folder.data.thumbnail ? undefined : titlePageColors(folder.data.id).background}
+    class={css({
+      flexShrink: '0',
+      width: '64px',
+      height: '96px',
+      borderRadius: '6px',
+      backgroundColor: 'surface.inset',
+      boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
+      overflow: 'hidden',
+    })}
+  >
+    {#if folder.data.thumbnail}
+      <Img
+        style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
+        alt={folder.data.name}
+        image$key={folder.data.thumbnail}
+        size={128}
+      />
+    {/if}
+  </div>
+
+  <div class={css({ flex: '1', minWidth: '0' })}>
+    <p
+      class={css({
+        fontSize: '16px',
+        fontWeight: 'semibold',
+        lineHeight: '[1.4]',
+        letterSpacing: '-0.01em',
+        transition: 'colors',
+        truncate: true,
       })}
-      data-folder-cover
+      data-folder-name
     >
-      {#if folder.data.thumbnail}
-        <Img
-          style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
-          alt={folder.data.name}
-          image$key={folder.data.thumbnail}
-          size={512}
-        />
-      {:else}
-        <Icon icon={FolderIcon} size={24} />
-      {/if}
-    </div>
+      {folder.data.name}
+    </p>
+    {#if folder.data.description}
+      <p class={css({ marginTop: '4px', fontSize: '13px', lineHeight: '[1.5]', color: 'text.muted', lineClamp: '2' })}>
+        {folder.data.description}
+      </p>
+    {/if}
+    <p class={css({ marginTop: '6px', fontSize: '12px', color: 'text.hint', fontVariantNumeric: 'tabular-nums', truncate: true })}>
+      {folderCountLabel(folder.data.folderCount, folder.data.publicationCount)}
+    </p>
   </div>
 
-  <div class={flex({ alignItems: 'center', gap: '8px', minWidth: '0', padding: '[10px 12px 11px]' })}>
-    <div class={css({ flex: '1', minWidth: '0' })}>
-      <p
-        class={css({
-          fontSize: '14px',
-          fontWeight: 'semibold',
-          lineHeight: '[1.35]',
-          letterSpacing: '-0.01em',
-          transition: 'colors',
-          truncate: true,
-        })}
-        data-folder-name
-      >
-        {folder.data.name}
-      </p>
-      <p class={css({ marginTop: '1px', fontSize: '12px', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>
-        {folderCountLabel(folder.data.folderCount, folder.data.publicationCount)}
-      </p>
-    </div>
-
-    <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={ChevronRightIcon} size={16} />
-  </div>
+  <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={ChevronRightIcon} size={16} />
 </a>

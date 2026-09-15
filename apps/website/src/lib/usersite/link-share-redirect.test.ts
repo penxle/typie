@@ -8,6 +8,12 @@ describe('resolveLinkShareRedirect', () => {
     );
   });
 
+  it('sends a published folder to its series page', () => {
+    expect(
+      resolveLinkShareRedirect({ requestedSlug: 'abc', entitySlug: 'abc', publicationUrl: 'https://s.typie.me/@finn/f/98765432109' }),
+    ).toBe('https://s.typie.me/@finn/f/98765432109');
+  });
+
   it('canonicalises a redirected slug before anything else', () => {
     expect(resolveLinkShareRedirect({ requestedSlug: 'old', entitySlug: 'new', publicationUrl: null })).toBe('/s/new');
   });
