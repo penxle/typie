@@ -468,7 +468,7 @@
     class={flex({
       flexShrink: '0',
       alignItems: 'center',
-      height: '41px',
+      height: '37px',
       paddingX: '20px',
       fontSize: '13px',
       fontWeight: 'semibold',

@@ -30,7 +30,6 @@
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
-  import { isToolbarKind } from './[slug]/v2/toolbar-kind';
   import ChangelogModal from './@changelog/ChangelogModal.svelte';
   import DocumentExportModal from './@context-menu/DocumentExportModal.svelte';
   import GoalModal from './@goal/GoalModal.svelte';
@@ -517,10 +516,6 @@
 
     if (query.data.me.preferences.initialPage) {
       app.preference.current.initialPage = query.data.me.preferences.initialPage;
-    }
-
-    if (isToolbarKind(query.data.me.preferences.defaultPrimaryToolbar)) {
-      app.preference.current.defaultPrimaryToolbar = query.data.me.preferences.defaultPrimaryToolbar;
     }
   });
 </script>

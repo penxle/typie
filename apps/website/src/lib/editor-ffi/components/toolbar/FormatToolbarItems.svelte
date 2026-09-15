@@ -1,34 +1,23 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
-  import { DropdownMenu, DropdownMenuItem, Icon, VerticalDivider } from '@typie/ui/components';
-  import { getThemeContext } from '@typie/ui/context';
+  import { flex } from '@typie/styled-system/patterns';
+  import { VerticalDivider } from '@typie/ui/components';
   import BoldIcon from '~icons/lucide/bold';
   import ItalicIcon from '~icons/lucide/italic';
   import LinkIcon from '~icons/lucide/link';
   import MessageSquarePlusIcon from '~icons/lucide/message-square-plus';
-  import MinusIcon from '~icons/lucide/minus';
   import RemoveFormattingIcon from '~icons/lucide/remove-formatting';
-  import SlashIcon from '~icons/lucide/slash';
   import StrikethroughIcon from '~icons/lucide/strikethrough';
   import UnderlineIcon from '~icons/lucide/underline';
-  import LetterSpacingIcon from '~icons/typie/letter-spacing';
-  import LineHeightIcon from '~icons/typie/line-height';
   import RubyIcon from '~icons/typie/ruby';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { THEME_COLORS } from '$lib/editor-ffi/theme';
-  import { values } from '$lib/editor-ffi/values';
   import ToolbarButton from './ToolbarButton.svelte';
-  import ToolbarColorGrid from './ToolbarColorGrid.svelte';
-  import ToolbarDropdownButton from './ToolbarDropdownButton.svelte';
+  import ToolbarColorDropdown from './ToolbarColorDropdown.svelte';
   import ToolbarFontFamily from './ToolbarFontFamily.svelte';
   import ToolbarFontSize from './ToolbarFontSize.svelte';
   import ToolbarFontWeight from './ToolbarFontWeight.svelte';
-  import ToolbarIcon from './ToolbarIcon.svelte';
-  import ToolbarLink from './ToolbarLink.svelte';
-  import ToolbarRuby from './ToolbarRuby.svelte';
+  import ToolbarParagraphDropdown from './ToolbarParagraphDropdown.svelte';
   import type { Message, ModifierType, Tri } from '@typie/editor-ffi/browser';
-  import type { ThemeVariant } from '$lib/editor-ffi/theme';
 
   type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
   type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
@@ -40,20 +29,7 @@
 
   let { fontFamilies = [], onFontUploadClick }: Props = $props();
 
-  const theme = getThemeContext();
   const ctx = getEditorContext();
-
-  const themeVariant = $derived(
-    (theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant,
-  );
-
-  const tc = $derived(THEME_COLORS[themeVariant]);
-
-  const textColors = $derived(values.textColor.map((c) => ({ label: c.label, value: c.value, color: tc[c.themeKey] })));
-
-  const textBackgroundColors = $derived(
-    values.textBackgroundColor.map((c) => ({ label: c.label, value: c.value, color: c.themeKey ? tc[c.themeKey] : null })),
-  );
 
   type ToggleState = { active: boolean; indeterminate: boolean };
 
@@ -84,36 +60,6 @@
 
   const alignmentDisabled = $derived(ctx.editor?.modifierState?.alignment?.type === 'absent');
   const lineHeightDisabled = $derived(ctx.editor?.modifierState?.line_height?.type === 'absent');
-
-  const currentTextColor = $derived(
-    ctx.editor?.modifierState?.text_color?.type === 'uniform'
-      ? ctx.editor.modifierState.text_color.value.value
-      : ctx.editor?.modifierState?.text_color?.type === 'absent'
-        ? 'black'
-        : undefined,
-  );
-  const isTextColorMixed = $derived(ctx.editor?.modifierState?.text_color?.type === 'mixed');
-
-  const currentTextBackgroundColor = $derived(
-    ctx.editor?.modifierState?.background_color?.type === 'uniform'
-      ? ctx.editor.modifierState.background_color.value.value
-      : ctx.editor?.modifierState?.background_color?.type === 'absent'
-        ? 'none'
-        : undefined,
-  );
-  const isTextBackgroundColorMixed = $derived(ctx.editor?.modifierState?.background_color?.type === 'mixed');
-
-  const currentLineHeight = $derived(
-    ctx.editor?.modifierState?.line_height?.type === 'uniform' ? ctx.editor.modifierState.line_height.value.value : undefined,
-  );
-
-  const currentLetterSpacing = $derived(
-    ctx.editor?.modifierState?.letter_spacing?.type === 'uniform' ? ctx.editor.modifierState.letter_spacing.value.value : undefined,
-  );
-
-  const currentTextAlign = $derived(
-    ctx.editor?.modifierState?.alignment?.type === 'uniform' ? ctx.editor.modifierState.alignment.value.value : undefined,
-  );
 
   const boldS = $derived(toggleState(ctx.editor?.modifierState?.effective_bold));
   const italicS = $derived(toggleState(ctx.editor?.modifierState?.italic));
@@ -154,113 +100,32 @@
 
     editor.updateNow(() => editor.enqueue({ type: 'selection', op: { type: 'set', selection: span } }));
   };
+
+  const openMarkCard = (kind: 'link' | 'ruby') => {
+    if (ctx.markCard?.kind === kind) {
+      ctx.markCard = null;
+      ctx.editor?.focus();
+      return;
+    }
+    const exists = kind === 'link' ? isLinkActive : isRubyActive;
+    extendSelectionToSpan(kind);
+    ctx.markCard = { kind, mode: exists ? 'view' : 'edit', anchor: null };
+  };
+
+  const group = flex({ alignItems: 'center', gap: '2px' });
 </script>
 
 <div
   class={flex({
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
     opacity: editingDisabled ? '40' : '100',
     pointerEvents: editingDisabled ? 'none' : 'auto',
   })}
 >
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton
-      chevron
-      disabled={textFormattingDisabled}
-      label={isTextColorMixed ? '글씨 색: 여러 색' : '글씨 색'}
-      onEscape={() => ctx.editor?.focus()}
-      placement="bottom-start"
-    >
-      {#snippet anchor()}
-        <div class={center({ size: '20px' })}>
-          {#if isTextColorMixed}
-            <div
-              class={css({
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: '1px',
-                borderRadius: 'full',
-                size: '16px',
-              })}
-            >
-              <Icon style={css.raw({ color: 'text.muted' })} icon={MinusIcon} size={14} />
-            </div>
-          {:else}
-            <div
-              style:background-color={textColors.find(({ value }) => value === currentTextColor)?.color}
-              class={css({ borderWidth: '1px', borderRadius: 'full', size: '16px' })}
-            ></div>
-          {/if}
-        </div>
-      {/snippet}
-
-      {#snippet floating({ close, opened })}
-        <ToolbarColorGrid
-          columns={11}
-          currentValue={currentTextColor}
-          items={textColors}
-          onClose={close}
-          onSelect={(value) => {
-            enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'text_color', value } } });
-          }}
-          {opened}
-        />
-      {/snippet}
-    </ToolbarDropdownButton>
-
-    <ToolbarDropdownButton
-      chevron
-      disabled={textFormattingDisabled}
-      label={isTextBackgroundColorMixed ? '배경색: 여러 색' : '배경색'}
-      onEscape={() => ctx.editor?.focus()}
-      placement="bottom-start"
-    >
-      {#snippet anchor()}
-        {@const selectedValue = currentTextBackgroundColor}
-        {@const selectedItem = textBackgroundColors.find(({ value }) => value === selectedValue)}
-        <div class={center({ size: '20px' })}>
-          <div
-            style:background-color={selectedValue === 'none' ? 'transparent' : selectedItem?.color}
-            class={css({
-              borderWidth: '1px',
-              borderRadius: '4px',
-              size: '16px',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            })}
-          >
-            {#if isTextBackgroundColorMixed}
-              <Icon style={css.raw({ color: 'text.muted' })} icon={MinusIcon} size={14} />
-            {:else if selectedValue === 'none'}
-              <Icon style={css.raw({ color: 'text.hint' })} icon={SlashIcon} size={10} />
-            {/if}
-          </div>
-        </div>
-      {/snippet}
-
-      {#snippet floating({ close, opened })}
-        <ToolbarColorGrid
-          columns={8}
-          currentValue={currentTextBackgroundColor}
-          items={textBackgroundColors}
-          onClose={close}
-          onSelect={(value) => {
-            if (value === 'none') {
-              enqueue({ type: 'modifier', op: { type: 'edit', modifier_type: 'background_color', modifier: undefined } });
-            } else {
-              enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'background_color', value } } });
-            }
-          }}
-          {opened}
-          shape="square"
-        />
-      {/snippet}
-    </ToolbarDropdownButton>
-
+  <div class={group}>
+    <ToolbarColorDropdown disabled={textFormattingDisabled} kind="text" />
+    <ToolbarColorDropdown disabled={textFormattingDisabled} kind="background" />
     <ToolbarFontFamily disabled={textFormattingDisabled} {fontFamilies} onUploadClick={onFontUploadClick} />
     <ToolbarFontWeight disabled={textFormattingDisabled} {fontFamilies} />
     <ToolbarFontSize disabled={textFormattingDisabled} />
@@ -268,7 +133,7 @@
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
+  <div class={group}>
     <ToolbarButton
       active={boldS.active}
       disabled={textFormattingDisabled}
@@ -308,44 +173,32 @@
 
   <VerticalDivider style={css.raw({ height: '12px' })} />
 
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton
-      active={isLinkActive}
-      disabled={textFormattingDisabled || isLinkMixed || (isCollapsed && !isLinkActive)}
-      label="링크"
-      onEscape={() => ctx.editor?.focus()}
-      onOpenChange={(opened) => {
-        if (opened) extendSelectionToSpan('link');
-        ctx.linkEditorOpen = opened;
-      }}
-      opened={ctx.linkEditorOpen}
-    >
-      {#snippet anchor()}
-        <ToolbarIcon icon={LinkIcon} />
-      {/snippet}
+  <div class={group}>
+    <ToolbarParagraphDropdown disabled={alignmentDisabled} kind="align" />
+    <ToolbarParagraphDropdown disabled={lineHeightDisabled} kind="lineHeight" />
+    <ToolbarParagraphDropdown disabled={textFormattingDisabled} kind="letterSpacing" />
+  </div>
 
-      {#snippet floating({ close })}
-        <ToolbarLink {close} />
-      {/snippet}
-    </ToolbarDropdownButton>
+  <VerticalDivider style={css.raw({ height: '12px' })} />
 
-    <ToolbarDropdownButton
-      active={isRubyActive}
-      disabled={textFormattingDisabled || isRubyMixed || (isCollapsed && !isRubyActive)}
-      label="루비"
-      onEscape={() => ctx.editor?.focus()}
-      onOpenChange={(opened) => {
-        if (opened) extendSelectionToSpan('ruby');
-      }}
-    >
-      {#snippet anchor()}
-        <ToolbarIcon icon={RubyIcon} />
-      {/snippet}
+  <div class={group}>
+    <span class={css({ display: 'contents' })} data-floating-keep-open>
+      <ToolbarButton
+        active={isLinkActive}
+        disabled={textFormattingDisabled || isLinkMixed || (isCollapsed && !isLinkActive)}
+        icon={LinkIcon}
+        label="링크"
+        onclick={() => openMarkCard('link')}
+      />
 
-      {#snippet floating({ close })}
-        <ToolbarRuby {close} />
-      {/snippet}
-    </ToolbarDropdownButton>
+      <ToolbarButton
+        active={isRubyActive}
+        disabled={textFormattingDisabled || isRubyMixed || (isCollapsed && !isRubyActive)}
+        icon={RubyIcon}
+        label="루비"
+        onclick={() => openMarkCard('ruby')}
+      />
+    </span>
 
     <ToolbarButton
       disabled={isCollapsed}
@@ -353,79 +206,6 @@
       label="코멘트"
       onclick={() => ctx.editor?.requestCommentCompose?.()}
     />
-  </div>
-
-  <VerticalDivider style={css.raw({ height: '12px' })} />
-
-  <div class={flex({ alignItems: 'center', gap: '4px' })}>
-    <ToolbarDropdownButton disabled={alignmentDisabled} label="문단 정렬" onEscape={() => ctx.editor?.focus()}>
-      {#snippet anchor()}
-        <ToolbarIcon icon={values.textAlign.find((a) => a.value === currentTextAlign)?.icon ?? values.textAlign[0].icon} />
-      {/snippet}
-
-      {#snippet floating({ close })}
-        <DropdownMenu>
-          {#each values.textAlign as { label, value } (value)}
-            <DropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={currentTextAlign === value}
-              onclick={() => {
-                enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'alignment', value } } });
-                close();
-              }}
-            >
-              {label}
-            </DropdownMenuItem>
-          {/each}
-        </DropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
-
-    <ToolbarDropdownButton disabled={lineHeightDisabled} label="문단 행간" onEscape={() => ctx.editor?.focus()}>
-      {#snippet anchor()}
-        <ToolbarIcon icon={LineHeightIcon} />
-      {/snippet}
-
-      {#snippet floating({ close })}
-        <DropdownMenu>
-          {#each values.lineHeight as { label, value } (value)}
-            <DropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={currentLineHeight === value}
-              onclick={() => {
-                enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'line_height', value } } });
-                close();
-              }}
-            >
-              {label}
-            </DropdownMenuItem>
-          {/each}
-        </DropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
-
-    <ToolbarDropdownButton disabled={textFormattingDisabled} label="문단 자간" onEscape={() => ctx.editor?.focus()}>
-      {#snippet anchor()}
-        <ToolbarIcon icon={LetterSpacingIcon} />
-      {/snippet}
-
-      {#snippet floating({ close })}
-        <DropdownMenu>
-          {#each values.letterSpacing as { label, value } (value)}
-            <DropdownMenuItem
-              style={css.raw({ fontSize: '14px' })}
-              active={currentLetterSpacing === value}
-              onclick={() => {
-                enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'letter_spacing', value } } });
-                close();
-              }}
-            >
-              {label}
-            </DropdownMenuItem>
-          {/each}
-        </DropdownMenu>
-      {/snippet}
-    </ToolbarDropdownButton>
   </div>
 
   <VerticalDivider style={css.raw({ height: '12px' })} />

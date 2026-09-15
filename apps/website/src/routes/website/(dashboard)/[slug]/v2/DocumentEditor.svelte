@@ -27,7 +27,7 @@
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
   import { Editor, getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { createAssetHydrator } from '$lib/editor-ffi/handlers/asset-hydration';
-  import { registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
+  import { openLinkCardAtPoint, registerLinkContextMenu } from '$lib/editor-ffi/handlers/link';
   import { RECENT_EDIT_WINDOW_MS } from '$lib/editor-ffi/recent-edit-marks';
   import { browserScaleFactor } from '$lib/editor-ffi/zoom';
   import { cache, mearieClient } from '$lib/graphql';
@@ -766,7 +766,11 @@
   $effect(() => {
     const editor = ctx.editor;
     if (!editor || editor.terminal) return;
-    return registerLinkContextMenu(editor);
+    return registerLinkContextMenu(editor, {
+      onEdit: (point, anchor) => {
+        openLinkCardAtPoint({ ctx, editor, point, anchor });
+      },
+    });
   });
 
   let fontUploadModalOpen = $state(false);
@@ -1216,7 +1220,6 @@
                 <DocumentComments {documentId} entityId={entity.id} {isOwner} me$key={query.data.me} myId={query.data.me.id}>
                   <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
                     <DocumentToolbars
-                      {documentId}
                       {fontFamilies}
                       onFontUploadClick={() => {
                         if (query.data.me.entitled) {

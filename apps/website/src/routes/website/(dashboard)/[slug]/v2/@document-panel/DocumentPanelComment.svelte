@@ -20,7 +20,7 @@
     class={flex({
       justifyContent: 'space-between',
       alignItems: 'center',
-      height: '41px',
+      height: '37px',
       paddingX: '20px',
       flexShrink: '0',
       borderBottomWidth: '1px',

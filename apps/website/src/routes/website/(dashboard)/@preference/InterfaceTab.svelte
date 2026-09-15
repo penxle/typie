@@ -3,9 +3,8 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Select } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import type { DashboardLayout_PreferenceModal_InterfaceTab_user$key } from '$mearie';
@@ -36,8 +35,6 @@
       }
     `),
   );
-
-  const app = getAppContext();
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -74,38 +71,6 @@
               await updatePreferences({ input: { value: { initialPage: value } } });
             }}
             value={user.data.preferences.initialPage ?? 'last'}
-          />
-        {/snippet}
-      </SettingsRow>
-
-      <SettingsDivider />
-
-      <SettingsRow>
-        {#snippet label()}
-          새 문서의 기본 툴바
-        {/snippet}
-        {#snippet description()}
-          툴바를 아직 맞바꾸지 않은 문서에서 항상 보이는 툴바예요.
-        {/snippet}
-        {#snippet value()}
-          <Select
-            items={[
-              { value: 'format', label: '서식', description: '글꼴·굵기·색 같은 서식 도구가 항상 보여요.' },
-              { value: 'insert', label: '삽입', description: '이미지·표·목록 같은 삽입 도구가 항상 보여요.' },
-            ]}
-            onselect={async (value) => {
-              if (!SubscribeModal.gate('preferences_interface')) {
-                return;
-              }
-
-              mixpanel.track('change_default_primary_toolbar', {
-                kind: value,
-              });
-
-              app.preference.current.defaultPrimaryToolbar = value;
-              await updatePreferences({ input: { value: { defaultPrimaryToolbar: value } } });
-            }}
-            value={user.data.preferences.defaultPrimaryToolbar ?? 'format'}
           />
         {/snippet}
       </SettingsRow>

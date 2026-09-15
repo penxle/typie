@@ -116,7 +116,7 @@
         flexShrink: '0',
         alignItems: 'center',
         gap: '6px',
-        height: '41px',
+        height: '37px',
         paddingX: '20px',
         fontSize: '13px',
         fontWeight: 'semibold',

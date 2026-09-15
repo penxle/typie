@@ -208,6 +208,8 @@ function isContinuousLayout(rootAttrs: PlainRootNode | undefined): boolean {
   return rootAttrs?.layout_mode.type === 'continuous';
 }
 
+export type MarkCardRequest = { kind: 'link' | 'ruby'; mode: 'view' | 'edit'; anchor: PageRect | null };
+
 export class EditorContext {
   readonly attachmentImporter = new EditorAttachmentImporter(this);
   editor = $state<Editor>();
@@ -224,7 +226,7 @@ export class EditorContext {
   serverGeneration = $state<number>(0);
   resetKey = $state<number>(0);
   attachmentDropTargetNodeId = $state<string | null>(null);
-  linkEditorOpen = $state(false);
+  markCard = $state<MarkCardRequest | null>(null);
 }
 
 const [getEditorContext, setEditorContext] = createStableContext<EditorContext>('editor-ffi.EditorContext');

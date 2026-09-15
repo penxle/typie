@@ -1,9 +1,12 @@
 export { default as FormatToolbarItems } from './FormatToolbarItems.svelte';
-export { default as InsertToolbarItems } from './InsertToolbarItems.svelte';
 export { default as ToolbarButton } from './ToolbarButton.svelte';
+export { default as ToolbarColorDropdown } from './ToolbarColorDropdown.svelte';
 export { default as ToolbarColorGrid } from './ToolbarColorGrid.svelte';
-export { default as ToolbarDropdownButton } from './ToolbarDropdownButton.svelte';
 export { default as ToolbarFontFamily } from './ToolbarFontFamily.svelte';
 export { default as ToolbarFontSize } from './ToolbarFontSize.svelte';
 export { default as ToolbarFontWeight } from './ToolbarFontWeight.svelte';
 export { default as ToolbarIcon } from './ToolbarIcon.svelte';
+export { default as ToolbarInsertMenu } from './ToolbarInsertMenu.svelte';
+export { default as ToolbarPanel } from './ToolbarPanel.svelte';
+export { default as ToolbarPanelDropdown } from './ToolbarPanelDropdown.svelte';
+export { default as ToolbarParagraphDropdown } from './ToolbarParagraphDropdown.svelte';

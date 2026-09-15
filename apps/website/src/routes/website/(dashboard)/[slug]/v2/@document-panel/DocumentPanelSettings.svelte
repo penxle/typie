@@ -332,7 +332,7 @@
   <div
     class={flex({
       flexShrink: '0',
-      height: '41px',
+      height: '37px',
       alignItems: 'center',
       paddingX: '20px',
       fontSize: '13px',

@@ -12,4 +12,4 @@
   let { icon, style }: Props = $props();
 </script>
 
-<Icon style={css.raw({ '& *': { strokeWidth: '[1.5px]' } }, style)} {icon} size={20} />
+<Icon style={css.raw({ '& *': { strokeWidth: '[1.75px]' } }, style)} {icon} size={16} />

@@ -11,9 +11,8 @@
   import type { EditorScrollScope } from './editor-ffi/scroll.svelte';
 
   const app = setupAppContext('reduced-motion-presentations-test');
-  app.preference.current.defaultPrimaryToolbar = 'insert';
 
-  const paneGroup = setupPaneGroup('reduced-motion-presentations-test', {
+  setupPaneGroup('reduced-motion-presentations-test', {
     userId: 'reduced-motion-presentations-test',
     navigate: () => null,
     onSiteChange: () => null,
@@ -21,7 +20,6 @@
   const entityPane: Pane = { id: 'entity-pane', type: 'pane', kind: 'entity', slug: 'document' };
   const homePane: Pane = { id: 'home-pane', type: 'pane', kind: 'home' };
   const headerPlacement = { topLeft: false, topRight: false };
-  paneGroup.state.current.toolbarExpandedByPaneId[entityPane.id] = false;
   setupPane(entityPane);
   setupZenModePaneChrome({ active: () => app.preference.current.zenModeEnabled, focused: () => true });
 

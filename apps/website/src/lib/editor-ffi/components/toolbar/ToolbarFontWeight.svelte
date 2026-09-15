@@ -1,15 +1,19 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { SearchableDropdown } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { SvelteMap } from 'svelte/reactivity';
   import { FontSpecimen } from '$lib/components';
   import { weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { values } from '$lib/editor-ffi/values';
   import { activeFontsByWeight, fontWeightItemsForFonts, fontWeightValueLabel } from '$lib/font-weight';
+  import { toolbarRecent } from './toolbar-recent.svelte';
+  import ToolbarPanel from './ToolbarPanel.svelte';
+  import ToolbarPanelDropdown from './ToolbarPanelDropdown.svelte';
+  import type { ToolbarPanelItem } from './ToolbarPanel.svelte';
 
   type Font = { id?: string | null; weight: number; subfamilyDisplayName?: string | null; state: string };
-  type FontFamily = { familyName: string; fonts: readonly Font[] };
+  type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
 
   type Props = {
     fontFamilies?: readonly FontFamily[];
@@ -18,14 +22,9 @@
 
   let { fontFamilies = [], disabled = false }: Props = $props();
 
+  const app = getAppContext();
   const ctx = getEditorContext();
-
-  let dropdownOpened = $state(false);
-
-  $effect(() => {
-    if (!dropdownOpened) return;
-    return ctx.editor?.retainFocus();
-  });
+  const recent = toolbarRecent(app.userId);
 
   const currentWeight = $derived(
     ctx.editor?.modifierState?.font_weight?.type === 'uniform' ? ctx.editor.modifierState.font_weight.value.value : undefined,
@@ -35,13 +34,10 @@
     ctx.editor?.modifierState?.font_family?.type === 'uniform' ? ctx.editor.modifierState.font_family.value.value : undefined,
   );
 
-  const currentFontFamilyAndFonts = $derived.by(() => {
+  const currentFonts = $derived.by(() => {
     if (currentFontFamilyValue) {
       const family = fontFamilies.find((f) => f.familyName === currentFontFamilyValue);
-      if (family) {
-        const fonts = activeFontsByWeight(family.fonts);
-        return { family: family.familyName, fonts };
-      }
+      if (family) return activeFontsByWeight(family.fonts);
     }
 
     const fontsByWeight = new SvelteMap<number, Font>();
@@ -52,46 +48,46 @@
         }
       }
     }
-
-    return {
-      family: undefined as string | undefined,
-      fonts: [...fontsByWeight.values()].toSorted((a, b) => a.weight - b.weight),
-    };
+    return [...fontsByWeight.values()].toSorted((a, b) => a.weight - b.weight);
   });
 
-  const weightItems = $derived(fontWeightItemsForFonts(currentFontFamilyAndFonts.fonts, values.fontWeight));
-
-  const weightFontIdMap = $derived(
-    new Map(
-      currentFontFamilyAndFonts.fonts.filter((f): f is typeof f & { id: string } => 'id' in f && !!f.id).map((f) => [f.weight, f.id]),
-    ),
+  const items = $derived<ToolbarPanelItem[]>(
+    fontWeightItemsForFonts(currentFonts, values.fontWeight).map((item) => ({
+      id: String(item.value),
+      label: item.label,
+      keywords: [String(item.value)],
+      selected: item.value === currentWeight,
+    })),
   );
+
+  const apply = (id: string, close: () => void) => {
+    ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_weight', value: Number(id) } } });
+    recent.remember('fontWeight', id);
+    close();
+    ctx.editor?.focus();
+  };
 </script>
 
-<SearchableDropdown
-  style={css.raw({ width: '100px' })}
-  {disabled}
-  getLabel={(value) => fontWeightValueLabel(currentFontFamilyAndFonts.fonts, values.fontWeight, value)}
-  items={weightItems}
-  label="폰트 굵기"
-  onEscape={() => ctx.editor?.focus()}
-  onOpenChange={(opened) => (dropdownOpened = opened)}
-  onchange={(weight, options) => {
-    ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_weight', value: weight } } });
-    if (options?.shouldFocus) {
-      ctx.editor?.focus();
-    }
-  }}
-  placeholder="-"
-  value={currentWeight}
->
-  {#snippet renderItem(item)}
-    {@const font = currentFontFamilyAndFonts.fonts.find((candidate) => candidate.weight === item.value)}
-    <FontSpecimen
-      fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, item.value)}
-      fontId={weightFontIdMap.get(item.value)}
-      text={item.label}
-      weight={item.value}
-    />
+<ToolbarPanelDropdown style={css.raw({ maxWidth: '180px' })} chevron {disabled} label="폰트 굵기">
+  {#snippet anchor()}
+    <span class={css({ paddingLeft: '2px', fontSize: '13px', fontWeight: 'medium', whiteSpace: 'nowrap', truncate: true })}>
+      {currentWeight === undefined ? '-' : fontWeightValueLabel(currentFonts, values.fontWeight, currentWeight)}
+    </span>
   {/snippet}
-</SearchableDropdown>
+
+  {#snippet panel({ close })}
+    <ToolbarPanel {items} onselect={(id) => apply(id, close)} placeholder="폰트 굵기" recentIds={recent.ids('fontWeight')} rowHeight={32}>
+      {#snippet render(item)}
+        {@const font = currentFonts.find((candidate) => String(candidate.weight) === item.id)}
+        <span class={css({ minWidth: '0', overflow: 'hidden', whiteSpace: 'nowrap' })}>
+          <FontSpecimen
+            fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, Number(item.id))}
+            fontId={font?.id ?? undefined}
+            text={item.label}
+            weight={Number(item.id)}
+          />
+        </span>
+      {/snippet}
+    </ToolbarPanel>
+  {/snippet}
+</ToolbarPanelDropdown>

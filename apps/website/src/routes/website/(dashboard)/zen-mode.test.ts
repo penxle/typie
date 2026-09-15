@@ -34,7 +34,6 @@ const fixture = (initialPreference: AppPreference = preference()) => {
     focusedPaneId: 'first',
     panelExpandedByPaneId: { first: true },
     panelTabByPaneId: {},
-    toolbarExpandedByPaneId: {},
   };
   const restored: [string, Record<string, boolean>][] = [];
   const paneGroup = {
