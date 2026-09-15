@@ -231,6 +231,9 @@ private fun RelatedNotesSheetContent(
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
   val noteColorOptions = rememberNoteColorOptions()
+  val bottomInset = safeBottomInset + keyboardOcclusion
+  // Keep content drawing into the safe area while the keyboard is hidden.
+  val keyboardPadding = if (keyboardOcclusion > 0.dp) bottomInset else 0.dp
 
   LaunchedEffect(noteEditState, toast) {
     noteEditState.saveFailures.collect { toast.show(ToastType.Error, "노트를 저장하지 못했어요.") }
@@ -636,13 +639,13 @@ private fun RelatedNotesSheetContent(
             reorderEnabled = SubscriptionService.entitlement.grantsAccess(),
             contentEditable = SubscriptionService.entitlement.grantsAccess(),
             actions = listActions,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(bottom = keyboardPadding),
             contentPadding =
               PaddingValues(
                 start = 16.dp,
                 top = EditorSubPaneContentTopPadding,
                 end = 16.dp,
-                bottom = safeBottomInset + keyboardOcclusion + RelatedNotesListBottomContentPadding,
+                bottom = bottomInset - keyboardPadding + RelatedNotesListBottomContentPadding,
               ),
           )
         }
