@@ -2,6 +2,7 @@
 pub enum SelectionRectKind {
     Text,
     ParagraphBreak,
+    PageBreak,
     Atom,
     Block,
 }
@@ -10,7 +11,7 @@ pub type SelectionRect = PageRect<SelectionRectKind>;
 
 use editor_common::Rect;
 use editor_macros::ffi;
-use editor_model::DocView;
+use editor_model::{ChildView, DocView, NodeType};
 use editor_state::Affinity;
 use editor_state::{Position, ResolvedSelection, Selection};
 use serde::{Deserialize, Serialize};
@@ -66,13 +67,14 @@ impl SelectionRectSets {
         self.text_rects.push(rect);
     }
 
-    fn push_paragraph_break(
+    fn push_trailing_break(
         &mut self,
-        geometry: super::paragraph_break::ParagraphBreakGeometry,
+        occurrence: super::trailing_break::TrailingBreakOccurrence,
         paragraph_rects_start: usize,
         direct_touch_interaction: bool,
     ) {
-        let rect = paragraph_break_rect(&geometry);
+        let geometry = occurrence.geometry;
+        let rect = PageRect::with_meta(geometry.rect.page_idx, geometry.rect.rect, occurrence.kind);
         let extends_text = self.line_box_rects.len() > paragraph_rects_start
             && self.line_box_rects.last().is_some_and(|previous| {
                 previous.meta == SelectionRectKind::Text
@@ -240,16 +242,6 @@ fn hard_break_rect(geometry: super::hard_break::HardBreakGeometry) -> SelectionR
     PageRect::with_meta(rect.page_idx, rect.rect, SelectionRectKind::Text)
 }
 
-fn paragraph_break_rect(
-    geometry: &super::paragraph_break::ParagraphBreakGeometry,
-) -> SelectionRect {
-    PageRect::with_meta(
-        geometry.rect.page_idx,
-        geometry.rect.rect,
-        SelectionRectKind::ParagraphBreak,
-    )
-}
-
 pub(crate) fn block_selection_rects(
     layout_index: &LayoutIndex,
     ids: &[editor_crdt::Dot],
@@ -299,7 +291,7 @@ fn selection_endpoints_with_direct_touch(
     let to_position = selection.to().position();
     let direct_from = selection_endpoint_for_position(layout_index, &from_position);
     let direct_to = if direct_touch_interaction {
-        direct_touch_paragraph_break_endpoint(layout_index, selection.view(), &to_position)
+        direct_touch_trailing_break_endpoint(layout_index, selection.view(), &to_position)
             .or_else(|| selection_endpoint_for_position(layout_index, &to_position))
     } else {
         selection_endpoint_for_position(layout_index, &to_position)
@@ -322,18 +314,17 @@ fn selection_endpoints_with_direct_touch(
     })
 }
 
-fn direct_touch_paragraph_break_endpoint(
+fn direct_touch_trailing_break_endpoint(
     layout_index: &LayoutIndex,
     view: &DocView,
     position: &Position,
 ) -> Option<PageRect> {
-    let paragraph_break =
-        super::paragraph_break::paragraph_break_occurrence_ending_at(layout_index, view, position)?;
-    let rect = paragraph_break.geometry.rect;
+    let geometry = super::trailing_break::geometry_ending_at(layout_index, view, position)?;
+    let rect = geometry.rect;
     Some(PageRect::new(
         rect.page_idx,
         Rect::from_xywh(
-            paragraph_break.geometry.line_right.max(rect.rect.x),
+            geometry.line_right.max(rect.rect.x),
             rect.rect.y,
             0.0,
             rect.rect.height,
@@ -635,13 +626,17 @@ fn attached(layout_index: &LayoutIndex, entry: &LayoutEntry, pos: &Position) -> 
     }
 }
 
-fn strut_line_has_selectable_child_range(line: &LayoutLine) -> bool {
+fn strut_line_has_selectable_child_range(line: &LayoutLine, view: &DocView) -> bool {
     line.glyph_runs.is_empty()
         && line.tab_gaps.is_empty()
         && line
             .offset_range
             .as_ref()
-            .is_some_and(|range| range.start < range.end)
+            .is_some_and(|range| {
+                let first_child = view.node(line.node).and_then(|paragraph| paragraph.child_at(range.start));
+                range.start < range.end
+                    && !matches!(first_child, Some(ChildView::Leaf(leaf)) if leaf.node_type() == NodeType::PageBreak)
+            })
 }
 
 fn text_area_height(line: &LayoutLine) -> f32 {
@@ -733,7 +728,7 @@ fn visit_line(
 
     let width = if x_end > x_start {
         x_end - x_start
-    } else if strut_line_has_selectable_child_range(line) {
+    } else if strut_line_has_selectable_child_range(line, selection.view()) {
         placeholder_width
     } else {
         return;
@@ -880,16 +875,17 @@ fn visit_box(
         }
     }
 
-    if *phase == Phase::Inside
-        && let Some(paragraph_break) = super::paragraph_break::paragraph_break_occurrence_for_node(
+    // A page break can close the selection within its paragraph's final line.
+    if *phase != Phase::Before
+        && let Some(trailing_break) = super::trailing_break::trailing_break_occurrence_for_node(
             layout_index,
             selection.view(),
             bx.node,
         )
-        && selection.contains_range(paragraph_break.range)
+        && selection.contains_range(trailing_break.range)
     {
-        rects.push_paragraph_break(
-            paragraph_break.geometry,
+        rects.push_trailing_break(
+            trailing_break,
             line_box_rects_before,
             walk.direct_touch_interaction,
         );
@@ -969,6 +965,18 @@ mod tests {
     }
 
     fn build_index(doc: &DocLogs, width: f32) -> (ProjectedDoc, LayoutIndex) {
+        build_index_with_paginator(
+            doc,
+            width,
+            Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0)),
+        )
+    }
+
+    fn build_index_with_paginator(
+        doc: &DocLogs,
+        width: f32,
+        paginator: Paginator,
+    ) -> (ProjectedDoc, LayoutIndex) {
         let pd = project_document(doc).unwrap();
         let view = DocView::new(&pd);
         let root_node = view.root().unwrap();
@@ -980,8 +988,7 @@ mod tests {
             &MeasureContext::default(),
             &mut res,
         );
-        let layout = Paginator::continuous(width, 100_000.0, EdgeInsets::all(0.0))
-            .paginate(MeasuredTree { root: measured });
+        let layout = paginator.paginate(MeasuredTree { root: measured });
         let index = LayoutIndex::new(layout.tree, &layout.pages);
         (pd, index)
     }
@@ -1331,6 +1338,164 @@ mod tests {
     }
 
     #[test]
+    fn page_break_selection_has_visible_geometry_and_touch_endpoint() {
+        for paginated in [false, true] {
+            for text in ["", "wrapped text ".repeat(10).as_str()] {
+                let mut children: Vec<_> = text.chars().map(SeqItem::Char).collect();
+                children.push(SeqItem::Atom(AtomLeaf::PageBreak));
+                let (doc, _, para) = para_doc_items(children);
+                let paginator = if paginated {
+                    Paginator::paginated(100.0, 200.0, EdgeInsets::ZERO)
+                } else {
+                    Paginator::continuous(100.0, 100_000.0, EdgeInsets::ZERO)
+                };
+                let (pd, index) = build_index_with_paginator(&doc, 100.0, paginator);
+                let view = DocView::new(&pd);
+                let start = Position::new(para, text.chars().count());
+                let end = Position {
+                    offset: start.offset + 1,
+                    affinity: Affinity::Upstream,
+                    ..start
+                };
+                let entry = index.entry_for_position(&start).unwrap();
+                let page_idx = index.page_idx_for_y(entry.rect.y).unwrap();
+                let selection = Selection::new(start, end).resolve(&view).unwrap();
+
+                let compact = selection_rects(&index, &selection);
+                assert_eq!(
+                    compact.len(),
+                    1,
+                    "the page break must have its own visible rect"
+                );
+                assert!(compact[0].rect.width > 0.0 && compact[0].rect.height > 0.0);
+                assert_eq!(compact[0].page_idx, page_idx);
+                let touch = selection_mark_rects_for_direct_touch(&index, &selection);
+                let endpoints = selection_endpoints_for_direct_touch(&index, &selection).unwrap();
+                assert_close(
+                    touch[0].rect.right(),
+                    entry.rect.right(),
+                    "touch mark reaches line end",
+                );
+                assert_close(
+                    endpoints.to.rect.x,
+                    touch[0].rect.right(),
+                    "handle follows the mark",
+                );
+                assert_eq!(endpoints.to.page_idx, page_idx);
+            }
+        }
+    }
+
+    #[test]
+    fn selecting_through_page_break_keeps_wrapped_final_line_text() {
+        let text = "wrapped text ".repeat(10).trim_end().to_string();
+        let mut children: Vec<_> = text.chars().map(SeqItem::Char).collect();
+        children.push(SeqItem::Atom(AtomLeaf::PageBreak));
+        let (doc, _, para) = para_doc_items(children);
+        let (pd, index) = build_index(&doc, 100.0);
+        let view = DocView::new(&pd);
+        let text_end = Position {
+            node: para,
+            offset: text.chars().count(),
+            affinity: Affinity::Upstream,
+        };
+        let text_selection = Selection::new(Position::new(para, 0), text_end)
+            .resolve(&view)
+            .unwrap();
+        let expected = selection_rects(&index, &text_selection)
+            .last()
+            .unwrap()
+            .clone();
+        let through_break = Selection::new(
+            Position::new(para, 0),
+            Position {
+                offset: text_end.offset + 1,
+                ..text_end
+            },
+        )
+        .resolve(&view)
+        .unwrap();
+        for direct_touch in [false, true] {
+            let rects = selection_rect_sets(&index, &through_break, direct_touch);
+            assert!(
+                rects
+                    .mark_rects
+                    .iter()
+                    .any(|rect| rect.page_idx == expected.page_idx
+                        && rect.rect.y == expected.rect.y
+                        && rect.rect.x <= expected.rect.x
+                        && rect.rect.right() >= expected.rect.right()),
+                "the final line's selected text must stay painted: {rects:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn page_break_drag_selection_uses_the_trailing_affordance() {
+        use super::super::hit_test::hit_test_extending;
+
+        let (doc, _, para) =
+            para_doc_items(vec![SeqItem::Char('a'), SeqItem::Atom(AtomLeaf::PageBreak)]);
+        let (pd, index) = build_index_with_paginator(
+            &doc,
+            400.0,
+            Paginator::paginated(400.0, 200.0, EdgeInsets::ZERO),
+        );
+        let view = DocView::new(&pd);
+        let start = Position::new(para, 1);
+        let end = Position {
+            offset: 2,
+            affinity: Affinity::Upstream,
+            ..start
+        };
+        let expected = Selection::new(start, end);
+        let entry = index.entry_for_position(&start).unwrap();
+        let x = entry.rect.right() - 1.0;
+        let y = entry.rect.y + entry.rect.height / 2.0;
+
+        for anchor in [start, end] {
+            let hit = hit_test_extending(&index, &view, &anchor, 0, x, y, false).unwrap();
+            assert_eq!(
+                hit.selection, expected,
+                "mouse drag includes the page break"
+            );
+        }
+        let touch_on_line = hit_test_extending(&index, &view, &start, 0, x, y, true).unwrap();
+        assert!(touch_on_line.selection.is_collapsed());
+        for direct_touch in [false, true] {
+            let below = hit_test_extending(
+                &index,
+                &view,
+                &start,
+                0,
+                x,
+                entry.rect.bottom() + 1.0,
+                direct_touch,
+            )
+            .unwrap();
+            assert_eq!(
+                below.selection, expected,
+                "drag keeps the break below the line"
+            );
+            let reverse = hit_test_extending(
+                &index,
+                &view,
+                &end,
+                0,
+                x,
+                entry.rect.bottom() + 1.0,
+                direct_touch,
+            )
+            .unwrap();
+            assert_eq!(
+                reverse.selection,
+                Selection::collapsed(end),
+                "reverse drag stays after the break below the line"
+            );
+        }
+    }
+
+    #[test]
     fn paragraph_break_attached_to_selected_text_is_one_rect() {
         let (doc, _root, first_para, second_para) = two_para_doc("abc", "def");
         let (pd, index) = build_index(&doc, 400.0);
@@ -1367,7 +1532,7 @@ mod tests {
         let (mut doc, _root, first_para, second_para) = two_para_doc("abc", "def");
         let (plain_pd, plain_index) = build_index(&doc, 400.0);
         let plain_view = DocView::new(&plain_pd);
-        let plain_break = super::super::paragraph_break::paragraph_break_occurrence_for_node(
+        let plain_break = super::super::trailing_break::trailing_break_occurrence_for_node(
             &plain_index,
             &plain_view,
             first_para,
@@ -1408,7 +1573,7 @@ mod tests {
 
         let text = Selection::new(Position::new(first_para, 0), Position::new(first_para, 3));
         let text_rect = selection_rects(&index, &text.resolve(&view).unwrap())[0].rect;
-        let paragraph_break = super::super::paragraph_break::paragraph_break_occurrence_for_node(
+        let paragraph_break = super::super::trailing_break::trailing_break_occurrence_for_node(
             &index, &view, first_para,
         )
         .unwrap();

@@ -1,15 +1,15 @@
-pub(crate) struct ParagraphBreakGeometry {
+pub(crate) struct TrailingBreakGeometry {
     pub(crate) rect: PageRect,
     pub(crate) line_right: f32,
 }
 
 use editor_common::Rect;
 use editor_crdt::Dot;
-use editor_model::{ChildView, DocView, NodeType};
+use editor_model::{AtomLeaf, ChildView, DocView, NodeType, NodeView};
 use editor_state::Affinity;
 use editor_state::{
-    Position, ResolvedPosition, Selection, before_or_same, last_cursor_position,
-    paragraph_break_at_end, paragraph_break_ending_at,
+    Position, ResolvedPosition, Selection, last_cursor_position, paragraph_break_at_end,
+    paragraph_break_ending_at,
 };
 
 use crate::page::{LayoutPage, PageRect};
@@ -17,47 +17,52 @@ use crate::paginate::types::{LayoutContent, LayoutLine, SpacingKind};
 
 use super::common::page_for_y;
 use super::layout_index::{LayoutEntry, LayoutIndex, LayoutPoint};
+use super::selection::SelectionRectKind;
 
-pub(crate) struct ParagraphBreakOccurrence {
+pub(crate) struct TrailingBreakOccurrence {
     pub(crate) range: Selection,
-    pub(crate) geometry: ParagraphBreakGeometry,
+    pub(crate) geometry: TrailingBreakGeometry,
+    pub(crate) kind: SelectionRectKind,
 }
 
-pub(crate) fn paragraph_break_occurrence_for_node(
+pub(crate) fn trailing_break_occurrence_for_node(
     layout_index: &LayoutIndex,
     view: &DocView,
     node: Dot,
-) -> Option<ParagraphBreakOccurrence> {
+) -> Option<TrailingBreakOccurrence> {
     let paragraph = view.node(node)?;
     if paragraph.node_type() != NodeType::Paragraph {
         return None;
     }
-    let range = paragraph_break_at_end(&last_cursor_position(&paragraph)?, view)?;
-    let geometry = geometry(layout_index, range, layout_index.pages())?;
-    Some(ParagraphBreakOccurrence { range, geometry })
+    let (range, kind) = range_for_paragraph(&paragraph, view)?;
+    let geometry = geometry(layout_index, range)?;
+    Some(TrailingBreakOccurrence {
+        range,
+        geometry,
+        kind,
+    })
 }
 
-pub(crate) fn paragraph_break_occurrence_ending_at(
+pub(crate) fn geometry_ending_at(
     layout_index: &LayoutIndex,
     view: &DocView,
     position: &Position,
-) -> Option<ParagraphBreakOccurrence> {
-    let range = paragraph_break_ending_at(position, view)?;
-    let geometry = geometry(layout_index, range, layout_index.pages())?;
-    Some(ParagraphBreakOccurrence { range, geometry })
+) -> Option<TrailingBreakGeometry> {
+    let range = view
+        .node(position.node)
+        .and_then(|paragraph| page_break_range(&paragraph))
+        .filter(|range| range.head.offset == position.offset)
+        .or_else(|| paragraph_break_ending_at(position, view))?;
+    geometry(layout_index, range)
 }
 
-fn geometry(
-    layout_index: &LayoutIndex,
-    paragraph_break_range: Selection,
-    pages: &[LayoutPage],
-) -> Option<ParagraphBreakGeometry> {
-    let pos = paragraph_break_range.anchor;
+fn geometry(layout_index: &LayoutIndex, range: Selection) -> Option<TrailingBreakGeometry> {
+    let pos = range.anchor;
     let entry = layout_index.entry_for_position(&pos)?;
     let LayoutContent::Line(line) = entry.content(layout_index)? else {
         return None;
     };
-    geometry_for_line_entry(entry, line, paragraph_break_range, pages)
+    geometry_for_line_entry(entry, line, range, layout_index.pages())
 }
 
 pub(crate) fn drag_selection_for_entry(
@@ -68,73 +73,94 @@ pub(crate) fn drag_selection_for_entry(
     point: LayoutPoint,
     direct_touch_interaction: bool,
 ) -> Option<Selection> {
-    let paragraph_break = paragraph_break_occurrence_for_entry(layout_index, view, entry)?;
     match entry.content(layout_index)? {
-        LayoutContent::Line(_) => {
-            let rect = paragraph_break.geometry.rect.rect;
+        LayoutContent::Line(line) => {
+            let range = trailing_break_range_for_line(view, line)?;
+            let geometry = geometry_for_line_entry(entry, line, range, layout_index.pages())?;
+            let rect = geometry.rect.rect;
             let page_y = point.y - point.page_y_start;
+            let resolved = range.resolve(view)?;
+            let dragging_forward = anchor.path() <= resolved.from().path();
+            if page_y >= rect.bottom() {
+                return Some(if dragging_forward {
+                    range
+                } else {
+                    Selection::collapsed(range.head)
+                });
+            }
             if direct_touch_interaction {
-                let resolved = paragraph_break.range.resolve(view)?;
-                let dragging_forward =
-                    before_or_same(&anchor.position(), &resolved.from().position(), view);
-                if dragging_forward {
-                    return (page_y >= rect.bottom()).then_some(paragraph_break.range);
-                }
-                if point.x < rect.x || page_y < rect.y {
+                if dragging_forward || point.x < rect.x || page_y < rect.y {
                     return None;
                 }
-                return Some(Selection::collapsed(paragraph_break.range.head));
+                return Some(Selection::collapsed(range.head));
             }
             let x_mid = rect.x + rect.width / 2.0;
-            if paragraph_break.geometry.rect.page_idx == point.page_idx
+            if geometry.rect.page_idx == point.page_idx
                 && page_y >= rect.y
                 && page_y <= rect.bottom()
                 && point.x >= x_mid
-                && point.x <= paragraph_break.geometry.line_right
+                && point.x <= geometry.line_right
             {
-                Some(paragraph_break.range)
+                Some(range)
             } else {
                 None
             }
         }
-        LayoutContent::Spacing(SpacingKind::Gap { .. }) => {
-            let resolved = paragraph_break.range.resolve(view)?;
-            if before_or_same(&anchor.position(), &resolved.from().position(), view) {
-                Some(paragraph_break.range)
+        LayoutContent::Spacing(SpacingKind::Gap { position }) => {
+            let range = trailing_break_range_before_gap_boundary(view, *position)?;
+            let resolved = range.resolve(view)?;
+            if anchor.path() <= resolved.from().path() {
+                Some(range)
             } else {
-                Some(Selection::collapsed(paragraph_break.range.head))
+                Some(Selection::collapsed(range.head))
             }
         }
         LayoutContent::Box(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
     }
 }
 
-fn paragraph_break_occurrence_for_entry(
-    layout_index: &LayoutIndex,
-    view: &DocView,
-    entry: &LayoutEntry,
-) -> Option<ParagraphBreakOccurrence> {
-    match entry.content(layout_index)? {
-        LayoutContent::Line(line) => {
-            let range = paragraph_break_range_for_line(view, line)?;
-            let geometry = geometry_for_line_entry(entry, line, range, layout_index.pages())?;
-            Some(ParagraphBreakOccurrence { range, geometry })
-        }
-        LayoutContent::Spacing(SpacingKind::Gap { position }) => {
-            let range = paragraph_break_range_before_gap_boundary(view, *position)?;
-            let geometry = geometry(layout_index, range, layout_index.pages())?;
-            Some(ParagraphBreakOccurrence { range, geometry })
-        }
-        LayoutContent::Box(_) | LayoutContent::Atom(_) | LayoutContent::Spacing(_) => None,
+fn trailing_break_range_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
+    let paragraph = view.node(line.node)?;
+    if let Some(range) = page_break_range(&paragraph) {
+        return line.contains_position(&range.head).then_some(range);
     }
-}
-
-fn paragraph_break_range_for_line(view: &DocView, line: &LayoutLine) -> Option<Selection> {
     if !line_can_host_visual_paragraph_break(line) {
         return None;
     }
     let line_end = super::grapheme::last_position_in_line(line);
     paragraph_break_at_end(&line_end, view)
+}
+
+fn page_break_range(paragraph: &NodeView) -> Option<Selection> {
+    if paragraph.node_type() != NodeType::Paragraph {
+        return None;
+    }
+    let offset = paragraph.child_count().checked_sub(1)?;
+    if !matches!(paragraph.child_at(offset), Some(ChildView::Leaf(leaf)) if matches!(leaf.as_atom(), Some(AtomLeaf::PageBreak)))
+    {
+        return None;
+    }
+    let start = Position::new(paragraph.id(), offset);
+    Some(Selection::new(
+        start,
+        Position {
+            offset: offset + 1,
+            affinity: Affinity::Upstream,
+            ..start
+        },
+    ))
+}
+
+fn range_for_paragraph(
+    paragraph: &NodeView,
+    view: &DocView,
+) -> Option<(Selection, SelectionRectKind)> {
+    page_break_range(paragraph)
+        .map(|range| (range, SelectionRectKind::PageBreak))
+        .or_else(|| {
+            paragraph_break_at_end(&last_cursor_position(paragraph)?, view)
+                .map(|range| (range, SelectionRectKind::ParagraphBreak))
+        })
 }
 
 fn line_can_host_visual_paragraph_break(line: &LayoutLine) -> bool {
@@ -147,7 +173,7 @@ fn line_can_host_visual_paragraph_break(line: &LayoutLine) -> bool {
     !strut_line_represents_inline_child
 }
 
-fn paragraph_break_range_before_gap_boundary(
+fn trailing_break_range_before_gap_boundary(
     view: &DocView,
     position: Position,
 ) -> Option<Selection> {
@@ -162,27 +188,21 @@ fn paragraph_break_range_before_gap_boundary(
     if prev.node_type() != NodeType::Paragraph {
         return None;
     }
-    paragraph_break_at_end(
-        &Position {
-            affinity: Affinity::Downstream,
-            ..last_cursor_position(&prev)?
-        },
-        view,
-    )
+    range_for_paragraph(&prev, view).map(|(range, _)| range)
 }
 
 fn geometry_for_line_entry(
     entry: &LayoutEntry,
     line: &LayoutLine,
-    paragraph_break_range: Selection,
+    range: Selection,
     pages: &[LayoutPage],
-) -> Option<ParagraphBreakGeometry> {
-    let pos = paragraph_break_range.anchor;
+) -> Option<TrailingBreakGeometry> {
+    let pos = range.anchor;
     let page_idx = page_for_y(pages, entry.rect.y)?;
     let x = entry.rect.x + super::grapheme::x_at_offset(line, &pos);
     let height = entry.rect.height;
     let width = height * 0.15;
-    Some(ParagraphBreakGeometry {
+    Some(TrailingBreakGeometry {
         rect: PageRect::new(
             page_idx,
             Rect::from_xywh(x, entry.rect.y - pages[page_idx].y_start, width, height),
@@ -361,7 +381,7 @@ mod tests {
 
         let (_, line) = first_line_for_para(&index, &para_a_id).expect("must find line for para A");
 
-        let sel = paragraph_break_range_for_line(&view, line)
+        let sel = trailing_break_range_for_line(&view, line)
             .expect("must detect paragraph break at end of para A");
         assert_eq!(sel.anchor.node, para_a_id);
 
@@ -379,7 +399,7 @@ mod tests {
         let (_, line2) =
             first_line_for_para(&index2, &para_id2).expect("must find line for single para");
 
-        assert!(paragraph_break_range_for_line(&view2, line2).is_none());
+        assert!(trailing_break_range_for_line(&view2, line2).is_none());
     }
 
     #[test]
@@ -403,12 +423,12 @@ mod tests {
             };
             let gap_pos = *position;
 
-            let result = paragraph_break_range_before_gap_boundary(&view, gap_pos);
+            let result = trailing_break_range_before_gap_boundary(&view, gap_pos);
             assert!(result.is_some(), "gap after paragraph must produce a break");
 
             let root = view.root().unwrap();
             let root_id = root.id();
-            let none_result = paragraph_break_range_before_gap_boundary(
+            let none_result = trailing_break_range_before_gap_boundary(
                 &view,
                 Position {
                     node: root_id,
@@ -436,7 +456,7 @@ mod tests {
         let (entry, line) =
             first_line_for_para(&index, &para_a_id).expect("must find line for para A");
 
-        let sel = paragraph_break_range_for_line(&view, line).expect("must detect paragraph break");
+        let sel = trailing_break_range_for_line(&view, line).expect("must detect paragraph break");
 
         let geom = geometry_for_line_entry(entry, line, sel, index.pages())
             .expect("must produce geometry");
@@ -472,7 +492,7 @@ mod tests {
             };
             let gap_pos = *position;
 
-            let pb = paragraph_break_range_before_gap_boundary(&view, gap_pos);
+            let pb = trailing_break_range_before_gap_boundary(&view, gap_pos);
             if pb.is_none() {
                 return;
             }

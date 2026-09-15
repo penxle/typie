@@ -116,11 +116,13 @@ fn x_at_offset_raw(line: &LayoutLine, pos: &Position) -> f32 {
     if pos.node == line.node
         && let Some(range) = &line.offset_range
     {
-        if pos.offset == range.start {
-            return line_content_start_x(line);
-        }
+        // The last wrapped line may only record the segment's end boundary.
+        // A trailing page break has no glyph run to resolve that boundary above.
         if pos.offset == range.end {
             return line_content_end_x(line);
+        }
+        if pos.offset == range.start {
+            return line_content_start_x(line);
         }
     }
 

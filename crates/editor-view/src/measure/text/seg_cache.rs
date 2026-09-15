@@ -114,7 +114,7 @@ fn hash_style<H: Hasher>(s: &ResolvedTextStyle, h: &mut H) {
 }
 
 /// Content hash capturing everything a segment's measured output depends on: its
-/// text, width/alignment/indent, paragraph base style, inline text runs, and tab
+/// text, offset span, width/alignment/indent, paragraph base style, inline text runs, and tab
 /// marks. Text runs hash relative byte/offset ranges and style/modifier state;
 /// tabs hash relative offset and style/modifier state because their measured gap
 /// and link rectangles are part of the cached `MeasuredLine`.
@@ -135,6 +135,8 @@ pub(crate) fn segment_hash(
 ) -> u64 {
     let mut h = DefaultHasher::new();
     seg_text.hash(&mut h);
+    // Non-rendered inline atoms still change the line's selectable end position.
+    seg_off.len().hash(&mut h);
     width.to_bits().hash(&mut h);
     (align as u8).hash(&mut h);
     indent.to_bits().hash(&mut h);
