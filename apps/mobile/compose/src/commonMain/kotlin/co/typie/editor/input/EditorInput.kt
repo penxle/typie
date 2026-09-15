@@ -204,6 +204,18 @@ internal class EditorInputNode(
     return bundle.snapshot.cursor?.takeIf { bundle.frames.containsKey(it.pageIdx) }
   }
 
+  private fun beginFloatingCursor(): EditorFloatingCursorSession? {
+    val bundle = editor.publishedBundle ?: return null
+    val revision = bundle.snapshot.version
+    // All caret queries belong to the frame used to begin this gesture. If layout
+    // advances before the first move, the core rejects them and preserves the range.
+    return EditorFloatingCursorSession.begin(
+      cursor = bundle.snapshot.cursor?.takeIf { bundle.frames.containsKey(it.pageIdx) },
+      selectionEndpoints = bundle.snapshot.selectionEndpoints,
+      cursorAt = { point -> editor.cursorAt(revision, point) },
+    )
+  }
+
   private fun firstRectForRangeInRoot(range: TextRange): Rect? {
     val rect = editor.firstRectForRange(range) ?: return null
     return uiState.pageRectInRoot(rect.pageIdx, rect.rect)
@@ -710,7 +722,7 @@ internal class EditorInputNode(
                 platformInputBridge.bindInputSession(
                   session = this,
                   request = request,
-                  cursor = ::presentedCursor,
+                  beginFloatingCursor = ::beginFloatingCursor,
                   viewportTransform = {
                     uiState.resolveViewportTransform(editor.publishedState.pageSizes)
                   },
