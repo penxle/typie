@@ -40,7 +40,7 @@ const indexSettings = {
 };
 
 const skipExisting = process.argv.includes('--skip-existing');
-const targets = [esIndex.documents, esIndex.folders, esIndex.publications, esIndex.spaces, esIndex.tags];
+const targets = [esIndex.documents, esIndex.folders, esIndex.publications, esIndex.sites, esIndex.tags];
 const existing = new Set<string>();
 
 for (const index of targets) {
@@ -87,7 +87,7 @@ await createIndex(esIndex.folders, {
 
 await createIndex(esIndex.publications, {
   properties: {
-    space_id: { type: 'keyword' },
+    site_id: { type: 'keyword' },
     discoverable: { type: 'boolean' },
     title: { type: 'text', analyzer: 'korean' },
     title_decomposed: { type: 'text', analyzer: 'decomposed', search_analyzer: 'decomposed_search' },
@@ -100,7 +100,7 @@ await createIndex(esIndex.publications, {
   },
 });
 
-await createIndex(esIndex.spaces, {
+await createIndex(esIndex.sites, {
   properties: {
     name: { type: 'text', analyzer: 'korean' },
     name_decomposed: { type: 'text', analyzer: 'decomposed', search_analyzer: 'decomposed_search' },

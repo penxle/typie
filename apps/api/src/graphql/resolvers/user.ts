@@ -66,16 +66,16 @@ import { env, stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import * as portone from '#/external/portone.ts';
 import { evaluateCouponCondition } from '#/utils/coupon.ts';
-import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
+import { enqueueDiscoveryPublicationSync, enqueueDiscoverySiteSync } from '#/utils/discovery-index.ts';
 import { getDocumentFontFamilies } from '#/utils/document.ts';
 import { resolveUserEntitlement, selectRepresentativeSubscription } from '#/utils/entitlement.ts';
 import { precheckIapEnroll } from '#/utils/iap-normalize.ts';
 import { opsAlertOnce } from '#/utils/ops-alert.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
 import { delay } from '#/utils/promise.ts';
+import { unpublishBySiteIdsCore } from '#/utils/publication-unpublish.ts';
 import { notDismissedFromRecent } from '#/utils/recent-documents.ts';
 import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
-import { deleteSpacesBySiteIdsCore } from '#/utils/space.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage } from '#/utils/user.ts';
@@ -767,7 +767,7 @@ builder.mutationFields((t) => ({
   deleteUser: t.withAuth({ session: true }).field({
     type: 'Boolean',
     resolve: async (_, __, ctx) => {
-      const { billingKey, purgedEntityIds, deletedSpaceIds } = await db.transaction(async (tx) => {
+      const { billingKey, purgedEntityIds, siteIds, unpublishedPublicationIds } = await db.transaction(async (tx) => {
         await lockUserSubscriptionState(tx, ctx.session.userId);
 
         // 가드가 락 밖이면 조회 직후 갱신 잡이 청구를 커밋해 탈퇴 시점 과금이 남는다.
@@ -786,7 +786,7 @@ builder.mutationFields((t) => ({
           .where(eq(Sites.userId, ctx.session.userId))
           .then((sites) => sites.map((site) => site.id));
 
-        const deletedSpaceIds = await deleteSpacesBySiteIdsCore(tx, { siteIds, now: dayjs() });
+        const unpublishedPublicationIds = await unpublishBySiteIdsCore(tx, { siteIds, now: dayjs() });
 
         const purgedEntities = await tx
           .update(Entities)
@@ -822,11 +822,12 @@ builder.mutationFields((t) => ({
 
         await tx.update(Users).set({ state: UserState.DEACTIVATED }).where(eq(Users.id, ctx.session.userId));
 
-        return { billingKey, purgedEntityIds: purgedEntities.map((entity) => entity.id), deletedSpaceIds };
+        return { billingKey, purgedEntityIds: purgedEntities.map((entity) => entity.id), siteIds, unpublishedPublicationIds };
       });
 
       await enqueueSearchSyncForEntityIds(purgedEntityIds);
-      await enqueueDiscoverySpaceSync(deletedSpaceIds);
+      await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
+      await enqueueDiscoverySiteSync(siteIds);
 
       if (billingKey) {
         try {

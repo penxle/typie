@@ -3,7 +3,7 @@ import { inArray } from 'drizzle-orm';
 type DiscoveryIndexSyncDeps = {
   findPublicationIdsByDocumentIds: (documentIds: string[]) => Promise<string[]>;
   enqueuePublicationIndexJob: (publicationId: string) => Promise<void>;
-  enqueueSpaceIndexJob: (spaceId: string) => Promise<void>;
+  enqueueSiteIndexJob: (siteId: string) => Promise<void>;
 };
 
 const unique = (ids: string[]) => [...new Set(ids)];
@@ -26,9 +26,9 @@ const defaultDeps: DiscoveryIndexSyncDeps = {
     const { enqueueJob } = await import('#/mq/index.ts');
     await enqueueJob('search:index:publication', publicationId);
   },
-  enqueueSpaceIndexJob: async (spaceId) => {
+  enqueueSiteIndexJob: async (siteId) => {
     const { enqueueJob } = await import('#/mq/index.ts');
-    await enqueueJob('search:index:space', spaceId);
+    await enqueueJob('search:index:site', siteId);
   },
 };
 
@@ -41,9 +41,9 @@ export const enqueueDiscoveryPublicationSync = async (
   }
 };
 
-export const enqueueDiscoverySpaceSync = async (spaceIds: string[], deps: DiscoveryIndexSyncDeps = defaultDeps): Promise<void> => {
-  for (const id of unique(spaceIds)) {
-    await deps.enqueueSpaceIndexJob(id);
+export const enqueueDiscoverySiteSync = async (siteIds: string[], deps: DiscoveryIndexSyncDeps = defaultDeps): Promise<void> => {
+  for (const id of unique(siteIds)) {
+    await deps.enqueueSiteIndexJob(id);
   }
 };
 

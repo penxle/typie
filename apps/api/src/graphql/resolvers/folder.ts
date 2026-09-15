@@ -9,7 +9,7 @@ import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
 import { createFolderCore, renameFolderCore, updateFolderOptionCore } from '#/utils/entity-actions.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
-import { assertNoPublishedPublication, assertVisibilityRequestable } from '#/utils/publication.ts';
+import { assertVisibilityRequestable, findPublishedDocumentIds } from '#/utils/publication.ts';
 import { unpublishByEntityIdsCore } from '#/utils/publication-unpublish.ts';
 import { builder } from '../builder.ts';
 import { Entity, EntityView, Folder, FolderView, IFolder, Image, isTypeOf } from '../objects.ts';
@@ -449,22 +449,26 @@ builder.mutationFields((t) => ({
 
           if (descendantEntityIds.length > 0) {
             const descendantDocuments = await tx
-              .select({ id: Documents.id })
+              .select({ id: Documents.id, entityId: Documents.entityId })
               .from(Documents)
               .where(inArray(Documents.entityId, descendantEntityIds));
 
-            await assertNoPublishedPublication(tx, {
+            const published = await findPublishedDocumentIds(tx, {
               documentIds: descendantDocuments.map(({ id }) => id),
               visibility: input.visibility,
             });
+            const skippedEntityIds = new Set(descendantDocuments.filter(({ id }) => published.has(id)).map(({ entityId }) => entityId));
+            const targetEntityIds = descendantEntityIds.filter((id) => !skippedEntityIds.has(id));
 
-            const updatedDescendantEntities = await tx
-              .update(Entities)
-              .set({ visibility: input.visibility ?? undefined })
-              .where(inArray(Entities.id, descendantEntityIds))
-              .returning({ id: Entities.id });
+            if (targetEntityIds.length > 0) {
+              const updatedDescendantEntities = await tx
+                .update(Entities)
+                .set({ visibility: input.visibility ?? undefined })
+                .where(inArray(Entities.id, targetEntityIds))
+                .returning({ id: Entities.id });
 
-            updatedEntities.push(...updatedDescendantEntities);
+              updatedEntities.push(...updatedDescendantEntities);
+            }
           }
         }
 

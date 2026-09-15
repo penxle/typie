@@ -50,7 +50,7 @@
       {#snippet value()}
         <Select
           items={[
-            { label: '최초 생성 시각', value: SiteDateDisplay.CREATED_AT },
+            { label: '발행 시각', value: SiteDateDisplay.PUBLISHED_AT },
             { label: '마지막 수정 시각', value: SiteDateDisplay.UPDATED_AT },
             { label: '미표시', value: SiteDateDisplay.NONE },
           ]}

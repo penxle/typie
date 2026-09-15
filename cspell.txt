@@ -185,6 +185,7 @@ onaddentity
 onapply
 onchevronhover
 oncollapse
+oncollectionselect
 oncreated
 ondelete
 ondirty
@@ -192,9 +193,12 @@ onexpand
 oniconhover
 onissueclick
 onmove
+onremovepartial
+onremovepartialtag
 onrowhover
 onsave
 onsaved
+onspaceselect
 onstatuschange
 onsubscribe
 oplog

@@ -1,7 +1,7 @@
 import { EntityState, EntityType } from '@typie/lib/enums';
 import { and, eq } from 'drizzle-orm';
 import { Documents, Entities, first, firstOrThrow, Folders, Sites } from '#/db/index.ts';
-import { buildFreshV2Content, generatePermalink, generateSlug, insertFreshV2Content } from './entity.ts';
+import { buildFreshV2Content, generateEntityNumber, generatePermalink, generateSlug, insertFreshV2Content } from './entity.ts';
 import type { Transaction } from '#/db/index.ts';
 
 type CreateSiteParams = {
@@ -63,6 +63,7 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           siteId: site.id,
           slug: generateSlug(),
           permalink: generatePermalink(),
+          number: generateEntityNumber(),
           type: EntityType.FOLDER,
           depth: folder.entity.depth,
           parentId: folder.entity.parentId ? folderEntityIdMap.get(folder.entity.parentId) : null,
@@ -109,6 +110,7 @@ export const createSite = async ({ userId, name, slug, logoId, tx }: CreateSiteP
           parentId: doc.entity.parentId ? folderEntityIdMap.get(doc.entity.parentId) : null,
           slug: generateSlug(),
           permalink: generatePermalink(),
+          number: generateEntityNumber(),
           type: EntityType.DOCUMENT,
           order: doc.entity.order,
           depth: doc.entity.depth,

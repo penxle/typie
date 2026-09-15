@@ -13,8 +13,8 @@ export const load = async (event) => {
               count
             }
 
-            recentSpaces {
-              space {
+            recentSites {
+              site {
                 id
                 name
                 url
@@ -29,26 +29,6 @@ export const load = async (event) => {
                 id
                 title
                 publishedAt
-              }
-            }
-
-            recentCollections {
-              collection {
-                id
-                permalink
-                name
-                publicationCount
-
-                cover {
-                  id
-                  ...Img_image
-                }
-              }
-
-              space {
-                id
-                name
-                url
               }
             }
           }

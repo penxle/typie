@@ -499,7 +499,7 @@
     mixpanel.track('open_folder_share_modal', { via });
   }}
 >
-  공유 및 발행
+  공유
 </MenuItem>
 
 <MenuItem

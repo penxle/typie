@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import * as tables from '#/db/schemas/tables.ts';
 import {
   buildDiscoverablePublicationsByIdsQuery,
-  buildDiscoverableSpacesByIdsQuery,
+  buildDiscoverableSitesByIdsQuery,
   buildDiscoveryFeedQuery,
   buildDiscoveryPublicationsQuery,
   buildDiscoveryRecentPublicationsQuery,
@@ -21,14 +21,13 @@ const database = drizzle.mock({ schema: tables }) as unknown as Database;
 const assertDiscoverablePredicate = (sql: string) => {
   assert.match(sql, /inner join "documents"/);
   assert.match(sql, /inner join "entities"/);
-  assert.match(sql, /inner join "spaces"/);
   assert.match(sql, /inner join "sites"/);
+  assert.doesNotMatch(sql, /"spaces"/);
   assert.match(sql, /"publications"\."state" = /);
   assert.match(sql, /"entities"\."state" = /);
-  assert.match(sql, /"spaces"\."state" = /);
   assert.match(sql, /"sites"\."state" = /);
-  assert.match(sql, /"spaces"\."allow_indexing" = /);
-  assert.match(sql, /"spaces"\."allow_discovery" = /);
+  assert.match(sql, /"sites"\."allow_indexing" = /);
+  assert.match(sql, /"sites"\."allow_discovery" = /);
   assert.match(sql, /"documents"\."password" is null/);
   assert.match(sql, /where .*"publications"\."state" = \$\d+ and .*"documents"\."password" is null/s);
 };
@@ -36,40 +35,40 @@ const assertDiscoverablePredicate = (sql: string) => {
 test('discovery publications apply the platform predicate, order newest first, and cut by keyset cursor', () => {
   const query = buildDiscoveryPublicationsQuery(database, { after: 'PUB0Z', limit: 21 }).toSQL();
   assertDiscoverablePredicate(query.sql);
-  assert.doesNotMatch(query.sql, /"publications"\."space_id" = \$/);
+  assert.doesNotMatch(query.sql, /"publications"\."site_id" = \$/);
   assert.match(query.sql, /\("publications"\."published_at", "publications"\."id"\) < \(select/);
   assert.match(query.sql, /order by "publications"\."published_at" desc, "publications"\."id" desc/);
   assert.match(query.sql, /limit /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 21]);
 });
 
 test('discovery publications without a cursor omit the keyset clause', () => {
   const query = buildDiscoveryPublicationsQuery(database, { after: null, limit: 21 }).toSQL();
   assert.doesNotMatch(query.sql, /< \(select/);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 21]);
 });
 
-test('discovery publications can be narrowed to one tag across every space', () => {
+test('discovery publications can be narrowed to one tag across every site', () => {
   const query = buildDiscoveryPublicationsQuery(database, { tagName: '에세이', after: null, limit: 21 }).toSQL();
   assertDiscoverablePredicate(query.sql);
   assert.match(query.sql, /inner join "publication_tags"/);
   assert.match(query.sql, /"publication_tags"\."name" = /);
-  assert.doesNotMatch(query.sql, /"publications"\."space_id" = \$/);
+  assert.doesNotMatch(query.sql, /"publications"\."site_id" = \$/);
   assert.ok(query.params.includes('에세이'));
 });
 
-test('discovery feed keeps only the newest post of each consecutive same-space run, ordered newest first', () => {
+test('discovery feed keeps only the newest post of each consecutive same-site run, ordered newest first', () => {
   const query = buildDiscoveryFeedQuery(database, { after: null, limit: 21 }).toSQL();
   assertDiscoverablePredicate(query.sql);
   assert.match(
     query.sql,
-    /lag\("publications"\."space_id"\) over \(order by "publications"\."published_at" desc, "publications"\."id" desc\)/,
+    /lag\("publications"\."site_id"\) over \(order by "publications"\."published_at" desc, "publications"\."id" desc\)/,
   );
-  assert.match(query.sql, /"prev_space_id" is distinct from "feed_publications"\."space_id"/);
+  assert.match(query.sql, /"prev_site_id" is distinct from "feed_publications"\."site_id"/);
   assert.match(query.sql, /order by "feed_publications"\."published_at" desc, "feed_publications"\."id" desc/);
   assert.doesNotMatch(query.sql, /<= \(select/);
   assert.doesNotMatch(query.sql, /"feed_publications"\."id" <> /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 21]);
 });
 
 test('discovery feed cursor keeps the cursor row inside the window and drops it from the page', () => {
@@ -77,7 +76,7 @@ test('discovery feed cursor keeps the cursor row inside the window and drops it 
   assert.match(query.sql, /\("publications"\."published_at", "publications"\."id"\) <= \(select/);
   assert.match(query.sql, /"feed_publications"\."id" <> \$\d+/);
   assert.match(query.sql, /limit /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 'PUB0Z', 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 'PUB0Z', 21]);
 });
 
 test('discovery tags aggregate discoverable rows by name, most used first, limited when asked', () => {
@@ -110,16 +109,14 @@ test('discoverable publications by ids keep the platform predicate and take an i
   assert.ok(query.params.includes('PUB0A') && query.params.includes('PUB0B'));
 });
 
-test('discoverable spaces by ids require active space and site with both switches on', () => {
-  const query = buildDiscoverableSpacesByIdsQuery(database, { spaceIds: ['SPC0A'] }).toSQL();
-  assert.match(query.sql, /inner join "sites"/);
-  assert.match(query.sql, /"spaces"\."id" in \(/);
-  assert.match(query.sql, /"spaces"\."state" = /);
+test('discoverable sites by ids require an active site with both switches on', () => {
+  const query = buildDiscoverableSitesByIdsQuery(database, { siteIds: ['S0A'] }).toSQL();
+  assert.match(query.sql, /"sites"\."id" in \(/);
   assert.match(query.sql, /"sites"\."state" = /);
-  assert.match(query.sql, /"spaces"\."allow_indexing" = /);
-  assert.match(query.sql, /"spaces"\."allow_discovery" = /);
+  assert.match(query.sql, /"sites"\."allow_indexing" = /);
+  assert.match(query.sql, /"sites"\."allow_discovery" = /);
   assert.doesNotMatch(query.sql, /"publications"/);
-  assert.deepEqual(query.params, ['SPC0A', 'ACTIVE', 'ACTIVE', true, true]);
+  assert.deepEqual(query.params, ['S0A', 'ACTIVE', true, true]);
 });
 
 test('discovery tag counts aggregate only the named tags under the platform predicate', () => {
@@ -131,10 +128,10 @@ test('discovery tag counts aggregate only the named tags under the platform pred
   assert.ok(query.params.includes('에세이') && query.params.includes('단편'));
 });
 
-test('recent discovery publications scan the newest discoverable rows with space and series ids only', () => {
+test('recent discovery publications scan the newest discoverable rows with site ids only', () => {
   const query = buildDiscoveryRecentPublicationsQuery(database, { limit: DISCOVERY_RECENT_SCAN_LIMIT }).toSQL();
   assertDiscoverablePredicate(query.sql);
-  assert.match(query.sql, /^select "publications"\."id", "publications"\."space_id", "publications"\."collection_id" from/);
+  assert.match(query.sql, /^select "publications"\."id", "publications"\."site_id" from/);
   assert.match(query.sql, /order by "publications"\."published_at" desc, "publications"\."id" desc/);
   assert.equal(query.params.at(-1), 200);
 });

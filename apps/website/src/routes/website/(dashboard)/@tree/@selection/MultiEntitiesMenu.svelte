@@ -224,7 +224,7 @@
       mixpanel.track('open_folder_share_modal', { via: 'multi_entities_menu', count: folderIds.length });
     }}
   >
-    폴더 {folderIds.length}개 공유 및 발행
+    폴더 {folderIds.length}개 공유
   </MenuItem>
 {/if}
 

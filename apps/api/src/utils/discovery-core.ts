@@ -1,6 +1,6 @@
-import { EntityState, PublicationState, SiteState, SpaceState } from '@typie/lib/enums';
+import { EntityState, PublicationState, SiteState } from '@typie/lib/enums';
 import { and, asc, count, desc, eq, getTableColumns, inArray, isNull, ne, sql } from 'drizzle-orm';
-import { Documents, Entities, Publications, PublicationTags, Sites, Spaces } from '#/db/schemas/tables.ts';
+import { Documents, Entities, Publications, PublicationTags, Sites } from '#/db/schemas/tables.ts';
 import type { PgSelect } from 'drizzle-orm/pg-core';
 import type { Database, Transaction } from '#/db/index.ts';
 
@@ -12,17 +12,15 @@ export const discoverablePublicationScope = <T extends PgSelect>(qb: T) =>
   qb
     .innerJoin(Documents, eq(Publications.documentId, Documents.id))
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .innerJoin(Spaces, eq(Publications.spaceId, Spaces.id))
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id));
+    .innerJoin(Sites, eq(Publications.siteId, Sites.id));
 
 export const discoverablePublicationPredicate = () =>
   and(
     eq(Publications.state, PublicationState.PUBLISHED),
     eq(Entities.state, EntityState.ACTIVE),
-    eq(Spaces.state, SpaceState.ACTIVE),
     eq(Sites.state, SiteState.ACTIVE),
-    eq(Spaces.allowIndexing, true),
-    eq(Spaces.allowDiscovery, true),
+    eq(Sites.allowIndexing, true),
+    eq(Sites.allowDiscovery, true),
     isNull(Documents.password),
   );
 
@@ -49,12 +47,12 @@ export const buildDiscoveryPublicationsQuery = (executor: Executor, input: { tag
 };
 
 export const buildDiscoveryFeedQuery = (executor: Executor, input: { after: string | null; limit: number }) => {
-  const prevSpaceId = sql<
+  const prevSiteId = sql<
     string | null
-  >`lag(${Publications.spaceId}) over (order by ${Publications.publishedAt} desc, ${Publications.id} desc)`.as('prev_space_id');
+  >`lag(${Publications.siteId}) over (order by ${Publications.publishedAt} desc, ${Publications.id} desc)`.as('prev_site_id');
   const feed = discoverablePublicationScope(
     executor
-      .select({ ...getTableColumns(Publications), prevSpaceId })
+      .select({ ...getTableColumns(Publications), prevSiteId })
       .from(Publications)
       .$dynamic(),
   )
@@ -76,7 +74,7 @@ export const buildDiscoveryFeedQuery = (executor: Executor, input: { after: stri
   return executor
     .select(selection)
     .from(feed)
-    .where(and(sql`${feed.prevSpaceId} is distinct from ${feed.spaceId}`, input.after ? ne(feed.id, input.after) : undefined))
+    .where(and(sql`${feed.prevSiteId} is distinct from ${feed.siteId}`, input.after ? ne(feed.id, input.after) : undefined))
     .orderBy(desc(feed.publishedAt), desc(feed.id))
     .limit(input.limit);
 };
@@ -84,12 +82,7 @@ export const buildDiscoveryFeedQuery = (executor: Executor, input: { after: stri
 export const DISCOVERY_RECENT_SCAN_LIMIT = 200;
 
 export const buildDiscoveryRecentPublicationsQuery = (executor: Executor, input: { limit: number }) =>
-  discoverablePublicationScope(
-    executor
-      .select({ id: Publications.id, spaceId: Publications.spaceId, collectionId: Publications.collectionId })
-      .from(Publications)
-      .$dynamic(),
-  )
+  discoverablePublicationScope(executor.select({ id: Publications.id, siteId: Publications.siteId }).from(Publications).$dynamic())
     .where(discoverablePublicationPredicate())
     .orderBy(desc(Publications.publishedAt), desc(Publications.id))
     .limit(input.limit);
@@ -120,18 +113,16 @@ export const buildDiscoveryTagsQuery = (executor: Executor, input: { name?: stri
 export const buildDiscoverablePublicationsByIdsQuery = (executor: Executor, input: { publicationIds: string[] }) =>
   discoverablePublicationsBase(executor).where(and(inArray(Publications.id, input.publicationIds), discoverablePublicationPredicate()));
 
-export const buildDiscoverableSpacesByIdsQuery = (executor: Executor, input: { spaceIds: string[] }) =>
+export const buildDiscoverableSitesByIdsQuery = (executor: Executor, input: { siteIds: string[] }) =>
   executor
-    .select(getTableColumns(Spaces))
-    .from(Spaces)
-    .innerJoin(Sites, eq(Spaces.siteId, Sites.id))
+    .select()
+    .from(Sites)
     .where(
       and(
-        inArray(Spaces.id, input.spaceIds),
-        eq(Spaces.state, SpaceState.ACTIVE),
+        inArray(Sites.id, input.siteIds),
         eq(Sites.state, SiteState.ACTIVE),
-        eq(Spaces.allowIndexing, true),
-        eq(Spaces.allowDiscovery, true),
+        eq(Sites.allowIndexing, true),
+        eq(Sites.allowDiscovery, true),
       ),
     );
 

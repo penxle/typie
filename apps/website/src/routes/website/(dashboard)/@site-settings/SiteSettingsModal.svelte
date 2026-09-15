@@ -3,15 +3,17 @@
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
-  import GlobeIcon from '~icons/lucide/globe';
   import OrbitIcon from '~icons/lucide/orbit';
   import PaletteIcon from '~icons/lucide/palette';
+  import SearchIcon from '~icons/lucide/search';
+  import TextIcon from '~icons/lucide/text';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import { graphql } from '$mearie';
+  import AboutTab from './AboutTab.svelte';
   import DesignTab from './DesignTab.svelte';
   import GeneralTab from './GeneralTab.svelte';
-  import SpacesTab from './SpacesTab.svelte';
+  import VisibilityTab from './VisibilityTab.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_SiteSettingsModal_site$key, DashboardLayout_SiteSettingsModal_user$key } from '$mearie';
 
@@ -37,7 +39,8 @@
 
         ...DashboardLayout_SiteSettingsModal_GeneralTab_site
         ...DashboardLayout_SiteSettingsModal_DesignTab_site
-        ...DashboardLayout_SiteSettingsModal_SpacesTab_site
+        ...DashboardLayout_SiteSettingsModal_AboutTab_site
+        ...DashboardLayout_SiteSettingsModal_VisibilityTab_site
       }
     `),
     () => site$key,
@@ -68,10 +71,16 @@
       component: DesignTab,
     },
     {
-      path: '/site-settings/spaces',
-      label: '스페이스',
-      icon: GlobeIcon,
-      component: SpacesTab,
+      path: '/site-settings/about',
+      label: '소개',
+      icon: TextIcon,
+      component: AboutTab,
+    },
+    {
+      path: '/site-settings/visibility',
+      label: '노출',
+      icon: SearchIcon,
+      component: VisibilityTab,
     },
   ];
 

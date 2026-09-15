@@ -5,34 +5,28 @@
   import { Icon, Tooltip } from '@typie/ui/components';
   import ArrowUpRightIcon from '~icons/lucide/arrow-up-right';
   import SettingsIcon from '~icons/lucide/settings';
+  import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { graphql } from '$mearie';
   import { currentSpaceSlug } from './current-space-slug';
   import { spaceHomePath } from './paths';
-  import SpaceSettingsModal from './SpaceSettingsModal.svelte';
-  import type { UsersiteSpace_SpaceHeader_spaceView$key } from '$mearie';
+  import type { UsersiteSpace_SpaceHeader_siteView$key } from '$mearie';
 
   type Props = {
-    spaceView$key: UsersiteSpace_SpaceHeader_spaceView$key;
+    siteView$key: UsersiteSpace_SpaceHeader_siteView$key;
     variant: 'sidebar' | 'compact';
   };
 
-  let { spaceView$key, variant }: Props = $props();
-
-  let settingsOpen = $state(false);
+  let { siteView$key, variant }: Props = $props();
 
   const space = createFragment(
     graphql(`
-      fragment UsersiteSpace_SpaceHeader_spaceView on SpaceView {
+      fragment UsersiteSpace_SpaceHeader_siteView on SiteView {
         id
         name
         description
         availableActions
         publicationCount
-
-        collections {
-          id
-        }
 
         links {
           label
@@ -45,7 +39,7 @@
         }
       }
     `),
-    () => spaceView$key,
+    () => siteView$key,
   );
 
   const slug = $derived(currentSpaceSlug());
@@ -70,7 +64,7 @@
 
     {#if space.data.availableActions.includes('SETTINGS')}
       <Tooltip message="스페이스 설정">
-        <button
+        <a
           class={flex({
             flexShrink: '0',
             alignItems: 'center',
@@ -87,14 +81,11 @@
             transition: 'common',
             _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
           })}
-          onclick={() => {
-            settingsOpen = true;
-          }}
-          type="button"
+          href={`${env.PUBLIC_WEBSITE_URL}/?open=site-settings/general`}
         >
           <Icon icon={SettingsIcon} size={14} />
           설정
-        </button>
+        </a>
       </Tooltip>
     {/if}
   </div>
@@ -111,8 +102,6 @@
 
   <div class={flex({ alignItems: 'center', gap: '6px', fontSize: '13px', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>
     <span>글 {space.data.publicationCount}개</span>
-    <i class={css({ flexShrink: '0', size: '2px', borderRadius: 'full', backgroundColor: 'border.emphasis' })} aria-hidden="true"></i>
-    <span>시리즈 {space.data.collections.length}개</span>
   </div>
 
   {#if space.data.links.length > 0}
@@ -141,11 +130,3 @@
     </ul>
   {/if}
 </header>
-
-<SpaceSettingsModal
-  onclose={() => {
-    settingsOpen = false;
-  }}
-  open={settingsOpen}
-  spaceId={space.data.id}
-/>

@@ -20,7 +20,7 @@
 
   const query = $derived(hydrateQuery(() => searchQuery));
   const result = $derived(query.data.discovery.search);
-  const empty = $derived(!result || (result.publications.length === 0 && result.spaces.length === 0 && result.tags.length === 0));
+  const empty = $derived(!result || (result.publications.length === 0 && result.sites.length === 0 && result.tags.length === 0));
 
   const message = css.raw({ paddingY: '80px', textAlign: 'center', fontSize: '14px', color: 'text.hint' });
   const heading = css.raw({
@@ -49,7 +49,7 @@
       lg: { gridColumn: '1', gridRow: '2' },
     })}
   >
-    글 {result.publications.length}편 · 스페이스 {result.spaces.length}개 · 태그 {result.tags.length}개
+    글 {result.publications.length}편 · 스페이스 {result.sites.length}개 · 태그 {result.tags.length}개
   </div>
 {/if}
 
@@ -89,9 +89,9 @@
   >
     <div>
       <h2 class={css(heading)}>스페이스</h2>
-      {#if result.spaces.length > 0}
+      {#if result.sites.length > 0}
         <div class={flex({ display: { base: 'none', lg: 'flex' }, flexDirection: 'column', marginY: '-8px' })}>
-          {#each result.spaces as space (space.id)}
+          {#each result.sites as space (space.id)}
             <a
               class={flex({
                 alignItems: 'center',
@@ -131,7 +131,7 @@
           {/each}
         </div>
         <div class={flex({ display: { base: 'flex', lg: 'none' }, flexDirection: 'column', gap: '8px' })}>
-          {#each result.spaces as space (space.id)}
+          {#each result.sites as space (space.id)}
             <a
               class={flex({
                 alignItems: 'center',

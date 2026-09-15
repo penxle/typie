@@ -5,8 +5,8 @@
   import { getAppContext } from '@typie/ui/context';
   import { untrack } from 'svelte';
   import { graphql } from '$mearie';
-  import Document from './Document.svelte';
   import DocumentShare from './DocumentShare.svelte';
+  import DocumentsShare from './DocumentsShare.svelte';
   import Folder from './Folder.svelte';
 
   const app = getAppContext();
@@ -16,7 +16,6 @@
       query DashboardLayout_ShareModal_Query($entityIds: [ID!]!) {
         entities(entityIds: $entityIds) {
           id
-          type
 
           node {
             __typename
@@ -30,7 +29,12 @@
             ... on Document {
               id
 
-              ...DashboardLayout_Share_Document_document
+              publication {
+                id
+                state
+              }
+
+              ...DashboardLayout_Share_DocumentsShare_document
             }
           }
         }
@@ -41,8 +45,13 @@
   );
 
   const entities = $derived(entitiesQuery.data?.entities ?? []);
+  const documentNodes = $derived(entities.map((entity) => entity.node).filter((node) => node.__typename === 'Document'));
+  const folderNodes = $derived(entities.map((entity) => entity.node).filter((node) => node.__typename === 'Folder'));
+  const allDocuments = $derived(entities.length > 0 && documentNodes.length === entities.length);
+  const allFolders = $derived(entities.length > 0 && folderNodes.length === entities.length);
+
   const singleDocumentEntityId = $derived(
-    app.state.shareOpen.length === 1 && entities.length === 1 && entities[0].type === 'DOCUMENT' ? entities[0].id : null,
+    app.state.shareOpen.length === 1 && entities.length === 1 && documentNodes.length === 1 ? entities[0].id : null,
   );
 
   const documentQuery = createQuery(
@@ -56,11 +65,6 @@
 
             ... on Document {
               id
-
-              publication {
-                id
-                state
-              }
 
               ...DashboardLayout_Share_DocumentShare_document
             }
@@ -92,45 +96,37 @@
       return;
     }
 
-    const document = singleDocument;
-    if (!document) return;
+    if (!allDocuments) return;
+
+    const key = documentNodes.map((node) => node.id).join(',');
+    const anyPublishing = documentNodes.some((node) => node.publication && node.publication.state !== 'UNPUBLISHED');
 
     untrack(() => {
-      if (steppedFor === document.id) return;
-      steppedFor = document.id;
-      step = document.publication && document.publication.state !== 'UNPUBLISHED' ? 'publish' : 'visibility';
+      if (steppedFor === key) return;
+      steppedFor = key;
+      step = anyPublishing ? 'publish' : 'visibility';
     });
   });
 
   const modalStyle = $derived(
-    singleDocument
-      ? step === 'publish'
-        ? css.raw({ maxWidth: '880px', height: 'full', maxHeight: '680px', padding: '0', overflow: 'hidden' })
-        : css.raw({ maxWidth: '480px', padding: '0' })
-      : css.raw({ maxWidth: '400px' }),
+    allDocuments && step === 'publish'
+      ? css.raw({ maxWidth: '880px', height: 'full', maxHeight: '680px', padding: '0', overflow: 'hidden' })
+      : css.raw({ maxWidth: '480px', padding: '0' }),
   );
+
+  const close = () => {
+    app.state.shareOpen = [];
+  };
 </script>
 
-<Modal
-  style={modalStyle}
-  loading={!loaded}
-  onclose={() => {
-    app.state.shareOpen = [];
-  }}
-  open={app.state.shareOpen.length > 0}
->
+<Modal style={modalStyle} loading={!loaded} onclose={close} open={app.state.shareOpen.length > 0}>
   {#if loaded}
     {#if singleDocument}
-      <DocumentShare document$key={singleDocument} onclose={() => (app.state.shareOpen = [])} bind:step />
-    {:else if entitiesQuery.data}
-      {@const allFolders = entities.every((e) => e.type === 'FOLDER')}
-      {@const allDocuments = entities.every((e) => e.type === 'DOCUMENT')}
-
-      {#if allFolders}
-        <Folder folders$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Folder')} />
-      {:else if allDocuments}
-        <Document documents$key={entitiesQuery.data.entities.map((e) => e.node).filter((e) => e.__typename === 'Document')} />
-      {/if}
+      <DocumentShare document$key={singleDocument} onclose={close} bind:step />
+    {:else if allDocuments}
+      <DocumentsShare documents$key={documentNodes} onclose={close} bind:step />
+    {:else if allFolders}
+      <Folder folders$key={folderNodes} onclose={close} />
     {/if}
   {/if}
 </Modal>

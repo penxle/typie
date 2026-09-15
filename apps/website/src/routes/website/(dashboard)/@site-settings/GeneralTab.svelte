@@ -11,11 +11,13 @@
   import CheckIcon from '~icons/lucide/check';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import UploadIcon from '~icons/lucide/upload';
+  import { env } from '$env/dynamic/public';
   import { LoadableImg, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import SiteSlugModal from './SiteSlugModal.svelte';
   import type {
     DashboardLayout_SiteSettingsModal_GeneralTab_site$key,
     DashboardLayout_SiteSettingsModal_GeneralTab_user$key,
@@ -33,6 +35,7 @@
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_site on Site {
         id
         name
+        slug
 
         logo {
           id
@@ -126,6 +129,7 @@
 
   let deleteConfirmInput = $state('');
   let deleteConfirmError = $state('');
+  let slugModalOpen = $state(false);
 </script>
 
 <div class={css({ maxWidth: '640px' })}>
@@ -205,6 +209,41 @@
           {#if form.errors.name}
             <p class={css({ fontSize: '12px', color: 'danger.default', textAlign: 'right' })}>{form.errors.name}</p>
           {/if}
+        {/snippet}
+      </SettingsRow>
+
+      <SettingsDivider />
+
+      <SettingsRow>
+        {#snippet label()}
+          주소
+        {/snippet}
+        {#snippet value()}
+          <TextInput
+            style={css.raw({ width: '[280px]', height: '32px', fontSize: '13px', cursor: 'pointer', '& > input': { cursor: 'pointer' } })}
+            leftItemAttached
+            onclick={() => {
+              slugModalOpen = true;
+            }}
+            readonly
+            value={site.data.slug}
+          >
+            {#snippet leftItem()}
+              <span
+                class={css({
+                  fontSize: '13px',
+                  color: 'text.muted',
+                  backgroundColor: 'surface.inset',
+                  paddingX: '12px',
+                  height: 'full',
+                  display: 'flex',
+                  alignItems: 'center',
+                })}
+              >
+                {env.PUBLIC_USERSITE_HOST}/@
+              </span>
+            {/snippet}
+          </TextInput>
         {/snippet}
       </SettingsRow>
     </form>
@@ -344,3 +383,5 @@
     {/if}
   {/if}
 {/snippet}
+
+<SiteSlugModal siteId={site.data.id} slug={site.data.slug} bind:open={slugModalOpen} />

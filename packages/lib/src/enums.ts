@@ -218,28 +218,15 @@ export const SingleSignOnProvider = {
   NAVER: 'NAVER',
 } as const;
 
-export type SpaceAvailableAction = keyof typeof SpaceAvailableAction;
-export const SpaceAvailableAction = {
+export type SiteAvailableAction = keyof typeof SiteAvailableAction;
+export const SiteAvailableAction = {
   SETTINGS: 'SETTINGS',
-} as const;
-
-export type SpaceDateDisplay = keyof typeof SpaceDateDisplay;
-export const SpaceDateDisplay = {
-  NONE: 'NONE',
-  PUBLISHED_AT: 'PUBLISHED_AT',
-  UPDATED_AT: 'UPDATED_AT',
-} as const;
-
-export type SpaceState = keyof typeof SpaceState;
-export const SpaceState = {
-  ACTIVE: 'ACTIVE',
-  DELETED: 'DELETED',
 } as const;
 
 export type SiteDateDisplay = keyof typeof SiteDateDisplay;
 export const SiteDateDisplay = {
   NONE: 'NONE',
-  CREATED_AT: 'CREATED_AT',
+  PUBLISHED_AT: 'PUBLISHED_AT',
   UPDATED_AT: 'UPDATED_AT',
 } as const;
 

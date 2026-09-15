@@ -12,9 +12,9 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Documents, Entities, first, Folders, Images, PublicationVersions, Spaces } from '#/db/index.ts';
+import { db, Documents, Entities, first, Folders, Images, PublicationVersions, Sites } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
-import { buildPublishedPublicationByPermalinkQuery } from '#/utils/publication-view-core.ts';
+import { buildPublishedPublicationByNumberQuery } from '#/utils/publication-view-core.ts';
 import type { ReactNode } from 'react';
 import type { Env, ServerContext } from '#/context.ts';
 
@@ -76,10 +76,10 @@ const colors = {
   },
 };
 
-og.get('/p/:permalink', async (c) => {
-  const permalink = c.req.param('permalink');
+og.get('/p/:number', async (c) => {
+  const number = c.req.param('number');
 
-  const publication = await buildPublishedPublicationByPermalinkQuery(db, { permalink }).then(first);
+  const publication = await buildPublishedPublicationByNumberQuery(db, { number }).then(first);
 
   if (!publication) {
     throw new HTTPException(404);
@@ -104,16 +104,16 @@ og.get('/p/:permalink', async (c) => {
 const COVER_WIDTH = 1280;
 const COVER_HEIGHT = 720;
 
-og.get('/cover/:permalink', async (c) => {
-  const permalink = c.req.param('permalink');
+og.get('/cover/:number', async (c) => {
+  const number = c.req.param('number');
 
-  const publication = await buildPublishedPublicationByPermalinkQuery(db, { permalink }).then(first);
+  const publication = await buildPublishedPublicationByNumberQuery(db, { number }).then(first);
 
   if (!publication) {
     throw new HTTPException(404);
   }
 
-  const [version, space] = await Promise.all([
+  const [version, site] = await Promise.all([
     db
       .select({ title: PublicationVersions.title })
       .from(PublicationVersions)
@@ -121,15 +121,15 @@ og.get('/cover/:permalink', async (c) => {
       .orderBy(desc(PublicationVersions.version))
       .limit(1)
       .then(first),
-    db.select({ name: Spaces.name }).from(Spaces).where(eq(Spaces.id, publication.spaceId)).then(first),
+    db.select({ name: Sites.name }).from(Sites).where(eq(Sites.id, publication.siteId)).then(first),
   ]);
 
-  if (!version || !space) {
+  if (!version || !site) {
     throw new HTTPException(404);
   }
 
   const title = version.title || '(제목 없음)';
-  const resp = await respondWithCard(c, renderTitlePageCover({ seed: publication.id + title, title, spaceName: space.name }), {
+  const resp = await respondWithCard(c, renderTitlePageCover({ seed: publication.id + title, title, spaceName: site.name }), {
     width: COVER_WIDTH,
     height: COVER_HEIGHT,
   });

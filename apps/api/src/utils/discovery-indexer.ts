@@ -1,15 +1,15 @@
-import { SiteState, SpaceState } from '@typie/lib/enums';
+import { SiteState } from '@typie/lib/enums';
 import { db } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { buildDiscoveryTagCountsQuery } from './discovery-core.ts';
 import {
   buildPublicationIndexRowsQuery,
   buildPublicationTagNamesQuery,
-  buildSpaceIndexRowsQuery,
-  buildSpaceTagNamesQuery,
+  buildSiteIndexRowsQuery,
+  buildSiteTagNamesQuery,
   collectTagNames,
   toPublicationIndexDocument,
-  toSpaceIndexDocument,
+  toSiteIndexDocument,
   toTagIndexDocument,
 } from './discovery-index-core.ts';
 import { buildLatestVersionMetadataQuery } from './publication-core.ts';
@@ -87,21 +87,21 @@ export const indexPublications = async (publicationIds: string[], options: { syn
   }
 };
 
-export const indexSpaces = async (spaceIds: string[], options: { cascade?: boolean } = {}) => {
-  const ids = unique(spaceIds);
+export const indexSites = async (siteIds: string[], options: { cascade?: boolean } = {}) => {
+  const ids = unique(siteIds);
   if (ids.length === 0) return;
 
-  const rows = await buildSpaceIndexRowsQuery(db, { spaceIds: ids });
+  const rows = await buildSiteIndexRowsQuery(db, { siteIds: ids });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   const operations: BulkOperation[] = [];
   for (const id of ids) {
     const row = rowById.get(id);
-    const document = row ? toSpaceIndexDocument(row) : null;
+    const document = row ? toSiteIndexDocument(row) : null;
     if (document) {
-      operations.push({ index: { _index: esIndex.spaces, _id: id } }, document);
+      operations.push({ index: { _index: esIndex.sites, _id: id } }, document);
     } else {
-      operations.push({ delete: { _index: esIndex.spaces, _id: id } });
+      operations.push({ delete: { _index: esIndex.sites, _id: id } });
     }
   }
   await runBulk(operations);
@@ -110,12 +110,12 @@ export const indexSpaces = async (spaceIds: string[], options: { cascade?: boole
 
   for (const id of ids) {
     const row = rowById.get(id);
-    const alive = row !== undefined && row.state === SpaceState.ACTIVE && row.siteState === SiteState.ACTIVE;
+    const alive = row !== undefined && row.state === SiteState.ACTIVE;
     if (alive) {
       const updated = await elasticsearch.updateByQuery({
         index: esIndex.publications,
         conflicts: 'proceed',
-        query: { term: { space_id: id } },
+        query: { term: { site_id: id } },
         script: {
           source: 'ctx._source.discoverable = params.discoverable',
           params: { discoverable: row.allowIndexing && row.allowDiscovery },
@@ -123,23 +123,23 @@ export const indexSpaces = async (spaceIds: string[], options: { cascade?: boole
       });
       if (updated.timed_out || (updated.failures?.length ?? 0) > 0) {
         throw new Error(
-          `discovery space cascade failed for ${id}: ${JSON.stringify({ timed_out: updated.timed_out, failures: updated.failures })}`,
+          `discovery site cascade failed for ${id}: ${JSON.stringify({ timed_out: updated.timed_out, failures: updated.failures })}`,
         );
       }
     } else {
       const deleted = await elasticsearch.deleteByQuery({
         index: esIndex.publications,
         conflicts: 'proceed',
-        query: { term: { space_id: id } },
+        query: { term: { site_id: id } },
       });
       if (deleted.timed_out || (deleted.failures?.length ?? 0) > 0) {
         throw new Error(
-          `discovery space cascade failed for ${id}: ${JSON.stringify({ timed_out: deleted.timed_out, failures: deleted.failures })}`,
+          `discovery site cascade failed for ${id}: ${JSON.stringify({ timed_out: deleted.timed_out, failures: deleted.failures })}`,
         );
       }
     }
   }
 
-  const names = await buildSpaceTagNamesQuery(db, { spaceIds: ids });
+  const names = await buildSiteTagNamesQuery(db, { siteIds: ids });
   await syncTagCounts(names.map((row) => row.name));
 };

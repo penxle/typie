@@ -2,7 +2,7 @@ import { PublicationState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { asc, eq, inArray } from 'drizzle-orm';
 import { redis } from '#/cache.ts';
-import { db, Documents, Entities, firstOrThrow, PublicationTags, Spaces, TableCode, validateDbId } from '#/db/index.ts';
+import { db, Documents, Entities, PublicationTags, Sites, TableCode, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
 import { liveKey } from '#/utils/changeset.ts';
@@ -10,14 +10,18 @@ import { enqueueDiscoveryPublicationSync } from '#/utils/discovery-index.ts';
 import {
   cancelScheduledPublicationCore,
   computeHasUnpublishedChanges,
+  findFolderDocumentIds,
   publishDocumentCore,
+  publishDocumentsCore,
   unpublishDocumentCore,
+  unpublishDocumentsCore,
   updatePublicationCore,
 } from '#/utils/publication.ts';
 import { buildLatestVersionMetadataQuery } from '#/utils/publication-core.ts';
-import { spaceUrl } from '#/utils/usersite-core.ts';
+import { pinPublicationCore, unpinPublicationCore } from '#/utils/publication-pin.ts';
+import { publicationUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
-import { Collection, Document, Image, isTypeOf, Publication, Space } from '../objects.ts';
+import { Document, Image, isTypeOf, Publication, Site } from '../objects.ts';
 import type { Context } from '#/context.ts';
 
 export const latestVersionLoader = (ctx: Context) =>
@@ -25,6 +29,25 @@ export const latestVersionLoader = (ctx: Context) =>
     name: 'Publication.latestVersion',
     load: async (ids: string[]) => await buildLatestVersionMetadataQuery(db, { publicationIds: ids }),
     key: ({ publicationId }: { publicationId: string }) => publicationId,
+  });
+
+export const publicationEntityLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'Publication.entity',
+    load: async (ids: string[]) =>
+      await db
+        .select({ documentId: Documents.id, entityId: Entities.id, siteId: Entities.siteId, slug: Entities.slug, number: Entities.number })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(inArray(Documents.id, ids)),
+    key: ({ documentId }: { documentId: string }) => documentId,
+  });
+
+const siteSlugLoader = (ctx: Context) =>
+  ctx.loader({
+    name: 'Publication.siteSlug',
+    load: async (ids: string[]) => await db.select({ id: Sites.id, slug: Sites.slug }).from(Sites).where(inArray(Sites.id, ids)),
+    key: ({ id }: { id: string }) => id,
   });
 
 const liveHeadsLoader = (ctx: Context) =>
@@ -41,14 +64,21 @@ const liveHeadsLoader = (ctx: Context) =>
     key: (row) => row?.id,
   });
 
-const publishSiteUpdate = async (documentId: string) => {
-  const row = await db
+const publishSiteUpdate = async (documentIds: string[]) => {
+  if (documentIds.length === 0) return;
+  const rows = await db
     .select({ entityId: Entities.id, siteId: Entities.siteId })
     .from(Documents)
     .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .where(eq(Documents.id, documentId))
-    .then(firstOrThrow);
-  pubsub.publish('site:update', row.siteId, { scope: 'entity', entityId: row.entityId });
+    .where(inArray(Documents.id, documentIds));
+  for (const row of rows) {
+    pubsub.publish('site:update', row.siteId, { scope: 'entity', entityId: row.entityId });
+  }
+};
+
+const afterPublicationChange = async (publications: { id: string; documentId: string }[]) => {
+  await enqueueDiscoveryPublicationSync(publications.map((publication) => publication.id));
+  await publishSiteUpdate(publications.map((publication) => publication.documentId));
 };
 
 Publication.implement({
@@ -57,9 +87,7 @@ Publication.implement({
     id: t.exposeID('id'),
     state: t.expose('state', { type: PublicationState }),
     document: t.expose('documentId', { type: Document }),
-    space: t.expose('spaceId', { type: Space }),
-    collection: t.field({ type: Collection, nullable: true, resolve: (self) => self.collectionId }),
-    collectionOrder: t.exposeString('collectionOrder', { nullable: true }),
+    site: t.expose('siteId', { type: Site }),
     pinnedOrder: t.exposeString('pinnedOrder', { nullable: true }),
     publishedAt: t.expose('publishedAt', { type: 'DateTime', nullable: true }),
     scheduledAt: t.expose('scheduledAt', { type: 'DateTime', nullable: true }),
@@ -115,14 +143,11 @@ Publication.implement({
     }),
     url: t.string({
       resolve: async (self, _, ctx) => {
-        const space = await ctx
-          .loader({
-            name: 'Publication.space',
-            load: async (ids: string[]) => await db.select().from(Spaces).where(inArray(Spaces.id, ids)),
-            key: ({ id }: { id: string }) => id,
-          })
-          .load(self.spaceId);
-        return `${spaceUrl(env.USERSITE_URL, space.slug)}/p/${self.permalink}`;
+        const [site, entity] = await Promise.all([
+          siteSlugLoader(ctx).load(self.siteId),
+          publicationEntityLoader(ctx).load(self.documentId),
+        ]);
+        return publicationUrl(env.USERSITE_URL, site.slug, entity.number);
       },
     }),
     hasUnpublishedChanges: t.boolean({
@@ -151,9 +176,7 @@ builder.mutationFields((t) => ({
     type: Publication,
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
-      spaceId: t.input.id({ validate: validateDbId(TableCode.SPACES) }),
       tags: t.input.stringList(),
-      collectionId: t.input.id({ required: false, validate: validateDbId(TableCode.COLLECTIONS) }),
       excerpt: t.input.string({ required: false }),
       thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
       scheduledAt: t.input.field({ type: 'DateTime', required: false }),
@@ -162,16 +185,13 @@ builder.mutationFields((t) => ({
       const publication = await publishDocumentCore(db, {
         userId: ctx.session.userId,
         documentId: input.documentId,
-        spaceId: input.spaceId,
         tags: input.tags,
-        collectionId: input.collectionId,
         excerpt: input.excerpt,
         thumbnailId: input.thumbnailId,
         scheduledAt: input.scheduledAt ?? null,
         now: dayjs(),
       });
-      await enqueueDiscoveryPublicationSync([publication.id]);
-      await publishSiteUpdate(publication.documentId);
+      await afterPublicationChange([publication]);
       return publication;
     },
   }),
@@ -181,14 +201,12 @@ builder.mutationFields((t) => ({
     input: {
       publicationId: t.input.id({ validate: validateDbId(TableCode.PUBLICATIONS) }),
       tags: t.input.stringList(),
-      collectionId: t.input.id({ required: false, validate: validateDbId(TableCode.COLLECTIONS) }),
       excerpt: t.input.string({ required: false }),
       thumbnailId: t.input.id({ required: false, validate: validateDbId(TableCode.IMAGES) }),
     },
     resolve: async (_, { input }, ctx) => {
       const publication = await updatePublicationCore(db, { userId: ctx.session.userId, ...input, now: dayjs() });
-      await enqueueDiscoveryPublicationSync([publication.id]);
-      await publishSiteUpdate(publication.documentId);
+      await afterPublicationChange([publication]);
       return publication;
     },
   }),
@@ -198,8 +216,7 @@ builder.mutationFields((t) => ({
     input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
     resolve: async (_, { input }, ctx) => {
       const publication = await unpublishDocumentCore(db, { userId: ctx.session.userId, documentId: input.documentId, now: dayjs() });
-      await enqueueDiscoveryPublicationSync([publication.id]);
-      await publishSiteUpdate(publication.documentId);
+      await afterPublicationChange([publication]);
       return publication;
     },
   }),
@@ -213,9 +230,109 @@ builder.mutationFields((t) => ({
         publicationId: input.publicationId,
         now: dayjs(),
       });
-      await enqueueDiscoveryPublicationSync([publication.id]);
-      await publishSiteUpdate(publication.documentId);
+      await afterPublicationChange([publication]);
       return publication;
+    },
+  }),
+
+  publishDocuments: t.withAuth({ session: true }).fieldWithInput({
+    type: [Publication],
+    input: {
+      documentIds: t.input.idList({ validate: { items: validateDbId(TableCode.DOCUMENTS) } }),
+      addTags: t.input.stringList({ required: false }),
+      removeTags: t.input.stringList({ required: false }),
+      scheduledAt: t.input.field({ type: 'DateTime', required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const publications = await publishDocumentsCore(db, {
+        userId: ctx.session.userId,
+        documentIds: input.documentIds,
+        addTags: input.addTags ?? undefined,
+        removeTags: input.removeTags ?? undefined,
+        scheduledAt: input.scheduledAt,
+        now: dayjs(),
+      });
+      await afterPublicationChange(publications);
+      return publications;
+    },
+  }),
+
+  unpublishDocuments: t.withAuth({ session: true }).fieldWithInput({
+    type: [Publication],
+    input: { documentIds: t.input.idList({ validate: { items: validateDbId(TableCode.DOCUMENTS) } }) },
+    resolve: async (_, { input }, ctx) => {
+      const publications = await unpublishDocumentsCore(db, { userId: ctx.session.userId, documentIds: input.documentIds, now: dayjs() });
+      await afterPublicationChange(publications);
+      return publications;
+    },
+  }),
+
+  publishFolderDocuments: t.withAuth({ session: true }).fieldWithInput({
+    type: [Publication],
+    input: {
+      folderIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      addTags: t.input.stringList({ required: false }),
+      removeTags: t.input.stringList({ required: false }),
+      scheduledAt: t.input.field({ type: 'DateTime', required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const documentIds = await findFolderDocumentIds(db, { userId: ctx.session.userId, folderIds: input.folderIds });
+      const publications = await publishDocumentsCore(db, {
+        userId: ctx.session.userId,
+        documentIds,
+        addTags: input.addTags ?? undefined,
+        removeTags: input.removeTags ?? undefined,
+        scheduledAt: input.scheduledAt,
+        now: dayjs(),
+      });
+      await afterPublicationChange(publications);
+      return publications;
+    },
+  }),
+
+  unpublishFolderDocuments: t.withAuth({ session: true }).fieldWithInput({
+    type: [Publication],
+    input: { folderIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
+    resolve: async (_, { input }, ctx) => {
+      const documentIds = await findFolderDocumentIds(db, { userId: ctx.session.userId, folderIds: input.folderIds });
+      const publications = await unpublishDocumentsCore(db, { userId: ctx.session.userId, documentIds, now: dayjs() });
+      await afterPublicationChange(publications);
+      return publications;
+    },
+  }),
+
+  pinPublication: t.withAuth({ session: true }).fieldWithInput({
+    type: Publication,
+    input: {
+      publicationId: t.input.id({ validate: validateDbId(TableCode.PUBLICATIONS) }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const publication = await pinPublicationCore(db, { userId: ctx.session.userId, ...input });
+      pubsub.publish('site:update', publication.siteId, { scope: 'site' });
+      return publication;
+    },
+  }),
+
+  unpinPublication: t.withAuth({ session: true }).fieldWithInput({
+    type: Publication,
+    input: { publicationId: t.input.id({ validate: validateDbId(TableCode.PUBLICATIONS) }) },
+    resolve: async (_, { input }, ctx) => {
+      const publication = await unpinPublicationCore(db, { userId: ctx.session.userId, publicationId: input.publicationId });
+      pubsub.publish('site:update', publication.siteId, { scope: 'site' });
+      return publication;
+    },
+  }),
+}));
+
+builder.queryFields((t) => ({
+  folderDocuments: t.withAuth({ session: true }).field({
+    type: [Document],
+    args: { folderIds: t.arg.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
+    resolve: async (_, args, ctx) => {
+      const documentIds = await findFolderDocumentIds(db, { userId: ctx.session.userId, folderIds: args.folderIds });
+      return documentIds;
     },
   }),
 }));

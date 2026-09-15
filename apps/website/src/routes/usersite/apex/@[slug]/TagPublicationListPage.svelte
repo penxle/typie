@@ -7,16 +7,16 @@
   type Props = {
     after: string | null;
     tagName: string;
-    showCollection?: boolean;
+    showFolder?: boolean;
     onLoaded: (result: { hasMore: boolean; lastId: string | null }) => void;
   };
 
-  let { after, tagName, showCollection = true, onLoaded }: Props = $props();
+  let { after, tagName, showFolder = true, onLoaded }: Props = $props();
 
   const query = createQuery(
     graphql(`
       query UsersiteSpace_TagPublicationListPage_Query($slug: String!, $name: String!, $after: ID) {
-        spaceView(slug: $slug) {
+        siteView(slug: $slug) {
           id
 
           tag(name: $name) {
@@ -37,7 +37,7 @@
     () => ({ slug: page.params.slug ?? '', name: tagName, after }),
   );
 
-  const result = $derived(query.data?.spaceView.tag.publications);
+  const result = $derived(query.data?.siteView.tag.publications);
 
   $effect(() => {
     if (!result) return;
@@ -47,6 +47,6 @@
 
 {#if result}
   {#each result.publications as publication (publication.id)}
-    <DiscoveryCard context="space" enter publicationView$key={publication} {showCollection} />
+    <DiscoveryCard context="space" enter publicationView$key={publication} {showFolder} />
   {/each}
 {/if}

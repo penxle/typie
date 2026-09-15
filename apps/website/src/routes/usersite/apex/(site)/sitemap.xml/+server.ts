@@ -9,11 +9,11 @@ export const GET: RequestHandler = async (event) => {
     event,
     graphql(`
       query UsersiteApexSitemapIndex_Query {
-        sitemapSpaceSlugs
+        sitemapSiteSlugs
       }
     `),
     {},
   );
 
-  return sitemapIndex(event, ['/sitemap-root.xml', ...query.data.sitemapSpaceSlugs.map((slug) => `${spaceHomePath(slug)}/sitemap.xml`)]);
+  return sitemapIndex(event, ['/sitemap-root.xml', ...query.data.sitemapSiteSlugs.map((slug) => `${spaceHomePath(slug)}/sitemap.xml`)]);
 };

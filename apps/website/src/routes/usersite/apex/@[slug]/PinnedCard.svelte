@@ -33,7 +33,7 @@
         passwordUnlocked
         url
 
-        collection {
+        folder {
           id
           name
         }
@@ -43,7 +43,7 @@
           ...Img_image
         }
 
-        space {
+        site {
           id
           dateDisplay
         }
@@ -52,7 +52,7 @@
     () => publicationView$key,
   );
 
-  const date = $derived(pickSpaceDate(publication.data.space.dateDisplay, publication.data));
+  const date = $derived(pickSpaceDate(publication.data.site.dateDisplay, publication.data));
   const timestamp = $derived(date === null ? null : dayjs(date).valueOf());
 </script>
 
@@ -74,9 +74,9 @@
       <Icon icon={PinIcon} size={12} />
       고정
     </span>
-    {#if publication.data.collection}
+    {#if publication.data.folder}
       <i class={css({ flexShrink: '0', size: '2px', borderRadius: 'full', backgroundColor: 'border.emphasis' })} aria-hidden="true"></i>
-      <span class={css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis' })}>{publication.data.collection.name}</span>
+      <span class={css({ minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis' })}>{publication.data.folder.name}</span>
     {/if}
   </div>
 

@@ -6,7 +6,7 @@
   let { data } = $props();
 
   const query = $derived(hydrateQuery(() => data.tagQuery));
-  const space = $derived(query.data.spaceView);
+  const space = $derived(query.data.siteView);
   const tag = $derived(space.tag);
 </script>
 

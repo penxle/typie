@@ -25,6 +25,7 @@ import {
   calculateBlobSizeFromAssetIds,
   derivePlainRootFromPreset,
   extractAssetIdsFromPlainDoc,
+  generateEntityNumber,
   generatePermalink,
   generateSlug,
   insertFreshV2Content,
@@ -33,7 +34,7 @@ import { generateFractionalOrder } from './order.ts';
 import { assertSitePermission } from './permission.ts';
 import { assertActiveSubscription, hasActiveSubscription } from './plan.ts';
 import { runAfterCommit } from './post-commit.ts';
-import { assertNoPublishedPublication, assertVisibilityRequestable } from './publication.ts';
+import { assertNoPublishedPublication, assertVisibilityRequestable, findPublishedDocumentIds } from './publication.ts';
 import { unpublishByEntityIdsCore } from './publication-unpublish.ts';
 import { enqueueSearchSyncForEntityIds } from './search-index.ts';
 import { wasm as wasmFfi } from './wasm-ffi.ts';
@@ -102,6 +103,7 @@ export const createFolderCore = async (executor: Database | Transaction, args: C
         parentId: args.parentEntityId,
         slug: generateSlug(),
         permalink: generatePermalink(),
+        number: generateEntityNumber(),
         type: EntityType.FOLDER,
         icon: 'folder',
         order: generateFractionalOrder({ lower: orderLower, upper: args.upperOrder ?? null }),
@@ -199,6 +201,7 @@ export const createDividerCore = async (
         parentId: args.parentEntityId,
         slug: generateSlug(),
         permalink: generatePermalink(),
+        number: generateEntityNumber(),
         type: EntityType.DIVIDER,
         icon: 'minus',
         order: generateFractionalOrder({ lower: orderLower, upper: args.upperOrder ?? null }),
@@ -408,6 +411,7 @@ export const createDocumentCore = async (
         parentId: args.parentEntityId,
         slug: generateSlug(),
         permalink: generatePermalink(),
+        number: generateEntityNumber(),
         type: EntityType.DOCUMENT,
         icon: 'file',
         order: generateFractionalOrder({ lower: orderLower, upper: args.upperOrder ?? null }),
@@ -550,6 +554,7 @@ export const duplicateDocumentCore = async (
         parentId: entity.parentEntityId,
         slug: generateSlug(),
         permalink: generatePermalink(),
+        number: generateEntityNumber(),
         type: EntityType.DOCUMENT,
         order: generateFractionalOrder({ lower: entity.order, upper: nextEntity?.order }),
         depth: entity.depth,
@@ -1281,16 +1286,20 @@ export const updateFolderOptionCore = async (
 
       if (descendantEntityIds.length > 0) {
         const descendantDocuments = await tx
-          .select({ id: Documents.id })
+          .select({ id: Documents.id, entityId: Documents.entityId })
           .from(Documents)
           .where(inArray(Documents.entityId, descendantEntityIds));
 
-        await assertNoPublishedPublication(tx, {
+        const published = await findPublishedDocumentIds(tx, {
           documentIds: descendantDocuments.map(({ id }) => id),
           visibility: args.visibility,
         });
+        const skippedEntityIds = new Set(descendantDocuments.filter(({ id }) => published.has(id)).map(({ entityId }) => entityId));
+        const targetEntityIds = descendantEntityIds.filter((id) => !skippedEntityIds.has(id));
 
-        await tx.update(Entities).set({ visibility: args.visibility }).where(inArray(Entities.id, descendantEntityIds));
+        if (targetEntityIds.length > 0) {
+          await tx.update(Entities).set({ visibility: args.visibility }).where(inArray(Entities.id, targetEntityIds));
+        }
       }
 
       changedFolderEntityIds.push(

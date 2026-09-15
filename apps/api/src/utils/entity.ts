@@ -28,6 +28,7 @@ import type { DocLayoutMode } from '#/db/schemas/json.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
+export const generateEntityNumber = () => faker.string.numeric({ length: 11, allowLeadingZeros: false });
 
 export type TemplatePreset = {
   fontFamily?: string;
@@ -422,6 +423,7 @@ export const copyEntityRecursive = async (
       parentId: targetParentId,
       slug: generateSlug(),
       permalink: generatePermalink(),
+      number: generateEntityNumber(),
       type: sourceEntity.type,
       order,
       depth: targetDepth,

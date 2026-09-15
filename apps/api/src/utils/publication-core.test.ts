@@ -9,16 +9,18 @@ import {
   buildDuePublicationsQuery,
   buildLatestVersionGraphsQuery,
   buildLatestVersionMetadataQuery,
-  buildPublicationsBySpaceQuery,
+  buildPublicationsBySiteQuery,
   buildPublishedDocumentIdsQuery,
   buildPublishingEntityIdsBySiteQuery,
-  generateNumericPermalink,
   hasUnpublishedChanges,
+  mergeTags,
   normalizeTags,
   pickPublicationVersion,
+  resolveBulkPublishPlan,
   resolvePublishedVisibilityBlock,
   resolvePublishTransition,
   resolveVisibilityRequestBlock,
+  summarizePublicationStates,
   validateScheduledAt,
 } from './publication-core.ts';
 import type { Database } from '#/db/index.ts';
@@ -107,21 +109,21 @@ test('hasUnpublishedChanges compares heads, title and subtitle only', () => {
   assert.equal(hasUnpublishedChanges(version, { heads: null, title: '제목', subtitle: null }), true);
 });
 
-test('due publications are scheduled rows at or before now on live entities, sites and spaces, locked with skip locked', () => {
+test('due publications are scheduled rows at or before now on live entities and sites, locked with skip locked', () => {
   const now = dayjs('2026-09-07T12:00:00+09:00');
   const query = buildDuePublicationsQuery(database, { now }).toSQL();
   assert.match(query.sql, /"publications"\."state" = /);
   assert.match(query.sql, /"publications"\."scheduled_at" <= /);
   assert.match(query.sql, /"entities"\."state" = /);
   assert.match(query.sql, /"sites"\."state" = /);
-  assert.match(query.sql, /"spaces"\."state" = /);
+  assert.doesNotMatch(query.sql, /"spaces"/);
   assert.match(query.sql, /for update of "publications" skip locked/);
   assert.equal(query.params[0], 'SCHEDULED');
 });
 
-test('publications by space filter state and order by published_at desc with id as the tie-break', () => {
-  const query = buildPublicationsBySpaceQuery(database, { spaceIds: ['SPC0A'], states: ['PUBLISHED'] }).toSQL();
-  assert.match(query.sql, /"publications"\."space_id" in \(/);
+test('publications by site filter state and order by published_at desc with id as the tie-break', () => {
+  const query = buildPublicationsBySiteQuery(database, { siteIds: ['S0A'], states: ['PUBLISHED'] }).toSQL();
+  assert.match(query.sql, /"publications"\."site_id" in \(/);
   assert.match(query.sql, /"publications"\."state" in \(/);
   assert.match(query.sql, /order by "publications"\."published_at" desc, "publications"\."id" desc/);
 });
@@ -149,10 +151,10 @@ test('published document ids query filters the given documents by the published 
   assert.equal(query.params.at(-1), 'PUBLISHED');
 });
 
-test('publishing entity ids by site join spaces on the site and take published and scheduled rows', () => {
+test('publishing entity ids by site read the site column and take published and scheduled rows', () => {
   const query = buildPublishingEntityIdsBySiteQuery(database, { siteIds: ['S0A', 'S0B'] }).toSQL();
-  assert.match(query.sql, /inner join "spaces" on "publications"\."space_id" = "spaces"\."id"/);
-  assert.match(query.sql, /"spaces"\."site_id" in \(/);
+  assert.doesNotMatch(query.sql, /"spaces"/);
+  assert.match(query.sql, /"publications"\."site_id" in \(/);
   assert.match(query.sql, /"publications"\."state" in \(/);
   assert.deepEqual(query.params, ['S0A', 'S0B', 'PUBLISHED', 'SCHEDULED']);
 });
@@ -169,8 +171,56 @@ test('PUBLIC visibility is reserved for publishing and cannot be requested direc
   assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PRIVATE), null);
 });
 
-test('generateNumericPermalink returns 11 digits without a leading zero', () => {
-  for (let i = 0; i < 100; i++) {
-    assert.match(generateNumericPermalink(), /^[1-9]\d{10}$/);
-  }
+test('mergeTags keeps existing order, appends added ones, drops removed ones and duplicates', () => {
+  assert.deepEqual(mergeTags(['에세이', '소설'], ['소설', '일기'], ['에세이']), ['소설', '일기']);
+  assert.deepEqual(mergeTags([], undefined, undefined), []);
+});
+
+test('resolveBulkPublishPlan republishes a published edition with merged tags', () => {
+  const [step] = resolveBulkPublishPlan(
+    [{ documentId: 'D1', existing: { state: PublicationState.PUBLISHED, scheduledAt: null, tags: ['a'] } }],
+    { addTags: ['b'] },
+  );
+  assert.deepEqual(step, { kind: 'republish', documentId: 'D1', tags: ['a', 'b'] });
+});
+
+test('resolveBulkPublishPlan publishes an unpublished document right away', () => {
+  const [step] = resolveBulkPublishPlan([{ documentId: 'D1', existing: null }], {});
+  assert.deepEqual(step, { kind: 'publish', documentId: 'D1', tags: [], scheduledAt: null, currentState: null });
+});
+
+test('resolveBulkPublishPlan keeps the scheduled time when scheduledAt is omitted and drops it on null', () => {
+  const at = dayjs('2026-09-20T10:00:00+09:00');
+  const existing = { state: PublicationState.SCHEDULED, scheduledAt: at, tags: ['a'] };
+  const [kept] = resolveBulkPublishPlan([{ documentId: 'D1', existing }], {});
+  assert.ok(kept.kind === 'publish' && kept.scheduledAt?.isSame(at));
+  const [now] = resolveBulkPublishPlan([{ documentId: 'D1', existing }], { scheduledAt: null });
+  assert.ok(now.kind === 'publish' && now.scheduledAt === null && now.currentState === PublicationState.SCHEDULED);
+});
+
+test('resolveBulkPublishPlan plans a mixed selection in input order and lets removeTags win over addTags', () => {
+  const at = dayjs('2026-09-20T10:00:00+09:00');
+  const steps = resolveBulkPublishPlan(
+    [
+      { documentId: 'D1', existing: null },
+      { documentId: 'D2', existing: { state: PublicationState.SCHEDULED, scheduledAt: at, tags: ['a', 'b'] } },
+      { documentId: 'D3', existing: { state: PublicationState.PUBLISHED, scheduledAt: null, tags: ['a'] } },
+    ],
+    { addTags: ['c', 'b'], removeTags: ['a', 'c'] },
+  );
+  assert.deepEqual(
+    steps.map((step) => [step.kind, step.documentId, step.tags]),
+    [
+      ['publish', 'D1', ['b']],
+      ['publish', 'D2', ['b']],
+      ['republish', 'D3', ['b']],
+    ],
+  );
+});
+
+test('summarizePublicationStates counts published, scheduled and the rest as unpublished', () => {
+  assert.deepEqual(
+    summarizePublicationStates([PublicationState.PUBLISHED, PublicationState.SCHEDULED, PublicationState.UNPUBLISHED, null]),
+    { published: 1, scheduled: 1, unpublished: 2 },
+  );
 });

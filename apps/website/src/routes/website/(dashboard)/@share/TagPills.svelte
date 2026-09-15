@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
+  import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import PlusIcon from '~icons/lucide/plus';
   import XIcon from '~icons/lucide/x';
@@ -9,10 +10,12 @@
 
   type Props = {
     tags: string[];
+    partial?: { tag: string; count: number }[];
+    onremovepartial?: (tag: string) => void;
     disabled?: boolean;
   };
 
-  let { tags = $bindable(), disabled = false }: Props = $props();
+  let { tags = $bindable(), partial = [], onremovepartial, disabled = false }: Props = $props();
 
   type Mode = { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; tag: string };
 
@@ -251,6 +254,12 @@
     paddingRight: '9px',
   });
 
+  const chipPartialStyle = css.raw({
+    borderStyle: 'dashed',
+    borderColor: 'border.default',
+    color: 'text.hint',
+  });
+
   const inputStyle = css.raw({
     gridArea: '[1 / 1]',
     width: 'full',
@@ -351,6 +360,27 @@
     </span>
   {/each}
 
+  {#each partial.filter((item) => !tags.includes(item.tag)) as item (item.tag)}
+    <span
+      class={css(tagChipStyle, chipPartialStyle, disabled || !onremovepartial ? chipLockedStyle : undefined)}
+      use:tooltip={{ message: `글 ${item.count}개에만`, placement: 'top' }}
+    >
+      <span>{item.tag}</span>
+
+      {#if !disabled && onremovepartial}
+        <button
+          class={center({ size: '14px', borderRadius: 'full', color: '[inherit]', opacity: '70', _hover: { opacity: '100' } })}
+          aria-label="태그 삭제"
+          onclick={() => onremovepartial(item.tag)}
+          onmousedown={(event) => event.preventDefault()}
+          type="button"
+        >
+          <Icon icon={XIcon} size={10} />
+        </button>
+      {/if}
+    </span>
+  {/each}
+
   {#if !disabled}
     {#if mode.kind === 'add'}
       {@render pillInput('태그 입력')}
@@ -384,7 +414,7 @@
       <span>{tags.length > 0 ? '추가' : '태그 추가'}</span>
       <Icon icon={PlusIcon} size={12} />
     </button>
-  {:else if tags.length === 0}
+  {:else if tags.length === 0 && partial.length === 0}
     <span class={css({ fontSize: '13px', color: 'text.hint' })}>없음</span>
   {/if}
 

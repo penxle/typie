@@ -5,7 +5,7 @@ import {
   DocumentZombieSweepDueCron,
   DocumentZombieSweepJob,
 } from './changeset.ts';
-import { PublicationIndexJob, SpaceIndexJob } from './discovery.ts';
+import { PublicationIndexJob, SiteIndexJob } from './discovery.ts';
 import {
   SendSubscriptionExpiredEmailJob,
   SendSubscriptionExpiringEmailJob,
@@ -39,7 +39,7 @@ export const jobs = [
   DocumentIndexJob,
   FolderIndexJob,
   PublicationIndexJob,
-  SpaceIndexJob,
+  SiteIndexJob,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalRetryJob,
   SubscriptionRenewalPlanChangeJob,

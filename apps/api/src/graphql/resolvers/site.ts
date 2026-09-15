@@ -1,20 +1,21 @@
 import { faker } from '@faker-js/faker';
-import { DocumentType, EntityState, EntityType, EntityVisibility, SiteDateDisplay, SiteState } from '@typie/lib/enums';
-import { NotFoundError, TypieError } from '@typie/lib/errors';
+import { DocumentType, EntityState, EntityType, SiteDateDisplay, SiteState } from '@typie/lib/enums';
+import { TypieError } from '@typie/lib/errors';
 import { siteSchema } from '@typie/lib/validation';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { match } from 'ts-pattern';
 import { clearLoaders } from '#/context.ts';
-import { db, Documents, Entities, first, firstOrThrow, firstOrThrowWith, Sites, TableCode, Users, validateDbId } from '#/db/index.ts';
+import { db, Documents, Entities, first, firstOrThrow, Sites, TableCode, Users, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import { pubsub } from '#/pubsub.ts';
-import { enqueueDiscoverySpaceSync } from '#/utils/discovery-index.ts';
+import { enqueueDiscoveryPublicationSync, enqueueDiscoverySiteSync } from '#/utils/discovery-index.ts';
 import { generateRandomAvatar, persistBlobAsImage } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { buildPinnedEntitiesBatchQuery } from '#/utils/pinned-entities.ts';
 import { assertActiveSubscription } from '#/utils/plan.ts';
+import { unpublishBySiteIdsCore } from '#/utils/publication-unpublish.ts';
 import {
   buildRecentDocumentsBatchQuery,
   clampRecentDocumentLimit,
@@ -22,11 +23,11 @@ import {
   RECENT_DOCUMENT_SORTS,
   toRecentDocumentsPage,
 } from '#/utils/recent-documents.ts';
-import { deleteSpacesBySiteIdsCore } from '#/utils/space.ts';
-import { buildSpacesBySiteQuery } from '#/utils/space-core.ts';
-import { parseUsersiteSlug } from '#/utils/usersite-core.ts';
+import { normalizeSiteLinks } from '#/utils/site-core.ts';
+import { siteUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
-import { Document, Entity, EntityView, Image, ISite, isTypeOf, Site, SiteView, Space, User } from '../objects.ts';
+import { Document, Entity, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
+import type { SiteLink } from '#/utils/site-core.ts';
 
 const RecentDocumentSort = builder.enumType('RecentDocumentSort', { values: RECENT_DOCUMENT_SORTS });
 
@@ -41,16 +42,34 @@ const RecentDocumentsResult = builder.simpleObject('RecentDocumentsResult', {
  * * Types
  */
 
+const SiteLinkObject = builder.simpleObject('SiteLink', {
+  fields: (t) => ({
+    label: t.string(),
+    url: t.string(),
+  }),
+});
+
+const SiteLinkInput = builder.inputType('SiteLinkInput', {
+  fields: (t) => ({
+    label: t.string(),
+    url: t.string(),
+  }),
+});
+
 ISite.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
     slug: t.exposeString('slug'),
     name: t.exposeString('name'),
     logo: t.expose('logoId', { type: Image }),
+    description: t.exposeString('description', { nullable: true }),
+    links: t.field({ type: [SiteLinkObject], resolve: (self) => self.links }),
+    allowIndexing: t.exposeBoolean('allowIndexing'),
+    allowDiscovery: t.exposeBoolean('allowDiscovery'),
 
     dateDisplay: t.expose('dateDisplay', { type: SiteDateDisplay }),
 
-    url: t.string({ resolve: (self) => env.USERSITE_URL.replace('*', () => self.slug) }),
+    url: t.string({ resolve: (self) => siteUrl(env.USERSITE_URL, self.slug) }),
   }),
 });
 
@@ -201,22 +220,6 @@ Site.implement({
       },
     }),
 
-    spaces: t.field({
-      type: [Space],
-      resolve: async (self, _, ctx) => {
-        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
-
-        const loader = ctx.loader({
-          name: 'Site.spaces',
-          many: true,
-          load: async (ids) => await buildSpacesBySiteQuery(db, { siteIds: ids }),
-          key: ({ siteId }) => siteId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
-
     folderCount: t.int({
       resolve: async (self) => {
         const rows = await db.execute<{ count: number }>(
@@ -272,40 +275,6 @@ Site.implement({
   }),
 });
 
-SiteView.implement({
-  isTypeOf: isTypeOf(TableCode.SITES),
-  interfaces: [ISite],
-  fields: (t) => ({
-    entities: t.field({
-      type: [EntityView],
-      resolve: async (self, _, ctx) => {
-        const loader = ctx.loader({
-          name: 'SiteView.entities',
-          many: true,
-          load: async (ids) => {
-            return await db
-              .select()
-              .from(Entities)
-              .where(
-                and(
-                  inArray(Entities.siteId, ids),
-                  eq(Entities.state, EntityState.ACTIVE),
-                  ne(Entities.type, EntityType.DIVIDER),
-                  eq(Entities.visibility, EntityVisibility.PUBLIC),
-                  isNull(Entities.parentId),
-                ),
-              )
-              .orderBy(asc(Entities.order));
-          },
-          key: ({ siteId }) => siteId,
-        });
-
-        return await loader.load(self.id);
-      },
-    }),
-  }),
-});
-
 /**
  * * Queries
  */
@@ -323,25 +292,6 @@ builder.queryFields((t) => ({
       return args.siteId;
     },
   }),
-
-  siteView: t.field({
-    type: SiteView,
-    args: { origin: t.arg.string() },
-    resolve: async (_, args) => {
-      const slug = parseUsersiteSlug(args.origin, env.USERSITE_URL);
-      if (!slug) {
-        throw new TypieError({ code: 'invalid_hostname' });
-      }
-
-      const site = await db
-        .select()
-        .from(Sites)
-        .where(and(eq(Sites.slug, slug), eq(Sites.state, SiteState.ACTIVE)))
-        .then(firstOrThrowWith(new NotFoundError()));
-
-      return site;
-    },
-  }),
 }));
 
 /**
@@ -355,6 +305,10 @@ builder.mutationFields((t) => ({
       siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
       name: t.input.string({ required: false }),
       logoId: t.input.id({ required: false }),
+      description: t.input.string({ required: false }),
+      links: t.input.field({ type: [SiteLinkInput], required: false }),
+      allowIndexing: t.input.boolean({ required: false }),
+      allowDiscovery: t.input.boolean({ required: false }),
       dateDisplay: t.input.field({ type: SiteDateDisplay, required: false }),
     },
     resolve: async (_, { input }, ctx) => {
@@ -365,12 +319,33 @@ builder.mutationFields((t) => ({
 
       await assertActiveSubscription({ userId: ctx.session.userId });
 
-      const updateData: { name?: string; logoId?: string; dateDisplay?: SiteDateDisplay } = {};
+      const updateData: {
+        name?: string;
+        logoId?: string;
+        description?: string | null;
+        links?: SiteLink[];
+        allowIndexing?: boolean;
+        allowDiscovery?: boolean;
+        dateDisplay?: SiteDateDisplay;
+      } = {};
       if (input.name !== undefined && input.name !== null) {
         updateData.name = input.name;
       }
       if (input.logoId !== undefined && input.logoId !== null) {
         updateData.logoId = input.logoId;
+      }
+      if (input.description !== undefined) {
+        const description = input.description?.trim() ?? '';
+        updateData.description = description.length > 0 ? description : null;
+      }
+      if (input.links !== undefined && input.links !== null) {
+        updateData.links = normalizeSiteLinks(input.links);
+      }
+      if (input.allowIndexing !== undefined && input.allowIndexing !== null) {
+        updateData.allowIndexing = input.allowIndexing;
+      }
+      if (input.allowDiscovery !== undefined && input.allowDiscovery !== null) {
+        updateData.allowDiscovery = input.allowDiscovery;
       }
       if (input.dateDisplay !== undefined && input.dateDisplay !== null) {
         updateData.dateDisplay = input.dateDisplay;
@@ -380,7 +355,10 @@ builder.mutationFields((t) => ({
         return await db.select().from(Sites).where(eq(Sites.id, input.siteId)).then(firstOrThrow);
       }
 
-      return await db.update(Sites).set(updateData).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+      const site = await db.update(Sites).set(updateData).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+      pubsub.publish('site:update', site.id, { scope: 'site' });
+      await enqueueDiscoverySiteSync([site.id]);
+      return site;
     },
   }),
 
@@ -408,7 +386,9 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'site_slug_already_exists' });
       }
 
-      return await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+      const site = await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+      pubsub.publish('site:update', site.id, { scope: 'site' });
+      return site;
     },
   }),
 
@@ -455,7 +435,7 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
-      let deletedSpaceIds: string[] = [];
+      let unpublishedPublicationIds: string[] = [];
 
       const site = await db.transaction(async (tx) => {
         const activeSites = await tx
@@ -468,12 +448,13 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'cannot_delete_last_site' });
         }
 
-        deletedSpaceIds = await deleteSpacesBySiteIdsCore(tx, { siteIds: [input.siteId], now: dayjs() });
+        unpublishedPublicationIds = await unpublishBySiteIdsCore(tx, { siteIds: [input.siteId], now: dayjs() });
 
         return await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
       });
 
-      await enqueueDiscoverySpaceSync(deletedSpaceIds);
+      await enqueueDiscoveryPublicationSync(unpublishedPublicationIds);
+      await enqueueDiscoverySiteSync([site.id]);
 
       return site;
     },

@@ -1,17 +1,22 @@
 <script lang="ts">
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { Helmet } from '@typie/ui/components';
   import { hydrateQuery } from '$lib/graphql';
-  import DiscoverySectionHead from '../../(site)/DiscoverySectionHead.svelte';
-  import PublicationListSection from '../PublicationListSection.svelte';
+  import SiteEntries from '../SiteEntries.svelte';
 
   let { data } = $props();
 
   const query = $derived(hydrateQuery(() => data.query));
-  const space = $derived(query.data.spaceView);
+  const site = $derived(query.data.siteView);
 </script>
 
-<Helmet description={space.description ?? space.name} title={space.name} />
+<Helmet description={site.description ?? site.name} title={site.name} />
 
-<DiscoverySectionHead count={space.publicationCount} title="글" />
-
-<PublicationListSection initialHasMore={space.publications.hasMore} publications={space.publications.publications} />
+{#if site.entries.length > 0}
+  <SiteEntries entries={site.entries} />
+{:else}
+  <div class={flex({ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingY: '80px' })}>
+    <p class={css({ fontSize: '14px', color: 'text.hint' })}>아직 발행한 글이 없어요</p>
+  </div>
+{/if}

@@ -9,4 +9,8 @@ export const isUsersiteApexOrigin = (origin: string, usersiteUrl: string) => ori
 
 export const usersiteApexUrl = (usersiteUrl: string) => usersiteUrl.replace('*.', '');
 
-export const spaceUrl = (usersiteUrl: string, slug: string) => `${usersiteApexUrl(usersiteUrl)}/@${slug}`;
+export const siteUrl = (usersiteUrl: string, slug: string) => `${usersiteApexUrl(usersiteUrl)}/@${slug}`;
+
+export const publicationUrl = (usersiteUrl: string, slug: string, number: string) => `${siteUrl(usersiteUrl, slug)}/p/${number}`;
+
+export const folderUrl = (usersiteUrl: string, slug: string, number: string) => `${siteUrl(usersiteUrl, slug)}/f/${number}`;

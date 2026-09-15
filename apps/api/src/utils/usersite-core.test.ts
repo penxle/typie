@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isUsersiteApexOrigin, parseUsersiteSlug, spaceUrl, usersiteApexUrl } from './usersite-core.ts';
+import { folderUrl, isUsersiteApexOrigin, parseUsersiteSlug, publicationUrl, siteUrl, usersiteApexUrl } from './usersite-core.ts';
 
 const USERSITE_URL = 'https://*.typie.me';
 
@@ -30,6 +30,11 @@ test('usersiteApexUrl strips the wildcard label', () => {
   assert.equal(usersiteApexUrl(USERSITE_URL), 'https://typie.me');
 });
 
-test('spaceUrl places the slug under the apex origin with an @ prefix', () => {
-  assert.equal(spaceUrl(USERSITE_URL, 'myspace'), 'https://typie.me/@myspace');
+test('siteUrl places the slug under the apex origin with an @ prefix', () => {
+  assert.equal(siteUrl(USERSITE_URL, 'myspace'), 'https://typie.me/@myspace');
+});
+
+test('publication and folder urls hang off the site url', () => {
+  assert.equal(publicationUrl(USERSITE_URL, 'myspace', '12345678901'), 'https://typie.me/@myspace/p/12345678901');
+  assert.equal(folderUrl(USERSITE_URL, 'myspace', '12345678901'), 'https://typie.me/@myspace/f/12345678901');
 });

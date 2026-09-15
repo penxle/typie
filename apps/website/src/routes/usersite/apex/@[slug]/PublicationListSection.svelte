@@ -5,18 +5,17 @@
   import { Button, RingSpinner } from '@typie/ui/components';
   import { discoveryCardList } from '../(site)/discovery-styles';
   import DiscoveryCard from '../(site)/DiscoveryCard.svelte';
-  import PublicationListPage from './PublicationListPage.svelte';
   import TagPublicationListPage from './TagPublicationListPage.svelte';
   import type { UsersiteApex_DiscoveryCard_publicationView$key } from '$mearie';
 
   type Props = {
     publications: readonly ({ id: string } & UsersiteApex_DiscoveryCard_publicationView$key)[];
     initialHasMore?: boolean;
-    tagName?: string | null;
-    showCollection?: boolean;
+    tagName: string;
+    showFolder?: boolean;
   };
 
-  let { publications, initialHasMore = false, tagName = null, showCollection = true }: Props = $props();
+  let { publications, initialHasMore = false, tagName, showFolder = true }: Props = $props();
 
   let cursors = $state<string[]>([]);
   let hasMore = $state(false);
@@ -46,15 +45,11 @@
   <section>
     <div class={css(discoveryCardList)}>
       {#each publications as publication (publication.id)}
-        <DiscoveryCard context="space" publicationView$key={publication} {showCollection} />
+        <DiscoveryCard context="space" publicationView$key={publication} {showFolder} />
       {/each}
 
       {#each cursors as after (after)}
-        {#if tagName === null}
-          <PublicationListPage {after} {onLoaded} {showCollection} />
-        {:else}
-          <TagPublicationListPage {after} {onLoaded} {showCollection} {tagName} />
-        {/if}
+        <TagPublicationListPage {after} {onLoaded} {showFolder} {tagName} />
       {/each}
     </div>
 
