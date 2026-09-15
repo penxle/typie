@@ -71,8 +71,8 @@ fun UpdatePasswordScreen() {
     Column(
       modifier =
         Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
           .imePadding()
+          .verticalScroll(scrollState)
           .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(12.dp),

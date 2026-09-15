@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +46,9 @@ import co.typie.domain.subscription.grantsAccess
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsOrImePadding
+import co.typie.ext.navigationBars
 import co.typie.ext.pressScale
+import co.typie.ext.rememberTrustedImeInsets
 import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
@@ -162,8 +167,9 @@ fun StudioSettingsScreen() {
     Column(
       modifier =
         Modifier.fillMaxSize()
+          .windowInsetsPadding(rememberTrustedImeInsets().only(WindowInsetsSides.Bottom))
           .verticalScroll(scrollState)
-          .navigationBarsOrImePadding()
+          .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
           .padding(AppTheme.spacings.scrollBottomPadding)
     ) {
       SpaceLogoHero(

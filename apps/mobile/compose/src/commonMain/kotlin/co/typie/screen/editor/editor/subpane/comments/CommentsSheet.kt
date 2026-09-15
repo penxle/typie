@@ -178,6 +178,9 @@ private fun CommentsSheetContent(
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
+  val bottomInset = safeBottomInset + keyboardOcclusion
+  // Keep content drawing into the safe area while the keyboard is hidden.
+  val keyboardPadding = if (keyboardOcclusion > 0.dp) bottomInset else 0.dp
   var pendingReopenedThreadId by remember { mutableStateOf<String?>(null) }
   var commentSubmitInProgress by remember { mutableStateOf(false) }
 
@@ -442,12 +445,13 @@ private fun CommentsSheetContent(
       Column(
         modifier =
           Modifier.fillMaxSize()
+            .padding(bottom = keyboardPadding)
             .verticalScroll(scrollState)
             .padding(
               start = 16.dp,
               top = EditorSubPaneContentTopPadding,
               end = 16.dp,
-              bottom = safeBottomInset + keyboardOcclusion + CommentsListBottomContentPadding,
+              bottom = bottomInset - keyboardPadding + CommentsListBottomContentPadding,
             ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {

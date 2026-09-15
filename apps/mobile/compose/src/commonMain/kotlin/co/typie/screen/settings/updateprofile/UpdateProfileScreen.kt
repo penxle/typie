@@ -116,8 +116,8 @@ fun UpdateProfileScreen() {
     Column(
       modifier =
         Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
           .imePadding()
+          .verticalScroll(scrollState)
           .padding(innerPadding)
           .padding(AppTheme.spacings.scrollBottomPadding)
     ) {
