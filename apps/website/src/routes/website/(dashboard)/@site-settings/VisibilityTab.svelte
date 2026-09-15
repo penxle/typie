@@ -55,7 +55,7 @@
     try {
       await updateSite({ input: { siteId: site.data.id, ...input } });
       mixpanel.track('update_site', { field });
-      Toast.success('작업실 설정이 업데이트됐어요.');
+      Toast.success('스페이스 설정이 업데이트됐어요.');
       return true;
     } catch (err) {
       Toast.error(publicationErrorMessage(publicationErrorCode(err)));
@@ -105,13 +105,10 @@
         타이피 스퀘어에 노출
       {/snippet}
       {#snippet description()}
-        {allowIndexing ? '끄면 타이피 스퀘어 피드 및 검색에 스페이스와 글이 나오지 않아요.' : '검색 엔진에 노출을 켜야 쓸 수 있어요'}
+        끄면 타이피 스퀘어 피드 및 검색에 스페이스와 글이 나오지 않아요.
       {/snippet}
       {#snippet value()}
-        <Switch
-          disabled={!allowIndexing}
-          bind:checked={() => allowIndexing && allowDiscovery, (checked) => void setAllowDiscovery(checked)}
-        />
+        <Switch bind:checked={() => allowDiscovery, (checked) => void setAllowDiscovery(checked)} />
       {/snippet}
     </SettingsRow>
   </SettingsCard>

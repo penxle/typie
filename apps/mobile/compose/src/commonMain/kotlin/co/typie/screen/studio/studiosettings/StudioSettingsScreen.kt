@@ -131,7 +131,7 @@ fun StudioSettingsScreen() {
   }
 
   ProvideTopBar(
-    center = { Text("작업실 설정", style = AppTheme.typography.title) },
+    center = { Text("스페이스 설정", style = AppTheme.typography.title) },
     trailing = { MoreMenu(model) },
   )
 
@@ -149,7 +149,7 @@ fun StudioSettingsScreen() {
           onClick = {
             if (!SubscriptionService.gate(sheet, GatedAction.UpdateSpace)) return@Button
             model.submit().withDefaultExceptionHandler(toast).onOk {
-              toast.success("작업실 설정이 변경되었어요.")
+              toast.success("스페이스 설정이 변경되었어요.")
               nav.pop()
             }
           },
@@ -187,7 +187,7 @@ fun StudioSettingsScreen() {
             field = model.form.name,
             label = "이름",
             labelPosition = LabelPosition.Internal,
-            placeholder = "작업실 이름",
+            placeholder = "스페이스 이름",
           )
 
           Box(
@@ -201,10 +201,10 @@ fun StudioSettingsScreen() {
               label = "주소",
               help =
                 if (!SubscriptionService.entitlement.grantsAccess()) {
-                  "작업실 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                  "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                 } else null,
               labelPosition = LabelPosition.Internal,
-              placeholder = "작업실 주소",
+              placeholder = "스페이스 주소",
               enabled = SubscriptionService.entitlement.grantsAccess(),
               readOnly = !SubscriptionService.entitlement.grantsAccess(),
               suffix = {
@@ -272,13 +272,13 @@ private fun MoreMenu(model: StudioSettingsViewModel) {
   val dialog = LocalDialog.current
   val colors = AppTheme.colors
 
-  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "작업실 메뉴") }) {
-    item(icon = Lucide.Trash2, label = "작업실 삭제", color = colors.danger) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis, contentDescription = "스페이스 메뉴") }) {
+    item(icon = Lucide.Trash2, label = "스페이스 삭제", color = colors.danger) {
       if (model.query.data.me.sites.size <= 1) {
         scope.launch {
           dialog.alert(
-            title = "작업실을 삭제할 수 없어요",
-            message = "계정에는 최소 1개의 작업실이 필요해요.\n새 작업실을 만든 후 삭제할 수 있어요.",
+            title = "스페이스를 삭제할 수 없어요",
+            message = "계정에는 최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
           )
         }
       } else {
@@ -290,7 +290,7 @@ private fun MoreMenu(model: StudioSettingsViewModel) {
               isDeleting = model.isDeleting,
               onDelete = {
                 model.deleteSite().withDefaultExceptionHandler(toast).onOk {
-                  toast.success("작업실이 삭제되었어요.")
+                  toast.success("스페이스가 삭제되었어요.")
                   complete(Unit)
                   nav.pop()
                 }
@@ -354,9 +354,7 @@ private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
   isDeleting: Boolean,
-  onDelete:
-    suspend context(SheetScope<Unit>)
-    () -> Unit,
+  onDelete: suspend context(SheetScope<Unit>) () -> Unit,
 ) {
   var inputValue by remember { mutableStateOf("") }
 
@@ -368,7 +366,7 @@ private fun DeleteSiteSheet(
       SheetBar(
         center = {
           Text(
-            text = "작업실 삭제",
+            text = "스페이스 삭제",
             style = AppTheme.typography.title,
             color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
@@ -398,7 +396,7 @@ private fun DeleteSiteSheet(
             "${folderCount}개의 폴더와 ${documentCount}개의 문서가 함께 삭제돼요."
           folderCount > 0 -> "${folderCount}개의 폴더가 함께 삭제돼요."
           documentCount > 0 -> "${documentCount}개의 문서가 함께 삭제돼요."
-          else -> "작업실이 비어있어요."
+          else -> "스페이스가 비어있어요."
         },
       variant =
         if (folderCount == 0 && documentCount == 0) AlertBannerVariant.Default
@@ -410,7 +408,7 @@ private fun DeleteSiteSheet(
         value = inputValue,
         onValueChange = { inputValue = it },
         label = "확인 숫자",
-        help = "삭제를 진행하려면 작업실과 함께 삭제되는 문서 수($documentCount)를 입력해주세요.",
+        help = "삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($documentCount)를 입력해주세요.",
         helpTextStyle = AppTheme.typography.caption,
         placeholder = confirmText,
         autoFocus = true,

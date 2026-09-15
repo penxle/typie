@@ -26,7 +26,7 @@ const assertDiscoverablePredicate = (sql: string) => {
   assert.match(sql, /"publications"\."state" = /);
   assert.match(sql, /"entities"\."state" = /);
   assert.match(sql, /"sites"\."state" = /);
-  assert.match(sql, /"sites"\."allow_indexing" = /);
+  assert.doesNotMatch(sql, /"sites"\."allow_indexing"/);
   assert.match(sql, /"sites"\."allow_discovery" = /);
   assert.match(sql, /"documents"\."password" is null/);
   assert.match(sql, /where .*"publications"\."state" = \$\d+ and .*"documents"\."password" is null/s);
@@ -39,13 +39,13 @@ test('discovery publications apply the platform predicate, order newest first, a
   assert.match(query.sql, /\("publications"\."published_at", "publications"\."id"\) < \(select/);
   assert.match(query.sql, /order by "publications"\."published_at" desc, "publications"\."id" desc/);
   assert.match(query.sql, /limit /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, 'PUB0Z', 21]);
 });
 
 test('discovery publications without a cursor omit the keyset clause', () => {
   const query = buildDiscoveryPublicationsQuery(database, { after: null, limit: 21 }).toSQL();
   assert.doesNotMatch(query.sql, /< \(select/);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, 21]);
 });
 
 test('discovery publications can be narrowed to one tag across every site', () => {
@@ -68,7 +68,7 @@ test('discovery feed keeps only the newest post of each consecutive same-site ru
   assert.match(query.sql, /order by "feed_publications"\."published_at" desc, "feed_publications"\."id" desc/);
   assert.doesNotMatch(query.sql, /<= \(select/);
   assert.doesNotMatch(query.sql, /"feed_publications"\."id" <> /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, 21]);
 });
 
 test('discovery feed cursor keeps the cursor row inside the window and drops it from the page', () => {
@@ -76,7 +76,7 @@ test('discovery feed cursor keeps the cursor row inside the window and drops it 
   assert.match(query.sql, /\("publications"\."published_at", "publications"\."id"\) <= \(select/);
   assert.match(query.sql, /"feed_publications"\."id" <> \$\d+/);
   assert.match(query.sql, /limit /);
-  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, true, 'PUB0Z', 'PUB0Z', 21]);
+  assert.deepEqual(query.params, ['PUBLISHED', 'ACTIVE', 'ACTIVE', true, 'PUB0Z', 'PUB0Z', 21]);
 });
 
 test('discovery tags aggregate discoverable rows by name, most used first, limited when asked', () => {
@@ -109,14 +109,14 @@ test('discoverable publications by ids keep the platform predicate and take an i
   assert.ok(query.params.includes('PUB0A') && query.params.includes('PUB0B'));
 });
 
-test('discoverable sites by ids require an active site with both switches on', () => {
+test('discoverable sites by ids require an active site with discovery on, independent of indexing', () => {
   const query = buildDiscoverableSitesByIdsQuery(database, { siteIds: ['S0A'] }).toSQL();
   assert.match(query.sql, /"sites"\."id" in \(/);
   assert.match(query.sql, /"sites"\."state" = /);
-  assert.match(query.sql, /"sites"\."allow_indexing" = /);
+  assert.doesNotMatch(query.sql, /"sites"\."allow_indexing"/);
   assert.match(query.sql, /"sites"\."allow_discovery" = /);
   assert.doesNotMatch(query.sql, /"publications"/);
-  assert.deepEqual(query.params, ['S0A', 'ACTIVE', true, true]);
+  assert.deepEqual(query.params, ['S0A', 'ACTIVE', true]);
 });
 
 test('discovery tag counts aggregate only the named tags under the platform predicate', () => {

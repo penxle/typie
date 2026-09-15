@@ -330,6 +330,7 @@ zeed
 zrangebyscore
 zrem
 zremrangebyscore
+zrevrange
 zscore
 zset
 zstd

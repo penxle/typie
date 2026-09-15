@@ -75,8 +75,8 @@ private fun TriggerContent(logo: Img_image, onClick: suspend () -> Unit) {
         .clip(shape)
         .background(TopBarDefaults.controlBackgroundColor(), shape)
         .border(1.dp, TopBarDefaults.controlBorderColor(), shape)
-        .tooltip("작업실 메뉴")
-        .semantics { contentDescription = "작업실 메뉴" }
+        .tooltip("스페이스 메뉴")
+        .semantics { contentDescription = "스페이스 메뉴" }
         .hoverFeedback(shape = shape)
         .clickable(onClick = onClick)
         .padding(horizontal = TriggerHorizontalPadding),

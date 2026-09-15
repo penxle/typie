@@ -1,21 +1,26 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { tooltip } from '@typie/ui/actions';
+  import { createFloatingActions, registerFocusTrapContainer, tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
+  import { untrack } from 'svelte';
   import PlusIcon from '~icons/lucide/plus';
   import XIcon from '~icons/lucide/x';
   import { duplicatedTagInput, parseTagInput } from '$lib/publication/publish-form';
+  import { graphql } from '$mearie';
   import { tagChipStyle } from './publish-styles';
+  import TagSuggestions from './TagSuggestions.svelte';
 
   type Props = {
+    siteId: string;
     tags: string[];
     partial?: { tag: string; count: number }[];
     onremovepartial?: (tag: string) => void;
     disabled?: boolean;
   };
 
-  let { tags = $bindable(), partial = [], onremovepartial, disabled = false }: Props = $props();
+  let { siteId, tags = $bindable(), partial = [], onremovepartial, disabled = false }: Props = $props();
 
   type Mode = { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; tag: string };
 
@@ -27,6 +32,101 @@
   let addButtonEl = $state<HTMLButtonElement>();
   let inputEl = $state<HTMLInputElement>();
   let chipEls = $state<(HTMLButtonElement | null)[]>([]);
+
+  const SUGGEST_DEBOUNCE_MS = 150;
+  const panelId = $props.id();
+
+  let debouncedDraft = $state('');
+  let highlighted = $state<number | null>(null);
+  type Suggestion = { name: string; count: number };
+
+  let suggestions = $state<{ mine: readonly Suggestion[]; popular: readonly Suggestion[] }>({ mine: [], popular: [] });
+  let panelEl = $state<HTMLDivElement>();
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const suggestionsQuery = createQuery(
+    graphql(`
+      query DashboardLayout_Share_TagPills_Query($siteId: ID!, $query: String!, $exclude: [String!]) {
+        site(siteId: $siteId) {
+          id
+
+          tagSuggestions(query: $query, exclude: $exclude) {
+            mine {
+              name
+              count
+            }
+
+            popular {
+              name
+              count
+            }
+          }
+        }
+      }
+    `),
+    () => ({ siteId, query: debouncedDraft, exclude: tags }),
+    () => ({ skip: mode.kind !== 'add' }),
+  );
+
+  $effect(() => {
+    const data = suggestionsQuery.data?.site.tagSuggestions;
+    if (data) suggestions = { mine: data.mine, popular: data.popular };
+  });
+
+  const visibleSuggestions = $derived({
+    mine: suggestions.mine.filter((suggestion) => !tags.includes(suggestion.name)),
+    popular: suggestions.popular.filter((suggestion) => !tags.includes(suggestion.name)),
+  });
+  const flatSuggestions = $derived([...visibleSuggestions.mine, ...visibleSuggestions.popular]);
+  const panelOpen = $derived(mode.kind === 'add' && flatSuggestions.length > 0);
+
+  const { anchor: suggestAnchor, floating: suggestFloating } = createFloatingActions({ placement: 'bottom-start', offset: 4 });
+
+  $effect(() => {
+    const input = inputEl;
+    const panel = panelEl;
+    if (!panelOpen || !input || !panel) return;
+    const host = input.closest<HTMLElement>('[data-focus-trap]');
+    if (!host) return;
+    return untrack(() => registerFocusTrapContainer(host, panel));
+  });
+
+  $effect(() => {
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  });
+
+  const scheduleSuggest = (value: string) => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    highlighted = null;
+    debounceTimer = setTimeout(() => {
+      debouncedDraft = value;
+    }, SUGGEST_DEBOUNCE_MS);
+  };
+
+  const resetSuggest = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debouncedDraft = '';
+    highlighted = null;
+  };
+
+  const pickSuggestion = (name: string) => {
+    commit(name);
+    draft = '';
+    resetSuggest();
+    inputEl?.focus();
+  };
+
+  const moveHighlight = (delta: 1 | -1) => {
+    const total = flatSuggestions.length;
+    if (total === 0) return;
+    if (highlighted === null) {
+      highlighted = delta === 1 ? 0 : total - 1;
+      return;
+    }
+    highlighted = (highlighted + delta + total) % total;
+  };
 
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
   let skipBlur = false;
@@ -82,6 +182,8 @@
   const close = () => {
     mode = { kind: 'idle' };
     draft = '';
+    suggestions = { mine: [], popular: [] };
+    resetSuggest();
   };
 
   const startAdding = () => {
@@ -89,6 +191,7 @@
     switching = mode.kind !== 'idle';
     mode = { kind: 'add' };
     draft = '';
+    resetSuggest();
 
     requestAnimationFrame(() => {
       switching = false;
@@ -169,10 +272,12 @@
       const rest = pieces.pop() ?? '';
       commit(pieces.join(','));
       draft = rest;
+      scheduleSuggest(rest);
       return;
     }
 
     draft = value;
+    if (mode.kind === 'add') scheduleSuggest(value);
   };
 
   const handlePaste = (event: ClipboardEvent) => {
@@ -193,6 +298,12 @@
       return;
     }
 
+    if (panelOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      moveHighlight(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
     if (event.key === 'Enter') {
       event.preventDefault();
       if (mode.kind === 'edit') {
@@ -200,8 +311,14 @@
         const kept = rename(mode.tag, draft);
         finishEditing(kept ? index : index - 1);
       } else {
-        commit(draft);
-        draft = '';
+        const picked = highlighted === null ? undefined : flatSuggestions.at(highlighted);
+        if (picked) {
+          pickSuggestion(picked.name);
+        } else {
+          commit(draft);
+          draft = '';
+          resetSuggest();
+        }
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
@@ -277,7 +394,7 @@
 </script>
 
 {#snippet pillInput(placeholder: string)}
-  <span class={css({ display: 'inline-grid', minWidth: '56px', maxWidth: 'full' })}>
+  <span class={css({ display: 'inline-grid', minWidth: '56px', maxWidth: 'full' })} use:suggestAnchor>
     <span
       class={css({
         gridArea: '[1 / 1]',
@@ -297,6 +414,10 @@
     <input
       bind:this={inputEl}
       class={css(inputStyle)}
+      aria-activedescendant={highlighted !== null && mode.kind === 'add' ? `${panelId}-${highlighted}` : undefined}
+      aria-autocomplete={mode.kind === 'add' ? 'list' : undefined}
+      aria-controls={mode.kind === 'add' ? panelId : undefined}
+      aria-expanded={mode.kind === 'add' ? panelOpen : undefined}
       aria-label="태그"
       autocomplete="off"
       data-1p-ignore
@@ -305,6 +426,7 @@
       onkeydown={handleKeydown}
       onpaste={handlePaste}
       {placeholder}
+      role={mode.kind === 'add' ? 'combobox' : undefined}
       size="1"
       type="text"
       value={draft}
@@ -420,3 +542,19 @@
 
   <span class={css({ srOnly: true })} aria-live="polite">{announcement}</span>
 </div>
+
+{#if panelOpen}
+  <div
+    bind:this={panelEl}
+    class={css({ zIndex: 'tooltip', pointerEvents: 'auto' })}
+    use:suggestFloating={{ appendTo: document.querySelector('.tooltip-container') as Element | null }}
+  >
+    <TagSuggestions
+      id={panelId}
+      {highlighted}
+      mine={visibleSuggestions.mine}
+      onselect={pickSuggestion}
+      popular={visibleSuggestions.popular}
+    />
+  </div>
+{/if}

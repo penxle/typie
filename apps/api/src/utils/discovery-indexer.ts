@@ -118,7 +118,7 @@ export const indexSites = async (siteIds: string[], options: { cascade?: boolean
         query: { term: { site_id: id } },
         script: {
           source: 'ctx._source.discoverable = params.discoverable',
-          params: { discoverable: row.allowIndexing && row.allowDiscovery },
+          params: { discoverable: row.allowDiscovery },
         },
       });
       if (updated.timed_out || (updated.failures?.length ?? 0) > 0) {

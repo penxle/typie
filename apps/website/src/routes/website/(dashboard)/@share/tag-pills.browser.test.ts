@@ -1,11 +1,40 @@
 import '../../../../app.css';
 
+import { createQuery } from '@mearie/svelte';
 import { mount, unmount } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import TagPills from './TagPills.svelte';
 
+vi.mock(import('@mearie/svelte'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  createQuery: vi.fn(),
+}));
+
+type Suggestion = { name: string; count: number };
+type Suggestions = { mine: Suggestion[]; popular: Suggestion[] };
+
 let component: Record<string, unknown> | undefined;
+let getVariables: (() => unknown) | undefined;
+
+const mockSuggestions = (suggestions: Suggestions | undefined) => {
+  vi.mocked(createQuery)
+    .mockReset()
+    .mockImplementation(((_document: unknown, variables: () => unknown) => {
+      getVariables = variables;
+      return {
+        data: suggestions ? { site: { id: 'site-1', tagSuggestions: suggestions } } : undefined,
+        loading: false,
+        error: undefined,
+        refetch: vi.fn(),
+      };
+    }) as never);
+};
+
+beforeEach(() => {
+  getVariables = undefined;
+  mockSuggestions(undefined);
+});
 
 afterEach(async () => {
   if (component) await unmount(component);
@@ -16,7 +45,7 @@ afterEach(async () => {
 const openInput = async (tags: string[]) => {
   const target = document.createElement('div');
   document.body.append(target);
-  component = mount(TagPills, { target, props: { tags } as never });
+  component = mount(TagPills, { target, props: { tags, siteId: 'site-1' } as never });
 
   const add = target.querySelector<HTMLButtonElement>('[data-primary]');
   expect(add).not.toBeNull();
@@ -102,7 +131,7 @@ describe('태그 편집', () => {
   const startEditing = async (tags: string[], name: string) => {
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(TagPills, { target, props: { tags } as never });
+    component = mount(TagPills, { target, props: { tags, siteId: 'site-1' } as never });
 
     const chip = chipButton(target, name);
     expect(chip).toBeDefined();
@@ -162,7 +191,7 @@ describe('태그 편집', () => {
   it('칩을 눌러도 눌린 요소가 문서에 남는다', async () => {
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(TagPills, { target, props: { tags: ['봄'] } as never });
+    component = mount(TagPills, { target, props: { tags: ['봄'], siteId: 'site-1' } as never });
 
     const chip = chipButton(target, '봄');
     expect(chip).toBeDefined();
@@ -173,7 +202,7 @@ describe('태그 편집', () => {
   it('추가 알약을 눌러도 눌린 요소가 문서에 남는다', async () => {
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(TagPills, { target, props: { tags: [] } as never });
+    component = mount(TagPills, { target, props: { tags: [], siteId: 'site-1' } as never });
 
     const add = target.querySelector<HTMLButtonElement>('[data-primary]');
     expect(add).not.toBeNull();
@@ -231,5 +260,130 @@ describe('태그 입력 칸', () => {
 
     expect(contentWidth(input)).toBeGreaterThanOrEqual(measureText(input, input.value));
     expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth + 1);
+  });
+});
+
+const suggestions: Suggestions = {
+  mine: [
+    { name: '봄', count: 3 },
+    { name: '여행', count: 2 },
+  ],
+  popular: [
+    { name: '바다', count: 50 },
+    { name: '산', count: 40 },
+  ],
+};
+
+const listbox = (target: HTMLElement) =>
+  target.querySelector<HTMLElement>('[role="listbox"]') ?? document.querySelector<HTMLElement>('[role="listbox"]');
+const options = (target: HTMLElement) => [...(listbox(target)?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+
+describe('태그 제안', () => {
+  it('입력이 열리면 빈 질의로 두 섹션이 바로 보인다', async () => {
+    mockSuggestions(suggestions);
+    const { target } = await openInput([]);
+
+    await vi.waitFor(() => expect(listbox(target)).not.toBeNull());
+    expect(listbox(target)?.textContent).toContain('내 태그');
+    expect(listbox(target)?.textContent).toContain('인기 태그');
+    expect(options(target).map((el) => el.dataset.name)).toEqual(['봄', '여행', '바다', '산']);
+    expect(getVariables?.()).toEqual({ siteId: 'site-1', query: '', exclude: [] });
+    expect(getComputedStyle(listbox(target) as HTMLElement).animationName).not.toBe('none');
+  });
+
+  it('타이핑하면 디바운스 뒤 질의와 exclude가 변수로 나간다', async () => {
+    mockSuggestions(suggestions);
+    await openInput(['봄']);
+
+    await userEvent.keyboard('여');
+    expect(getVariables?.()).toEqual({ siteId: 'site-1', query: '', exclude: ['봄'] });
+
+    await vi.waitFor(() => expect(getVariables?.()).toEqual({ siteId: 'site-1', query: '여', exclude: ['봄'] }), { timeout: 1000 });
+  });
+
+  it('아래 화살표로 하이라이트를 옮기고 Enter로 고른다', async () => {
+    mockSuggestions(suggestions);
+    const { target, input } = await openInput([]);
+    await vi.waitFor(() => expect(options(target).length).toBe(4));
+
+    expect(input.getAttribute('aria-activedescendant')).toBeNull();
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(options(target)[0].getAttribute('aria-selected')).toBe('true');
+    expect(input.getAttribute('aria-activedescendant')).toBe(options(target)[0].id);
+
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(options(target)[2].getAttribute('aria-selected')).toBe('true');
+
+    await userEvent.keyboard('{Enter}');
+    await vi.waitFor(() => expect(chipButton(target, '바다')).not.toBeUndefined());
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('');
+  });
+
+  it('위 화살표는 끝에서 처음으로 순환한다', async () => {
+    mockSuggestions(suggestions);
+    const { target } = await openInput([]);
+    await vi.waitFor(() => expect(options(target).length).toBe(4));
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(options(target)[3].getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('하이라이트가 없으면 Enter는 친 글자 그대로 새 태그를 만든다', async () => {
+    mockSuggestions(suggestions);
+    const { target } = await openInput([]);
+    await vi.waitFor(() => expect(options(target).length).toBe(4));
+
+    await userEvent.keyboard('봄날{Enter}');
+
+    await vi.waitFor(() => expect(chipButton(target, '봄날')).not.toBeUndefined());
+    expect(chipButton(target, '봄')).toBeUndefined();
+  });
+
+  it('제안을 클릭하면 태그가 붙고 입력은 열린 채 포커스를 유지한다', async () => {
+    mockSuggestions(suggestions);
+    const { target, input } = await openInput([]);
+    await vi.waitFor(() => expect(options(target).length).toBe(4));
+
+    await userEvent.click(options(target)[1]);
+
+    await vi.waitFor(() => expect(chipButton(target, '여행')).not.toBeUndefined());
+    expect(target.contains(input)).toBe(true);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('붙인 태그는 새 응답을 기다리지 않고 목록에서 바로 빠진다', async () => {
+    mockSuggestions(suggestions);
+    const { target } = await openInput([]);
+    await vi.waitFor(() => expect(options(target).length).toBe(4));
+
+    await userEvent.click(options(target)[1]);
+
+    await vi.waitFor(() => expect(chipButton(target, '여행')).not.toBeUndefined());
+    expect(options(target).map((el) => el.dataset.name)).toEqual(['봄', '바다', '산']);
+  });
+
+  it('두 섹션이 모두 비면 패널을 그리지 않는다', async () => {
+    mockSuggestions({ mine: [], popular: [] });
+    const { target } = await openInput([]);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(listbox(target)).toBeNull();
+    expect(target.querySelector('input[aria-label="태그"]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('칩 편집 모드에서는 제안이 뜨지 않는다', async () => {
+    mockSuggestions(suggestions);
+    const { target } = await openInput(['봄']);
+    await vi.waitFor(() => expect(listbox(target)).not.toBeNull());
+
+    await userEvent.keyboard('{Escape}');
+    const chip = chipButton(target, '봄');
+    expect(chip).not.toBeUndefined();
+    await userEvent.click(chip as HTMLButtonElement);
+
+    await vi.waitFor(() => expect(target.querySelector<HTMLInputElement>('input[aria-label="태그"]')?.value).toBe('봄'));
+    expect(listbox(target)).toBeNull();
   });
 });

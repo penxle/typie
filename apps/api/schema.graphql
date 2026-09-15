@@ -1800,6 +1800,7 @@ type PublicationView implements IEditorDocument {
   next: PublicationView
   number: String!
   passwordUnlocked: Boolean!
+  pinnedOrder: String
   prev: PublicationView
   protectContent: Boolean!
   publishedAt: DateTime!
@@ -2100,6 +2101,7 @@ type Site implements ISite {
   pinnedEntities: [Entity!]!
   recentDocuments(limit: Int! = 5, sort: RecentDocumentSort!): RecentDocumentsResult!
   slug: String!
+  tagSuggestions(exclude: [String!], query: String!): TagSuggestions!
   url: String!
   user: User!
   view: SiteView!
@@ -2245,6 +2247,16 @@ type Subscription_ {
   startsAt: DateTime!
   state: SubscriptionState!
   user: User!
+}
+
+type TagSuggestion {
+  count: Int!
+  name: String!
+}
+
+type TagSuggestions {
+  mine: [TagSuggestion!]!
+  popular: [TagSuggestion!]!
 }
 
 type TextReplacement {

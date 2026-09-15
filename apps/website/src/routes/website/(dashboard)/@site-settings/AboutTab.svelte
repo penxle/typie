@@ -7,6 +7,7 @@
   import { publicationErrorMessage } from '$lib/publication/publish-form';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
+  import PinnedPublicationsEditor from './PinnedPublicationsEditor.svelte';
   import SiteLinksEditor from './SiteLinksEditor.svelte';
   import type { DashboardLayout_SiteSettingsModal_AboutTab_site$key } from '$mearie';
 
@@ -55,7 +56,7 @@
     try {
       await updateSite({ input: { siteId: site.data.id, ...input } });
       mixpanel.track('update_site', { field });
-      Toast.success('작업실 설정이 업데이트됐어요.');
+      Toast.success('스페이스 설정이 업데이트됐어요.');
       return true;
     } catch (err) {
       Toast.error(publicationErrorMessage(publicationErrorCode(err)));
@@ -108,6 +109,10 @@
       onblur={saveDescription}
       placeholder="스페이스를 한두 문장으로 소개해 보세요."
       bind:value={description}></textarea>
+  </div>
+
+  <div class={css({ marginTop: '40px' })}>
+    <PinnedPublicationsEditor siteId={site.data.id} />
   </div>
 
   <div class={css({ marginTop: '40px' })}>

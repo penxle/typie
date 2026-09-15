@@ -24,6 +24,7 @@ import {
   toRecentDocumentsPage,
 } from '#/utils/recent-documents.ts';
 import { normalizeSiteLinks } from '#/utils/site-core.ts';
+import { getTagSuggestions } from '#/utils/tag-suggest.ts';
 import { siteUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { Document, Entity, Image, ISite, isTypeOf, Site, SiteView, User } from '../objects.ts';
@@ -35,6 +36,20 @@ const RecentDocumentsResult = builder.simpleObject('RecentDocumentsResult', {
   fields: (t) => ({
     documents: t.field({ type: [Document] }),
     hasMore: t.boolean(),
+  }),
+});
+
+const TagSuggestion = builder.simpleObject('TagSuggestion', {
+  fields: (t) => ({
+    name: t.string(),
+    count: t.int(),
+  }),
+});
+
+const TagSuggestions = builder.simpleObject('TagSuggestions', {
+  fields: (t) => ({
+    mine: t.field({ type: [TagSuggestion] }),
+    popular: t.field({ type: [TagSuggestion] }),
   }),
 });
 
@@ -79,6 +94,18 @@ Site.implement({
   fields: (t) => ({
     view: t.expose('id', { type: SiteView }),
     user: t.expose('userId', { type: User }),
+
+    tagSuggestions: t.field({
+      type: TagSuggestions,
+      args: {
+        query: t.arg.string(),
+        exclude: t.arg.stringList({ required: false }),
+      },
+      resolve: async (self, args, ctx) => {
+        await assertSitePermission({ userId: ctx.session?.userId, siteId: self.id });
+        return await getTagSuggestions({ siteId: self.id, query: args.query, exclude: args.exclude ?? [] });
+      },
+    }),
 
     entities: t.field({
       type: [Entity],

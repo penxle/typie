@@ -175,7 +175,7 @@ internal fun MainDrawerContent() {
 
       Column(modifier = Modifier.weight(1f)) {
         Text(
-          text = "작업실",
+          text = "스페이스",
           style = AppTheme.typography.title,
           color = AppTheme.colors.textDefault,
           modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 4.dp),
@@ -284,7 +284,7 @@ internal fun MainDrawerContent() {
               Spacer(Modifier.width(12.dp))
 
               Text(
-                text = "새 작업실 생성",
+                text = "새 스페이스 생성",
                 style = AppTheme.typography.action,
                 color = AppTheme.colors.textMuted,
               )
@@ -298,7 +298,7 @@ internal fun MainDrawerContent() {
       Spacer(Modifier.height(4.dp))
 
       Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-        DrawerActionRow(icon = Lucide.Settings, label = "작업실 설정") {
+        DrawerActionRow(icon = Lucide.Settings, label = "스페이스 설정") {
           dismissAndRun { nav.navigate(Route.StudioSettings) }
         }
 
@@ -362,7 +362,7 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
       SheetBar(
         center = {
           Text(
-            text = "새 작업실 생성",
+            text = "새 스페이스 생성",
             style = AppTheme.typography.title,
             color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
@@ -373,7 +373,7 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
     }
   ) {
     Text(
-      text = "작업실은 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
+      text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
       style = AppTheme.typography.body,
       color = AppTheme.colors.textMuted,
     )
@@ -381,9 +381,9 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
     TextField(
       value = name,
       onValueChange = { name = it },
-      label = "작업실 이름",
+      label = "스페이스 이름",
       labelPosition = LabelPosition.External,
-      placeholder = "새 작업실",
+      placeholder = "새 스페이스",
       autoFocus = true,
     )
 
@@ -402,7 +402,7 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
         enabled = !model.isCreatingSite,
         onClick = {
           model.createSite(name).withDefaultExceptionHandler(toast).onOk {
-            toast.show(ToastType.Success, "새 작업실이 생성되었어요.")
+            toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
             dismiss()
           }
         },

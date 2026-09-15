@@ -20,6 +20,7 @@
   import type { ModifiedPublishFields, PublishMode, ScheduleParts } from '$lib/publication/publish-form';
 
   type Props = {
+    siteId: string;
     autoExcerpt: string;
     tags: string[];
     excerpt: string;
@@ -36,6 +37,7 @@
   };
 
   let {
+    siteId,
     autoExcerpt,
     tags = $bindable(),
     excerpt = $bindable(),
@@ -132,7 +134,7 @@
 
 <div class={flex({ flexDirection: 'column', gap: '1px', marginX: '-8px' })}>
   <PropertyRow icon={TagIcon} label="태그" modified={modified.tags} top>
-    <TagPills {disabled} onremovepartial={onremovepartialtag} partial={partialTags} bind:tags />
+    <TagPills {disabled} onremovepartial={onremovepartialtag} partial={partialTags} {siteId} bind:tags />
   </PropertyRow>
 
   {#if showMeta}
@@ -194,14 +196,15 @@
       </Popover>
     </PropertyRow>
 
-    <PropertyRow icon={ImageIcon} label="썸네일" modified={modified.thumbnail}>
+    <PropertyRow hint="16:9 비율, 1280×720 이상을 권장해요" icon={ImageIcon} label="썸네일" modified={modified.thumbnail}>
       {#if thumbnailId}
         <div class={css({ position: 'relative' })}>
           <button
             class={css({
               position: 'relative',
               display: 'block',
-              size: '36px',
+              width: '64px',
+              aspectRatio: '[16 / 9]',
               overflow: 'hidden',
               borderRadius: '6px',
               backgroundColor: 'surface.canvas',

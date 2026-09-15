@@ -14,7 +14,6 @@ export type PublicationIndexRow = {
   publishedAt: Dayjs | null;
   entityState: EntityState;
   siteState: SiteState;
-  allowIndexing: boolean;
   allowDiscovery: boolean;
   password: string | null;
 };
@@ -37,7 +36,6 @@ export type SiteIndexRow = {
   name: string;
   description: string | null;
   state: SiteState;
-  allowIndexing: boolean;
   allowDiscovery: boolean;
 };
 
@@ -62,7 +60,6 @@ export const buildPublicationIndexRowsQuery = (executor: Executor, input: { publ
       publishedAt: Publications.publishedAt,
       entityState: Entities.state,
       siteState: Sites.state,
-      allowIndexing: Sites.allowIndexing,
       allowDiscovery: Sites.allowDiscovery,
       password: Documents.password,
     })
@@ -86,7 +83,6 @@ export const buildSiteIndexRowsQuery = (executor: Executor, input: { siteIds: st
       name: Sites.name,
       description: Sites.description,
       state: Sites.state,
-      allowIndexing: Sites.allowIndexing,
       allowDiscovery: Sites.allowDiscovery,
     })
     .from(Sites)
@@ -109,7 +105,7 @@ export const toPublicationIndexDocument = (input: {
 
   return {
     site_id: row.siteId,
-    discoverable: row.allowIndexing && row.allowDiscovery,
+    discoverable: row.allowDiscovery,
     title: version.title,
     title_decomposed: decompose(version.title),
     subtitle: version.subtitle,
@@ -123,7 +119,7 @@ export const toPublicationIndexDocument = (input: {
 
 export const toSiteIndexDocument = (row: SiteIndexRow): SiteIndexDocument | null => {
   if (row.state !== SiteState.ACTIVE) return null;
-  if (!row.allowIndexing || !row.allowDiscovery) return null;
+  if (!row.allowDiscovery) return null;
 
   return { name: row.name, name_decomposed: decompose(row.name), description: row.description };
 };

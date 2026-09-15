@@ -28,7 +28,6 @@ const row = (overrides: Partial<PublicationIndexRow> = {}): PublicationIndexRow 
   publishedAt,
   entityState: EntityState.ACTIVE,
   siteState: SiteState.ACTIVE,
-  allowIndexing: true,
   allowDiscovery: true,
   password: null,
   ...overrides,
@@ -51,8 +50,7 @@ test('a published, active, password-free publication becomes an index document w
   assert.equal(doc.published_at, publishedAt);
 });
 
-test('discoverable follows both site switches without dropping the document', () => {
-  assert.equal(toPublicationIndexDocument({ row: row({ allowIndexing: false }), version, tagNames: [] })?.discoverable, false);
+test('discoverable follows the discovery switch without dropping the document', () => {
   assert.equal(toPublicationIndexDocument({ row: row({ allowDiscovery: false }), version, tagNames: [] })?.discoverable, false);
 });
 
@@ -67,9 +65,8 @@ test('unpublished, inactive, password-protected, or versionless publications are
 });
 
 test('a site document exists only for active, discoverable sites', () => {
-  const base = { id: 'S0A', name: '내 스페이스', description: null, state: SiteState.ACTIVE, allowIndexing: true, allowDiscovery: true };
+  const base = { id: 'S0A', name: '내 스페이스', description: null, state: SiteState.ACTIVE, allowDiscovery: true };
   assert.deepEqual(toSiteIndexDocument(base), { name: '내 스페이스', name_decomposed: 'ㄴㅐ ㅅㅡㅍㅔㅇㅣㅅㅡ', description: null });
-  assert.equal(toSiteIndexDocument({ ...base, allowIndexing: false }), null);
   assert.equal(toSiteIndexDocument({ ...base, allowDiscovery: false }), null);
   assert.equal(toSiteIndexDocument({ ...base, state: SiteState.DELETED }), null);
 });
@@ -102,5 +99,5 @@ test('tag name lookups take id lists and the site variant is distinct', () => {
 
   const sites = buildSiteIndexRowsQuery(database, { siteIds: ['S0A'] }).toSQL();
   assert.match(sites.sql, /"sites"\."id" in \(/);
-  assert.match(sites.sql, /"state", "allow_indexing", "allow_discovery" from "sites"/);
+  assert.match(sites.sql, /"state", "allow_discovery" from "sites"/);
 });

@@ -64,7 +64,7 @@
       </div>
 
       {#if site.pinnedPublications.length > 0}
-        <div class={css({ marginBottom: '56px' })}>
+        <div class={css({ marginBottom: '44px' })}>
           <PinnedPublications publications={site.pinnedPublications} />
         </div>
       {/if}

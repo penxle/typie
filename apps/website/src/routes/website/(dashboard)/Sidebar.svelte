@@ -579,7 +579,7 @@
       overflow: 'hidden',
     })}
   >
-    <!-- 작업실 스위쳐 -->
+    <!-- 스페이스 스위쳐 -->
     <div
       class={flex({
         alignItems: 'center',

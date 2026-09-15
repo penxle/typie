@@ -1,11 +1,23 @@
 import '../../../../app.css';
 
+import { createQuery } from '@mearie/svelte';
 import { mount, unmount } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { userEvent } from 'vitest/browser';
 import TagPills from './TagPills.svelte';
 
+vi.mock(import('@mearie/svelte'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  createQuery: vi.fn(),
+}));
+
 let component: Record<string, unknown> | undefined;
+
+beforeEach(() => {
+  vi.mocked(createQuery)
+    .mockReset()
+    .mockReturnValue({ data: undefined, loading: false, error: undefined, refetch: vi.fn() } as never);
+});
 
 afterEach(async () => {
   if (component) await unmount(component);
@@ -20,7 +32,7 @@ describe('TagPills partial chips', () => {
     const onremovepartial = vi.fn();
     component = mount(TagPills, {
       target,
-      props: { tags: ['일기'], partial: [{ tag: '에세이', count: 2 }], onremovepartial } as never,
+      props: { tags: ['일기'], partial: [{ tag: '에세이', count: 2 }], onremovepartial, siteId: 'site-1' } as never,
     });
 
     const chips = [...target.querySelectorAll<HTMLElement>('span')].filter((el) => el.textContent?.trim().startsWith('에세이'));
@@ -39,7 +51,10 @@ describe('TagPills partial chips', () => {
   it('공통 태그가 없고 일부 태그만 있으면 "없음"을 보이지 않는다', () => {
     const target = document.createElement('div');
     document.body.append(target);
-    component = mount(TagPills, { target, props: { tags: [], partial: [{ tag: '에세이', count: 1 }], disabled: true } as never });
+    component = mount(TagPills, {
+      target,
+      props: { tags: [], partial: [{ tag: '에세이', count: 1 }], disabled: true, siteId: 'site-1' } as never,
+    });
     expect(target.textContent).not.toContain('없음');
     expect(target.textContent).toContain('에세이');
   });
