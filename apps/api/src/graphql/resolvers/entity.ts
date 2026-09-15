@@ -414,6 +414,16 @@ Entity.implement({
   }),
 });
 
+const siblingVisibilities = async (parentId: string | null): Promise<EntityVisibility[]> => {
+  if (!parentId) return [EntityVisibility.PUBLIC];
+
+  const parent = await db.select({ visibility: Entities.visibility }).from(Entities).where(eq(Entities.id, parentId)).then(first);
+
+  return parent?.visibility === EntityVisibility.UNLISTED
+    ? [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED]
+    : [EntityVisibility.PUBLIC];
+};
+
 EntityView.implement({
   isTypeOf: isTypeOf(TableCode.ENTITIES),
   interfaces: [IEntity],
@@ -496,7 +506,7 @@ EntityView.implement({
       resolve: async (self) => {
         if (self.type !== EntityType.DOCUMENT) return null;
 
-        const visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
+        const visibilities = await siblingVisibilities(self.parentId);
 
         return await db
           .select()
@@ -523,7 +533,7 @@ EntityView.implement({
       resolve: async (self) => {
         if (self.type !== EntityType.DOCUMENT) return null;
 
-        const visibilities = [EntityVisibility.PUBLIC, EntityVisibility.UNLISTED];
+        const visibilities = await siblingVisibilities(self.parentId);
 
         return await db
           .select()
