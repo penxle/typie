@@ -499,7 +499,7 @@
     mixpanel.track('open_folder_share_modal', { via });
   }}
 >
-  공유
+  공유 및 발행
 </MenuItem>
 
 <MenuItem
@@ -756,7 +756,7 @@
 >
   <div class={css({ fontWeight: 'medium' })}>
     {#if entity.visibility === EntityVisibility.PUBLIC}
-      <span class={css({ color: 'success.default' })}>공개 폴더</span>
+      <span class={css({ color: 'success.default' })}>시리즈로 발행된 폴더</span>
     {:else if entity.visibility === EntityVisibility.UNLISTED}
       <span class={css({ color: 'accent.default' })}>링크 조회 가능 폴더</span>
     {:else}

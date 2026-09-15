@@ -23,7 +23,7 @@
 <div class={flex({ flexDirection: 'column', gap: '4px', minWidth: '120px' })}>
   <div class={css({ fontWeight: 'semibold' })}>
     {#if visibility === EntityVisibility.PUBLIC}
-      <span>공개 폴더</span>
+      <span>시리즈로 발행된 폴더</span>
     {:else if visibility === EntityVisibility.UNLISTED}
       <span>링크 조회 가능 폴더</span>
     {:else}

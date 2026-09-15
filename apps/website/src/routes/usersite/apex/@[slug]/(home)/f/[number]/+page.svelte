@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import { Helmet } from '@typie/ui/components';
   import { Img } from '$lib/components';
   import { hydrateQuery } from '$lib/graphql';
@@ -26,47 +28,72 @@
 <Helmet description={`${folder.name}의 ${countLabel}`} title={folder.name} trailing={site.name} />
 
 {#key folder.id}
-  <header class={css({ marginBottom: '32px' })}>
-    {#if folder.thumbnail}
-      <div
-        class={css({
-          marginBottom: '20px',
-          aspectRatio: '[16 / 9]',
-          '@media (max-width: 639px)': { marginBottom: '16px' },
-          borderRadius: '12px',
-          backgroundColor: 'surface.canvas',
-          boxShadow: '[inset 0 0 0 1px rgba(0, 0, 0, 0.04)]',
-          overflow: 'hidden',
-          isolation: 'isolate',
-        })}
-      >
+  <header
+    class={flex({
+      alignItems: 'center',
+      gap: '24px',
+      marginBottom: '40px',
+      '@media (max-width: 639px)': { flexDirection: 'column', alignItems: 'flex-start', gap: '0' },
+    })}
+  >
+    <div
+      style:background-color={folder.thumbnail ? undefined : titlePageColors(folder.id).background}
+      class={css({
+        flexShrink: '0',
+        width: '112px',
+        height: '168px',
+        borderRadius: '8px',
+        backgroundColor: 'surface.inset',
+        boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
+        overflow: 'hidden',
+        '@media (max-width: 639px)': { width: '80px', height: '120px', borderRadius: '6px' },
+      })}
+    >
+      {#if folder.thumbnail}
         <Img
           style={css.raw({ width: 'full', height: 'full', objectFit: 'cover' })}
           alt={folder.name}
           image$key={folder.thumbnail}
-          size={1024}
+          size={256}
         />
-      </div>
-    {/if}
+      {/if}
+    </div>
 
-    <ReadingKicker items={crumbs} />
+    <div class={css({ flex: '1', minWidth: '0', '@media (max-width: 639px)': { flex: 'none', width: 'full', marginTop: '16px' } })}>
+      <ReadingKicker items={crumbs} />
 
-    <h1
-      class={css({
-        marginTop: '10px',
-        fontSize: '24px',
-        fontWeight: 'bold',
-        letterSpacing: '-0.02em',
-        lineHeight: '[1.3]',
-        lineClamp: '2',
-      })}
-    >
-      {folder.name}
-    </h1>
-    <p class={css({ marginTop: '4px', fontSize: '13px', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>
-      {countLabel}
-    </p>
+      <h1
+        class={css({
+          marginTop: '12px',
+          fontSize: '28px',
+          fontWeight: 'bold',
+          letterSpacing: '-0.025em',
+          lineHeight: '[1.25]',
+          lineClamp: '2',
+          '@media (max-width: 639px)': { marginTop: '8px', fontSize: '24px' },
+        })}
+      >
+        {folder.name}
+      </h1>
+      {#if folder.description}
+        <p
+          class={css({
+            marginTop: '10px',
+            maxWidth: '560px',
+            fontSize: '14px',
+            lineHeight: '[1.6]',
+            color: 'text.muted',
+            '@media (max-width: 639px)': { marginTop: '8px', fontSize: '14px' },
+          })}
+        >
+          {folder.description}
+        </p>
+      {/if}
+      <p class={css({ marginTop: '10px', fontSize: '13px', color: 'text.hint', fontVariantNumeric: 'tabular-nums' })}>
+        {countLabel}
+      </p>
+    </div>
   </header>
 
-  <SiteEntries entries={folder.children} />
+  <SiteEntries entries={folder.children} nested />
 {/key}

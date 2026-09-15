@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
-import { EntityState, EntityType } from '@typie/lib/enums';
+import { EntityState, EntityType, EntityVisibility } from '@typie/lib/enums';
 import { titlePageColors } from '@typie/lib/title-page';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -133,6 +133,47 @@ og.get('/cover/:number', async (c) => {
     width: COVER_WIDTH,
     height: COVER_HEIGHT,
   });
+  resp.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+
+  return resp;
+});
+
+const SERIES_COVER_WIDTH = 800;
+const SERIES_COVER_HEIGHT = 1200;
+
+og.get('/series/:number', async (c) => {
+  const number = c.req.param('number');
+
+  const folder = await db
+    .select({ entityId: Entities.id, name: Folders.name, siteName: Sites.name })
+    .from(Entities)
+    .innerJoin(Folders, eq(Folders.entityId, Entities.id))
+    .innerJoin(Sites, eq(Sites.id, Entities.siteId))
+    .where(
+      and(
+        eq(Entities.number, number),
+        eq(Entities.type, EntityType.FOLDER),
+        eq(Entities.state, EntityState.ACTIVE),
+        eq(Entities.visibility, EntityVisibility.PUBLIC),
+      ),
+    )
+    .then(first);
+
+  if (!folder) {
+    throw new HTTPException(404);
+  }
+
+  const resp = await respondWithCard(
+    c,
+    renderTitlePageCover({
+      seed: folder.entityId,
+      title: folder.name,
+      spaceName: folder.siteName,
+      width: SERIES_COVER_WIDTH,
+      height: SERIES_COVER_HEIGHT,
+    }),
+    { width: SERIES_COVER_WIDTH, height: SERIES_COVER_HEIGHT },
+  );
   resp.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
 
   return resp;
@@ -415,17 +456,33 @@ const renderDocumentCard = async ({
   );
 };
 
-const renderTitlePageCover = ({ seed, title, spaceName }: { seed: string; title: string; spaceName: string }) => {
+const renderTitlePageCover = ({
+  seed,
+  title,
+  spaceName,
+  width = COVER_WIDTH,
+  height = COVER_HEIGHT,
+}: {
+  seed: string;
+  title: string;
+  spaceName: string;
+  width?: number;
+  height?: number;
+}) => {
   const colors = titlePageColors(seed);
-  const unit = COVER_WIDTH / 100;
+  const unit = width / 100;
+  const portrait = height > width;
+  const scale = portrait
+    ? { outer: 3.5, padY: 6, padX: 4, gap: 5, title: 18, clamp: 4, rule: 14, caption: 7.5 }
+    : { outer: 4.5, padY: 3, padX: 9, gap: 2.8, title: 7.2, clamp: 3, rule: 9, caption: 3.9 };
 
   return (
     <div
       style={{
         display: 'flex',
-        width: `${COVER_WIDTH}px`,
-        height: `${COVER_HEIGHT}px`,
-        padding: `${unit * 4.5}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+        padding: `${unit * scale.outer}px`,
         fontFamily: 'Pretendard',
         backgroundColor: colors.background,
       }}
@@ -437,8 +494,8 @@ const renderTitlePageCover = ({ seed, title, spaceName }: { seed: string; title:
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: `${unit * 2.8}px`,
-          padding: `${unit * 3}px ${unit * 9}px`,
+          gap: `${unit * scale.gap}px`,
+          padding: `${unit * scale.padY}px ${unit * scale.padX}px`,
           border: `3px solid ${colors.frame}`,
         }}
       >
@@ -446,24 +503,24 @@ const renderTitlePageCover = ({ seed, title, spaceName }: { seed: string; title:
           style={{
             display: 'block',
             maxWidth: '100%',
-            fontSize: `${unit * 7.2}px`,
+            fontSize: `${unit * scale.title}px`,
             fontWeight: 800,
             lineHeight: '1.3',
-            letterSpacing: `${-unit * 7.2 * 0.025}px`,
+            letterSpacing: `${-unit * scale.title * 0.025}px`,
             color: colors.title,
             textAlign: 'center',
-            lineClamp: 3,
+            lineClamp: scale.clamp,
             wordBreak: 'keep-all',
           }}
         >
           {title}
         </div>
-        <div style={{ display: 'flex', width: `${unit * 9}px`, height: '3px', backgroundColor: colors.rule }} />
+        <div style={{ display: 'flex', width: `${unit * scale.rule}px`, height: '3px', backgroundColor: colors.rule }} />
         <div
           style={{
             display: 'block',
             maxWidth: '100%',
-            fontSize: `${unit * 3.9}px`,
+            fontSize: `${unit * scale.caption}px`,
             fontWeight: 500,
             color: colors.caption,
             textAlign: 'center',

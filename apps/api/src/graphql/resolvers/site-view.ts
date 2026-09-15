@@ -1,5 +1,6 @@
 import { EntityType, SiteAvailableAction } from '@typie/lib/enums';
 import { NotFoundError } from '@typie/lib/errors';
+import { titlePageCoverVersion } from '@typie/lib/title-page';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, Entities, firstOrThrowWith, Folders, Sites, TableCode, validateDbId } from '#/db/index.ts';
 import { env } from '#/env.ts';
@@ -21,10 +22,11 @@ import {
 import {
   buildSiteTree,
   buildSiteTreeRowsQuery,
-  visibleAncestors,
-  visibleChildCounts,
-  visibleChildren,
-  visibleFolderIds,
+  isPathFolder,
+  pathAncestors,
+  pathChildCounts,
+  pathChildren,
+  pathFolderIds,
 } from '#/utils/site-tree-core.ts';
 import { folderUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
@@ -69,7 +71,7 @@ type PublishedRow = Awaited<ReturnType<typeof buildPublishedPublicationsByEntity
 type SiteEntry = typeof Entities.$inferSelect | PublishedRow;
 
 export const resolveEntries = async (ctx: Context, tree: SiteTree, parentId: string | null): Promise<SiteEntry[]> => {
-  const rows = visibleChildren(tree, parentId);
+  const rows = pathChildren(tree, parentId);
   const documentEntityIds = rows.filter((row) => row.type === EntityType.DOCUMENT).map((row) => row.id);
   const folderEntityIds = rows.filter((row) => row.type === EntityType.FOLDER).map((row) => row.id);
   const [publications, folders] = await Promise.all([
@@ -147,6 +149,20 @@ SiteFolderView.implement({
         return folder.thumbnailId;
       },
     }),
+    description: t.string({
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const folder = await folderLoader(ctx).load(self.id);
+        return folder.description;
+      },
+    }),
+    generatedCoverUrl: t.string({
+      resolve: async (self, _, ctx) => {
+        const [folder, site] = await Promise.all([folderLoader(ctx).load(self.id), siteLoader(ctx).load(self.siteId)]);
+        const version = titlePageCoverVersion({ title: folder.name, spaceName: site.name });
+        return `${env.API_URL}/og/series/${self.number}?v=${version}`;
+      },
+    }),
     url: t.string({
       resolve: async (self, _, ctx) => {
         const site = await siteLoader(ctx).load(self.siteId);
@@ -165,19 +181,19 @@ SiteFolderView.implement({
       type: [SiteFolderView],
       resolve: async (self, _, ctx) => {
         const { tree } = await siteTreeLoader(ctx).load(self.siteId);
-        return visibleAncestors(tree, self.id).map((row) => row.id);
+        return pathAncestors(tree, self.id).map((row) => row.id);
       },
     }),
     folderCount: t.int({
       resolve: async (self, _, ctx) => {
         const { tree } = await siteTreeLoader(ctx).load(self.siteId);
-        return visibleChildCounts(tree, self.id).folders;
+        return pathChildCounts(tree, self.id).folders;
       },
     }),
     publicationCount: t.int({
       resolve: async (self, _, ctx) => {
         const { tree } = await siteTreeLoader(ctx).load(self.siteId);
-        return visibleChildCounts(tree, self.id).documents;
+        return pathChildCounts(tree, self.id).documents;
       },
     }),
   }),
@@ -199,6 +215,20 @@ SiteView.implement({
     pinnedPublications: t.field({
       type: [PublicationView],
       resolve: async (self) => await buildPinnedPublicationsQuery(db, { siteIds: [self.id] }),
+    }),
+    pinnedFolders: t.field({
+      type: [SiteFolderView],
+      resolve: async (self, _, ctx) => {
+        const { tree } = await siteTreeLoader(ctx).load(self.id);
+        const folderIds = pathFolderIds(tree);
+        if (folderIds.length === 0) return [];
+        const pinned = await db
+          .select({ entityId: Folders.entityId })
+          .from(Folders)
+          .where(and(inArray(Folders.entityId, folderIds), eq(Folders.pinned, true)));
+        const pinnedSet = new Set(pinned.map((row) => row.entityId));
+        return folderIds.filter((id) => pinnedSet.has(id));
+      },
     }),
     publicationCount: t.int({
       resolve: async (self) => await buildPublishedPublicationCountQuery(db, { siteId: self.id }).then((rows) => rows[0]?.count ?? 0),
@@ -236,7 +266,7 @@ SiteView.implement({
           .where(and(eq(Entities.siteId, self.id), eq(Entities.number, args.number), eq(Entities.type, EntityType.FOLDER)))
           .then(firstOrThrowWith(new NotFoundError()));
         const { tree } = await siteTreeLoader(ctx).load(self.id);
-        if (!tree.visible.has(entity.id)) throw new NotFoundError();
+        if (!isPathFolder(tree, entity.id)) throw new NotFoundError();
         return entity.id;
       },
     }),
@@ -265,7 +295,7 @@ SiteView.implement({
           buildPublishedPublicationNumbersQuery(db, { siteId: self.id, limit: 5000 }),
           buildSiteTagsQuery(db, { siteId: self.id }),
         ]);
-        const folderIds = visibleFolderIds(tree);
+        const folderIds = pathFolderIds(tree);
         const folders =
           folderIds.length > 0 ? await db.select({ number: Entities.number }).from(Entities).where(inArray(Entities.id, folderIds)) : [];
         return buildSitemapPaths({

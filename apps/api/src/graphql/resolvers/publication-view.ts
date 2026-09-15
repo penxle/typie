@@ -15,7 +15,7 @@ import {
   buildReactionCountsQuery,
   deriveExcerpt,
 } from '#/utils/publication-view-core.ts';
-import { visibleAncestors, visibleNeighbors } from '#/utils/site-tree-core.ts';
+import { pathAncestors, pathNeighbors } from '#/utils/site-tree-core.ts';
 import { publicationUrl } from '#/utils/usersite-core.ts';
 import { builder } from '../builder.ts';
 import { DocumentReaction, IEditorDocument, Image, isTypeOf, PublicationView, SiteFolderView, SiteView } from '../objects.ts';
@@ -45,7 +45,7 @@ const isOwner = async (ctx: Context, siteId: string) =>
 
 const neighborPublication = async (ctx: Context, self: { siteId: string; documentId: string }, direction: 'prev' | 'next') => {
   const [entity, { tree }] = await Promise.all([publicationEntityLoader(ctx).load(self.documentId), siteTreeLoader(ctx).load(self.siteId)]);
-  const neighbor = visibleNeighbors(tree, entity.entityId)[direction];
+  const neighbor = pathNeighbors(tree, entity.entityId)[direction];
   if (!neighbor) return null;
   const rows = await buildPublishedPublicationsByEntityIdsQuery(db, { entityIds: [neighbor.id] });
   return rows[0] ?? null;
@@ -115,7 +115,7 @@ PublicationView.implement({
           publicationEntityLoader(ctx).load(self.documentId),
           siteTreeLoader(ctx).load(self.siteId),
         ]);
-        return visibleAncestors(tree, entity.entityId).at(-1)?.id ?? null;
+        return pathAncestors(tree, entity.entityId).at(-1)?.id ?? null;
       },
     }),
     ancestors: t.field({
@@ -125,7 +125,7 @@ PublicationView.implement({
           publicationEntityLoader(ctx).load(self.documentId),
           siteTreeLoader(ctx).load(self.siteId),
         ]);
-        return visibleAncestors(tree, entity.entityId).map((row) => row.id);
+        return pathAncestors(tree, entity.entityId).map((row) => row.id);
       },
     }),
     prev: t.field({

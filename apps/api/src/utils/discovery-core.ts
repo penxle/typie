@@ -82,7 +82,12 @@ export const buildDiscoveryFeedQuery = (executor: Executor, input: { after: stri
 export const DISCOVERY_RECENT_SCAN_LIMIT = 200;
 
 export const buildDiscoveryRecentPublicationsQuery = (executor: Executor, input: { limit: number }) =>
-  discoverablePublicationScope(executor.select({ id: Publications.id, siteId: Publications.siteId }).from(Publications).$dynamic())
+  discoverablePublicationScope(
+    executor
+      .select({ id: Publications.id, siteId: Publications.siteId, documentId: Publications.documentId })
+      .from(Publications)
+      .$dynamic(),
+  )
     .where(discoverablePublicationPredicate())
     .orderBy(desc(Publications.publishedAt), desc(Publications.id))
     .limit(input.limit);

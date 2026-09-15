@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { EntityVisibility, PublicationState } from '@typie/lib/enums';
+import { EntityType, EntityVisibility, PublicationState } from '@typie/lib/enums';
 import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -165,10 +165,11 @@ test('published visibility block names the blocking code for unlisted and privat
   assert.equal(resolvePublishedVisibilityBlock(EntityVisibility.PUBLIC), null);
 });
 
-test('PUBLIC visibility is reserved for publishing and cannot be requested directly', () => {
-  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PUBLIC), 'visibility_public_reserved');
-  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.UNLISTED), null);
-  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PRIVATE), null);
+test('PUBLIC visibility is reserved for publishing on documents and allowed on folders', () => {
+  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PUBLIC, EntityType.DOCUMENT), 'visibility_public_reserved');
+  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PUBLIC, EntityType.FOLDER), null);
+  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.UNLISTED, EntityType.DOCUMENT), null);
+  assert.equal(resolveVisibilityRequestBlock(EntityVisibility.PRIVATE, EntityType.FOLDER), null);
 });
 
 test('mergeTags keeps existing order, appends added ones, drops removed ones and duplicates', () => {

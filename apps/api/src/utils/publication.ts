@@ -88,8 +88,8 @@ export const findPublishedDocumentIds = async (executor: Executor, args: { docum
   return new Set(rows.map((row) => row.documentId));
 };
 
-export const assertVisibilityRequestable = (visibility: EntityVisibility) => {
-  const code = resolveVisibilityRequestBlock(visibility);
+export const assertVisibilityRequestable = (visibility: EntityVisibility, type: EntityType) => {
+  const code = resolveVisibilityRequestBlock(visibility, type);
   if (code) throw new TypieError({ code, status: 400 });
 };
 

@@ -32,6 +32,18 @@ export const load = async (event) => {
               }
             }
 
+            pinnedFolders {
+              id
+              number
+              name
+              publicationCount
+
+              thumbnail {
+                id
+                ...Img_image
+              }
+            }
+
             tags {
               name
               count

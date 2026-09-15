@@ -356,6 +356,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   publication_not_scheduled: '예약된 글이 아니에요.',
   publication_unpublish_required: '공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.',
   publication_link_share_blocked: '공개 방식을 바꾸려면 먼저 발행을 취소해야 해요.',
+  series_unpublish_required: '공개 방식을 바꾸려면 먼저 시리즈를 삭제해야 해요.',
   publication_no_documents: '발행할 글이 없어요.',
   site_slug_already_exists: '이미 존재하는 스페이스 주소예요.',
   site_pin_limit: '고정은 3개까지 할 수 있어요.',

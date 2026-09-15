@@ -11,9 +11,10 @@
 
   type Props = {
     entries: readonly Entry[];
+    nested?: boolean;
   };
 
-  let { entries }: Props = $props();
+  let { entries, nested = false }: Props = $props();
 
   const folders = $derived(entries.filter((entry) => entry.__typename === 'SiteFolderView'));
   const publications = $derived(entries.filter((entry) => entry.__typename === 'PublicationView'));
@@ -34,28 +35,11 @@
 {#if folders.length > 0}
   <section class={css({ marginBottom: publications.length > 0 ? '44px' : '0' })}>
     <h2 class={css(groupLabel)}>
-      폴더 <span class={css(groupCount)}>{folders.length}</span>
+      {nested ? '하위 시리즈' : '시리즈'}
+      <span class={css(groupCount)}>{folders.length}</span>
     </h2>
 
-    <div
-      class={css({
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: '12px',
-        '@media (max-width: 639px)': {
-          display: 'flex',
-          marginX: '-20px',
-          paddingX: '20px',
-          paddingBottom: '4px',
-          overflowX: 'auto',
-          scrollSnapType: '[x mandatory]',
-          scrollPaddingX: '20px',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
-          '& > *': { flex: '[0 0 56%]', scrollSnapAlign: 'start' },
-        },
-      })}
-    >
+    <div class={css({ display: 'flex', flexDirection: 'column', minWidth: '0' })}>
       {#each folders as folder (folder.id)}
         <FolderTile folderView$key={folder} />
       {/each}

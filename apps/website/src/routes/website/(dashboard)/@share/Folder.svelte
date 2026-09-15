@@ -4,30 +4,32 @@
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Button, Icon, RingSpinner } from '@typie/ui/components';
+  import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';
   import ExternalLinkIcon from '~icons/lucide/external-link';
-  import Layers2Icon from '~icons/lucide/layers-2';
   import LinkIcon from '~icons/lucide/link';
   import LockIcon from '~icons/lucide/lock';
+  import SendIcon from '~icons/lucide/send';
   import { publicationErrorCode } from '$lib/publication/error';
   import { publicationErrorMessage, sharedValue } from '$lib/publication/publish-form';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import OptionCard from './OptionCard.svelte';
   import { groupLabelStyle, linkFieldButtonStyle, linkFieldInputStyle, linkFieldStyle } from './publish-styles';
+  import SeriesPublish from './SeriesPublish.svelte';
   import ShareHeader from './ShareHeader.svelte';
   import type { DashboardLayout_Share_Folder_folder$key } from '$mearie';
 
   type Props = {
     folders$key: DashboardLayout_Share_Folder_folder$key[];
+    step: 'visibility' | 'series';
     onclose: () => void;
   };
 
-  let { folders$key, onclose }: Props = $props();
+  let { folders$key, step = $bindable(), onclose }: Props = $props();
 
   const folders = createFragment(
     graphql(`
@@ -40,6 +42,8 @@
           visibility
           url
         }
+
+        ...DashboardLayout_Share_SeriesPublish_folder
       }
     `),
     () => folders$key,
@@ -50,6 +54,13 @@
       mutation DashboardLayout_Share_Folder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
         updateFoldersOption(input: $input) {
           id
+          description
+          pinned
+          seriesUrl
+
+          thumbnail {
+            id
+          }
 
           entity {
             id
@@ -85,13 +96,10 @@
 
   let copied = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let recursiveState = $state<'idle' | 'inflight' | 'success'>('idle');
-  let recursiveTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     return () => {
       if (timer) clearTimeout(timer);
-      if (recursiveTimer) clearTimeout(recursiveTimer);
     };
   });
 
@@ -110,6 +118,10 @@
 
   const setVisibility = async (next: EntityVisibility) => {
     if (visibility === next) return;
+    if (folders.data.some((folder) => folder.entity.visibility === EntityVisibility.PUBLIC)) {
+      Toast.error(publicationErrorMessage('series_unpublish_required'));
+      return;
+    }
     if (!SubscribeModal.gate('share_folder')) return;
 
     try {
@@ -120,26 +132,8 @@
     }
   };
 
-  const applyRecursive = async () => {
-    if (recursiveState === 'inflight' || visibility === undefined) return;
-    if (recursiveTimer) clearTimeout(recursiveTimer);
-    if (!SubscribeModal.gate('share_folder')) return;
-
-    recursiveState = 'inflight';
-
-    try {
-      await updateFoldersOption({ input: { folderIds, visibility, recursive: true } });
-      recursiveState = 'success';
-      mixpanel.track('update_folder_option', { visibility, recursive: true });
-    } catch (err) {
-      recursiveState = 'idle';
-      Toast.error(publicationErrorMessage(publicationErrorCode(err)));
-      return;
-    }
-
-    recursiveTimer = setTimeout(() => {
-      recursiveState = 'idle';
-    }, 2000);
+  const publishAsSeries = () => {
+    step = 'series';
   };
 </script>
 
@@ -186,59 +180,56 @@
   {/if}
 {/snippet}
 
-<ShareHeader {onclose} subtitle={multiple ? `폴더 ${folders.data.length}개` : folders.data[0].name} title="공유" />
+{#if step === 'visibility'}
+  <ShareHeader {onclose} subtitle={multiple ? `폴더 ${folders.data.length}개` : folders.data[0].name} title="공유" />
 
-<div class={flex({ flexDirection: 'column', gap: '24px', paddingTop: '2px', paddingX: '24px', paddingBottom: '24px' })}>
-  <section class={flex({ flexDirection: 'column', gap: '10px' })}>
-    <div class={css(groupLabelStyle)}>공개 범위</div>
+  <div class={flex({ flexDirection: 'column', gap: '24px', paddingTop: '2px', paddingX: '24px', paddingBottom: '24px' })}>
+    <section class={flex({ flexDirection: 'column', gap: '10px' })}>
+      <div class={css(groupLabelStyle)}>공개 범위</div>
 
-    <div class={flex({ flexDirection: 'column', gap: '8px' })} aria-label="공개 범위" role="radiogroup">
-      <OptionCard
-        description="나만 볼 수 있어요."
-        hint={hint(EntityVisibility.PRIVATE)}
-        icon={LockIcon}
-        label="비공개"
-        onclick={() => setVisibility(EntityVisibility.PRIVATE)}
-        selected={visibility === EntityVisibility.PRIVATE}
-      />
-      <OptionCard
-        body={linkBody}
-        description="링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요."
-        hint={hint(EntityVisibility.UNLISTED)}
-        icon={LinkIcon}
-        label="링크가 있는 사람"
-        onclick={() => setVisibility(EntityVisibility.UNLISTED)}
-        selected={visibility === EntityVisibility.UNLISTED}
-      />
-    </div>
-
-    {#if mixed}
-      <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
-        공개 범위가 서로 달라요. 고르면 폴더 {folders.data.length}개에 모두 적용돼요.
-      </p>
-    {/if}
-
-    <div class={flex({ alignItems: 'center', justifyContent: 'flex-end', gap: '8px' })}>
-      <span class={css({ fontSize: '12px', color: 'text.hint' })}>발행된 글은 그대로 두고 나머지에 적용돼요.</span>
-
-      <Button
-        style={css.raw({ minWidth: '200px', gap: '4px' })}
-        disabled={visibility === undefined}
-        onclick={applyRecursive}
-        size="sm"
-        variant="secondary"
-      >
-        {#if recursiveState === 'inflight'}
-          <RingSpinner style={css.raw({ size: '14px' })} />
-          적용 중...
-        {:else if recursiveState === 'success'}
-          <Icon icon={CheckIcon} size={14} />
-          적용됨
-        {:else}
-          <Icon icon={Layers2Icon} size={14} />
-          하위 항목에 동일한 설정 적용하기
+      <div class={flex({ flexDirection: 'column', gap: '8px' })} aria-label="공개 범위" role="radiogroup">
+        <OptionCard
+          description="나만 볼 수 있어요."
+          hint={hint(EntityVisibility.PRIVATE)}
+          icon={LockIcon}
+          label="비공개"
+          onclick={() => setVisibility(EntityVisibility.PRIVATE)}
+          selected={visibility === EntityVisibility.PRIVATE}
+        />
+        <OptionCard
+          body={linkBody}
+          description="링크가 있는 누구나 폴더와 폴더 내의 링크 공개 문서를 볼 수 있어요."
+          hint={hint(EntityVisibility.UNLISTED)}
+          icon={LinkIcon}
+          label="링크가 있는 사람"
+          onclick={() => setVisibility(EntityVisibility.UNLISTED)}
+          selected={visibility === EntityVisibility.UNLISTED}
+        />
+        {#if !multiple}
+          <OptionCard
+            description="스페이스에서 이 폴더를 시리즈로 표시해요."
+            icon={SendIcon}
+            label="스페이스에 시리즈로 발행"
+            onclick={publishAsSeries}
+            selected={visibility === EntityVisibility.PUBLIC}
+            trailing="chevron"
+          />
         {/if}
-      </Button>
-    </div>
-  </section>
-</div>
+      </div>
+
+      {#if mixed}
+        <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
+          공개 범위가 서로 달라요. 고르면 폴더 {folders.data.length}개에 모두 적용돼요.
+        </p>
+      {/if}
+
+      {#if multiple && countOf(EntityVisibility.PUBLIC) > 0}
+        <p class={css({ fontSize: '12px', lineHeight: '[1.5]', color: 'text.hint' })}>
+          시리즈로 발행된 폴더 {countOf(EntityVisibility.PUBLIC)}개는 공개 방식을 바꾸려면 먼저 시리즈를 삭제해야 해요.
+        </p>
+      {/if}
+    </section>
+  </div>
+{:else}
+  <SeriesPublish folder$key={folders.data[0]} onback={() => (step = 'visibility')} {onclose} />
+{/if}

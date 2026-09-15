@@ -1,10 +1,10 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { titlePageColors } from '@typie/lib/title-page';
   import { css } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
   import ChevronLeftIcon from '~icons/lucide/chevron-left';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import FolderIcon from '~icons/lucide/folder';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import { Img } from '$lib/components';
@@ -52,6 +52,7 @@
           id
           number
           name
+          description
           publicationCount
 
           thumbnail {
@@ -133,15 +134,14 @@
     <div class={css({ padding: '20px', borderTopWidth: '1px', borderColor: 'border.hairline', backgroundColor: 'surface.canvas' })}>
       <a class={css(entity)} href={folderPath(slug, folder.number)}>
         <span
+          style:background-color={folder.thumbnail ? undefined : titlePageColors(folder.id).background}
           class={css({
-            display: 'grid',
-            placeItems: 'center',
             flexShrink: '0',
-            size: '36px',
-            borderRadius: '9px',
+            width: '36px',
+            height: '54px',
+            borderRadius: '4px',
             backgroundColor: 'surface.inset',
             boxShadow: '[inset 0 0 0 1px token(colors.border.hairline)]',
-            color: 'text.hint',
             overflow: 'hidden',
           })}
         >
@@ -152,8 +152,6 @@
               image$key={folder.thumbnail}
               size={96}
             />
-          {:else}
-            <Icon icon={FolderIcon} size={18} />
           {/if}
         </span>
         <span class={css(entityText)}>
@@ -162,6 +160,10 @@
         </span>
         <Icon style={css.raw({ color: 'text.hint' })} icon={ChevronRightIcon} size={14} />
       </a>
+
+      {#if folder.description}
+        <p class={css(description, { marginTop: '8px' })}>{folder.description}</p>
+      {/if}
 
       <div
         class={css({
