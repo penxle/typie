@@ -89,7 +89,7 @@ import kotlinx.coroutines.launch
 
 private val SpaceDateDisplayOptions =
   mapOf(
-    SiteDateDisplay.CREATED_AT to "최초 생성 시각",
+    SiteDateDisplay.PUBLISHED_AT to "발행 시각",
     SiteDateDisplay.UPDATED_AT to "마지막 수정 시각",
     SiteDateDisplay.NONE to "미표시",
   )
@@ -354,7 +354,9 @@ private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
   isDeleting: Boolean,
-  onDelete: suspend context(SheetScope<Unit>) () -> Unit,
+  onDelete:
+    suspend context(SheetScope<Unit>)
+    () -> Unit,
 ) {
   var inputValue by remember { mutableStateOf("") }
 
