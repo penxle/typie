@@ -15,7 +15,7 @@ export const load = async (event) => {
 
             pinnedPublications {
               id
-              ...UsersiteSpace_PinnedCard_publicationView
+              ...UsersiteSpace_PinnedRow_publicationView
             }
 
             entries {

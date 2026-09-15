@@ -19,7 +19,6 @@ export const discoverablePublicationPredicate = () =>
     eq(Publications.state, PublicationState.PUBLISHED),
     eq(Entities.state, EntityState.ACTIVE),
     eq(Sites.state, SiteState.ACTIVE),
-    eq(Sites.allowIndexing, true),
     eq(Sites.allowDiscovery, true),
     isNull(Documents.password),
   );
@@ -122,14 +121,7 @@ export const buildDiscoverableSitesByIdsQuery = (executor: Executor, input: { si
   executor
     .select()
     .from(Sites)
-    .where(
-      and(
-        inArray(Sites.id, input.siteIds),
-        eq(Sites.state, SiteState.ACTIVE),
-        eq(Sites.allowIndexing, true),
-        eq(Sites.allowDiscovery, true),
-      ),
-    );
+    .where(and(inArray(Sites.id, input.siteIds), eq(Sites.state, SiteState.ACTIVE), eq(Sites.allowDiscovery, true)));
 
 export const buildDiscoveryTagCountsQuery = (executor: Executor, input: { names: string[] }) =>
   discoverablePublicationScope(executor.select({ name: PublicationTags.name, count: count() }).from(Publications).$dynamic())

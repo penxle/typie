@@ -2,7 +2,7 @@
   import { Helmet } from '@typie/ui/components';
   import { hydrateQuery } from '$lib/graphql';
   import DiscoveryCardList from '../DiscoveryCardList.svelte';
-  import DiscoverySectionHead from '../DiscoverySectionHead.svelte';
+  import DiscoveryPageHead from '../DiscoveryPageHead.svelte';
 
   let { data } = $props();
 
@@ -13,6 +13,6 @@
 <Helmet title="타이피" trailing={null} />
 
 <section>
-  <DiscoverySectionHead title="최신 글" />
+  <DiscoveryPageHead title="홈" />
   <DiscoveryCardList initialHasMore={feed.hasMore} publications={feed.publications} source={{ kind: 'feed' }} />
 </section>

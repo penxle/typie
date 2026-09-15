@@ -397,7 +397,7 @@
           </Popover>
         </PropertyRow>
 
-        <PropertyRow icon={ImageIcon} label="썸네일">
+        <PropertyRow hint="2:3 비율, 800×1200 이상을 권장해요" icon={ImageIcon} label="썸네일">
           {#if thumbnailId}
             <div class={css({ position: 'relative' })}>
               <button

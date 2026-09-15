@@ -94,6 +94,7 @@ PublicationView.implement({
     }),
     publishedAt: t.field({ type: 'DateTime', resolve: (self) => self.publishedAt ?? self.updatedAt }),
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+    pinnedOrder: t.exposeString('pinnedOrder', { nullable: true }),
     tags: t.stringList({
       resolve: async (self, _, ctx) => {
         const loader = ctx.loader({

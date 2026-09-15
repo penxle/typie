@@ -508,6 +508,7 @@
             disabled={busy}
             {modified}
             scheduleEditable={view.scheduleEditable}
+            siteId={site.id}
             bind:tags
             bind:excerpt
             bind:thumbnailId

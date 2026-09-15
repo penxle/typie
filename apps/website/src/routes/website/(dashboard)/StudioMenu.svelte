@@ -11,6 +11,8 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import ChevronsUpDownIcon from '~icons/lucide/chevrons-up-down';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
+  import GlobeIcon from '~icons/lucide/globe';
   import PlusIcon from '~icons/lucide/plus';
   import SettingsIcon from '~icons/lucide/settings';
   import Trash2Icon from '~icons/lucide/trash-2';
@@ -40,6 +42,7 @@
         sites {
           id
           name
+          url
 
           logo {
             id
@@ -259,6 +262,38 @@
           inert={!open}
           use:staggerChildren
         >
+          <a
+            class={flex({
+              alignItems: 'center',
+              gap: '8px',
+              paddingX: '8px',
+              paddingY: '6px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 'medium',
+              color: 'text.default',
+              transition: 'common',
+              cursor: 'pointer',
+              _hover: { backgroundColor: 'surface.hover' },
+            })}
+            href={site.url}
+            onclick={() => {
+              close();
+              mixpanel.track('open_site_public_page', { via: 'sidebar' });
+            }}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={GlobeIcon} size={14} />
+            <span>스퀘어에서 열기</span>
+            <Icon
+              style={css.raw({ flexShrink: '0', color: 'text.default' })}
+              aria-label="새 탭에서 열기"
+              icon={ExternalLinkIcon}
+              size={12}
+            />
+          </a>
+
           <button
             class={flex({
               alignItems: 'center',
@@ -281,7 +316,7 @@
             type="button"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={SettingsIcon} size={14} />
-            <span>작업실 설정</span>
+            <span>스페이스 설정</span>
           </button>
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
@@ -313,7 +348,7 @@
 
           <HorizontalDivider style={css.raw({ marginY: '4px' })} color="secondary" />
 
-          <!-- 작업실 전환 서브메뉴 트리거 -->
+          <!-- 스페이스 전환 서브메뉴 트리거 -->
           <div
             bind:this={submenuTriggerEl}
             class={flex({
@@ -342,7 +377,7 @@
             tabindex="0"
           >
             <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={ChevronsUpDownIcon} size={14} />
-            <span>작업실 전환</span>
+            <span>스페이스 전환</span>
             <Icon style={css.raw({ marginLeft: 'auto', flexShrink: '0', color: 'text.default' })} icon={ChevronRightIcon} size={12} />
           </div>
         </div>
@@ -354,7 +389,7 @@
   <div class={css({ height: '34px' })}></div>
 </div>
 
-<!-- 작업실 전환 서브메뉴 (포탈) -->
+<!-- 스페이스 전환 서브메뉴 (포탈) -->
 {#if submenuOpen}
   <div
     bind:this={submenuEl}
@@ -439,7 +474,7 @@
       type="button"
     >
       <Icon style={css.raw({ flexShrink: '0', color: 'text.default' })} icon={PlusIcon} size={14} />
-      <span>새 작업실 생성</span>
+      <span>새 스페이스 생성</span>
     </button>
   </div>
 {/if}

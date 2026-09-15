@@ -333,7 +333,7 @@ private val Tab.presentation: TabPresentation
   get() =
     when (this) {
       Tab.Home -> TabPresentation(icon = Lucide.House, label = "홈")
-      Tab.Studio -> TabPresentation(icon = Lucide.FolderOpen, label = "작업실")
+      Tab.Studio -> TabPresentation(icon = Lucide.FolderOpen, label = "스페이스")
       Tab.Notes -> TabPresentation(icon = Lucide.StickyNote, label = "노트")
     }
 

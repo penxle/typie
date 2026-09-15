@@ -657,7 +657,7 @@ private fun RecentDocumentsSection(docs: List<HomeScreen_RecentDocumentRow_docum
         horizontalArrangement = Arrangement.Center,
       ) {
         Text(
-          "작업실에서 모든 문서 보기",
+          "스페이스에서 모든 문서 보기",
           style = AppTheme.typography.action,
           color = AppTheme.colors.textMuted,
         )

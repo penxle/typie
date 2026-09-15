@@ -450,6 +450,7 @@
             partialTags={partial}
             scheduleEditable={view.scheduleEditable}
             showMeta={false}
+            siteId={site.id}
             bind:tags
             bind:excerpt
             bind:thumbnailId

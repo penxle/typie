@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { discoveryCardList } from '../(site)/discovery-styles';
   import DiscoveryCard from '../(site)/DiscoveryCard.svelte';
+  import { entryGroupCount, entryGroupLabel } from './entry-group-styles';
   import FolderTile from './FolderTile.svelte';
   import type { UsersiteApex_DiscoveryCard_publicationView$key, UsersiteSpace_FolderTile_folderView$key } from '$mearie';
 
@@ -18,25 +19,13 @@
 
   const folders = $derived(entries.filter((entry) => entry.__typename === 'SiteFolderView'));
   const publications = $derived(entries.filter((entry) => entry.__typename === 'PublicationView'));
-
-  const groupLabel = css.raw({
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '6px',
-    marginBottom: '12px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    letterSpacing: '-0.01em',
-  });
-
-  const groupCount = css.raw({ fontSize: '13px', fontWeight: 'medium', color: 'text.hint', fontVariantNumeric: 'tabular-nums' });
 </script>
 
 {#if folders.length > 0}
   <section class={css({ marginBottom: publications.length > 0 ? '44px' : '0' })}>
-    <h2 class={css(groupLabel)}>
+    <h2 class={css(entryGroupLabel)}>
       {nested ? '하위 시리즈' : '시리즈'}
-      <span class={css(groupCount)}>{folders.length}</span>
+      <span class={css(entryGroupCount)}>{folders.length}</span>
     </h2>
 
     <div class={css({ display: 'flex', flexDirection: 'column', minWidth: '0' })}>
@@ -49,8 +38,8 @@
 
 {#if publications.length > 0}
   <section>
-    <h2 class={css(groupLabel)}>
-      글 <span class={css(groupCount)}>{publications.length}</span>
+    <h2 class={css(entryGroupLabel)}>
+      글 <span class={css(entryGroupCount)}>{publications.length}</span>
     </h2>
 
     <div class={css(discoveryCardList)}>

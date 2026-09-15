@@ -5,7 +5,7 @@ import co.typie.ext.comma
 const val UNTITLED_DOCUMENT_TEXT = "(제목 없음)"
 const val UNNAMED_FOLDER_TEXT = "(이름 없음)"
 const val EMPTY_ENTITY_EXCERPT_TEXT = "(내용 없음)"
-const val EMPTY_STUDIO_TEXT = "비어 있는 작업실"
+const val EMPTY_STUDIO_TEXT = "비어 있는 스페이스"
 const val EMPTY_FOLDER_TEXT = "빈 폴더"
 
 fun formatDocumentTitle(title: String, emptyText: String = UNTITLED_DOCUMENT_TEXT): String {

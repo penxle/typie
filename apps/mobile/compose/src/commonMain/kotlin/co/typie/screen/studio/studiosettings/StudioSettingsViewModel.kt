@@ -48,8 +48,8 @@ private val UNAVAILABLE_SITE_SLUGS =
 class StudioSettingsForm(scope: CoroutineScope) : FormState(scope, autoFocusFirstField = false) {
   val name =
     field("") {
-      required("작업실 이름을 입력해주세요.")
-      validateOn(ValidateOn.Change) { minLength(1, "작업실 이름을 입력해주세요.") }
+      required("스페이스 이름을 입력해주세요.")
+      validateOn(ValidateOn.Change) { minLength(1, "스페이스 이름을 입력해주세요.") }
     }
 
   val slug =
@@ -157,7 +157,7 @@ class StudioSettingsViewModel : ViewModel() {
     }
   }
 
-  // TODO: 작업실 삭제 트래킹
+  // TODO: 스페이스 삭제 트래킹
   suspend fun deleteSite(): Result<Unit, Nothing> =
     loading({ isDeleting = it }) {
       Apollo.executeMutation(
