@@ -44,6 +44,7 @@ catppuccin
 cbor
 cdylib
 centiseconds
+choseong
 cinterop
 cnpg
 coalescer
@@ -111,6 +112,7 @@ inview
 ipaddr
 ivec
 jaccard
+jamo
 josa
 jsign
 kakao

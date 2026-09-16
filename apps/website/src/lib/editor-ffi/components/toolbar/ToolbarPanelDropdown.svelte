@@ -2,79 +2,53 @@
   import { css } from '@typie/styled-system/css';
   import { createFloatingActions, tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
-  import { fly } from 'svelte/transition';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import type { Placement } from '@floating-ui/dom';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { Snippet } from 'svelte';
 
   type Props = {
     style?: SystemStyleObject;
-    keys?: TooltipParameter['keys'];
     label: string;
+    keys?: TooltipParameter['keys'];
     active?: boolean;
     disabled?: boolean;
     chevron?: boolean;
-    placement?: Placement;
-    opened?: boolean;
-    onOpenChange?: (opened: boolean) => void;
-    onEscape?: () => void;
-    anchor: Snippet<[{ open: () => void; opened: boolean }]>;
-    floating: Snippet<[{ close: () => void; opened: boolean }]>;
+    anchor: Snippet;
+    panel: Snippet<[{ close: () => void }]>;
+    onclose?: () => void;
   };
 
-  let {
-    style,
-    keys,
-    label,
-    active = false,
-    disabled = false,
-    chevron = false,
-    placement = 'bottom',
-    opened: externalOpened,
-    onOpenChange,
-    onEscape,
-    anchor,
-    floating,
-  }: Props = $props();
+  let { style, label, keys, active = false, disabled = false, chevron = false, anchor, panel, onclose }: Props = $props();
 
   const ctx = getEditorContext();
 
-  const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
-    placement,
-    offset: 8,
+  let opened = $state(false);
+
+  const { anchor: anchorAction, floating } = createFloatingActions({
+    placement: 'bottom-start',
+    offset: 6,
     onClickOutside: () => {
-      close();
+      opened = false;
     },
   });
 
-  let opened = $state(false);
-
-  $effect(() => {
-    if (externalOpened === undefined) return;
-
-    if (externalOpened && !opened) {
-      open();
-    } else if (!externalOpened && opened) {
-      close();
-    }
-  });
-
-  const open = () => {
-    if (disabled) return;
-    opened = true;
-    onOpenChange?.(true);
-  };
-
   const close = () => {
     opened = false;
-    onOpenChange?.(false);
   };
 
+  let wasOpened = false;
+
   $effect(() => {
-    if (disabled && opened) close();
+    const now = opened;
+    if (wasOpened && !now) onclose?.();
+    wasOpened = now;
+  });
+
+  $effect(() => {
+    if (disabled) opened = false;
   });
 
   $effect(() => {
@@ -82,10 +56,14 @@
     return ctx.editor?.retainFocus();
   });
 
-  const handleEscape = () => {
-    close();
-    onEscape?.();
-  };
+  $effect(() => {
+    if (!opened) return;
+    return pushEscapeHandler(() => {
+      close();
+      ctx.editor?.focus();
+      return true;
+    });
+  });
 </script>
 
 <button
@@ -95,6 +73,7 @@
       justifyContent: 'center',
       alignItems: 'center',
       gap: '2px',
+      flexShrink: '0',
       borderRadius: '4px',
       paddingX: chevron ? '4px' : '0',
       width: chevron ? 'fit' : '24px',
@@ -104,25 +83,24 @@
       backgroundColor: active ? 'surface.active' : 'transparent',
       transition: 'common',
       _enabled: {
-        _hover: { color: active ? 'accent.default' : 'text.default', _expanded: { color: 'accent.default' } },
+        _hover: { color: 'text.default', backgroundColor: 'surface.hover' },
         _expanded: { color: 'accent.default', backgroundColor: 'surface.active' },
       },
       _disabled: { opacity: '40' },
-      flexShrink: '0',
     },
     style,
   )}
   aria-expanded={opened}
-  aria-haspopup="menu"
+  aria-haspopup="listbox"
   aria-label={label}
   {disabled}
-  onclick={open}
+  onclick={() => (opened = !opened)}
   onpointerdown={(e) => e.preventDefault()}
   type="button"
   use:anchorAction
-  use:tooltip={{ message: label, keys, arrow: false }}
+  use:tooltip={{ message: opened ? null : label, keys, arrow: false }}
 >
-  {@render anchor({ open, opened })}
+  {@render anchor()}
 
   {#if chevron}
     <Icon
@@ -130,27 +108,50 @@
         color: 'text.muted',
         transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
         transitionDuration: '150ms',
+        '& *': { strokeWidth: '[1.5px]' },
       })}
       icon={ChevronDownIcon}
-      size={16}
+      size={14}
     />
   {/if}
 </button>
 
 {#if opened}
-  <div
-    class={css({
-      borderWidth: '1px',
-      borderColor: 'border.hairline',
-      borderBottomRadius: '4px',
-      backgroundColor: 'surface.default',
-      zIndex: 'overEditor',
-      boxShadow: 'sm',
-      overflow: 'hidden',
-    })}
-    use:floatingAction
-    in:fly={{ y: -5, duration: 150 }}
-  >
-    {@render floating({ close: handleEscape, opened })}
+  <div class={css({ zIndex: 'overEditor' })} use:floating>
+    <div
+      class={`toolbar-panel ${css({
+        borderRadius: '8px',
+        backgroundColor: 'surface.default',
+        boxShadow: 'lg',
+        overflow: 'hidden',
+        _dark: { borderWidth: '1px', borderColor: 'border.hairline' },
+      })}`}
+    >
+      {@render panel({ close })}
+    </div>
   </div>
 {/if}
+
+<style>
+  .toolbar-panel {
+    transform-origin: left top;
+    animation: toolbar-panel-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  @keyframes toolbar-panel-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toolbar-panel {
+      animation: none;
+    }
+  }
+</style>

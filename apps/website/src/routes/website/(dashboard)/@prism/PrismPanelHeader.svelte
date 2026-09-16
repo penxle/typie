@@ -40,7 +40,7 @@
   class={flex({
     alignItems: 'center',
     gap: '8px',
-    height: '44px',
+    height: '37px',
     paddingX: '14px',
     borderBottomWidth: '1px',
     borderColor: 'border.hairline',

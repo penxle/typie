@@ -34,7 +34,7 @@
   import { resolveHeaderGeometry } from './header-geometry';
   import Input from './Input.svelte';
   import LineHighlight from './LineHighlight.svelte';
-  import LinkTooltip from './LinkTooltip.svelte';
+  import MarkCardHost from './MarkCardHost.svelte';
   import PlaceholderOverlay from './PlaceholderOverlay.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
@@ -565,7 +565,7 @@
 
         <ContextMenu />
 
-        <LinkTooltip />
+        <MarkCardHost />
 
         {#if children}
           {@render children()}

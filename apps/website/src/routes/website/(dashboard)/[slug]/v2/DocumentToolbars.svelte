@@ -3,74 +3,34 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Scrollbar, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import mixpanel from 'mixpanel-browser';
-  import ArrowUpDownIcon from '~icons/lucide/arrow-up-down';
-  import PlusIcon from '~icons/lucide/plus';
   import RedoIcon from '~icons/lucide/redo';
   import SearchIcon from '~icons/lucide/search';
-  import TypeIcon from '~icons/lucide/type';
   import UndoIcon from '~icons/lucide/undo';
-  import { FormatToolbarItems, InsertToolbarItems, ToolbarButton } from '$lib/editor-ffi/components';
+  import { FormatToolbarItems, ToolbarButton, ToolbarInsertMenu } from '$lib/editor-ffi/components';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
-  import { getPane, getPaneGroup } from '../@pane/context.svelte';
+  import { getPane } from '../@pane/context.svelte';
   import { getZenModePaneChrome } from '../@pane/zen-mode-pane-chrome.svelte';
   import ZenModePaneChromeEffects from '../@pane/ZenModePaneChromeEffects.svelte';
   import ZenModePaneChromeSegment from '../@pane/ZenModePaneChromeSegment.svelte';
-  import { otherToolbarKind, readPrimaryToolbar, writePrimaryToolbar } from './toolbar-kind';
   import type { Message } from '@typie/editor-ffi/browser';
   import type { ComponentProps } from 'svelte';
-  import type { ToolbarKind } from './toolbar-kind';
 
   type Props = {
-    documentId: string | null;
     fontFamilies?: ComponentProps<typeof FormatToolbarItems>['fontFamilies'];
     onFontUploadClick?: () => void;
     onSearchClick?: () => void;
   };
 
-  let { documentId, fontFamilies = [], onFontUploadClick, onSearchClick }: Props = $props();
+  let { fontFamilies = [], onFontUploadClick, onSearchClick }: Props = $props();
 
   const app = getAppContext();
   const ctx = getEditorContext();
   const paneId = getPane().id;
-  const paneGroup = getPaneGroup();
   const paneChrome = getZenModePaneChrome();
-  const primaryToolbarId = `document-toolbar-primary-${paneId}`;
-  const expandedToolbarId = `document-toolbar-expanded-${paneId}`;
+  const toolbarId = `document-toolbar-${paneId}`;
 
-  let stored = $state<ToolbarKind | null>(null);
-  let primaryScrollContainer = $state<HTMLElement>();
-  let expandedScrollContainer = $state<HTMLElement>();
-  let primaryRowHeight = $state(0);
+  let scrollContainer = $state<HTMLElement>();
 
-  const row = css.raw({
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    paddingLeft: '12px',
-    paddingRight: '12px',
-    paddingY: '8px',
-    overflowX: 'auto',
-    scrollbar: 'hidden',
-    width: 'full',
-  });
-
-  const rowShell = css.raw({
-    flexShrink: '0',
-    borderBottomWidth: '1px',
-    borderColor: 'border.hairline',
-    position: 'relative',
-    backgroundColor: 'surface.default',
-  });
-
-  $effect(() => {
-    if (documentId === null) return;
-    stored = readPrimaryToolbar(documentId);
-  });
-
-  const primary = $derived(stored ?? app.preference.current.defaultPrimaryToolbar);
-  const expanded = $derived(otherToolbarKind(primary));
-  const open = $derived(paneGroup.state.current.toolbarExpandedByPaneId[paneId] ?? false);
   const editingDisabled = $derived(ctx.editor?.terminal === true || (ctx.editor !== undefined && ctx.editor !== ctx.liveEditor));
   const zenModeEnabled = $derived(app.preference.current.zenModeEnabled);
   const registerToolbarLane = paneChrome.registerToolbarLane;
@@ -80,32 +40,7 @@
     ctx.editor?.enqueue(message);
     ctx.editor?.focus();
   };
-
-  const toggle = () => {
-    const next = !open;
-    paneGroup.state.current.toolbarExpandedByPaneId = {
-      ...paneGroup.state.current.toolbarExpandedByPaneId,
-      [paneId]: next,
-    };
-    mixpanel.track('toggle_expanded_toolbar', { open: next, kind: expanded });
-  };
-
-  const swap = () => {
-    if (documentId === null) return;
-    const next = expanded;
-    writePrimaryToolbar(documentId, next);
-    stored = next;
-    mixpanel.track('swap_primary_toolbar', { primary: next });
-  };
 </script>
-
-{#snippet items(kind: ToolbarKind)}
-  {#if kind === 'insert'}
-    <InsertToolbarItems />
-  {:else}
-    <FormatToolbarItems {fontFamilies} {onFontUploadClick} />
-  {/if}
-{/snippet}
 
 <div
   class={css({
@@ -121,32 +56,39 @@
   use:registerToolbarLane
 >
   {#if zenModeEnabled}
-    <ZenModePaneChromeEffects lane="toolbar" toolbarSeparatorOffsets={open && primaryRowHeight > 0 ? [primaryRowHeight - 1] : []} />
+    <ZenModePaneChromeEffects lane="toolbar" />
   {/if}
 
   <ZenModePaneChromeSegment class={css({ position: 'relative' })} active={zenModeEnabled} aria-label="문서 도구" segment="toolbar">
     <div
-      class={css(
-        rowShell,
-        zenModeEnabled ? { borderColor: 'transparent', backgroundColor: 'transparent' } : { backgroundColor: 'surface.default' },
-      )}
+      class={css({
+        flexShrink: '0',
+        borderBottomWidth: '1px',
+        borderColor: zenModeEnabled ? 'transparent' : 'border.hairline',
+        position: 'relative',
+        backgroundColor: zenModeEnabled ? 'transparent' : 'surface.default',
+      })}
       role="presentation"
-      bind:clientHeight={primaryRowHeight}
     >
-      <div bind:this={primaryScrollContainer} id={primaryToolbarId} class={css(row)} role="toolbar" tabindex="-1">
-        <ToolbarButton
-          active={open}
-          icon={expanded === 'insert' ? PlusIcon : TypeIcon}
-          label={expanded === 'insert' ? '삽입 도구' : '서식 도구'}
-          onclick={toggle}
-        />
-
-        <VerticalDivider style={css.raw({ height: '12px' })} />
-
+      <div
+        bind:this={scrollContainer}
+        id={toolbarId}
+        class={flex({
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '12px',
+          paddingY: '6px',
+          overflowX: 'auto',
+          scrollbar: 'hidden',
+          width: 'full',
+        })}
+        role="toolbar"
+        tabindex="-1"
+      >
         <div
           class={flex({
             alignItems: 'center',
-            gap: '4px',
+            gap: '2px',
             opacity: editingDisabled ? '40' : '100',
             pointerEvents: editingDisabled ? 'none' : 'auto',
           })}
@@ -170,7 +112,11 @@
 
         <VerticalDivider style={css.raw({ height: '12px' })} />
 
-        {@render items(primary)}
+        <ToolbarInsertMenu disabled={editingDisabled} />
+
+        <VerticalDivider style={css.raw({ height: '12px' })} />
+
+        <FormatToolbarItems {fontFamilies} {onFontUploadClick} />
 
         <div class={css({ flexGrow: '1' })}></div>
 
@@ -185,39 +131,7 @@
         </div>
       </div>
 
-      <Scrollbar
-        controls={primaryToolbarId}
-        label="툴바 가로 스크롤"
-        orientation="horizontal"
-        scrollContainer={primaryScrollContainer}
-        size="sm"
-      />
+      <Scrollbar controls={toolbarId} label="툴바 가로 스크롤" orientation="horizontal" {scrollContainer} size="sm" />
     </div>
-
-    {#if open}
-      <div
-        class={css(
-          rowShell,
-          zenModeEnabled ? { borderColor: 'transparent', backgroundColor: 'transparent' } : { backgroundColor: 'surface.default' },
-        )}
-        role="presentation"
-      >
-        <div bind:this={expandedScrollContainer} id={expandedToolbarId} class={css(row)} role="toolbar" tabindex="-1">
-          <ToolbarButton disabled={documentId === null} icon={ArrowUpDownIcon} label="기본 툴바와 맞바꾸기" onclick={swap} />
-
-          <VerticalDivider style={css.raw({ height: '12px' })} />
-
-          {@render items(expanded)}
-        </div>
-
-        <Scrollbar
-          controls={expandedToolbarId}
-          label="툴바 가로 스크롤"
-          orientation="horizontal"
-          scrollContainer={expandedScrollContainer}
-          size="sm"
-        />
-      </div>
-    {/if}
   </ZenModePaneChromeSegment>
 </div>

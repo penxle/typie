@@ -1,13 +1,13 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { createFloatingActions, tooltip } from '@typie/ui/actions';
-  import { DropdownMenu, DropdownMenuItem, Icon } from '@typie/ui/components';
+  import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
-  import { tick } from 'svelte';
-  import { fly } from 'svelte/transition';
-  import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { values } from '$lib/editor-ffi/values';
+  import { toolbarRecent } from './toolbar-recent.svelte';
+  import ToolbarPanel from './ToolbarPanel.svelte';
+  import ToolbarPanelDropdown from './ToolbarPanelDropdown.svelte';
+  import type { ToolbarPanelItem } from './ToolbarPanel.svelte';
 
   type Props = {
     disabled?: boolean;
@@ -15,260 +15,81 @@
 
   let { disabled = false }: Props = $props();
 
+  const app = getAppContext();
   const ctx = getEditorContext();
-
-  let anchorElement: HTMLDivElement | undefined = $state();
-  let floatingElement: HTMLDivElement | undefined = $state();
-
-  const { anchor: anchorAction, floating: floatingAction } = createFloatingActions({
-    placement: 'bottom-start',
-    offset: 8,
-    onClickOutside: (event) => {
-      if (anchorElement?.contains(event.target as Node)) {
-        return;
-      }
-      close();
-    },
-  });
-
-  let opened = $state(false);
-  let inputElement: HTMLInputElement | undefined = $state();
-  let chevronElement: HTMLButtonElement | undefined = $state();
-  let inputValue = $state('');
-  let isFocused = $state(false);
+  const recent = toolbarRecent(app.userId);
 
   const currentFontSize = $derived(
     ctx.editor?.modifierState?.font_size?.type === 'uniform' ? ctx.editor.modifierState.font_size.value.value : undefined,
   );
-  const displayFontSize = $derived(currentFontSize === undefined ? undefined : currentFontSize / 100);
 
-  $effect(() => {
-    if (!opened && document.activeElement !== inputElement) {
-      inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
+  const recentIds = $derived(recent.ids('fontSize'));
+
+  const sizes = $derived.by(() => {
+    const merged: number[] = values.fontSize.map(({ value }) => value);
+    for (const id of recentIds) {
+      const value = Number(id);
+      if (Number.isFinite(value) && !merged.includes(value)) merged.push(value);
     }
+    if (currentFontSize !== undefined && !merged.includes(currentFontSize)) merged.push(currentFontSize);
+    return merged.toSorted((left, right) => left - right);
   });
 
-  const open = () => {
-    if (disabled) return;
-    opened = true;
+  const items = $derived<ToolbarPanelItem[]>(
+    sizes.map((value) => ({
+      id: String(value),
+      label: `${value / 100}pt`,
+      keywords: [String(value / 100)],
+      selected: value === currentFontSize,
+    })),
+  );
+
+  const parse = (query: string) => {
+    const match = /^(\d{1,3}(?:\.\d+)?)\s*(?:pt)?$/i.exec(query);
+    if (!match) return null;
+    const value = Math.round(Number.parseFloat(match[1]) * 100);
+    return value >= values.minFontSize && value <= values.maxFontSize ? value : null;
   };
 
-  const close = () => {
-    opened = false;
-  };
-
-  $effect(() => {
-    if (disabled) close();
-  });
-
-  $effect(() => {
-    if (!opened) return;
-    return ctx.editor?.retainFocus();
-  });
-
-  const handleFocus = () => {
-    isFocused = true;
-    open();
-    inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
-    inputElement?.select();
-  };
-
-  const applyFontSize = (shouldFocus = false) => {
-    if (!inputValue) return;
-
-    const parsed = Number.parseFloat(inputValue);
-    if (!Number.isNaN(parsed) && parsed * 100 !== currentFontSize) {
-      const clamped = clamp(Math.round(parsed * 100), values.minFontSize, values.maxFontSize);
-      ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_size', value: clamped } } });
-    }
-    void shouldFocus;
-  };
-
-  const handleBlur = (e: FocusEvent) => {
-    isFocused = false;
-
-    const relatedTarget = e.relatedTarget as Node | null;
-    if (relatedTarget && (floatingElement?.contains(relatedTarget) || chevronElement?.contains(relatedTarget))) {
-      return;
-    }
-
+  const apply = (value: number, close: () => void) => {
+    const clamped = clamp(Math.round(value), values.minFontSize, values.maxFontSize);
+    ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_size', value: clamped } } });
+    recent.remember('fontSize', String(clamped));
     close();
-  };
-
-  $effect(() => {
-    if (!isFocused && inputValue) {
-      applyFontSize();
-    }
-  });
-
-  const handleKeydown = (e: KeyboardEvent) => {
-    if (e.isComposing || e.defaultPrevented) return;
-
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      applyFontSize(true);
-      inputElement?.blur();
-      close();
-      ctx.editor?.focus();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      inputValue = displayFontSize === undefined ? '' : String(displayFontSize);
-      inputElement?.blur();
-      close();
-      ctx.editor?.focus();
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      e.stopPropagation();
-      const currentInput = Number.parseFloat(inputValue);
-      const current = (currentInput ? Math.round(currentInput * 100) : currentFontSize) ?? 0;
-      if (!current) return;
-      const sortedSizes = values.fontSize.map(({ value }) => value).toSorted((a, b) => a - b);
-      const currentIndex = sortedSizes.findIndex((size) => size >= current);
-
-      let newIndex: number;
-      if (e.key === 'ArrowDown') {
-        if (currentIndex === -1) {
-          newIndex = sortedSizes.length - 1;
-        } else if (currentIndex >= sortedSizes.length - 1) {
-          newIndex = 0;
-        } else {
-          newIndex = currentIndex + 1;
-        }
-      } else {
-        if (currentIndex === -1) {
-          newIndex = 0;
-        } else if (currentIndex <= 0) {
-          newIndex = sortedSizes.length - 1;
-        } else {
-          newIndex = currentIndex - 1;
-        }
-      }
-
-      const newValue = sortedSizes[newIndex];
-      if (newValue !== undefined) {
-        inputValue = String(newValue / 100);
-        ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_size', value: newValue } } });
-        tick().then(() => {
-          inputElement?.select();
-          const menuItems = floatingElement?.querySelectorAll('button[type="button"]');
-          (menuItems?.[newIndex] as HTMLElement)?.scrollIntoView({ block: 'nearest' });
-        });
-      }
-    }
+    ctx.editor?.focus();
   };
 </script>
 
-<div class={css({ position: 'relative', width: '50px', opacity: disabled ? '40' : '100', pointerEvents: disabled ? 'none' : 'auto' })}>
-  <div
-    bind:this={anchorElement}
-    class={css({
-      display: 'flex',
-      alignItems: 'center',
-      borderRadius: '4px',
-      height: '24px',
-      _hover: {
-        backgroundColor: 'surface.hover',
-      },
-      '& > input:focus': {
-        backgroundColor: 'surface.active',
-      },
-    })}
-    use:anchorAction
-    use:tooltip={{ message: isFocused ? null : '폰트 크기', arrow: false }}
-  >
-    <input
-      bind:this={inputElement}
+<ToolbarPanelDropdown style={css.raw({ maxWidth: '180px' })} chevron {disabled} label="폰트 크기">
+  {#snippet anchor()}
+    <span
       class={css({
-        flexGrow: '1',
-        size: 'full',
-        paddingLeft: '4px',
-        paddingRight: '20px',
-        fontSize: '14px',
-        color: 'text.muted',
-        textAlign: 'left',
-        backgroundColor: 'transparent',
-        border: 'none',
-        outline: 'none',
+        paddingLeft: '2px',
+        fontSize: '13px',
+        fontWeight: 'medium',
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'nowrap',
+        truncate: true,
       })}
-      {disabled}
-      onblur={handleBlur}
-      onfocus={handleFocus}
-      onkeydown={handleKeydown}
-      placeholder={displayFontSize === undefined ? '-' : String(displayFontSize)}
-      type="text"
-      bind:value={inputValue}
-    />
+    >
+      {currentFontSize === undefined ? '-' : `${currentFontSize / 100}pt`}
+    </span>
+  {/snippet}
 
-    <button
-      bind:this={chevronElement}
-      class={css({
-        pointerEvents: opened ? 'auto' : 'none',
-        cursor: 'pointer',
-      })}
-      {disabled}
-      onclick={() => {
-        applyFontSize(true);
-        inputElement?.blur();
-        close();
-        ctx.editor?.focus();
+  {#snippet panel({ close })}
+    <ToolbarPanel
+      free={{
+        accepts: (query) => parse(query) !== null,
+        apply: (query) => {
+          const value = parse(query);
+          if (value !== null) apply(value, close);
+        },
+        display: (query) => `${(parse(query) ?? 0) / 100}pt`,
       }}
-      type="button"
-    >
-      <Icon
-        style={css.raw({
-          position: 'absolute',
-          right: '4px',
-          top: '1/2',
-          translate: 'auto',
-          translateY: '-1/2',
-          color: 'text.muted',
-          transform: opened ? 'rotate(-180deg)' : 'rotate(0deg)',
-          transitionDuration: '150ms',
-        })}
-        icon={ChevronDownIcon}
-        size={16}
-      />
-    </button>
-  </div>
-
-  {#if opened}
-    <div
-      bind:this={floatingElement}
-      class={css({
-        borderWidth: '1px',
-        borderColor: 'border.hairline',
-        borderBottomRadius: '4px',
-        backgroundColor: 'surface.default',
-        zIndex: 'menu',
-        boxShadow: 'sm',
-        overflow: 'hidden',
-      })}
-      use:floatingAction
-      in:fly={{ y: -5, duration: 150 }}
-    >
-      <DropdownMenu
-        style={css.raw({ scrollbar: 'hidden' })}
-        autoFocus={false}
-        onclose={() => {
-          close();
-        }}
-        {opened}
-      >
-        {#each values.fontSize as { label, value } (value)}
-          <DropdownMenuItem
-            active={currentFontSize === value}
-            onclick={() => {
-              ctx.editor?.enqueue({ type: 'modifier', op: { type: 'set', modifier: { type: 'font_size', value } } });
-              ctx.editor?.focus();
-              close();
-            }}
-          >
-            {label}
-          </DropdownMenuItem>
-        {/each}
-      </DropdownMenu>
-    </div>
-  {/if}
-</div>
+      {items}
+      onselect={(id) => apply(Number(id), close)}
+      placeholder="폰트 크기"
+      {recentIds}
+    />
+  {/snippet}
+</ToolbarPanelDropdown>

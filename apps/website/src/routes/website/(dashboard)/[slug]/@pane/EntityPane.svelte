@@ -101,7 +101,6 @@
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
   const entity = $derived(query.data?.entity);
   const documentLayoutMode = $derived(entity?.node.__typename === 'Document' ? entity.node.layoutMode : null);
-  const documentId = $derived(entity?.node.__typename === 'Document' ? entity.node.id : null);
   const documentHeaderVisible = $derived(entity?.state === EntityState.ACTIVE && entity.node.__typename === 'Document');
   let previousEntityState: EntityState | undefined;
 
@@ -292,7 +291,6 @@
     >
       <PaneSkeleton
         contentInsetTop={overlayLayout.contentTopInset}
-        {documentId}
         {documentLayoutMode}
         {headerPlacement}
         {pane}

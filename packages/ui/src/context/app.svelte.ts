@@ -28,8 +28,6 @@ export type AppPreference = {
   /** True until this browser has presented its first HDR Prism object. */
   prismHdrEnabled: boolean;
 
-  defaultPrimaryToolbar: 'insert' | 'format';
-
   trashHeight: number;
 
   focusDuration: number;
@@ -170,8 +168,6 @@ export const setupAppContext = (userId: string) => {
       prismNotificationSoundEnabled: true,
       prismWelcomeObjectEnabled: true,
       prismHdrEnabled: true,
-
-      defaultPrimaryToolbar: 'format',
 
       trashHeight: 300,
 
