@@ -724,6 +724,7 @@ class EditorReadingModeInteractionTest {
       pointerId: Long,
       position: Offset,
       dispatchAtMillis: Long,
+      delayMillis: Long,
     ) = Unit
 
     override fun cancelLongPressDispatch() = Unit

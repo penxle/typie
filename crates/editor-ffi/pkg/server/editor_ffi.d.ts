@@ -1016,6 +1016,7 @@ declare class Editor {
     set_recent_edit_baseline(now_ms: number, buckets: RecentHeadBucket[]): number;
     split_changesets(payload: Uint8Array): ChangesetEntry[];
     table_overlays(): TableOverlay[];
+    text_hit_rects(): PageRect[];
     tick(): TickResult | undefined;
     tick_through(request_id: RequestId): TickResult;
     tracked_range(id: string): TrackedRange | undefined;

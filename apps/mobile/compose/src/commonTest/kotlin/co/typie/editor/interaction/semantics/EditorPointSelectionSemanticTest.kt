@@ -253,6 +253,7 @@ class EditorPointSelectionSemanticTest {
       pointerId: Long,
       position: Offset,
       dispatchAtMillis: Long,
+      delayMillis: Long,
     ) = error("Unused in direct cursor semantic dispatch tests")
 
     override fun cancelLongPressDispatch() =

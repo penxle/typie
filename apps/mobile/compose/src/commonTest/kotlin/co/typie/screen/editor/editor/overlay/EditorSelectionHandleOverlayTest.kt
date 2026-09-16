@@ -2,6 +2,7 @@ package co.typie.screen.editor.editor.overlay
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.graphics.ImageBitmap
 import co.typie.editor.EditorState
 import co.typie.editor.ffi.Affinity
 import co.typie.editor.ffi.PageRect
@@ -13,12 +14,74 @@ import co.typie.editor.ffi.Size
 import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.gestures.resolveSelectionHandleGeometry
 import co.typie.editor.runtime.EditorUiState
+import co.typie.platform.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class EditorSelectionHandleOverlayTest {
+  @Test
+  fun `android selection handles attach below the line and extend outward`() {
+    for (type in listOf(EditorSelectionHandleType.From, EditorSelectionHandleType.To)) {
+      val geometry =
+        resolveSelectionHandleGeometry(
+          type = type,
+          endpointTopLeftInOverlay = Offset(100f, 200f),
+          stemHeightPx = 20f,
+          radiusPx = 12f,
+          stemWidthPx = 2f,
+          touchTargetPx = 44f,
+          platform = Platform.Android,
+        )
+      val paint = geometry.touchTargetTopLeft + geometry.paintTopLeftInTouchTarget
+      assertEquals(220f, paint.y)
+      assertEquals(if (type == EditorSelectionHandleType.From) 76f else 100f, paint.x)
+      assertTrue(geometry.containsTouch(paint + Offset(12f, 12f)))
+    }
+  }
+
+  @Test
+  fun `native drawable bounds preserve hotspots padding and minimum touch size`() {
+    val images =
+      mapOf(
+        EditorSelectionHandleType.Cursor to ImageBitmap(53, 63),
+        EditorSelectionHandleType.From to ImageBitmap(116, 58),
+        EditorSelectionHandleType.To to ImageBitmap(116, 58),
+      )
+    val expectedPaintLeft =
+      mapOf(
+        EditorSelectionHandleType.Cursor to 174f,
+        EditorSelectionHandleType.From to 113f,
+        EditorSelectionHandleType.To to 171f,
+      )
+    for ((type, image) in images) {
+      for (minimumTouchSize in listOf(44f, 120f)) {
+        val geometry =
+          resolveSelectionHandleOverlayGeometry(
+            placement = EditorSelectionHandleOverlayPlacement(type, Offset(200f, 300f), 20f),
+            density = minimumTouchSize / 44f,
+            platform = Platform.Android,
+            image = image,
+          )
+        val paint = geometry.touchTargetTopLeft + geometry.paintTopLeftInTouchTarget
+        assertEquals(Offset(expectedPaintLeft.getValue(type), 320f), paint)
+        assertEquals(maxOf(minimumTouchSize, image.width.toFloat()), geometry.touchTargetSize.width)
+        assertEquals(
+          maxOf(minimumTouchSize, image.height.toFloat()),
+          geometry.touchTargetSize.height,
+        )
+        assertTrue(geometry.containsTouch(paint))
+        assertTrue(
+          geometry.containsTouch(paint + Offset(image.width.toFloat(), image.height.toFloat()))
+        )
+        assertFalse(geometry.containsTouch(geometry.touchTargetTopLeft - Offset(1f, 0f)))
+      }
+    }
+  }
+
   @Test
   fun `from handle hit target and paint offsets match legacy selection handle`() {
     val geometry =
@@ -117,7 +180,7 @@ class EditorSelectionHandleOverlayTest {
   }
 
   @Test
-  fun `selection handles are hidden outside direct touch interaction`() {
+  fun `selection handles follow direct touch and android selection gesture visibility`() {
     val selection =
       Selection(
         anchor = Position("text", 0, Affinity.Downstream),
@@ -145,5 +208,18 @@ class EditorSelectionHandleOverlayTest {
         directTouchInteraction = false,
       )
     )
+    for (hidden in listOf(false, true, false)) {
+      val placements =
+        resolveSelectionHandleOverlayPlacements(
+          state = state,
+          uiState = EditorUiState().apply { updatePageOffset(0, Offset.Zero) },
+          editorRectInOverlay = ComposeRect.Zero,
+          density = 1f,
+          directTouchInteraction = true,
+          platform = Platform.Android,
+          selectionHandlesHidden = hidden,
+        )
+      assertEquals(if (hidden) 0 else 2, placements?.size ?: 0)
+    }
   }
 }

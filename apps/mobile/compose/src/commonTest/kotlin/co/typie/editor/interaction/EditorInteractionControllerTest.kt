@@ -1,6 +1,7 @@
 package co.typie.editor.interaction
 
 import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.geometry.Size as ComposeSize
@@ -52,6 +53,7 @@ import co.typie.editor.ffi.ViewOp
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
 import co.typie.editor.interaction.gestures.EditorMouseButton
 import co.typie.editor.interaction.gestures.EditorPanGestureDriver
+import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.runtime.EditorContextMenuState
 import co.typie.editor.runtime.EditorUiState
@@ -1966,6 +1968,53 @@ class EditorInteractionControllerTest {
     }
 
   @Test
+  fun `android selection handles stay hidden through double tap hold drag release and cancel`() =
+    runTest(StandardTestDispatcher()) {
+      for (platform in listOf(Platform.Android, Platform.iOS)) {
+        for (drag in listOf(false, true)) {
+          for (cancel in listOf(false, true)) {
+            val selection =
+              Selection(
+                Position("text", 0, Affinity.Downstream),
+                Position("text", 5, Affinity.Downstream),
+              )
+            val fake = FakeFfiEditor(selectionProvider = { selection })
+            val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+            fake.publishSnapshot(editor)
+            val host = TestHost(this)
+            val controller =
+              EditorInteractionController(
+                editorProvider = { editor },
+                effects = host,
+                geometry = host,
+                uiStateProvider = { host.uiState },
+                platformProvider = { platform },
+              )
+            val hidden = derivedStateOf { controller.selectionHandlesHidden }
+            controller.updateTapSlop(8f)
+            val start = Offset(10f, 20f)
+            assertFalse(hidden.value)
+            controller.onPointerDown(1L, start, 0L)
+            controller.onPointerUp(1L, start, 40L)
+            runCurrent()
+            controller.onPointerDown(2L, start, 120L)
+            runCurrent()
+            assertEquals(platform == Platform.Android, hidden.value)
+            if (drag) {
+              controller.onPointerMove(2L, start + Offset(8f, 0f), 140L)
+              assertEquals(platform == Platform.Android, hidden.value)
+            }
+            if (cancel) controller.cancel()
+            else controller.onPointerUp(2L, start + if (drag) Offset(8f, 0f) else Offset.Zero, 160L)
+            runCurrent()
+            assertFalse(hidden.value)
+            controller.cancel()
+          }
+        }
+      }
+    }
+
+  @Test
   fun `double tap drag clears tap sequence before the next tap`() =
     runTest(StandardTestDispatcher()) {
       val selection =
@@ -2102,6 +2151,550 @@ class EditorInteractionControllerTest {
         ),
         fake.enqueued.last(),
       )
+    }
+
+  @Test
+  fun `android selection handle taps and holds preserve the range and show its menu`() =
+    runTest(StandardTestDispatcher()) {
+      for (point in listOf(Offset(-2f, 42f), Offset(52f, 42f))) {
+        for (duration in listOf(40L, 700L)) {
+          val selection =
+            Selection(
+              Position("text", 0, Affinity.Downstream),
+              Position("text", 5, Affinity.Downstream),
+            )
+          val fake =
+            FakeFfiEditor(
+              selectionProvider = { selection },
+              selectionEndpointsProvider = { selectionEndpoints() },
+            )
+          val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+          fake.publishSnapshot(editor)
+          val host = TestHost(this)
+          host.uiState.updateFocus(true)
+          val controller =
+            EditorInteractionController(
+              editorProvider = { editor },
+              effects = host,
+              geometry = host,
+              uiStateProvider = { host.uiState },
+              platformProvider = { Platform.Android },
+            )
+          controller.updateTapSlop(8f)
+          assertTrue(controller.onPointerDown(1L, point, 0L))
+          controller.onPointerMove(1L, point + Offset(2f, 1f), 20L)
+          assertFalse(controller.onLongPressTimer(1L, point, 500L))
+          assertTrue(controller.onPointerUp(1L, point + Offset(2f, 1f), duration))
+          runCurrent()
+          assertTrue(fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+          assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+          assertFalse(host.scrollGestureLockActive)
+          assertNull(controller.magnifierPosition)
+          controller.cancel()
+        }
+      }
+    }
+
+  @Test
+  fun `android body cursor drag claims horizontal movement and leaves vertical movement to scrolling`() =
+    runTest(StandardTestDispatcher()) {
+      for (horizontal in listOf(true, false)) {
+        val caret = Position("text", 0, Affinity.Downstream)
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { Selection(caret, caret) },
+            cursorProvider = { cursorAt(80f) },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        host.uiState.updateFocus(true)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.Android },
+          )
+        val pan = TestPanGestureDriver(shouldCatchTouch = false)
+        controller.updateTapSlop(8f)
+        val start = Offset(10f, 6f)
+        controller.onPointerDown(1L, start, 0L, touchPanDriver = pan)
+        val moved = start + if (horizontal) Offset(20f, 4f) else Offset(4f, 20f)
+        controller.onPointerMove(1L, moved, 20L)
+        if (horizontal) {
+          assertEquals(EditorInteractionMode.CursorDragging, controller.interactionMode)
+          assertEquals(moved, controller.magnifierPosition)
+          assertEquals(
+            SelectionOp.SetAt(0, moved.x, moved.y),
+            fake.enqueued.filterIsInstance<Message.Selection>().last().op,
+          )
+          assertTrue(editor.imeNotificationsPaused)
+          assertTrue(pan.updates.isEmpty())
+        } else {
+          assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+          controller.onPointerMove(1L, moved + Offset(40f, 0f), 40L)
+          assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+          assertTrue(fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+        }
+        controller.onPointerUp(1L, moved, 60L)
+        assertFalse(host.scrollGestureLockActive)
+        assertFalse(editor.imeNotificationsPaused)
+        assertNull(controller.magnifierPosition)
+        assertFalse(host.uiState.contextMenu.visible)
+        controller.cancel()
+      }
+    }
+
+  @Test
+  fun `android word long press shows its menu before release and hides it only after drag slop`() =
+    runTest(StandardTestDispatcher()) {
+      var selection =
+        Selection(
+          Position("text", 0, Affinity.Downstream),
+          Position("text", 0, Affinity.Downstream),
+        )
+      val word = selection.copy(head = Position("text", 5, Affinity.Downstream))
+      lateinit var fake: FakeFfiEditor
+      fake =
+        FakeFfiEditor(
+          selectionProvider = { selection },
+          onTick = {
+            if ((fake.enqueued.lastOrNull() as? Message.Selection)?.op is SelectionOp.SelectUnitAt)
+              selection = word
+            listOf(EditorEvent.StateChanged(listOf(StateField.Selection)))
+          },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      val point = Offset(10f, 20f)
+      controller.onPointerDown(1L, point, 0L)
+      controller.onLongPressTimer(1L, point, 500L)
+      runCurrent()
+      assertFalse(host.uiState.contextMenu.visible)
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+      controller.onPointerMove(1L, point + Offset(3f, 0f), 520L)
+      assertTrue(host.uiState.contextMenu.visible)
+      assertNull(controller.magnifierPosition)
+      controller.onPointerMove(1L, point + Offset(12f, 0f), 540L)
+      assertFalse(host.uiState.contextMenu.visible)
+      assertEquals(point + Offset(12f, 0f), controller.magnifierPosition)
+      assertTrue(
+        fake.enqueued.filterIsInstance<Message.Selection>().last().op is SelectionOp.ExtendTo
+      )
+      controller.onPointerUp(1L, point + Offset(12f, 0f), 560L)
+      runCurrent()
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `cancelling an android long press clears visible and unpublished menus`() =
+    runTest(StandardTestDispatcher()) {
+      for (onText in listOf(false, true)) {
+        for (published in listOf(false, true)) {
+          val initialPosition = Position("text", 0, Affinity.Downstream)
+          var selection = Selection(initialPosition, initialPosition)
+          val fake =
+            FakeFfiEditor(
+              selectionProvider = { selection },
+              textHitRectsProvider = {
+                if (onText) FakeFfiEditor.coveringHitRects(0) else emptyList()
+              },
+              onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+            )
+          val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+          fake.publishSnapshot(editor)
+          val host = TestHost(this)
+          val controller =
+            EditorInteractionController(
+              editorProvider = { editor },
+              effects = host,
+              geometry = host,
+              uiStateProvider = { host.uiState },
+              platformProvider = { Platform.Android },
+            )
+          val point = Offset(20f, 20f)
+          controller.onPointerDown(1L, point, 0L)
+          val end = Position("text", 5, Affinity.Downstream)
+          selection = Selection(if (onText) initialPosition else end, end)
+          controller.onLongPressTimer(1L, point, 500L)
+          runCurrent()
+          if (published) controller.presentAppliedState(editor)
+          assertEquals(published, host.uiState.contextMenu.visible)
+
+          controller.cancel()
+          controller.presentAppliedState(editor)
+          assertFalse(host.uiState.contextMenu.visible)
+          assertFalse(host.scrollGestureLockActive)
+          assertNull(controller.magnifierPosition)
+        }
+      }
+    }
+
+  @Test
+  fun `android body taps show the cursor handle and handle taps open the menu`() =
+    runTest(StandardTestDispatcher()) {
+      val position = Position("text", 3, Affinity.Downstream)
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { Selection(position, position) },
+          cursorProvider = { cursorAt(40f) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      host.uiState.updateFocus(true)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      repeat(2) { tap ->
+        controller.onPointerDown(1L, Offset(40f, 6f), tap * 1_000L)
+        controller.onPointerUp(1L, Offset(40f, 6f), tap * 1_000L + 40L)
+        runCurrent()
+        controller.presentAppliedState(editor)
+        advanceTimeBy(301L)
+        runCurrent()
+        assertTrue(host.uiState.cursorHandle.isVisibleFor(editor.publishedState))
+        assertFalse(host.uiState.contextMenu.visible)
+      }
+      assertTrue(controller.onPointerDown(2L, Offset(40f, 24f), 2_000L))
+      advanceTimeBy(5_000L)
+      runCurrent()
+      assertTrue(host.uiState.cursorHandle.visible)
+      assertTrue(controller.onPointerUp(2L, Offset(40f, 24f), 7_000L))
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+      runCurrent()
+      advanceTimeBy(3_999L)
+      runCurrent()
+      assertTrue(host.uiState.cursorHandle.visible)
+      advanceTimeBy(1L)
+      runCurrent()
+      assertFalse(host.uiState.cursorHandle.visible)
+    }
+
+  @Test
+  fun `android cursor handle drag follows the cursor and hides on later input or pan`() =
+    runTest(StandardTestDispatcher()) {
+      var position = Position("text", 3, Affinity.Downstream)
+      var cursor = cursorAt(40f)
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { Selection(position, position) },
+          cursorProvider = { cursor },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      host.uiState.updateFocus(true)
+      host.uiState.selectionHandleImages =
+        mapOf(EditorSelectionHandleType.Cursor to ImageBitmap(53, 63))
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      host.uiState.cursorHandle.show(editor.publishedState, host)
+      controller.onPointerDown(1L, Offset(40f, 60f), 0L)
+      controller.onPointerMove(1L, Offset(70f, 60f), 20L)
+      assertEquals(
+        SelectionOp.SetAt(0, 70f, 6f),
+        fake.enqueued.filterIsInstance<Message.Selection>().last().op,
+      )
+      position = position.copy(offset = 5)
+      cursor = cursorAt(70f)
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.cursorHandle.isVisibleFor(editor.publishedState))
+      controller.onPointerUp(1L, Offset(70f, 60f), 40L)
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.cursorHandle.isVisibleFor(editor.publishedState))
+      assertFalse(host.uiState.contextMenu.visible)
+      assertFalse(host.scrollGestureLockActive)
+      assertFalse(editor.imeNotificationsPaused)
+
+      position = position.copy(offset = 6)
+      cursor = cursorAt(80f)
+      fake.publishSnapshot(editor)
+      controller.onEditorStateChanged(editor.publishedState)
+      assertFalse(host.uiState.cursorHandle.visible)
+      host.uiState.cursorHandle.show(editor.publishedState, host)
+      controller.onPointerDown(
+        2L,
+        Offset(150f, 6f),
+        1_000L,
+        touchPanDriver = TestPanGestureDriver(false),
+      )
+      controller.onPointerMove(2L, Offset(150f, 40f), 1_030L)
+      assertEquals(EditorInteractionMode.Panning, controller.interactionMode)
+      assertFalse(host.uiState.cursorHandle.visible)
+      controller.cancel()
+    }
+
+  @Test
+  fun `android cursor handle preserves menu intent across taps drags and outside dismissal`() =
+    runTest(StandardTestDispatcher()) {
+      for (menuVisible in listOf(false, true)) {
+        for (drag in listOf(false, true)) {
+          for (suppressed in listOf(false, true)) {
+            var position = Position("text", 3, Affinity.Downstream)
+            var cursor = cursorAt(40f)
+            val fake =
+              FakeFfiEditor(
+                selectionProvider = { Selection(position, position) },
+                cursorProvider = { cursor },
+                onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+              )
+            val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+            fake.publishSnapshot(editor)
+            val host = TestHost(this)
+            host.uiState.updateFocus(true)
+            val controller =
+              EditorInteractionController(
+                editorProvider = { editor },
+                effects = host,
+                geometry = host,
+                uiStateProvider = { host.uiState },
+                platformProvider = { Platform.Android },
+              )
+            controller.updateTapSlop(8f)
+            host.uiState.cursorHandle.show(editor.publishedState, host)
+            if (menuVisible) host.uiState.contextMenu.show(editor.publishedState)
+            if (suppressed) host.uiState.contextMenu.beginOutsideDismissGesture(1L)
+            controller.onPointerDown(1L, Offset(40f, 24f), 0L)
+            assertFalse(host.uiState.contextMenu.visible)
+            if (drag) {
+              controller.onPointerMove(1L, Offset(70f, 24f), 20L)
+              position = position.copy(offset = 5)
+              cursor = cursorAt(70f)
+            }
+            controller.onPointerUp(1L, Offset(if (drag) 70f else 40f, 24f), 40L)
+            if (drag) assertFalse(host.uiState.contextMenu.visible)
+            controller.presentAppliedState(editor)
+            assertEquals(
+              !suppressed && if (drag) menuVisible else !menuVisible,
+              host.uiState.contextMenu.isVisibleFor(editor.publishedState),
+              "menuVisible=$menuVisible drag=$drag suppressed=$suppressed",
+            )
+            assertFalse(host.scrollGestureLockActive)
+            assertFalse(editor.imeNotificationsPaused)
+            controller.cancel()
+          }
+        }
+      }
+    }
+
+  @Test
+  fun `android empty space long press places the caret before release without magnifying`() =
+    runTest(StandardTestDispatcher()) {
+      var position = Position("other", 3, Affinity.Downstream)
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { Selection(position, position) },
+          cursorProvider = { cursorAt(40f) },
+          textHitRectsProvider = { emptyList() },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      host.uiState.updateFocus(true)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      val point = Offset(40f, 6f)
+      controller.updateTapSlop(8f)
+      controller.onPointerDown(1L, point, 0L)
+      position = Position("empty", 0, Affinity.Downstream)
+      controller.onLongPressTimer(1L, point, 500L)
+      assertEquals(
+        SelectionOp.SetAt(0, 40f, 6f),
+        fake.enqueued.filterIsInstance<Message.Selection>().lastOrNull()?.op,
+      )
+      runCurrent()
+      assertNull(controller.magnifierPosition)
+      assertEquals(Selection(position, position), editor.appliedState.selection)
+      assertFalse(host.uiState.contextMenu.visible)
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.contextMenu.visible)
+      assertTrue(host.uiState.cursorHandle.isVisibleFor(editor.publishedState))
+      fake.enqueued.clear()
+      controller.onPointerMove(1L, point + Offset(3f, 0f), 520L)
+      assertNull(controller.magnifierPosition)
+      assertTrue(fake.enqueued.isEmpty())
+      assertTrue(host.uiState.contextMenu.visible)
+      advanceTimeBy(5_000L)
+      runCurrent()
+      assertFalse(host.uiState.cursorHandle.visible)
+      controller.onPointerUp(1L, point + Offset(3f, 0f), 5_520L)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `android long press cursor drag waits for the final cursor publication before its menu`() =
+    runTest(StandardTestDispatcher()) {
+      var position = Position("text", 0, Affinity.Downstream)
+      var cursor = cursorAt(40f)
+      val fake =
+        FakeFfiEditor(
+          selectionProvider = { Selection(position, position) },
+          cursorProvider = { cursor },
+          textHitRectsProvider = { emptyList() },
+          onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+        )
+      val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+      fake.publishSnapshot(editor)
+      val host = TestHost(this)
+      host.uiState.updateFocus(true)
+      val controller =
+        EditorInteractionController(
+          editorProvider = { editor },
+          effects = host,
+          geometry = host,
+          uiStateProvider = { host.uiState },
+          platformProvider = { Platform.Android },
+        )
+      controller.updateTapSlop(8f)
+      controller.onPointerDown(1L, Offset(40f, 6f), 0L)
+      assertTrue(controller.onLongPressTimer(1L, Offset(40f, 6f), 500L))
+      controller.presentAppliedState(editor)
+      assertTrue(host.uiState.contextMenu.visible)
+      assertNull(controller.magnifierPosition)
+      controller.onPointerMove(1L, Offset(70f, 6f), 520L)
+      assertFalse(host.uiState.contextMenu.visible)
+      assertEquals(Offset(70f, 6f), controller.magnifierPosition)
+      position = position.copy(offset = 3)
+      cursor = cursorAt(70f)
+      controller.onPointerUp(1L, Offset(70f, 6f), 540L)
+      assertFalse(host.uiState.contextMenu.visible)
+      controller.presentAppliedState(editor)
+      assertEquals(Selection(position, position), editor.publishedState.selection)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+    }
+
+  @Test
+  fun `android cursor drag release preserves final edge auto scroll position`() =
+    runTest(StandardTestDispatcher()) {
+      for (source in listOf("handle", "body", "long press")) {
+        val position = Position("text", 3, Affinity.Downstream)
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { Selection(position, position) },
+            cursorProvider = { cursorAt(40f) },
+            textHitRectsProvider = { emptyList() },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        host.uiState.updateFocus(true)
+        host.edgeAutoScrollViewport =
+          EditorEdgeAutoScrollViewport(rect = ComposeRect(0f, 0f, 100f, 120f), density = 1f)
+        host.edgeAutoScrollConsumedDelta = Offset(0f, 14f)
+        host.edgeAutoScrollMovesViewport = true
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.Android },
+          )
+        controller.updateTapSlop(8f)
+        if (source == "handle") host.uiState.cursorHandle.show(editor.publishedState, host)
+        val start = Offset(40f, if (source == "handle") 24f else 6f)
+        controller.onPointerDown(1L, start, 0L)
+        if (source == "long press") controller.onLongPressTimer(1L, start, 500L)
+        controller.onPointerMove(1L, start + Offset(30f, 0f), 520L)
+        val bottom = Offset(70f, 160f)
+        controller.onPointerMove(1L, bottom, 540L)
+        pumpEdgeAutoScrollFrames(host, 3)
+        val before = fake.enqueued.filterIsInstance<Message.Selection>().last().op
+
+        controller.onPointerUp(1L, bottom, 600L)
+
+        val after = fake.enqueued.filterIsInstance<Message.Selection>().last().op
+        controller.cancel()
+        pumpEdgeAutoScrollFrames(host, 2)
+        assertEquals(2, host.edgeAutoScrollDispatchCount, source)
+        val expected = SelectionOp.SetAt(page = 0, x = 70f, y = 148f)
+        assertEquals(expected, before, "$source during scroll")
+        assertEquals(expected, after, "$source after release")
+      }
+    }
+
+  @Test
+  fun `android empty space long press only starts cursor drag with an initially horizontal movement`() =
+    runTest(StandardTestDispatcher()) {
+      for (initialMove in listOf(Offset(20f, 10f), Offset(10f, 20f), Offset(10f, 10f))) {
+        val position = Position("text", 0, Affinity.Downstream)
+        val fake =
+          FakeFfiEditor(
+            selectionProvider = { Selection(position, position) },
+            cursorProvider = { cursorAt(40f) },
+            textHitRectsProvider = { emptyList() },
+            onTick = { listOf(EditorEvent.StateChanged(listOf(StateField.Selection))) },
+          )
+        val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+        fake.publishSnapshot(editor)
+        val host = TestHost(this)
+        host.uiState.updateFocus(true)
+        val controller =
+          EditorInteractionController(
+            editorProvider = { editor },
+            effects = host,
+            geometry = host,
+            uiStateProvider = { host.uiState },
+            platformProvider = { Platform.Android },
+          )
+        val origin = Offset(40f, 6f)
+        val dragging = initialMove.x > initialMove.y
+        controller.updateTapSlop(8f)
+        controller.onPointerDown(1L, origin, 0L)
+        controller.onLongPressTimer(1L, origin, 500L)
+        controller.presentAppliedState(editor)
+        fake.enqueued.clear()
+        controller.onPointerMove(1L, origin + initialMove, 520L)
+        assertEquals(if (dragging) origin + initialMove else null, controller.magnifierPosition)
+        // The initial direction remains decisive even if the finger changes direction later.
+        val next = origin + if (dragging) Offset(0f, 40f) else Offset(40f, 0f)
+        controller.onPointerMove(1L, next, 540L)
+        assertEquals(if (dragging) next else null, controller.magnifierPosition)
+        assertEquals(dragging, fake.enqueued.isNotEmpty())
+        assertEquals(!dragging, host.uiState.contextMenu.visible)
+        controller.cancel()
+        advanceTimeBy(5_000L)
+        runCurrent()
+        assertNull(controller.magnifierPosition)
+        assertFalse(host.uiState.cursorHandle.visible)
+        assertFalse(host.scrollGestureLockActive)
+      }
     }
 
   @Test
@@ -2728,6 +3321,9 @@ class EditorInteractionControllerTest {
         )
       val context =
         object : EditorGestureContext {
+          override val selectionHandlesHidden = false
+          override val selectionHandleImages = host.uiState.selectionHandleImages
+          override val cursorHandle = host.uiState.cursorHandle
           override val pointerType = PointerType.Touch
           override val editor = testEditor
           override val semantics = semantics
@@ -4518,7 +5114,8 @@ class EditorInteractionControllerTest {
       advanceUntilIdle()
 
       assertEquals(EditorInteractionMode.LongPressWordSelecting, controller.interactionMode)
-      assertEquals(start, controller.magnifierPosition)
+      assertNull(controller.magnifierPosition)
+      assertFalse(host.uiState.contextMenu.visible)
       assertEquals(
         listOf<Message>(
           Message.Selection(
@@ -4669,12 +5266,12 @@ class EditorInteractionControllerTest {
       assertTrue(
         controller.onPointerMove(
           pointerId = 1L,
-          position = start + Offset(8f, 0f),
+          position = start + Offset(12f, 0f),
           nowMillis = 510L,
         )
       )
       assertTrue(
-        controller.onPointerUp(pointerId = 1L, position = start + Offset(8f, 0f), nowMillis = 520L)
+        controller.onPointerUp(pointerId = 1L, position = start + Offset(12f, 0f), nowMillis = 520L)
       )
       controller.onEditorStateChanged(editor.publishedState)
 
@@ -4832,9 +5429,13 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `android long press uses engine cursor hit result for cursor mode admission`() =
+  fun `android long press selects a word even at the current caret`() =
     runTest(StandardTestDispatcher()) {
-      val fake = FakeFfiEditor(cursorProvider = { cursorAt(x = 10f) })
+      val fake =
+        FakeFfiEditor(
+          cursorProvider = { cursorAt(x = 10f) },
+          cursorHitRectsProvider = { FakeFfiEditor.coveringHitRects(0) },
+        )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.publishSnapshot(editor)
       val host = TestHost(this)
@@ -4865,13 +5466,15 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `android long press keeps pointer down cursor hit decision when timer fires`() =
+  fun `android long press selects a word after a preceding tap moves the caret`() =
     runTest(StandardTestDispatcher()) {
       var cursorHit = false
       val fake =
         FakeFfiEditor(
           cursorProvider = { cursorAt(x = 10f) },
-          cursorHitProvider = { _, _, _ -> cursorHit },
+          cursorHitRectsProvider = {
+            if (cursorHit) FakeFfiEditor.coveringHitRects(0) else emptyList()
+          },
         )
       val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
       fake.publishSnapshot(editor)
@@ -4889,6 +5492,7 @@ class EditorInteractionControllerTest {
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
       cursorHit = true
+      fake.publishSnapshot(editor)
       assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
       advanceUntilIdle()
 
@@ -5036,7 +5640,7 @@ class EditorInteractionControllerTest {
     }
 
   @Test
-  fun `android long press on range selection hit is rejected`() =
+  fun `android long press on an existing range shows the menu and preserves selection through release`() =
     runTest(StandardTestDispatcher()) {
       val rangeSelection =
         Selection(
@@ -5065,10 +5669,16 @@ class EditorInteractionControllerTest {
 
       controller.onPointerDown(pointerId = 1L, position = start, nowMillis = 0L)
 
-      assertFalse(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
-      assertEquals(EditorInteractionMode.Idle, controller.interactionMode)
+      assertTrue(controller.onLongPressTimer(pointerId = 1L, position = start, nowMillis = 500L))
+      assertEquals(EditorInteractionMode.LongPressSelecting, controller.interactionMode)
       assertNull(controller.magnifierPosition)
       assertEquals(emptyList(), fake.enqueued)
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+      controller.onPointerUp(1L, start, 800L)
+      runCurrent()
+      assertTrue(fake.enqueued.filterIsInstance<Message.Selection>().isEmpty())
+      assertTrue(host.uiState.contextMenu.isVisibleFor(editor.publishedState))
+      assertFalse(host.scrollGestureLockActive)
     }
 
   @Test
@@ -5460,6 +6070,7 @@ class EditorInteractionControllerTest {
       pointerId: Long,
       position: Offset,
       dispatchAtMillis: Long,
+      delayMillis: Long,
     ) {
       scheduledLongPressDispatchAtMillis = dispatchAtMillis
     }

@@ -79,17 +79,13 @@ internal class EditorEdgeAutoScrollSemantic {
     edgePosition: Offset,
     dispatchPosition: Offset,
     context: EditorGestureContext,
+    dispatch: (PagePoint) -> Boolean,
   ) {
     trackTouchSelection(
       edgePosition = edgePosition,
       dispatchPosition = dispatchPosition,
       context = context,
-      dispatch = { scrolled ->
-        context.semantics.pointSelection.enqueueCursorMove(
-          editor = context.editor,
-          point = scrolled.point,
-        )
-      },
+      dispatch = { scrolled -> dispatch(scrolled.point) },
     )
   }
 

@@ -681,6 +681,12 @@ impl View {
         crate::query::interactive::interactive_regions(&result.layout_index, &state.view())
     }
 
+    pub fn text_hit_rects(&self) -> Vec<crate::page::PageRect> {
+        self.layout.as_ref().map_or_else(Vec::new, |result| {
+            crate::query::hit_test::text_hit_rects(&result.layout_index)
+        })
+    }
+
     pub fn cursor_hit_rects(&self, state: &State) -> Vec<crate::page::PageRect> {
         let Some(result) = self.layout.as_ref() else {
             return Vec::new();

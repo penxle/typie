@@ -149,12 +149,17 @@ class EditorHitTestSnapshotTest {
           onTick = { events },
           selectionProvider = { expanded },
           selectionHitRectsProvider = { rects },
+          textHitRectsProvider = { rects },
         )
       val dispatcher = StandardTestDispatcher(testScheduler)
       val scope = CoroutineScope(SupervisorJob() + dispatcher)
       val editor = Editor(fake, scope, dispatcher)
       editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertTrue(editor.selectionHitTest(page = 0, x = 5f, y = 5f))
+      assertTrue(editor.textHitTest(page = 0, x = 0f, y = 0f))
+      assertTrue(editor.textHitTest(page = 0, x = 10f, y = 10f))
+      assertFalse(editor.textHitTest(page = 0, x = 10.1f, y = 10f))
+      assertFalse(editor.textHitTest(page = 1, x = 5f, y = 5f))
 
       rects =
         listOf(PageRect(pageIdx = 0, rect = Rect(x = 100f, y = 100f, width = 10f, height = 10f)))
@@ -163,11 +168,14 @@ class EditorHitTestSnapshotTest {
         editor.selectionHitTest(page = 0, x = 5f, y = 5f),
         "rects must carry over when no geometry-affecting event fired",
       )
+      assertTrue(editor.textHitTest(page = 0, x = 5f, y = 5f))
 
       events = listOf(EditorEvent.RenderInvalidated)
       editor.update { enqueue(Message.System(SystemEvent.Initialize)) }
       assertFalse(editor.selectionHitTest(page = 0, x = 5f, y = 5f))
       assertTrue(editor.selectionHitTest(page = 0, x = 105f, y = 105f))
+      assertFalse(editor.textHitTest(page = 0, x = 5f, y = 5f))
+      assertTrue(editor.textHitTest(page = 0, x = 105f, y = 105f))
       scope.cancel()
     } finally {
       Dispatchers.resetMain()

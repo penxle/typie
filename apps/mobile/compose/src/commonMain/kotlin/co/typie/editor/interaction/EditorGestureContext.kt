@@ -1,11 +1,17 @@
 package co.typie.editor.interaction
 
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerType
 import co.typie.editor.Editor
+import co.typie.editor.interaction.gestures.EditorSelectionHandleType
+import co.typie.editor.runtime.EditorCursorHandleState
 import co.typie.platform.Platform
 
 internal interface EditorGestureContext {
+  val selectionHandlesHidden: Boolean
   val editor: Editor
+  val cursorHandle: EditorCursorHandleState
+  val selectionHandleImages: Map<EditorSelectionHandleType, ImageBitmap>
   val semantics: EditorInteractionSemantics
   val effects: EditorInteractionEffects
   val geometry: EditorInteractionGeometry

@@ -255,6 +255,9 @@ private class EditorInteractionsNode(
       dragSlopPx = 5f * density,
     )
     interactionController.updateTapSlop(tapSlopPx = EditorTapSlopDp * density)
+    interactionController.updateLongPressTimeout(
+      currentValueOf(LocalViewConfiguration).longPressTimeoutMillis
+    )
     interactionController.updateColumnResizeSlop(
       dragSlopPx = min(touchSlop, EditorTapSlopDp * density)
     )

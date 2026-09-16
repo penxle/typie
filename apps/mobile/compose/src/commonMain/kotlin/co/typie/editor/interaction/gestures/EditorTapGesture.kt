@@ -263,9 +263,6 @@ internal class EditorTapGesture(
     publishedState: EditorState = context.editor.publishedState,
   ) {
     val pending = pendingPresentation ?: return
-    if (!pending.sequenceConfirmed) {
-      return
-    }
     val appliedState = pending.appliedState ?: return
     if (
       context.editor !== pending.editor ||
@@ -282,6 +279,20 @@ internal class EditorTapGesture(
       cancelPendingPresentation(context = context)
       return
     }
+    if (
+      !pending.cursorHandleShown &&
+        pending.tapCount == 1 &&
+        pending.expectedEditing &&
+        context.platform == Platform.Android &&
+        context.isFocused &&
+        !context.readOnly &&
+        publishedState.cursor != null &&
+        publishedState.selection.isCollapsed()
+    ) {
+      context.cursorHandle.show(publishedState, context.effects)
+      pending.cursorHandleShown = true
+    }
+    if (!pending.sequenceConfirmed) return
     pendingPresentation = null
     if (pending.showReadingHint) {
       context.effects.showReadingTapHint()
@@ -333,6 +344,7 @@ internal class EditorTapGesture(
     var appliedState: EditorState? = null,
     var showContextMenu: Boolean = false,
     var sequenceConfirmed: Boolean = false,
+    var cursorHandleShown: Boolean = false,
   )
 }
 
@@ -740,7 +752,7 @@ private fun EditorTapGesture.dispatchSelectionTap(
             context.effects.requestPointerSelectionHead(version = snapshot.version)
           }
         }
-        isSameCursorTap(previousCursor, snapshot) -> {
+        context.platform != Platform.Android && isSameCursorTap(previousCursor, snapshot) -> {
           showContextMenuAfterPublication = wasFocused
         }
         else -> {

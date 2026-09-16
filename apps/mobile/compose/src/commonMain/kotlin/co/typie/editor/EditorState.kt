@@ -40,6 +40,7 @@ data class EditorState(
   val trackedRangesContainingSelection: List<TrackedRangeEndpoints> = emptyList(),
   val selectionHitRects: List<PageRect> = emptyList(),
   val cursorHitRects: List<PageRect> = emptyList(),
+  val textHitRects: List<PageRect> = emptyList(),
   val interactiveRegions: List<InteractiveRegion> = emptyList(),
 ) {
   companion object {

@@ -2,6 +2,7 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
 import co.typie.editor.ext.isCollapsed
 import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Position
@@ -12,12 +13,15 @@ import co.typie.editor.interaction.EditorInteractionMode
 import co.typie.editor.interaction.canApply
 import co.typie.editor.interaction.hasActiveTableCellSelection
 import co.typie.editor.interaction.sessions.EditorSelectionHandleDragSession
+import co.typie.platform.Platform
 import co.typie.ui.input.isDirectTouchInteraction
 import kotlin.math.max
+import kotlin.math.sqrt
 
 internal enum class EditorSelectionHandleType {
   From,
   To,
+  Cursor,
 }
 
 internal data class EditorSelectionHandleTableCellHandoff(
@@ -31,6 +35,8 @@ internal data class EditorSelectionHandleTableCellHandoff(
 internal const val EditorSelectionHandleRadiusDp = 8f
 internal const val EditorSelectionHandleStemWidthDp = 2f
 internal const val EditorSelectionHandleTouchTargetDp = 44f
+internal const val EditorAndroidSelectionHandleRadiusDp = 12.5f
+internal val EditorAndroidCursorHandleRadiusDp = 25f / (1f + sqrt(2f))
 
 internal data class EditorSelectionHandleGeometry(
   val touchTargetTopLeft: Offset,
@@ -54,7 +60,56 @@ internal fun resolveSelectionHandleGeometry(
   radiusPx: Float,
   stemWidthPx: Float,
   touchTargetPx: Float,
+  platform: Platform = Platform.Desktop,
+  image: ImageBitmap? = null,
 ): EditorSelectionHandleGeometry {
+  if (platform == Platform.Android) {
+    if (image != null) {
+      val width = image.width.toFloat()
+      val height = image.height.toFloat()
+      val touchWidth = max(touchTargetPx, width)
+      // Match EditText's drawable hotspots and horizontal gravity, including transparent padding.
+      val hotspotX =
+        when (type) {
+          EditorSelectionHandleType.From -> image.width * 3 / 4
+          EditorSelectionHandleType.To -> image.width / 4
+          EditorSelectionHandleType.Cursor -> image.width / 2
+        }
+      val paintLeft =
+        when (type) {
+          EditorSelectionHandleType.From -> touchWidth - width
+          EditorSelectionHandleType.To -> 0f
+          EditorSelectionHandleType.Cursor -> (touchWidth - width) / 2f
+        }
+      return EditorSelectionHandleGeometry(
+        touchTargetTopLeft = endpointTopLeftInOverlay + Offset(-hotspotX - paintLeft, stemHeightPx),
+        touchTargetSize = Size(touchWidth, max(touchTargetPx, height)),
+        paintTopLeftInTouchTarget = Offset(paintLeft, 0f),
+        stemHeightPx = 0f,
+        radiusPx = 0f,
+        stemWidthPx = 0f,
+      )
+    }
+    val centerX =
+      when (type) {
+        EditorSelectionHandleType.From -> -radiusPx
+        EditorSelectionHandleType.To -> radiusPx
+        EditorSelectionHandleType.Cursor -> 0f
+      }
+    return EditorSelectionHandleGeometry(
+      touchTargetTopLeft =
+        endpointTopLeftInOverlay + Offset(centerX - touchTargetPx / 2f, stemHeightPx),
+      touchTargetSize = Size(touchTargetPx, max(touchTargetPx, radiusPx * 2f)),
+      paintTopLeftInTouchTarget =
+        Offset(
+          (touchTargetPx - radiusPx * 2f) / 2f,
+          if (type == EditorSelectionHandleType.Cursor) radiusPx * (sqrt(2f) - 1f) else 0f,
+        ),
+      stemHeightPx = 0f,
+      radiusPx = radiusPx,
+      stemWidthPx = 0f,
+    )
+  }
   val totalHeightPx = radiusPx * 2f + stemHeightPx
   val effectiveTouchHeightPx = max(totalHeightPx, touchTargetPx)
   val customPaintTop = if (type == EditorSelectionHandleType.From) -radiusPx * 2f else 0f
@@ -106,6 +161,7 @@ internal class EditorSelectionHandleGesture(
 
   fun hitTest(position: Offset): EditorSelectionHandleType? {
     val context = contextProvider()
+    if (context.selectionHandlesHidden) return null
     val density = context.geometry.density
     if (density <= 0f) {
       return null
@@ -116,7 +172,9 @@ internal class EditorSelectionHandleGesture(
     if (hasActiveTableCellSelection(context.editor)) {
       return null
     }
-    val radiusPx = EditorSelectionHandleRadiusDp * density
+    val radiusPx =
+      (if (context.platform == Platform.Android) EditorAndroidSelectionHandleRadiusDp
+      else EditorSelectionHandleRadiusDp) * density
     val stemWidthPx = EditorSelectionHandleStemWidthDp * density
     val touchTargetPx = EditorSelectionHandleTouchTargetDp * density
     val endpoints = context.editor.publishedState.selectionEndpoints ?: return null
@@ -165,6 +223,8 @@ internal class EditorSelectionHandleGesture(
         radiusPx = radiusPx,
         stemWidthPx = stemWidthPx,
         touchTargetPx = touchTargetPx,
+        platform = context.platform,
+        image = context.selectionHandleImages[type],
       )
     return geometry.containsTouch(position)
   }
@@ -307,6 +367,11 @@ internal class EditorSelectionHandleGesture(
         editor = context.editor,
         terminalExtension = terminalExtension,
         showContextMenu = context.pointerType.isDirectTouchInteraction(),
+      )
+    } else if (wasActive && context.platform == Platform.Android) {
+      context.semantics.contextMenu.requestShowForAppliedSelection(
+        editor = context.editor,
+        state = context.editor.publishedState,
       )
     }
     return wasActive

@@ -20,7 +20,6 @@ import co.typie.editor.interaction.gestures.EditorTableColumnResizeGesture
 import co.typie.editor.interaction.gestures.EditorTableHandleDragUpdate
 import co.typie.editor.interaction.gestures.EditorTableHandleGesture
 import co.typie.editor.interaction.gestures.EditorTapGesture
-import co.typie.editor.interaction.gestures.captureSemanticIntentAtPointerDown
 import co.typie.editor.interaction.gestures.finish
 import co.typie.editor.interaction.gestures.handlePointerDown
 import co.typie.editor.interaction.gestures.handlePointerUp
@@ -29,6 +28,7 @@ import co.typie.editor.interaction.gestures.start
 import co.typie.editor.interaction.gestures.trackPointerMove
 import co.typie.editor.interaction.gestures.update
 import co.typie.editor.interaction.sessions.EditorDoubleTapDragSession
+import co.typie.platform.Platform
 import co.typie.ui.input.isDirectTouchInteraction
 
 internal class EditorInteractionGestures(
@@ -52,7 +52,11 @@ internal class EditorInteractionGestures(
 
   private val mouse = EditorMouseGesture()
   private val cursorDrag = EditorCursorDragGesture()
+  val doubleTapSelectionActive: Boolean
+    get() = doubleTapDrag.active
+
   private var cursorDragSlop = 0f
+  var longPressTimeoutMillis: Long = EditorLongPressDispatchDelayMillis
 
   fun updateMouseConfiguration(doubleClickTimeoutMillis: Long, dragSlopPx: Float) {
     mouse.doubleClickTimeoutMillis = doubleClickTimeoutMillis
@@ -125,6 +129,7 @@ internal class EditorInteractionGestures(
       touchPanDriver != null &&
         pan.prepareScrollCatch(change = change, position = positionInRoot, driver = touchPanDriver)
     ) {
+      context.cursorHandle.hide()
       return true
     }
 
@@ -163,18 +168,29 @@ internal class EditorInteractionGestures(
         selectionHandleType != null &&
         tap.nextTapCount(position = position, nowMillis = nowMillis) == 3
     if (
+      columnResizePlacement == null &&
+        !tableHandleHit &&
+        selectionHandleType == null &&
+        cursorDrag.prepareHandle(position, context, tapEnabled)
+    ) {
+      tap.clearTapHistory()
+      context.effects.cancelTapDispatch()
+      context.effects.cancelLongPressDispatch()
+      return true
+    }
+    context.cursorHandle.hide()
+    if (selectionHandleType != null && context.platform == Platform.Android) {
+      tap.clearTapHistory()
+      tap.cancelPendingPresentation(context)
+      return selectionHandle.handleDragDown(type = selectionHandleType, position = position)
+    }
+    if (
       columnResizePlacement != null ||
         tableHandleHit ||
         (selectionHandleType != null && !tripleTapOnSelectionHandle)
     ) {
       tap.clearTapHistory()
       tap.cancelPendingPresentation(context = context)
-    }
-
-    if (
-      tapEnabled && columnResizePlacement == null && !tableHandleHit && selectionHandleType == null
-    ) {
-      longPress.captureSemanticIntentAtPointerDown(position = position, context = context)
     }
 
     val consumed =
@@ -232,7 +248,8 @@ internal class EditorInteractionGestures(
       context.effects.scheduleLongPressDispatch(
         pointerId = pointerId,
         position = position,
-        dispatchAtMillis = nowMillis + EditorLongPressDispatchDelayMillis,
+        dispatchAtMillis = nowMillis + longPressTimeoutMillis,
+        delayMillis = longPressTimeoutMillis,
       )
     }
     return consumed || columnResizeConsumed || selectionHandleConsumed || tableHandleConsumed
@@ -255,7 +272,8 @@ internal class EditorInteractionGestures(
       return positionInEditor?.let { cursorDrag.update(it, context) } ?: true
     }
     if (cursorDrag.pending && change.isConsumed) {
-      cursorDrag.finish(context)
+      cursorDrag.finish(context, cancelled = true)
+      context.cursorHandle.hide()
     }
     if (positionInEditor != null && cursorDrag.shouldStart(positionInEditor, cursorDragSlop)) {
       pan.cancel(context)
@@ -264,6 +282,7 @@ internal class EditorInteractionGestures(
       context.semantics.pointSelection.cancelPendingSelection()
       if (cursorDrag.start(context)) return cursorDrag.update(positionInEditor, context)
     }
+    if (cursorDrag.pendingHandle) return true
     if (positionInEditor == null) {
       val panConsumed = pan.update(change = change, position = positionInRoot, context = context)
       if (panConsumed) {
@@ -274,7 +293,7 @@ internal class EditorInteractionGestures(
     val position = positionInEditor
 
     if (longPress.isActivePointer(pointerId)) {
-      return longPress.update(position = position, context = context)
+      return longPress.update(position = position, dragSlop = cursorDragSlop, context = context)
     }
 
     trackTapPointerMove(pointerId = pointerId, position = position, context = context)
@@ -381,16 +400,18 @@ internal class EditorInteractionGestures(
       return tableHandle.handleDragEnd()
     }
 
-    selectionHandle.activeType?.let { type ->
-      context.effects.cancelLongPressDispatch()
-      tap.onPointerUp(
-        pointerId = pointerId,
-        position = position,
-        nowMillis = nowMillis,
-        canFinish = false,
-      )
-      return selectionHandle.handleDragEnd(type = type)
-    }
+    (selectionHandle.activeType
+        ?: selectionHandle.pendingType.takeIf { context.platform == Platform.Android })
+      ?.let { type ->
+        context.effects.cancelLongPressDispatch()
+        tap.onPointerUp(
+          pointerId = pointerId,
+          position = position,
+          nowMillis = nowMillis,
+          canFinish = false,
+        )
+        return selectionHandle.handleDragEnd(type = type)
+      }
 
     if (pan.update(change = change, position = positionInRoot, context = context)) {
       cancelTapAndLongPress(context = context)
@@ -565,13 +586,15 @@ internal class EditorInteractionGestures(
   }
 
   fun resetPointerOwnedState(context: EditorGestureContext) {
-    cursorDrag.finish(context)
+    cursorDrag.finish(context, cancelled = true)
+    context.cursorHandle.hide()
     mouse.cancel(context)
     context.semantics.selectionHandle.cancelPendingContextMenuRequest()
     tableColumnResize.cancel(context = context)
     tableHandle.resetPointerOwnedState(context = context)
     selectionHandle.resetPointerOwnedState(context = context)
     doubleTapDrag.resetPointerOwnedState(context = context)
+    if (longPress.active) context.semantics.contextMenu.hide()
     longPress.reset()
     context.effects.setScrollGestureLocked(false)
     context.semantics.magnifier.hide()

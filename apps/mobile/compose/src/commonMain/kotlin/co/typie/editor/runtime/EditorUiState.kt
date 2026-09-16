@@ -8,10 +8,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ImageBitmap
 import co.typie.editor.EditorViewportTransform
 import co.typie.editor.ffi.CursorMetrics
 import co.typie.editor.ffi.Rect as FfiRect
 import co.typie.editor.ffi.Size
+import co.typie.editor.interaction.gestures.EditorSelectionHandleType
 
 @Stable
 class EditorUiState {
@@ -24,6 +26,9 @@ class EditorUiState {
     get() = inputSessionOwner != null
 
   internal val contextMenu = EditorContextMenuState()
+  internal val cursorHandle = EditorCursorHandleState()
+  internal var selectionHandleImages by
+    mutableStateOf<Map<EditorSelectionHandleType, ImageBitmap>>(emptyMap())
 
   var displayZoom by mutableStateOf(1f)
     private set
@@ -40,6 +45,7 @@ class EditorUiState {
 
   fun updateFocus(focused: Boolean) {
     this.focused = focused
+    if (!focused) cursorHandle.hide()
   }
 
   internal fun acquireInputSession(owner: Any) {
@@ -56,6 +62,7 @@ class EditorUiState {
     focused = false
     inputSessionOwner = null
     contextMenu.reset()
+    cursorHandle.hide()
     displayZoom = 1f
     pageOffsets.clear()
     pagePositionsInRoot.clear()
