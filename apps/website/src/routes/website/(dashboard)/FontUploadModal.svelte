@@ -3,11 +3,9 @@
   import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { SvelteMap } from 'svelte/reactivity';
-  import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';
   import UploadIcon from '~icons/lucide/upload';
@@ -193,26 +191,9 @@
 </script>
 
 <Modal style={css.raw({ maxWidth: '400px' })} bind:open>
-  <div class={center({ gap: '8px', padding: '12px' })}>
-    <div class={center({ gap: '4px' })}>
-      <Icon style={css.raw({ color: 'text.default' })} icon={TypeIcon} size={14} />
-      <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>폰트 업로드하기</span>
-    </div>
-
-    <div
-      class={center({
-        gap: '4px',
-        borderRadius: 'full',
-        paddingX: '8px',
-        paddingY: '2px',
-        backgroundColor: 'accent.subtle',
-        userSelect: 'none',
-      })}
-      use:tooltip={{ message: 'FULL ACCESS 전용 기능이에요', placement: 'top', delay: 0 }}
-    >
-      <Icon style={css.raw({ color: 'text.default' })} icon={GemIcon} size={12} />
-      <span class={css({ fontSize: '11px', fontWeight: 'bold', color: 'text.default' })}>FULL</span>
-    </div>
+  <div class={center({ gap: '4px', padding: '12px' })}>
+    <Icon style={css.raw({ color: 'text.default' })} icon={TypeIcon} size={14} />
+    <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default' })}>폰트 업로드하기</span>
   </div>
 
   <HorizontalDivider />
