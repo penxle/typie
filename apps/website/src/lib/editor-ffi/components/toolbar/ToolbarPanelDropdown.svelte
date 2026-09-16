@@ -5,6 +5,7 @@
   import { pushEscapeHandler } from '@typie/ui/utils';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import ToolbarPanelSurface from './ToolbarPanelSurface.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { Snippet } from 'svelte';
@@ -118,40 +119,8 @@
 
 {#if opened}
   <div class={css({ zIndex: 'overEditor' })} use:floating>
-    <div
-      class={`toolbar-panel ${css({
-        borderRadius: '8px',
-        backgroundColor: 'surface.default',
-        boxShadow: 'lg',
-        overflow: 'hidden',
-        _dark: { borderWidth: '1px', borderColor: 'border.hairline' },
-      })}`}
-    >
+    <ToolbarPanelSurface>
       {@render panel({ close })}
-    </div>
+    </ToolbarPanelSurface>
   </div>
 {/if}
-
-<style>
-  .toolbar-panel {
-    transform-origin: left top;
-    animation: toolbar-panel-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  }
-
-  @keyframes toolbar-panel-in {
-    from {
-      opacity: 0;
-      transform: scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .toolbar-panel {
-      animation: none;
-    }
-  }
-</style>

@@ -32,7 +32,6 @@
   let { disabled = false }: Props = $props();
 
   type Kind = 'image' | 'file' | 'embed' | 'hr' | 'quote' | 'callout' | 'fold' | 'table' | 'bullet' | 'ordered' | 'page_break';
-  type View = 'root' | 'hr' | 'quote' | 'table';
 
   const app = getAppContext();
   const ctx = getEditorContext();
@@ -55,14 +54,6 @@
     { kind: 'page_break', label: '페이지 나누기', icon: FilePlusIcon, keywords: ['page'] },
   ];
 
-  const titles: Record<Exclude<View, 'root'>, string> = { hr: '구분선', quote: '인용구', table: '표' };
-
-  let view = $state<View>('root');
-
-  const noop = () => {
-    return;
-  };
-
   const rootItems = $derived<ToolbarPanelItem[]>(
     catalog
       .filter((entry) => entry.kind !== 'page_break' || layoutMode?.type === 'paginated')
@@ -83,13 +74,14 @@
     close();
   };
 
+  const insert = (kind: Kind, message: Message, close: () => void) => {
+    recent.remember('insert', kind);
+    send(message, close);
+  };
+
   const pickRoot = (id: string, close: () => void) => {
     const kind = id as Kind;
     recent.remember('insert', kind);
-    if (kind === 'hr' || kind === 'quote' || kind === 'table') {
-      view = kind;
-      return;
-    }
     const message: Message | undefined =
       kind === 'image'
         ? insertFragment({ node: { type: 'image', id: undefined } })
@@ -112,74 +104,51 @@
   };
 </script>
 
-<ToolbarPanelDropdown
-  style={css.raw({ width: 'fit', paddingX: '6px', gap: '4px' })}
-  {disabled}
-  label="블록 삽입"
-  onclose={() => (view = 'root')}
->
+<ToolbarPanelDropdown style={css.raw({ width: 'fit', paddingX: '6px', gap: '4px' })} {disabled} label="블록 삽입">
   {#snippet anchor()}
     <ToolbarIcon icon={PlusIcon} />
     <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>삽입</span>
   {/snippet}
 
   {#snippet panel({ close })}
-    {#key view}
-      {#if view === 'root'}
-        <ToolbarPanel items={rootItems} onselect={(id) => pickRoot(id, close)} placeholder="블록 삽입" recentIds={recent.ids('insert')} />
-      {:else if view === 'table'}
-        <ToolbarPanel items={[]} onback={() => (view = 'root')} onselect={noop} placeholder="" title={titles.table}>
-          {#snippet extra()}
-            <TableSizeSelector
-              onSelect={(rows, cols) => {
-                view = 'root';
-                send({ type: 'insertion', op: { type: 'table', rows, cols } }, close);
-              }}
-            />
-          {/snippet}
-        </ToolbarPanel>
-      {:else if view === 'hr'}
-        <ToolbarPanel
-          items={horizontalRuleVariants.map(({ variant }) => ({ id: variant, label: variant }))}
-          onback={() => (view = 'root')}
-          onselect={(id) => {
-            view = 'root';
-            send(createHorizontalRuleVariantMessage(blockState, id as HorizontalRuleVariant), close);
-          }}
-          placeholder=""
-          rowHeight={36}
-          rowJustify="center"
-          title={titles.hr}
-        >
-          {#snippet render(item)}
-            {@const Variant = horizontalRuleVariants.find((v) => v.variant === item.id)?.component}
-            {#if Variant}
-              <Variant />
-            {/if}
-          {/snippet}
-        </ToolbarPanel>
-      {:else}
-        <ToolbarPanel
-          items={blockquoteVariants.map(({ variant }) => ({ id: variant, label: variant }))}
-          onback={() => (view = 'root')}
-          onselect={(id) => {
-            view = 'root';
-            send({ type: 'block', op: { type: 'toggle_blockquote', variant: id as BlockquoteVariant } }, close);
-          }}
-          placeholder=""
-          rowHeight={48}
-          rowPaddingX="16px"
-          rowPaddingY="8px"
-          title={titles.quote}
-        >
-          {#snippet render(item)}
-            {@const Variant = blockquoteVariants.find((v) => v.variant === item.id)?.component}
-            {#if Variant}
-              <Variant />
-            {/if}
-          {/snippet}
-        </ToolbarPanel>
-      {/if}
-    {/key}
+    <ToolbarPanel items={rootItems} onselect={(id) => pickRoot(id, close)} placeholder="블록 삽입" recentIds={recent.ids('insert')}>
+      {#snippet submenu(item)}
+        {#if item.id === 'table'}
+          <TableSizeSelector onSelect={(rows, cols) => insert('table', { type: 'insertion', op: { type: 'table', rows, cols } }, close)} />
+        {:else if item.id === 'hr'}
+          <ToolbarPanel
+            bare
+            items={horizontalRuleVariants.map(({ variant }) => ({ id: variant, label: variant }))}
+            onselect={(id) => insert('hr', createHorizontalRuleVariantMessage(blockState, id as HorizontalRuleVariant), close)}
+            rowHeight={36}
+            rowJustify="center"
+          >
+            {#snippet render(row)}
+              {@const Variant = horizontalRuleVariants.find((v) => v.variant === row.id)?.component}
+              {#if Variant}
+                <Variant />
+              {/if}
+            {/snippet}
+          </ToolbarPanel>
+        {:else}
+          <ToolbarPanel
+            bare
+            items={blockquoteVariants.map(({ variant }) => ({ id: variant, label: variant }))}
+            onselect={(id) =>
+              insert('quote', { type: 'block', op: { type: 'toggle_blockquote', variant: id as BlockquoteVariant } }, close)}
+            rowHeight={48}
+            rowPaddingX="16px"
+            rowPaddingY="8px"
+          >
+            {#snippet render(row)}
+              {@const Variant = blockquoteVariants.find((v) => v.variant === row.id)?.component}
+              {#if Variant}
+                <Variant />
+              {/if}
+            {/snippet}
+          </ToolbarPanel>
+        {/if}
+      {/snippet}
+    </ToolbarPanel>
   {/snippet}
 </ToolbarPanelDropdown>

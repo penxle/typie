@@ -17,6 +17,7 @@
 <div
   class={css({
     display: 'grid',
+    width: '240px',
     gridTemplateColumns: 'repeat(10, minmax(0, 1fr))',
     gap: '2px',
     padding: '8px',
