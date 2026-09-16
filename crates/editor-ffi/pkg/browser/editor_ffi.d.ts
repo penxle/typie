@@ -892,6 +892,7 @@ declare class Editor {
     split_changesets(payload: Uint8Array): ChangesetEntry[];
     surface_backend(page: number): string;
     table_overlays(): TableOverlay[];
+    text_hit_rects(): PageRect[];
     tick(): TickResult | undefined;
     tick_through(request_id: RequestId): TickResult;
     tracked_range(id: string): TrackedRange | undefined;

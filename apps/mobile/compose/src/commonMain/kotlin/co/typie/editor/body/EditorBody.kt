@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import co.typie.editor.PublishedBundle
 import co.typie.editor.ext.unclippedBoundsInRoot
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.interaction.LocalEditorInteractionScope
+import co.typie.editor.interaction.gestures.rememberEditorSelectionHandleImages
 import co.typie.editor.overlay.editorExtensionAreaLineHighlight
 import co.typie.editor.overlay.editorLineHighlightColor
 import co.typie.editor.runtime.EditorUiState
@@ -60,12 +62,15 @@ internal fun EditorBody(
   suppressSoftwareKeyboard: Boolean = false,
   showDebugBodyOverlay: Boolean = false,
   showDebugSurfaceOverlay: Boolean = false,
+  placeholder: @Composable BoxScope.(EditorBodyGeometry, EditorState) -> Unit = { _, _ -> },
   overlay: @Composable BoxScope.(EditorBodyGeometry, EditorState) -> Unit = { _, _ -> },
 ) {
   val density = LocalDensity.current
   val displayZoom = LocalEditorZoomController.current.displayZoom
   val editor = LocalEditorRuntime.current.editor
   val uiState = LocalEditorUiState.current
+  val selectionHandleImages = rememberEditorSelectionHandleImages()
+  SideEffect { uiState.selectionHandleImages = selectionHandleImages }
   val interactionScope = LocalEditorInteractionScope.current
   val directTouchInteractionState = LocalDirectTouchInteractionState.current
   var bodyContentHeight by remember { mutableFloatStateOf(0f) }
@@ -176,6 +181,7 @@ internal fun EditorBody(
           }
         }
       }
+      Box(modifier = Modifier.matchParentSize()) { placeholder(geometry, presentedState) }
       if (editor != null) {
         EditorTableColumnResizeOverlay(
           editor = editor,
@@ -196,6 +202,8 @@ internal fun EditorBody(
           density = density.density,
           pagePresented = { page -> presentedBundle?.frames?.containsKey(page) == true },
           directTouchInteraction = directTouchInteractionState.isDirectTouchInteraction,
+          platform = interactionScope.controller.platform,
+          selectionHandlesHidden = interactionScope.controller.selectionHandlesHidden,
         )
       }
     }

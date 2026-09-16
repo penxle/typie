@@ -60,6 +60,32 @@ pub(crate) fn hit_test(
         .and_then(|entry| text_or_atom_selection_for_entry(layout_index, entry, point.x))
 }
 
+pub(crate) fn text_hit_rects(layout_index: &LayoutIndex) -> Vec<crate::page::PageRect> {
+    layout_index
+        .entries()
+        .filter_map(|entry| {
+            let LayoutContent::Line(line) = entry.content(layout_index)? else {
+                return None;
+            };
+            if line.is_phantom {
+                return None;
+            }
+            let (Some((left, _)), Some((right, _))) = grapheme::visual_bounds(line) else {
+                return None;
+            };
+            if right <= left {
+                return None;
+            }
+            layout_index.page_rect(editor_common::Rect::from_xywh(
+                entry.rect.x + left,
+                entry.rect.y,
+                right - left,
+                entry.rect.height,
+            ))
+        })
+        .collect()
+}
+
 pub(crate) fn hit_test_extending(
     layout_index: &LayoutIndex,
     view: &DocView,
@@ -810,6 +836,33 @@ mod tests {
                 (line.node == *para_id && line.offset_range.is_some()).then_some((entry, line))
             })
             .collect()
+    }
+
+    #[test]
+    fn text_hit_rects_exclude_line_margins_and_empty_paragraphs() {
+        let (_, para_id, index) = para_doc("Hello", 400.0);
+        let (entry, line) = first_line_for_para(&index, &para_id).unwrap();
+        let rects = text_hit_rects(&index);
+        assert_eq!(rects.len(), 1);
+        let rect = rects[0].rect;
+        assert_eq!(rect.x, entry.rect.x + line.glyph_runs[0].x);
+        assert!(rect.width > 0.0 && rect.width < entry.rect.width);
+        assert_eq!(rect.height, entry.rect.height);
+        let (_, _, empty) = para_doc("", 400.0);
+        assert!(text_hit_rects(&empty).is_empty());
+    }
+
+    #[test]
+    fn text_hit_rects_cover_wrapped_lines_and_tabs() {
+        let (_, _, index) = para_doc("Hello world hello world", 40.0);
+        let lines = index.entries().filter(|entry| matches!(
+            entry.content(&index), Some(LayoutContent::Line(line)) if !line.glyph_runs.is_empty()
+        )).count();
+        assert!(lines > 1);
+        assert_eq!(text_hit_rects(&index).len(), lines);
+        let (_, _, tabs) = para_items_doc(vec![SeqItem::Atom(AtomLeaf::Tab)], 400.0);
+        assert_eq!(text_hit_rects(&tabs).len(), 1);
+        assert!(text_hit_rects(&tabs)[0].rect.width > 0.0);
     }
 
     #[test]

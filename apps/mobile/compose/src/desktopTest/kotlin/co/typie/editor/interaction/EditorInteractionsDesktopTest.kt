@@ -2331,6 +2331,7 @@ class EditorInteractionsDesktopTest {
       pointerId: Long,
       position: Offset,
       dispatchAtMillis: Long,
+      delayMillis: Long,
     ) {
       longPressDispatchScheduleCount += 1
     }

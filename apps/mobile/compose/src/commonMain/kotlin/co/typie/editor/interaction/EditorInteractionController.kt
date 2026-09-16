@@ -53,6 +53,12 @@ internal class EditorInteractionController(
   override val isFocused: Boolean
     get() = uiStateProvider().focused
 
+  override val cursorHandle
+    get() = uiStateProvider().cursorHandle
+
+  override val selectionHandleImages
+    get() = uiStateProvider().selectionHandleImages
+
   override val readOnly: Boolean
     get() = readOnlyProvider()
 
@@ -70,6 +76,11 @@ internal class EditorInteractionController(
   val interactionMode: EditorInteractionMode
     get() = mode
 
+  override val selectionHandlesHidden: Boolean
+    get() =
+      platform == Platform.Android &&
+        (mode == EditorInteractionMode.LongPressWordSelecting || gestures.doubleTapSelectionActive)
+
   val magnifierPosition: Offset?
     get() = semantics.magnifier.position
 
@@ -85,6 +96,10 @@ internal class EditorInteractionController(
 
   fun updateTapSlop(tapSlopPx: Float) {
     gestures.updateTapSlop(tapSlopPx)
+  }
+
+  fun updateLongPressTimeout(timeoutMillis: Long) {
+    gestures.longPressTimeoutMillis = timeoutMillis.coerceAtLeast(0L)
   }
 
   fun updateColumnResizeSlop(dragSlopPx: Float) {
@@ -255,6 +270,7 @@ internal class EditorInteractionController(
   }
 
   fun onEditorStateChanged(state: EditorState) {
+    cursorHandle.onEditorStateChanged(state)
     semantics.onEditorStateChanged(
       editor = editor,
       state = state,
@@ -300,6 +316,7 @@ internal class EditorInteractionController(
   }
 
   fun reset() {
+    cursorHandle.hide()
     effects.cancelTapSequenceConfirmation()
     effects.setScrollGestureLocked(false)
     mode = EditorInteractionMode.Idle
@@ -309,6 +326,8 @@ internal class EditorInteractionController(
 
   override fun reduceMode(event: EditorInteractionEvent) {
     mode = mode.reduce(event)
+    if (mode == EditorInteractionMode.Panning || mode == EditorInteractionMode.ViewportZooming)
+      cursorHandle.hide()
   }
 
   private fun ensurePointerInputEnabled(): Boolean {

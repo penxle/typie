@@ -720,6 +720,10 @@ impl Editor {
         self.view.selection_hit_rects(&resolved)
     }
 
+    pub fn text_hit_rects(&self) -> Vec<editor_view::PageRect> {
+        self.view.text_hit_rects()
+    }
+
     pub fn cursor_hit_rects(&self) -> Vec<editor_view::PageRect> {
         self.view.cursor_hit_rects(&self.state)
     }

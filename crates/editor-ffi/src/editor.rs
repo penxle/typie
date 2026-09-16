@@ -554,6 +554,10 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.cursor_hit_test(page as usize, x, y)))
     }
 
+    pub fn text_hit_rects(&self) -> EditorResult<Vec<Complex<editor_view::PageRect>>> {
+        self.with_inner(|inner| Ok(inner.editor.text_hit_rects().into_ffi()?))
+    }
+
     pub fn cursor_hit_rects(&self) -> EditorResult<Vec<Complex<editor_view::PageRect>>> {
         self.with_inner(|inner| Ok(inner.editor.cursor_hit_rects().into_ffi()?))
     }

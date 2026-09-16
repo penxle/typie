@@ -14,7 +14,12 @@ internal interface EditorInteractionEffects {
 
   fun cancelTapSequenceConfirmation()
 
-  fun scheduleLongPressDispatch(pointerId: Long, position: Offset, dispatchAtMillis: Long)
+  fun scheduleLongPressDispatch(
+    pointerId: Long,
+    position: Offset,
+    dispatchAtMillis: Long,
+    delayMillis: Long,
+  )
 
   fun cancelLongPressDispatch()
 

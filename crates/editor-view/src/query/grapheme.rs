@@ -5,7 +5,7 @@ use crate::paginate::types::LayoutLine;
 
 type VisualEdge = Option<(f32, usize)>;
 
-fn visual_bounds(line: &LayoutLine) -> (VisualEdge, VisualEdge) {
+pub(crate) fn visual_bounds(line: &LayoutLine) -> (VisualEdge, VisualEdge) {
     let mut first: VisualEdge = None;
     let mut last: VisualEdge = None;
 

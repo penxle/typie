@@ -1460,6 +1460,9 @@ internal constructor(
   fun cursorHitTest(page: Int, x: Float, y: Float): Boolean =
     appliedState.cursorHitRects.any { it.pageIdx == page && it.rect.containsPoint(x, y) }
 
+  fun textHitTest(page: Int, x: Float, y: Float): Boolean =
+    appliedState.textHitRects.any { it.pageIdx == page && it.rect.containsPoint(x, y) }
+
   fun interactiveHitTest(page: Int, x: Float, y: Float): InteractiveHit? {
     val region =
       appliedState.interactiveRegions.firstOrNull {
@@ -1639,6 +1642,10 @@ internal constructor(
         hitGeometryStale -> inner.cursorHitRects()
         else -> previous.cursorHitRects
       }
+    val textHitRects =
+      if (documentChanged || pageSizesChanged || renderInvalidated || initial) {
+        inner.textHitRects()
+      } else previous.textHitRects
     val interactiveRegions =
       if (documentChanged || pageSizesChanged || renderInvalidated || initial) {
         inner.interactiveRegions()
@@ -1729,6 +1736,7 @@ internal constructor(
           },
         selectionHitRects = selectionHitRects,
         cursorHitRects = cursorHitRects,
+        textHitRects = textHitRects,
         interactiveRegions = interactiveRegions,
       )
     appliedState = snapshot

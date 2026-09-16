@@ -1,5 +1,8 @@
 package co.typie.editor.interaction.sessions
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.Editor
 import co.typie.editor.EditorState
@@ -15,7 +18,7 @@ import co.typie.editor.interaction.semantics.dispatchSelectionExtension
 private const val EditorDoubleTapDragStartThresholdDp = 4f
 
 internal class EditorDoubleTapDragSession {
-  private var phase = EditorDoubleTapDragPhase.Idle
+  private var phase by mutableStateOf(EditorDoubleTapDragPhase.Idle)
   private var startPosition: Offset? = null
   private var startThresholdPx = 0f
   private var wordSelectionRequest: WordSelectionRequest? = null

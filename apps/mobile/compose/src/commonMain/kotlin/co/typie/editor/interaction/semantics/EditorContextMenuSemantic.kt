@@ -21,12 +21,14 @@ internal class EditorContextMenuSemantic(private val stateProvider: () -> Editor
     editor: Editor,
     state: EditorState,
     pointerPosition: PagePoint? = null,
+    allowCollapsed: Boolean = false,
   ) {
     stateProvider()
       .requestShowForAppliedSelection(
         editor = editor,
         state = state,
         pointerPosition = pointerPosition,
+        allowCollapsed = allowCollapsed,
       )
   }
 

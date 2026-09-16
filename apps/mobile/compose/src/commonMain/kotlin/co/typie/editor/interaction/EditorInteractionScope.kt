@@ -6,7 +6,6 @@ import co.typie.editor.Editor
 import co.typie.editor.PagePoint
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.interaction.gestures.EditorConsecutiveTapMaxIntervalMillis
-import co.typie.editor.interaction.gestures.EditorLongPressDispatchDelayMillis
 import co.typie.editor.interaction.gestures.EditorTapDispatchDelayMillis
 import co.typie.editor.interaction.semantics.EditorViewportZoomSemanticConfig
 import co.typie.editor.launchEditorEffect
@@ -291,11 +290,12 @@ internal class EditorInteractionScope(
     pointerId: Long,
     position: Offset,
     dispatchAtMillis: Long,
+    delayMillis: Long,
   ) {
     longPressDispatchJob?.cancel()
     longPressDispatchJob = coroutineScope.launch {
       try {
-        delay(EditorLongPressDispatchDelayMillis)
+        delay(delayMillis)
         controller.onLongPressTimer(
           pointerId = pointerId,
           position = position,

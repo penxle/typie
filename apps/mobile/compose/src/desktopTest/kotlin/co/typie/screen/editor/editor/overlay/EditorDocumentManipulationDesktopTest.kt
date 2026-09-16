@@ -1448,6 +1448,8 @@ class EditorDocumentManipulationDesktopTest {
               density = 1f,
               pagePresented = { page -> editor.publishedBundle?.frames?.containsKey(page) == true },
               directTouchInteraction = true,
+              platform = Platform.Desktop,
+              selectionHandlesHidden = interactionScope.controller.selectionHandlesHidden,
             )
           }
         }

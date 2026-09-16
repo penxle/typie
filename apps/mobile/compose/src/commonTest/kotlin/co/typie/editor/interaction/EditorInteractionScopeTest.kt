@@ -33,12 +33,61 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorInteractionScopeTest {
+  @Test
+  fun `long press respects the configured platform timeout`() =
+    runTest(StandardTestDispatcher()) {
+      val fake = FakeFfiEditor(pageSizesProvider = { listOf(Size(400f, 700f)) })
+      val editor =
+        Editor(fake, this, StandardTestDispatcher(testScheduler)).also { fake.publishSnapshot(it) }
+      var frameKey: FrameKey? = null
+      val surface =
+        editor.attachSurface(
+          page = 0,
+          handle = 1L,
+          width = 400.0,
+          height = 700.0,
+          scaleFactor = 1.0,
+          wakeDelivery = { frameKey = it },
+        )
+      editor.requestSurfacePages(setOf(0))
+      advanceUntilIdle()
+      editor.deliverFrame(
+        session = surface,
+        tiles = listOf(co.typie.editor.PresentedTile(ImageBitmap(400, 700))),
+        pixelSize = IntSize(400, 700),
+        editorRevision = editor.appliedState.version,
+        frameKey = assertNotNull(frameKey).value,
+      )
+      advanceUntilIdle()
+      assertTrue(editor.acceptPublication(assertNotNull(editor.publishIfReady(setOf(0)))))
+      val uiState =
+        EditorUiState().apply {
+          updateInteractionSurfaceBounds(Rect(0f, 0f, 400f, 700f), 1f)
+          updateEditorBounds(Rect(0f, 0f, 400f, 700f), density = 1f)
+          updatePageOffset(0, Offset.Zero)
+        }
+      val scope = EditorInteractionScope(this, platformProvider = { Platform.iOS })
+      updateScope(scope, editor, editing = { true }, uiState = uiState)
+      assertNotNull(scope.resolvePoint(Offset(10f, 20f)))
+      scope.controller.updateLongPressTimeout(900L)
+      scope.controller.onPointerDown(pointerDown(1L, 0L), position = Offset(10f, 20f))
+      advanceTimeBy(899L)
+      runCurrent()
+      assertEquals(EditorInteractionMode.Idle, scope.controller.interactionMode)
+      assertNotNull(scope.resolvePoint(Offset(10f, 20f)))
+      advanceTimeBy(1L)
+      runCurrent()
+      assertEquals(EditorInteractionMode.LongPressSelecting, scope.controller.interactionMode)
+      scope.controller.cancel()
+    }
+
   @Test
   fun `app direct touch changes sync with the attached editor`() =
     runTest(StandardTestDispatcher()) {

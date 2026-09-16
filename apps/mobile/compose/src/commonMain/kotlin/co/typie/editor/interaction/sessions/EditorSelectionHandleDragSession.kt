@@ -62,11 +62,13 @@ internal class EditorSelectionHandleDragSession {
       when (type) {
         EditorSelectionHandleType.From -> endpoints.from
         EditorSelectionHandleType.To -> endpoints.to
+        EditorSelectionHandleType.Cursor -> return false
       }
     val anchor =
       when (type) {
         EditorSelectionHandleType.From -> endpoints.toPosition
         EditorSelectionHandleType.To -> endpoints.fromPosition
+        EditorSelectionHandleType.Cursor -> return false
       }
     val startTouchPosition =
       pendingContext?.takeIf { it.type == type }?.touchPosition ?: touchPosition

@@ -97,6 +97,7 @@ internal class FakeFfiEditor(
   var interactiveHitProvider: (Int, Float, Float) -> InteractiveHit? = { _, _, _ -> null },
   var selectionHitRectsProvider: () -> List<PageRect> = { emptyList() },
   var cursorHitRectsProvider: () -> List<PageRect> = { emptyList() },
+  var textHitRectsProvider: () -> List<PageRect> = { coveringHitRects(0) },
   var interactiveRegionsProvider: () -> List<InteractiveRegion> = { emptyList() },
   var replaceViewportAnchorPresentationProvider: (Revision) -> Boolean = { true },
   var firstRectForRangeProvider: (Revision, Int, Int) -> PageRect? = { _, _, _ -> null },
@@ -339,6 +340,8 @@ internal class FakeFfiEditor(
   override fun cursorHitTest(page: Int, x: Float, y: Float): Boolean = cursorHitProvider(page, x, y)
 
   override fun cursorHitRects(): List<PageRect> = cursorHitRectsProvider()
+
+  override fun textHitRects(): List<PageRect> = textHitRectsProvider()
 
   override fun interactiveRegions(): List<InteractiveRegion> = interactiveRegionsProvider()
 

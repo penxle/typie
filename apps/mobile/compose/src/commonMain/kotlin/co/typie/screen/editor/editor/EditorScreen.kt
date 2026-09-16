@@ -2106,7 +2106,7 @@ fun EditorScreen(entityId: String) {
                 !editorReady || editorSuppressesSoftwareKeyboard || !directEditingEnabled,
               showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
               showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
-              overlay = { presentedGeometry, presentedState ->
+              placeholder = { presentedGeometry, presentedState ->
                 if (editorReady && !editorReadOnly) {
                   EditorDocumentPlaceholder(
                     placeholder = presentedState.placeholder,
@@ -2118,6 +2118,8 @@ fun EditorScreen(entityId: String) {
                     onLoadTemplate = ::openTemplateSheet,
                   )
                 }
+              },
+              overlay = { _, _ ->
                 if (editorReady && comments.virtualThreadGuardVisible) {
                   val guardInteractionSource = remember { MutableInteractionSource() }
                   Box(

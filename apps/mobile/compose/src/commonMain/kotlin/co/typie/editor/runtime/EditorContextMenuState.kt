@@ -88,10 +88,14 @@ internal class EditorContextMenuState {
     state: EditorState,
     pointerPosition: PagePoint? = null,
     mode: EditorContextMenuMode =
-      if (pointerPosition == null) EditorContextMenuMode.Compact else EditorContextMenuMode.Expanded,
+      if (pointerPosition == null) EditorContextMenuMode.Compact
+      else EditorContextMenuMode.Expanded,
+    allowCollapsed: Boolean = false,
   ) {
     val selection = state.selection
-    if (selection == null || (selection.isCollapsed() && pointerPosition == null)) {
+    if (
+      selection == null || (selection.isCollapsed() && pointerPosition == null && !allowCollapsed)
+    ) {
       pendingPublicationTarget = null
       return
     }
@@ -121,10 +125,7 @@ internal class EditorContextMenuState {
       return
     }
     pendingPublicationTarget = null
-    if (
-      state.selection == target.selection &&
-        (!state.selection.isCollapsed() || target.pointerPosition != null)
-    ) {
+    if (state.selection == target.selection) {
       show(state, pointerPosition = target.pointerPosition, mode = target.mode)
     }
   }

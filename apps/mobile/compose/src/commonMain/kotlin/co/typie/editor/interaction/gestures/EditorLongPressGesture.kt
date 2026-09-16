@@ -2,7 +2,6 @@ package co.typie.editor.interaction.gestures
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.PagePoint
-import co.typie.editor.ext.isCollapsed
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.semantics.EditorLongPressSemanticIntent
 import co.typie.editor.interaction.sessions.EditorLongPressSession
@@ -14,11 +13,6 @@ internal class EditorLongPressGesture {
   private val session = EditorLongPressSession()
   private var pendingPointerId: Long? = null
 
-  private var semanticIntentAtPointerDown: EditorLongPressSemanticIntent? = null
-
-  val capturedSemanticIntent: EditorLongPressSemanticIntent?
-    get() = semanticIntentAtPointerDown
-
   val active: Boolean
     get() = session.active
 
@@ -29,10 +23,6 @@ internal class EditorLongPressGesture {
     pendingPointerId = pointerId
   }
 
-  fun captureSemanticIntentAtPointerDown(intent: EditorLongPressSemanticIntent) {
-    semanticIntentAtPointerDown = intent
-  }
-
   fun canStart(pointerId: Long): Boolean = pendingPointerId == pointerId && !session.active
 
   fun isActivePointer(pointerId: Long): Boolean = session.isActivePointer(pointerId)
@@ -40,7 +30,6 @@ internal class EditorLongPressGesture {
   fun cancelPending(pointerId: Long? = null): Boolean {
     if (pointerId == null || pendingPointerId == pointerId) {
       pendingPointerId = null
-      semanticIntentAtPointerDown = null
       return true
     }
     return false
@@ -49,13 +38,11 @@ internal class EditorLongPressGesture {
   fun end() {
     pendingPointerId = null
     session.end()
-    semanticIntentAtPointerDown = null
   }
 
   fun reset() {
     pendingPointerId = null
     session.reset()
-    semanticIntentAtPointerDown = null
   }
 
   fun startSession(
@@ -66,7 +53,6 @@ internal class EditorLongPressGesture {
     context: EditorGestureContext,
   ): Boolean {
     pendingPointerId = null
-    semanticIntentAtPointerDown = null
     return session.start(
       pointerId = pointerId,
       position = position,
@@ -76,25 +62,10 @@ internal class EditorLongPressGesture {
     )
   }
 
-  fun updateSession(position: Offset, context: EditorGestureContext): Boolean =
-    session.update(position = position, context = context)
+  fun updateSession(position: Offset, dragSlop: Float, context: EditorGestureContext): Boolean =
+    session.update(position = position, dragSlop = dragSlop, context = context)
 
   fun finishSession(context: EditorGestureContext): Boolean = session.finish(context = context)
-}
-
-internal fun EditorLongPressGesture.captureSemanticIntentAtPointerDown(
-  position: Offset,
-  context: EditorGestureContext,
-) {
-  val point = context.geometry.resolvePoint(positionInNode = position) ?: return
-  captureSemanticIntentAtPointerDown(
-    context.semantics.longPress.resolveIntent(
-      editor = context.editor,
-      point = point,
-      platform = context.platform,
-      editing = context.editing,
-    )
-  )
 }
 
 internal fun EditorLongPressGesture.start(
@@ -107,13 +78,12 @@ internal fun EditorLongPressGesture.start(
   }
   val point = resolveAdmission(position = position, context = context) ?: return false
   val semanticIntent =
-    capturedSemanticIntent
-      ?: context.semantics.longPress.resolveIntent(
-        editor = context.editor,
-        point = point,
-        platform = context.platform,
-        editing = context.editing,
-      )
+    context.semantics.longPress.resolveIntent(
+      editor = context.editor,
+      point = point,
+      platform = context.platform,
+      editing = context.editing,
+    )
   return startSession(
     pointerId = pointerId,
     position = position,
@@ -125,8 +95,9 @@ internal fun EditorLongPressGesture.start(
 
 internal fun EditorLongPressGesture.update(
   position: Offset,
+  dragSlop: Float,
   context: EditorGestureContext,
-): Boolean = updateSession(position = position, context = context)
+): Boolean = updateSession(position = position, dragSlop = dragSlop, context = context)
 
 internal fun EditorLongPressGesture.finish(context: EditorGestureContext): Boolean =
   finishSession(context = context)
@@ -142,11 +113,12 @@ private fun EditorLongPressGesture.resolveAdmission(
   }
 
   val editor = context.editor
-  if (editor.selectionHitTest(page = point.page, x = point.x, y = point.y)) {
-    if (context.platform != Platform.Android || !editor.publishedState.selection.isCollapsed()) {
-      cancelPending()
-      return null
-    }
+  if (
+    context.platform != Platform.Android &&
+      editor.selectionHitTest(page = point.page, x = point.x, y = point.y)
+  ) {
+    cancelPending()
+    return null
   }
   return point
 }

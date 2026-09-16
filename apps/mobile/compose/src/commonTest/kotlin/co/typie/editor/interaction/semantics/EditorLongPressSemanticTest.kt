@@ -61,7 +61,7 @@ class EditorLongPressSemanticTest {
 
     val androidCursorEditor = editor(cursorHit = true)
     assertEquals(
-      EditorLongPressSemanticIntent.CursorMove,
+      EditorLongPressSemanticIntent.WordSelection,
       EditorLongPressSemantic()
         .resolveIntent(
           editor = androidCursorEditor,
@@ -69,6 +69,18 @@ class EditorLongPressSemanticTest {
           platform = Platform.Android,
           editing = true,
         ),
+    )
+  }
+
+  @Test
+  fun `android editing long press in line margins moves the cursor`() = runTest {
+    val fake = FakeFfiEditor(textHitRectsProvider = { emptyList() })
+    val editor = Editor(fake, this, StandardTestDispatcher(testScheduler))
+    fake.publishSnapshot(editor)
+    assertEquals(
+      EditorLongPressSemanticIntent.CursorMove,
+      EditorLongPressSemantic()
+        .resolveIntent(editor = editor, point = Point, platform = Platform.Android, editing = true),
     )
   }
 

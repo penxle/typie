@@ -5,6 +5,7 @@ import co.typie.editor.Editor
 import co.typie.editor.EditorState
 import co.typie.editor.PagePoint
 import co.typie.editor.ext.isCollapsed
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.SelectionPointUnit
 import co.typie.editor.interaction.EditorGestureContext
 import co.typie.editor.interaction.EditorInteractionEvent
@@ -14,11 +15,16 @@ import co.typie.editor.interaction.isLongPressing
 import co.typie.editor.interaction.isViewportZooming
 import co.typie.editor.interaction.semantics.EditorLongPressSemanticIntent
 import co.typie.editor.interaction.semantics.dispatchSelectionExtension
+import co.typie.platform.Platform
+import kotlin.math.abs
 
 internal class EditorLongPressSession {
   private var activePointerId: Long? = null
   private var semanticIntent = EditorLongPressSemanticIntent.CursorMove
   private var wordSelectionRequest: WordSelectionRequest? = null
+  private var lastCursorPoint: PagePoint? = null
+  private var dragOrigin = Offset.Zero
+  private var dragState = DragState.Pending
 
   val active: Boolean
     get() = activePointerId != null
@@ -59,7 +65,7 @@ internal class EditorLongPressSession {
     context.effects.setScrollGestureLocked(true)
 
     context.semantics.contextMenu.hide()
-    context.semantics.magnifier.show(position)
+    if (context.platform != Platform.Android) context.semantics.magnifier.show(position)
     if (semanticIntent == EditorLongPressSemanticIntent.WordSelection) {
       context.semantics.selectionExpansion.awaitWordSelectionApplied(
         baselineSelection = context.editor.appliedState.selection
@@ -75,15 +81,60 @@ internal class EditorLongPressSession {
       return false
     }
 
-    if (semanticIntent == EditorLongPressSemanticIntent.WordSelection) {
+    dragOrigin = position
+    if (semanticIntent == EditorLongPressSemanticIntent.ContextMenu) {
+      context.semantics.contextMenu.requestShowForAppliedSelection(
+        context.editor,
+        context.editor.publishedState,
+      )
+    } else if (semanticIntent == EditorLongPressSemanticIntent.WordSelection) {
+      wordSelectionRequest?.showMenuWhenPublished = context.platform == Platform.Android
       dispatchWordSelectionAt(point = point, context = context)
+    } else if (context.platform == Platform.Android) {
+      val state =
+        context.semantics.pointSelection.applySelection(
+          context.editor,
+          SelectionOp.SetAt(point.page, point.x, point.y),
+        )
+      if (state != null) {
+        context.cursorHandle.show(state, context.effects)
+        context.semantics.contextMenu.requestShowForAppliedSelection(
+          context.editor,
+          state,
+          allowCollapsed = true,
+        )
+      }
     }
     return true
   }
 
-  fun update(position: Offset, context: EditorGestureContext): Boolean {
+  fun update(position: Offset, dragSlop: Float, context: EditorGestureContext): Boolean {
     if (context.mode.isViewportZooming || !context.mode.isLongPressing) {
       return false
+    }
+    if (semanticIntent == EditorLongPressSemanticIntent.ContextMenu) return true
+    if (context.platform == Platform.Android) {
+      when (dragState) {
+        DragState.Pending -> {
+          val delta = position - dragOrigin
+          if (delta.getDistance() <= dragSlop) return true
+          // EditText fixes the initial direction when touch slop is crossed. A swipe within
+          // 45 degrees of vertical does not start cursor dragging, even if it turns later.
+          if (!isWordSelection && abs(delta.x) <= abs(delta.y)) {
+            dragState = DragState.Rejected
+            return true
+          }
+          dragState = DragState.Dragging
+          wordSelectionRequest?.showMenuWhenPublished = false
+          context.semantics.contextMenu.hide()
+          if (!isWordSelection) {
+            context.cursorHandle.show(context.editor.appliedState, context.effects)
+            context.cursorHandle.hold()
+          }
+        }
+        DragState.Rejected -> return true
+        DragState.Dragging -> Unit
+      }
     }
     context.semantics.magnifier.show(position)
     if (isWordSelection) {
@@ -97,6 +148,7 @@ internal class EditorLongPressSession {
         edgePosition = position,
         dispatchPosition = position,
         context = context,
+        dispatch = { point -> dispatchCursorMove(point, context) },
       )
     }
     val point = context.geometry.resolvePoint(positionInNode = position) ?: return true
@@ -123,10 +175,13 @@ internal class EditorLongPressSession {
       return dispatched
     }
 
-    return context.semantics.pointSelection.enqueueCursorMove(
-      editor = context.editor,
-      point = point,
-    )
+    return dispatchCursorMove(point, context)
+  }
+
+  private fun dispatchCursorMove(point: PagePoint, context: EditorGestureContext): Boolean {
+    val dispatched = context.semantics.pointSelection.enqueueCursorMove(context.editor, point)
+    if (dispatched) lastCursorPoint = point
+    return dispatched
   }
 
   fun finish(context: EditorGestureContext): Boolean {
@@ -145,10 +200,34 @@ internal class EditorLongPressSession {
       return false
     }
 
-    if (isWordSelection) {
+    if (semanticIntent == EditorLongPressSemanticIntent.ContextMenu) {
+      context.semantics.contextMenu.requestShowForAppliedSelection(
+        context.editor,
+        context.editor.publishedState,
+      )
+    } else if (isWordSelection) {
       wordSelectionRequest?.let { request ->
         request.showMenuWhenPublished = true
         requestWordSelectionMenuIfReady(request = request, context = context)
+      }
+    } else if (context.platform == Platform.Android && context.editing && !context.readOnly) {
+      val point = lastCursorPoint
+      val state =
+        if (point != null) {
+          context.semantics.pointSelection.applySelection(
+            context.editor,
+            SelectionOp.SetAt(point.page, point.x, point.y),
+          )
+        } else context.editor.appliedState
+      if (state != null) {
+        context.cursorHandle.show(state, context.effects)
+        context.semantics.contextMenu.requestShowForAppliedSelection(
+          context.editor,
+          state,
+          allowCollapsed = true,
+        )
+      } else {
+        context.cursorHandle.hide()
       }
     }
     context.reduceMode(event)
@@ -162,6 +241,9 @@ internal class EditorLongPressSession {
 
   fun end() {
     activePointerId = null
+    lastCursorPoint = null
+    dragOrigin = Offset.Zero
+    dragState = DragState.Pending
     semanticIntent = EditorLongPressSemanticIntent.CursorMove
   }
 
@@ -228,7 +310,7 @@ internal class EditorLongPressSession {
     }
     val appliedState = request.appliedState ?: return
     if (appliedState.selection.isCollapsed()) {
-      wordSelectionRequest = null
+      requestMenuForPublishedSelection(request, appliedState, context)
       return
     }
     val extensionPoint =
@@ -271,14 +353,24 @@ internal class EditorLongPressSession {
     if (wordSelectionRequest !== request || context.editor !== request.editor) {
       return
     }
-    wordSelectionRequest = null
-    if (state.selection.isCollapsed()) {
+    val allowCollapsed =
+      context.platform == Platform.Android && context.editing && !context.readOnly
+    if (state.selection.isCollapsed() && !allowCollapsed) {
       return
     }
+    if (allowCollapsed && state.selection.isCollapsed())
+      context.cursorHandle.show(state, context.effects)
     context.semantics.contextMenu.requestShowForAppliedSelection(
       editor = request.editor,
       state = state,
+      allowCollapsed = allowCollapsed,
     )
+  }
+
+  private enum class DragState {
+    Pending,
+    Dragging,
+    Rejected,
   }
 
   private class WordSelectionRequest(val editor: Editor) {

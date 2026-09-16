@@ -440,6 +440,8 @@ class EditorOverlayLayoutSynchronizationDesktopTest {
               density = 1f,
               pagePresented = { true },
               directTouchInteraction = true,
+              platform = co.typie.platform.Platform.Desktop,
+              selectionHandlesHidden = false,
             )
           }
         }
