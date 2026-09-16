@@ -7,7 +7,7 @@ use editor_model::{
 };
 use editor_resource::Resource;
 use editor_state::State;
-use editor_state::{CellRect, ResolvedSelection, document_content_selection};
+use editor_state::{CellRect, ResolvedSelection, Selection, document_content_selection};
 use serde::{Deserialize, Serialize};
 
 use crate::html::parse as html_parse;
@@ -53,8 +53,13 @@ impl SlicePreflight {
 
 impl Slice {
     pub fn extract(state: &State) -> Option<Slice> {
+        Self::extract_selection(state, state.selection.as_ref()?)
+    }
+
+    /// Extract a range without changing the editor selection.
+    pub fn extract_selection(state: &State, selection: &Selection) -> Option<Slice> {
         let view = state.view();
-        let rs = state.selection.as_ref()?.resolve(&view)?;
+        let rs = selection.resolve(&view)?;
         if rs.is_collapsed() {
             return None;
         }
@@ -96,16 +101,16 @@ impl Slice {
         Some(slice)
     }
 
-    pub fn to_text(&self) -> String {
-        text_serialize::to_text(self)
+    pub fn to_text(&self, assets: &[crate::ClipboardAsset]) -> String {
+        text_serialize::to_text(self, assets)
     }
 
     pub fn from_text(text: &str) -> Slice {
         text_parse::from_text(text)
     }
 
-    pub fn to_html(&self, resource: &Resource) -> String {
-        html_serialize::serialize_clipboard_slice(self, resource)
+    pub fn to_html(&self, resource: &Resource, assets: &[crate::ClipboardAsset]) -> String {
+        html_serialize::serialize_clipboard_slice(self, resource, assets)
     }
 
     pub fn from_html(html: &str, resource: &Resource) -> Slice {
@@ -204,10 +209,14 @@ impl Slice {
         })
     }
 
-    pub fn to_payload(&self, resource: &Resource) -> ClipboardPayload {
+    pub fn to_payload(
+        &self,
+        resource: &Resource,
+        assets: &[crate::ClipboardAsset],
+    ) -> ClipboardPayload {
         ClipboardPayload {
-            html: self.to_html(resource),
-            text: self.to_text(),
+            html: self.to_html(resource, assets),
+            text: self.to_text(assets),
         }
     }
 }
@@ -486,6 +495,60 @@ mod tests {
     };
     use editor_resource::Resource;
     use editor_state::{Affinity, Position, Selection};
+
+    #[test]
+    fn copy_range_preserves_complete_subtrees_without_changing_selection() {
+        let (state, root, hidden) = state! {
+            doc { root: root {
+                paragraph { text("before") }
+                fold {
+                    fold_title { text("title") }
+                    hidden: fold_content { paragraph { text("secret") } }
+                }
+                paragraph { text("after") }
+            } }
+            selection: (root, 0) -> (root, 3)
+        };
+        let selection = state.selection.unwrap();
+        let slice = Slice::extract_selection(&state, &selection).unwrap();
+        let resource = Resource::new_test();
+        let payload = slice.to_payload(&resource, &[]);
+        assert_eq!(payload.text, "before\ntitle\nsecret\nafter");
+        assert!(payload.html.contains("secret"));
+        let restored = Slice::from_html(&payload.html, &resource);
+        assert_eq!(restored, slice);
+        assert!(restored.to_text(&[]).contains("secret"));
+        assert_eq!(state.selection, Some(selection));
+        assert_eq!(Slice::extract(&state), Some(slice));
+        let _ = (root, hidden);
+    }
+
+    #[test]
+    fn copy_linear_table_range_does_not_add_unselected_cells() {
+        let (state, first, last) = state! {
+            doc { root { table {
+                table_row {
+                    table_cell { paragraph { text("excluded") } }
+                    table_cell { first: paragraph { text("abc") } }
+                }
+                table_row {
+                    table_cell { last: paragraph { text("def") } }
+                    table_cell { paragraph { text("excluded") } }
+                }
+            } } }
+            selection: (first, 1) -> (last, 2)
+        };
+        let slice = Slice::extract_selection(&state, &state.selection.unwrap()).unwrap();
+        assert_eq!(slice.to_text(&[]), "bc\nde");
+        assert!(
+            !slice
+                .to_html(&Resource::new_test(), &[])
+                .contains("excluded")
+        );
+        assert_eq!(slice.content[0].node.as_type(), NodeType::Table);
+        let backwards = Selection::new(Position::new(last, 2), Position::new(first, 1));
+        assert_eq!(Slice::extract_selection(&state, &backwards), Some(slice));
+    }
 
     fn cell_rect_sel(state: &State, anchor_cell: Dot, head_cell: Dot) -> editor_state::Selection {
         use editor_state::{Position, Selection};
@@ -1055,7 +1118,7 @@ mod tests {
                 .iter()
                 .all(|child| matches!(child.node, PlainNode::Paragraph(_)))
         );
-        assert_eq!(slice.to_text(), "\n");
+        assert_eq!(slice.to_text(&[]), "\n");
     }
 
     #[test]
@@ -1122,7 +1185,7 @@ mod tests {
             selection: (p1, 1) -> (p2, 1)
         };
         let slice = Slice::extract(&s).expect("non-collapsed");
-        assert_eq!(slice.to_text(), "\nb");
+        assert_eq!(slice.to_text(&[]), "\nb");
     }
 
     #[test]
@@ -1132,7 +1195,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         let original = Slice::extract(&s).unwrap();
-        let payload = original.to_payload(&Resource::new_test());
+        let payload = original.to_payload(&Resource::new_test(), &[]);
         assert!(!payload.html.is_empty());
         assert!(!payload.text.is_empty());
 
@@ -1157,7 +1220,7 @@ mod tests {
             &Resource::new_test(),
         );
         assert_eq!(source, PayloadSource::Text);
-        assert_eq!(parsed.to_text(), "plain");
+        assert_eq!(parsed.to_text(&[]), "plain");
     }
 
     #[test]
@@ -1174,7 +1237,7 @@ mod tests {
         let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
 
         assert_eq!(source, PayloadSource::Html);
-        assert_eq!(parsed.to_text(), "body");
+        assert_eq!(parsed.to_text(&[]), "body");
     }
 
     #[test]
@@ -1199,7 +1262,7 @@ mod tests {
         let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
 
         assert_eq!(source, PayloadSource::Text);
-        assert_eq!(parsed.to_text(), "plain");
+        assert_eq!(parsed.to_text(&[]), "plain");
     }
 
     #[test]
@@ -1218,7 +1281,7 @@ mod tests {
         let (parsed, source) = Slice::from_payload(Some(&html), "plain", &Resource::new_test());
 
         assert_eq!(source, PayloadSource::Text);
-        assert_eq!(parsed.to_text(), "plain");
+        assert_eq!(parsed.to_text(&[]), "plain");
     }
 
     #[test]
@@ -1462,7 +1525,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 1, <)
         };
         let original = Slice::extract(&s).expect("non-collapsed");
-        let payload = original.to_payload(&Resource::new_test());
+        let payload = original.to_payload(&Resource::new_test(), &[]);
 
         let resource = Resource::new_test();
         let (parsed, source) = Slice::from_payload(Some(&payload.html), &payload.text, &resource);

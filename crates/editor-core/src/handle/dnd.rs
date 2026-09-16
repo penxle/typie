@@ -287,9 +287,7 @@ pub(crate) fn judge_apply_drop(
             if !modifiers.alt && drop_position_at_source_boundary(&state.view(), position, source) {
                 return false;
             }
-            let mut extract_state = state.clone();
-            extract_state.selection = Some(*source);
-            let Some(slice) = Slice::extract(&extract_state) else {
+            let Some(slice) = Slice::extract_selection(state, source) else {
                 return false;
             };
             if modifiers.alt {
@@ -585,9 +583,7 @@ fn drop_internal_selection_at(
         }
     }
 
-    let mut state = editor.state().clone();
-    state.selection = Some(source);
-    let Some(slice) = Slice::extract(&state) else {
+    let Some(slice) = Slice::extract_selection(editor.state(), &source) else {
         return Ok(());
     };
 

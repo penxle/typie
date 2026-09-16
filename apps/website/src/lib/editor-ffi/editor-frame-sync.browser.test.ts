@@ -1859,7 +1859,7 @@ describe('web editor frame synchronization', () => {
   it('updates offscreen file card heights as uploads and assets change', async () => {
     const plain = paginatedDocWithPageBreaks(12);
     plain.root.children.push(entry({ type: 'file', id: 'file' }));
-    const { editor, context } = await mountEditor(plain);
+    const { editor } = await mountEditor(plain);
     const element = editor.externalElements[0];
     if (!element) throw new Error('Expected a file element');
     expect(element.bounds.height).toBe(48);
@@ -1869,13 +1869,13 @@ describe('web editor frame synchronization', () => {
     editor.inflightFiles.set(element.node, { uploadId: 'upload', name: 'document.pdf', size: 1024 });
     await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(64);
 
-    context.fileAssets.set('file', { id: 'file', name: 'document.pdf', size: '1024', url: '/document.pdf' });
+    editor.fileAssets.set('file', { id: 'file', name: 'document.pdf', size: '1024', url: '/document.pdf' });
     editor.inflightFiles.delete(element.node);
     await tick();
     await waitForPresentation(editor);
     expect(editor.externalElements[0]?.bounds.height).toBe(64);
 
-    context.fileAssets.delete('file');
+    editor.fileAssets.delete('file');
     await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(48);
     expect(document.querySelector(`[data-node-id="${element.node}"]`)).toBeNull();
   });
@@ -1886,7 +1886,7 @@ describe('web editor frame synchronization', () => {
     if (root.type !== 'root' || root.layout_mode?.type !== 'paginated') throw new Error('Expected paginated root');
     root.layout_mode.page_width = 200;
     plain.root.children = [entry({ type: 'file', id: 'file' })];
-    const { editor, context } = await mountEditor(plain);
+    const { editor } = await mountEditor(plain);
     const element = editor.externalElements[0];
     if (!element) throw new Error('Expected a file element');
     const wrapper = document.querySelector<HTMLElement>(`[data-node-id="${element.node}"]`);
@@ -1897,7 +1897,7 @@ describe('web editor frame synchronization', () => {
     await expect.poll(() => wrapper.getBoundingClientRect().height).toBe(64);
     expect(editor.externalElements[0]?.bounds.height).toBe(64);
 
-    context.fileAssets.set('file', { id: 'file', name, size: '1024', url: '/document.pdf' });
+    editor.fileAssets.set('file', { id: 'file', name, size: '1024', url: '/document.pdf' });
     editor.inflightFiles.delete(element.node);
     await tick();
     await waitForPresentation(editor);

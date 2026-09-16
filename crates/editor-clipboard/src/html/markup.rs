@@ -368,11 +368,7 @@ fn modifier_presentation<'m>(
                 style.push(format!("letter-spacing:{}em", *value as f32 / 100.0))
             }
             Modifier::Link { href } => structural.push(StructuralMarkup::Link(href)),
-            Modifier::Ruby { text } => {
-                if target == HtmlTarget::DomProjection {
-                    ruby = Some(text.as_str());
-                }
-            }
+            Modifier::Ruby { text } => ruby = Some(text.as_str()),
             Modifier::LineHeight { value } => {
                 if target == HtmlTarget::DomProjection {
                     style.push(format!("line-height:{}", *value as f32 / 100.0));

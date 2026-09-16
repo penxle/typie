@@ -19,7 +19,7 @@ export function getExternalElementHeight(ctx: EditorContext, element: ExternalEl
       return editor.images.displaySize(element)?.height;
     }
     case 'file': {
-      return (data.id && ctx.fileAssets.has(data.id)) || editor.inflightFiles.has(element.node)
+      return (data.id && editor.fileAssets.has(data.id)) || editor.inflightFiles.has(element.node)
         ? EXTERNAL_FILE_CARD_HEIGHT
         : EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT;
     }

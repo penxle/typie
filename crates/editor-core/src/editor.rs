@@ -660,7 +660,7 @@ impl Editor {
         let doc = self.state.view();
         let doc_text = editor_state::doc_plain_text(&doc);
         let selection_text = Slice::extract(&self.state)
-            .map(|s| s.to_text())
+            .map(|s| s.to_text(&[]))
             .unwrap_or_default();
 
         let resource = self.resource.lock().unwrap();
@@ -6126,7 +6126,7 @@ mod tests {
         };
         let payload = Slice::extract(&source)
             .unwrap()
-            .to_payload(&Resource::new_test());
+            .to_payload(&Resource::new_test(), &[]);
         let (target, p2) = state! {
             doc { root {
                 blockquote { p2: paragraph { text("inside") } }

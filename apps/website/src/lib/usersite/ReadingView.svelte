@@ -346,7 +346,7 @@
           placeholder: asset.placeholder,
         });
       } else if (asset.__typename === 'File') {
-        ctx.fileAssets.set(asset.id, {
+        editor.fileAssets.set(asset.id, {
           id: asset.id,
           url: asset.url,
           name: asset.name,

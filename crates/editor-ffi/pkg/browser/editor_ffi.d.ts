@@ -11,6 +11,15 @@
 export type ChainSegment = { type: "real"; dot: Dot } | { type: "synthetic"; owner: Dot; role: NodeType; depth: number };
 
 /**
+ * Already-resolved asset metadata. Copy never fetches or encodes asset bytes.
+ */
+export interface ClipboardAsset {
+    id: string;
+    url: string;
+    label: string;
+}
+
+/**
  * An IME composition range, expressed in flat-offset coordinates.
  *
  * `start` and `end` are **flat offsets** — absolute positions over the
@@ -803,6 +812,11 @@ declare class Editor {
      * Device-pixel rectangles [left, top, right, bottom] for the current page target.
      */
     configure_surface_tiles(page: number, bounds: Int32Array): void;
+    /**
+     * Read a browser range (or the editor selection) without changing selection,
+     * focus, history, or view state. Both web surfaces use this copy policy.
+     */
+    copy_content(selection: Selection | null | undefined, assets: ClipboardAsset[], prefix: string | null | undefined, suffix: string | null | undefined): ClipboardPayload | undefined;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;

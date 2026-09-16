@@ -8,6 +8,15 @@ pub struct ClipboardPayload {
     pub text: String,
 }
 
+/// Already-resolved asset metadata. Copy never fetches or encodes asset bytes.
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClipboardAsset {
+    pub id: String,
+    pub url: String,
+    pub label: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
