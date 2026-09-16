@@ -21,6 +21,7 @@ export type EmbedAsset = {
   title: string | null;
   description: string | null;
   thumbnailUrl: string | null;
+  faviconUrl: string | null;
   html: string | null;
 };
 

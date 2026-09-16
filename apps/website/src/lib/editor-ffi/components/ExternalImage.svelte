@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions, pointerCapture, tooltip } from '@typie/ui/actions';
-  import { Icon, Img, RingSpinner } from '@typie/ui/components';
+  import { pointerCapture } from '@typie/ui/actions';
+  import { Img, RingSpinner } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { clamp } from '@typie/ui/utils';
   import { onDestroy } from 'svelte';
@@ -13,10 +12,15 @@
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '../editor.svelte';
-  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT, getExternalElementHeightUpdates } from '../external-element-height';
+  import { EXTERNAL_CARD_HEIGHT, getExternalElementHeightUpdates } from '../external-element-height';
   import { calculateImageWidth } from '../handlers/image';
+  import ExternalCard from './ExternalCard.svelte';
+  import ExternalCardAction from './ExternalCardAction.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
+  import ExternalMediaAction from './ExternalMediaAction.svelte';
+  import ExternalMediaControls from './ExternalMediaControls.svelte';
+  import ExternalPlaceholder from './ExternalPlaceholder.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
   import type { ContextMenuItem } from '../types';
 
@@ -35,9 +39,6 @@
     maxWidth: number;
   };
 
-  const ACTION_SIZE = 28;
-  const ACTION_INSET = 10;
-  const ACTION_GAP = 6;
   const RESIZE_HANDLE_WIDTH = 8;
   const RESIZE_HANDLE_INSET = 10;
   const RESIZE_HANDLE_GAP = 8;
@@ -56,7 +57,6 @@
   const isResizing = $derived(resizeSide !== null);
   let enlarged = $state(false);
   let containerEl = $state<HTMLDivElement>();
-  let pickerOpened = $state(false);
   let publicationWait = $state.raw<AbortController>();
 
   onDestroy(() => {
@@ -90,12 +90,6 @@
   const displayedWidth = $derived(liveWidth * displayZoom);
   const displayedHeight = $derived(liveHeight * displayZoom);
   const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
-  const visibleActionCount = $derived.by(() => {
-    const availableWidth = displayedWidth - ACTION_INSET * displayZoom;
-    const availableHeight = displayedHeight - ACTION_INSET * displayZoom;
-    if (availableWidth < ACTION_SIZE || availableHeight < ACTION_SIZE) return 0;
-    return availableWidth >= ACTION_SIZE * 2 + ACTION_GAP * displayZoom ? 2 : 1;
-  });
   const resizeHandleVisualHeight = $derived(
     Math.max(RESIZE_HANDLE_MIN_HEIGHT, Math.min(liveHeight / 3, RESIZE_HANDLE_MAX_HEIGHT, displayedHeight)),
   );
@@ -107,21 +101,11 @@
   const uploadSpinnerVisualSize = $derived(Math.min(UPLOAD_SPINNER_SIZE, displayedWidth, displayedHeight));
   const showUploadSpinner = $derived(uploadSpinnerVisualSize >= UPLOAD_SPINNER_MIN_SIZE);
   const canEdit = $derived(!ctx.editor?.readOnly);
-  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
-  const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
-  );
   const isAttachmentDropTarget = $derived(stage === 'empty' && ctx.attachmentDropTargetNodeId === element.node);
 
-  const { anchor, floating } = createFloatingActions({
-    placement: 'bottom',
-    offset: 4,
-    middleware: [flip(), hide()],
-  });
-
-  $effect(() => {
-    pickerOpened = isOnlySelectedElement && stage === 'empty';
-  });
+  const controlsMeta = $derived(
+    isResizing ? `너비 ${Math.round(proportion)}%` : originalWidth > 0 ? `${originalWidth} × ${originalHeight}` : '',
+  );
 
   $effect(() => {
     if (stage !== 'ready') {
@@ -309,15 +293,15 @@
   });
 </script>
 
-<ExternalElementWrapper {element} minHeight={imageSize ? '0' : `${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}>
-  <div
-    bind:this={containerEl}
-    style:width={imageSize ? `${imageSize.width}px` : '100%'}
-    style:height={imageSize ? `${imageSize.height}px` : undefined}
-    class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
-    role="group"
-  >
-    {#if imageSrc}
+<ExternalElementWrapper {element} minHeight={imageSize ? '0' : `${EXTERNAL_CARD_HEIGHT}px`}>
+  {#if imageSrc}
+    <div
+      bind:this={containerEl}
+      style:width={imageSize ? `${imageSize.width}px` : '100%'}
+      style:height={imageSize ? `${imageSize.height}px` : undefined}
+      class={cx('group', css({ position: 'relative', margin: '[0 auto]' }))}
+      role="group"
+    >
       <Img
         style={css.raw({ width: 'full', borderRadius: '4px' }, !canEdit && { cursor: 'zoom-in' })}
         alt="본문 이미지"
@@ -368,59 +352,18 @@
         </div>
       {/if}
 
-      {#if canEdit && stage === 'ready' && visibleActionCount > 0}
-        <div
-          style:gap={`${ACTION_GAP * displayZoom}px`}
-          style:transform={fixedControlTransform}
-          style:transform-origin="top right"
-          class={flex({ position: 'absolute', top: '10px', right: '10px', zIndex: '10' })}
+      {#if canEdit && stage === 'ready'}
+        <ExternalMediaControls
+          height={liveHeight}
+          meta={controlsMeta}
+          pinned={isResizing}
+          selected={element.is_selected}
+          width={liveWidth}
+          zoom={displayZoom}
         >
-          <button
-            class={center({
-              borderRadius: '4px',
-              size: '28px',
-              color: 'text.on.inverse',
-              backgroundColor: 'surface.inverse/70',
-              opacity: '0',
-              transition: 'opacity',
-              _hover: { backgroundColor: 'surface.inverse/85' },
-              _groupHover: { opacity: '100' },
-            })}
-            aria-label="이미지 확대 보기"
-            onclick={() => (enlarged = true)}
-            onpointerdown={(event) => {
-              event.stopPropagation();
-            }}
-            type="button"
-            use:tooltip={{ message: '이미지 확대 보기', arrow: false }}
-          >
-            <Icon icon={Maximize2Icon} size={16} />
-          </button>
-
-          {#if visibleActionCount > 1}
-            <button
-              class={center({
-                borderRadius: '4px',
-                size: '28px',
-                color: 'text.on.inverse',
-                backgroundColor: 'surface.inverse/70',
-                opacity: '0',
-                transition: 'opacity',
-                _hover: { backgroundColor: 'surface.inverse/85' },
-                _groupHover: { opacity: '100' },
-              })}
-              aria-label="이미지 삭제"
-              onclick={deleteNode}
-              onpointerdown={(event) => {
-                event.stopPropagation();
-              }}
-              type="button"
-              use:tooltip={{ message: '이미지 삭제', arrow: false }}
-            >
-              <Icon icon={Trash2Icon} size={16} />
-            </button>
-          {/if}
-        </div>
+          <ExternalMediaAction icon={Maximize2Icon} label="이미지 확대 보기" onclick={() => (enlarged = true)} />
+          <ExternalMediaAction icon={Trash2Icon} label="이미지 삭제" onclick={deleteNode} />
+        </ExternalMediaControls>
       {/if}
 
       {#if canEdit && stage === 'ready'}
@@ -435,6 +378,7 @@
               style:height={`${resizeHandleVisualHeight}px`}
               style:transform={fixedControlTransform}
               style:transform-origin={`${side} center`}
+              style:opacity={element.is_selected ? '1' : undefined}
               class={css({
                 borderRadius: '4px',
                 backgroundColor: 'white/50',
@@ -446,6 +390,7 @@
                 pointerEvents: 'auto',
                 _hover: { backgroundColor: 'white/40' },
                 _groupHover: { opacity: '100' },
+                _focusVisible: { opacity: '100' },
               })}
               aria-label="이미지 크기 조절"
               type="button"
@@ -459,98 +404,28 @@
           </div>
         {/each}
       {/if}
-    {:else}
-      <div
-        style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
-        class={cx(
-          flex({
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderRadius: '4px',
-            backgroundColor: 'surface.inset',
-            width: 'full',
-          }),
-          isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
-        )}
-        use:anchor
-      >
-        <div
-          class={flex({
-            align: 'center',
-            gap: '12px',
-            paddingX: '14px',
-            paddingY: '12px',
-            fontSize: '14px',
-            color: isAttachmentDropTarget ? 'accent.default' : 'text.hint',
-          })}
+    </div>
+  {:else}
+    <div class={cx('group', css({ width: 'full' }))}>
+      {#if stage === 'resolving'}
+        <ExternalCard icon={ImageIcon} loading />
+      {:else}
+        <ExternalPlaceholder
+          {canEdit}
+          dropActive={isAttachmentDropTarget}
+          hint={canEdit ? (isAttachmentDropTarget ? '놓아서 업로드하기' : '클릭하거나 이미지를 끌어다 놓으세요') : undefined}
+          icon={ImageIcon}
+          onclick={handleUpload}
+          title={canEdit ? '이미지 추가' : '비어있는 이미지'}
         >
-          <Icon icon={ImageIcon} size={20} />
-          {#if stage === 'resolving'}
-            이미지를 불러오는 중...
-          {:else if stage === 'uploading'}
-            이미지를 업로드하는 중...
-          {:else if isAttachmentDropTarget}
-            놓아서 업로드하기
-          {:else}
-            이미지
+          {#if canEdit}
+            <ExternalCardAction danger icon={Trash2Icon} label="이미지 삭제" onclick={deleteNode} />
           {/if}
-        </div>
-
-        {#if stage === 'resolving' || stage === 'uploading'}
-          <div class={css({ marginRight: '14px' })}>
-            <RingSpinner style={css.raw({ size: '16px', color: 'text.muted' })} />
-          </div>
-        {:else if canEdit && !isAttachmentDropTarget}
-          <button
-            class={center({
-              marginRight: '12px',
-              borderRadius: '4px',
-              padding: '4px',
-              color: 'text.muted',
-              _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
-            })}
-            aria-label="이미지 삭제"
-            onclick={deleteNode}
-            onpointerdown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            type="button"
-            use:tooltip={{ message: '이미지 삭제', arrow: false }}
-          >
-            <Icon icon={Trash2Icon} size={16} />
-          </button>
-        {/if}
-      </div>
-    {/if}
-  </div>
+        </ExternalPlaceholder>
+      {/if}
+    </div>
+  {/if}
 </ExternalElementWrapper>
-
-{#if pickerOpened && canEdit}
-  <button
-    class={flex({
-      alignItems: 'center',
-      gap: '6px',
-      borderWidth: '1px',
-      borderRadius: '8px',
-      paddingX: '12px',
-      paddingY: '6px',
-      fontSize: '13px',
-      color: 'text.muted',
-      backgroundColor: 'surface.default',
-      boxShadow: 'sm',
-      transition: 'common',
-      zIndex: 'editor',
-      _hover: { backgroundColor: 'surface.hover' },
-    })}
-    onclick={handleUpload}
-    type="button"
-    use:floating
-  >
-    <Icon icon={ImageIcon} size={14} />
-    이미지 선택
-  </button>
-{/if}
 
 {#if enlarged && stage === 'ready' && imageSrc && containerEl}
   <ExternalImageEnlarge

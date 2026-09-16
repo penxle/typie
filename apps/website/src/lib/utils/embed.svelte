@@ -11,6 +11,7 @@
         title
         description
         thumbnailUrl
+        faviconUrl
         html
       }
     }

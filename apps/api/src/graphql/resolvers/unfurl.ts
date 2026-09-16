@@ -16,6 +16,7 @@ Embed.implement({
     title: t.exposeString('title', { nullable: true }),
     description: t.exposeString('description', { nullable: true }),
     thumbnailUrl: t.exposeString('thumbnailUrl', { nullable: true }),
+    faviconUrl: t.exposeString('faviconUrl', { nullable: true }),
     html: t.exposeString('html', { nullable: true }),
   }),
 });
@@ -45,6 +46,7 @@ builder.mutationFields((t) => ({
           title: meta.title,
           description: meta.description,
           thumbnailUrl: meta.thumbnailUrl,
+          faviconUrl: meta.faviconUrl,
           html: meta.html,
         })
         .returning()

@@ -29,13 +29,17 @@ const createDataTransfer = ({
   data = {},
 }: {
   files?: File[];
-  items?: { kind: string; type: string }[];
+  items?: { kind: string; type: string; directory?: boolean; file?: File }[];
   types?: string[];
   data?: Record<string, string>;
 } = {}) => {
-  const resolvedItems = (items ?? files.map((f) => ({ kind: 'file', type: f.type }))).map((item) => ({
+  const sourceItems: { kind: string; type: string; directory?: boolean; file?: File }[] =
+    items ?? files.map((f) => ({ kind: 'file', type: f.type, file: f }));
+  const resolvedItems = sourceItems.map((item) => ({
     kind: item.kind,
     type: item.type,
+    webkitGetAsEntry: () => ({ isDirectory: item.directory === true }),
+    getAsFile: () => item.file ?? null,
   }));
   const store = new Map(Object.entries(data));
   return {
@@ -347,6 +351,36 @@ describe('handleDragOver', () => {
     vi.advanceTimersToNextFrame();
 
     expect(attachmentState.attachmentDropTargetNodeId).toBe('image-node');
+  });
+
+  it('drops only the files, leaving directories out of the import', () => {
+    const { ctx, extensionAreaEl, importAtDrop } = createCtx();
+    const file = createFile('notes.txt', 'text/plain');
+    // The platform hands a directory over as a File too, so only the entry tells them apart.
+    const folder = createFile('sources', '');
+    const transfer = createDataTransfer({
+      files: [folder, file],
+      items: [
+        { kind: 'file', type: '', directory: true, file: folder },
+        { kind: 'file', type: 'text/plain', file },
+      ],
+    });
+
+    handleDrop(ctx, { ...createDragEvent(transfer, extensionAreaEl), clientX: 10, clientY: 10 }, vi.fn());
+
+    expect(importAtDrop).toHaveBeenCalledWith([{ file, kind: 'file' }], expect.objectContaining({ page: 0 }));
+  });
+
+  it('hovers a file placeholder with an extension the platform reports without a MIME type', () => {
+    const { ctx, attachmentState, extensionAreaEl, canReusePlaceholder } = createCtx();
+    targetAtPoint(extensionAreaEl, 'file-node');
+    canReusePlaceholder.mockImplementation((nodeId, kind) => nodeId === 'file-node' && kind === 'file');
+    const transfer = createDataTransfer({ items: [{ kind: 'file', type: '' }] });
+
+    handleDragOver(ctx, createDragEvent(transfer, extensionAreaEl));
+    vi.advanceTimersToNextFrame();
+
+    expect(attachmentState.attachmentDropTargetNodeId).toBe('file-node');
   });
 
   it('prevents default when a transferable payload has editor-local coordinates', () => {

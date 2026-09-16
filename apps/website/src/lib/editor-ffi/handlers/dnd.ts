@@ -55,6 +55,20 @@ const modifiersFromEvent = (event: DragEvent): InputModifiers => ({
 
 const filesFromTransfer = (dataTransfer: DataTransfer): File[] => [...dataTransfer.files];
 
+// The drag data store is only readable on dragstart and drop, so a directory can be
+// identified here but never while hovering. Items we cannot resolve stay in the list.
+const droppedFiles = (dataTransfer: DataTransfer): File[] => {
+  const items = [...dataTransfer.items].filter((item) => item.kind === 'file');
+  if (items.length === 0 || typeof items[0]?.webkitGetAsEntry !== 'function') {
+    return filesFromTransfer(dataTransfer);
+  }
+
+  return items
+    .filter((item) => item.webkitGetAsEntry()?.isDirectory !== true)
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+};
+
 const attachmentKind = (type: string): AttachmentImportItem['kind'] => (type.startsWith('image/') ? 'image' : 'file');
 
 const hasInternalSelection = (dataTransfer: DataTransfer): boolean => {
@@ -121,15 +135,16 @@ const externalNodeAtPoint = (editor: EditorInstance, root: EventTarget | null, c
   return element.dataset.nodeId;
 };
 
+// Dragover only exposes each item's MIME type, and the platform leaves it empty for
+// extensions it does not know. Classify those as plain files, the same way the drop
+// path does, so hover feedback matches what dropping will actually do.
 const hoverAttachmentKinds = (dataTransfer: DataTransfer): AttachmentImportItem['kind'][] | undefined => {
   const fileItems = [...dataTransfer.items].filter((item) => item.kind === 'file');
   if (fileItems.length > 0) {
-    if (fileItems.some((item) => item.type === '')) return undefined;
     return fileItems.map((item) => attachmentKind(item.type));
   }
 
   const files = filesFromTransfer(dataTransfer);
-  if (files.some((file) => file.type === '')) return undefined;
   return files.length > 0 ? files.map((file) => attachmentKind(file.type)) : undefined;
 };
 
@@ -354,7 +369,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
   }
 
   const modifiers = modifiersFromEvent(event);
-  const files = hasInternalSelectionDrag(editor, dataTransfer) ? [] : filesFromTransfer(dataTransfer);
+  const files = hasInternalSelectionDrag(editor, dataTransfer) ? [] : droppedFiles(dataTransfer);
   const attachmentIntent =
     files.length > 0 ? attachmentDropIntent(ctx, editor, event.currentTarget, event.clientX, event.clientY, files) : undefined;
   event.preventDefault();

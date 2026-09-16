@@ -649,6 +649,7 @@ input DuplicateDocumentInput {
 
 type Embed {
   description: String
+  faviconUrl: String
   html: String
   id: ID!
   thumbnailUrl: String

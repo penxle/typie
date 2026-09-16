@@ -49,6 +49,7 @@ const asset: EmbedAsset = {
   title: 'Example',
   description: null,
   thumbnailUrl: null,
+  faviconUrl: null,
   html: null,
 };
 
