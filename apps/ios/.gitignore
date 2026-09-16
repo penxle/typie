@@ -1,0 +1,16 @@
+.DS_Store
+build/
+.build/
+DerivedData/
+xcuserdata/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+Configuration/Config.local.xcconfig
+Packages/*/.swiftpm/
+node_modules/
+**/fastlane/README.md
+**/fastlane/report.xml

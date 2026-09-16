@@ -51,6 +51,7 @@
     "**/proptest-regressions/**",
     "apps/mobile/compose/src/commonMain/composeResources/files/**",
     "apps/eval/migrations/**",
+    "apps/ios/Packages/Typie/Sources/Design/Resources/**",
     "apps/website/src/assets/lottie/**"
   ],
   "dictionaries": ["cspell.txt"],

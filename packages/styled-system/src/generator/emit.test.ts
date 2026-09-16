@@ -7,6 +7,7 @@ import {
   emitNotices,
   emitPresets,
   emitSemanticColors,
+  emitSwiftColors,
   variantSelector,
 } from './emit.ts';
 import { EDITOR_KEYS, UI_TOKENS } from './schema.ts';
@@ -114,5 +115,25 @@ describe('emitNotices', () => {
     expect(output).toContain('https://creativecommons.org/publicdomain/zero/1.0/');
     expect(output.includes('## MIT License')).toBe(includeMit);
     expect(output.includes('Permission is hereby granted')).toBe(includeMit);
+  });
+});
+
+describe('emitSwiftColors', () => {
+  const scrimPresets = presets.map((preset) =>
+    preset.id === 'light-white' ? { ...preset, ui: { ...preset.ui, scrim: '#09090c52' } } : preset,
+  );
+  const out = emitSwiftColors({ roster, presets: scrimPresets });
+
+  it('declares one camelCase field per ui token and fills light and dark from the roster defaults', () => {
+    expect(out).toContain('public let textOnDangerSubtle: Color');
+    expect(out).toContain('public let paletteGray: Color');
+    expect((out.match(/public let /g) ?? []).length).toBe(UI_TOKENS.length);
+    expect(out).toContain('public static let light = TColors(');
+    expect(out).toContain('    textDefault: Color(argb: 0xFFFAFAFA)');
+    expect(out).toContain('    surfaceCanvas: Color(argb: 0xFF101010)');
+  });
+
+  it('moves an 8-digit alpha suffix in front of the rgb digits', () => {
+    expect(out).toContain('    scrim: Color(argb: 0x5209090C)');
   });
 });

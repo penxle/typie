@@ -39,7 +39,7 @@ internal fun editorBlockquoteToolbarPage(
           },
         )
         EditorToolbarButton(
-          icon = Lucide.TextSelect,
+          icon = Lucide.SquareDashedText,
           contentDescription = "인용구 해제",
           onClick = {
             val nodeId = target?.id ?: return@EditorToolbarButton

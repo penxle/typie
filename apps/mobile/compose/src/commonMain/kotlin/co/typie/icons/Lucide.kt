@@ -68,6 +68,23 @@ private object Lucide0 {
         )
       )
     )
+  val Ad =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 13H6m4 2v-4a2 2 0 0 0-4 0v4m8-.5a.5.5 0 0 0 .5.5h1a2.5 2.5 0 0 0 2.5-2.5v-1A2.5 2.5 0 0 0 15.5 9h-1a.5.5 0 0 0-.5.5z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-16a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Airplay =
     IconData(
       listOf(
@@ -813,6 +830,23 @@ private object Lucide0 {
         ),
       )
     )
+  val Angle =
+    IconData(
+      listOf(
+        IconPath(
+          "M3 3v16a2 2 0 0 0 2 2h16",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 11a10 10 0 0 1 10 10",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Angry =
     IconData(
       listOf(
@@ -1026,7 +1060,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M15 11a1 1 0 0 0 1 1h2.939a1 1 0 0 1 .75 1.811l-6.835 6.836a1.207 1.207 0 0 1-1.707 0L4.31 13.81a1 1 0 0 1 .75-1.811H8a1 1 0 0 0 1-1V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1z",
+          "M9 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-7.086 7.086a1 1 0 0 1-1.414 0l-7.086-7.086a.707.707 0 0 1 .5-1.207H8a1 1 0 0 0 1-1z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1037,7 +1071,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M15 11a1 1 0 0 0 1 1h2.939a1 1 0 0 1 .75 1.811l-6.835 6.836a1.207 1.207 0 0 1-1.707 0L4.31 13.81a1 1 0 0 1 .75-1.811H8a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1zM9 4h6",
+          "M14 8a1 1 0 0 1 1 1v2a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-6.939 6.939a1.207 1.207 0 0 1-1.708 0l-6.94-6.94a.707.707 0 0 1 .5-1.206H8a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1zM9 4h6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1048,7 +1082,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M13 9a1 1 0 0 1-1-1V5.061a1 1 0 0 0-1.811-.75l-6.835 6.836a1.207 1.207 0 0 0 0 1.707l6.835 6.835a1 1 0 0 0 1.811-.75V16a1 1 0 0 1 1-1h6a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1z",
+          "M10.793 19.793a.707.707 0 0 0 1.207-.5V16a1 1 0 0 1 1-1h6a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1h-6a1 1 0 0 1-1-1V4.707a.707.707 0 0 0-1.207-.5l-6.94 6.94a1.207 1.207 0 0 0 0 1.707z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1059,7 +1093,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M13 9a1 1 0 0 1-1-1V5.061a1 1 0 0 0-1.811-.75l-6.835 6.836a1.207 1.207 0 0 0 0 1.707l6.835 6.835a1 1 0 0 0 1.811-.75V16a1 1 0 0 1 1-1h2a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm7 0v6",
+          "M13 9a1 1 0 0 1-1-1V4.707a.707.707 0 0 0-1.207-.5l-6.94 6.94a1.207 1.207 0 0 0 0 1.707l6.94 6.94a.707.707 0 0 0 1.207-.5V16a1 1 0 0 1 1-1h2a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm7 0v6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1070,7 +1104,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M11 9a1 1 0 0 0 1-1V5.061a1 1 0 0 1 1.811-.75l6.836 6.836a1.207 1.207 0 0 1 0 1.707l-6.836 6.835a1 1 0 0 1-1.811-.75V16a1 1 0 0 0-1-1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z",
+          "M13.207 19.793a.707.707 0 0 1-1.207-.5V16a1 1 0 0 0-1-1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h6a1 1 0 0 0 1-1V4.707a.707.707 0 0 1 1.207-.5l6.94 6.94a1.207 1.207 0 0 1 0 1.707z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1081,7 +1115,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M11 9a1 1 0 0 0 1-1V5.061a1 1 0 0 1 1.811-.75l6.836 6.836a1.207 1.207 0 0 1 0 1.707l-6.836 6.835a1 1 0 0 1-1.811-.75V16a1 1 0 0 0-1-1H9a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1zM4 9v6",
+          "M11 9a1 1 0 0 0 1-1V4.707a.707.707 0 0 1 1.207-.5l6.94 6.94a1.207 1.207 0 0 1 0 1.707l-6.94 6.94a.707.707 0 0 1-1.207-.5V16a1 1 0 0 0-1-1H9a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1zM4 9v6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1092,7 +1126,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M9 13a1 1 0 0 0-1-1H5.061a1 1 0 0 1-.75-1.811l6.836-6.835a1.207 1.207 0 0 1 1.707 0l6.835 6.835a1 1 0 0 1-.75 1.811H16a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z",
+          "M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1103,7 +1137,7 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M9 13a1 1 0 0 0-1-1H5.061a1 1 0 0 1-.75-1.811l6.836-6.835a1.207 1.207 0 0 1 1.707 0l6.835 6.835a1 1 0 0 1-.75 1.811H16a1 1 0 0 0-1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zm0 7h6",
+          "M14 16a1 1 0 0 0 1-1v-2a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-6.939-6.939a1.207 1.207 0 0 0-1.708 0l-6.94 6.94a.707.707 0 0 0 .5 1.206H8a1 1 0 0 1 1 1v2a1 1 0 0 0 1 1zm-5 4h6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1547,7 +1581,18 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M12 6v12m5.196-9L6.804 15m0-6l10.392 6",
+          "M12 5v14m6.065-10.504l-12.125 7m0-6.992l12.125 7",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val Astroid =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.983 21.186a1 1 0 0 1-1.966 0a10 10 0 0 0-8.203-8.203a1 1 0 0 1 0-1.966a10 10 0 0 0 8.203-8.203a1 1 0 0 1 1.966 0a10 10 0 0 0 8.203 8.203a1 1 0 0 1 0 1.966a10 10 0 0 0-8.203 8.203",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1599,6 +1644,28 @@ private object Lucide0 {
       listOf(
         IconPath(
           "M2 10v3m4-7v11m4-14v18m4-13v7m4-10v13m4-8v3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val AudioLinesOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 10v11m0-18v1.35M14 14v1m0-7v.35M18 5v7.35M2 10v3M2 2l20 20m0-12v3M6 6v11",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val AudioLinesX =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 3v18m4-13v6.35M17 17l5 5M18 5v8.1M2 10v3m20-3v3m0 4l-5 5M6 6v11",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -1744,7 +1811,7 @@ private object Lucide0 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m9 12l2 2l4-4",
+          "m16 9l-5.5 5.5L8 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -2119,6 +2186,23 @@ private object Lucide0 {
         ),
       )
     )
+  val BanknoteCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "M11.748 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4.875M16 19l2 2l4-4m-4-5h.01M6 12h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 10A2 2 0 1 0 12 14 2 2 0 1 0 12 10z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val BanknoteX =
     IconData(
       listOf(
@@ -2236,7 +2320,7 @@ private object Lucide0 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M17 3a2 2 0 0 1 1.68.92a15.25 15.25 0 0 1 0 16.16A2 2 0 0 1 17 21H7a2 2 0 0 1-1.68-.92a15.25 15.25 0 0 1 0-16.16A2 2 0 0 1 7 3zM3.84 17h16.32M3.84 7h16.32",
+          "M16.997 21a2 2 0 0 0 1.68-.92a15.25 15.25 0 0 0 0-16.16a2 2 0 0 0-1.68-.92h-10a2 2 0 0 0-1.681.92a15.25 15.25 0 0 0 0 16.16a2 2 0 0 0 1.681.92zM3.54 16h16.914M3.54 8h16.914",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -2454,13 +2538,36 @@ private object Lucide0 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m18.5 6l2.19 4.5a6.48 6.48 0 0 1-2.29 7.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5",
+          "m18.5 6l1.754 3.5a6.48 6.48 0 0 1-1.854 8.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
           "M12.5 6A2.5 2.5 0 1 0 12.5 11 2.5 2.5 0 1 0 12.5 6z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val BeefOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M11.771 6.109a2.5 2.5 0 0 1 3.12 3.12",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M17.852 12.185a6.5 6.5 0 0 0-9.035-9.04m9.196 14.868C15.029 20.349 10.831 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m18.5 6l2.19 4.5a6.48 6.48 0 0 1-.139 4.393M2 2l20 20M6.355 6.37a7 7 0 0 0-.075.23c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c3.356 0 6.993-1.267 9.85-3.151",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -2506,6 +2613,17 @@ private object Lucide0 {
       listOf(
         IconPath(
           "M10.268 21a2 2 0 0 0 3.464 0m-10.47-5.674A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val BellCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "M10.268 21a2 2 0 0 0 3.464 0M15 8l2 2l4-4m-4.14-1.518A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326m0 0A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673c-.531-.548-1.075-1.109-1.537-1.873",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -2846,17 +2964,28 @@ private object Lucide0 {
     IconData(
       listOf(
         IconPath(
-          "M9 2A7 7 0 1 0 9 16 7 7 0 1 0 9 2z",
+          "M15 2A7 7 0 1 0 15 16 7 7 0 1 0 15 2z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M15 8A7 7 0 1 0 15 22 7 7 0 1 0 15 8z",
+          "M9 8A7 7 0 1 0 9 22 7 7 0 1 0 9 8z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val Blender =
+    IconData(
+      listOf(
+        IconPath(
+          "M8 14a2 2 0 0 0-1.963 1.615l-1.018 5.193A1 1 0 0 0 6 22h12a1 1 0 0 0 .981-1.192l-1.018-5.193A2 2 0 0 0 16 14zm9-12l-1 12m-7.994 0L7 2m.565 6.787A5 5 0 0 0 12 8a5 5 0 0 1 4.56-.75M19 2H5a2 2 0 0 0-2 2v5a2 2 0 0 0 .688 1.5M12 18h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val Blinds =
@@ -2965,6 +3094,9 @@ private object Lucide0 {
         ),
       )
     )
+}
+
+private object Lucide1 {
   val Bomb =
     IconData(
       listOf(
@@ -2987,6 +3119,17 @@ private object Lucide0 {
       listOf(
         IconPath(
           "M17 10c.7-.7 1.69 0 2.5 0a2.5 2.5 0 1 0 0-5a.5.5 0 0 1-.5-.5a2.5 2.5 0 1 0-5 0c0 .81.7 1.8 0 2.5l-7 7c-.7.7-1.69 0-2.5 0a2.5 2.5 0 0 0 0 5c.28 0 .5.22.5.5a2.5 2.5 0 1 0 5 0c0-.81-.7-1.8 0-2.5Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val BoneFracture =
+    IconData(
+      listOf(
+        IconPath(
+          "M14 4.5a1 1 0 0 1 5 0a.5.5 0 0 0 .5.5a1 1 0 0 1 0 5c-.81 0-1.8-.7-2.5 0l-1.958 1.957a.15.15 0 0 1-.252-.072l-.493-2.07a.15.15 0 0 0-.111-.112l-2.072-.494a.15.15 0 0 1-.072-.252L14 7c.7-.7 0-1.69 0-2.5M16 20l-1-2m5-2l-2-1M4 8l2 1m2-5l1 2m.698 8.19a.15.15 0 0 0 .112.112l2.074.489a.15.15 0 0 1 .072.252L10 17c-.7.7 0 1.69 0 2.5a1 1 0 0 1-5 0a.495.495 0 0 0-.5-.5a1 1 0 0 1 0-5c.81 0 1.8.7 2.5 0l1.956-1.957a.15.15 0 0 1 .252.072z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -3088,9 +3231,6 @@ private object Lucide0 {
         )
       )
     )
-}
-
-private object Lucide1 {
   val BookDown =
     IconData(
       listOf(
@@ -3279,6 +3419,17 @@ private object Lucide1 {
         )
       )
     )
+  val BookmarkOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M19 19v1a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5M2 2l20 20M8.656 3H17a2 2 0 0 1 2 2v8.344",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val BookmarkPlus =
     IconData(
       listOf(
@@ -3316,7 +3467,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M12 7v14m-9-3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4a4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3a3 3 0 0 0-3-3z",
+          "M12 5v16m8.001-2A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2a5 5 0 0 1 4-2z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -3327,13 +3478,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M12 21V7m4 5l2 2l4-4",
+          "M12 5v16m4-9l2 2l4-4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4a4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3a3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3",
+          "M22 6V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2a5 5 0 0 1 4-2h4.001A2 2 0 0 0 22 17v-1.344",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -3344,7 +3495,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M12 7v14m4-9h2m-2-4h2M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4a4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3a3 3 0 0 0-3-3zm3-6h2M6 8h2",
+          "M12 5v16m4-8h2m-2-4h2m2.001 10A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2a5 5 0 0 1 4-2zM6 13h2M6 9h2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -3474,7 +3625,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "m14.5 7l-5 5M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20M9.5 7l5 5",
+          "m14.5 7.5l-5 5m-5.5 7v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20M9.5 7.5l5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -3898,6 +4049,57 @@ private object Lucide1 {
         ),
       )
     )
+  val Broccoli =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 13a3 3 0 0 1-2.121-5.121",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M15.606 14.204c-3.5 1.5-5.899 4.503-8.899 7.503A1 1 0 0 1 6 22c-2 0-4-2-4-4a1 1 0 0 1 .293-.707c1.911-1.911 3.823-3.578 5.347-5.441",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16.573 14.737A4 4 0 0 1 14 11",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7.14 10.907a4 4 0 1 1 2.756-7.43A4 4 0 0 1 16.7 4.48a2 2 0 0 1 2.82 2.82a4 4 0 0 1 1.002 6.805A4 4 0 1 1 13 16",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val Broom =
+    IconData(
+      listOf(
+        IconPath(
+          "M13.5 10.5L22 2m-7.266 11.841a2 2 0 0 0-.314-2.42L12.58 9.58a2 2 0 0 0-2.421-.314l-7.657 4.461A1 1 0 0 0 2.3 15.3l6.403 6.403a1 1 0 0 0 1.571-.204zM5 18l2-2m.699-5.3l5.602 5.601",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val BroomSparkles =
+    IconData(
+      listOf(
+        IconPath(
+          "M11 2v2m1-1h-2m3.5 7.5L22 2m-7.266 11.841a2 2 0 0 0-.314-2.42L12.58 9.58a2 2 0 0 0-2.421-.314l-7.657 4.461A1 1 0 0 0 2.3 15.3l6.403 6.403a1 1 0 0 0 1.571-.204zM20 15v4m2-2h-4M4 4v4m1 10l2-2M6 6H2m5.699 4.7l5.602 5.601",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Brush =
     IconData(
       listOf(
@@ -4205,19 +4407,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18",
+          "M3 9h18",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4228,13 +4430,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M11 14h1v4m4-16v4M3 10h18M8 2v4",
+          "M11 13h1v4m4-15v3M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4245,13 +4447,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "m14 18l4 4l4-4M16 2v4m2 8v8",
+          "m14 17l4 4l4-4M16 2v3m2 8v8",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M21 11.354V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.343M3 10h18M8 2v4",
+          "M21 10.354V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.343M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4262,13 +4464,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "m14 18l4-4l4 4M16 2v4m2 16v-8",
+          "m14 17l4-4l4 4M16 2v3m2 16v-8",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M21 11.343V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9M3 10h18M8 2v4",
+          "M21 10.343V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4279,19 +4481,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18M9 16l2 2l4-4",
+          "M3 9h18M9 15l2 2l4-4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4302,7 +4504,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4m5 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 10h18m-5 10l2 2l4-4",
+          "M19 3H5m16 10V5m0 0a2 2 0 0 0-2-2M3 19a2 2 0 0 0 2 2M3 5v14M5 3a2 2 0 0 0-2 2m13 14l2 2l4-4M16 2v3M3 9h18M5 21h7.5M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4313,7 +4515,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M16 14v2.2l1.6 1M16 2v4m5 1.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M3 10h5m0-8v4",
+          "M16 14v2.2l1.6 1M16 2v3m5 2.338V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2.338M3 9h5.859M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4330,7 +4532,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "m15.228 16.852l-.923-.383m.923 2.679l-.923.383M16 2v4m.47 8.305l.382.923m0 5.544l-.383.924m2.679-6.468l.383-.923m-.001 7.391l-.382-.924m1.624-3.92l.924-.383m-.924 2.679l.924.383M21 10.592V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6M3 10h18M8 2v4",
+          "m15.228 16.852l-.923-.383m.923 2.679l-.923.383M16 2v3m.47 9.305l.382.923m0 5.544l-.383.924m2.679-6.468l.383-.923m-.001 7.391l-.382-.924m1.625-3.92l.924-.383m-.924 2.679l.924.383M21 10.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5.5M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4347,19 +4549,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01",
+          "M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4370,30 +4572,24 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M3 20a2 2 0 0 0 2 2h10a2.4 2.4 0 0 0 1.706-.706l3.588-3.588A2.4 2.4 0 0 0 21 16V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z",
+          "M16 2v3m5 10V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10v-5a1 1 0 0 1 1-1za2.4 2.4 0 0 1-.706 1.706l-3.588 3.588A2.4 2.4 0 0 1 15 21M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M15 22v-5a1 1 0 0 1 1-1h5M8 2v4m8-4v4M3 10h18",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
+        )
       )
     )
   val CalendarHeart =
     IconData(
       listOf(
         IconPath(
-          "M12.127 22H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.125",
+          "M12.127 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.125",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M14.62 18.8A2.25 2.25 0 1 1 18 15.836a2.25 2.25 0 1 1 3.38 2.966l-2.626 2.856a.998.998 0 0 1-1.507 0zM16 2v4M3 10h18M8 2v4",
+          "M14.62 17.8A2.25 2.25 0 1 1 18 14.836a2.25 2.25 0 1 1 3.38 2.966l-2.626 2.856a.998.998 0 0 1-1.507 0zM16 2v3M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4404,7 +4600,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M16 19h6M16 2v4m5 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5M3 10h18M8 2v4",
+          "M16 18h6M16 2v3m5 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.3M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4415,19 +4611,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18m-11 6h4",
+          "M3 9h18m-11 6h4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4438,7 +4634,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.82-1.18M21 15.5V6a2 2 0 0 0-2-2H9.5M16 2v4M3 10h7m11 0h-5.5M2 2l20 20",
+          "M16 2v3M2 2l20 20M21 9h-5.5M3 9h6M3.586 3.586A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.414-.586M8.656 3H19a2 2 0 0 1 2 2v10.344",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4449,7 +4645,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M16 19h6M16 2v4m3 10v6m2-9.402V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5M3 10h18M8 2v4",
+          "M16 18h6M16 2v3m3 10v6m2-9.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.3M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4460,19 +4656,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18m-11 6h4m-2-2v4",
+          "M3 9h18m-11 6h4m-2-2v4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4483,13 +4679,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M16 2v4M3 10h18M8 2v4m9 8h-6m2 4H7m0-4h.01M17 18h.01",
+          "M16 2v3M3 9h18M8 2v3m9 8h-6m2 4H7m0-4h.01M17 17h.01",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4517,13 +4713,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M16 2v4m5 5.75V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.25M22 22l-1.875-1.875M3 10h18M8 2v4",
+          "M16 2v3m5 5.69V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.25M22 21l-1.875-1.875M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M18 15A3 3 0 1 0 18 21 3 3 0 1 0 18 15z",
+          "M18 14A3 3 0 1 0 18 20 3 3 0 1 0 18 14z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4540,13 +4736,13 @@ private object Lucide1 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m11 14l1.535-1.605a5 5 0 0 1 8 1.5M16 2v4m5 12l-1.535 1.605a5 5 0 0 1-8-1.5",
+          "m11 14l1.535-1.605a5 5 0 0 1 8 1.5M16 2v3m5 13l-1.535 1.605a5 5 0 0 1-8-1.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M21 22v-4h-4m4-9.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4.3M3 10h4m1-8v4",
+          "M21 22v-4h-4m4-9.483V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.517M3 9h4m1-7v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4557,19 +4753,19 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4",
+          "M8 2v3m8-3v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 10h18m-7 4l-4 4m0-4l4 4",
+          "M3 9h18m-7 4l-4 4m0-4l4 4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4580,7 +4776,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M8 2v4m8-4v4m5 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 10h18m-4 12l5-5m-5 0l5 5",
+          "M16 2v3m1 11l5 5m-5 0l5-5m-1-4V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 9h18M8 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4683,7 +4879,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M5.7 21a2 2 0 0 1-3.5-2l8.6-14a6 6 0 0 1 10.4 6a2 2 0 1 1-3.464-2a2 2 0 1 0-3.464-2ZM17.75 7L15 2.1m-4.1 2.7L13 9m-5.1.7l2 4.4m-5 .6L7 18.9",
+          "m10.8 5l2.111 4.223M17.75 7L15 2.1M4.874 14.647l2.12 4.24M5.7 21a2 2 0 0 1-3.5-2l8.6-14a6 6 0 0 1 10.4 6a2 2 0 1 1-3.464-2a2 2 0 1 0-3.464-2zM7.906 9.712l2.005 4.411",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -4809,6 +5005,23 @@ private object Lucide1 {
         ),
       )
     )
+  val CarBattery =
+    IconData(
+      listOf(
+        IconPath(
+          "M14 13h4m-2 2v-4m2-6v2M6 13h4M6 5v2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M4 7h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-16a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val CardSim =
     IconData(
       listOf(
@@ -4853,19 +5066,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M2.27 21.7s9.87-3.5 12.73-6.36a4.5 4.5 0 0 0-6.36-6.37C5.77 11.84 2.27 21.7 2.27 21.7M8.64 14l-2.05-2.04M15.34 15l-2.46-2.46",
+          "M15 16a1 1 0 0 0-7-7q-4 4-5.987 12.385a.5.5 0 0 0 .602.602Q11 20 15 16l-3-3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M22 9s-1.33-2-3.5-2C16.86 7 15 9 15 9s1.33 2 3.5 2S22 9 22 9",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M15 2s-2 1.33-2 3.5S15 9 15 9s2-1.84 2-3.5C17 3.33 15 2 15 2",
+          "M15 9q4 4 7 0q-3-4-7 0q4-4 0-7q-4 3 0 7m-7 6l-2.58-2.58",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -5035,6 +5242,23 @@ private object Lucide1 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val CctvOff =
+    IconData(
+      listOf(
+        IconPath(
+          "m12.309 6.652l4.797 2.401a1 1 0 0 1 .447 1.341l-.501 1.001l.605.605h2.725a1 1 0 0 1 .894 1.447l-.724 1.448m-5.386.271l-.719 1.439a1 1 0 0 1-1.342.447L3.61 12.3a2.92 2.92 0 0 1-1.3-3.91L3.69 5.6a2.9 2.9 0 0 1 .873-1.037",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M2 19h3.76a2 2 0 0 0 1.8-1.1l1.441-2.902M2 2l20 20M2 21v-4m5-8h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val ChartArea =
@@ -5341,7 +5565,7 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M12 16v5m4-7v7m4-11v11m2-18l-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15m2 3v3m4-7v7",
+          "M12 16v5m4-6.361V21m4-10.344V21m2-18l-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15m2 3.463V21m4-6.344V21",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -6002,7 +6226,7 @@ private object Lucide1 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m9 12l2 2l4-4",
+          "m16 9l-5.5 5.5L8 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -6143,13 +6367,13 @@ private object Lucide1 {
     IconData(
       listOf(
         IconPath(
-          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          "M12 11A1 1 0 1 0 12 13 1 1 0 1 0 12 11z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M12 11A1 1 0 1 0 12 13 1 1 0 1 0 12 11z",
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -6207,6 +6431,26 @@ private object Lucide1 {
         ),
       )
     )
+  val CircleEuro =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 9.4a4 4 0 1 0 0 5.2M7 12h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+}
+
+private object Lucide2 {
   val CircleFadingArrowUp =
     IconData(
       listOf(
@@ -6508,9 +6752,6 @@ private object Lucide1 {
         ),
       )
     )
-}
-
-private object Lucide2 {
   val CircleSmall =
     IconData(
       listOf(
@@ -6583,13 +6824,13 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M18 20a6 6 0 0 0-12 0",
+          "M17.925 20.056a6 6 0 0 0-11.851.001",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M12 6A4 4 0 1 0 12 14 4 4 0 1 0 12 6z",
+          "M12 7A4 4 0 1 0 12 15 4 4 0 1 0 12 7z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -6921,7 +7162,7 @@ private object Lucide2 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2m7 7l-6 6m0-6l6 6",
+          "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2m6.5 7.5l-5 5m0-5l5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -7189,6 +7430,52 @@ private object Lucide2 {
         ),
       )
     )
+  val ClockArrowLeft =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 6v6l1.5.8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12.338 21.994a10 10 0 1 1 9.587-8.767M14 18h8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m18 22l-4-4l4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val ClockArrowRight =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 6v6l2 1",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M13.5 21.885A10 10 0 1 1 22 12m-8 6h8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m18 22l4-4l-4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val ClockArrowUp =
     IconData(
       listOf(
@@ -7216,19 +7503,13 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M12 6v6l4 2",
+          "M21.95 13a10 10 0 1 0-8.685 8.92",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M22 12a10 10 0 1 0-11 9.95",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "m22 16l-5.5 5.5L14 19",
+          "M12 6v6l4 2m0 5l2 2l4-4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -7762,7 +8043,7 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M10.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.5m-6.7 9.1l1-.4M15 3v7.5m.2 6.4l-.9-.3m2.3 5.1l.3-.9m-.1-5.5l-.4-1m2.7.9l.3-.9m.2 7.4l-.4-1m1.5-3.9l1-.4m0 3l-.9-.3M9 3v18",
+          "M10.6 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.6m-6.695 8.93l.923-.382M15 3v7.6m.229 6.252l-.924-.383m2.547-1.241l-.383-.923m.383 6.467l-.383.924m2.679-6.468l.383-.923m-.001 7.391l-.382-.924m1.625-3.92l.922-.383m-.922 2.679l.922.383M9 3v18",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -7926,19 +8207,19 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M16 2v2M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M8 2v2",
+          "M16 2v2M7 21v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M8 2v2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M12 8A3 3 0 1 0 12 14 3 3 0 1 0 12 8z",
+          "M12 7A3 3 0 1 0 12 13 3 3 0 1 0 12 7z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -7949,19 +8230,19 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M16 2v2m1.915 18a6 6 0 0 0-12 0M8 2v2",
+          "M16 2v2m1.915 17a6 6 0 1 0-12 0M8 2v2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M12 8A4 4 0 1 0 12 16 4 4 0 1 0 12 8z",
+          "M12 7A4 4 0 1 0 12 15 4 4 0 1 0 12 7z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -8171,7 +8452,7 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "m12 12l6 6m-6 0l6-6",
+          "M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -8183,7 +8464,7 @@ private object Lucide2 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",
+          "m12.5 12.5l5 5m-5 0l5-5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -8570,6 +8851,52 @@ private object Lucide2 {
         ),
       )
     )
+  val DatabaseArrowDown =
+    IconData(
+      listOf(
+        IconPath(
+          "m16 19l3 3l3-3m-3-3v6m2-9.464V5M3 12a9 3 0 0 0 12.182 2.806",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10.318 2.968",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val DatabaseArrowUp =
+    IconData(
+      listOf(
+        IconPath(
+          "M19 22v-6m2-3.464V5m1 14l-3-3l-3 3M3 12a9 3 0 0 0 11.457 2.886",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10.318 2.968",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val DatabaseBackup =
     IconData(
       listOf(
@@ -8599,6 +8926,75 @@ private object Lucide2 {
         ),
       )
     )
+  val DatabaseCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "m16 19l2 2l4-4m-1-3.873V5M3 12a9 3 0 0 0 18 0",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10.318 2.968",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val DatabaseMinus =
+    IconData(
+      listOf(
+        IconPath(
+          "M21 15V5m1 14h-6M3 12a9 3 0 0 0 18 0",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10.318 2.968",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val DatabasePlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M19 16v6m2-9.464V5m1 14h-6M3 12a9 3 0 0 0 12.182 2.806",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10.318 2.968",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val DatabaseSearch =
     IconData(
       listOf(
@@ -8616,6 +9012,29 @@ private object Lucide2 {
         ),
         IconPath(
           "M18 15A3 3 0 1 0 18 21 3 3 0 1 0 18 15z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A9 3 0 1 0 12 8 9 3 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val DatabaseX =
+    IconData(
+      listOf(
+        IconPath(
+          "m17 17l5 5m-2.677-8.256A9 3 0 0 0 21 12m0 1.127V5m1 12l-5 5M3 12a9 3 0 0 0 10.563 2.954",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 5v14a9 3 0 0 0 10 2.981",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -9176,7 +9595,7 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M12.1 11.1A1 1 0 1 0 12.1 13.1 1 1 0 1 0 12.1 11.1z",
+          "M12 11A1 1 0 1 0 12 13 1 1 0 1 0 12 11z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -9511,6 +9930,26 @@ private object Lucide2 {
         )
       )
     )
+  val Eject =
+    IconData(
+      listOf(
+        IconPath(
+          "M4 13a1 1 0 0 1-.72-1.695l7.257-7.668a2 2 0 0 1 2.926 0l7.256 7.668A1 1 0 0 1 20 13z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M4 17h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-16a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+}
+
+private object Lucide3 {
   val Ellipse =
     IconData(
       listOf(
@@ -9616,7 +10055,7 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "m15 20l3-3h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2l3 3zM6 8v1m4-1v1m4-1v1m4-1v1",
+          "M10 8v1m4-1v1m4-1v1m1 8a2 2 0 0 0-1.765 1.059l-.47.882A2 2 0 0 1 15 20H9a2 2 0 0 1-1.765-1.059l-.47-.882A2 2 0 0 0 5 17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2zM6 8v1",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -9701,6 +10140,23 @@ private object Lucide2 {
         )
       )
     )
+  val EyeDashed =
+    IconData(
+      listOf(
+        IconPath(
+          "M13.054 18.946a11 11 0 0 1-2.11 0m2.11-13.892a11 11 0 0 0-2.11-.001m6.128 1.221a11 11 0 0 1 1.753 1.173m0 9.105a11 11 0 0 1-1.753 1.174M2.514 13.303a11 11 0 0 1-.452-.954a1 1 0 0 1 0-.697a11 11 0 0 1 .45-.955m18.973 0a11 11 0 0 1 .453.955a1 1 0 0 1 0 .697a11 11 0 0 1-.453.954M5.173 7.448a11 11 0 0 1 1.753-1.174m0 11.452a11 11 0 0 1-1.753-1.174",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 9A3 3 0 1 0 12 15 3 3 0 1 0 12 9z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val EyeOff =
     IconData(
       listOf(
@@ -9718,6 +10174,23 @@ private object Lucide2 {
         ),
       )
     )
+  val FaceAngry =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 12v-1.584M17 10a5 5 0 0 0-3 1m-7-1a5 5 0 0 1 3 1m-1 1v-1.584M9 17a5 5 0 0 1 6.001 0",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Facebook =
     IconData(
       listOf(
@@ -9727,6 +10200,108 @@ private object Lucide2 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val FaceExpressionless =
+    IconData(
+      listOf(
+        IconPath(
+          "M14 10h2m-8 0h2m-2 6h8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val FaceGrinning =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 10V9m-7.916 5.302a5.12 5.12 0 0 0 9.833 0a.24.24 0 0 0-.235-.302H7.32a.24.24 0 0 0-.235.302M9 10V9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val FaceNeutral =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 10V9m-7 7h8m-7-6V9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val FaceSlightlyFrowning =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 10V9m-6 1V9m0 7a5 5 0 0 1 6 0",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val FaceSlightlySmiling =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 10V9m1.472 6a6 6 0 0 1-8.943 0M9 10V9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val FaceSlightlySmilingPlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M13.267 2.08a10 10 0 1 0 8.653 8.653M15 10V9m1-4h6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16.472 15a6 6 0 0 1-8.943 0M19 2v6M9 10V9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val Factory =
@@ -9772,7 +10347,7 @@ private object Lucide2 {
     IconData(
       listOf(
         IconPath(
-          "M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1zM16 8L2 22m15.5-7H9",
+          "M14.086 18.412A2 2 0 0 1 12.67 19H5v-7.672a2 2 0 0 1 .586-1.414L11.75 3.75a6 6 0 1 1 8.49 8.49zM16 8L2 22m15.488-7H9",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -9887,9 +10462,6 @@ private object Lucide2 {
         ),
       )
     )
-}
-
-private object Lucide3 {
   val FileAudio2 =
     IconData(
       listOf(
@@ -9992,19 +10564,25 @@ private object Lucide3 {
     IconData(
       listOf(
         IconPath(
-          "M14.5 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v3.8",
+          "M14 2v5a1 1 0 0 0 1 1h5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M14 2v5a1 1 0 0 0 1 1h5m-8.3 6.2L7 17l-4.7-2.8",
+          "M14.692 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v3.804",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 13.1a2 2 0 0 0-.999 1.76v3.24a2 2 0 0 0 .969 1.78L6 21.7a2 2 0 0 0 2.03.01L11 19.9a2 2 0 0 0 1-1.76V14.9a2 2 0 0 0-.97-1.78L8 11.3a2 2 0 0 0-2.03-.01zM7 17v5",
+          "M2.264 13.752L7 16.5l4.737-2.748",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M2.995 13.014A2 2 0 0 0 2 14.744v3.516a2 2 0 0 0 .996 1.73l3 1.74a2 2 0 0 0 2.008 0l3-1.74A2 2 0 0 0 12 18.26v-3.517a2 2 0 0 0-.995-1.73l-3-1.742a2 2 0 0 0-1.892-.064zM7 16.5V22",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -11604,6 +12182,23 @@ private object Lucide3 {
         ),
       )
     )
+  val FolderBookmark =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 6v8l3-3l3 3V6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val FolderCheck =
     IconData(
       listOf(
@@ -12293,6 +12888,30 @@ private object Lucide3 {
         )
       )
     )
+  val Galaxy =
+    IconData(
+      listOf(
+        IconPath(
+          "M16.005 15.108a5.041 6.52 28.25 0 0-8.008-6.217a5.041 6.52 28.25 0 0 8.008 6.217A11.884 7.288-60.76 0 1 4.029 7.001M17 21h.01M7 3h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7.997 8.891a11.885 7.288-60.756 0 1 11.977 8.107",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath("M12 11A1 1 0 1 0 12 13 1 1 0 1 0 12 11z", PathStyle.Fill),
+        IconPath(
+          "M12 11A1 1 0 1 0 12 13 1 1 0 1 0 12 11z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val GalleryHorizontal =
     IconData(
       listOf(
@@ -12483,7 +13102,7 @@ private object Lucide3 {
     IconData(
       listOf(
         IconPath(
-          "M9 10h.01M15 10h.01M12 2a8 8 0 0 0-8 8v12l3-3l2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8",
+          "M15 10v1m-7.472 9.472a1.6 1.6 0 0 1 2.277 0l1.057 1.056a1.6 1.6 0 0 0 2.276 0l1.057-1.056a1.6 1.6 0 0 1 2.277 0l1.114 1.114a1.4 1.4 0 0 0 2.414-1V10a8 8 0 0 0-16 0v10.586a1.4 1.4 0 0 0 2.414 1zM9 10v1",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -12744,6 +13363,9 @@ private object Lucide3 {
         ),
       )
     )
+}
+
+private object Lucide4 {
   val Github =
     IconData(
       listOf(
@@ -12799,7 +13421,7 @@ private object Lucide3 {
     IconData(
       listOf(
         IconPath(
-          "M12 6h4a2 2 0 0 1 2 2v7M6 12v9M9 3L3 9m6 0L3 3",
+          "M12 6h4a2 2 0 0 1 2 2v7M6 12v9M8.5 3.5l-5 5m5 0l-5-5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -12874,19 +13496,19 @@ private object Lucide3 {
     IconData(
       listOf(
         IconPath(
-          "M6 3A3 3 0 1 0 6 9 3 3 0 1 0 6 3z",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M6 9v12M21 3l-6 6m6 0l-6-6m3 8.5V15",
+          "m15.5 3.5l5 5m-5 0l5-5M18 11.62V15M6 9v12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
           "M18 15A3 3 0 1 0 18 21 3 3 0 1 0 18 15z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M6 3A3 3 0 1 0 6 9 3 3 0 1 0 6 3z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -13007,6 +13629,23 @@ private object Lucide3 {
         ),
         IconPath(
           "M12 2a14.5 14.5 0 0 0 0 20a14.5 14.5 0 0 0 0-20M2 12h20",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val GlobeCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "m15 6l2 2l4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M2 12h20A10 10 0 1 1 12 2a14.5 14.5 0 0 0 0 20a14.5 14.5 0 0 0 4-10",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -13223,7 +13862,7 @@ private object Lucide3 {
     IconData(
       listOf(
         IconPath(
-          "M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3m13 4l5 5m-5 0l5-5",
+          "M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3m13.5 4.5l5 5m-5 0l5-5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -13524,9 +14163,6 @@ private object Lucide3 {
         ),
       )
     )
-}
-
-private object Lucide4 {
   val HandCoins =
     IconData(
       listOf(
@@ -13833,7 +14469,7 @@ private object Lucide4 {
     IconData(
       listOf(
         IconPath(
-          "M22 9a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1l2 2h12l2-2h1a1 1 0 0 0 1-1ZM7.5 12h9",
+          "M22 9a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h.5a2 2 0 0 1 1.6.8l.3.4A2 2 0 0 0 7 16h10a2 2 0 0 0 1.6-.8l.3-.4a2 2 0 0 1 1.6-.8h.5a1 1 0 0 0 1-1zM8 12h8",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -14057,6 +14693,17 @@ private object Lucide4 {
         ),
       )
     )
+  val HeartX =
+    IconData(
+      listOf(
+        IconPath(
+          "m15.5 12.5l5 5m0-5l-5 5m6.455-8.726a5.5 5.5 0 0 0-9.546-2.95a.6.6 0 0 1-.818 0A5.5 5.5 0 0 0 2 9.5c0 2.3 1.5 4 3 5.5l5.508 5.332a2 2 0 0 0 2.57.352",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Heater =
     IconData(
       listOf(
@@ -14113,23 +14760,6 @@ private object Lucide4 {
         ),
         IconPath(
           "m22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-      )
-    )
-  val History =
-    IconData(
-      listOf(
-        IconPath(
-          "M3 12a9 9 0 1 0 9-9a9.75 9.75 0 0 0-6.74 2.74L3 8",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M3 3v5h5m4-1v5l4 2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -14858,13 +15488,13 @@ private object Lucide4 {
     IconData(
       listOf(
         IconPath(
-          "m15.5 7.5l2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4m2-2l-9.6 9.6",
+          "m2 21l9.6-9.6m-4.1 4.1l2.3 2.3a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0L4 19",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M7.5 10A5.5 5.5 0 1 0 7.5 21 5.5 5.5 0 1 0 7.5 10z",
+          "M15.5 2A5.5 5.5 0 1 0 15.5 13 5.5 5.5 0 1 0 15.5 2z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -15033,7 +15663,7 @@ private object Lucide4 {
     IconData(
       listOf(
         IconPath(
-          "M10 18v-7m1.12-8.802a2 2 0 0 1 1.76.006l7.866 3.847c.476.233.31.949-.22.949H3.474c-.53 0-.695-.716-.22-.949zM14 18v-7m4 7v-7M3 22h18M6 18v-7",
+          "M10 18v-7m1.119-8.795a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949zM14 18v-7m4 7v-7M3 22h18M6 18v-7",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -15164,6 +15794,34 @@ private object Lucide4 {
         ),
       )
     )
+  val LayerArrowDown =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 10v10m10-10a1 1 0 0 1-.59.92l-5.077 2.308",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M22.017 10.005a1 1 0 0 0-.597-.916l-8.59-3.91a2 2 0 0 0-1.66.001L2.6 9.08a1 1 0 0 0-.02 1.831l5.093 2.316M9 17l3 3l3-3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val LayerArrowUp =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 14V4m-4.326 6.774L2.58 13.09a1 1 0 0 0 0 1.822l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 .59-.92a1 1 0 0 0-.59-.922l-5.078-2.308M9 7l3-3l3 3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Layers =
     IconData(
       listOf(
@@ -15221,6 +15879,45 @@ private object Lucide4 {
         ),
       )
     )
+  val LayersArrowDown =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 7v15M2 12a1 1 0 0 0 .58.91l5.093 2.316M22 12a1 1 0 0 1-.59.92l-5.077 2.308M8 10.37L2.6 7.91a1 1 0 0 1 0-1.831l8.57-3.9a2 2 0 0 1 1.66.001l8.59 3.91a1 1 0 0 1 0 1.831l-5.392 2.45M9 19l3 3l3-3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val LayersArrowUp =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 12V2M2 17.002a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 .59-.92",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7.674 8.774L2.58 11.09a1 1 0 0 0 0 1.822l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 .59-.92a1 1 0 0 0-.59-.922l-5.078-2.308M9 5l3-3l3 3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val LayersMinus =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 .83.18a2 2 0 0 0 .83-.18l8.58-3.9a1 1 0 0 0 0-1.832zM16 17h6M2.003 11.995a1 1 0 0 0 .597.915l8.58 3.91a2 2 0 0 0 .83.18m-10.007-.005a1 1 0 0 0 .597.915l8.58 3.91a2 2 0 0 0 .83.18a2 2 0 0 0 .83-.18l2.11-.96m7.068-8.856a1 1 0 0 1-.598.916l-.177.08",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val LayersPlus =
     IconData(
       listOf(
@@ -15255,6 +15952,29 @@ private object Lucide4 {
         ),
         IconPath(
           "M4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val LayoutFreeform =
+    IconData(
+      listOf(
+        IconPath(
+          "M4 3h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M15 4h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M5 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -15595,6 +16315,17 @@ private object Lucide4 {
         )
       )
     )
+  val LineStyle =
+    IconData(
+      listOf(
+        IconPath(
+          "M11 5h2m2 7h6m-2-7h2M3 12h6m-6 7h18M3 5h2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Link =
     IconData(
       listOf(
@@ -15704,6 +16435,23 @@ private object Lucide4 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val ListClock =
+    IconData(
+      listOf(
+        IconPath(
+          "M16 13v2.2l1.6 1M3 12h3.458M3 19h3.832M3 5h18",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16 9A6 6 0 1 0 16 21 6 6 0 1 0 16 9z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val ListCollapse =
@@ -15843,6 +16591,28 @@ private object Lucide4 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val ListSortAscending =
+    IconData(
+      listOf(
+        IconPath(
+          "M3 19h18m-6-7H3m6-7H3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val ListSortDescending =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 12H3m0-7h18M9 19H3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val ListStart =
@@ -15986,6 +16756,9 @@ private object Lucide4 {
         ),
       )
     )
+}
+
+private object Lucide5 {
   val LocateFixed =
     IconData(
       listOf(
@@ -16207,6 +16980,29 @@ private object Lucide4 {
         ),
       )
     )
+  val MailBadge =
+    IconData(
+      listOf(
+        IconPath(
+          "M22 7.7V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8.25",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 12.996a1.94 1.94 0 0 1-1.03-.296L2 7m18.69 9.479l1.29 4.88a.5.5 0 0 1-.698.591l-1.843-.849a1 1 0 0 0-.879.001l-1.846.85a.5.5 0 0 1-.692-.593l1.29-4.88",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M19 11A3 3 0 1 0 19 17 3 3 0 1 0 19 11z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Mailbox =
     IconData(
       listOf(
@@ -16235,6 +17031,23 @@ private object Lucide4 {
         ),
         IconPath(
           "m22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7m14 12l2 2l4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val MailClock =
+    IconData(
+      listOf(
+        IconPath(
+          "M16 14v2.2l1.6 1M22 7l-.759.484M6.835 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2M7.605 10.567L2 7",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16 10A6 6 0 1 0 16 22 6 6 0 1 0 16 10z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -16376,13 +17189,13 @@ private object Lucide4 {
     IconData(
       listOf(
         IconPath(
-          "M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h9",
+          "M22 12.532V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8.792",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7m15 10l4 4m0-4l-4 4",
+          "m22 7l-8.991 5.727a2 2 0 0 1-2.009 0L2 7m14.5 9.5l5 5m0-5l-5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -16610,6 +17423,29 @@ private object Lucide4 {
         )
       )
     )
+  val MapPinSearch =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.248 21.969a1 1 0 0 1-.849-.17C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0q-.001.63-.112 1.262M22 22l-1.88-1.88",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 7A3 3 0 1 0 12 13 3 3 0 1 0 12 7z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M18 15A3 3 0 1 0 18 21 3 3 0 1 0 18 15z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val MapPinX =
     IconData(
       listOf(
@@ -16693,7 +17529,7 @@ private object Lucide4 {
     IconData(
       listOf(
         IconPath(
-          "M8 22h8m-4-11v11m7-19l-7 8l-7-8Z",
+          "M12 12L4.207 4.207A.707.707 0 0 1 4.707 3h14.586a.707.707 0 0 1 .5 1.207zm0 0v10m-5 0h10",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -16779,9 +17615,6 @@ private object Lucide4 {
         ),
       )
     )
-}
-
-private object Lucide5 {
   val Meh =
     IconData(
       listOf(
@@ -16865,7 +17698,7 @@ private object Lucide5 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m9 12l2 2l4-4",
+          "m16 9l-5.5 5.5L8 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -16894,6 +17727,17 @@ private object Lucide5 {
       listOf(
         IconPath(
           "M10.1 2.182a10 10 0 0 1 3.8 0m0 19.636a10 10 0 0 1-3.8 0M17.609 3.72a10 10 0 0 1 2.69 2.7M2.182 13.9a10 10 0 0 1 0-3.8m18.098 7.51a10 10 0 0 1-2.7 2.69m4.238-10.2a10 10 0 0 1 0 3.8M3.721 6.391a10 10 0 0 1 2.7-2.69m-.258 17.416l-2.906.85a1 1 0 0 1-1.236-1.169l.965-2.98",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val MessageCircleDashedCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "M10.1 2.182a10 10 0 0 1 3.8 0m0 19.636a10 10 0 0 1-3.8 0M17.609 3.72a10 10 0 0 1 2.69 2.7M2.182 13.9a10 10 0 0 1 0-3.8m18.098 7.51a10 10 0 0 1-2.7 2.69m4.238-10.2a10 10 0 0 1 0 3.8M3.721 6.391a10 10 0 0 1 2.7-2.69m-.258 17.416l-2.906.85a1 1 0 0 1-1.236-1.169l.965-2.98M16 9l-5.5 5.5L8 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -17304,6 +18148,23 @@ private object Lucide5 {
         ),
       )
     )
+  val MicAudioLines =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 3v2.341M12 17v4m2-16v.341M18 5v13M2 10v3m20-3v3M6 6v11m3 4h6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 9h0a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-0a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val MicOff =
     IconData(
       listOf(
@@ -17372,6 +18233,23 @@ private object Lucide5 {
         ),
       )
     )
+  val MicSignal =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 17v4m6-10a6 6 0 0 0-3-5.197M2 11a10 10 0 0 1 5-8.662M22 11a10 10 0 0 0-5-8.662M6 11a6 6 0 0 1 3-5.197M9 21h6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 9h0a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-0a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val MicVocal =
     IconData(
       listOf(
@@ -17395,11 +18273,28 @@ private object Lucide5 {
         ),
       )
     )
+  val MidiPort =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 18h.01M15 2.458V5a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V2.458M16 16h.01M18 12h.01M6 12h.01M8 16h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Milestone =
     IconData(
       listOf(
         IconPath(
-          "M12 13v8m0-18v3M4 6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h13a2 2 0 0 0 1.152-.365l3.424-2.317a1 1 0 0 0 0-1.635l-3.424-2.318A2 2 0 0 0 17 6z",
+          "M12 13v8m0-18v3m6.172 0a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -17807,6 +18702,63 @@ private object Lucide5 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val Mop =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 22c2.761 0 5-1.79 5-4c-4.42 0-4.08-5-8.5-5a1 1 0 1 0 0 9za3 3 0 0 1-3-3m5.5-7.5L22 2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m6.98 13.02l2.665-2.664a1.21 1.21 0 0 1 1.71 0l2.29 2.288a1.21 1.21 0 0 1 0 1.712l-2.088 2.087",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val MopSparkles =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 22a3 3 0 0 1-3-3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M10 22c2.761 0 5-1.79 5-4c-4.42 0-4.08-5-8.5-5a4.501 4.501 0 0 0 0 9zm0-19H8m4.5 8.5L22 2m-2 11v4m2-2h-4M4 5v4m2-2H2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m6.98 13.02l2.665-2.664a1.21 1.21 0 0 1 1.71 0l2.29 2.288a1.21 1.21 0 0 1 0 1.712l-2.088 2.087M9 2v2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val Mosque =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.268 2a2 2 0 0 0 3.465 2M14 5v3m2 14v-3a2 2 0 0 0-4 0v3m9-9c-.662-1.497-1.666-2.753-2.9-3.63C16.825 8.47 15.422 8 14 8s-2.826.47-4.1 1.37C8.668 10.248 7.663 11.504 7 13zM3 9h4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7 22V6a5 5 0 0 0-2-4a5 5 0 0 0-2 4v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val Motorbike =
@@ -18577,7 +19529,7 @@ private object Lucide5 {
     IconData(
       listOf(
         IconPath(
-          "M3 3h6l6 18h6M14 3h7",
+          "M14 3h7M3 3h5.28a1 1 0 0 1 .948.684l5.544 16.632a1 1 0 0 0 .949.684H21",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -18877,19 +19829,19 @@ private object Lucide5 {
     IconData(
       listOf(
         IconPath(
-          "M11.25 17.25h1.5L12 18zM15 12l2 2m1-7.5a.5.5 0 0 0-.5-.5",
+          "M11.25 17.25h1.5L12 18zM15 12l2 2m.902-7.401a8 8 0 0 0-.5-.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M20.69 9.67a4.5 4.5 0 1 0-7.04-5.5a8.4 8.4 0 0 0-3.3 0a4.5 4.5 0 1 0-7.04 5.5C2.49 11.2 2 12.88 2 14.5C2 19.47 6.48 22 12 22s10-2.53 10-7.5c0-1.62-.48-3.3-1.3-4.83",
+          "M2 14.5C2 19.47 6.48 22 12 22s10-2.53 10-7.5a10 10 0 0 0-1.3-4.83a4.5 4.5 0 1 0-7.05-5.5a8 8 0 0 0-3.3 0a4.5 4.5 0 1 0-7.04 5.5A10 10 0 0 0 2 14.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M6 6.5a.495.495 0 0 1 .5-.5M9 12l-2 2",
+          "M6.099 6.599a8 8 0 0 1 .5-.5M9 12l-2 2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -19049,6 +20001,9 @@ private object Lucide5 {
         ),
       )
     )
+}
+
+private object Lucide6 {
   val PanelRight =
     IconData(
       listOf(
@@ -19253,11 +20208,39 @@ private object Lucide5 {
         ),
       )
     )
+  val PaperBag =
+    IconData(
+      listOf(
+        IconPath(
+          "M5.364 3.848C4 6 3 9.652 3 12.652V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5c0-2.334-1.816-4.668-2.622-7.002",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7 3h11.379a2 2 0 0 1 1.789 1.106l.723 1.447A1 1 0 0 1 19.997 7h-8.525a2 2 0 0 1-1.789-1.106L8.79 4.105a2 2 0 1 0-3.579 1.789l2.261 4.522A5 5 0 0 1 8 12.652V21",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Paperclip =
     IconData(
       listOf(
         IconPath(
           "m16 6l-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val Parasol =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.5 11.134L18.196 21m2.229-15.701a10 10 0 0 0-16.941 9.78c.183.563.843.774 1.355.478L20.16 6.711c.512-.296.66-.973.264-1.413M21 21H3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -19427,6 +20410,17 @@ private object Lucide5 {
         )
       )
     )
+  val PencilSparkles =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 3H8m7.007 2.008l3.987 3.986M20 15v4m1.174-12.187a2.82 2.82 0 0 0-3.986-3.987L3.842 16.175a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zM22 17h-4M4 5v4m2-2H2m7-5v2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val PenLine =
     IconData(
       listOf(
@@ -19517,6 +20511,23 @@ private object Lucide5 {
         ),
         IconPath(
           "m9 20l3-6l3 6M6 8l6 2l6-2m-6 2v4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val Phi =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 2v20",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 5A7 7 0 1 0 12 19 7 7 0 1 0 12 5z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -19632,7 +20643,7 @@ private object Lucide5 {
     IconData(
       listOf(
         IconPath(
-          "M18.5 8c-1.4 0-2.6-.8-3.2-2A6.87 6.87 0 0 0 2 9v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-8.5C22 9.6 20.4 8 18.5 8M2 14h20M6 14v4m4-4v4m4-4v4m4-4v4",
+          "M10 13v4m4-4v4m4-4v4M2 13h20m0-1.5A3.5 3.5 0 0 0 18.5 8a3.52 3.52 0 0 1-3.173-2A7 7 0 0 0 2 9v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2zM6 13v4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -19874,14 +20885,79 @@ private object Lucide5 {
         )
       )
     )
-}
-
-private object Lucide6 {
   val Play =
     IconData(
       listOf(
         IconPath(
           "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val PlayingCard =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.832 8.445a1 1 0 0 0-1.589-.098l-2.075 3.098a1 1 0 0 0 0 1.11l2 3a1 1 0 0 0 1.664 0l2-3a1 1 0 0 0 0-1.11z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val PlayingCards =
+    IconData(
+      listOf(
+        IconPath(
+          "M14.832 8.445a1 1 0 0 0-1.589-.098l-2.075 3.098a1 1 0 0 0 0 1.11l2 3a1 1 0 0 0 1.664 0l2-3a1 1 0 0 0 0-1.11zM7.18 20.827l-5-11a2 2 0 0 1 .993-2.647L7 5.44",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M9 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-16a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val PlayingCardsFan =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.65 7.65a2 2 0 0 1 2.629-1.046l5.51 2.374a2 2 0 0 1 1.046 2.628l-3.957 9.184a2 2 0 0 1-2.628 1.046l-5.51-2.374a2 2 0 0 1-1.046-2.628z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M18 7.777V4a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v10a2 2 0 0 0 1.137 1.805",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "m8 4.389l-4.364.809a2 2 0 0 0-1.602 2.33l1.822 9.833a2 2 0 0 0 2.331 1.602l2.542-.47",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val PlayOff =
+    IconData(
+      listOf(
+        IconPath(
+          "m10.215 4.56l9.79 5.71a2 2 0 0 1 .003 3.458l-.393.23m-3.573 2.084l-8.034 4.686A2 2 0 0 1 5 19V5M2 2l20 20",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -19991,6 +21067,23 @@ private object Lucide6 {
         IconPath("M12 10A1 1 0 1 0 12 12 1 1 0 1 0 12 10z", PathStyle.Fill),
         IconPath(
           "M12 10A1 1 0 1 0 12 12 1 1 0 1 0 12 10z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val Podium =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 6V2h-1M9 15a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M9 21V11a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v10",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -20339,6 +21432,17 @@ private object Lucide6 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val RadioOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M13.414 13.414a2 2 0 1 1-2.828-2.828m5.661-2.825a6 6 0 0 1 1.744 4.572m1.084-7.4a10 10 0 0 1 2.234 10.72M2 2l20 20M4.925 19.067a10 10 0 0 1 0-14.134m2.828 11.306a6 6 0 0 1 0-8.478",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val RadioReceiver =
@@ -20995,6 +22099,17 @@ private object Lucide6 {
         ),
       )
     )
+  val RepeatOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M11.656 6H21l-4-4m.898 15.898A4 4 0 0 1 17 18H3l4-4M2 2l20 20m-1-9v1a4 4 0 0 1-.171 1.159M21 6l-4 4M3 11v-1a4 4 0 0 1 3.102-3.898M7 22l-4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Replace =
     IconData(
       listOf(
@@ -21115,6 +22230,51 @@ private object Lucide6 {
         ),
       )
     )
+  val Road =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 17v4m0-16V3m0 6v3m-9.923 6.449A2 2 0 0 0 4 21h16a2 2 0 0 0 1.924-2.55l-4-14A2 2 0 0 0 16 3H8a2 2 0 0 0-1.924 1.45z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val RobotArm =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 21L7.5 8.322M14 7l1.75-3.767a.5.5 0 0 1 .662-.172L20 5.005m0 3.993l-3.588 1.944a.5.5 0 0 1-.662-.172L14 7H8M3.486 21h10M5 21V8.732",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M6 5A2 2 0 1 0 6 9 2 2 0 1 0 6 5z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val RobotVacuum =
+    IconData(
+      listOf(
+        IconPath(
+          "M11 17h2m-1-5h.01M17 12a5 5 0 0 0-10 0M19 2v2.8M2 5h2.8M22 5h-2.8M5 2v2.8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 2A10 10 0 1 0 12 22 10 10 0 1 0 12 2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Rocket =
     IconData(
       listOf(
@@ -21193,13 +22353,13 @@ private object Lucide6 {
     IconData(
       listOf(
         IconPath(
-          "M16.466 7.5C15.643 4.237 13.952 2 12 2C9.239 2 7 6.477 7 12s2.239 10 5 10q.514-.002 1-.2m2.194-8.093l3.814 1.86l-1.86 3.814",
+          "m15.194 13.707l3.814 1.86l-1.86 3.814m-.676-11.853A5 10 0 1 0 13 21.798",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M19 15.57c-1.804.885-4.274 1.43-7 1.43c-5.523 0-10-2.239-10-5s4.477-5 10-5c4.838 0 8.873 1.718 9.8 4",
+          "M21.798 11A10 5 0 1 0 19 15.57",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -21217,6 +22377,23 @@ private object Lucide6 {
         ),
         IconPath(
           "M3 3v5h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val RotateCcwClock =
+    IconData(
+      listOf(
+        IconPath(
+          "M3 12a9 9 0 1 0 9-9a9.75 9.75 0 0 0-6.74 2.74L3 8",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 3v5h5m4-1v5l4 2",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -21278,6 +22455,17 @@ private object Lucide6 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val RotateCwFadingClock =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 3a9.75 9.75 0 0 1 6.74 2.74m0 0L21 8m0 0V3M7.5 19.794c-6-3.464-6-12.124 0-15.588m0 0A9 9 0 0 1 12 3m0 4v5l4 2m-2 6.775A9 9 0 0 1 12 21m7-3.344a9 9 0 0 1-1.5 1.456M21 12a9 9 0 0 1-.228 2M21 8h-5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val RotateCwSquare =
@@ -21603,6 +22791,23 @@ private object Lucide6 {
         ),
       )
     )
+  val SaveCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4v4.35M16 19l2 2l4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M17 15.13V14a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val SaveOff =
     IconData(
       listOf(
@@ -21614,6 +22819,40 @@ private object Lucide6 {
         ),
         IconPath(
           "M20.41 20.41A2 2 0 0 1 19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 .59-1.41M29.5 11.5s5 5 4 5M9 3h6.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V15",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val SavePen =
+    IconData(
+      listOf(
+        IconPath(
+          "M13.33 13H8a1 1 0 0 0-1 1v7m7.363-3.366a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 1 0-3.004-3.004zM7 3v4a1 1 0 0 0 1 1h7",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4v.3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val SavePlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V12",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16 13H8a1 1 0 0 0-1 1v7m12 1v-6m3 3h-6M7 3v4a1 1 0 0 0 1 1h7",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -21697,6 +22936,23 @@ private object Lucide6 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val ScanBox =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 12v5.5M17 3h2a2 2 0 0 1 2 2v2m0 10v2a2 2 0 0 1-2 2h-2M3 7V5a2 2 0 0 1 2-2h2m0 18H5a2 2 0 0 1-2-2v-2m4.264-7.748L12 12l4.737-2.748",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7.995 8.514A2 2 0 0 0 7 10.244v3.516a2 2 0 0 0 .996 1.73l3 1.74a2 2 0 0 0 2.008 0l3-1.74A2 2 0 0 0 17 13.76v-3.517a2 2 0 0 0-.995-1.73l-3-1.742a2 2 0 0 0-1.892-.064z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val ScanEye =
@@ -21789,6 +23045,23 @@ private object Lucide6 {
         ),
         IconPath(
           "m16 16l-1.9-1.9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val ScanSquare =
+    IconData(
+      listOf(
+        IconPath(
+          "M3 7V5a2 2 0 0 1 2-2h2m10 0h2a2 2 0 0 1 2 2v2m0 10v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M9 8h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -22018,6 +23291,9 @@ private object Lucide6 {
         ),
       )
     )
+}
+
+private object Lucide7 {
   val Search =
     IconData(
       listOf(
@@ -22308,6 +23584,17 @@ private object Lucide6 {
         )
       )
     )
+  val ServerPlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M12.5 10H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2m-6 6h6m-3-3v6m3 3v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h8.5M6 18h.01M6 6h.01",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Settings =
     IconData(
       listOf(
@@ -22500,6 +23787,40 @@ private object Lucide6 {
         ),
       )
     )
+  val ShieldCog =
+    IconData(
+      listOf(
+        IconPath(
+          "m10.929 14.467l-.383.924m.383-6.468L10.546 8m2.679.923L13.608 8m-.001 7.391l-.382-.924m1.624-3.92l.923-.383m-.923 2.679l.923.383M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1zM9.305 10.547l-.923-.383m.923 2.679l-.923.383",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12.077 8.695A3 3 0 1 0 12.077 14.695 3 3 0 1 0 12.077 8.695z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val ShieldCogCorner =
+    IconData(
+      listOf(
+        IconPath(
+          "M11 22c-3.806-1.45-7-3.966-7-9V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1v4m-5.077 6.547L14 16.164m.923 2.679l-.923.383m2.547-4.303L16.164 14m.383 6.467l-.383.924m2.679-6.468l.383-.923m-.001 7.391l-.382-.924m1.624-3.92l.923-.383m-.923 2.679l.923.383",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M17.695 14.695A3 3 0 1 0 17.695 20.695 3 3 0 1 0 17.695 14.695z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val ShieldEllipsis =
     IconData(
       listOf(
@@ -22520,6 +23841,46 @@ private object Lucide6 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val ShieldKeyhole =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 13v3m8-3c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 9A2 2 0 1 0 12 13 2 2 0 1 0 12 9z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val ShieldLock =
+    IconData(
+      listOf(
+        IconPath(
+          "M20 9.807V6a1 1 0 0 0-1-1c-2 0-4.49-1.19-6.24-2.72a1.17 1.17 0 0 0-1.52 0C9.5 3.8 7 5 5 5a1 1 0 0 0-1 1v7c0 3.88 2.107 6.254 5 7.796",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M19 17v-2a2 2 0 0 0-4 0v2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M14 17h6a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val ShieldMinus =
@@ -22610,19 +23971,42 @@ private object Lucide6 {
     IconData(
       listOf(
         IconPath(
-          "M12 10.189V14m0-12v3m7 8V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6",
+          "M12 2v2m0 5.189V13m7-1V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M19.38 20A11.6 11.6 0 0 0 21 14l-8.188-3.639a2 2 0 0 0-1.624 0L3 14a11.6 11.6 0 0 0 2.81 7.76",
+          "M19.38 19A11.6 11.6 0 0 0 21 13l-8.188-3.639a2 2 0 0 0-1.624 0L3 13.001a11.6 11.6 0 0 0 2.81 7.76",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M2 21c.6.5 1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1",
+          "M2 20c.6.5 1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val ShipCargo =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 15v-3m0-10v2m4.5 8V9a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-13a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1a1 1 0 0 1 1 1v3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M19.38 19c1.076-1.815 1.636-4.89 1.628-6.008a1 1 0 0 0-1-.992H3.984a1 1 0 0 0-1 .984c-.03 1.86.97 5.621 2.826 7.776",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M2 20c.6.5 1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2c1.3 0 1.9.5 2.5 1",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -22695,19 +24079,25 @@ private object Lucide6 {
     IconData(
       listOf(
         IconPath(
-          "M8 20A1 1 0 1 0 8 22 1 1 0 1 0 8 20z",
+          "m2.05 2.05l1.099-.028a1 1 0 0 1 1.008.815l2.69 14.347A1 1 0 0 0 7.83 18H18",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M19 20A1 1 0 1 0 19 22 1 1 0 1 0 19 20z",
+          "M4.563 5h16.435a1 1 0 0 1 .981 1.204l-1.026 6.226A2 2 0 0 1 18.962 14H6.25",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12",
+          "M18 18A2 2 0 1 0 18 22 2 2 0 1 0 18 18z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M8 18A2 2 0 1 0 8 22 2 2 0 1 0 8 18z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -22896,7 +24286,7 @@ private object Lucide6 {
     IconData(
       listOf(
         IconPath(
-          "M12 13v8m0-18v3m6 0a2 2 0 0 1 1.387.56l2.307 2.22a1 1 0 0 1 0 1.44l-2.307 2.22A2 2 0 0 1 18 13H6a2 2 0 0 1-1.387-.56l-2.306-2.22a1 1 0 0 1 0-1.44l2.306-2.22A2 2 0 0 1 6 6z",
+          "M12 13v8m0-18v3m-9.646 4.354a1.207 1.207 0 0 1 0-1.708l2.06-2.06A2 2 0 0 1 5.828 6h12.344a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H5.828a2 2 0 0 1-1.414-.586z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23249,9 +24639,6 @@ private object Lucide6 {
         ),
       )
     )
-}
-
-private object Lucide7 {
   val Soup =
     IconData(
       listOf(
@@ -23357,7 +24744,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "m6 16l6-12l6 12M8 12h8m0 8l2 2l4-4",
+          "m20 15l-5.5 5.5L12 18m-8-2l6-12l5.115 10.23M6 12h8",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23455,6 +24842,17 @@ private object Lucide7 {
         ),
       )
     )
+  val SportShoe =
+    IconData(
+      listOf(
+        IconPath(
+          "m15 10.42l4.8-5.07M19 18h3M9.5 22L21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Spotlight =
     IconData(
       listOf(
@@ -23537,13 +24935,13 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M15 15H9l6-6m-6 6V9",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m16 8l-8 8m8 0H8V8",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23554,13 +24952,13 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M15 15L9 9m0 6h6V9",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m8 8l8 8m0-8v8H8",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23700,13 +25098,13 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M15 15L9 9m0 6V9h6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M8 16V8h8m0 8L8 8",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23717,13 +25115,13 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M15 15V9H9m0 6l6-6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M8 8h8v8m-8 0l8-8",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23751,19 +25149,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14M3 5v14M21 5v14M9 21h1m4 0h1M3 5a2 2 0 0 1 2-2m14 0a2 2 0 0 1 2 2M5 21a2 2 0 0 1-2-2m18 0a2 2 0 0 1-2 2",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M8.5 7A1.5 1.5 0 1 0 8.5 10 1.5 1.5 0 1 0 8.5 7z",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M9.561 9.561L12 12m5 5l-2.18-2.18",
+          "M14 21h1m2-4l-2.18-2.18M5 21a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2M9 21h1m-.44-6.56L17 7M9.56 9.56L12 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23775,7 +25161,7 @@ private object Lucide7 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M9.561 14.439L17 7",
+          "M8.5 7A1.5 1.5 0 1 0 8.5 10 1.5 1.5 0 1 0 8.5 7z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -23831,7 +25217,7 @@ private object Lucide7 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "m9 12l2 2l4-4",
+          "m16 9l-5.5 5.5L8 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24001,6 +25387,17 @@ private object Lucide7 {
         )
       )
     )
+  val SquareDashedText =
+    IconData(
+      listOf(
+        IconPath(
+          "M14 21h1M14 3h1m4 0a2 2 0 0 1 2 2m0 9v1m0 4a2 2 0 0 1-2 2m2-12v1M3 14v1m0-6v1m2 11a2 2 0 0 1-2-2M5 3a2 2 0 0 0-2 2m4 7h10M7 16h6M7 8h8M9 21h1M9 3h1",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val SquareDashedTopSolid =
     IconData(
       listOf(
@@ -24010,6 +25407,23 @@ private object Lucide7 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val SquareDimensions =
+    IconData(
+      listOf(
+        IconPath(
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M12 7H7v5m5 5h5v-5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val SquareDivide =
@@ -24180,6 +25594,17 @@ private object Lucide7 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val SquareOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M20.4 20.4a2 2 0 0 1-1.4.6H5a2 2 0 0 1-2-2V5a2 2 0 0 1 .59-1.41M21 15.3V5a2 2 0 0 0-2-2H8.7M22 22L2 2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val SquareParking =
@@ -24384,19 +25809,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M8.5 7A1.5 1.5 0 1 0 8.5 10 1.5 1.5 0 1 0 8.5 7z",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "M9.561 9.561L12 12m5 5l-2.18-2.18",
+          "m17 17l-2.18-2.18m-5.26-.38L17 7M9.56 9.56L12 12",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24408,7 +25821,13 @@ private object Lucide7 {
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M9.561 14.439L17 7",
+          "M8.5 7A1.5 1.5 0 1 0 8.5 10 1.5 1.5 0 1 0 8.5 7z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24475,7 +25894,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3m8 0h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3M12 4v16",
+          "M12 2v20m4-19h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3m-8 0H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24486,7 +25905,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M5 8V5c0-1 1-2 2-2h10c1 0 2 1 2 2v3m0 8v3c0 1-1 2-2 2H7c-1 0-2-1-2-2v-3m-1-4h16",
+          "M2 12h20m-1 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3m0-8V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24594,6 +26013,23 @@ private object Lucide7 {
         ),
         IconPath(
           "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val SquareText =
+    IconData(
+      listOf(
+        IconPath(
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M7 8h8m-8 4h10M7 16h6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24730,6 +26166,17 @@ private object Lucide7 {
         )
       )
     )
+  val StarCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "m19.06 12.501l2.78-2.707a.53.53 0 0 0-.294-.905l-5.166-.755a2.1 2.1 0 0 1-1.595-1.16l-2.31-4.68a.53.53 0 0 0-.95.001L9.216 6.974a2.1 2.1 0 0 1-1.597 1.16l-5.165.755a.53.53 0 0 0-.294.906l3.736 3.637a2.1 2.1 0 0 1 .611 1.879l-.88 5.139a.53.53 0 0 0 .769.56l4.617-2.428l.027-.014M15 18l2 2l4-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val StarHalf =
     IconData(
       listOf(
@@ -24741,11 +26188,44 @@ private object Lucide7 {
         )
       )
     )
+  val StarMinus =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 18h6m-3.312-4a2.1 2.1 0 0 1 .416-.568l3.736-3.638a.53.53 0 0 0-.294-.905l-5.166-.755a2.1 2.1 0 0 1-1.595-1.16l-2.31-4.68a.53.53 0 0 0-.95.001L9.216 6.974a2.1 2.1 0 0 1-1.597 1.16l-5.165.755a.53.53 0 0 0-.294.906l3.736 3.637a2.1 2.1 0 0 1 .611 1.879l-.88 5.139a.53.53 0 0 0 .769.56l4.617-2.428l.027-.014",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val StarOff =
     IconData(
       listOf(
         IconPath(
           "m10.344 4.688l1.181-2.393a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.237 3.152m-.658 4.999l.43 2.505a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a8 8 0 0 0 .4-.099M2 2l20 20",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val StarPlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M11.013 18.582L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16l2.309-4.679a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904L20 11.5M15 18h6m-3-3v6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
+  val StarX =
+    IconData(
+      listOf(
+        IconPath(
+          "m15.5 15.5l5 5m-.437-8.975l1.777-1.731a.53.53 0 0 0-.294-.905l-5.166-.755a2.1 2.1 0 0 1-1.595-1.16l-2.31-4.68a.53.53 0 0 0-.95.001L9.216 6.974a2.1 2.1 0 0 1-1.597 1.16l-5.165.755a.53.53 0 0 0-.294.906l3.736 3.637a2.1 2.1 0 0 1 .611 1.879l-.88 5.139a.53.53 0 0 0 .769.56l4.617-2.428a2.1 2.1 0 0 1 .987-.243a2 2 0 0 1 .132.004M20.5 15.5l-5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -24831,6 +26311,117 @@ private object Lucide7 {
         ),
       )
     )
+  val StickyNoteCheck =
+    IconData(
+      listOf(
+        IconPath(
+          "m15 19l2 2l4-4M15 3v5a1 1 0 0 0 1 1h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M21 13V9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6.5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNoteMinus =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 3v5a1 1 0 0 0 1 1h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M21 14V9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.35M21 18h-6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNoteOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 3v5a1 1 0 0 0 1 1h5M2 2l20 20M3.586 3.586A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.414-.586",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M8.656 3H15a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 21 9v6.344",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNotePlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 3v5a1 1 0 0 0 1 1h5m-3 6v6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M21 12.356V9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7.355M21 18h-6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNotes =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 16 14v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M10 8v5a1 1 0 0 0 1 1h5M8 4a2 2 0 0 1 2-2h6a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 22 8v6a2 2 0 0 1-2 2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16 2v5a1 1 0 0 0 1 1h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNoteX =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 3v5a1 1 0 0 0 1 1h5m-5 7l5 5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M21 12V9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m9-5l-5 5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+}
+
+private object Lucide8 {
   val Stone =
     IconData(
       listOf(
@@ -24919,6 +26510,23 @@ private object Lucide7 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         )
+      )
+    )
+  val Summary =
+    IconData(
+      listOf(
+        IconPath(
+          "M15 4H7m11 12l3 3l-3 3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M3 4v13a2 2 0 0 0 2 2h16M7 14h7M7 9h12",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
       )
     )
   val Sun =
@@ -25100,7 +26708,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "m11 19l-6-6m0 8l-2-2m5-3l-4 4m5.5-2.5L21 6V3h-3L6.5 14.5",
+          "m11 19l-6-6m0 8l-2-2m5-3l-4 4m5.5-2.5L20.414 6.586A2 2 0 0 0 21 5.172V3h-2.172a2 2 0 0 0-1.414.586L6.5 14.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -25111,7 +26719,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6m-3 3l4 4m-1 1l2-2M14.5 6.5L18 3h3v3l-3.5 3.5M5 14l4 4m-2-1l-3 3m-1-1l2 2",
+          "m13 19l6-6m-4.5 4.5L3.586 6.586A2 2 0 0 1 3 5.172V3h2.172a2 2 0 0 1 1.414.586L17.5 14.5m-2.672-8.328l2.586-2.586A2 2 0 0 1 18.828 3H21v2.172a2 2 0 0 1-.586 1.414l-2.586 2.586M16 16l4 4m-1 1l2-2M5 14l4 4m-4 3l-2-2m4.5-2.5L4 20",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -25328,6 +26936,24 @@ private object Lucide7 {
         ),
       )
     )
+  val TagPlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M16 13h6m-5.5-6.5l-3.914-3.914A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l1.79-1.79M19 10v6",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath("M7.5 7A.5.5 0 1 0 7.5 8 .5.5 0 1 0 7.5 7z", PathStyle.Fill),
+        IconPath(
+          "M7.5 7A.5.5 0 1 0 7.5 8 .5.5 0 1 0 7.5 7z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val Tags =
     IconData(
       listOf(
@@ -25340,6 +26966,24 @@ private object Lucide7 {
         IconPath("M10.5 6A.5.5 0 1 0 10.5 7 .5.5 0 1 0 10.5 6z", PathStyle.Fill),
         IconPath(
           "M10.5 6A.5.5 0 1 0 10.5 7 .5.5 0 1 0 10.5 6z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val TagX =
+    IconData(
+      listOf(
+        IconPath(
+          "m16.5 6.5l-3.914-3.914A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.43 2.43 0 0 0 3.42 0l1.79-1.79m0-9l5 5m0-5l-5 5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath("M7.5 7A.5.5 0 1 0 7.5 8 .5.5 0 1 0 7.5 7z", PathStyle.Fill),
+        IconPath(
+          "M7.5 7A.5.5 0 1 0 7.5 8 .5.5 0 1 0 7.5 7z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -25607,7 +27251,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1M7 22h1a4 4 0 0 0 4-4v-1M7 2h1a4 4 0 0 1 4 4v1",
+          "M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1M7 22h1a4 4 0 0 0 4-4M7 2h1a4 4 0 0 1 4 4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -25668,17 +27312,6 @@ private object Lucide7 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
-      )
-    )
-  val TextSelect =
-    IconData(
-      listOf(
-        IconPath(
-          "M14 21h1M14 3h1m4 0a2 2 0 0 1 2 2m0 9v1m0 4a2 2 0 0 1-2 2m2-12v1M3 14v1m0-6v1m2 11a2 2 0 0 1-2-2M5 3a2 2 0 0 0-2 2m4 7h10M7 16h6M7 8h8M9 21h1M9 3h1",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        )
       )
     )
   val TextWrap =
@@ -25893,6 +27526,17 @@ private object Lucide7 {
         )
       )
     )
+  val Timeline =
+    IconData(
+      listOf(
+        IconPath(
+          "M4 12h.01M4 16h.01M4 20h.01M4 4h.01M4 8h.01m5.404 5.414a2 2 0 0 0 1.414.586H19a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-8.172a2 2 0 0 0-1.414.586L8 12zm0 8a2 2 0 0 0 1.414.586H19a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-8.172a2 2 0 0 0-1.414.586L8 20zm0-16A2 2 0 0 0 10.828 6H19a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1h-8.172a2 2 0 0 0-1.414.586L8 4z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val Timer =
     IconData(
       listOf(
@@ -25993,7 +27637,7 @@ private object Lucide7 {
     IconData(
       listOf(
         IconPath(
-          "M16 12v4m0-10a2 2 0 0 1 1.414.586l4 4A2 2 0 0 1 22 12v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 .586-1.414l4-4A2 2 0 0 1 8 6zm0 0V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2m-6 8h20M8 12v4",
+          "M16 12v4m0-10V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2m9 0a2 2 0 0 1 1.414.586l3 3A2 2 0 0 1 22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 .586-1.414l3-3A2 2 0 0 1 7 6zM2 14h20M8 12v4",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -26164,6 +27808,29 @@ private object Lucide7 {
         ),
       )
     )
+  val Trailer =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 11.341V10m4 3v-3m4 7V8a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M22 15v1a1 1 0 0 1-1 1H10m-4-5.659V10",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M8 15A2 2 0 1 0 8 19 2 2 0 1 0 8 15z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val TrainFront =
     IconData(
       listOf(
@@ -26282,9 +27949,6 @@ private object Lucide7 {
         )
       )
     )
-}
-
-private object Lucide8 {
   val TreePalm =
     IconData(
       listOf(
@@ -26452,13 +28116,19 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978m7-7.318v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978M18 9h1.5a1 1 0 0 0 0-5H18M4 22h16",
+          "M10 14.66V17a1 1 0 0 1-1 1a2 2 0 0 0-2 2v2m7-7.34V17a1 1 0 0 0 1 1a2 2 0 0 1 2 2v2m.916-12H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3M4 22h16",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm0 0H4.5a1 1 0 0 1 0-5H6",
+          "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -26785,13 +28455,13 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M6 4h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z",
+          "M13 14h6a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M12 14h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z",
+          "M5 3h6a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -26888,6 +28558,23 @@ private object Lucide8 {
         ),
         IconPath(
           "m18 12l1-1l1 1l-1 1Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val UsbCPort =
+    IconData(
+      listOf(
+        IconPath(
+          "M6 12h12",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M6 8h12a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4h-12a4 4 0 0 1-4-4v-0a4 4 0 0 1 4-4Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27077,6 +28764,23 @@ private object Lucide8 {
         ),
       )
     )
+  val UserRoundArrowLeft =
+    IconData(
+      listOf(
+        IconPath(
+          "m19 16l-3 3M2 21a8 8 0 0 1 12.664-6.5M22 19h-6l3 3",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M10 3A5 5 0 1 0 10 13 5 5 0 1 0 10 3z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
   val UserRoundCheck =
     IconData(
       listOf(
@@ -27242,19 +28946,13 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M2 21a8 8 0 0 1 11.873-7",
+          "m16.5 16.5l5 5M2 21a8 8 0 0 1 11.531-7.18M21.5 16.5l-5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
           "M10 3A5 5 0 1 0 10 13 5 5 0 1 0 10 3z",
-          PathStyle.Stroke,
-          strokeLineCap = StrokeCap.Round,
-          strokeLineJoin = StrokeJoin.Round,
-        ),
-        IconPath(
-          "m17 17l5 5m0-5l-5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27301,6 +28999,23 @@ private object Lucide8 {
         ),
         IconPath(
           "m21 21l-1.9-1.9",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val UserShield =
+    IconData(
+      listOf(
+        IconPath(
+          "M10 15H6a4 4 0 0 0-4 4v2m20-3.5c0 2.499-1.75 3.749-3.83 4.474a.5.5 0 0 1-.335-.005c-2.085-.72-3.835-1.97-3.835-4.47V14a.5.5 0 0 1 .5-.499c1 0 2.25-.6 3.12-1.36a.6.6 0 0 1 .76-.001c.875.765 2.12 1.36 3.12 1.36a.5.5 0 0 1 .5.5z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M9 3A4 4 0 1 0 9 11 4 4 0 1 0 9 3z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27768,13 +29483,13 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5m13.5-3.4a16.55 16.55 0 0 1-9 7.5",
+          "M11 7a16 16 20 0 1 10.98 4.362M12 12a13 13 0 0 1-8.66 5m13.49-3.366a16 16 0 0 1-9.267 7.328",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M20.7 17a12.8 12.8 0 0 0-8.7-5a13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5",
+          "M20.66 17A13 13 0 0 0 12 12a13 13 0 0 1 0-10M8.17 15.366a16 16 0 0 1-1.713-11.69",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27835,7 +29550,7 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298zM22 9l-6 6m0-6l6 6",
+          "M11 4.702a.7.7 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.7.7 0 0 0 11 19.298zm5.5 9.798l5-5m-5 0l5 5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27880,13 +29595,13 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
+          "M3 11h3.75a2 2 0 0 1 1.6.8l.45.6a4 4 0 0 0 6.4 0l.45-.6a2 2 0 0 1 1.6-.8H21M3 7h18",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
         IconPath(
-          "M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2M3 11h3c.8 0 1.6.3 2.1.9l1.1.9c1.6 1.6 4.1 1.6 5.7 0l1.1-.9c.5-.5 1.3-.9 2.1-.9H21",
+          "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2Z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -27995,6 +29710,9 @@ private object Lucide8 {
         ),
       )
     )
+}
+
+private object Lucide9 {
   val Watch =
     IconData(
       listOf(
@@ -28045,6 +29763,17 @@ private object Lucide8 {
         )
       )
     )
+  val WavesHorizontal =
+    IconData(
+      listOf(
+        IconPath(
+          "M2 12q2.5 2 5 0t5 0t5 0t5 0M2 19q2.5 2 5 0t5 0t5 0t5 0M2 5q2.5 2 5 0t5 0t5 0t5 0",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val WavesLadder =
     IconData(
       listOf(
@@ -28066,6 +29795,17 @@ private object Lucide8 {
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
         ),
+      )
+    )
+  val WavesVertical =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 2q2 2.5 0 5t0 5t0 5t0 5m7-20q2 2.5 0 5t0 5t0 5t0 5M5 2q2 2.5 0 5t0 5t0 5t0 5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
       )
     )
   val Waypoints =
@@ -28120,6 +29860,23 @@ private object Lucide8 {
         ),
         IconPath(
           "M7 22h10m-5 0v-4",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val WebcamOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M12 22v-4m.754-10.904a3 3 0 0 1 2.15 2.15m-2.041 3.627a3 3 0 0 1-3.736-3.735",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M16.566 16.57A8 8 0 0 1 5.43 5.433M2 2l20 20M7 22h10M8.478 2.817a8 8 0 0 1 10.705 10.705",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -28469,6 +30226,17 @@ private object Lucide8 {
         )
       )
     )
+  val WrenchOff =
+    IconData(
+      listOf(
+        IconPath(
+          "M10.747 5.093a6 6 0 0 1 6.841-2.882c.438.12.54.662.219.984L14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-2.882 6.842M13.5 13.5l-7.88 7.88a1 1 0 0 1-2.999-3l7.88-7.88M2 2l20 20",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        )
+      )
+    )
   val X =
     IconData(
       listOf(
@@ -28512,7 +30280,7 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+          "M15.914 4a1.5 1.5 0 0 0-2.474-1.561l-9 9A1.5 1.5 0 0 0 5.5 14h4.002a.5.5 0 0 1 .471.666L8.086 20a1.5 1.5 0 0 0 2.475 1.56l9-9A1.5 1.5 0 0 0 18.5 10h-3.997a.5.5 0 0 1-.472-.667z",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -28523,7 +30291,7 @@ private object Lucide8 {
     IconData(
       listOf(
         IconPath(
-          "M10.513 4.856L13.12 2.17a.5.5 0 0 1 .86.46l-1.377 4.317M15.656 10H20a1 1 0 0 1 .78 1.63l-1.72 1.773m-2.787 2.87L10.88 21.83a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14H4a1 1 0 0 1-.78-1.63l4.507-4.643M2 2l20 20",
+          "M10.768 5.111L13.44 2.44a1.5 1.5 0 0 1 2.474 1.561l-1.633 4.625m4.608 4.606l.672-.672A1.5 1.5 0 0 0 18.5 10h-2.844M2 2l20 20M7.94 7.94l-3.5 3.499A1.5 1.5 0 0 0 5.5 14h4.002a.5.5 0 0 1 .471.666L8.086 20a1.5 1.5 0 0 0 2.475 1.56l5.5-5.5",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
@@ -28764,6 +30532,9 @@ object Lucide {
   val Activity: IconData
     get() = Lucide0.Activity
 
+  val Ad: IconData
+    get() = Lucide0.Ad
+
   val Airplay: IconData
     get() = Lucide0.Airplay
 
@@ -28886,6 +30657,9 @@ object Lucide {
 
   val Anchor: IconData
     get() = Lucide0.Anchor
+
+  val Angle: IconData
+    get() = Lucide0.Angle
 
   val Angry: IconData
     get() = Lucide0.Angry
@@ -29058,6 +30832,9 @@ object Lucide {
   val Asterisk: IconData
     get() = Lucide0.Asterisk
 
+  val Astroid: IconData
+    get() = Lucide0.Astroid
+
   val Atom: IconData
     get() = Lucide0.Atom
 
@@ -29066,6 +30843,12 @@ object Lucide {
 
   val AudioLines: IconData
     get() = Lucide0.AudioLines
+
+  val AudioLinesOff: IconData
+    get() = Lucide0.AudioLinesOff
+
+  val AudioLinesX: IconData
+    get() = Lucide0.AudioLinesX
 
   val AudioWaveform: IconData
     get() = Lucide0.AudioWaveform
@@ -29163,6 +30946,9 @@ object Lucide {
   val BanknoteArrowUp: IconData
     get() = Lucide0.BanknoteArrowUp
 
+  val BanknoteCheck: IconData
+    get() = Lucide0.BanknoteCheck
+
   val BanknoteX: IconData
     get() = Lucide0.BanknoteX
 
@@ -29235,6 +31021,9 @@ object Lucide {
   val Beef: IconData
     get() = Lucide0.Beef
 
+  val BeefOff: IconData
+    get() = Lucide0.BeefOff
+
   val Beer: IconData
     get() = Lucide0.Beer
 
@@ -29243,6 +31032,9 @@ object Lucide {
 
   val Bell: IconData
     get() = Lucide0.Bell
+
+  val BellCheck: IconData
+    get() = Lucide0.BellCheck
 
   val BellDot: IconData
     get() = Lucide0.BellDot
@@ -29301,6 +31093,9 @@ object Lucide {
   val Blend: IconData
     get() = Lucide0.Blend
 
+  val Blender: IconData
+    get() = Lucide0.Blender
+
   val Blinds: IconData
     get() = Lucide0.Blinds
 
@@ -29326,31 +31121,34 @@ object Lucide {
     get() = Lucide0.Bolt
 
   val Bomb: IconData
-    get() = Lucide0.Bomb
+    get() = Lucide1.Bomb
 
   val Bone: IconData
-    get() = Lucide0.Bone
+    get() = Lucide1.Bone
+
+  val BoneFracture: IconData
+    get() = Lucide1.BoneFracture
 
   val Book: IconData
-    get() = Lucide0.Book
+    get() = Lucide1.Book
 
   val BookA: IconData
-    get() = Lucide0.BookA
+    get() = Lucide1.BookA
 
   val BookAlert: IconData
-    get() = Lucide0.BookAlert
+    get() = Lucide1.BookAlert
 
   val BookAudio: IconData
-    get() = Lucide0.BookAudio
+    get() = Lucide1.BookAudio
 
   val BookCheck: IconData
-    get() = Lucide0.BookCheck
+    get() = Lucide1.BookCheck
 
   val BookCopy: IconData
-    get() = Lucide0.BookCopy
+    get() = Lucide1.BookCopy
 
   val BookDashed: IconData
-    get() = Lucide0.BookDashed
+    get() = Lucide1.BookDashed
 
   val BookDown: IconData
     get() = Lucide1.BookDown
@@ -29381,6 +31179,9 @@ object Lucide {
 
   val BookmarkMinus: IconData
     get() = Lucide1.BookmarkMinus
+
+  val BookmarkOff: IconData
+    get() = Lucide1.BookmarkOff
 
   val BookmarkPlus: IconData
     get() = Lucide1.BookmarkPlus
@@ -29486,6 +31287,15 @@ object Lucide {
 
   val BringToFront: IconData
     get() = Lucide1.BringToFront
+
+  val Broccoli: IconData
+    get() = Lucide1.Broccoli
+
+  val Broom: IconData
+    get() = Lucide1.Broom
+
+  val BroomSparkles: IconData
+    get() = Lucide1.BroomSparkles
 
   val Brush: IconData
     get() = Lucide1.Brush
@@ -29634,6 +31444,9 @@ object Lucide {
   val Caravan: IconData
     get() = Lucide1.Caravan
 
+  val CarBattery: IconData
+    get() = Lucide1.CarBattery
+
   val CardSim: IconData
     get() = Lucide1.CardSim
 
@@ -29669,6 +31482,9 @@ object Lucide {
 
   val Cctv: IconData
     get() = Lucide1.Cctv
+
+  val CctvOff: IconData
+    get() = Lucide1.CctvOff
 
   val ChartArea: IconData
     get() = Lucide1.ChartArea
@@ -29901,56 +31717,59 @@ object Lucide {
   val CircleEqual: IconData
     get() = Lucide1.CircleEqual
 
+  val CircleEuro: IconData
+    get() = Lucide1.CircleEuro
+
   val CircleFadingArrowUp: IconData
-    get() = Lucide1.CircleFadingArrowUp
+    get() = Lucide2.CircleFadingArrowUp
 
   val CircleFadingPlus: IconData
-    get() = Lucide1.CircleFadingPlus
+    get() = Lucide2.CircleFadingPlus
 
   val CircleGauge: IconData
-    get() = Lucide1.CircleGauge
+    get() = Lucide2.CircleGauge
 
   val CircleMinus: IconData
-    get() = Lucide1.CircleMinus
+    get() = Lucide2.CircleMinus
 
   val CircleOff: IconData
-    get() = Lucide1.CircleOff
+    get() = Lucide2.CircleOff
 
   val CircleParking: IconData
-    get() = Lucide1.CircleParking
+    get() = Lucide2.CircleParking
 
   val CircleParkingOff: IconData
-    get() = Lucide1.CircleParkingOff
+    get() = Lucide2.CircleParkingOff
 
   val CirclePause: IconData
-    get() = Lucide1.CirclePause
+    get() = Lucide2.CirclePause
 
   val CirclePercent: IconData
-    get() = Lucide1.CirclePercent
+    get() = Lucide2.CirclePercent
 
   val CirclePile: IconData
-    get() = Lucide1.CirclePile
+    get() = Lucide2.CirclePile
 
   val CirclePlay: IconData
-    get() = Lucide1.CirclePlay
+    get() = Lucide2.CirclePlay
 
   val CirclePlus: IconData
-    get() = Lucide1.CirclePlus
+    get() = Lucide2.CirclePlus
 
   val CirclePoundSterling: IconData
-    get() = Lucide1.CirclePoundSterling
+    get() = Lucide2.CirclePoundSterling
 
   val CirclePower: IconData
-    get() = Lucide1.CirclePower
+    get() = Lucide2.CirclePower
 
   val CircleQuestionMark: IconData
-    get() = Lucide1.CircleQuestionMark
+    get() = Lucide2.CircleQuestionMark
 
   val CircleSlash: IconData
-    get() = Lucide1.CircleSlash
+    get() = Lucide2.CircleSlash
 
   val CircleSlash2: IconData
-    get() = Lucide1.CircleSlash2
+    get() = Lucide2.CircleSlash2
 
   val CircleSmall: IconData
     get() = Lucide2.CircleSmall
@@ -30059,6 +31878,12 @@ object Lucide {
 
   val ClockArrowDown: IconData
     get() = Lucide2.ClockArrowDown
+
+  val ClockArrowLeft: IconData
+    get() = Lucide2.ClockArrowLeft
+
+  val ClockArrowRight: IconData
+    get() = Lucide2.ClockArrowRight
 
   val ClockArrowUp: IconData
     get() = Lucide2.ClockArrowUp
@@ -30309,11 +32134,29 @@ object Lucide {
   val Database: IconData
     get() = Lucide2.Database
 
+  val DatabaseArrowDown: IconData
+    get() = Lucide2.DatabaseArrowDown
+
+  val DatabaseArrowUp: IconData
+    get() = Lucide2.DatabaseArrowUp
+
   val DatabaseBackup: IconData
     get() = Lucide2.DatabaseBackup
 
+  val DatabaseCheck: IconData
+    get() = Lucide2.DatabaseCheck
+
+  val DatabaseMinus: IconData
+    get() = Lucide2.DatabaseMinus
+
+  val DatabasePlus: IconData
+    get() = Lucide2.DatabasePlus
+
   val DatabaseSearch: IconData
     get() = Lucide2.DatabaseSearch
+
+  val DatabaseX: IconData
+    get() = Lucide2.DatabaseX
 
   val DatabaseZap: IconData
     get() = Lucide2.DatabaseZap
@@ -30474,83 +32317,110 @@ object Lucide {
   val EggOff: IconData
     get() = Lucide2.EggOff
 
+  val Eject: IconData
+    get() = Lucide2.Eject
+
   val Ellipse: IconData
-    get() = Lucide2.Ellipse
+    get() = Lucide3.Ellipse
 
   val Ellipsis: IconData
-    get() = Lucide2.Ellipsis
+    get() = Lucide3.Ellipsis
 
   val EllipsisVertical: IconData
-    get() = Lucide2.EllipsisVertical
+    get() = Lucide3.EllipsisVertical
 
   val Equal: IconData
-    get() = Lucide2.Equal
+    get() = Lucide3.Equal
 
   val EqualApproximately: IconData
-    get() = Lucide2.EqualApproximately
+    get() = Lucide3.EqualApproximately
 
   val EqualNot: IconData
-    get() = Lucide2.EqualNot
+    get() = Lucide3.EqualNot
 
   val Eraser: IconData
-    get() = Lucide2.Eraser
+    get() = Lucide3.Eraser
 
   val EthernetPort: IconData
-    get() = Lucide2.EthernetPort
+    get() = Lucide3.EthernetPort
 
   val Euro: IconData
-    get() = Lucide2.Euro
+    get() = Lucide3.Euro
 
   val EvCharger: IconData
-    get() = Lucide2.EvCharger
+    get() = Lucide3.EvCharger
 
   val Expand: IconData
-    get() = Lucide2.Expand
+    get() = Lucide3.Expand
 
   val ExternalLink: IconData
-    get() = Lucide2.ExternalLink
+    get() = Lucide3.ExternalLink
 
   val Eye: IconData
-    get() = Lucide2.Eye
+    get() = Lucide3.Eye
 
   val EyeClosed: IconData
-    get() = Lucide2.EyeClosed
+    get() = Lucide3.EyeClosed
+
+  val EyeDashed: IconData
+    get() = Lucide3.EyeDashed
 
   val EyeOff: IconData
-    get() = Lucide2.EyeOff
+    get() = Lucide3.EyeOff
+
+  val FaceAngry: IconData
+    get() = Lucide3.FaceAngry
 
   val Facebook: IconData
-    get() = Lucide2.Facebook
+    get() = Lucide3.Facebook
+
+  val FaceExpressionless: IconData
+    get() = Lucide3.FaceExpressionless
+
+  val FaceGrinning: IconData
+    get() = Lucide3.FaceGrinning
+
+  val FaceNeutral: IconData
+    get() = Lucide3.FaceNeutral
+
+  val FaceSlightlyFrowning: IconData
+    get() = Lucide3.FaceSlightlyFrowning
+
+  val FaceSlightlySmiling: IconData
+    get() = Lucide3.FaceSlightlySmiling
+
+  val FaceSlightlySmilingPlus: IconData
+    get() = Lucide3.FaceSlightlySmilingPlus
 
   val Factory: IconData
-    get() = Lucide2.Factory
+    get() = Lucide3.Factory
 
   val Fan: IconData
-    get() = Lucide2.Fan
+    get() = Lucide3.Fan
 
   val FastForward: IconData
-    get() = Lucide2.FastForward
+    get() = Lucide3.FastForward
 
   val Feather: IconData
-    get() = Lucide2.Feather
+    get() = Lucide3.Feather
 
   val Fence: IconData
-    get() = Lucide2.Fence
+    get() = Lucide3.Fence
 
   val FerrisWheel: IconData
-    get() = Lucide2.FerrisWheel
+    get() = Lucide3.FerrisWheel
 
   val Figma: IconData
-    get() = Lucide2.Figma
+    get() = Lucide3.Figma
 
   val File: IconData
-    get() = Lucide2.File
+    get() = Lucide3.File
 
   val FileArchive: IconData
-    get() = Lucide2.FileArchive
+    get() = Lucide3.FileArchive
 
   val FileAudio: IconData
-    get() = Lucide2.FileAudio
+    get() = Lucide3.FileAudio
 
   val FileAudio2: IconData
     get() = Lucide3.FileAudio2
@@ -30846,6 +32716,9 @@ object Lucide {
   val FolderArchive: IconData
     get() = Lucide3.FolderArchive
 
+  val FolderBookmark: IconData
+    get() = Lucide3.FolderBookmark
+
   val FolderCheck: IconData
     get() = Lucide3.FolderCheck
 
@@ -30975,6 +32848,9 @@ object Lucide {
   val FunnelX: IconData
     get() = Lucide3.FunnelX
 
+  val Galaxy: IconData
+    get() = Lucide3.Galaxy
+
   val GalleryHorizontal: IconData
     get() = Lucide3.GalleryHorizontal
 
@@ -31045,112 +32921,115 @@ object Lucide {
     get() = Lucide3.GitGraph
 
   val Github: IconData
-    get() = Lucide3.Github
+    get() = Lucide4.Github
 
   val Gitlab: IconData
-    get() = Lucide3.Gitlab
+    get() = Lucide4.Gitlab
 
   val GitMerge: IconData
-    get() = Lucide3.GitMerge
+    get() = Lucide4.GitMerge
 
   val GitMergeConflict: IconData
-    get() = Lucide3.GitMergeConflict
+    get() = Lucide4.GitMergeConflict
 
   val GitPullRequest: IconData
-    get() = Lucide3.GitPullRequest
+    get() = Lucide4.GitPullRequest
 
   val GitPullRequestArrow: IconData
-    get() = Lucide3.GitPullRequestArrow
+    get() = Lucide4.GitPullRequestArrow
 
   val GitPullRequestClosed: IconData
-    get() = Lucide3.GitPullRequestClosed
+    get() = Lucide4.GitPullRequestClosed
 
   val GitPullRequestCreate: IconData
-    get() = Lucide3.GitPullRequestCreate
+    get() = Lucide4.GitPullRequestCreate
 
   val GitPullRequestCreateArrow: IconData
-    get() = Lucide3.GitPullRequestCreateArrow
+    get() = Lucide4.GitPullRequestCreateArrow
 
   val GitPullRequestDraft: IconData
-    get() = Lucide3.GitPullRequestDraft
+    get() = Lucide4.GitPullRequestDraft
 
   val Glasses: IconData
-    get() = Lucide3.Glasses
+    get() = Lucide4.Glasses
 
   val GlassWater: IconData
-    get() = Lucide3.GlassWater
+    get() = Lucide4.GlassWater
 
   val Globe: IconData
-    get() = Lucide3.Globe
+    get() = Lucide4.Globe
+
+  val GlobeCheck: IconData
+    get() = Lucide4.GlobeCheck
 
   val GlobeLock: IconData
-    get() = Lucide3.GlobeLock
+    get() = Lucide4.GlobeLock
 
   val GlobeOff: IconData
-    get() = Lucide3.GlobeOff
+    get() = Lucide4.GlobeOff
 
   val GlobeX: IconData
-    get() = Lucide3.GlobeX
+    get() = Lucide4.GlobeX
 
   val Goal: IconData
-    get() = Lucide3.Goal
+    get() = Lucide4.Goal
 
   val Gpu: IconData
-    get() = Lucide3.Gpu
+    get() = Lucide4.Gpu
 
   val GraduationCap: IconData
-    get() = Lucide3.GraduationCap
+    get() = Lucide4.GraduationCap
 
   val Grape: IconData
-    get() = Lucide3.Grape
+    get() = Lucide4.Grape
 
   val Grid2x2: IconData
-    get() = Lucide3.Grid2x2
+    get() = Lucide4.Grid2x2
 
   val Grid2x2Check: IconData
-    get() = Lucide3.Grid2x2Check
+    get() = Lucide4.Grid2x2Check
 
   val Grid2x2Plus: IconData
-    get() = Lucide3.Grid2x2Plus
+    get() = Lucide4.Grid2x2Plus
 
   val Grid2x2X: IconData
-    get() = Lucide3.Grid2x2X
+    get() = Lucide4.Grid2x2X
 
   val Grid3x2: IconData
-    get() = Lucide3.Grid3x2
+    get() = Lucide4.Grid3x2
 
   val Grid3x3: IconData
-    get() = Lucide3.Grid3x3
+    get() = Lucide4.Grid3x3
 
   val Grip: IconData
-    get() = Lucide3.Grip
+    get() = Lucide4.Grip
 
   val GripHorizontal: IconData
-    get() = Lucide3.GripHorizontal
+    get() = Lucide4.GripHorizontal
 
   val GripVertical: IconData
-    get() = Lucide3.GripVertical
+    get() = Lucide4.GripVertical
 
   val Group: IconData
-    get() = Lucide3.Group
+    get() = Lucide4.Group
 
   val Guitar: IconData
-    get() = Lucide3.Guitar
+    get() = Lucide4.Guitar
 
   val Ham: IconData
-    get() = Lucide3.Ham
+    get() = Lucide4.Ham
 
   val Hamburger: IconData
-    get() = Lucide3.Hamburger
+    get() = Lucide4.Hamburger
 
   val Hammer: IconData
-    get() = Lucide3.Hammer
+    get() = Lucide4.Hammer
 
   val Hand: IconData
-    get() = Lucide3.Hand
+    get() = Lucide4.Hand
 
   val Handbag: IconData
-    get() = Lucide3.Handbag
+    get() = Lucide4.Handbag
 
   val HandCoins: IconData
     get() = Lucide4.HandCoins
@@ -31254,6 +33133,9 @@ object Lucide {
   val HeartPulse: IconData
     get() = Lucide4.HeartPulse
 
+  val HeartX: IconData
+    get() = Lucide4.HeartX
+
   val Heater: IconData
     get() = Lucide4.Heater
 
@@ -31265,9 +33147,6 @@ object Lucide {
 
   val Highlighter: IconData
     get() = Lucide4.Highlighter
-
-  val History: IconData
-    get() = Lucide4.History
 
   val Hop: IconData
     get() = Lucide4.Hop
@@ -31449,6 +33328,12 @@ object Lucide {
   val Laugh: IconData
     get() = Lucide4.Laugh
 
+  val LayerArrowDown: IconData
+    get() = Lucide4.LayerArrowDown
+
+  val LayerArrowUp: IconData
+    get() = Lucide4.LayerArrowUp
+
   val Layers: IconData
     get() = Lucide4.Layers
 
@@ -31458,11 +33343,23 @@ object Lucide {
   val Layers3: IconData
     get() = Lucide4.Layers3
 
+  val LayersArrowDown: IconData
+    get() = Lucide4.LayersArrowDown
+
+  val LayersArrowUp: IconData
+    get() = Lucide4.LayersArrowUp
+
+  val LayersMinus: IconData
+    get() = Lucide4.LayersMinus
+
   val LayersPlus: IconData
     get() = Lucide4.LayersPlus
 
   val LayoutDashboard: IconData
     get() = Lucide4.LayoutDashboard
+
+  val LayoutFreeform: IconData
+    get() = Lucide4.LayoutFreeform
 
   val LayoutGrid: IconData
     get() = Lucide4.LayoutGrid
@@ -31524,6 +33421,9 @@ object Lucide {
   val LineSquiggle: IconData
     get() = Lucide4.LineSquiggle
 
+  val LineStyle: IconData
+    get() = Lucide4.LineStyle
+
   val Link: IconData
     get() = Lucide4.Link
 
@@ -31550,6 +33450,9 @@ object Lucide {
 
   val ListChevronsUpDown: IconData
     get() = Lucide4.ListChevronsUpDown
+
+  val ListClock: IconData
+    get() = Lucide4.ListClock
 
   val ListCollapse: IconData
     get() = Lucide4.ListCollapse
@@ -31584,6 +33487,12 @@ object Lucide {
   val ListRestart: IconData
     get() = Lucide4.ListRestart
 
+  val ListSortAscending: IconData
+    get() = Lucide4.ListSortAscending
+
+  val ListSortDescending: IconData
+    get() = Lucide4.ListSortDescending
+
   val ListStart: IconData
     get() = Lucide4.ListStart
 
@@ -31612,145 +33521,154 @@ object Lucide {
     get() = Lucide4.Locate
 
   val LocateFixed: IconData
-    get() = Lucide4.LocateFixed
+    get() = Lucide5.LocateFixed
 
   val LocateOff: IconData
-    get() = Lucide4.LocateOff
+    get() = Lucide5.LocateOff
 
   val Lock: IconData
-    get() = Lucide4.Lock
+    get() = Lucide5.Lock
 
   val LockKeyhole: IconData
-    get() = Lucide4.LockKeyhole
+    get() = Lucide5.LockKeyhole
 
   val LockKeyholeOpen: IconData
-    get() = Lucide4.LockKeyholeOpen
+    get() = Lucide5.LockKeyholeOpen
 
   val LockOpen: IconData
-    get() = Lucide4.LockOpen
+    get() = Lucide5.LockOpen
 
   val LogIn: IconData
-    get() = Lucide4.LogIn
+    get() = Lucide5.LogIn
 
   val LogOut: IconData
-    get() = Lucide4.LogOut
+    get() = Lucide5.LogOut
 
   val Logs: IconData
-    get() = Lucide4.Logs
+    get() = Lucide5.Logs
 
   val Lollipop: IconData
-    get() = Lucide4.Lollipop
+    get() = Lucide5.Lollipop
 
   val Luggage: IconData
-    get() = Lucide4.Luggage
+    get() = Lucide5.Luggage
 
   val Magnet: IconData
-    get() = Lucide4.Magnet
+    get() = Lucide5.Magnet
 
   val Mail: IconData
-    get() = Lucide4.Mail
+    get() = Lucide5.Mail
+
+  val MailBadge: IconData
+    get() = Lucide5.MailBadge
 
   val Mailbox: IconData
-    get() = Lucide4.Mailbox
+    get() = Lucide5.Mailbox
 
   val MailCheck: IconData
-    get() = Lucide4.MailCheck
+    get() = Lucide5.MailCheck
+
+  val MailClock: IconData
+    get() = Lucide5.MailClock
 
   val MailMinus: IconData
-    get() = Lucide4.MailMinus
+    get() = Lucide5.MailMinus
 
   val MailOpen: IconData
-    get() = Lucide4.MailOpen
+    get() = Lucide5.MailOpen
 
   val MailPlus: IconData
-    get() = Lucide4.MailPlus
+    get() = Lucide5.MailPlus
 
   val MailQuestionMark: IconData
-    get() = Lucide4.MailQuestionMark
+    get() = Lucide5.MailQuestionMark
 
   val Mails: IconData
-    get() = Lucide4.Mails
+    get() = Lucide5.Mails
 
   val MailSearch: IconData
-    get() = Lucide4.MailSearch
+    get() = Lucide5.MailSearch
 
   val MailWarning: IconData
-    get() = Lucide4.MailWarning
+    get() = Lucide5.MailWarning
 
   val MailX: IconData
-    get() = Lucide4.MailX
+    get() = Lucide5.MailX
 
   val Map: IconData
-    get() = Lucide4.Map
+    get() = Lucide5.Map
 
   val MapMinus: IconData
-    get() = Lucide4.MapMinus
+    get() = Lucide5.MapMinus
 
   val MapPin: IconData
-    get() = Lucide4.MapPin
+    get() = Lucide5.MapPin
 
   val MapPinCheck: IconData
-    get() = Lucide4.MapPinCheck
+    get() = Lucide5.MapPinCheck
 
   val MapPinCheckInside: IconData
-    get() = Lucide4.MapPinCheckInside
+    get() = Lucide5.MapPinCheckInside
 
   val MapPinHouse: IconData
-    get() = Lucide4.MapPinHouse
+    get() = Lucide5.MapPinHouse
 
   val MapPinMinus: IconData
-    get() = Lucide4.MapPinMinus
+    get() = Lucide5.MapPinMinus
 
   val MapPinMinusInside: IconData
-    get() = Lucide4.MapPinMinusInside
+    get() = Lucide5.MapPinMinusInside
 
   val MapPinned: IconData
-    get() = Lucide4.MapPinned
+    get() = Lucide5.MapPinned
 
   val MapPinOff: IconData
-    get() = Lucide4.MapPinOff
+    get() = Lucide5.MapPinOff
 
   val MapPinPen: IconData
-    get() = Lucide4.MapPinPen
+    get() = Lucide5.MapPinPen
 
   val MapPinPlus: IconData
-    get() = Lucide4.MapPinPlus
+    get() = Lucide5.MapPinPlus
 
   val MapPinPlusInside: IconData
-    get() = Lucide4.MapPinPlusInside
+    get() = Lucide5.MapPinPlusInside
+
+  val MapPinSearch: IconData
+    get() = Lucide5.MapPinSearch
 
   val MapPinX: IconData
-    get() = Lucide4.MapPinX
+    get() = Lucide5.MapPinX
 
   val MapPinXInside: IconData
-    get() = Lucide4.MapPinXInside
+    get() = Lucide5.MapPinXInside
 
   val MapPlus: IconData
-    get() = Lucide4.MapPlus
+    get() = Lucide5.MapPlus
 
   val Mars: IconData
-    get() = Lucide4.Mars
+    get() = Lucide5.Mars
 
   val MarsStroke: IconData
-    get() = Lucide4.MarsStroke
+    get() = Lucide5.MarsStroke
 
   val Martini: IconData
-    get() = Lucide4.Martini
+    get() = Lucide5.Martini
 
   val Maximize: IconData
-    get() = Lucide4.Maximize
+    get() = Lucide5.Maximize
 
   val Maximize2: IconData
-    get() = Lucide4.Maximize2
+    get() = Lucide5.Maximize2
 
   val Medal: IconData
-    get() = Lucide4.Medal
+    get() = Lucide5.Medal
 
   val Megaphone: IconData
-    get() = Lucide4.Megaphone
+    get() = Lucide5.Megaphone
 
   val MegaphoneOff: IconData
-    get() = Lucide4.MegaphoneOff
+    get() = Lucide5.MegaphoneOff
 
   val Meh: IconData
     get() = Lucide5.Meh
@@ -31775,6 +33693,9 @@ object Lucide {
 
   val MessageCircleDashed: IconData
     get() = Lucide5.MessageCircleDashed
+
+  val MessageCircleDashedCheck: IconData
+    get() = Lucide5.MessageCircleDashedCheck
 
   val MessageCircleHeart: IconData
     get() = Lucide5.MessageCircleHeart
@@ -31860,6 +33781,9 @@ object Lucide {
   val Mic: IconData
     get() = Lucide5.Mic
 
+  val MicAudioLines: IconData
+    get() = Lucide5.MicAudioLines
+
   val MicOff: IconData
     get() = Lucide5.MicOff
 
@@ -31872,8 +33796,14 @@ object Lucide {
   val Microwave: IconData
     get() = Lucide5.Microwave
 
+  val MicSignal: IconData
+    get() = Lucide5.MicSignal
+
   val MicVocal: IconData
     get() = Lucide5.MicVocal
+
+  val MidiPort: IconData
+    get() = Lucide5.MidiPort
 
   val Milestone: IconData
     get() = Lucide5.Milestone
@@ -31946,6 +33876,15 @@ object Lucide {
 
   val MoonStar: IconData
     get() = Lucide5.MoonStar
+
+  val Mop: IconData
+    get() = Lucide5.Mop
+
+  val MopSparkles: IconData
+    get() = Lucide5.MopSparkles
+
+  val Mosque: IconData
+    get() = Lucide5.Mosque
 
   val Motorbike: IconData
     get() = Lucide5.Motorbike
@@ -32182,178 +34121,202 @@ object Lucide {
     get() = Lucide5.PanelLeftRightDashed
 
   val PanelRight: IconData
-    get() = Lucide5.PanelRight
+    get() = Lucide6.PanelRight
 
   val PanelRightClose: IconData
-    get() = Lucide5.PanelRightClose
+    get() = Lucide6.PanelRightClose
 
   val PanelRightDashed: IconData
-    get() = Lucide5.PanelRightDashed
+    get() = Lucide6.PanelRightDashed
 
   val PanelRightOpen: IconData
-    get() = Lucide5.PanelRightOpen
+    get() = Lucide6.PanelRightOpen
 
   val PanelsLeftBottom: IconData
-    get() = Lucide5.PanelsLeftBottom
+    get() = Lucide6.PanelsLeftBottom
 
   val PanelsRightBottom: IconData
-    get() = Lucide5.PanelsRightBottom
+    get() = Lucide6.PanelsRightBottom
 
   val PanelsTopLeft: IconData
-    get() = Lucide5.PanelsTopLeft
+    get() = Lucide6.PanelsTopLeft
 
   val PanelTop: IconData
-    get() = Lucide5.PanelTop
+    get() = Lucide6.PanelTop
 
   val PanelTopBottomDashed: IconData
-    get() = Lucide5.PanelTopBottomDashed
+    get() = Lucide6.PanelTopBottomDashed
 
   val PanelTopClose: IconData
-    get() = Lucide5.PanelTopClose
+    get() = Lucide6.PanelTopClose
 
   val PanelTopDashed: IconData
-    get() = Lucide5.PanelTopDashed
+    get() = Lucide6.PanelTopDashed
 
   val PanelTopOpen: IconData
-    get() = Lucide5.PanelTopOpen
+    get() = Lucide6.PanelTopOpen
+
+  val PaperBag: IconData
+    get() = Lucide6.PaperBag
 
   val Paperclip: IconData
-    get() = Lucide5.Paperclip
+    get() = Lucide6.Paperclip
+
+  val Parasol: IconData
+    get() = Lucide6.Parasol
 
   val Parentheses: IconData
-    get() = Lucide5.Parentheses
+    get() = Lucide6.Parentheses
 
   val ParkingMeter: IconData
-    get() = Lucide5.ParkingMeter
+    get() = Lucide6.ParkingMeter
 
   val PartyPopper: IconData
-    get() = Lucide5.PartyPopper
+    get() = Lucide6.PartyPopper
 
   val Pause: IconData
-    get() = Lucide5.Pause
+    get() = Lucide6.Pause
 
   val PawPrint: IconData
-    get() = Lucide5.PawPrint
+    get() = Lucide6.PawPrint
 
   val PcCase: IconData
-    get() = Lucide5.PcCase
+    get() = Lucide6.PcCase
 
   val Pen: IconData
-    get() = Lucide5.Pen
+    get() = Lucide6.Pen
 
   val Pencil: IconData
-    get() = Lucide5.Pencil
+    get() = Lucide6.Pencil
 
   val PencilLine: IconData
-    get() = Lucide5.PencilLine
+    get() = Lucide6.PencilLine
 
   val PencilOff: IconData
-    get() = Lucide5.PencilOff
+    get() = Lucide6.PencilOff
 
   val PencilRuler: IconData
-    get() = Lucide5.PencilRuler
+    get() = Lucide6.PencilRuler
+
+  val PencilSparkles: IconData
+    get() = Lucide6.PencilSparkles
 
   val PenLine: IconData
-    get() = Lucide5.PenLine
+    get() = Lucide6.PenLine
 
   val PenOff: IconData
-    get() = Lucide5.PenOff
+    get() = Lucide6.PenOff
 
   val Pentagon: IconData
-    get() = Lucide5.Pentagon
+    get() = Lucide6.Pentagon
 
   val PenTool: IconData
-    get() = Lucide5.PenTool
+    get() = Lucide6.PenTool
 
   val Percent: IconData
-    get() = Lucide5.Percent
+    get() = Lucide6.Percent
 
   val PersonStanding: IconData
-    get() = Lucide5.PersonStanding
+    get() = Lucide6.PersonStanding
+
+  val Phi: IconData
+    get() = Lucide6.Phi
 
   val PhilippinePeso: IconData
-    get() = Lucide5.PhilippinePeso
+    get() = Lucide6.PhilippinePeso
 
   val Phone: IconData
-    get() = Lucide5.Phone
+    get() = Lucide6.Phone
 
   val PhoneCall: IconData
-    get() = Lucide5.PhoneCall
+    get() = Lucide6.PhoneCall
 
   val PhoneForwarded: IconData
-    get() = Lucide5.PhoneForwarded
+    get() = Lucide6.PhoneForwarded
 
   val PhoneIncoming: IconData
-    get() = Lucide5.PhoneIncoming
+    get() = Lucide6.PhoneIncoming
 
   val PhoneMissed: IconData
-    get() = Lucide5.PhoneMissed
+    get() = Lucide6.PhoneMissed
 
   val PhoneOff: IconData
-    get() = Lucide5.PhoneOff
+    get() = Lucide6.PhoneOff
 
   val PhoneOutgoing: IconData
-    get() = Lucide5.PhoneOutgoing
+    get() = Lucide6.PhoneOutgoing
 
   val Pi: IconData
-    get() = Lucide5.Pi
+    get() = Lucide6.Pi
 
   val Piano: IconData
-    get() = Lucide5.Piano
+    get() = Lucide6.Piano
 
   val Pickaxe: IconData
-    get() = Lucide5.Pickaxe
+    get() = Lucide6.Pickaxe
 
   val PictureInPicture: IconData
-    get() = Lucide5.PictureInPicture
+    get() = Lucide6.PictureInPicture
 
   val PictureInPicture2: IconData
-    get() = Lucide5.PictureInPicture2
+    get() = Lucide6.PictureInPicture2
 
   val PieChart: IconData
-    get() = Lucide5.PieChart
+    get() = Lucide6.PieChart
 
   val PiggyBank: IconData
-    get() = Lucide5.PiggyBank
+    get() = Lucide6.PiggyBank
 
   val Pilcrow: IconData
-    get() = Lucide5.Pilcrow
+    get() = Lucide6.Pilcrow
 
   val PilcrowLeft: IconData
-    get() = Lucide5.PilcrowLeft
+    get() = Lucide6.PilcrowLeft
 
   val PilcrowRight: IconData
-    get() = Lucide5.PilcrowRight
+    get() = Lucide6.PilcrowRight
 
   val Pill: IconData
-    get() = Lucide5.Pill
+    get() = Lucide6.Pill
 
   val PillBottle: IconData
-    get() = Lucide5.PillBottle
+    get() = Lucide6.PillBottle
 
   val Pin: IconData
-    get() = Lucide5.Pin
+    get() = Lucide6.Pin
 
   val PinOff: IconData
-    get() = Lucide5.PinOff
+    get() = Lucide6.PinOff
 
   val Pipette: IconData
-    get() = Lucide5.Pipette
+    get() = Lucide6.Pipette
 
   val Pizza: IconData
-    get() = Lucide5.Pizza
+    get() = Lucide6.Pizza
 
   val Plane: IconData
-    get() = Lucide5.Plane
+    get() = Lucide6.Plane
 
   val PlaneLanding: IconData
-    get() = Lucide5.PlaneLanding
+    get() = Lucide6.PlaneLanding
 
   val PlaneTakeoff: IconData
-    get() = Lucide5.PlaneTakeoff
+    get() = Lucide6.PlaneTakeoff
 
   val Play: IconData
     get() = Lucide6.Play
+
+  val PlayingCard: IconData
+    get() = Lucide6.PlayingCard
+
+  val PlayingCards: IconData
+    get() = Lucide6.PlayingCards
+
+  val PlayingCardsFan: IconData
+    get() = Lucide6.PlayingCardsFan
+
+  val PlayOff: IconData
+    get() = Lucide6.PlayOff
 
   val Plug: IconData
     get() = Lucide6.Plug
@@ -32375,6 +34338,9 @@ object Lucide {
 
   val Podcast: IconData
     get() = Lucide6.Podcast
+
+  val Podium: IconData
+    get() = Lucide6.Podium
 
   val Pointer: IconData
     get() = Lucide6.Pointer
@@ -32441,6 +34407,9 @@ object Lucide {
 
   val Radio: IconData
     get() = Lucide6.Radio
+
+  val RadioOff: IconData
+    get() = Lucide6.RadioOff
 
   val RadioReceiver: IconData
     get() = Lucide6.RadioReceiver
@@ -32550,6 +34519,9 @@ object Lucide {
   val Repeat2: IconData
     get() = Lucide6.Repeat2
 
+  val RepeatOff: IconData
+    get() = Lucide6.RepeatOff
+
   val Replace: IconData
     get() = Lucide6.Replace
 
@@ -32567,6 +34539,15 @@ object Lucide {
 
   val Ribbon: IconData
     get() = Lucide6.Ribbon
+
+  val Road: IconData
+    get() = Lucide6.Road
+
+  val RobotArm: IconData
+    get() = Lucide6.RobotArm
+
+  val RobotVacuum: IconData
+    get() = Lucide6.RobotVacuum
 
   val Rocket: IconData
     get() = Lucide6.Rocket
@@ -32586,6 +34567,9 @@ object Lucide {
   val RotateCcw: IconData
     get() = Lucide6.RotateCcw
 
+  val RotateCcwClock: IconData
+    get() = Lucide6.RotateCcwClock
+
   val RotateCcwKey: IconData
     get() = Lucide6.RotateCcwKey
 
@@ -32594,6 +34578,9 @@ object Lucide {
 
   val RotateCw: IconData
     get() = Lucide6.RotateCw
+
+  val RotateCwFadingClock: IconData
+    get() = Lucide6.RotateCwFadingClock
 
   val RotateCwSquare: IconData
     get() = Lucide6.RotateCwSquare
@@ -32652,8 +34639,17 @@ object Lucide {
   val SaveAll: IconData
     get() = Lucide6.SaveAll
 
+  val SaveCheck: IconData
+    get() = Lucide6.SaveCheck
+
   val SaveOff: IconData
     get() = Lucide6.SaveOff
+
+  val SavePen: IconData
+    get() = Lucide6.SavePen
+
+  val SavePlus: IconData
+    get() = Lucide6.SavePlus
 
   val Scale: IconData
     get() = Lucide6.Scale
@@ -32669,6 +34665,9 @@ object Lucide {
 
   val ScanBarcode: IconData
     get() = Lucide6.ScanBarcode
+
+  val ScanBox: IconData
+    get() = Lucide6.ScanBox
 
   val ScanEye: IconData
     get() = Lucide6.ScanEye
@@ -32687,6 +34686,9 @@ object Lucide {
 
   val ScanSearch: IconData
     get() = Lucide6.ScanSearch
+
+  val ScanSquare: IconData
+    get() = Lucide6.ScanSquare
 
   val ScanText: IconData
     get() = Lucide6.ScanText
@@ -32719,238 +34721,256 @@ object Lucide {
     get() = Lucide6.ScrollText
 
   val Search: IconData
-    get() = Lucide6.Search
+    get() = Lucide7.Search
 
   val SearchAlert: IconData
-    get() = Lucide6.SearchAlert
+    get() = Lucide7.SearchAlert
 
   val SearchCheck: IconData
-    get() = Lucide6.SearchCheck
+    get() = Lucide7.SearchCheck
 
   val SearchCode: IconData
-    get() = Lucide6.SearchCode
+    get() = Lucide7.SearchCode
 
   val SearchLarge: IconData
-    get() = Lucide6.SearchLarge
+    get() = Lucide7.SearchLarge
 
   val SearchSlash: IconData
-    get() = Lucide6.SearchSlash
+    get() = Lucide7.SearchSlash
 
   val SearchX: IconData
-    get() = Lucide6.SearchX
+    get() = Lucide7.SearchX
 
   val Section: IconData
-    get() = Lucide6.Section
+    get() = Lucide7.Section
 
   val Send: IconData
-    get() = Lucide6.Send
+    get() = Lucide7.Send
 
   val SendHorizontal: IconData
-    get() = Lucide6.SendHorizontal
+    get() = Lucide7.SendHorizontal
 
   val SendToBack: IconData
-    get() = Lucide6.SendToBack
+    get() = Lucide7.SendToBack
 
   val SeparatorHorizontal: IconData
-    get() = Lucide6.SeparatorHorizontal
+    get() = Lucide7.SeparatorHorizontal
 
   val SeparatorVertical: IconData
-    get() = Lucide6.SeparatorVertical
+    get() = Lucide7.SeparatorVertical
 
   val Server: IconData
-    get() = Lucide6.Server
+    get() = Lucide7.Server
 
   val ServerCog: IconData
-    get() = Lucide6.ServerCog
+    get() = Lucide7.ServerCog
 
   val ServerCrash: IconData
-    get() = Lucide6.ServerCrash
+    get() = Lucide7.ServerCrash
 
   val ServerOff: IconData
-    get() = Lucide6.ServerOff
+    get() = Lucide7.ServerOff
+
+  val ServerPlus: IconData
+    get() = Lucide7.ServerPlus
 
   val Settings: IconData
-    get() = Lucide6.Settings
+    get() = Lucide7.Settings
 
   val Settings2: IconData
-    get() = Lucide6.Settings2
+    get() = Lucide7.Settings2
 
   val Shapes: IconData
-    get() = Lucide6.Shapes
+    get() = Lucide7.Shapes
 
   val Share: IconData
-    get() = Lucide6.Share
+    get() = Lucide7.Share
 
   val Share2: IconData
-    get() = Lucide6.Share2
+    get() = Lucide7.Share2
 
   val Sheet: IconData
-    get() = Lucide6.Sheet
+    get() = Lucide7.Sheet
 
   val Shell: IconData
-    get() = Lucide6.Shell
+    get() = Lucide7.Shell
 
   val ShelvingUnit: IconData
-    get() = Lucide6.ShelvingUnit
+    get() = Lucide7.ShelvingUnit
 
   val Shield: IconData
-    get() = Lucide6.Shield
+    get() = Lucide7.Shield
 
   val ShieldAlert: IconData
-    get() = Lucide6.ShieldAlert
+    get() = Lucide7.ShieldAlert
 
   val ShieldBan: IconData
-    get() = Lucide6.ShieldBan
+    get() = Lucide7.ShieldBan
 
   val ShieldCheck: IconData
-    get() = Lucide6.ShieldCheck
+    get() = Lucide7.ShieldCheck
+
+  val ShieldCog: IconData
+    get() = Lucide7.ShieldCog
+
+  val ShieldCogCorner: IconData
+    get() = Lucide7.ShieldCogCorner
 
   val ShieldEllipsis: IconData
-    get() = Lucide6.ShieldEllipsis
+    get() = Lucide7.ShieldEllipsis
 
   val ShieldHalf: IconData
-    get() = Lucide6.ShieldHalf
+    get() = Lucide7.ShieldHalf
+
+  val ShieldKeyhole: IconData
+    get() = Lucide7.ShieldKeyhole
+
+  val ShieldLock: IconData
+    get() = Lucide7.ShieldLock
 
   val ShieldMinus: IconData
-    get() = Lucide6.ShieldMinus
+    get() = Lucide7.ShieldMinus
 
   val ShieldOff: IconData
-    get() = Lucide6.ShieldOff
+    get() = Lucide7.ShieldOff
 
   val ShieldPlus: IconData
-    get() = Lucide6.ShieldPlus
+    get() = Lucide7.ShieldPlus
 
   val ShieldQuestionMark: IconData
-    get() = Lucide6.ShieldQuestionMark
+    get() = Lucide7.ShieldQuestionMark
 
   val ShieldUser: IconData
-    get() = Lucide6.ShieldUser
+    get() = Lucide7.ShieldUser
 
   val ShieldX: IconData
-    get() = Lucide6.ShieldX
+    get() = Lucide7.ShieldX
 
   val Ship: IconData
-    get() = Lucide6.Ship
+    get() = Lucide7.Ship
+
+  val ShipCargo: IconData
+    get() = Lucide7.ShipCargo
 
   val ShipWheel: IconData
-    get() = Lucide6.ShipWheel
+    get() = Lucide7.ShipWheel
 
   val Shirt: IconData
-    get() = Lucide6.Shirt
+    get() = Lucide7.Shirt
 
   val ShoppingBag: IconData
-    get() = Lucide6.ShoppingBag
+    get() = Lucide7.ShoppingBag
 
   val ShoppingBasket: IconData
-    get() = Lucide6.ShoppingBasket
+    get() = Lucide7.ShoppingBasket
 
   val ShoppingCart: IconData
-    get() = Lucide6.ShoppingCart
+    get() = Lucide7.ShoppingCart
 
   val Shovel: IconData
-    get() = Lucide6.Shovel
+    get() = Lucide7.Shovel
 
   val ShowerHead: IconData
-    get() = Lucide6.ShowerHead
+    get() = Lucide7.ShowerHead
 
   val Shredder: IconData
-    get() = Lucide6.Shredder
+    get() = Lucide7.Shredder
 
   val Shrimp: IconData
-    get() = Lucide6.Shrimp
+    get() = Lucide7.Shrimp
 
   val Shrink: IconData
-    get() = Lucide6.Shrink
+    get() = Lucide7.Shrink
 
   val Shrub: IconData
-    get() = Lucide6.Shrub
+    get() = Lucide7.Shrub
 
   val Shuffle: IconData
-    get() = Lucide6.Shuffle
+    get() = Lucide7.Shuffle
 
   val Sigma: IconData
-    get() = Lucide6.Sigma
+    get() = Lucide7.Sigma
 
   val Signal: IconData
-    get() = Lucide6.Signal
+    get() = Lucide7.Signal
 
   val SignalHigh: IconData
-    get() = Lucide6.SignalHigh
+    get() = Lucide7.SignalHigh
 
   val SignalLow: IconData
-    get() = Lucide6.SignalLow
+    get() = Lucide7.SignalLow
 
   val SignalMedium: IconData
-    get() = Lucide6.SignalMedium
+    get() = Lucide7.SignalMedium
 
   val SignalZero: IconData
-    get() = Lucide6.SignalZero
+    get() = Lucide7.SignalZero
 
   val Signature: IconData
-    get() = Lucide6.Signature
+    get() = Lucide7.Signature
 
   val Signpost: IconData
-    get() = Lucide6.Signpost
+    get() = Lucide7.Signpost
 
   val SignpostBig: IconData
-    get() = Lucide6.SignpostBig
+    get() = Lucide7.SignpostBig
 
   val Siren: IconData
-    get() = Lucide6.Siren
+    get() = Lucide7.Siren
 
   val SkipBack: IconData
-    get() = Lucide6.SkipBack
+    get() = Lucide7.SkipBack
 
   val SkipForward: IconData
-    get() = Lucide6.SkipForward
+    get() = Lucide7.SkipForward
 
   val Skull: IconData
-    get() = Lucide6.Skull
+    get() = Lucide7.Skull
 
   val Slack: IconData
-    get() = Lucide6.Slack
+    get() = Lucide7.Slack
 
   val Slash: IconData
-    get() = Lucide6.Slash
+    get() = Lucide7.Slash
 
   val Slice: IconData
-    get() = Lucide6.Slice
+    get() = Lucide7.Slice
 
   val SlidersHorizontal: IconData
-    get() = Lucide6.SlidersHorizontal
+    get() = Lucide7.SlidersHorizontal
 
   val SlidersVertical: IconData
-    get() = Lucide6.SlidersVertical
+    get() = Lucide7.SlidersVertical
 
   val Smartphone: IconData
-    get() = Lucide6.Smartphone
+    get() = Lucide7.Smartphone
 
   val SmartphoneCharging: IconData
-    get() = Lucide6.SmartphoneCharging
+    get() = Lucide7.SmartphoneCharging
 
   val SmartphoneNfc: IconData
-    get() = Lucide6.SmartphoneNfc
+    get() = Lucide7.SmartphoneNfc
 
   val Smile: IconData
-    get() = Lucide6.Smile
+    get() = Lucide7.Smile
 
   val SmilePlus: IconData
-    get() = Lucide6.SmilePlus
+    get() = Lucide7.SmilePlus
 
   val Snail: IconData
-    get() = Lucide6.Snail
+    get() = Lucide7.Snail
 
   val Snowflake: IconData
-    get() = Lucide6.Snowflake
+    get() = Lucide7.Snowflake
 
   val SoapDispenserDroplet: IconData
-    get() = Lucide6.SoapDispenserDroplet
+    get() = Lucide7.SoapDispenserDroplet
 
   val Sofa: IconData
-    get() = Lucide6.Sofa
+    get() = Lucide7.Sofa
 
   val SolarPanel: IconData
-    get() = Lucide6.SolarPanel
+    get() = Lucide7.SolarPanel
 
   val Soup: IconData
     get() = Lucide7.Soup
@@ -32990,6 +35010,9 @@ object Lucide {
 
   val Spool: IconData
     get() = Lucide7.Spool
+
+  val SportShoe: IconData
+    get() = Lucide7.SportShoe
 
   val Spotlight: IconData
     get() = Lucide7.Spotlight
@@ -33099,8 +35122,14 @@ object Lucide {
   val SquareDashedMousePointer: IconData
     get() = Lucide7.SquareDashedMousePointer
 
+  val SquareDashedText: IconData
+    get() = Lucide7.SquareDashedText
+
   val SquareDashedTopSolid: IconData
     get() = Lucide7.SquareDashedTopSolid
+
+  val SquareDimensions: IconData
+    get() = Lucide7.SquareDimensions
 
   val SquareDivide: IconData
     get() = Lucide7.SquareDivide
@@ -33131,6 +35160,9 @@ object Lucide {
 
   val SquareMousePointer: IconData
     get() = Lucide7.SquareMousePointer
+
+  val SquareOff: IconData
+    get() = Lucide7.SquareOff
 
   val SquareParking: IconData
     get() = Lucide7.SquareParking
@@ -33210,6 +35242,9 @@ object Lucide {
   val SquareTerminal: IconData
     get() = Lucide7.SquareTerminal
 
+  val SquareText: IconData
+    get() = Lucide7.SquareText
+
   val SquareUser: IconData
     get() = Lucide7.SquareUser
 
@@ -33234,11 +35269,23 @@ object Lucide {
   val Star: IconData
     get() = Lucide7.Star
 
+  val StarCheck: IconData
+    get() = Lucide7.StarCheck
+
   val StarHalf: IconData
     get() = Lucide7.StarHalf
 
+  val StarMinus: IconData
+    get() = Lucide7.StarMinus
+
   val StarOff: IconData
     get() = Lucide7.StarOff
+
+  val StarPlus: IconData
+    get() = Lucide7.StarPlus
+
+  val StarX: IconData
+    get() = Lucide7.StarX
 
   val StepBack: IconData
     get() = Lucide7.StepBack
@@ -33255,302 +35302,332 @@ object Lucide {
   val StickyNote: IconData
     get() = Lucide7.StickyNote
 
+  val StickyNoteCheck: IconData
+    get() = Lucide7.StickyNoteCheck
+
+  val StickyNoteMinus: IconData
+    get() = Lucide7.StickyNoteMinus
+
+  val StickyNoteOff: IconData
+    get() = Lucide7.StickyNoteOff
+
+  val StickyNotePlus: IconData
+    get() = Lucide7.StickyNotePlus
+
+  val StickyNotes: IconData
+    get() = Lucide7.StickyNotes
+
+  val StickyNoteX: IconData
+    get() = Lucide7.StickyNoteX
+
   val Stone: IconData
-    get() = Lucide7.Stone
+    get() = Lucide8.Stone
 
   val Store: IconData
-    get() = Lucide7.Store
+    get() = Lucide8.Store
 
   val StretchHorizontal: IconData
-    get() = Lucide7.StretchHorizontal
+    get() = Lucide8.StretchHorizontal
 
   val StretchVertical: IconData
-    get() = Lucide7.StretchVertical
+    get() = Lucide8.StretchVertical
 
   val Strikethrough: IconData
-    get() = Lucide7.Strikethrough
+    get() = Lucide8.Strikethrough
 
   val Subscript: IconData
-    get() = Lucide7.Subscript
+    get() = Lucide8.Subscript
+
+  val Summary: IconData
+    get() = Lucide8.Summary
 
   val Sun: IconData
-    get() = Lucide7.Sun
+    get() = Lucide8.Sun
 
   val SunDim: IconData
-    get() = Lucide7.SunDim
+    get() = Lucide8.SunDim
 
   val SunMedium: IconData
-    get() = Lucide7.SunMedium
+    get() = Lucide8.SunMedium
 
   val SunMoon: IconData
-    get() = Lucide7.SunMoon
+    get() = Lucide8.SunMoon
 
   val Sunrise: IconData
-    get() = Lucide7.Sunrise
+    get() = Lucide8.Sunrise
 
   val Sunset: IconData
-    get() = Lucide7.Sunset
+    get() = Lucide8.Sunset
 
   val SunSnow: IconData
-    get() = Lucide7.SunSnow
+    get() = Lucide8.SunSnow
 
   val Superscript: IconData
-    get() = Lucide7.Superscript
+    get() = Lucide8.Superscript
 
   val SwatchBook: IconData
-    get() = Lucide7.SwatchBook
+    get() = Lucide8.SwatchBook
 
   val SwissFranc: IconData
-    get() = Lucide7.SwissFranc
+    get() = Lucide8.SwissFranc
 
   val SwitchCamera: IconData
-    get() = Lucide7.SwitchCamera
+    get() = Lucide8.SwitchCamera
 
   val Sword: IconData
-    get() = Lucide7.Sword
+    get() = Lucide8.Sword
 
   val Swords: IconData
-    get() = Lucide7.Swords
+    get() = Lucide8.Swords
 
   val Syringe: IconData
-    get() = Lucide7.Syringe
+    get() = Lucide8.Syringe
 
   val Table: IconData
-    get() = Lucide7.Table
+    get() = Lucide8.Table
 
   val Table2: IconData
-    get() = Lucide7.Table2
+    get() = Lucide8.Table2
 
   val TableCellsMerge: IconData
-    get() = Lucide7.TableCellsMerge
+    get() = Lucide8.TableCellsMerge
 
   val TableCellsSplit: IconData
-    get() = Lucide7.TableCellsSplit
+    get() = Lucide8.TableCellsSplit
 
   val TableColumnsSplit: IconData
-    get() = Lucide7.TableColumnsSplit
+    get() = Lucide8.TableColumnsSplit
 
   val TableOfContents: IconData
-    get() = Lucide7.TableOfContents
+    get() = Lucide8.TableOfContents
 
   val TableProperties: IconData
-    get() = Lucide7.TableProperties
+    get() = Lucide8.TableProperties
 
   val TableRowsSplit: IconData
-    get() = Lucide7.TableRowsSplit
+    get() = Lucide8.TableRowsSplit
 
   val Tablet: IconData
-    get() = Lucide7.Tablet
+    get() = Lucide8.Tablet
 
   val Tablets: IconData
-    get() = Lucide7.Tablets
+    get() = Lucide8.Tablets
 
   val TabletSmartphone: IconData
-    get() = Lucide7.TabletSmartphone
+    get() = Lucide8.TabletSmartphone
 
   val Tag: IconData
-    get() = Lucide7.Tag
+    get() = Lucide8.Tag
+
+  val TagPlus: IconData
+    get() = Lucide8.TagPlus
 
   val Tags: IconData
-    get() = Lucide7.Tags
+    get() = Lucide8.Tags
+
+  val TagX: IconData
+    get() = Lucide8.TagX
 
   val Tally1: IconData
-    get() = Lucide7.Tally1
+    get() = Lucide8.Tally1
 
   val Tally2: IconData
-    get() = Lucide7.Tally2
+    get() = Lucide8.Tally2
 
   val Tally3: IconData
-    get() = Lucide7.Tally3
+    get() = Lucide8.Tally3
 
   val Tally4: IconData
-    get() = Lucide7.Tally4
+    get() = Lucide8.Tally4
 
   val Tally5: IconData
-    get() = Lucide7.Tally5
+    get() = Lucide8.Tally5
 
   val Tangent: IconData
-    get() = Lucide7.Tangent
+    get() = Lucide8.Tangent
 
   val Target: IconData
-    get() = Lucide7.Target
+    get() = Lucide8.Target
 
   val Telescope: IconData
-    get() = Lucide7.Telescope
+    get() = Lucide8.Telescope
 
   val Tent: IconData
-    get() = Lucide7.Tent
+    get() = Lucide8.Tent
 
   val TentTree: IconData
-    get() = Lucide7.TentTree
+    get() = Lucide8.TentTree
 
   val Terminal: IconData
-    get() = Lucide7.Terminal
+    get() = Lucide8.Terminal
 
   val TestTube: IconData
-    get() = Lucide7.TestTube
+    get() = Lucide8.TestTube
 
   val TestTubeDiagonal: IconData
-    get() = Lucide7.TestTubeDiagonal
+    get() = Lucide8.TestTubeDiagonal
 
   val TestTubes: IconData
-    get() = Lucide7.TestTubes
+    get() = Lucide8.TestTubes
 
   val Text: IconData
-    get() = Lucide7.Text
+    get() = Lucide8.Text
 
   val TextAlignCenter: IconData
-    get() = Lucide7.TextAlignCenter
+    get() = Lucide8.TextAlignCenter
 
   val TextAlignEnd: IconData
-    get() = Lucide7.TextAlignEnd
+    get() = Lucide8.TextAlignEnd
 
   val TextAlignJustify: IconData
-    get() = Lucide7.TextAlignJustify
+    get() = Lucide8.TextAlignJustify
 
   val TextAlignStart: IconData
-    get() = Lucide7.TextAlignStart
+    get() = Lucide8.TextAlignStart
 
   val TextCursor: IconData
-    get() = Lucide7.TextCursor
+    get() = Lucide8.TextCursor
 
   val TextCursorInput: IconData
-    get() = Lucide7.TextCursorInput
+    get() = Lucide8.TextCursorInput
 
   val TextInitial: IconData
-    get() = Lucide7.TextInitial
+    get() = Lucide8.TextInitial
 
   val TextQuote: IconData
-    get() = Lucide7.TextQuote
+    get() = Lucide8.TextQuote
 
   val TextSearch: IconData
-    get() = Lucide7.TextSearch
-
-  val TextSelect: IconData
-    get() = Lucide7.TextSelect
+    get() = Lucide8.TextSearch
 
   val TextWrap: IconData
-    get() = Lucide7.TextWrap
+    get() = Lucide8.TextWrap
 
   val Theater: IconData
-    get() = Lucide7.Theater
+    get() = Lucide8.Theater
 
   val Thermometer: IconData
-    get() = Lucide7.Thermometer
+    get() = Lucide8.Thermometer
 
   val ThermometerSnowflake: IconData
-    get() = Lucide7.ThermometerSnowflake
+    get() = Lucide8.ThermometerSnowflake
 
   val ThermometerSun: IconData
-    get() = Lucide7.ThermometerSun
+    get() = Lucide8.ThermometerSun
 
   val ThumbsDown: IconData
-    get() = Lucide7.ThumbsDown
+    get() = Lucide8.ThumbsDown
 
   val ThumbsUp: IconData
-    get() = Lucide7.ThumbsUp
+    get() = Lucide8.ThumbsUp
 
   val Ticket: IconData
-    get() = Lucide7.Ticket
+    get() = Lucide8.Ticket
 
   val TicketCheck: IconData
-    get() = Lucide7.TicketCheck
+    get() = Lucide8.TicketCheck
 
   val TicketMinus: IconData
-    get() = Lucide7.TicketMinus
+    get() = Lucide8.TicketMinus
 
   val TicketPercent: IconData
-    get() = Lucide7.TicketPercent
+    get() = Lucide8.TicketPercent
 
   val TicketPlus: IconData
-    get() = Lucide7.TicketPlus
+    get() = Lucide8.TicketPlus
 
   val Tickets: IconData
-    get() = Lucide7.Tickets
+    get() = Lucide8.Tickets
 
   val TicketSlash: IconData
-    get() = Lucide7.TicketSlash
+    get() = Lucide8.TicketSlash
 
   val TicketsPlane: IconData
-    get() = Lucide7.TicketsPlane
+    get() = Lucide8.TicketsPlane
 
   val TicketX: IconData
-    get() = Lucide7.TicketX
+    get() = Lucide8.TicketX
+
+  val Timeline: IconData
+    get() = Lucide8.Timeline
 
   val Timer: IconData
-    get() = Lucide7.Timer
+    get() = Lucide8.Timer
 
   val TimerOff: IconData
-    get() = Lucide7.TimerOff
+    get() = Lucide8.TimerOff
 
   val TimerReset: IconData
-    get() = Lucide7.TimerReset
+    get() = Lucide8.TimerReset
 
   val ToggleLeft: IconData
-    get() = Lucide7.ToggleLeft
+    get() = Lucide8.ToggleLeft
 
   val ToggleRight: IconData
-    get() = Lucide7.ToggleRight
+    get() = Lucide8.ToggleRight
 
   val Toilet: IconData
-    get() = Lucide7.Toilet
+    get() = Lucide8.Toilet
 
   val Toolbox: IconData
-    get() = Lucide7.Toolbox
+    get() = Lucide8.Toolbox
 
   val ToolCase: IconData
-    get() = Lucide7.ToolCase
+    get() = Lucide8.ToolCase
 
   val Tornado: IconData
-    get() = Lucide7.Tornado
+    get() = Lucide8.Tornado
 
   val Torus: IconData
-    get() = Lucide7.Torus
+    get() = Lucide8.Torus
 
   val Touchpad: IconData
-    get() = Lucide7.Touchpad
+    get() = Lucide8.Touchpad
 
   val TouchpadOff: IconData
-    get() = Lucide7.TouchpadOff
+    get() = Lucide8.TouchpadOff
 
   val TowelRack: IconData
-    get() = Lucide7.TowelRack
+    get() = Lucide8.TowelRack
 
   val TowerControl: IconData
-    get() = Lucide7.TowerControl
+    get() = Lucide8.TowerControl
 
   val ToyBrick: IconData
-    get() = Lucide7.ToyBrick
+    get() = Lucide8.ToyBrick
 
   val Tractor: IconData
-    get() = Lucide7.Tractor
+    get() = Lucide8.Tractor
 
   val TrafficCone: IconData
-    get() = Lucide7.TrafficCone
+    get() = Lucide8.TrafficCone
+
+  val Trailer: IconData
+    get() = Lucide8.Trailer
 
   val TrainFront: IconData
-    get() = Lucide7.TrainFront
+    get() = Lucide8.TrainFront
 
   val TrainFrontTunnel: IconData
-    get() = Lucide7.TrainFrontTunnel
+    get() = Lucide8.TrainFrontTunnel
 
   val TrainTrack: IconData
-    get() = Lucide7.TrainTrack
+    get() = Lucide8.TrainTrack
 
   val TramFront: IconData
-    get() = Lucide7.TramFront
+    get() = Lucide8.TramFront
 
   val Transgender: IconData
-    get() = Lucide7.Transgender
+    get() = Lucide8.Transgender
 
   val Trash: IconData
-    get() = Lucide7.Trash
+    get() = Lucide8.Trash
 
   val Trash2: IconData
-    get() = Lucide7.Trash2
+    get() = Lucide8.Trash2
 
   val TreeDeciduous: IconData
-    get() = Lucide7.TreeDeciduous
+    get() = Lucide8.TreeDeciduous
 
   val TreePalm: IconData
     get() = Lucide8.TreePalm
@@ -33669,6 +35746,9 @@ object Lucide {
   val Usb: IconData
     get() = Lucide8.Usb
 
+  val UsbCPort: IconData
+    get() = Lucide8.UsbCPort
+
   val User: IconData
     get() = Lucide8.User
 
@@ -33695,6 +35775,9 @@ object Lucide {
 
   val UserRound: IconData
     get() = Lucide8.UserRound
+
+  val UserRoundArrowLeft: IconData
+    get() = Lucide8.UserRoundArrowLeft
 
   val UserRoundCheck: IconData
     get() = Lucide8.UserRoundCheck
@@ -33725,6 +35808,9 @@ object Lucide {
 
   val UserSearch: IconData
     get() = Lucide8.UserSearch
+
+  val UserShield: IconData
+    get() = Lucide8.UserShield
 
   val UsersRound: IconData
     get() = Lucide8.UsersRound
@@ -33835,152 +35921,164 @@ object Lucide {
     get() = Lucide8.WashingMachine
 
   val Watch: IconData
-    get() = Lucide8.Watch
+    get() = Lucide9.Watch
 
   val Waves: IconData
-    get() = Lucide8.Waves
+    get() = Lucide9.Waves
 
   val WavesArrowDown: IconData
-    get() = Lucide8.WavesArrowDown
+    get() = Lucide9.WavesArrowDown
 
   val WavesArrowUp: IconData
-    get() = Lucide8.WavesArrowUp
+    get() = Lucide9.WavesArrowUp
+
+  val WavesHorizontal: IconData
+    get() = Lucide9.WavesHorizontal
 
   val WavesLadder: IconData
-    get() = Lucide8.WavesLadder
+    get() = Lucide9.WavesLadder
+
+  val WavesVertical: IconData
+    get() = Lucide9.WavesVertical
 
   val Waypoints: IconData
-    get() = Lucide8.Waypoints
+    get() = Lucide9.Waypoints
 
   val Webcam: IconData
-    get() = Lucide8.Webcam
+    get() = Lucide9.Webcam
+
+  val WebcamOff: IconData
+    get() = Lucide9.WebcamOff
 
   val Webhook: IconData
-    get() = Lucide8.Webhook
+    get() = Lucide9.Webhook
 
   val WebhookOff: IconData
-    get() = Lucide8.WebhookOff
+    get() = Lucide9.WebhookOff
 
   val Weight: IconData
-    get() = Lucide8.Weight
+    get() = Lucide9.Weight
 
   val WeightTilde: IconData
-    get() = Lucide8.WeightTilde
+    get() = Lucide9.WeightTilde
 
   val Wheat: IconData
-    get() = Lucide8.Wheat
+    get() = Lucide9.Wheat
 
   val WheatOff: IconData
-    get() = Lucide8.WheatOff
+    get() = Lucide9.WheatOff
 
   val WholeWord: IconData
-    get() = Lucide8.WholeWord
+    get() = Lucide9.WholeWord
 
   val Wifi: IconData
-    get() = Lucide8.Wifi
+    get() = Lucide9.Wifi
 
   val WifiCog: IconData
-    get() = Lucide8.WifiCog
+    get() = Lucide9.WifiCog
 
   val WifiHigh: IconData
-    get() = Lucide8.WifiHigh
+    get() = Lucide9.WifiHigh
 
   val WifiLow: IconData
-    get() = Lucide8.WifiLow
+    get() = Lucide9.WifiLow
 
   val WifiOff: IconData
-    get() = Lucide8.WifiOff
+    get() = Lucide9.WifiOff
 
   val WifiPen: IconData
-    get() = Lucide8.WifiPen
+    get() = Lucide9.WifiPen
 
   val WifiSync: IconData
-    get() = Lucide8.WifiSync
+    get() = Lucide9.WifiSync
 
   val WifiZero: IconData
-    get() = Lucide8.WifiZero
+    get() = Lucide9.WifiZero
 
   val Wind: IconData
-    get() = Lucide8.Wind
+    get() = Lucide9.Wind
 
   val WindArrowDown: IconData
-    get() = Lucide8.WindArrowDown
+    get() = Lucide9.WindArrowDown
 
   val Wine: IconData
-    get() = Lucide8.Wine
+    get() = Lucide9.Wine
 
   val WineOff: IconData
-    get() = Lucide8.WineOff
+    get() = Lucide9.WineOff
 
   val Workflow: IconData
-    get() = Lucide8.Workflow
+    get() = Lucide9.Workflow
 
   val Worm: IconData
-    get() = Lucide8.Worm
+    get() = Lucide9.Worm
 
   val WrapText: IconData
-    get() = Lucide8.WrapText
+    get() = Lucide9.WrapText
 
   val Wrench: IconData
-    get() = Lucide8.Wrench
+    get() = Lucide9.Wrench
+
+  val WrenchOff: IconData
+    get() = Lucide9.WrenchOff
 
   val X: IconData
-    get() = Lucide8.X
+    get() = Lucide9.X
 
   val XLineTop: IconData
-    get() = Lucide8.XLineTop
+    get() = Lucide9.XLineTop
 
   val Youtube: IconData
-    get() = Lucide8.Youtube
+    get() = Lucide9.Youtube
 
   val Zap: IconData
-    get() = Lucide8.Zap
+    get() = Lucide9.Zap
 
   val ZapOff: IconData
-    get() = Lucide8.ZapOff
+    get() = Lucide9.ZapOff
 
   val ZodiacAquarius: IconData
-    get() = Lucide8.ZodiacAquarius
+    get() = Lucide9.ZodiacAquarius
 
   val ZodiacAries: IconData
-    get() = Lucide8.ZodiacAries
+    get() = Lucide9.ZodiacAries
 
   val ZodiacCancer: IconData
-    get() = Lucide8.ZodiacCancer
+    get() = Lucide9.ZodiacCancer
 
   val ZodiacCapricorn: IconData
-    get() = Lucide8.ZodiacCapricorn
+    get() = Lucide9.ZodiacCapricorn
 
   val ZodiacGemini: IconData
-    get() = Lucide8.ZodiacGemini
+    get() = Lucide9.ZodiacGemini
 
   val ZodiacLeo: IconData
-    get() = Lucide8.ZodiacLeo
+    get() = Lucide9.ZodiacLeo
 
   val ZodiacLibra: IconData
-    get() = Lucide8.ZodiacLibra
+    get() = Lucide9.ZodiacLibra
 
   val ZodiacOphiuchus: IconData
-    get() = Lucide8.ZodiacOphiuchus
+    get() = Lucide9.ZodiacOphiuchus
 
   val ZodiacPisces: IconData
-    get() = Lucide8.ZodiacPisces
+    get() = Lucide9.ZodiacPisces
 
   val ZodiacSagittarius: IconData
-    get() = Lucide8.ZodiacSagittarius
+    get() = Lucide9.ZodiacSagittarius
 
   val ZodiacScorpio: IconData
-    get() = Lucide8.ZodiacScorpio
+    get() = Lucide9.ZodiacScorpio
 
   val ZodiacTaurus: IconData
-    get() = Lucide8.ZodiacTaurus
+    get() = Lucide9.ZodiacTaurus
 
   val ZodiacVirgo: IconData
-    get() = Lucide8.ZodiacVirgo
+    get() = Lucide9.ZodiacVirgo
 
   val ZoomIn: IconData
-    get() = Lucide8.ZoomIn
+    get() = Lucide9.ZoomIn
 
   val ZoomOut: IconData
-    get() = Lucide8.ZoomOut
+    get() = Lucide9.ZoomOut
 }

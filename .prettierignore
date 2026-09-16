@@ -8,6 +8,7 @@ docs/*
 
 apps/api/drizzle/*
 apps/mobile/*
+apps/ios/*
 
 **/build/**
 apps/desktop/release/**

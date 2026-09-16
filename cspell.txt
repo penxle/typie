@@ -43,6 +43,7 @@ bytea
 catppuccin
 cbor
 cdylib
+cfurl
 centiseconds
 choseong
 cinterop
@@ -110,6 +111,7 @@ inout
 inversesqrt
 inview
 ipaddr
+iphoneos
 ivec
 jaccard
 jamo
@@ -281,6 +283,7 @@ unconfigure
 unmigratable
 UNDISPATCHED
 uniffi
+unlift
 unobserve
 unparseable
 unplugin
@@ -310,6 +313,7 @@ xadd
 xbackend
 xcarchive
 xcargs
+xcassets
 xcconfig
 xcframework
 xcodeproj
