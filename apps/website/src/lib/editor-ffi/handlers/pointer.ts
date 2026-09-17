@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern';
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import { isSelectionCollapsed } from '../geometry';
 import type { InputModifiers, InteractiveHit, Position, Rect, Selection, SelectionPointUnit } from '@typie/editor-ffi/browser';
@@ -12,20 +13,15 @@ type LocalPoint = { page: number; x: number; y: number };
 type DragPoint = LocalPoint & { clientX: number; clientY: number };
 
 const interactiveTarget = (editor: Editor, hit: InteractiveHit | undefined, local: { x: number; y: number }) => {
-  if (hit?.type === 'fold_title') {
-    const selectableTitle = !editor.readOnly || (editor.nativeSelection && !editor.protectContent);
-    if (selectableTitle && hit.text_rect && pointInRect(local.x, local.y, hit.text_rect)) return;
-    return hit;
-  }
-  if (hit?.type === 'callout_icon' && !editor.readOnly) return hit;
-};
-
-const activateInteractiveTarget = (editor: Editor, hit: InteractiveHit) => {
-  if (hit.type === 'fold_title') {
-    editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
-  } else {
-    editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
-  }
+  if (!hit) return;
+  return match(hit)
+    .with({ type: 'fold_title' }, (hit) => {
+      const selectableTitle = !editor.readOnly || (editor.nativeSelection && !editor.protectContent);
+      if (selectableTitle && hit.text_rect && pointInRect(local.x, local.y, hit.text_rect)) return;
+      return hit;
+    })
+    .with({ type: 'callout_icon' }, (hit) => (editor.readOnly ? undefined : hit))
+    .exhaustive();
 };
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
@@ -42,14 +38,11 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 
   const hit = interactiveTarget(editor, editor.interactiveHitTest(local.page, local.x, local.y), local);
   if (hit) {
-    if (e.pointerType === 'touch') {
-      // The browser decides whether this gesture produces a click. Retain only
-      // its engine target because multiple canvas controls share one DOM node.
-      PointerState.of(editor).clickTarget = { pointerId: e.pointerId, hit };
-    } else {
-      activateInteractiveTarget(editor, hit);
-      if (editor.nativeSelection) e.preventDefault();
-    }
+    // The browser decides whether this gesture produces a click. Retain only
+    // its engine target because multiple canvas controls share one DOM node.
+    PointerState.of(editor).clickTarget = { pointerId: e.pointerId, hit };
+    // Keep mouse/pen presses on controls from starting native text selection.
+    if (editor.nativeSelection && e.pointerType !== 'touch') e.preventDefault();
     return;
   }
   // The viewer shares interactive hit testing, then leaves text selection to the browser.
@@ -167,7 +160,13 @@ export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor,
   if (!local) return;
   if (target) {
     const hit = interactiveTarget(editor, editor.interactiveHitTest(local.page, local.x, local.y), local);
-    if (hit?.type === target.hit.type && hit.id === target.hit.id) activateInteractiveTarget(editor, hit);
+    if (!hit || hit.type !== target.hit.type || hit.id !== target.hit.id) return;
+    match(hit)
+      .with({ type: 'fold_title' }, ({ id }) => editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id } }))
+      .with({ type: 'callout_icon' }, ({ id, next_variant }) =>
+        editor.enqueue({ type: 'node', op: { type: 'set_attrs', id, attrs: { type: 'callout', variant: next_variant } } }),
+      )
+      .exhaustive();
     return;
   }
   if (editor.nativeSelection || !editor.commentClickHandler) return;

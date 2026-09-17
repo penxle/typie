@@ -1,7 +1,7 @@
 import '../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
@@ -311,58 +311,60 @@ it('includes folded bodies in every viewer copy format when the range crosses th
   await userEvent.click(page.elementLocator(root), { position: { ...togglePosition } });
   await vi.waitFor(() => expect(root.textContent).not.toContain('secret'));
 });
-it.each([false, true])('waits for a fold click and allows touch cancellation, protected=%s', async (protectContent) => {
-  const { root } = await viewer(
-    doc([
-      entry({ type: 'fold' }, [
-        entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'title' })]),
-        entry({ type: 'fold_content' }, [paragraph('folded body')]),
+describe.each(['mouse', 'pen', 'touch'])('%s fold activation', (pointerType) => {
+  it.each([false, true])('waits for a fold click and allows cancellation, protected=%s', async (protectContent) => {
+    const { root } = await viewer(
+      doc([
+        entry({ type: 'fold' }, [
+          entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'title' })]),
+          entry({ type: 'fold_content' }, [paragraph('folded body')]),
+        ]),
+        paragraph('after'),
       ]),
-      paragraph('after'),
-    ]),
-  );
-  const run = defined(editor.published?.snapshot.selectionLayout?.[0].runs[0]);
-  const bounds = root.getBoundingClientRect();
-  const point = { clientX: bounds.left + run.rect.x - 8, clientY: bounds.top + run.rect.y + run.rect.height / 2 };
-  editor.protectContent = protectContent;
-  await vi.waitFor(() => expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true));
-  const target = defined(document.elementFromPoint(point.clientX, point.clientY));
-  const send = (type: string, dy = 0) =>
-    target.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 42,
-        pointerType: 'touch',
-        isPrimary: true,
-        button: 0,
-        ...point,
-        clientY: point.clientY + dy,
-      }),
     );
-  const enqueue = vi.spyOn(editor, 'enqueue');
-  expect(send('pointerdown')).toBe(true);
-  expect(enqueue).not.toHaveBeenCalled();
-  send('pointercancel');
-  send('pointerup');
-  send('click');
-  expect(enqueue).not.toHaveBeenCalled();
-  send('pointerdown');
-  send('pointermove', 30);
-  send('pointerup');
-  expect(enqueue).not.toHaveBeenCalled();
-  send('pointerdown');
-  target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-  send('pointerup');
-  send('click');
-  expect(enqueue).not.toHaveBeenCalled();
-  send('pointerdown');
-  send('pointerup');
-  expect(enqueue).not.toHaveBeenCalled();
-  send('lostpointercapture');
-  send('click');
-  expect(enqueue).toHaveBeenCalledExactlyOnceWith({ type: 'view', op: { type: 'toggle_fold', id: expect.any(String) } });
-  if (!protectContent) await vi.waitFor(() => expect(root.textContent).toContain('folded body'));
+    const run = defined(editor.published?.snapshot.selectionLayout?.[0].runs[0]);
+    const bounds = root.getBoundingClientRect();
+    const point = { clientX: bounds.left + run.rect.x - 8, clientY: bounds.top + run.rect.y + run.rect.height / 2 };
+    editor.protectContent = protectContent;
+    await vi.waitFor(() => expect(editor.isPublished(editor.appliedRevision, { requireFrame: true })).toBe(true));
+    const target = defined(document.elementFromPoint(point.clientX, point.clientY));
+    const send = (type: string, dy = 0) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 42,
+          pointerType,
+          isPrimary: true,
+          button: 0,
+          ...point,
+          clientY: point.clientY + dy,
+        }),
+      );
+    const enqueue = vi.spyOn(editor, 'enqueue');
+    expect(send('pointerdown')).toBe(pointerType === 'touch');
+    expect(enqueue).not.toHaveBeenCalled();
+    send('pointercancel');
+    send('pointerup');
+    send('click');
+    expect(enqueue).not.toHaveBeenCalled();
+    send('pointerdown');
+    send('pointermove', 30);
+    send('pointerup');
+    expect(enqueue).not.toHaveBeenCalled();
+    send('pointerdown');
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    send('pointerup');
+    send('click');
+    expect(enqueue).not.toHaveBeenCalled();
+    send('pointerdown');
+    send('pointerup');
+    expect(enqueue).not.toHaveBeenCalled();
+    send('lostpointercapture');
+    send('click');
+    expect(enqueue).toHaveBeenCalledExactlyOnceWith({ type: 'view', op: { type: 'toggle_fold', id: expect.any(String) } });
+    if (!protectContent) await vi.waitFor(() => expect(root.textContent).toContain('folded body'));
+  });
 });
 it.each([false, true])(
   'includes collapsed bodies with native select-all but keeps title-only selections partial, backwards=%s',
