@@ -3,8 +3,10 @@ import '../../app.css';
 import { mount, tick, unmount } from 'svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 import { cdp } from 'vitest/browser';
+import { PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
+import { resolvePageSpans } from './geometry';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
 import type { CDPSession } from '@vitest/browser-playwright';
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
@@ -80,6 +82,79 @@ async function viewer(
   if (!root) throw new Error('Expected document body');
   return { root, ...harness };
 }
+
+it.for([false, true])(
+  'preserves native text and selection while zooming, paginated=%s',
+  { timeout: 30_000 },
+  async (paginated, { task }) => {
+    const { root } = await viewer(paginated);
+    const spans = [...root.querySelectorAll<HTMLElement>('[data-selection-run]')];
+    const first = spans[0].firstChild;
+    const last = spans.at(-1)?.firstChild;
+    const selection = window.getSelection();
+    if (!first || !last || !selection) throw new Error('Expected selectable text');
+    selection.setBaseAndExtent(first, 0, last, last.textContent?.length ?? 0);
+    const text = selection.toString();
+    const timings: number[] = [];
+    for (const zoom of [1.137, 1.253, 1.371, 1.489, 1.607, 1.729]) {
+      await frame();
+      const started = performance.now();
+      editor.displayZoom = zoom;
+      await tick();
+      await Promise.resolve();
+      root.getBoundingClientRect();
+      timings.push(performance.now() - started);
+    }
+    Object.assign(task.meta, { performance: { runs: spans.length, zoomUpdateMs: timings } });
+    expect(spans.every((span) => span.isConnected)).toBe(true);
+    expect(selection.anchorNode).toBe(first);
+    expect(selection.focusNode).toBe(last);
+    expect(selection.toString()).toBe(text);
+
+    const zoom = editor.displayZoom;
+    const pages = resolvePageSpans(editor.pageSizes, {
+      displayZoom: zoom,
+      scaleFactor: editor.scaleFactor,
+      pageGap: paginated ? PAGE_GAP * zoom : 0,
+    });
+    const blocks = editor.published?.snapshot.selectionLayout;
+    if (!blocks) throw new Error('Expected selection layout');
+    const rootRect = root.getBoundingClientRect();
+    for (const [index, span] of spans.entries()) {
+      if (index % 97 !== 0 && index !== spans.length - 1) continue;
+      const block = blocks[Number(span.closest<HTMLElement>('[data-selection-block]')?.dataset.selectionBlock)];
+      const run = block.runs[Number(span.dataset.selectionRun)];
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      const rect = range.getBoundingClientRect();
+      expect(Math.abs(rect.top - rootRect.top - pages[run.page_idx].top - run.rect.y * zoom)).toBeLessThan(0.25);
+    }
+  },
+);
+
+it.each([false, true])('presents the final raster scale after repeated document and browser zoom, paginated=%s', async (paginated) => {
+  const { root } = await viewer(paginated, true);
+  for (const deltaY of [-20, -20, -20, 20, 20, 20, -20]) {
+    root.dispatchEvent(new WheelEvent('wheel', { deltaY, ctrlKey: true, bubbles: true, cancelable: true, clientX: 160, clientY: 80 }));
+    await frame();
+  }
+  await expect.poll(() => editor.renderZoom).toBeCloseTo(editor.displayZoom, 5);
+  const documentZoom = editor.displayZoom;
+  for (const scale of [1, 1.25, 2, 1]) {
+    vi.stubGlobal('devicePixelRatio', scale);
+    editor.resizeViewport(360, 180, scale);
+    await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(scale);
+    await expect
+      .poll(() => {
+        const surface = editor.published?.frames.get(0)?.surface;
+        const canvas = surface?.querySelector<HTMLCanvasElement>(':scope [data-surface-layer="foreground"] canvas');
+        return canvas?.isConnected ? new DOMMatrixReadOnly(canvas.style.transform).a : 0;
+      })
+      .toBeCloseTo(1 / (scale * documentZoom), 5);
+    expect(editor.terminal).toBe(false);
+    expect(editor.displayZoom).toBe(documentZoom);
+  }
+});
 
 it.each([false, true])('leaves touch scrolling and pinch zoom to the browser, windowScroll=%s', async (useWindowScroll) => {
   const { root } = await viewer(false, true, useWindowScroll);

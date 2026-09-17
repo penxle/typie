@@ -1873,7 +1873,8 @@ export class Editor {
       const previous = previousTiles?.get(page);
       if (previous?.length === bounds.length && previous.every((value, index) => value === bounds[index])) continue;
       const target = this.#visualHost?.targets.get(page);
-      if (!target?.available) continue;
+      // Tile bounds use the new raster scale; a replacement surface installs them when attached.
+      if (!target?.available || target.scaleFactor !== this.surfaceScaleFactor) continue;
       this.#invokeCore((core) => core.configure_surface_tiles(page, Int32Array.from(bounds)));
       target.proof = undefined;
       target.requiredRevision = this.#applied.revision;

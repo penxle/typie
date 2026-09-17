@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { PAGE_GAP } from '../constants';
   import { resolveCachedPageSpans } from '../geometry';
   import { readNativeSelection } from '../native-selection';
-  import { layoutSelectionBlocks, renderSelectionText } from '../native-selection-dom';
-  import { fitSelectionRuns, loadSelectionFonts, observeNativeSelection } from '../native-selection-layout';
+  import { layoutSelectionBlocks, positionSelectionText, renderSelectionText } from '../native-selection-dom';
+  import { fitSelectionFragments, fitSelectionRuns, loadSelectionFonts, observeNativeSelection } from '../native-selection-layout';
   import ExternalElement from './ExternalElement.svelte';
   import NativeSelectionImage from './NativeSelectionImage.svelte';
   import type { Editor } from '../editor.svelte';
@@ -57,7 +57,7 @@
   $effect(() => {
     const element = root;
     const layout = blocks;
-    const pageSpans = pages;
+    void width;
     if (!element) return;
     let active = true;
     let dispose: (() => void) | undefined;
@@ -65,6 +65,8 @@
     void untrack(() => loadSelectionFonts(editor, layout))
       .then(() => {
         if (!active) return;
+        const pageSpans = untrack(() => pages);
+        fitSelectionFragments(element, layout, pageSpans);
         fitSelectionRuns(element, layout, pageSpans);
         dispose = observeNativeSelection(element, editor, layout);
         fontsReady = true;
@@ -75,6 +77,21 @@
     return () => {
       active = false;
       dispose?.();
+    };
+  });
+
+  $effect(() => {
+    const element = root;
+    const layout = blocks;
+    const pageSpans = pages;
+    void externalElements;
+    if (!element || !fontsReady) return;
+    let active = true;
+    void tick().then(() => {
+      if (active) fitSelectionFragments(element, layout, pageSpans);
+    });
+    return () => {
+      active = false;
     };
   });
 </script>
@@ -98,7 +115,16 @@
       data-selection-block={index}
     >
       {#if block.fragments.length > 0}
-        <span class="selection-text-block" {@attach (element) => renderSelectionText(element, block)}></span>
+        <span
+          class="selection-text-block"
+          {@attach (element) => {
+            // Text and font metrics change with document layout, not display zoom.
+            void blocks;
+            void width;
+            untrack(() => renderSelectionText(element, block));
+            $effect(() => positionSelectionText(element, block));
+          }}
+        ></span>
       {:else if block.external}
         {@const { element, top } = block.external}
         <div style:left="0px" style:top={`${top}px`} class="selection-external" class:selectable={element.data.type !== 'image'}>
@@ -141,6 +167,7 @@
     line-height: 0;
   }
   .native-selection-layer :global(.selection-fragment) {
+    position: relative;
     display: inline-block;
     vertical-align: top;
     pointer-events: auto;

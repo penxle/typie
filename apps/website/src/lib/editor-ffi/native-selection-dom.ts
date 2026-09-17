@@ -154,9 +154,6 @@ export function renderSelectionText(element: HTMLElement, block: BlockLayout) {
   for (const fragment of block.fragments) {
     const pageElement = document.createElement('span');
     pageElement.className = 'selection-fragment';
-    pageElement.style.cssText =
-      `width:${fragment.width}px;height:${fragment.height}px;margin-top:${fragment.marginTop}px;` +
-      `padding:${fragment.paddingTop}px ${fragment.paddingRight}px 0 ${fragment.paddingLeft}px;`;
     for (const line of fragment.lines) {
       const lineElement = document.createElement('span');
       lineElement.className = 'selection-line';
@@ -185,6 +182,15 @@ export function renderSelectionText(element: HTMLElement, block: BlockLayout) {
   // Keep the same nodes while scrolling/selecting. Direct DOM also avoids
   // framework anchors and a reactive component/effect for every run.
   element.replaceChildren(content);
+}
+
+export function positionSelectionText(element: HTMLElement, block: BlockLayout) {
+  for (const [index, fragment] of block.fragments.entries()) {
+    const pageElement = element.children[index] as HTMLElement;
+    pageElement.style.cssText =
+      `width:${fragment.width}px;height:${fragment.height}px;margin-top:${fragment.marginTop}px;` +
+      `padding:${fragment.paddingTop}px ${fragment.paddingRight}px 0 ${fragment.paddingLeft}px;`;
+  }
 }
 
 function selectionLink(href: string | undefined): string | undefined {
