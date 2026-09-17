@@ -8,6 +8,7 @@
 
   type Props = {
     document$key: Editor_document$key;
+    mode?: 'editor' | 'viewer';
     active?: boolean;
     useWindowScroll?: boolean;
     style?: SystemStyleObject;
@@ -21,6 +22,7 @@
 
   let {
     document$key,
+    mode = 'editor',
     active = true,
     useWindowScroll = false,
     style,
@@ -50,6 +52,7 @@
     {document$key}
     {footer}
     {header}
+    {mode}
     {onReady}
     {placeholderAction}
     {useWindowScroll}

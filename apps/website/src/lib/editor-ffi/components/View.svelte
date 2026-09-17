@@ -49,6 +49,7 @@
 
   type Props = {
     document$key: Editor_document$key;
+    mode?: 'editor' | 'viewer';
     active?: boolean;
     /** window 자체를 스크롤 컨테이너로 사용한다. 페이지당 에디터 1개를 전제한다 (window에 리스너를 부착). */
     useWindowScroll?: boolean;
@@ -65,6 +66,7 @@
 
   let {
     document$key,
+    mode = 'editor',
     active = true,
     useWindowScroll = false,
     style,
@@ -410,7 +412,15 @@
   )}
 >
   {#if ctx.editor}
-    <EditorZoom {active} editor={ctx.editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} viewportWidth={clientWidth ?? 0}>
+    <EditorZoom
+      {active}
+      editor={ctx.editor}
+      {editorViewSurface}
+      layout={zoomLayout}
+      {mode}
+      scroll={ctx.scroll}
+      viewportWidth={clientWidth ?? 0}
+    >
       {#snippet zoomControls(controls)}
         <FloatingEditorZoomControls
           chromeAttachment={floatingZoomChromeAttachment}

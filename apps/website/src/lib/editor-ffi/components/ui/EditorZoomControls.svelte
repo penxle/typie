@@ -19,6 +19,7 @@
     enabled: boolean;
     displayZoom: number;
     indicatorZoom: number;
+    keyboardShortcuts?: boolean;
     landmark: DocumentZoomLandmark | null;
     atMinimum: boolean;
     atMaximum: boolean;
@@ -59,6 +60,7 @@
     enabled,
     displayZoom,
     indicatorZoom,
+    keyboardShortcuts = true,
     landmark,
     atMinimum,
     atMaximum,
@@ -112,7 +114,7 @@
       }
     }
   });
-  const toggleKeys = $derived(toggleTargetLandmark === 'unit' ? (['Mod', '0'] as ['Mod', '0']) : undefined);
+  const toggleKeys = $derived(keyboardShortcuts && toggleTargetLandmark === 'unit' ? (['Mod', '0'] as ['Mod', '0']) : undefined);
 
   function handleValuePointerEnter() {
     valueHovered = true;
@@ -311,7 +313,7 @@
       type="button"
       use:tooltip={{
         message: atMinimum ? '최소 배율입니다' : '페이지 축소',
-        keys: atMinimum ? undefined : ['Mod', '-'],
+        keys: keyboardShortcuts && !atMinimum ? ['Mod', '-'] : undefined,
         placement: 'bottom',
       }}
     >
@@ -395,7 +397,7 @@
       type="button"
       use:tooltip={{
         message: atMaximum ? '최대 배율입니다' : '페이지 확대',
-        keys: atMaximum ? undefined : ['Mod', '+'],
+        keys: keyboardShortcuts && !atMaximum ? ['Mod', '+'] : undefined,
         placement: 'bottom',
       }}
     >
