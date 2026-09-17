@@ -1252,6 +1252,76 @@ fn range_marked_invalid_when_all_covered_text_deleted() {
 }
 
 #[test]
+fn frozen_range_ending_at_paragraph_start_is_unlocated_after_covering_delete() {
+    for reversed in [false, true] {
+        for (delete_start, delete_end) in [(2, 0), (1, 2)] {
+            let (initial, p1, p2) = state! {
+                doc { root {
+                    p1: paragraph { text("hello") }
+                    p2: paragraph { text("world") }
+                } }
+                selection: (p1, 2) -> (p2, 0)
+            };
+            let mut selection = initial.selection.unwrap();
+            selection.head.affinity = editor_state::Affinity::Upstream;
+            if reversed {
+                selection = Selection::new(selection.head, selection.anchor);
+            }
+            let frozen = editor_state::StableSelection::capture(&selection, &initial.view());
+            let mut editor = Editor::new_test(initial);
+            editor.apply(Message::TrackedRange {
+                op: TrackedRangeOp::AddFrozen {
+                    id: "r".into(),
+                    group: "comment".into(),
+                    selection: frozen,
+                    metadata: String::new(),
+                },
+            });
+            let original = editor
+                .tracked_ranges()
+                .get("r")
+                .unwrap()
+                .locate(editor.state());
+            assert_eq!(located_text(&editor, "r").as_deref(), Some("llo"));
+
+            // Delete either exactly "llo\n" or the wider "ello\nwo".
+            set_selection(
+                &mut editor,
+                Selection::new(
+                    editor_state::Position::new(p1, delete_start),
+                    editor_state::Position::new(p2, delete_end),
+                ),
+            );
+            editor.apply(Message::Deletion {
+                op: DeletionOp::Selection,
+            });
+            assert!(
+                is_unlocated(&editor, "r"),
+                "fully deleted range must be unlocated: reversed={reversed}, delete={delete_start}..{delete_end}, got={:?}",
+                located_text(&editor, "r")
+            );
+
+            editor.apply(Message::History {
+                op: HistoryOp::Undo,
+            });
+            assert_eq!(
+                editor
+                    .tracked_ranges()
+                    .get("r")
+                    .unwrap()
+                    .locate(editor.state()),
+                original,
+                "undo must restore the original range, including its paragraph break"
+            );
+            editor.apply(Message::History {
+                op: HistoryOp::Redo,
+            });
+            assert!(is_unlocated(&editor, "r"));
+        }
+    }
+}
+
+#[test]
 fn range_collapses_when_text_deleted_beyond_its_bounds() {
     // Comment covers 'ell' (1..4) of "hello", but the user deletes the whole
     // word (0..5). The range must still collapse — TR-225 repro.

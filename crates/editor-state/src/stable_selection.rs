@@ -84,7 +84,8 @@ impl StableSelection {
         let Some(resolved) = primary.resolve(ctx.view()) else {
             return Some(primary);
         };
-        Some(match resolved.anchor().cmp(resolved.head()) {
+        let order = resolved.anchor().cmp(resolved.head());
+        let corrected = match order {
             Ordering::Less => Selection {
                 anchor: self.anchor.range_start_position(ctx, primary.anchor),
                 head: self.head.range_end_position(ctx, primary.head),
@@ -93,8 +94,22 @@ impl StableSelection {
                 anchor: self.anchor.range_end_position(ctx, primary.anchor),
                 head: self.head.range_start_position(ctx, primary.head),
             },
-            Ordering::Equal => primary,
-        })
+            Ordering::Equal => return Some(primary),
+        };
+        // Deleting the whole range can make its corrected boundaries cross.
+        // Collapse at the upper boundary, as for deleted inline ranges.
+        let crosses = corrected
+            .resolve(ctx.view())
+            .is_some_and(|resolved| resolved.anchor().cmp(resolved.head()) == order.reverse());
+        if crosses {
+            let end = if order == Ordering::Less {
+                corrected.head
+            } else {
+                corrected.anchor
+            };
+            return Some(Selection::collapsed(end));
+        }
+        Some(corrected)
     }
 
     fn resolve_inline_range(
