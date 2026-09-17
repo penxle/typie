@@ -162,6 +162,7 @@
                     whiteSpace: 'nowrap',
                     textOverflow: 'ellipsis',
                   })}
+                  data-selection-label
                 >
                   {asset.title ?? '(제목 없음)'}
                 </p>
@@ -174,6 +175,7 @@
                       whiteSpace: 'nowrap',
                       textOverflow: 'ellipsis',
                     })}
+                    data-selection-label
                   >
                     {asset.description}
                   </p>
@@ -187,6 +189,7 @@
                     whiteSpace: 'nowrap',
                     textOverflow: 'ellipsis',
                   })}
+                  data-selection-label
                 >
                   {new URL(asset.url).origin}
                 </p>

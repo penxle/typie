@@ -326,6 +326,7 @@
           if (canEdit) return;
 
           event.stopPropagation();
+          if (ctx.editor?.nativeSelection && !window.getSelection()?.isCollapsed) return;
           enlarged = true;
         }}
         onkeydown={(event) => {

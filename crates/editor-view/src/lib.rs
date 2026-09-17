@@ -1,17 +1,16 @@
 editor_macros::preamble!();
 
-pub mod glyph_run;
-pub mod style;
-
 mod dnd;
 mod external;
+pub mod glyph_run;
 pub(crate) mod measure;
-pub(crate) mod paginate;
-pub(crate) mod query;
-mod table_overlay;
-
 mod page;
 pub mod page_fragment;
+pub(crate) mod paginate;
+pub(crate) mod query;
+mod selection_layout;
+pub mod style;
+mod table_overlay;
 mod view;
 mod view_state;
 mod viewport;
@@ -33,6 +32,7 @@ pub use query::viewport_anchor::{
     ViewportAnchorPositionGeometry, ViewportAnchorPresentation, ViewportAnchorResolution,
 };
 pub use query::*;
+pub use selection_layout::{SelectionFont, SelectionLayoutBlock, SelectionTextRun};
 pub use table_overlay::TableOverlay;
 pub use view::*;
 pub use view_state::*;

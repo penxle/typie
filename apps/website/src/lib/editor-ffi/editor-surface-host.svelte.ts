@@ -5,6 +5,7 @@ import type { Editor, PublishedBundle } from './editor.svelte';
 import type { SurfaceDriverEffects } from './surface-driver';
 
 type PageProducer = {
+  separateBackground: boolean;
   width: number;
   height: number;
   driver: ReturnType<typeof createSurfaceDriver<HTMLElement>>;
@@ -57,7 +58,9 @@ export class EditorSurfaceHost {
       current.width = width;
       current.height = height;
       current.driver.setActive(true);
-      if (this.#editor.surfaceConfigMatches(page, width, height)) current.driver.restyle();
+      const modeChanged = current.separateBackground !== (this.#editor.nativeSelection && !this.#editor.protectContent);
+      current.separateBackground = this.#editor.nativeSelection && !this.#editor.protectContent;
+      if (!modeChanged && this.#editor.surfaceConfigMatches(page, width, height)) current.driver.restyle();
       else current.driver.replace();
     }
   }
@@ -98,6 +101,7 @@ export class EditorSurfaceHost {
       createSurface: () => {
         const surface = document.createElement('div');
         surface.dataset.pageSurface = String(page);
+        if (this.#editor.nativeSelection && !this.#editor.protectContent) surface.dataset.separateBackground = '';
         surface.style.position = 'absolute';
         surface.style.inset = '0';
         surface.style.width = '100%';
@@ -136,7 +140,12 @@ export class EditorSurfaceHost {
       removeNode: (surface) => surface.remove(),
       replacementFailed: () => this.#editor.surfaceReplacementFailed(page),
     };
-    producer = { width, height, driver: createSurfaceDriver(effects) };
+    producer = {
+      separateBackground: this.#editor.nativeSelection && !this.#editor.protectContent,
+      width,
+      height,
+      driver: createSurfaceDriver(effects),
+    };
     return producer;
   }
 

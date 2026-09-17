@@ -659,6 +659,8 @@ impl Renderer {
             &theme,
         );
 
+        sink.start_foreground();
+
         view.visit_page(
             page_idx,
             &mut self.page_visitor(
@@ -899,6 +901,8 @@ impl<'a> RenderVisitor<'a> {
                     x: ann.x,
                     width: ann.width,
                     graphemes: Vec::<GraphemeSpan>::new(),
+                    rtl: false,
+                    letter_spacing: 0.0,
                     cursor_ascent: 0.0,
                     cursor_descent: 0.0,
                 };
@@ -2225,6 +2229,8 @@ mod tests {
             x: 8.0,
             width: 24.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };
@@ -2510,6 +2516,8 @@ mod tests {
                 x: 0.0,
                 width: 24.0,
                 graphemes: vec![],
+                rtl: false,
+                letter_spacing: 0.0,
                 cursor_ascent: 0.0,
                 cursor_descent: 0.0,
             };

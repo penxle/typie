@@ -24,19 +24,20 @@
   const layoutMode = $derived(editor.rootAttrs?.layout_mode);
   const isPaginated = $derived(layoutMode?.type === 'paginated');
   const displayZoom = $derived(editor.safeDisplayZoom());
+  const nativeSelection = $derived(editor.nativeSelection && !editor.protectContent);
   const slotWidth = $derived(roundToScale(width * displayZoom, scaleFactor));
   const slotHeight = $derived(roundToScale(height * displayZoom, scaleFactor));
   const showCropMarker = $derived(layoutMode?.type === 'paginated' && !editor.readOnly);
   const pagePresented = $derived(editor.published?.frames.has(page) === true);
   const externalElements = $derived.by(() => {
     void editor.publishedRevision;
-    return pagePresented
+    return pagePresented && !nativeSelection
       ? editor.pageExternalElements(page).filter((element) => element.data.type !== 'embed' && element.data.type !== 'image')
       : [];
   });
   const tableOverlays = $derived.by(() => {
     void editor.publishedRevision;
-    return isPaginated && pagePresented ? editor.pageTableOverlays(page) : [];
+    return isPaginated && pagePresented && !editor.readOnly ? editor.pageTableOverlays(page) : [];
   });
   const linkRects = $derived.by(() => {
     void editor.publishedRevision;
@@ -46,14 +47,15 @@
 
 <div style:width={`${slotWidth}px`} style:height={`${slotHeight}px`} class={css({ position: 'relative', flexShrink: '0' })}>
   <div
-    style:width={`${cssWidth}px`}
-    style:height={`${cssHeight}px`}
-    style:transform={displayZoom === 1 ? undefined : `scale(${displayZoom})`}
-    style:transform-origin={displayZoom === 1 ? undefined : 'top left'}
-    style:will-change={pagePresented && displayZoom !== 1 ? 'transform' : undefined}
+    style:--surface-zoom={displayZoom}
+    style:width={`${nativeSelection ? slotWidth : cssWidth}px`}
+    style:height={`${nativeSelection ? slotHeight : cssHeight}px`}
+    style:transform={displayZoom === 1 || nativeSelection ? undefined : `scale(${displayZoom})`}
+    style:transform-origin={displayZoom === 1 || nativeSelection ? undefined : 'top left'}
+    style:will-change={pagePresented && displayZoom !== 1 && !nativeSelection ? 'transform' : undefined}
     class={css({
       position: 'relative',
-      isolation: 'isolate',
+      isolation: nativeSelection ? 'auto' : 'isolate',
       ...(isPaginated && {
         backgroundColor: 'surface.default',
         boxShadow: 'md',
@@ -84,7 +86,9 @@
       <TableOverlay {overlay} readOnly={editor.readOnly} />
     {/each}
 
-    <LinkOverlay links={linkRects} />
+    {#if !nativeSelection}
+      <LinkOverlay links={linkRects} />
+    {/if}
 
     {#if showCropMarker && layoutMode?.type === 'paginated'}
       {@const marginLeft = layoutMode.page_margin_left}
@@ -113,3 +117,18 @@
     {/if}
   </div>
 </div>
+
+<style>
+  :global([data-surface-layer]) {
+    pointer-events: none;
+    user-select: none;
+    transform: scale(var(--surface-zoom, 1));
+    transform-origin: top left;
+  }
+  :global([data-surface-layer='background']) {
+    z-index: 0;
+  }
+  :global([data-surface-layer='foreground']) {
+    z-index: 2;
+  }
+</style>

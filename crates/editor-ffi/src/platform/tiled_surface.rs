@@ -1,4 +1,4 @@
-use editor_renderer::{backend::cpu::CpuSink, damage::IRect, display_list::DisplayList};
+use editor_renderer::{backend::cpu::CpuSink, damage::IRect, display_list::Primitive};
 use std::sync::Arc;
 
 use crate::error::FfiError;
@@ -129,7 +129,12 @@ impl TiledSurface {
         )
     }
 
-    pub fn apply_damage(&mut self, dl: &DisplayList, damage: &[IRect], version: u64) -> bool {
+    pub fn apply_damage(
+        &mut self,
+        primitives: &[Primitive],
+        damage: &[IRect],
+        version: u64,
+    ) -> bool {
         let Some(requested) = self.requested_tiles() else {
             return false;
         };
@@ -150,7 +155,7 @@ impl TiledSurface {
                     .filter_map(|r| r.intersect(raster))
                     .reduce(IRect::union)
                 {
-                    editor_renderer::diff::raster_rect(dl, dirty, &mut self.scratch);
+                    editor_renderer::diff::raster_rect(primitives, dirty, &mut self.scratch);
                     // Native readers may still hold the previous frame. Copy only
                     // when shared; on Web the tile allocation is usually unique.
                     let pixels = Arc::make_mut(&mut tile.pixels);
@@ -175,7 +180,7 @@ impl TiledSurface {
                 tiles.push(tile);
                 continue;
             }
-            editor_renderer::diff::raster_rect(dl, raster, &mut self.scratch);
+            editor_renderer::diff::raster_rect(primitives, raster, &mut self.scratch);
             let mut pixels = vec![0; raster.width() as usize * raster.height() as usize * 4];
             self.scratch.read_back_rect(
                 &mut pixels,
@@ -237,7 +242,7 @@ mod tests {
             Transform::IDENTITY,
         );
         let dl = recorder.into_list();
-        assert!(surface.apply_damage(&dl, &[full], 1));
+        assert!(surface.apply_damage(&dl.primitives, &[full], 1));
         assert_eq!(surface.tiles.len(), 1);
         assert_eq!(surface.tiles[0].pixels.len(), 514 * 514 * 4);
         let original = surface.tiles[0].pixels.clone();
@@ -246,12 +251,12 @@ mod tests {
             .configure_tiles(&[512, 1024, 1024, 1536, 1024, 1024, 1536, 1536])
             .unwrap();
         assert!(surface.needs_render());
-        assert!(surface.apply_damage(&dl, &[], 2));
+        assert!(surface.apply_damage(&dl.primitives, &[], 2));
         assert!(Arc::ptr_eq(&original, &surface.tiles[0].pixels));
         assert_eq!(surface.tiles[0].version, 1);
         assert_eq!(surface.tiles[1].version, 2);
         assert!(surface.tiles[1].pixels.iter().all(|p| *p == 0));
-        assert!(surface.apply_damage(&DisplayList::default(), &[full], 3));
+        assert!(surface.apply_damage(&[], &[full], 3));
         assert!(!Arc::ptr_eq(&original, &surface.tiles[0].pixels));
         assert!(surface.tiles[0].pixels.iter().all(|p| *p == 0));
         assert!(original[(7 * 514 + 9) * 4] >= 250);
@@ -278,11 +283,11 @@ mod tests {
         );
         let dl = recorder.into_list();
         let mut full = CpuSink::new(1100, 700);
-        editor_renderer::diff::raster_rect(&dl, bounds, &mut full);
+        editor_renderer::diff::raster_rect(&dl.primitives, bounds, &mut full);
         let mut expected = vec![0; 1100 * 700 * 4];
         full.read_back_rect(&mut expected, 1100 * 4, bounds);
         let mut surface = TiledSurface::new(1100.0, 700.0, 1.0).unwrap();
-        assert!(surface.apply_damage(&dl, &[bounds], 1));
+        assert!(surface.apply_damage(&dl.primitives, &[bounds], 1));
         for tile in &surface.tiles {
             let [left, top, right, bottom] = tile.bounds;
             let stride = (right - left + 2) as usize * 4;
@@ -303,7 +308,7 @@ mod tests {
         assert!(surface.resize(400.0, 300.0, 2.0));
         assert_eq!(surface.scale_factor(), 2.0);
         assert!(surface.tiles.is_empty());
-        assert!(surface.apply_damage(&DisplayList::default(), &[], 2));
+        assert!(surface.apply_damage(&[], &[], 2));
         assert_eq!(surface.tiles.len(), 4);
         assert!(
             surface
@@ -338,16 +343,16 @@ mod tests {
         let before = display_list(500.5);
         let after = display_list(510.5);
         let mut surface = TiledSurface::new(1100.0, 700.0, 1.0).unwrap();
-        assert!(surface.apply_damage(&before, &[full], 1));
+        assert!(surface.apply_damage(&before.primitives, &[full], 1));
         let pinned = surface.tiles.clone();
         let original_pixels = pinned
             .iter()
             .map(|tile| tile.pixels.to_vec())
             .collect::<Vec<_>>();
         let damage = editor_renderer::diff::diff(&before, &after, full);
-        assert!(surface.apply_damage(&after, &damage, 2));
+        assert!(surface.apply_damage(&after.primitives, &damage, 2));
         let mut expected = TiledSurface::new(1100.0, 700.0, 1.0).unwrap();
-        assert!(expected.apply_damage(&after, &[full], 2));
+        assert!(expected.apply_damage(&after.primitives, &[full], 2));
         for (actual, expected) in surface.tiles.iter().zip(&expected.tiles) {
             assert_eq!(actual.pixels, expected.pixels);
         }
@@ -383,6 +388,6 @@ mod tests {
                 .configure_tiles(&vec![0; (MAX_TILES + 1) * 4])
                 .is_err()
         );
-        assert!(!surface.apply_damage(&DisplayList::default(), &[], 1));
+        assert!(!surface.apply_damage(&[], &[], 1));
     }
 }

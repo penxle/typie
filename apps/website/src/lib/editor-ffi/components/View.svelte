@@ -25,7 +25,6 @@
     handlePointerUp,
   } from '../handlers/pointer';
   import { setupEditorScroll } from '../scroll.svelte';
-  import { touchPanLock } from '../touch-pan-lock';
   import { browserScaleFactor, resolveContinuousLayoutViewportWidth } from '../zoom';
   import Caret from './Caret.svelte';
   import ContextMenu from './ContextMenu.svelte';
@@ -38,12 +37,12 @@
   import PlaceholderOverlay from './PlaceholderOverlay.svelte';
   import RepasteAsText from './RepasteAsText.svelte';
   import Scrollbar from './Scrollbar.svelte';
-  import SelectionHandles from './SelectionHandles.svelte';
   import EditorZoom from './ui/EditorZoom.svelte';
   import FloatingEditorZoomControls from './ui/FloatingEditorZoomControls.svelte';
   import ViewportOverlay from './ViewportOverlay.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Snippet } from 'svelte';
+  import type { HTMLAttributes } from 'svelte/elements';
   import type { Editor_document$key } from '$mearie';
   import type { DocumentZoomLayout } from '../zoom';
   import type { EditorViewSurfaceLayout } from './editor-view-surface-layout';
@@ -89,6 +88,47 @@
 
   const ctx = getEditorContext();
   const theme = getThemeContext();
+
+  const surfaceEvents = $derived.by((): HTMLAttributes<HTMLDivElement> => {
+    const editor = ctx.editor;
+    if (!editor) return {};
+    const common: HTMLAttributes<HTMLDivElement> = {
+      onpointerdown: (event) => {
+        ctx.scroll?.cancel();
+        handlePointerDown(editor, event);
+      },
+      onpointerleave: () => editor.clearLinkHover(),
+    };
+    if (editor.nativeSelection) {
+      return {
+        ...common,
+        onpointermove: (event) => editor.updatePointerHover(event.clientX, event.clientY),
+      };
+    }
+    return {
+      ...common,
+      onclick: handle(editor, handleClick),
+      oncontextmenu: handle(editor, handleContextMenu),
+      ondragend: () => handleDragEnd(ctx),
+      ondragenter: (event) => handleDragEnter(ctx, event),
+      ondragleave: (event) => handleDragLeave(ctx, event),
+      ondragover: (event) => handleDragOver(ctx, event),
+      ondragstart: (event) => handleDragStart(ctx, event),
+      ondrop: (event) =>
+        handleDrop(ctx, event, ({ file, kind }) => {
+          Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
+        }),
+      onfocusin: () => editor.focus(),
+      onfocusout: (event) => {
+        if (!window.document.hasFocus() || event.relatedTarget === editor.inputEl) return;
+        editor.blur();
+      },
+      onlostpointercapture: handle(editor, handlePointerCaptureLost),
+      onpointercancel: handle(editor, handlePointerCancel),
+      onpointermove: handle(editor, handlePointerMove),
+      onpointerup: handle(editor, handlePointerUp),
+    };
+  });
 
   // 이 View 인스턴스가 소유한다. 공유 컨텍스트에 두면 {#key ctx.editor}로 View가 교체될 때
   // 새 인스턴스가 옛 인스턴스의 host를 읽어버린다 (새 브랜치 생성이 옛 브랜치 파괴보다 먼저다).
@@ -468,7 +508,7 @@
     {/if}
 
     {#if ctx.editor}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div
         bind:this={ctx.editor.extensionAreaEl}
         style:cursor
@@ -485,49 +525,24 @@
             flexGrow: '1',
             isolation: 'isolate',
             width: 'full',
-            userSelect: 'none',
+            userSelect: ctx.editor.nativeSelection && !ctx.editor.protectContent ? 'text' : 'none',
           },
-          ctx.editor.readOnly && {
-            WebkitUserSelect: 'none',
-            WebkitTouchCallout: 'none',
-          },
+          ctx.editor.nativeSelection &&
+            ctx.editor.protectContent && {
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+            },
         )}
-        draggable={ctx.editor.isSelectionCollapsed ? undefined : true}
-        onclick={handle(ctx.editor, handleClick)}
-        oncontextmenu={handle(ctx.editor, handleContextMenu)}
-        ondragend={() => handleDragEnd(ctx)}
-        ondragenter={(event) => handleDragEnter(ctx, event)}
-        ondragleave={(event) => handleDragLeave(ctx, event)}
-        ondragover={(event) => handleDragOver(ctx, event)}
-        ondragstart={(event) => handleDragStart(ctx, event)}
-        ondrop={(event) =>
-          handleDrop(ctx, event, ({ file, kind }) => {
-            Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
-          })}
-        onfocusin={() => ctx.editor?.focus()}
-        onfocusout={(event) => {
-          if (!window.document.hasFocus()) return;
-          if (event.relatedTarget === ctx.editor?.inputEl) return;
-          ctx.editor?.blur();
-        }}
-        onlostpointercapture={handle(ctx.editor, handlePointerCaptureLost)}
-        onpointercancel={handle(ctx.editor, handlePointerCancel)}
-        onpointerdown={(event) => {
-          ctx.scroll?.cancel();
-          const editor = ctx.editor;
-          if (editor) handlePointerDown(editor, event);
-        }}
-        onpointerleave={() => ctx.editor?.clearLinkHover()}
-        onpointermove={handle(ctx.editor, handlePointerMove)}
-        onpointerup={handle(ctx.editor, handlePointerUp)}
-        role="textbox"
-        tabindex={0}
-        use:touchPanLock={ctx.editor.gesture.panLockActive}
+        {...surfaceEvents}
+        draggable={ctx.editor.nativeSelection || ctx.editor.isSelectionCollapsed ? undefined : true}
+        role={ctx.editor.nativeSelection ? 'document' : 'textbox'}
+        tabindex={ctx.editor.nativeSelection ? -1 : 0}
       >
         <div
           bind:this={ctx.editor.documentTrackEl}
           style:--editor-content-from-x={`${contentMotion?.fromX ?? 0}px`}
           style:animation={contentAnimation}
+          style:isolation={ctx.editor.nativeSelection ? 'isolate' : undefined}
           class={css({
             position: 'relative',
             display: 'flex',
@@ -544,28 +559,22 @@
         >
           <EditorPages editor={ctx.editor} {surfaceHost} />
 
-          <DocumentOverlayLayer />
-
-          <Caret />
-
-          <LineHighlight />
-
-          <PlaceholderOverlay {placeholderAction} />
+          {#if !ctx.editor.nativeSelection}
+            <DocumentOverlayLayer />
+            <Caret />
+            <LineHighlight />
+            <PlaceholderOverlay {placeholderAction} />
+          {/if}
         </div>
 
-        <ViewportOverlay>
-          <Input />
-
-          <RepasteAsText />
-
-          {#if ctx.editor.readOnly}
-            <SelectionHandles />
-          {/if}
-        </ViewportOverlay>
-
-        <ContextMenu />
-
-        <MarkCardHost />
+        {#if !ctx.editor.nativeSelection}
+          <ViewportOverlay>
+            <Input />
+            <RepasteAsText />
+          </ViewportOverlay>
+          <ContextMenu />
+          <MarkCardHost />
+        {/if}
 
         {#if children}
           {@render children()}

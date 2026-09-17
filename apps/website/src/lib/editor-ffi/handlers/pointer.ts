@@ -2,7 +2,6 @@ import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
 import { isSelectionCollapsed } from '../geometry';
 import type { InputModifiers, InteractiveHit, Position, Rect, Selection, SelectionPointUnit } from '@typie/editor-ffi/browser';
 import type { Editor } from '../editor.svelte';
-import type { SelectionHandleKind } from '../gesture.svelte';
 import type { EditorEventHandler } from '../types';
 
 const DRAG_START_THRESHOLD_PX = 5;
@@ -12,18 +11,11 @@ const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <=
 type LocalPoint = { page: number; x: number; y: number };
 type DragPoint = LocalPoint & { clientX: number; clientY: number };
 
-const selectionHandleKindFromTarget = (target: EventTarget | null): SelectionHandleKind | null => {
-  if (!(target instanceof HTMLElement)) return null;
-
-  const handle = target.closest<HTMLElement>('[data-selection-handle]');
-  const kind = handle?.dataset.selectionHandle;
-  return kind === 'from' || kind === 'to' ? kind : null;
-};
-
-export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
+const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
   const editMode = !editor.readOnly;
+  const selectableTitle = editMode || (editor.nativeSelection && !editor.protectContent);
   if (hit.type === 'fold_title') {
-    const onText = editMode && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
+    const onText = selectableTitle && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
     if (!onText) {
       editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
       return true;
@@ -38,22 +30,6 @@ export const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, loc
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
   if (!e.isPrimary) return;
 
-  const selectionHandleType = selectionHandleKindFromTarget(e.target);
-  const isReadOnlyTouch = editor.readOnly && e.pointerType === 'touch';
-  if (selectionHandleType && !isReadOnlyTouch) {
-    return;
-  }
-
-  if (isReadOnlyTouch) {
-    if (selectionHandleType) {
-      e.preventDefault();
-    }
-    const local = editor.clientToLocal(e.clientX, e.clientY);
-    const resolved = local ? { page: local.page, x: local.x, y: local.y } : null;
-    editor.gesture.handlePointerDown(e, resolved, selectionHandleType);
-    return;
-  }
-
   if (e.button !== 0) return;
 
   const local = editor.clientToLocal(e.clientX, e.clientY);
@@ -62,9 +38,12 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
   }
 
   const hit = editor.interactiveHitTest(local.page, local.x, local.y);
-  if (hit && tryHandleInteractiveHit(editor, hit, { x: local.x, y: local.y })) {
+  if (hit && tryHandleInteractiveHit(editor, hit, local)) {
+    if (editor.nativeSelection) e.preventDefault();
     return;
   }
+  // The viewer shares fold hit testing, then leaves text selection to the browser.
+  if (editor.nativeSelection) return;
 
   const { page, x, y } = local;
   const count = PointerState.of(editor).resolveClickCount(e);
@@ -137,10 +116,7 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (editor.readOnly && e.pointerType === 'touch') {
-    editor.gesture.handlePointerMove(e);
-    return;
-  }
+  if (editor.nativeSelection) return;
 
   editor.updatePointerHover(e.clientX, e.clientY);
 
@@ -158,10 +134,7 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
 };
 
 export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (editor.readOnly && e.pointerType === 'touch') {
-    editor.gesture.handlePointerUp(e);
-    return;
-  }
+  if (editor.nativeSelection) return;
 
   const state = PointerState.of(editor);
   if (!state.hasActivePointer(e.pointerId)) {
@@ -175,20 +148,15 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
 };
 
 export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
-  if (e.button !== 0 || !editor.commentClickHandler) return;
-
+  if (editor.nativeSelection || e.button !== 0 || !editor.commentClickHandler) return;
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) return;
-
   const id = editor.commentIdAt(local.page, local.x, local.y);
   if (id !== null) editor.commentClickHandler(id);
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (editor.readOnly && e.pointerType === 'touch') {
-    editor.gesture.handlePointerCancel(e);
-    return;
-  }
+  if (editor.nativeSelection) return;
 
   const state = PointerState.of(editor);
   if (!state.hasActivePointer(e.pointerId)) {

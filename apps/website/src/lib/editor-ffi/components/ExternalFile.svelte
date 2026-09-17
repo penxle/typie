@@ -135,11 +135,15 @@
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           })}
+          data-selection-label
         >
           {displayName}
         </span>
         {#if displaySize}
-          <span class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+          <span
+            class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}
+            data-selection-label
+          >
             {displaySize}
           </span>
         {/if}

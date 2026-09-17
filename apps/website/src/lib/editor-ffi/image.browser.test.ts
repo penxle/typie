@@ -33,7 +33,7 @@ afterEach(async () => {
 async function mountImage(
   proportion = 100,
   originalHeight = 3000,
-  { useWindowScroll = false, resolveAsset = true, placeholder = false } = {},
+  { useWindowScroll = false, resolveAsset = true, placeholder = false, readOnly = false, nativeSelection = false } = {},
 ) {
   await initWasm();
   const doc: PlainDoc = {
@@ -57,6 +57,8 @@ async function mountImage(
     ),
   };
   editor = await Editor.createFromDoc(doc, { width: 800, height: 1000, scale_factor: 1 });
+  editor.readOnly = readOnly;
+  editor.nativeSelection = nativeSelection;
   const url = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="${originalHeight}"/>`;
   const asset = { id: 'asset', url, originalUrl: url, width: 600, height: originalHeight, placeholder: '' };
   if (resolveAsset) editor.images.assets.set('asset', asset);
@@ -67,6 +69,8 @@ async function mountImage(
     target,
     props: {
       editor,
+      readOnly,
+      nativeSelection,
       useWindowScroll,
       userId: `image-size-${crypto.randomUUID()}`,
       onReady: (harness) => {
@@ -275,10 +279,14 @@ it.each(['pointerup', 'pointercancel'] as const)('keeps an offscreen resize unti
   });
 });
 
-it('keeps an offscreen image while its enlarged view is open and unmounts it after closing', async () => {
-  const { editor } = await mountImage(50, 3000, { useWindowScroll: true });
+it.each([
+  { readOnly: false, nativeSelection: false },
+  { readOnly: true, nativeSelection: false },
+  { readOnly: true, nativeSelection: true },
+])('keeps an enlarged offscreen image until closing, mode=%o', async (mode) => {
+  const { editor } = await mountImage(50, 3000, { useWindowScroll: true, ...mode });
   await vi.waitFor(() => expect(document.querySelector('[aria-label="이미지 확대 보기"]')).not.toBeNull());
-  const image = document.querySelector('img[alt="본문 이미지"]');
+  const image = document.querySelector('[data-external-element] img[alt="본문 이미지"]');
   document.querySelector<HTMLButtonElement>('[aria-label="이미지 확대 보기"]')?.click();
   await vi.waitFor(() => expect(document.querySelector('[aria-label="닫기"]')).not.toBeNull());
 

@@ -435,6 +435,8 @@ mod tests {
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };
@@ -478,6 +480,8 @@ mod tests {
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };
@@ -521,6 +525,8 @@ mod tests {
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };
@@ -557,6 +563,8 @@ mod tests {
             x: 99.0,
             width: 10.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };
@@ -610,6 +618,8 @@ mod tests {
             x: 0.0,
             width: 10.0,
             graphemes: vec![],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         };

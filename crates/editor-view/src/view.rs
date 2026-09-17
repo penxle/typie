@@ -618,6 +618,17 @@ impl View {
         }
     }
 
+    pub fn selection_layout(&self, state: &State) -> Vec<crate::SelectionLayoutBlock> {
+        let Some(layout) = &self.layout else {
+            return Vec::new();
+        };
+        crate::selection_layout::selection_layout(
+            &layout.layout_index,
+            &state.view(),
+            &self.resource.lock().unwrap().font_registry,
+        )
+    }
+
     pub fn hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
         let layout_index = &self.layout.as_ref()?.layout_index;
         crate::query::hit_test::hit_test(layout_index, page_idx, x, y)

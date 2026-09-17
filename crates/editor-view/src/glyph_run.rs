@@ -46,6 +46,9 @@ pub struct GlyphRun {
     pub offset_range: std::ops::Range<usize>,
     pub link: Option<String>,
     pub text: String,
+    /// `text` and `graphemes` follow visual cluster order.
+    pub rtl: bool,
+    pub letter_spacing: f32,
     pub x: f32,
     pub width: f32,
     pub graphemes: Vec<GraphemeSpan>,
@@ -97,6 +100,8 @@ impl GlyphRun {
             x,
             width,
             graphemes,
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         }

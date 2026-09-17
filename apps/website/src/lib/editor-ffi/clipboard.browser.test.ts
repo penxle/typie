@@ -8,7 +8,7 @@ vi.mock('@mearie/svelte', async (importOriginal) => {
   return { ...original, createMutation: () => [vi.fn()] };
 });
 
-it('includes folded content in every editor copy format without changing the selection', async () => {
+it.each([false, true])('includes folded content in every editor copy format, alone=%s', async (alone) => {
   const entry = (node: PlainNode, children: PlainNodeEntry[] = []): PlainNodeEntry => ({
     node,
     children,
@@ -18,12 +18,12 @@ it('includes folded content in every editor copy format without changing the sel
   const paragraph = (text: string) => entry({ type: 'paragraph' }, [entry({ type: 'text', text })]);
   const plain: PlainDoc = {
     root: entry({ type: 'root', layout_mode: { type: 'continuous', max_width: 320 } }, [
-      paragraph('before'),
+      ...(alone ? [] : [paragraph('before')]),
       entry({ type: 'fold' }, [
         entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'title' })]),
         entry({ type: 'fold_content' }, [paragraph('secret')]),
       ]),
-      paragraph('after'),
+      ...(alone ? [] : [paragraph('after')]),
     ]),
   };
   const editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
@@ -32,7 +32,7 @@ it('includes folded content in every editor copy format without changing the sel
     const selection = editor.appliedSnapshot.selection;
     expect(selection).toBeDefined();
     for (const payload of [editor.copySelection(), editor.copySelection({ selection })]) {
-      expect(payload?.text).toBe('before\ntitle\nsecret\nafter');
+      expect(payload?.text).toBe(alone ? 'title\nsecret\n' : 'before\ntitle\nsecret\nafter');
       if (!payload) throw new Error('Expected clipboard payload');
       expect(payload.html).toContain('secret');
       const html = new DOMParser().parseFromString(payload.html, 'text/html');

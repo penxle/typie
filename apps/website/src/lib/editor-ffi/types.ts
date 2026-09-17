@@ -36,8 +36,6 @@ export type ContextMenuItem = {
   onclick: () => void | Promise<void>;
 };
 
-export type ContextMenuSource = 'mouse' | 'touch';
-
 export type ContextMenuPlacement = 'bottom-start' | 'top' | 'bottom';
 
 export type ContextMenuContributorContext = {

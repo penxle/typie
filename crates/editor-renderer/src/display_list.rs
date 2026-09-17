@@ -44,6 +44,7 @@ pub struct Primitive {
 
 #[derive(Default)]
 pub struct DisplayList {
+    pub foreground_start: usize,
     pub primitives: Vec<Primitive>,
 }
 
@@ -193,6 +194,10 @@ fn glyph_key_bits(g: &GlyphKey) -> u64 {
 }
 
 impl RenderSink for DisplayListRecorder {
+    fn start_foreground(&mut self) {
+        self.list.foreground_start = self.list.primitives.len();
+    }
+
     fn pixel_size(&self) -> (u32, u32) {
         (
             self.page_bounds.width() as u32,

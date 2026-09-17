@@ -403,6 +403,8 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.cursor().into_ffi()?))
     }
 
+    /// Hit-test a page point in the given revision and return caret geometry
+    /// without changing the selection.
     pub fn cursor_at(
         &self,
         revision: Complex<editor_core::Revision>,
@@ -1292,6 +1294,31 @@ impl Editor {
 #[cfg(feature = "wasm-browser")]
 #[editor_macros::ffi_export(wasm)]
 impl Editor {
+    pub fn selection_font(&self, family: u16, weight: u16) -> EditorResult<Option<Vec<u8>>> {
+        self.with_inner(|inner| {
+            let resource = inner.editor.resource().lock().unwrap();
+            // Font conversion is optional; resource errors use browser fallback.
+            // Keep editor availability/lock failures on the normal error path.
+            Ok(resource.font_registry.metrics_font(family, weight).ok())
+        })
+    }
+
+    /// Return caret geometry for a known document position in the current layout.
+    /// Does not hit-test or change the selection.
+    pub fn cursor_for_position(
+        &self,
+        position: Complex<editor_state::Position>,
+    ) -> EditorResult<Option<Complex<editor_view::CursorMetrics>>> {
+        let position = position.from_ffi()?;
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .cursor_metrics(inner.editor.state(), &position)
+                .into_ffi()?)
+        })
+    }
+
     /// Read a browser range (or the editor selection) without changing selection,
     /// focus, history, or view state. Both web surfaces use this copy policy.
     pub fn copy_content(
@@ -1328,6 +1355,18 @@ impl Editor {
             let resource = inner.editor.resource().lock().unwrap();
             Ok(slice
                 .map(|slice| slice.to_payload(&resource, &assets))
+                .into_ffi()?)
+        })
+    }
+
+    pub fn document_selection_layout(
+        &self,
+    ) -> EditorResult<Vec<Complex<editor_view::SelectionLayoutBlock>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .selection_layout(inner.editor.state())
                 .into_ffi()?)
         })
     }

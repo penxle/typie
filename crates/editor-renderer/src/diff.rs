@@ -1,6 +1,6 @@
 use crate::backend::cpu::CpuSink;
 use crate::damage::{IRect, merge_damage};
-use crate::display_list::DisplayList;
+use crate::display_list::{DisplayList, Primitive};
 use crate::sink::RenderSink;
 
 pub fn diff(prev: &DisplayList, new: &DisplayList, full: IRect) -> Vec<IRect> {
@@ -14,11 +14,14 @@ pub fn diff(prev: &DisplayList, new: &DisplayList, full: IRect) -> Vec<IRect> {
     let mut survivor_prev_idx: Vec<usize> = Vec::new();
     let mut survivor_bounds: Vec<IRect> = Vec::new();
 
-    for np in &new.primitives {
+    for (ni, np) in new.primitives.iter().enumerate() {
         let mut matched: Option<usize> = None;
         if let Some(cands) = buckets.get(&np.key) {
             for &pi in cands {
-                if !prev_used[pi] && prev.primitives[pi].same_content(np) {
+                if !prev_used[pi]
+                    && (pi < prev.foreground_start) == (ni < new.foreground_start)
+                    && prev.primitives[pi].same_content(np)
+                {
                     prev_used[pi] = true;
                     matched = Some(pi);
                     break;
@@ -58,9 +61,9 @@ pub fn diff(prev: &DisplayList, new: &DisplayList, full: IRect) -> Vec<IRect> {
     merge_damage(&raw, full)
 }
 
-pub fn replay(dl: &DisplayList, clip: IRect, sink: &mut dyn RenderSink) {
+pub fn replay(primitives: &[Primitive], clip: IRect, sink: &mut dyn RenderSink) {
     use crate::display_list::PrimPayload::*;
-    for p in &dl.primitives {
+    for p in primitives {
         if p.bounds.intersect(clip).is_none() {
             continue;
         }
@@ -104,7 +107,7 @@ pub fn render_incremental(
     for &r in &damage {
         sink.clear_rect(r);
         sink.set_clip(Some(r));
-        replay(new, r, sink);
+        replay(&new.primitives, r, sink);
     }
     sink.set_clip(None);
     damage
@@ -113,7 +116,7 @@ pub fn render_incremental(
 /// Rasters the display-list content of device rect `r` into `scratch` at origin.
 /// `scratch` must be at least `r.width() x r.height()`; offsets are integral so
 /// the result is byte-identical to the same subregion of a full-page raster.
-pub fn raster_rect(dl: &DisplayList, r: IRect, scratch: &mut CpuSink) {
+pub fn raster_rect(primitives: &[Primitive], r: IRect, scratch: &mut CpuSink) {
     let local = IRect {
         x0: 0,
         y0: 0,
@@ -124,7 +127,7 @@ pub fn raster_rect(dl: &DisplayList, r: IRect, scratch: &mut CpuSink) {
     scratch.clear_rect(local);
     scratch.set_clip(Some(local));
     let mut sink = crate::translate::TranslatedSink::new(scratch, -(r.x0 as f32), -(r.y0 as f32));
-    replay(dl, r, &mut sink);
+    replay(primitives, r, &mut sink);
     scratch.set_clip(None);
 }
 
@@ -135,6 +138,59 @@ mod tests {
     use crate::display_list::DisplayListRecorder;
     use crate::sink::RenderSink;
     use crate::types::{Color, Transform};
+
+    #[test]
+    fn background_and_foreground_keep_separate_alpha_and_damage() {
+        let bounds = IRect {
+            x0: 0,
+            y0: 0,
+            x1: 8,
+            y1: 8,
+        };
+        let mut recorder = DisplayListRecorder::new(bounds);
+        recorder.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 8.0, 8.0),
+            Color::new(255, 0, 0, 255),
+            Transform::IDENTITY,
+        );
+        recorder.start_foreground();
+        recorder.fill_rect(
+            editor_common::Rect::from_xywh(2.0, 2.0, 2.0, 2.0),
+            Color::new(0, 0, 0, 255),
+            Transform::IDENTITY,
+        );
+        let mut dl = recorder.into_list();
+        assert_eq!(dl.foreground_start, 1);
+        let mut scratch = CpuSink::new(8, 8);
+        let mut pixels = vec![0; 8 * 8 * 4];
+        raster_rect(&dl.primitives[dl.foreground_start..], bounds, &mut scratch);
+        scratch.read_back_rect(&mut pixels, 8 * 4, bounds);
+        assert_eq!(&pixels[..4], &[0, 0, 0, 0]);
+        assert_eq!(&pixels[(2 * 8 + 2) * 4..][..3], &[0, 0, 0]);
+        assert!(pixels[(2 * 8 + 2) * 4 + 3] >= 254);
+        raster_rect(&dl.primitives[..dl.foreground_start], bounds, &mut scratch);
+        scratch.read_back_rect(&mut pixels, 8 * 4, bounds);
+        assert_eq!(pixels[(2 * 8 + 2) * 4], 253);
+        assert_eq!(&pixels[(2 * 8 + 2) * 4 + 1..][..2], &[0, 0]);
+        assert!(pixels[(2 * 8 + 2) * 4 + 3] >= 254);
+        let unchanged = DisplayList {
+            foreground_start: 0,
+            primitives: std::mem::take(&mut dl.primitives),
+        };
+        let mut recorder = DisplayListRecorder::new(bounds);
+        recorder.fill_rect(
+            editor_common::Rect::from_xywh(0.0, 0.0, 8.0, 8.0),
+            Color::new(255, 0, 0, 255),
+            Transform::IDENTITY,
+        );
+        recorder.start_foreground();
+        recorder.fill_rect(
+            editor_common::Rect::from_xywh(2.0, 2.0, 2.0, 2.0),
+            Color::new(0, 0, 0, 255),
+            Transform::IDENTITY,
+        );
+        assert!(!diff(&unchanged, &recorder.into_list(), bounds).is_empty());
+    }
 
     fn full() -> IRect {
         IRect {
@@ -231,7 +287,7 @@ mod tests {
             y1: 64,
         };
         let mut scratch = CpuSink::new(56, 56);
-        raster_rect(&dl, r, &mut scratch);
+        raster_rect(&dl.primitives, r, &mut scratch);
 
         let mut expect = vec![0u8; 56 * 56 * 4];
         full_sink.read_back_rect(&mut expect, 56 * 4, r);
@@ -267,9 +323,11 @@ mod tests {
             },
         };
         let prev = DisplayList {
+            foreground_start: 0,
             primitives: vec![mk(10.0)],
         };
         let new = DisplayList {
+            foreground_start: 0,
             primitives: vec![mk(100.0)],
         };
         let d = diff(&prev, &new, full());
@@ -372,7 +430,7 @@ mod tests {
             );
 
             let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
-            raster_rect(&dl, r, &mut scratch);
+            raster_rect(&dl.primitives, r, &mut scratch);
             let mut got = vec![0u8; rw * rh * 4];
             scratch.read_back_rect(
                 &mut got,

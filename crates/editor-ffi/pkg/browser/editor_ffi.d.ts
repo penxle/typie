@@ -508,6 +508,39 @@ export interface SelectionEndpoints {
     to_position: Position;
 }
 
+export interface SelectionFont {
+    family: number;
+    weight: number;
+    key: string;
+}
+
+export interface SelectionLayoutBlock {
+    node: Dot;
+    kind: NodeType;
+    before: Position;
+    after: Position;
+    runs: SelectionTextRun[];
+    /**
+     * The final newline represents this structural range, not a hard-break leaf.
+     */
+    trailing_break: Selection | undefined;
+}
+
+export interface SelectionTextRun {
+    font: SelectionFont | undefined;
+    offset: number;
+    text: string;
+    page_idx: number;
+    rect: Rect;
+    line: Rect;
+    letter_spacing: number;
+    font_size: number;
+    weight: number;
+    italic: boolean;
+    rtl: boolean;
+    link: string | undefined;
+}
+
 export interface Size {
     width: number;
     height: number;
@@ -820,11 +853,21 @@ declare class Editor {
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    /**
+     * Hit-test a page point in the given revision and return caret geometry
+     * without changing the selection.
+     */
     cursor_at(revision: Revision, page: number, x: number, y: number): CursorMetrics | undefined;
+    /**
+     * Return caret geometry for a known document position in the current layout.
+     * Does not hit-test or change the selection.
+     */
+    cursor_for_position(position: Position): CursorMetrics | undefined;
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
     detach_surface(page: number): void;
     document_dom_projection(): DocumentDomProjection;
+    document_selection_layout(): SelectionLayoutBlock[];
     /**
      * `window_ms` is how far back an edit still counts as recent. The host owns that
      * number — it also decides how far back the query that seeds the baseline reaches —
@@ -898,6 +941,7 @@ declare class Editor {
     root_modifiers(): Modifier[];
     selection(): Selection | undefined;
     selection_endpoints(): SelectionEndpoints | undefined;
+    selection_font(family: number, weight: number): Uint8Array | undefined;
     selection_hit_rects(): PageRect[];
     selection_hit_test(page: number, x: number, y: number): boolean;
     selection_kind(): SelectionKind | undefined;

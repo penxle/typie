@@ -1,10 +1,7 @@
 import type { EditorEventHandler } from '../types';
 
 export const handleContextMenu: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
-  if (editor.gesture.shouldSuppressNativeContextMenu()) {
-    e.preventDefault();
-    return;
-  }
+  if (editor.nativeSelection) return;
   e.preventDefault();
 
   const local = editor.clientToLocal(e.clientX, e.clientY);
@@ -25,7 +22,6 @@ export const handleContextMenu: EditorEventHandler<HTMLElement, MouseEvent> = (e
   editor.openContextMenu({
     x: e.clientX,
     y: e.clientY,
-    source: 'mouse',
     placement: 'bottom-start',
     extraItems,
   });

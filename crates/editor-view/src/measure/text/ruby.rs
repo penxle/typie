@@ -320,6 +320,8 @@ mod tests {
                 advance: width,
                 codepoints: text.chars().count() as u8,
             }],
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         }

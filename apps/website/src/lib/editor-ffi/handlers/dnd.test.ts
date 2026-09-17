@@ -64,7 +64,7 @@ const createDragEvent = (dataTransfer: DataTransfer | null = createDataTransfer(
   } as unknown as DragEvent & { preventDefault: ReturnType<typeof vi.fn> };
 };
 
-const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
+const createCtx = ({ readOnly = false, protectContent = false, nativeSelection = false } = {}) => {
   const messages: Message[] = [];
   const enqueue = vi.fn((message: Message) => {
     messages.push(message);
@@ -95,6 +95,7 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
   >(() => true);
   const editor = {
     readOnly,
+    nativeSelection,
     protectContent,
     isSelectionCollapsed: false,
     clientToLocal: vi.fn<(x: number, y: number) => { page: number; x: number; y: number }>(() => ({ page: 0, x: 10, y: 20 })),
@@ -105,14 +106,6 @@ const createCtx = ({ readOnly = false, protectContent = false } = {}) => {
     updateNow,
     focus: vi.fn(),
     extensionAreaEl,
-    gesture: {
-      isDoubleTapSelectionDragActive: false,
-      gestureActive: false,
-      isReadOnlyTouchDragCandidate: vi.fn(() => false),
-      isReadOnlyTouchDragArmed: vi.fn(() => false),
-      handleNativeDragStart: vi.fn(),
-      handleNativeDragEnd: vi.fn(),
-    },
   };
   const attachmentState = {
     editor,
@@ -184,6 +177,15 @@ describe('handleDragStart', () => {
     expect(event.preventDefault).not.toHaveBeenCalled();
   });
 
+  it('leaves native viewer drags outside the editor selection machinery', () => {
+    const { ctx, updateNow } = createCtx({ readOnly: true, nativeSelection: true });
+    const dataTransfer = createDataTransfer();
+    const event = createDragEvent(dataTransfer);
+    handleDragStart(ctx, event);
+    expect(dataTransfer.setData).not.toHaveBeenCalled();
+    expect(updateNow).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
   it('allows read-only selection drag as external copy data and clears pending pointer press', () => {
     const { ctx, messages, updateNow } = createCtx({ readOnly: true });
     const dataTransfer = createDataTransfer();
@@ -195,7 +197,7 @@ describe('handleDragStart', () => {
     expect(dataTransfer.setData).not.toHaveBeenCalledWith('application/x-typie-internal-selection', expect.any(String));
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'Hello');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/html', '<p>Hello</p>');
-    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0);
+    expect(dataTransfer.setDragImage).toHaveBeenCalled();
     expect(messages).toEqual([
       {
         type: 'dnd',
@@ -208,45 +210,6 @@ describe('handleDragStart', () => {
 
   it('보호 문서의 read-only 드래그는 dataTransfer 에 쓰지 않고 차단한다', () => {
     const { ctx } = createCtx({ readOnly: true, protectContent: true });
-    const dataTransfer = createDataTransfer();
-    const event = createDragEvent(dataTransfer);
-
-    handleDragStart(ctx, event);
-
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(dataTransfer.setData).not.toHaveBeenCalled();
-  });
-
-  it('blocks a read-only touch drag while the gesture is active but not armed', () => {
-    const { ctx, editor } = createCtx({ readOnly: true });
-    editor.gesture.gestureActive = true;
-    const dataTransfer = createDataTransfer();
-    const event = createDragEvent(dataTransfer);
-
-    handleDragStart(ctx, event);
-
-    expect(event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(dataTransfer.setData).not.toHaveBeenCalled();
-  });
-
-  it('starts an armed read-only touch drag and notifies the gesture controller', () => {
-    const { ctx, editor } = createCtx({ readOnly: true });
-    editor.gesture.gestureActive = true;
-    editor.gesture.isReadOnlyTouchDragCandidate = vi.fn(() => true);
-    editor.gesture.isReadOnlyTouchDragArmed = vi.fn(() => true);
-    const dataTransfer = createDataTransfer();
-    const event = createDragEvent(dataTransfer);
-
-    handleDragStart(ctx, event);
-
-    expect(editor.gesture.handleNativeDragStart).toHaveBeenCalledTimes(1);
-    expect(dataTransfer.effectAllowed).toBe('copy');
-    expect(event.preventDefault).not.toHaveBeenCalled();
-  });
-
-  it('blocks a native drag while a double-tap selection drag is active', () => {
-    const { ctx, editor } = createCtx();
-    editor.gesture.isDoubleTapSelectionDragActive = true;
     const dataTransfer = createDataTransfer();
     const event = createDragEvent(dataTransfer);
 

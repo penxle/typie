@@ -7557,7 +7557,7 @@ mod tests {
 
         let (dl, _b) = editor.build_display_list(0, sf).unwrap();
         let mut c = CpuSink::new(pw, ph);
-        editor_renderer::diff::replay(&dl, full, &mut c);
+        editor_renderer::diff::replay(&dl.primitives, full, &mut c);
         let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
         c.read_back_rect(&mut buf_dl, pw as usize * 4, full);
 
@@ -7593,7 +7593,7 @@ mod tests {
 
         let (dl, _b) = editor.build_display_list(0, sf).unwrap();
         let mut c = CpuSink::new(pw, ph);
-        editor_renderer::diff::replay(&dl, full, &mut c);
+        editor_renderer::diff::replay(&dl.primitives, full, &mut c);
         let mut buf_dl = vec![0u8; pw as usize * ph as usize * 4];
         c.read_back_rect(&mut buf_dl, pw as usize * 4, full);
 
@@ -7985,7 +7985,7 @@ mod tests {
         for r in rects {
             let (rw, rh) = (r.width() as usize, r.height() as usize);
             let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
-            editor_renderer::diff::raster_rect(&dl, r, &mut scratch);
+            editor_renderer::diff::raster_rect(&dl.primitives, r, &mut scratch);
             let mut expect = vec![0u8; rw * rh * 4];
             full_sink.read_back_rect(&mut expect, rw * 4, r);
             let mut got = vec![0u8; rw * rh * 4];
@@ -8050,7 +8050,7 @@ mod tests {
             ] {
                 let (rw, rh) = (r.width() as usize, r.height() as usize);
                 let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
-                editor_renderer::diff::raster_rect(&dl, r, &mut scratch);
+                editor_renderer::diff::raster_rect(&dl.primitives, r, &mut scratch);
                 let mut expect = vec![0u8; rw * rh * 4];
                 full_sink.read_back_rect(&mut expect, rw * 4, r);
                 let mut got = vec![0u8; rw * rh * 4];
@@ -8080,7 +8080,7 @@ mod tests {
                 continue;
             }
             let mut scratch = CpuSink::new(r.width() as u16, r.height() as u16);
-            editor_renderer::diff::raster_rect(dl, r, &mut scratch);
+            editor_renderer::diff::raster_rect(&dl.primitives, r, &mut scratch);
             let mut buf = vec![0u8; rw * rh * 4];
             scratch.read_back_rect(
                 &mut buf,

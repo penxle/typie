@@ -257,9 +257,11 @@ pub(crate) fn extract_lines(
                     if *style != target_style_index || cluster_range.is_empty() {
                         continue;
                     }
-                    if first_byte_start.is_none() {
-                        first_byte_start = Some(cluster_range.start);
-                    }
+                    first_byte_start = Some(
+                        first_byte_start.map_or(cluster_range.start, |start: usize| {
+                            start.min(cluster_range.start)
+                        }),
+                    );
                     let local_start = run_text.len();
                     run_text.push_str(&text[cluster_range.clone()]);
                     clusters.push((local_start..run_text.len(), *advance));
@@ -300,6 +302,8 @@ pub(crate) fn extract_lines(
                     offset_range,
                     link,
                     text: run_text,
+                    rtl: run.is_rtl(),
+                    letter_spacing: src.style.letter_spacing,
                     x: run_x + shift,
                     width: run_advance,
                     graphemes,
@@ -662,6 +666,21 @@ mod tests {
 
     fn glyph_runs(lines: &[ExtractedLine]) -> Vec<&GlyphRun> {
         lines.iter().flat_map(|l| l.glyph_runs.iter()).collect()
+    }
+
+    #[test]
+    fn rtl_offsets_stay_inside_the_logical_source_range() {
+        let text = "hello שלום العربية";
+        let logs = build_logs(text.chars().map(ch).collect());
+        let lines = pipeline_extract(&logs);
+        let mut runs = glyph_runs(&lines);
+        runs.sort_by_key(|run| run.offset_range.start);
+        let mut end = 0;
+        for run in runs {
+            assert_eq!(run.offset_range.start, end);
+            end = run.offset_range.end;
+        }
+        assert_eq!(end, text.chars().count());
     }
 
     #[test]

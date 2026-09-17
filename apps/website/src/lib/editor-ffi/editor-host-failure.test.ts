@@ -25,14 +25,6 @@ vi.mock('$lib/wasm-ffi.svelte', () => ({
   },
 }));
 
-vi.mock('./gesture.svelte', () => ({
-  TouchGestureController: class {
-    destroy() {
-      // The guarded-boundary tests do not need gesture behavior.
-    }
-  },
-}));
-
 vi.mock('./fonts', () => ({
   fontDataMissingHandler: vi.fn(),
 }));
@@ -89,6 +81,7 @@ function createCore() {
     page_table_overlays: vi.fn(() => []),
     page_link_rects: vi.fn(() => []),
     external_elements: vi.fn(() => []),
+    document_selection_layout: vi.fn(() => []),
     table_overlays: vi.fn(() => []),
     link_rects: vi.fn(() => []),
     page_sizes: vi.fn<() => Size[]>(() => DefaultPageSizes),
