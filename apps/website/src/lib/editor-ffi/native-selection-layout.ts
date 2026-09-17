@@ -32,6 +32,23 @@ export async function loadSelectionFonts(editor: Editor, blocks: readonly Select
   );
 }
 
+// Zoom changes the rounded page slots and in-flow margins, but not text metrics.
+// Correct each fragment's origin without measuring or rewriting every text run.
+export function fitSelectionFragments(root: HTMLElement, blocks: readonly SelectionLayoutBlock[], pages: readonly { top: number }[]) {
+  const fragments = [...root.querySelectorAll<HTMLElement>('.selection-fragment')];
+  for (const fragment of fragments) fragment.style.top = '0';
+  const rootRect = root.getBoundingClientRect();
+  const zoom = rootRect.width / Number.parseFloat(getComputedStyle(root).width);
+  const offsets = fragments.map((fragment) => {
+    const line = fragment.firstElementChild as HTMLElement;
+    const span = line.firstElementChild as HTMLElement;
+    const block = blocks[Number(fragment.closest<HTMLElement>('[data-selection-block]')?.dataset.selectionBlock)];
+    const run = block.runs[Number(span.dataset.selectionRun)];
+    return (pages[run.page_idx].top - (line.getBoundingClientRect().top - rootRect.top)) / zoom + run.line.y;
+  });
+  for (const [index, fragment] of fragments.entries()) fragment.style.top = `${offsets[index]}px`;
+}
+
 // Canvas measureText can use different fallback metrics than DOM text (notably
 // emoji). Read the actual DOM once per displayed layout, batching reads before
 // writes so the number of runs does not cause repeated synchronous layouts.

@@ -429,6 +429,34 @@ describe('Editor guarded core invocation', () => {
     editor.destroy();
   });
 
+  it.each(['document', 'browser'])('keeps new %s zoom tiles off the old surface until replacement', async (kind) => {
+    const { editor, core } = await createEditor(createCore(), false);
+    const releaseHost = editor.activateVisualHost();
+    const pages = new Set([0]);
+    editor.requestSurfacePages(pages, new Map([[0, [0, 0, 100, 100]]]));
+    editor.attachSurface(0, document.createElement('surface'), 100, 100);
+    core.configure_surface_tiles.mockClear();
+    core.render_surface.mockClear();
+
+    if (kind === 'document') editor.commitRenderZoom(2);
+    else editor.resizeViewport(1, 1, 2);
+    const bounds = [0, 0, 200, 200];
+    editor.requestSurfacePages(pages, new Map([[0, bounds]]));
+    expect(core.configure_surface_tiles).not.toHaveBeenCalled();
+    expect(core.render_surface).not.toHaveBeenCalled();
+
+    const replacement = document.createElement('surface');
+    editor.attachSurface(0, replacement, 100, 100);
+    expect(core.attach_surface).toHaveBeenLastCalledWith(0, replacement, 100, 100, 2);
+    expect(core.configure_surface_tiles).toHaveBeenLastCalledWith(0, Int32Array.from(bounds));
+    const bundle = editor.publishIfReady(pages);
+    if (!bundle) throw new Error('Expected replacement frame');
+    expect(editor.acceptPublication(bundle)).toBe(true);
+    expect(editor.publishedSurfaceElement(0)).toBe(replacement);
+    releaseHost();
+    editor.destroy();
+  });
+
   it('accepts a publication when iterator helper methods are unavailable', async () => {
     const { editor } = await createEditor(createCore(), false);
     const releaseHost = editor.activateVisualHost();
