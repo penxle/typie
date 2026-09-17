@@ -148,6 +148,14 @@ impl TiledSurface {
                 x1: rect.x1 + 1,
                 y1: rect.y1 + 1,
             };
+            // Tiles need no backing where no primitive can paint,
+            // including the gutter. Dropping an old tile also clears erased content.
+            if !primitives
+                .iter()
+                .any(|p| p.bounds.intersect(raster).is_some())
+            {
+                continue;
+            }
             if let Some(index) = previous.iter().position(|tile| tile.bounds == bounds) {
                 let mut tile = previous.swap_remove(index);
                 if let Some(dirty) = damage
@@ -226,6 +234,81 @@ mod tests {
     use editor_renderer::{display_list::DisplayListRecorder, sink::RenderSink, types::Transform};
 
     #[test]
+    fn sparse_tiles_preserve_gutters_and_remove_erased_content() {
+        let mut surface = TiledSurface::new(2048.0, 512.0, 1.0).unwrap();
+        let full = IRect {
+            x0: 0,
+            y0: 0,
+            x1: 2048,
+            y1: 512,
+        };
+        let mut recorder = DisplayListRecorder::new(full);
+        recorder.fill_rect(
+            Rect::from_xywh(512.25, 10.25, 8.5, 20.5),
+            Color::new(80, 120, 160, 127),
+            Transform::IDENTITY,
+        );
+        recorder.fill_rect(
+            Rect::from_xywh(1540.0, 10.0, 20.0, 20.0),
+            Color::new(160, 120, 80, 255),
+            Transform::IDENTITY,
+        );
+        let dl = recorder.into_list();
+        assert!(surface.apply_damage(&dl.primitives, &[full], 1));
+        assert_eq!(
+            surface.tiles.len(),
+            3,
+            "the empty third tile needs no pixels"
+        );
+        let mut scratch = CpuSink::new(514, 514);
+        for (tile, left) in surface.tiles.iter().zip([0, 512, 1536]) {
+            assert_eq!(tile.bounds, [left, 0, left + 512, 512]);
+            editor_renderer::diff::raster_rect(
+                &dl.primitives,
+                IRect {
+                    x0: left - 1,
+                    y0: -1,
+                    x1: left + 513,
+                    y1: 513,
+                },
+                &mut scratch,
+            );
+            let mut expected = vec![0; 514 * 514 * 4];
+            scratch.read_back_rect(
+                &mut expected,
+                514 * 4,
+                IRect {
+                    x0: 0,
+                    y0: 0,
+                    x1: 514,
+                    y1: 514,
+                },
+            );
+            assert_eq!(
+                tile.pixels.as_ref(),
+                expected,
+                "including the raster gutter"
+            );
+        }
+        let old = surface.tiles[1].pixels.clone();
+        let last = surface.tiles[2].pixels.clone();
+        assert!(surface.apply_damage(&dl.primitives[1..], &[dl.primitives[0].bounds], 2));
+        assert_eq!(surface.tiles.len(), 1);
+        assert_eq!(surface.tiles[0].bounds, [1536, 0, 2048, 512]);
+        assert!(Arc::ptr_eq(&surface.tiles[0].pixels, &last));
+        assert!(surface.apply_damage(&[], &[full], 3));
+        assert!(surface.tiles.is_empty());
+        assert!(!surface.needs_render());
+        assert!(
+            old.iter().any(|&value| value != 0),
+            "published pixels stay intact"
+        );
+        assert!(surface.apply_damage(&dl.primitives, &[full], 4));
+        assert_eq!(surface.tiles.len(), 3);
+        assert_eq!(surface.tiles[1].pixels, old);
+    }
+
+    #[test]
     fn huge_page_only_rasters_requested_tiles_and_reuses_unchanged_pixels() {
         let mut surface = TiledSurface::new(100_000.0, 200_000.0, 2.0).unwrap();
         surface.configure_tiles(&[512, 1024, 1024, 1536]).unwrap();
@@ -252,13 +335,11 @@ mod tests {
             .unwrap();
         assert!(surface.needs_render());
         assert!(surface.apply_damage(&dl.primitives, &[], 2));
+        assert_eq!(surface.tiles.len(), 1);
         assert!(Arc::ptr_eq(&original, &surface.tiles[0].pixels));
         assert_eq!(surface.tiles[0].version, 1);
-        assert_eq!(surface.tiles[1].version, 2);
-        assert!(surface.tiles[1].pixels.iter().all(|p| *p == 0));
         assert!(surface.apply_damage(&[], &[full], 3));
-        assert!(!Arc::ptr_eq(&original, &surface.tiles[0].pixels));
-        assert!(surface.tiles[0].pixels.iter().all(|p| *p == 0));
+        assert!(surface.tiles.is_empty());
         assert!(original[(7 * 514 + 9) * 4] >= 250);
     }
 
@@ -309,13 +390,8 @@ mod tests {
         assert_eq!(surface.scale_factor(), 2.0);
         assert!(surface.tiles.is_empty());
         assert!(surface.apply_damage(&[], &[], 2));
-        assert_eq!(surface.tiles.len(), 4);
-        assert!(
-            surface
-                .tiles
-                .iter()
-                .all(|tile| tile.pixels.iter().all(|pixel| *pixel == 0))
-        );
+        assert!(surface.tiles.is_empty());
+        assert!(!surface.needs_render());
     }
 
     #[test]
