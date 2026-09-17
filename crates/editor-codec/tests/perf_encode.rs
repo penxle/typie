@@ -22,14 +22,10 @@ fn synth_history(n: usize, per_changeset: usize) -> Vec<Changeset<EditOp>> {
     let mut ops = Vec::with_capacity(n + 1);
     ops.push(Op {
         id: Dot::new(1, 0),
-        parents: vec![],
+        parents: editor_crdt::smallvec![],
         payload: EditOp::Seq(ListOp::Ins {
             pos: 0,
-            item: SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
         }),
     });
     let text: String = "가나다라마 hello world 바사아자차 "
@@ -41,7 +37,7 @@ fn synth_history(n: usize, per_changeset: usize) -> Vec<Changeset<EditOp>> {
         let clock = 1 + i as u64;
         ops.push(Op {
             id: Dot::new(1, clock),
-            parents: vec![Dot::new(1, clock - 1)],
+            parents: editor_crdt::smallvec![Dot::new(1, clock - 1)],
             payload: EditOp::Seq(ListOp::Ins {
                 pos: 1 + i,
                 item: SeqItem::Char(ch),

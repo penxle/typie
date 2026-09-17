@@ -49,27 +49,61 @@ pub fn spans_covering<R: SeqResolve>(pos: usize, spans: &SpanLog, resolver: &R) 
 
 /// All spans resolved to `[start, end)` once, to query many positions cheaply.
 /// `spans_covering` re-resolves every span (an `O(log)` boundary lookup each) on
-/// every call; looping it over a block's leaves is `O(leaves · spans · log)`. Build
-/// this once and call [`ResolvedSpans::covering`] per leaf for `O(leaves · spans)`
-/// integer comparisons with no repeated boundary resolution.
+/// every call. Build this once and call [`ResolvedSpans::covering`] per leaf: the
+/// spans are kept sorted by `start` with the max `end` of every midpoint subtree,
+/// so a query skips whole subtrees that end before the position — `O(log + hits)`
+/// instead of a scan of every span per leaf.
 pub struct ResolvedSpans {
     spans: Vec<ResolvedSpan>,
+    max_end: Vec<usize>,
 }
 
 impl ResolvedSpans {
     pub fn build<R: SeqResolve>(spans: &SpanLog, resolver: &R) -> Self {
-        Self {
-            spans: resolve_spans(spans, resolver),
+        Self::from_resolved(resolve_spans(spans, resolver))
+    }
+
+    fn from_resolved(mut spans: Vec<ResolvedSpan>) -> Self {
+        spans.sort_by_key(|r| r.start);
+        let mut max_end = vec![0; spans.len()];
+        fn fill(spans: &[ResolvedSpan], max_end: &mut [usize], lo: usize, hi: usize) -> usize {
+            if lo >= hi {
+                return 0;
+            }
+            let mid = lo + (hi - lo) / 2;
+            let own = spans[mid].end;
+            let left = fill(spans, max_end, lo, mid);
+            let right = fill(spans, max_end, mid + 1, hi);
+            max_end[mid] = own.max(left).max(right);
+            max_end[mid]
         }
+        let len = spans.len();
+        fill(&spans, &mut max_end, 0, len);
+        Self { spans, max_end }
+    }
+
+    fn collect(&self, lo: usize, hi: usize, pos: usize, out: &mut Vec<Dot>) {
+        if lo >= hi {
+            return;
+        }
+        let mid = lo + (hi - lo) / 2;
+        if self.max_end[mid] <= pos {
+            return;
+        }
+        self.collect(lo, mid, pos, out);
+        let span = &self.spans[mid];
+        if span.start > pos {
+            return;
+        }
+        if pos < span.end {
+            out.push(span.op_dot);
+        }
+        self.collect(mid + 1, hi, pos, out);
     }
 
     pub fn covering(&self, pos: usize) -> Vec<Dot> {
-        let mut out: Vec<Dot> = self
-            .spans
-            .iter()
-            .filter(|r| r.start <= pos && pos < r.end)
-            .map(|r| r.op_dot)
-            .collect();
+        let mut out: Vec<Dot> = Vec::new();
+        self.collect(0, self.spans.len(), pos, &mut out);
         out.sort();
         out
     }
@@ -108,9 +142,40 @@ pub fn explicit_from_covering(
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::Modifier;
     use crate::span::{Anchor, Bias, SpanOp};
+
+    proptest! {
+        #[test]
+        fn covering_matches_a_scan_of_every_span(
+            ranges in proptest::collection::vec((0usize..40, 1usize..40), 0..80),
+        ) {
+            let resolved = |ranges: &[(usize, usize)]| -> Vec<ResolvedSpan> {
+                ranges
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (start, len))| ResolvedSpan {
+                        op_dot: Dot::new(1 + (i as u64 % 3), i as u64 / 2),
+                        start: *start,
+                        end: start + len,
+                    })
+                    .collect()
+            };
+            let index = ResolvedSpans::from_resolved(resolved(&ranges));
+            for pos in 0..82 {
+                let mut expected: Vec<Dot> = resolved(&ranges)
+                    .iter()
+                    .filter(|r| r.start <= pos && pos < r.end)
+                    .map(|r| r.op_dot)
+                    .collect();
+                expected.sort();
+                prop_assert_eq!(index.covering(pos), expected);
+            }
+        }
+    }
 
     #[test]
     fn explicit_lww_picks_max_op_dot() {

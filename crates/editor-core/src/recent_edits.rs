@@ -157,7 +157,7 @@ fn is_block_ins(state: &State, dot: Dot) -> bool {
     matches!(
         state.projected.graph().get(&dot).map(|o| &o.payload),
         Some(EditOp::Seq(ListOp::Ins {
-            item: SeqItem::Block { .. },
+            item: SeqItem::Block(_),
             ..
         }))
     )
@@ -170,7 +170,7 @@ fn enclosing_live_block(state: &State, leaf: Dot) -> Option<Dot> {
     let checkout = state.projected.seq_checkout();
     let (marker, visible) =
         checkout.enclosing_marker(state.projected.seq(), leaf, &|item: &SeqItem| {
-            matches!(item, SeqItem::Block { .. })
+            matches!(item, SeqItem::Block(_))
         })?;
     (visible && state.view().node(marker).is_some()).then_some(marker)
 }
@@ -206,7 +206,7 @@ impl BlockMarkerIndex {
     pub(crate) fn build(state: &State) -> Self {
         let checkout = state.projected.seq_checkout();
         let markers = checkout.marker_positions(state.projected.seq(), &|item: &SeqItem| {
-            matches!(item, SeqItem::Block { .. })
+            matches!(item, SeqItem::Block(_))
         });
         Self { markers }
     }
@@ -253,7 +253,7 @@ pub(crate) fn classify_op_with(
     let mut out = Vec::new();
     match &op.payload {
         EditOp::Seq(ListOp::Ins {
-            item: SeqItem::Block { .. },
+            item: SeqItem::Block(_),
             ..
         }) => {
             out.push(RecentEditEffect::BlockCreated(op.id));
@@ -811,11 +811,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let effects = classify_op(&next, &op);
@@ -1026,11 +1022,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let (next, op) = apply(
@@ -1333,11 +1325,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let (state, _ch) = apply(
@@ -1373,11 +1361,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let frontier_after_block = heads_of(&state);
@@ -1440,12 +1424,12 @@ mod tests {
     }
 
     fn horizontal_rule() -> SeqItem {
-        SeqItem::BlockAtom {
-            leaf: AtomLeaf::HorizontalRule {
+        SeqItem::block_atom(
+            AtomLeaf::HorizontalRule {
                 variant: HorizontalRuleVariant::Line,
             },
-            parents: vec![Dot::ROOT],
-        }
+            vec![Dot::ROOT],
+        )
     }
 
     #[test]
@@ -1861,11 +1845,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let (state, _ch) = apply(
@@ -1926,11 +1906,7 @@ mod tests {
             &state,
             EditOp::Seq(ListOp::Ins {
                 pos: 7,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         let (state, _fill) = apply(
@@ -2832,19 +2808,11 @@ mod tests {
                     1 => continue,
                     2 => EditOp::Seq(ListOp::Ins {
                         pos: len,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                     }),
                     3 => EditOp::Seq(ListOp::Ins {
                         pos: len,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Callout,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![]),
                     }),
                     4 => {
                         let callouts = live_blocks_of_type(&state, NodeType::Callout);
@@ -2958,11 +2926,7 @@ mod tests {
                     }),
                     1 => EditOp::Seq(ListOp::Ins {
                         pos: len,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                     }),
                     // From the front, so each later delete's targets sit behind a growing
                     // stretch of tombstones — the shape the index exists for.

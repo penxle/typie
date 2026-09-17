@@ -2225,11 +2225,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::ListItem, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;
@@ -2237,11 +2233,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: pos + 1,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, raw_item],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, raw_item], vec![]),
             }))
             .unwrap()
             .id;
@@ -2276,11 +2268,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Block {
-                    node_type,
-                    parents,
-                    attrs: vec![],
-                },
+                item: SeqItem::block(node_type, parents, vec![]),
             }))
             .unwrap()
             .id

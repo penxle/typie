@@ -163,11 +163,7 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block {
-                node_type,
-                parents,
-                attrs: vec![],
-            },
+            item: SeqItem::block(node_type, parents, vec![]),
         })
     }
 

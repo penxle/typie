@@ -472,11 +472,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, c) in children.iter().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), c.clone()));
@@ -552,11 +548,7 @@ mod tests {
                 BlockSpec::Para(k) => {
                     let p = next(
                         &mut items,
-                        SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![root],
-                            attrs: vec![],
-                        },
+                        SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
                     );
                     blocks.push(p);
                     for _ in 0..*k {
@@ -566,21 +558,13 @@ mod tests {
                 BlockSpec::Quote(inner) => {
                     let bq = next(
                         &mut items,
-                        SeqItem::Block {
-                            node_type: NodeType::Blockquote,
-                            parents: vec![root],
-                            attrs: vec![],
-                        },
+                        SeqItem::block(NodeType::Blockquote, vec![root], vec![]),
                     );
                     blocks.push(bq);
                     for k in inner {
                         let p = next(
                             &mut items,
-                            SeqItem::Block {
-                                node_type: NodeType::Paragraph,
-                                parents: vec![root, bq],
-                                attrs: vec![],
-                            },
+                            SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
                         );
                         blocks.push(p);
                         for _ in 0..*k {
@@ -700,20 +684,16 @@ mod tests {
         let items = vec![
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::Line,
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (a, SeqItem::Char('a')),
             (hb, SeqItem::Atom(AtomLeaf::HardBreak)),
@@ -798,28 +778,17 @@ mod tests {
         let items = vec![
             (
                 img,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image {
-                        node: ImageNode::default(),
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(ImageNode::default()),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
-            (
-                bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (x, SeqItem::Char('x')),
         ];
@@ -851,11 +820,7 @@ mod tests {
         let items = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (a, SeqItem::Char('a')),
             (b, SeqItem::Char('b')),
@@ -973,30 +938,15 @@ mod tests {
             let para = Dot::new(1, 1);
             if nest {
                 let bq = Dot::new(1, 100);
-                items.push((
-                    bq,
-                    SeqItem::Block {
-                        node_type: NodeType::Blockquote,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
-                ));
+                items.push((bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])));
                 items.push((
                     para,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root, bq],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
                 ));
             } else {
                 items.push((
                     para,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
                 ));
             }
             for (i, k) in kinds.into_iter().enumerate() {

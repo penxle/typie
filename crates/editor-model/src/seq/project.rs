@@ -1,6 +1,6 @@
 use editor_crdt::{Dot, FastMap};
 
-use super::SeqItem;
+use super::{BlockAtomMarker, BlockMarker, SeqItem};
 use crate::nodes::{NodeAttr, NodeType};
 use crate::schema::{ContextExpr, SchemaError};
 
@@ -727,11 +727,12 @@ pub fn project_blocks_with_stats(
 
     for (id, item) in items {
         match item {
-            SeqItem::Block {
-                node_type,
-                parents,
-                attrs,
-            } => {
+            SeqItem::Block(b) => {
+                let BlockMarker {
+                    node_type,
+                    parents,
+                    attrs,
+                } = &**b;
                 let keep = attach_depth(&stack, parents);
                 if attach_is_revival(&stack, parents, keep) {
                     stats.repairs += 1;
@@ -748,7 +749,7 @@ pub fn project_blocks_with_stats(
                 nodes[parent_idx].children.push(ChildRef::Block(idx));
                 stack.push((*id, idx));
             }
-            SeqItem::Char(_) | SeqItem::Unknown { .. } => {
+            SeqItem::Char(_) | SeqItem::Unknown(_) => {
                 let parent_idx = stack.last().expect("root is always present").1;
                 nodes[parent_idx].children.push(ChildRef::Leaf {
                     id: *id,
@@ -768,7 +769,8 @@ pub fn project_blocks_with_stats(
                     item: item.clone(),
                 });
             }
-            SeqItem::BlockAtom { leaf, parents } => {
+            SeqItem::BlockAtom(b) => {
+                let BlockAtomMarker { leaf, parents } = &**b;
                 if !leaf.is_block_level() {
                     return Err(ProjectError::AtomClassMismatch {
                         id: *id,
@@ -820,11 +822,12 @@ pub fn project_blocks_seeded(
 
     for (id, item) in items {
         match item {
-            SeqItem::Block {
-                node_type,
-                parents,
-                attrs,
-            } => {
+            SeqItem::Block(b) => {
+                let BlockMarker {
+                    node_type,
+                    parents,
+                    attrs,
+                } = &**b;
                 let keep = attach_depth(&stack, parents);
                 if attach_is_revival(&stack, parents, keep) {
                     stats.repairs += 1;
@@ -841,7 +844,7 @@ pub fn project_blocks_seeded(
                 nodes[parent_idx].children.push(ChildRef::Block(idx));
                 stack.push((*id, idx));
             }
-            SeqItem::Char(_) | SeqItem::Unknown { .. } => {
+            SeqItem::Char(_) | SeqItem::Unknown(_) => {
                 let parent_idx = stack.last().expect("root is always present").1;
                 nodes[parent_idx].children.push(ChildRef::Leaf {
                     id: *id,
@@ -861,7 +864,8 @@ pub fn project_blocks_seeded(
                     item: item.clone(),
                 });
             }
-            SeqItem::BlockAtom { leaf, parents } => {
+            SeqItem::BlockAtom(b) => {
+                let BlockAtomMarker { leaf, parents } = &**b;
                 if !leaf.is_block_level() {
                     return Err(ProjectError::AtomClassMismatch {
                         id: *id,
@@ -932,10 +936,9 @@ pub fn flatten(tree: &RawTree) -> Vec<(Dot, SeqItem)> {
             match c {
                 RawChild::Leaf { id, item } => {
                     let out_item = match item {
-                        SeqItem::Atom(leaf) if leaf.is_block_level() => SeqItem::BlockAtom {
-                            leaf: leaf.clone(),
-                            parents: parents.clone(),
-                        },
+                        SeqItem::Atom(leaf) if leaf.is_block_level() => {
+                            SeqItem::block_atom(leaf.clone(), parents.clone())
+                        }
                         other => other.clone(),
                     };
                     out.push((as_dot(*id), out_item));
@@ -949,11 +952,7 @@ pub fn flatten(tree: &RawTree) -> Vec<(Dot, SeqItem)> {
         let id = as_dot(node.id);
         out.push((
             id,
-            SeqItem::Block {
-                node_type: node.node_type,
-                parents: parents.clone(),
-                attrs: node.attrs.clone(),
-            },
+            SeqItem::block(node.node_type, parents.clone(), node.attrs.clone()),
         ));
         parents.push(id);
         emit_children(&node.children, parents, out);
@@ -1170,36 +1169,24 @@ mod tests {
         let els = vec![
             (
                 d(1, 1),
-                SeqItem::Block {
-                    node_type: NodeType::BulletList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::BulletList, vec![root], vec![]),
             ),
             (
                 d(1, 2),
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, d(1, 1)],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, d(1, 1)], vec![]),
             ),
             (
                 d(1, 3),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, d(1, 1), d(1, 2)],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, d(1, 1), d(1, 2)], vec![]),
             ),
             (d(1, 4), SeqItem::Char('a')),
             (
                 d(1, 10),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, d(1, 1), d(1, 2), d(9, 9)],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, d(1, 1), d(1, 2), d(9, 9)],
+                    vec![],
+                ),
             ),
             (d(1, 11), SeqItem::Char('z')),
         ];
@@ -1227,28 +1214,16 @@ mod tests {
         let els = vec![
             (
                 d(1, 1),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (d(1, 2), SeqItem::Char('a')),
             (
                 d(1, 5),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (
                 d(1, 8),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, d(1, 1)],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, d(1, 1)], vec![]),
             ),
         ];
         let raw = project_blocks(&els).unwrap();
@@ -1272,13 +1247,7 @@ mod tests {
         let d = |c| Dot::new(1, c);
         let els = vec![
             (d(1), SeqItem::Char('x')),
-            (
-                d(2),
-                SeqItem::Unknown {
-                    tag: 0,
-                    bytes: vec![],
-                },
-            ),
+            (d(2), SeqItem::unknown(0, vec![])),
         ];
         let raw = project_blocks(&els).unwrap();
         assert_eq!(
@@ -1296,29 +1265,17 @@ mod tests {
         let seq = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('H')),
             (Dot::new(1, 3), SeqItem::Char('i')),
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 inner,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (Dot::new(1, 6), SeqItem::Char('y')),
             (Dot::new(1, 7), SeqItem::Char('o')),
@@ -1350,11 +1307,7 @@ mod tests {
         let seq = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 1), SeqItem::Char('x')),
         ];
@@ -1373,11 +1326,7 @@ mod tests {
         let block = Dot::new(1, 1);
         let seq = vec![(
             block,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![ghost],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![ghost], vec![]),
         )];
         let tree = project_blocks(&seq).unwrap();
         assert_eq!(tree.roots[0].children.len(), 1);
@@ -1392,19 +1341,11 @@ mod tests {
         let seq = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![ghost, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![ghost, bq], vec![]),
             ),
         ];
         let tree = project_blocks(&seq).unwrap();
@@ -1429,20 +1370,12 @@ mod tests {
         let seq = vec![
             (
                 a,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (ax, SeqItem::Char('x')),
             (
                 b,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, ghost],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, ghost], vec![]),
             ),
             (by, SeqItem::Char('y')),
         ];
@@ -1476,20 +1409,12 @@ mod tests {
         let seq = vec![
             (
                 fold,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![Dot::ROOT], vec![]),
             ),
             (title, SeqItem::Char('t')),
             (
                 b,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, fold, ghost],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, fold, ghost], vec![]),
             ),
             (by, SeqItem::Char('y')),
         ];
@@ -1540,11 +1465,7 @@ mod tests {
             (stray, SeqItem::Char('x')),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (y, SeqItem::Char('y')),
         ];
@@ -1569,27 +1490,15 @@ mod tests {
         let seq = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para_in,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (
                 para2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
         ];
         let tree = project_blocks(&seq).expect("well-formed");
@@ -1610,29 +1519,17 @@ mod tests {
         vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('H')),
             (Dot::new(1, 3), SeqItem::Char('i')),
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 inner,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (Dot::new(1, 6), SeqItem::Char('y')),
             (Dot::new(1, 7), SeqItem::Char('o')),
@@ -1651,13 +1548,13 @@ mod tests {
         let callout = Dot::new(1, 1);
         let items = vec![(
             callout,
-            SeqItem::Block {
-                node_type: NodeType::Callout,
-                parents: vec![Dot::ROOT],
-                attrs: vec![crate::NodeAttr::Callout {
+            SeqItem::block(
+                NodeType::Callout,
+                vec![Dot::ROOT],
+                vec![crate::NodeAttr::Callout {
                     attr: crate::CalloutNodeAttr::Variant(crate::CalloutVariant::Warning),
                 }],
-            },
+            ),
         )];
         let tree = project_blocks(&items).unwrap();
         let flat = flatten(&tree);
@@ -1682,29 +1579,21 @@ mod tests {
         let seq = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('a')),
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![Dot::ROOT],
-                },
+                    vec![Dot::ROOT],
+                ),
             ),
         ];
         let tree = project_blocks(&seq).expect("well-formed");
@@ -1717,11 +1606,7 @@ mod tests {
         let items = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('x')),
             (
@@ -1739,11 +1624,7 @@ mod tests {
         let items = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('x')),
         ];
@@ -1759,19 +1640,11 @@ mod tests {
         let items = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para_in,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (
                 Dot::new(1, 3),
@@ -1779,11 +1652,7 @@ mod tests {
             ),
             (
                 tail,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
         ];
         let tree = project_blocks(&items).expect("well-formed");
@@ -1832,58 +1701,43 @@ mod tests {
         let seq = vec![
             (
                 fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Fold, vec![Dot::ROOT], vec![]),
             ),
             (
                 ftitle,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![Dot::ROOT, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![Dot::ROOT, fold], vec![]),
             ),
             (
                 fcontent,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![Dot::ROOT, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![Dot::ROOT, fold], vec![]),
             ),
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT, fold, fcontent],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Blockquote,
+                    vec![Dot::ROOT, fold, fcontent],
+                    vec![],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, fold, fcontent, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![Dot::ROOT, fold, fcontent, bq],
+                    vec![],
+                ),
             ),
             (Dot::new(1, 6), SeqItem::Char('a')),
             (
                 img1,
-                SeqItem::BlockAtom {
-                    leaf: hr(HorizontalRuleVariant::default()),
-                    parents: vec![Dot::ROOT, fold, fcontent],
-                },
+                SeqItem::block_atom(
+                    hr(HorizontalRuleVariant::default()),
+                    vec![Dot::ROOT, fold, fcontent],
+                ),
             ),
             (
                 img2,
-                SeqItem::BlockAtom {
-                    leaf: hr(HorizontalRuleVariant::default()),
-                    parents: vec![Dot::ROOT],
-                },
+                SeqItem::block_atom(hr(HorizontalRuleVariant::default()), vec![Dot::ROOT]),
             ),
         ];
         let tree = project_blocks(&seq).expect("well-formed");
@@ -1909,29 +1763,21 @@ mod tests {
         let seq = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('a')),
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![Dot::ROOT],
-                },
+                    vec![Dot::ROOT],
+                ),
             ),
         ];
         let tree = project_blocks(&seq).expect("well-formed");
@@ -1954,12 +1800,12 @@ mod tests {
         use crate::seq::AtomLeaf;
         let seq = vec![(
             Dot::new(1, 1),
-            SeqItem::BlockAtom {
-                leaf: AtomLeaf::HorizontalRule {
+            SeqItem::block_atom(
+                AtomLeaf::HorizontalRule {
                     variant: HorizontalRuleVariant::default(),
                 },
-                parents: vec![],
-            },
+                vec![],
+            ),
         )];
         assert_eq!(
             project_blocks(&seq).unwrap_err(),
@@ -1975,12 +1821,12 @@ mod tests {
         let hr = Dot::new(1, 1);
         let seq = vec![(
             hr,
-            SeqItem::BlockAtom {
-                leaf: AtomLeaf::HorizontalRule {
+            SeqItem::block_atom(
+                AtomLeaf::HorizontalRule {
                     variant: HorizontalRuleVariant::default(),
                 },
-                parents: vec![ghost],
-            },
+                vec![ghost],
+            ),
         )];
         let tree = project_blocks(&seq).unwrap();
         assert_eq!(tree.roots[0].children.len(), 1);
@@ -2017,18 +1863,11 @@ mod tests {
         let seq = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (
                 Dot::new(1, 2),
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HardBreak,
-                    parents: vec![Dot::ROOT, para],
-                },
+                SeqItem::block_atom(AtomLeaf::HardBreak, vec![Dot::ROOT, para]),
             ),
         ];
         assert_eq!(
@@ -2048,19 +1887,9 @@ mod tests {
         let items = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
-            (
-                unknown,
-                SeqItem::Unknown {
-                    tag: 999,
-                    bytes: vec![0xAA, 0xBB],
-                },
-            ),
+            (unknown, SeqItem::unknown(999, vec![0xAA, 0xBB])),
             (ch, SeqItem::Char('a')),
         ];
         let tree = project_blocks(&items).unwrap();
@@ -2074,7 +1903,7 @@ mod tests {
             "unknown 리프가 정확히 1 슬롯을 점유해야 한다"
         );
         assert!(
-            matches!(&p.children[0], RawChild::Leaf { id, item: SeqItem::Unknown { tag: 999, .. } } if *id == unknown)
+            matches!(&p.children[0], RawChild::Leaf { id, item: SeqItem::Unknown(u) } if *id == unknown && u.tag == 999)
         );
         assert!(
             matches!(&p.children[1], RawChild::Leaf { id, item: SeqItem::Char('a') } if *id == ch)
@@ -2103,36 +1932,24 @@ mod tests {
         let items = vec![
             (
                 d(1, 1),
-                SeqItem::Block {
-                    node_type: NodeType::BulletList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::BulletList, vec![root], vec![]),
             ),
             (
                 d(1, 2),
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, d(1, 1)],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, d(1, 1)], vec![]),
             ),
             (
                 d(1, 3),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, d(1, 1), d(1, 2)],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, d(1, 1), d(1, 2)], vec![]),
             ),
             (d(1, 4), SeqItem::Char('a')),
             (
                 d(1, 10),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, d(1, 1), d(1, 2), ghost],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, d(1, 1), d(1, 2), ghost],
+                    vec![],
+                ),
             ),
             (d(1, 11), SeqItem::Char('z')),
         ];
@@ -2159,11 +1976,7 @@ mod tests {
         let items = vec![
             (
                 escaped_marker,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 6), SeqItem::Char('z')),
         ];
@@ -2208,7 +2021,7 @@ mod tests {
                     variant: HorizontalRuleVariant::Line,
                 })),
                 Just(Shape::BlockAtom(AtomLeaf::Image {
-                    node: ImageNode::default(),
+                    node: Box::new(ImageNode::default()),
                 })),
             ]
         }
@@ -2252,26 +2065,13 @@ mod tests {
                 match s {
                     Shape::Leaf(item) => out.push((id, item.clone())),
                     Shape::BlockAtom(leaf) => {
-                        out.push((
-                            id,
-                            SeqItem::BlockAtom {
-                                leaf: leaf.clone(),
-                                parents: parents.clone(),
-                            },
-                        ));
+                        out.push((id, SeqItem::block_atom(leaf.clone(), parents.clone())));
                     }
                     Shape::Block {
                         node_type,
                         children,
                     } => {
-                        out.push((
-                            id,
-                            SeqItem::Block {
-                                node_type: *node_type,
-                                parents: parents.clone(),
-                                attrs: vec![],
-                            },
-                        ));
+                        out.push((id, SeqItem::block(*node_type, parents.clone(), vec![])));
                         parents.push(id);
                         for c in children {
                             walk(c, next, parents, out);

@@ -8,6 +8,7 @@ mod copy_identity;
 mod edit_op;
 mod error;
 mod fragment;
+mod leaf_blocks;
 mod modifier;
 mod node_attr;
 mod nodes;

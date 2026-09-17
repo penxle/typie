@@ -235,24 +235,10 @@ mod tests {
         let p1 = Dot::new(1, 1);
         let p2 = Dot::new(1, 5);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 2), SeqItem::Char('H')),
             (Dot::new(1, 3), SeqItem::Char('i')),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 6), SeqItem::Char('y')),
         ];
         (project_document(&logs(&items)).unwrap(), p1, p2)
@@ -264,30 +250,15 @@ mod tests {
         let p_inside = Dot::new(1, 2);
         let p_outside = Dot::new(1, 4);
         let items = vec![
-            (
-                bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])),
             (
                 p_inside,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
             (
                 p_outside,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(1, 5), SeqItem::Char('y')),
         ];
@@ -306,30 +277,15 @@ mod tests {
         let p1 = Dot::new(1, 2);
         let p2 = Dot::new(1, 4);
         let items = vec![
-            (
-                bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])),
             (
                 p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('a')),
             (
                 p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (Dot::new(1, 5), SeqItem::Char('b')),
         ];
@@ -582,53 +538,26 @@ mod tests {
             d
         };
         let items = [
-            (
-                table,
-                SeqItem::Block {
-                    node_type: NodeType::Table,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (table, SeqItem::block(NodeType::Table, vec![root], vec![])),
             (
                 row0,
-                SeqItem::Block {
-                    node_type: NodeType::TableRow,
-                    parents: vec![root, table],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableRow, vec![root, table], vec![]),
             ),
             (
                 cell00,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row0],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row0], vec![]),
             ),
             (
                 next(),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row0, cell00],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, table, row0, cell00], vec![]),
             ),
             (
                 cell01,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row0],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row0], vec![]),
             ),
             (
                 next(),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row0, cell01],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, table, row0, cell01], vec![]),
             ),
         ];
 

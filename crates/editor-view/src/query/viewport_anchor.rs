@@ -475,11 +475,7 @@ mod tests {
         let (after_state, _) = state
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: Vec::new(),
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], Vec::new()),
             }))
             .expect("paragraph insert above must apply");
         let mut after_view = View::new_test();
@@ -509,10 +505,12 @@ mod tests {
         let image = projected
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: image_node },
-                    parents: vec![Dot::ROOT],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(image_node),
+                    },
+                    vec![Dot::ROOT],
+                ),
             }))
             .expect("image insert must apply")
             .id;
@@ -558,10 +556,12 @@ mod tests {
         let image = projected
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: image_node },
-                    parents: vec![Dot::ROOT],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(image_node),
+                    },
+                    vec![Dot::ROOT],
+                ),
             }))
             .expect("image insert must apply")
             .id;
@@ -649,10 +649,12 @@ mod tests {
         let image = projected
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: image_node },
-                    parents: vec![Dot::ROOT],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(image_node),
+                    },
+                    vec![Dot::ROOT],
+                ),
             }))
             .unwrap()
             .id;

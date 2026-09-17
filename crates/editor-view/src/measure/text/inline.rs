@@ -246,14 +246,7 @@ mod tests {
     fn build_logs(children: Vec<SeqItem>) -> DocLogs {
         let root = Dot::ROOT;
         let p = Dot::new(1, 1);
-        let mut items = vec![(
-            p,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
-        )];
+        let mut items = vec![(p, SeqItem::block(NodeType::Paragraph, vec![root], vec![]))];
         for (i, c) in children.into_iter().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), c));
         }

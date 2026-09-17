@@ -38,11 +38,7 @@ fn wrapped_document(
             },
             op: ListOp::Ins {
                 pos,
-                item: SeqItem::Block {
-                    node_type: *node_type,
-                    parents: parents.clone(),
-                    attrs: vec![],
-                },
+                item: SeqItem::block(*node_type, parents.clone(), vec![]),
             },
         });
         parents.push(id);
@@ -50,12 +46,8 @@ fn wrapped_document(
     for (text, ruby) in paragraphs {
         let para = Dot::new(1, events.len() as u64 + 1);
         let first_char = Dot::new(1, para.clock + 1);
-        let items = std::iter::once(SeqItem::Block {
-            node_type: NodeType::Paragraph,
-            parents: parents.clone(),
-            attrs: vec![],
-        })
-        .chain(text.chars().map(SeqItem::Char));
+        let items = std::iter::once(SeqItem::block(NodeType::Paragraph, parents.clone(), vec![]))
+            .chain(text.chars().map(SeqItem::Char));
         for item in items {
             let pos = events.len();
             events.push(InputEvent {

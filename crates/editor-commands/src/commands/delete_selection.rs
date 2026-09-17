@@ -1681,10 +1681,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::Unknown {
-                    tag: 999,
-                    bytes: vec![0xAA],
-                },
+                item: SeqItem::unknown(999, vec![0xAA]),
             }))
             .unwrap()
             .id;
@@ -1715,7 +1712,7 @@ mod tests {
         assert_state_eq!(&restored, &initial);
     }
 
-    /// A placeholder `SeqItem::Block { node_type: NodeType::Unknown, .. }` sitting
+    /// A placeholder `SeqItem::Block` typed `NodeType::Unknown` sitting
     /// among known blocks must also delete/undo through the opaque, dot-based
     /// path (not `RemoveSubtree`/`InsertSubtree`, which would need a lossless
     /// `Subtree` capture the placeholder cannot provide).
@@ -1733,11 +1730,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::Block {
-                    node_type: NodeType::Unknown,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Unknown, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;

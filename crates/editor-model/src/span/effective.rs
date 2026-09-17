@@ -911,11 +911,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let elems = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
         )];
         let log = oplog_of(&elems);
         let (els, _r) = checkout_with_resolver(&log);
@@ -986,21 +982,10 @@ mod tests {
         let para = Dot::new(1, 2);
         let a = Dot::new(1, 3);
         let elems = vec![
-            (
-                bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (a, SeqItem::Char('a')),
         ];
@@ -1060,11 +1045,7 @@ mod tests {
         let elems = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (a, SeqItem::Char('a')),
             (b, SeqItem::Char('b')),

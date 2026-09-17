@@ -186,20 +186,16 @@ mod tests {
         let items = vec![
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
@@ -239,11 +235,7 @@ mod tests {
         let items = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(2, 2), SeqItem::Char('H')),
             (Dot::new(2, 3), SeqItem::Char('i')),
@@ -274,21 +266,10 @@ mod tests {
         let fold = Dot::new(3, 1);
         let ft = Dot::new(3, 2);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 ft,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (Dot::new(3, 3), SeqItem::Char('T')),
         ];

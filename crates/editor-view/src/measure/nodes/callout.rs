@@ -117,28 +117,16 @@ mod tests {
         let items = vec![
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![root], vec![]),
             ),
             (
                 para_inner,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, callout], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&items);

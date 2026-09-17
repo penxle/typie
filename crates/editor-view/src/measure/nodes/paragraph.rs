@@ -147,14 +147,7 @@ mod tests {
     fn build_paragraph(children: Vec<SeqItem>) -> DocLogs {
         let root = Dot::ROOT;
         let p = Dot::new(1, 1);
-        let mut items = vec![(
-            p,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
-        )];
+        let mut items = vec![(p, SeqItem::block(NodeType::Paragraph, vec![root], vec![]))];
         for (i, c) in children.into_iter().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), c));
         }
@@ -209,19 +202,11 @@ mod tests {
         let items = vec![
             (
                 p_center,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (
                 p_unset,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
@@ -280,21 +265,13 @@ mod tests {
         let items = vec![
             (
                 p_text_pb,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
             (Dot::new(1, 4), SeqItem::Atom(AtomLeaf::PageBreak)),
             (
                 p_pb_only,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(1, 5), SeqItem::Atom(AtomLeaf::PageBreak)),
         ];
@@ -363,28 +340,13 @@ mod tests {
         let items = vec![
             (
                 p_root_child,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (char_a1, SeqItem::Char('A')),
-            (
-                bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bq, SeqItem::block(NodeType::Blockquote, vec![root], vec![])),
             (
                 p_bq_child,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bq], vec![]),
             ),
             (char_a2, SeqItem::Char('A')),
         ];

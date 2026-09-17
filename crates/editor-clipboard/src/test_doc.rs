@@ -30,11 +30,7 @@ impl DocBuilder {
     }
 
     pub(crate) fn block(&mut self, node_type: NodeType, parents: &[Dot]) -> Dot {
-        self.ins(SeqItem::Block {
-            node_type,
-            parents: parents.to_vec(),
-            attrs: vec![],
-        })
+        self.ins(SeqItem::block(node_type, parents.to_vec(), vec![]))
     }
 
     pub(crate) fn text(&mut self, s: &str) -> Vec<Dot> {
@@ -43,10 +39,7 @@ impl DocBuilder {
 
     pub(crate) fn atom(&mut self, leaf: AtomLeaf, parents: &[Dot]) -> Dot {
         let item = if leaf.is_block_level() {
-            SeqItem::BlockAtom {
-                leaf,
-                parents: parents.to_vec(),
-            }
+            SeqItem::block_atom(leaf, parents.to_vec())
         } else {
             SeqItem::Atom(leaf)
         };
@@ -58,7 +51,12 @@ impl DocBuilder {
             Node::Image(n) => n,
             _ => unreachable!(),
         };
-        self.atom(AtomLeaf::Image { node }, parents)
+        self.atom(
+            AtomLeaf::Image {
+                node: Box::new(node),
+            },
+            parents,
+        )
     }
 
     pub(crate) fn horizontal_rule(&mut self, parents: &[Dot]) -> Dot {

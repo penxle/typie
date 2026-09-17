@@ -16,11 +16,7 @@ fn insert_root_paragraph_before_first_child(base: &State) -> Changeset<EditOp> {
     projected
         .apply_batch(vec![EditOp::Seq(ListOp::Ins {
             pos: 0,
-            item: SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
         })])
         .unwrap();
     projected.commit();

@@ -112,11 +112,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: end,
-                item: SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::ListItem, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;
@@ -124,11 +120,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: end + 1,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, list_item],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, list_item], vec![]),
             }))
             .unwrap()
             .id;
@@ -241,10 +233,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Unknown {
-                    tag: 7,
-                    bytes: vec![0xAB],
-                },
+                item: SeqItem::unknown(7, vec![0xAB]),
             }))
             .unwrap();
         let scaffold = scaffold_of(&state, list_item);
@@ -335,10 +324,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Unknown {
-                    tag: 1,
-                    bytes: vec![0x01],
-                },
+                item: SeqItem::unknown(1, vec![0x01]),
             }))
             .unwrap();
         let _ = list_item_c;

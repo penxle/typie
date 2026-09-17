@@ -1021,11 +1021,7 @@ mod tests {
     }
 
     fn block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
-        SeqItem::Block {
-            node_type,
-            parents,
-            attrs: vec![],
-        }
+        SeqItem::block(node_type, parents, vec![])
     }
 
     fn ins_only(items: &[(Dot, SeqItem)]) -> Vec<InputEvent<SeqItem>> {
@@ -2133,19 +2129,15 @@ mod tests {
             ops: vec![
                 Op {
                     id: cell,
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: NodeType::TableCell,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::TableCell, vec![Dot::ROOT], vec![]),
                     }),
                 },
                 Op {
                     id: a,
-                    parents: vec![cell],
+                    parents: editor_crdt::smallvec![cell],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -2179,11 +2171,7 @@ mod tests {
                 parents: (*prev).into_iter().collect(),
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: *pos,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 }),
             });
             *pos += 1;
@@ -2206,11 +2194,7 @@ mod tests {
             parents: prev.into_iter().collect(),
             payload: EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::TableCell, vec![Dot::ROOT], vec![]),
             }),
         });
         pos += 1;
@@ -2218,7 +2202,7 @@ mod tests {
         clock += 1;
         ops.push(Op {
             id: cell_char,
-            parents: vec![cell],
+            parents: editor_crdt::smallvec![cell],
             payload: EditOp::Seq(ListOp::Ins {
                 pos,
                 item: SeqItem::Char('z'),

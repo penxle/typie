@@ -9,7 +9,7 @@ fn char_cs(clock: u64, parents: Vec<Dot>, ch: char) -> Changeset<EditOp> {
     Changeset {
         ops: vec![Op {
             id: Dot::new(1, clock),
-            parents,
+            parents: parents.into(),
             payload: EditOp::Seq(ListOp::Ins {
                 pos: clock as usize,
                 item: SeqItem::Char(ch),

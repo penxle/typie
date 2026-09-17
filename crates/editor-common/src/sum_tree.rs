@@ -1,8 +1,8 @@
 //! Persistent order-statistics balanced tree with cached subtree aggregates.
 //!
-//! A height-balanced (AVL) tree of items, each carrying a `size` of type `S`
-//! (an additive measure — `u64` flat offsets, `f32` layout heights, …). Built
-//! from reference-counted nodes so it is **persistent**: cloning the tree is
+//! A height-balanced (AVL) tree of item chunks, each item carrying a `size` of
+//! type `S` (an additive measure — `u64` flat offsets, `f32` layout heights, …).
+//! Built from reference-counted nodes so it is **persistent**: cloning the tree is
 //! `O(1)` (a shared root pointer) and every mutation copies only the `O(log N)`
 //! nodes on the root path, leaving clones untouched. That makes it the
 //! structurally-correct editing primitive — available in `O(log N)` regardless
@@ -31,12 +31,18 @@ impl<T> SumSize for T where
 {
 }
 
+/// Items per node. A node is copied whole on the root path of a mutation, so
+/// this trades per-item overhead (one `Arc` node per `CHUNK` items instead of
+/// per item) against bytes copied per edit.
+const CHUNK: usize = 32;
+
 type Link<T, S> = Option<Arc<Node<T, S>>>;
+type Items<T, S> = Arc<Vec<(T, S)>>;
 
 #[derive(Clone)]
 struct Node<T, S> {
-    item: T,
-    size: S,
+    items: Items<T, S>,
+    chunk_size: S,
     left: Link<T, S>,
     right: Link<T, S>,
     height: i32,
@@ -56,23 +62,55 @@ fn subtree_size<T, S: SumSize>(link: &Link<T, S>) -> S {
     link.as_ref().map_or_else(S::default, |n| n.subtree_size)
 }
 
+fn chunk_sum<T, S: SumSize>(items: &[(T, S)]) -> S {
+    items
+        .iter()
+        .fold(S::default(), |acc, (_, size)| acc + *size)
+}
+
+fn leaf<T, S: SumSize>(items: Vec<(T, S)>) -> Node<T, S> {
+    let chunk_size = chunk_sum(&items);
+    Node {
+        count: items.len(),
+        items: Arc::new(items),
+        chunk_size,
+        left: None,
+        right: None,
+        height: 1,
+        subtree_size: chunk_size,
+    }
+}
+
+fn set_items<T, S: SumSize>(node: &mut Node<T, S>, items: Vec<(T, S)>) {
+    node.chunk_size = chunk_sum(&items);
+    node.items = Arc::new(items);
+}
+
 fn refresh<T, S: SumSize>(node: &mut Node<T, S>) {
     node.height = 1 + height(&node.left).max(height(&node.right));
-    node.count = 1 + count(&node.left) + count(&node.right);
-    node.subtree_size = node.size + subtree_size(&node.left) + subtree_size(&node.right);
+    node.count = node.items.len() + count(&node.left) + count(&node.right);
+    node.subtree_size = node.chunk_size + subtree_size(&node.left) + subtree_size(&node.right);
 }
 
 fn balance_factor<T, S>(node: &Node<T, S>) -> i32 {
     height(&node.left) - height(&node.right)
 }
 
-/// Owned copy of the node (children `Arc`s are shared, so `O(1)`). Path-copying
-/// these on the way down is what makes mutation persistent.
-fn owned<T: Clone, S: Clone>(node: &Arc<Node<T, S>>) -> Node<T, S> {
-    (**node).clone()
+/// Owned copy of the node (the item chunk and children are shared `Arc`s, so
+/// `O(1)`). Path-copying these on the way down is what makes mutation persistent.
+fn owned<T, S: Clone>(node: &Arc<Node<T, S>>) -> Node<T, S> {
+    Node {
+        items: node.items.clone(),
+        chunk_size: node.chunk_size.clone(),
+        left: node.left.clone(),
+        right: node.right.clone(),
+        height: node.height,
+        count: node.count,
+        subtree_size: node.subtree_size.clone(),
+    }
 }
 
-fn rotate_right<T: Clone, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>> {
+fn rotate_right<T, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>> {
     let mut node = owned(node);
     let left = node
         .left
@@ -86,7 +124,7 @@ fn rotate_right<T: Clone, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>>
     Arc::new(left)
 }
 
-fn rotate_left<T: Clone, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>> {
+fn rotate_left<T, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>> {
     let mut node = owned(node);
     let right = node
         .right
@@ -100,7 +138,7 @@ fn rotate_left<T: Clone, S: SumSize>(node: &Arc<Node<T, S>>) -> Arc<Node<T, S>> 
     Arc::new(right)
 }
 
-fn rebalance<T: Clone, S: SumSize>(mut node: Node<T, S>) -> Arc<Node<T, S>> {
+fn rebalance<T, S: SumSize>(mut node: Node<T, S>) -> Arc<Node<T, S>> {
     refresh(&mut node);
     let bf = balance_factor(&node);
     if bf > 1 {
@@ -120,6 +158,15 @@ fn rebalance<T: Clone, S: SumSize>(mut node: Node<T, S>) -> Arc<Node<T, S>> {
     Arc::new(node)
 }
 
+fn insert_front_chunk<T, S: SumSize>(link: &Link<T, S>, items: Vec<(T, S)>) -> Arc<Node<T, S>> {
+    let Some(node) = link else {
+        return Arc::new(leaf(items));
+    };
+    let mut node = owned(node);
+    node.left = Some(insert_front_chunk(&node.left, items));
+    rebalance(node)
+}
+
 fn insert_at<T: Clone, S: SumSize>(
     link: &Link<T, S>,
     index: usize,
@@ -127,34 +174,43 @@ fn insert_at<T: Clone, S: SumSize>(
     size: S,
 ) -> Arc<Node<T, S>> {
     let Some(node) = link else {
-        return Arc::new(Node {
-            item,
-            size,
-            left: None,
-            right: None,
-            height: 1,
-            count: 1,
-            subtree_size: size,
-        });
+        return Arc::new(leaf(vec![(item, size)]));
     };
     let mut node = owned(node);
     let left_count = count(&node.left);
-    if index <= left_count {
+    let here = node.items.len();
+    if index < left_count {
         node.left = Some(insert_at(&node.left, index, item, size));
+    } else if index <= left_count + here {
+        let at = index - left_count;
+        let mut items = Vec::with_capacity(here + 1);
+        items.extend_from_slice(&node.items[..at]);
+        items.push((item, size));
+        items.extend_from_slice(&node.items[at..]);
+        if items.len() > CHUNK {
+            let tail = items.split_off(items.len() / 2);
+            node.right = Some(insert_front_chunk(&node.right, tail));
+        }
+        set_items(&mut node, items);
     } else {
-        node.right = Some(insert_at(&node.right, index - left_count - 1, item, size));
+        node.right = Some(insert_at(
+            &node.right,
+            index - left_count - here,
+            item,
+            size,
+        ));
     }
     rebalance(node)
 }
 
-fn take_min<T: Clone, S: SumSize>(node: &Arc<Node<T, S>>) -> (T, S, Link<T, S>) {
+fn take_min<T, S: SumSize>(node: &Arc<Node<T, S>>) -> (Items<T, S>, S, Link<T, S>) {
     let mut node = owned(node);
     match node.left.take() {
-        None => (node.item, node.size, node.right.take()),
+        None => (node.items, node.chunk_size, node.right.take()),
         Some(left) => {
-            let (item, size, rest) = take_min(&left);
+            let (items, chunk_size, rest) = take_min(&left);
             node.left = rest;
-            (item, size, Some(rebalance(node)))
+            (items, chunk_size, Some(rebalance(node)))
         }
     }
 }
@@ -167,86 +223,70 @@ fn remove_at<T: Clone, S: SumSize>(
         return (None, None);
     };
     let left_count = count(&node.left);
+    let here = node.items.len();
     let mut node = owned(node);
     if index < left_count {
         let (new_left, removed) = remove_at(&node.left, index);
         node.left = new_left;
-        (Some(rebalance(node)), removed)
-    } else if index > left_count {
-        let (new_right, removed) = remove_at(&node.right, index - left_count - 1);
-        node.right = new_right;
-        (Some(rebalance(node)), removed)
-    } else {
-        let removed = (node.item.clone(), node.size);
-        let replacement = match (node.left.take(), node.right.take()) {
-            (left, None) => left,
-            (None, right) => right,
-            (Some(left), Some(right)) => {
-                let (succ_item, succ_size, rest) = take_min(&right);
-                let succ = Node {
-                    item: succ_item,
-                    size: succ_size,
-                    left: Some(left),
-                    right: rest,
-                    height: 1,
-                    count: 1,
-                    subtree_size: succ_size,
-                };
-                Some(rebalance(succ))
-            }
-        };
-        (replacement, Some(removed))
+        return (Some(rebalance(node)), removed);
     }
+    if index >= left_count + here {
+        let (new_right, removed) = remove_at(&node.right, index - left_count - here);
+        node.right = new_right;
+        return (Some(rebalance(node)), removed);
+    }
+    let at = index - left_count;
+    let removed = node.items[at].clone();
+    if here > 1 {
+        let mut items = Vec::with_capacity(here - 1);
+        items.extend_from_slice(&node.items[..at]);
+        items.extend_from_slice(&node.items[at + 1..]);
+        set_items(&mut node, items);
+        return (Some(rebalance(node)), Some(removed));
+    }
+    let replacement = match (node.left.take(), node.right.take()) {
+        (left, None) => left,
+        (None, right) => right,
+        (Some(left), Some(right)) => {
+            let (items, chunk_size, rest) = take_min(&right);
+            let succ = Node {
+                count: items.len(),
+                items,
+                chunk_size,
+                left: Some(left),
+                right: rest,
+                height: 1,
+                subtree_size: chunk_size,
+            };
+            Some(rebalance(succ))
+        }
+    };
+    (replacement, Some(removed))
 }
 
-fn set_size_at<T: Clone, S: SumSize>(
+fn update_at<T: Clone, S: SumSize>(
     link: &Link<T, S>,
     index: usize,
-    new_size: S,
+    update: &mut dyn FnMut(&mut (T, S)),
 ) -> (Link<T, S>, bool) {
     let Some(node) = link else {
         return (None, false);
     };
     let mut node = owned(node);
     let left_count = count(&node.left);
+    let here = node.items.len();
     let ok = if index < left_count {
-        let (new_left, ok) = set_size_at(&node.left, index, new_size);
+        let (new_left, ok) = update_at(&node.left, index, update);
         node.left = new_left;
         ok
-    } else if index > left_count {
-        let (new_right, ok) = set_size_at(&node.right, index - left_count - 1, new_size);
+    } else if index >= left_count + here {
+        let (new_right, ok) = update_at(&node.right, index - left_count - here, update);
         node.right = new_right;
         ok
     } else {
-        node.size = new_size;
-        true
-    };
-    refresh(&mut node);
-    (Some(Arc::new(node)), ok)
-}
-
-fn set_at<T: Clone, S: SumSize>(
-    link: &Link<T, S>,
-    index: usize,
-    item: T,
-    size: S,
-) -> (Link<T, S>, bool) {
-    let Some(node) = link else {
-        return (None, false);
-    };
-    let mut node = owned(node);
-    let left_count = count(&node.left);
-    let ok = if index < left_count {
-        let (new_left, ok) = set_at(&node.left, index, item, size);
-        node.left = new_left;
-        ok
-    } else if index > left_count {
-        let (new_right, ok) = set_at(&node.right, index - left_count - 1, item, size);
-        node.right = new_right;
-        ok
-    } else {
-        node.item = item;
-        node.size = size;
+        let mut items = node.items.as_ref().clone();
+        update(&mut items[index - left_count]);
+        set_items(&mut node, items);
         true
     };
     refresh(&mut node);
@@ -256,10 +296,12 @@ fn set_at<T: Clone, S: SumSize>(
 fn get_at<T, S>(link: &Link<T, S>, index: usize) -> Option<&T> {
     let node = link.as_ref()?;
     let left_count = count(&node.left);
-    match index.cmp(&left_count) {
-        std::cmp::Ordering::Less => get_at(&node.left, index),
-        std::cmp::Ordering::Equal => Some(&node.item),
-        std::cmp::Ordering::Greater => get_at(&node.right, index - left_count - 1),
+    if index < left_count {
+        return get_at(&node.left, index);
+    }
+    match node.items.get(index - left_count) {
+        Some((item, _)) => Some(item),
+        None => get_at(&node.right, index - left_count - node.items.len()),
     }
 }
 
@@ -269,10 +311,13 @@ fn offset_before<T, S: SumSize>(link: &Link<T, S>, index: usize) -> S {
     };
     let left_count = count(&node.left);
     if index <= left_count {
-        offset_before(&node.left, index)
-    } else {
-        subtree_size(&node.left) + node.size + offset_before(&node.right, index - left_count - 1)
+        return offset_before(&node.left, index);
     }
+    let at = index - left_count;
+    if at < node.items.len() {
+        return subtree_size(&node.left) + chunk_sum(&node.items[..at]);
+    }
+    subtree_size(&node.left) + node.chunk_size + offset_before(&node.right, at - node.items.len())
 }
 
 fn find_by_offset<T, S: SumSize>(link: &Link<T, S>, offset: S) -> Option<(usize, S)> {
@@ -282,11 +327,19 @@ fn find_by_offset<T, S: SumSize>(link: &Link<T, S>, offset: S) -> Option<(usize,
         return find_by_offset(&node.left, offset);
     }
     let here = offset - left_size;
-    if here < node.size {
-        return Some((count(&node.left), here));
+    let left_count = count(&node.left);
+    if here < node.chunk_size {
+        let mut acc = S::default();
+        for (i, (_, size)) in node.items.iter().enumerate() {
+            let next = acc + *size;
+            if here < next {
+                return Some((left_count + i, here - acc));
+            }
+            acc = next;
+        }
     }
-    find_by_offset(&node.right, here - node.size)
-        .map(|(i, within)| (count(&node.left) + 1 + i, within))
+    find_by_offset(&node.right, here - node.chunk_size)
+        .map(|(i, within)| (left_count + node.items.len() + i, within))
 }
 
 /// `find_by_offset` on one projected `u64` dimension of a compound size.
@@ -302,18 +355,28 @@ fn find_by_projected_offset<T, S: SumSize>(
         return find_by_projected_offset(&node.left, offset, project);
     }
     let here = offset - left;
-    let own = project(&node.size);
+    let left_count = count(&node.left);
+    let own = project(&node.chunk_size);
     if here < own {
-        return Some((count(&node.left), here));
+        let mut acc = 0u64;
+        for (i, (_, size)) in node.items.iter().enumerate() {
+            let next = acc + project(size);
+            if here < next {
+                return Some((left_count + i, here - acc));
+            }
+            acc = next;
+        }
     }
     find_by_projected_offset(&node.right, here - own, project)
-        .map(|(i, within)| (count(&node.left) + 1 + i, within))
+        .map(|(i, within)| (left_count + node.items.len() + i, within))
 }
 
 fn for_each<T, S: Copy>(link: &Link<T, S>, f: &mut impl FnMut(&T, S)) {
     if let Some(node) = link {
         for_each(&node.left, f);
-        f(&node.item, node.size);
+        for (item, size) in node.items.iter() {
+            f(item, *size);
+        }
         for_each(&node.right, f);
     }
 }
@@ -332,30 +395,26 @@ fn for_each_in_range<T, S: SumSize>(
         return;
     }
     for_each_in_range(&node.left, base, start, end, f);
-    let item_start = base + subtree_size(&node.left);
-    if item_start < end && item_start + node.size > start {
-        f(item_start, &node.item, node.size);
+    let mut item_start = base + subtree_size(&node.left);
+    for (item, size) in node.items.iter() {
+        if item_start < end && item_start + *size > start {
+            f(item_start, item, *size);
+        }
+        item_start = item_start + *size;
     }
-    for_each_in_range(&node.right, item_start + node.size, start, end, f);
+    for_each_in_range(&node.right, item_start, start, end, f);
 }
 
-fn build_balanced<T: Clone, S: SumSize>(items: &[(T, S)]) -> Link<T, S> {
-    if items.is_empty() {
+fn build_balanced<T, S: SumSize>(chunks: &mut [Option<Vec<(T, S)>>]) -> Link<T, S> {
+    if chunks.is_empty() {
         return None;
     }
-    let mid = items.len() / 2;
-    let (item, size) = items[mid].clone();
-    let left = build_balanced(&items[..mid]);
-    let right = build_balanced(&items[mid + 1..]);
-    let mut node = Node {
-        item,
-        size,
-        left,
-        right,
-        height: 1,
-        count: 1,
-        subtree_size: size,
-    };
+    let mid = chunks.len() / 2;
+    let (before, rest) = chunks.split_at_mut(mid);
+    let (here, after) = rest.split_first_mut().expect("mid is in range");
+    let mut node = leaf(here.take().expect("each chunk is consumed once"));
+    node.left = build_balanced(before);
+    node.right = build_balanced(after);
     refresh(&mut node);
     Some(Arc::new(node))
 }
@@ -397,8 +456,17 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
 
     /// Builds a balanced tree from an already-ordered list in `O(n)`.
     pub fn from_items(items: Vec<(T, S)>) -> Self {
+        let mut chunks: Vec<Option<Vec<(T, S)>>> = Vec::with_capacity(items.len().div_ceil(CHUNK));
+        let mut items = items.into_iter();
+        loop {
+            let chunk: Vec<(T, S)> = items.by_ref().take(CHUNK).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            chunks.push(Some(chunk));
+        }
         Self {
-            root: build_balanced(&items),
+            root: build_balanced(&mut chunks),
         }
     }
 
@@ -439,7 +507,7 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
 
     /// Updates the size of the item at `index`. Returns `false` if out of range.
     pub fn set_size(&mut self, index: usize, size: S) -> bool {
-        let (new_root, ok) = set_size_at(&self.root, index, size);
+        let (new_root, ok) = update_at(&self.root, index, &mut |entry| entry.1 = size);
         if ok {
             self.root = new_root;
         }
@@ -449,7 +517,12 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
     /// Replaces both the item and its size at `index`. Returns `false` if out of
     /// range. `O(log N)` (path copy), used to swap a re-measured child in place.
     pub fn set(&mut self, index: usize, item: T, size: S) -> bool {
-        let (new_root, ok) = set_at(&self.root, index, item, size);
+        let mut replacement = Some(item);
+        let (new_root, ok) = update_at(&self.root, index, &mut |entry| {
+            if let Some(item) = replacement.take() {
+                *entry = (item, size);
+            }
+        });
         if ok {
             self.root = new_root;
         }
@@ -490,16 +563,12 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
 
     /// Forward in-order iterator over `&item` — `O(1)` amortized per step.
     pub fn iter(&self) -> Iter<'_, T, S> {
-        let mut stack = Vec::new();
-        let mut cur = self.root.as_deref();
-        while let Some(node) = cur {
-            stack.push(node);
-            cur = node.left.as_deref();
-        }
-        Iter {
-            stack,
+        let mut iter = Iter {
+            stack: Vec::new(),
             remaining: count(&self.root),
-        }
+        };
+        iter.descend(self.root.as_deref());
+        iter
     }
 
     /// Visits every item overlapping the offset range `[start, end)`, passing
@@ -511,21 +580,32 @@ impl<T: Clone, S: SumSize> SumTree<T, S> {
 
 /// Forward in-order iterator over a [`SumTree`]'s items.
 pub struct Iter<'a, T, S> {
-    stack: Vec<&'a Node<T, S>>,
+    stack: Vec<(&'a Node<T, S>, usize)>,
     remaining: usize,
+}
+
+impl<'a, T, S> Iter<'a, T, S> {
+    fn descend(&mut self, mut cur: Option<&'a Node<T, S>>) {
+        while let Some(node) = cur {
+            self.stack.push((node, 0));
+            cur = node.left.as_deref();
+        }
+    }
 }
 
 impl<'a, T, S> Iterator for Iter<'a, T, S> {
     type Item = &'a T;
     fn next(&mut self) -> Option<&'a T> {
-        let node = self.stack.pop()?;
-        self.remaining -= 1;
-        let mut cur = node.right.as_deref();
-        while let Some(n) = cur {
-            self.stack.push(n);
-            cur = n.left.as_deref();
+        let (node, at) = self.stack.last_mut()?;
+        let node: &'a Node<T, S> = node;
+        let item = &node.items[*at].0;
+        *at += 1;
+        if *at == node.items.len() {
+            self.stack.pop();
+            self.descend(node.right.as_deref());
         }
-        Some(&node.item)
+        self.remaining -= 1;
+        Some(item)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -537,11 +617,7 @@ impl<T, S> ExactSizeIterator for Iter<'_, T, S> {}
 
 impl<T: Clone, S: SumSize> FromIterator<(T, S)> for SumTree<T, S> {
     fn from_iter<I: IntoIterator<Item = (T, S)>>(iter: I) -> Self {
-        let mut tree = SumTree::new();
-        for (item, size) in iter {
-            tree.push(item, size);
-        }
-        tree
+        SumTree::from_items(iter.into_iter().collect())
     }
 }
 
@@ -562,9 +638,11 @@ mod tests {
                 let (lh, lc, ls) = check_invariants(&node.left);
                 let (rh, rc, rs) = check_invariants(&node.right);
                 assert!((lh - rh).abs() <= 1, "AVL balance violated");
+                assert!(!node.items.is_empty() && node.items.len() <= CHUNK);
+                assert_eq!(node.chunk_size, chunk_sum(&node.items));
                 assert_eq!(node.height, 1 + lh.max(rh));
-                assert_eq!(node.count, 1 + lc + rc);
-                assert_eq!(node.subtree_size, node.size + ls + rs);
+                assert_eq!(node.count, node.items.len() + lc + rc);
+                assert_eq!(node.subtree_size, node.chunk_size + ls + rs);
                 (node.height, node.count, node.subtree_size)
             }
         }
@@ -719,10 +797,10 @@ mod tests {
             state ^= state << 17;
             state
         };
-        for step in 0..2000u32 {
+        for step in 0..4000u32 {
             let len = reference.len();
-            let op = next() % 3;
-            if op == 0 || len == 0 {
+            let op = next() % 4;
+            if op == 0 || op == 2 || len == 0 {
                 let idx = (next() as usize) % (len + 1);
                 let size = (next() % 9) + 1;
                 tree.insert(idx, step, size);
@@ -730,7 +808,12 @@ mod tests {
             } else if op == 1 {
                 let idx = (next() as usize) % len;
                 let size = (next() % 9) + 1;
-                tree.set_size(idx, size);
+                if next() % 2 == 0 {
+                    tree.set_size(idx, size);
+                } else {
+                    tree.set(idx, step, size);
+                    reference[idx].0 = step;
+                }
                 reference[idx].1 = size;
             } else {
                 let idx = (next() as usize) % len;
@@ -741,8 +824,32 @@ mod tests {
                 items(&tree),
                 reference.iter().map(|(i, _)| *i).collect::<Vec<_>>()
             );
+            assert_eq!(
+                tree.iter().copied().collect::<Vec<_>>(),
+                reference.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+            );
             let total: u64 = reference.iter().map(|(_, s)| s).sum();
             assert_eq!(tree.total_size(), total);
+            if !reference.is_empty() {
+                let probe = (next() as usize) % reference.len();
+                assert_eq!(tree.get(probe), Some(&reference[probe].0));
+                assert_eq!(tree.get(reference.len()), None);
+                let lo = next() % (total + 1);
+                let hi = lo + next() % 40;
+                let mut visited = Vec::new();
+                tree.for_each_in_range(lo, hi, |start, item, size| {
+                    visited.push((start, *item, size))
+                });
+                let mut expected = Vec::new();
+                let mut at = 0u64;
+                for (item, size) in &reference {
+                    if at < hi && at + size > lo {
+                        expected.push((at, *item, *size));
+                    }
+                    at += size;
+                }
+                assert_eq!(visited, expected);
+            }
             let mut acc = 0u64;
             for (i, (_, s)) in reference.iter().enumerate() {
                 assert_eq!(tree.offset_before(i), acc);
@@ -751,5 +858,9 @@ mod tests {
             }
             assert_eq!(tree.find_by_offset(acc), None);
         }
+        assert!(
+            reference.len() > CHUNK * 8,
+            "the run must exercise chunk splits"
+        );
     }
 }

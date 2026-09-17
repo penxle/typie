@@ -119,24 +119,10 @@ mod tests {
         let p1 = Dot::new(1, 1);
         let p2 = Dot::new(1, 2);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 3), SeqItem::Char('H')),
             (Dot::new(1, 4), SeqItem::Char('i')),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 5), SeqItem::Char('Y')),
             (Dot::new(1, 6), SeqItem::Char('o')),
         ];
@@ -177,14 +163,7 @@ mod tests {
         let root = Dot::ROOT;
         let p1 = Dot::new(1, 1);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 3), SeqItem::Char('H')),
             (Dot::new(1, 4), SeqItem::Char('i')),
         ];

@@ -473,11 +473,7 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block {
-                node_type,
-                parents,
-                attrs: vec![],
-            },
+            item: SeqItem::block(node_type, parents, vec![]),
         })
     }
 
@@ -1604,10 +1600,12 @@ mod tests {
         let image_dot = graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 4,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![root],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![root],
+                ),
             }))
             .unwrap()
             .id;
@@ -1662,10 +1660,12 @@ mod tests {
         let image_dot = graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![root],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![root],
+                ),
             }))
             .unwrap()
             .id;
@@ -2106,7 +2106,7 @@ mod tests {
                         let pos = 1 + (a as usize) % count;
                         let d = state.apply(EditOp::Seq(ListOp::Ins {
                             pos,
-                            item: SeqItem::Block { node_type: NodeType::Paragraph, parents: vec![Dot::ROOT], attrs: vec![] },
+                            item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                         })).unwrap().id;
                         paras.push(d);
                         count += 1;
@@ -2119,7 +2119,7 @@ mod tests {
                         };
                         state.apply(EditOp::Seq(ListOp::Ins {
                             pos,
-                            item: SeqItem::BlockAtom { leaf: AtomLeaf::Image { node: img }, parents: vec![Dot::ROOT] },
+                            item: SeqItem::block_atom(AtomLeaf::Image { node: Box::new(img) }, vec![Dot::ROOT]),
                         })).unwrap();
                         count += 1;
                     }
@@ -2234,10 +2234,12 @@ mod tests {
         graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img },
-                    parents: vec![root],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img),
+                    },
+                    vec![root],
+                ),
             }))
             .unwrap();
         let state = ProjectedState::from_graph(graph).unwrap();
@@ -2283,10 +2285,12 @@ mod tests {
         graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img },
-                    parents: vec![root],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img),
+                    },
+                    vec![root],
+                ),
             }))
             .unwrap();
         let mut state = ProjectedState::from_graph(graph).unwrap();

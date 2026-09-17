@@ -327,36 +327,20 @@ mod tests {
         let items = vec![
             (
                 ol,
-                SeqItem::Block {
-                    node_type: NodeType::OrderedList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::OrderedList, vec![root], vec![]),
             ),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, ol],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, ol, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, ol, li], vec![]),
             ),
             (ch, SeqItem::Char('x')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), li, ch)
@@ -369,38 +353,19 @@ mod tests {
         let para = Dot::new(1, 3);
         let para_root = Dot::new(1, 5);
         let items = vec![
-            (
-                bl,
-                SeqItem::Block {
-                    node_type: NodeType::BulletList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bl, SeqItem::block(NodeType::BulletList, vec![root], vec![])),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, bl],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, bl], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bl, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bl, li], vec![]),
             ),
             (Dot::new(1, 4), SeqItem::Char('x')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), li)
@@ -473,37 +438,21 @@ mod tests {
         let items = vec![
             (
                 ol,
-                SeqItem::Block {
-                    node_type: NodeType::OrderedList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::OrderedList, vec![root], vec![]),
             ),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, ol],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, ol, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, ol, li], vec![]),
             ),
             (ch_small, SeqItem::Char('a')),
             (ch_big, SeqItem::Char('B')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let mut doc = logs(&items);
@@ -591,35 +540,19 @@ mod tests {
         let items = vec![
             (
                 ol,
-                SeqItem::Block {
-                    node_type: NodeType::OrderedList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::OrderedList, vec![root], vec![]),
             ),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, ol],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, ol, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, ol, li], vec![]),
             ),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&items);
@@ -650,38 +583,19 @@ mod tests {
             NodeType::BulletList
         };
         let items = vec![
-            (
-                list,
-                SeqItem::Block {
-                    node_type: list_node_type,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (list, SeqItem::block(list_node_type, vec![root], vec![])),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, list],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, list], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, list, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, list, li], vec![]),
             ),
             (ch, SeqItem::Char('x')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&items);
@@ -713,70 +627,46 @@ mod tests {
         let items = vec![
             (
                 list,
-                SeqItem::Block {
-                    node_type: NodeType::BulletList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::BulletList, vec![root], vec![]),
             ),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, list],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, list], vec![]),
             ),
             (
                 first_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, list, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, list, li], vec![]),
             ),
             (first_char, SeqItem::Char('A')),
             (
                 nested_list,
-                SeqItem::Block {
-                    node_type: NodeType::OrderedList,
-                    parents: vec![root, list, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::OrderedList, vec![root, list, li], vec![]),
             ),
             (
                 nested_item,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, list, li, nested_list],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::ListItem,
+                    vec![root, list, li, nested_list],
+                    vec![],
+                ),
             ),
             (
                 nested_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, list, li, nested_list, nested_item],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, list, li, nested_list, nested_item],
+                    vec![],
+                ),
             ),
             (nested_char, SeqItem::Char('N')),
             (
                 second_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, list, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, list, li], vec![]),
             ),
             (second_char, SeqItem::Char('B')),
             (
                 root_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&items);
@@ -930,36 +820,20 @@ mod tests {
             vec![
                 (
                     ol,
-                    SeqItem::Block {
-                        node_type: NodeType::OrderedList,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::OrderedList, vec![root], vec![]),
                 ),
                 (
                     li,
-                    SeqItem::Block {
-                        node_type: NodeType::ListItem,
-                        parents: vec![root, ol],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
                 ),
                 (
                     para,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root, ol, li],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![root, ol, li], vec![]),
                 ),
                 (ch, SeqItem::Char('x')),
                 (
                     para_root,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
                 ),
             ]
         };
@@ -1038,29 +912,14 @@ mod tests {
         let li = Dot::new(30, 2);
         let para = Dot::new(30, 3);
         let mut items = vec![
-            (
-                bl,
-                SeqItem::Block {
-                    node_type: NodeType::BulletList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (bl, SeqItem::block(NodeType::BulletList, vec![root], vec![])),
             (
                 li,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, bl],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, bl], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, bl, li],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, bl, li], vec![]),
             ),
             (Dot::new(30, 4), SeqItem::Char('x')),
         ];
@@ -1070,11 +929,7 @@ mod tests {
         }
         items.push((
             Dot::new(30, 100),
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         ));
         (logs(&items), li)
     }
@@ -1138,53 +993,29 @@ mod tests {
         let items = vec![
             (
                 ol,
-                SeqItem::Block {
-                    node_type: NodeType::OrderedList,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::OrderedList, vec![root], vec![]),
             ),
             (
                 li1,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, ol],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
             ),
             (
                 para1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, ol, li1],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, ol, li1], vec![]),
             ),
             (Dot::new(4, 4), SeqItem::Char('a')),
             (
                 li2,
-                SeqItem::Block {
-                    node_type: NodeType::ListItem,
-                    parents: vec![root, ol],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::ListItem, vec![root, ol], vec![]),
             ),
             (
                 para2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, ol, li2],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, ol, li2], vec![]),
             ),
             (Dot::new(4, 7), SeqItem::Char('b')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&items);

@@ -2987,19 +2987,15 @@ mod tests {
             ops: vec![
                 Op {
                     id: d(0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                     }),
                 },
                 Op {
                     id: d(1),
-                    parents: vec![d(0)],
+                    parents: editor_crdt::smallvec![d(0)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -3007,19 +3003,19 @@ mod tests {
                 },
                 Op {
                     id: d(2),
-                    parents: vec![d(1)],
+                    parents: editor_crdt::smallvec![d(1)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 2,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT, Dot::new(9, 999)],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(
+                            NodeType::Paragraph,
+                            vec![Dot::ROOT, Dot::new(9, 999)],
+                            vec![],
+                        ),
                     }),
                 },
                 Op {
                     id: d(3),
-                    parents: vec![d(2)],
+                    parents: editor_crdt::smallvec![d(2)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 3,
                         item: SeqItem::Char('z'),
@@ -3370,11 +3366,7 @@ mod tests {
         let mut frontiers = vec![heads(&state)];
         let mut state = state;
 
-        let block = |parents: Vec<Dot>| SeqItem::Block {
-            node_type: NodeType::Paragraph,
-            parents,
-            attrs: vec![],
-        };
+        let block = |parents: Vec<Dot>| SeqItem::block(NodeType::Paragraph, parents, vec![]);
 
         let (next, _) = state
             .apply(EditOp::Seq(ListOp::Ins {

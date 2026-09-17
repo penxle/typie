@@ -64,7 +64,7 @@ pub struct Escalate {
 }
 
 fn is_unit_leaf(item: &SeqItem) -> bool {
-    matches!(item, SeqItem::Atom(_) | SeqItem::BlockAtom { .. })
+    matches!(item, SeqItem::Atom(_) | SeqItem::BlockAtom(_))
 }
 
 fn index_units<'a>(
@@ -964,14 +964,7 @@ mod tests {
             for c in &n.children {
                 match c {
                     RawChild::Block(b) => {
-                        out.push((
-                            b.id,
-                            SeqItem::Block {
-                                node_type: b.node_type,
-                                parents: vec![],
-                                attrs: vec![],
-                            },
-                        ));
+                        out.push((b.id, SeqItem::block(b.node_type, vec![], vec![])));
                         walk(b, out);
                     }
                     RawChild::Leaf { id, item } => out.push((*id, item.clone())),

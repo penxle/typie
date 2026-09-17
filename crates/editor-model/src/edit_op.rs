@@ -33,7 +33,7 @@ pub fn seq_parents(graph: &OpGraph<EditOp>, dot: Dot) -> Vec<Dot> {
     let mut out: Vec<Dot> = Vec::new();
     let mut seen: HashSet<Dot> = HashSet::new();
     let start: &Op<EditOp> = graph.get(&dot).expect("op exists");
-    let mut stack: Vec<Dot> = start.parents.clone();
+    let mut stack: Vec<Dot> = start.parents.to_vec();
     while let Some(p) = stack.pop() {
         if !seen.insert(p) {
             continue;
@@ -180,11 +180,7 @@ mod tests {
         let _para = g
             .add_mut(seq_ins(
                 0,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ))
             .unwrap()
             .id;
@@ -210,11 +206,7 @@ mod tests {
         graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }))
             .unwrap();
         graph
@@ -260,11 +252,7 @@ mod tests {
         let para = g
             .add_mut(seq_ins(
                 0,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ))
             .unwrap()
             .id;
@@ -290,11 +278,7 @@ mod tests {
         let _para = g
             .add_mut(seq_ins(
                 0,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ))
             .unwrap()
             .id;
@@ -326,22 +310,14 @@ mod tests {
         let callout = g
             .add_mut(seq_ins(
                 0,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![]),
             ))
             .unwrap()
             .id;
         let _p = g
             .add_mut(seq_ins(
                 1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, callout], vec![]),
             ))
             .unwrap()
             .id;
@@ -363,11 +339,7 @@ mod tests {
         let _para = g
             .add_mut(seq_ins(
                 0,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ))
             .unwrap()
             .id;
@@ -386,24 +358,13 @@ mod tests {
     fn split_seq_matches_standalone_reference() {
         let mut g: OpGraph<EditOp> = OpGraph::new();
         let root = g
-            .add_mut(seq_ins(
-                0,
-                SeqItem::Block {
-                    node_type: NodeType::Root,
-                    parents: vec![],
-                    attrs: vec![],
-                },
-            ))
+            .add_mut(seq_ins(0, SeqItem::block(NodeType::Root, vec![], vec![])))
             .unwrap()
             .id;
         let para = g
             .add_mut(seq_ins(
                 1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ))
             .unwrap()
             .id;
@@ -424,11 +385,7 @@ mod tests {
                 parents: vec![],
                 op: ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Root,
-                        parents: vec![],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Root, vec![], vec![]),
                 },
             },
             InputEvent {
@@ -436,11 +393,7 @@ mod tests {
                 parents: vec![root],
                 op: ListOp::Ins {
                     pos: 1,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
                 },
             },
             InputEvent {
@@ -489,14 +442,10 @@ mod tests {
         let cs = Changeset {
             ops: vec![Op {
                 id: Dot::new(1, 1),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: seq_ins(
                     0,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 ),
             }],
         };
@@ -506,23 +455,19 @@ mod tests {
     }
 
     fn blk(nt: NodeType, parents: Vec<Dot>) -> SeqItem {
-        SeqItem::Block {
-            node_type: nt,
-            parents,
-            attrs: vec![],
-        }
+        SeqItem::block(nt, parents, vec![])
     }
     fn op_seq(a: u64, c: u64, parents: &[Dot], pos: usize, item: SeqItem) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: seq_ins(pos, item),
         }
     }
     fn op_del(a: u64, c: u64, parents: &[Dot], pos: usize, len: usize) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: EditOp::Seq(ListOp::Del { pos, len }),
         }
     }
@@ -536,7 +481,7 @@ mod tests {
     ) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: EditOp::Alias(AliasOp {
                 pairs: vec![AliasRun {
                     old_start,
@@ -549,7 +494,7 @@ mod tests {
     fn op_carry(a: u64, c: u64, parents: &[Dot], target: Dot, v: &str) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                 target,
                 modifier: Modifier::TextColor {
@@ -688,7 +633,7 @@ mod tests {
     ) -> Op<EditOp> {
         Op {
             id: Dot::new(a, c),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: EditOp::NodeCarry(ModifierAttrOp::SetModifier { target, modifier }),
         }
     }

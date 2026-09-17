@@ -61,12 +61,12 @@ mod tests {
         let hr = Dot::new(1, 1);
         let items = vec![(
             hr,
-            SeqItem::BlockAtom {
-                leaf: AtomLeaf::HorizontalRule {
+            SeqItem::block_atom(
+                AtomLeaf::HorizontalRule {
                     variant: HorizontalRuleVariant::default(),
                 },
-                parents: vec![root],
-            },
+                vec![root],
+            ),
         )];
         (logs(&items), hr)
     }
@@ -80,10 +80,12 @@ mod tests {
         };
         let items = vec![(
             img,
-            SeqItem::BlockAtom {
-                leaf: AtomLeaf::Image { node: img_node },
-                parents: vec![root],
-            },
+            SeqItem::block_atom(
+                AtomLeaf::Image {
+                    node: Box::new(img_node),
+                },
+                vec![root],
+            ),
         )];
         (logs(&items), img)
     }

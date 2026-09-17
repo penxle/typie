@@ -232,11 +232,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let elems = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         (elems, root, para)
     }
@@ -339,11 +335,7 @@ mod tests {
         let elems = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(2, 2), SeqItem::Char('x')),
         ];
@@ -362,11 +354,7 @@ mod tests {
         let elems = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(3, 2), SeqItem::Atom(AtomLeaf::HardBreak)),
         ];
@@ -388,20 +376,16 @@ mod tests {
         let elems = vec![
             (
                 image,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image {
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
                         node: Default::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         let doc = logs(&elems);

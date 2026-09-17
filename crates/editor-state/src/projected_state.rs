@@ -1,13 +1,13 @@
 use editor_crdt::sequence::{Bias, SeqCheckout};
 use editor_crdt::{Changeset, CrdtError, Dot, InputEvent, ListOp, Op, OpGraph, OpLog};
 use editor_model::{
-    AliasClasses, AliasOp, Anchor, AtomLeaf, BlockNode, BlockPaths, BlockTree, Child, ChildList,
-    ContentExpr, DocLogs, DocView, EditOp, FlatWidthDelta, Modifier, ModifierAttrLog, ModifierType,
-    Node, NodeAttrLog, NodeType, ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild,
-    RawNode, RepairStats, SeqItem, SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one,
+    AliasClasses, AliasOp, Anchor, AtomLeaf, BlockNode, BlockTree, Child, ChildList, ContentExpr,
+    DocLogs, DocView, EditOp, FlatWidthDelta, Modifier, ModifierAttrLog, ModifierType, Node,
+    NodeAttrLog, NodeType, ProjectedDoc, ProjectionError, ProjectionIndexes, RawChild, RawNode,
+    RepairStats, SeqItem, SpanLog, SpanOp, SplitError, anchor_dot, block_effective_one,
     block_init_of, normalize_content_shallow_with_stats, normalize_window_forest_with_stats,
-    project_blocks, project_from, project_from_tree, project_with_overlay, seq_parents,
-    split_block_insert, split_logs,
+    project_blocks, project_from_tree_with_paths, project_from_with_paths,
+    project_with_overlay_and_paths, seq_parents, split_block_insert, split_logs,
 };
 use hashbrown::{HashMap, HashSet};
 
@@ -383,8 +383,8 @@ impl ProjectedState {
         let logs = split_logs(graph)?;
         let mut seq = SeqCheckout::new();
         seq.apply_tail(&logs.seq);
-        let projected = project_from(&logs, &seq)?;
-        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans, &seq);
+        let (projected, paths) = project_from_with_paths(&logs, &seq)?;
+        let indexes = ProjectionIndexes::rebuild_with_paths(paths, &projected, &logs.spans, &seq);
         Ok((logs, seq, projected, indexes))
     }
 
@@ -395,8 +395,8 @@ impl ProjectedState {
         let logs = split_logs(graph)?;
         let mut seq = SeqCheckout::new();
         seq.apply_tail(&logs.seq);
-        let projected = project_with_overlay(&logs, &seq, overlay)?;
-        let indexes = ProjectionIndexes::rebuild_from(&projected, &logs.spans, &seq);
+        let (projected, paths) = project_with_overlay_and_paths(&logs, &seq, overlay)?;
+        let indexes = ProjectionIndexes::rebuild_with_paths(paths, &projected, &logs.spans, &seq);
         Ok((logs, seq, projected, indexes))
     }
 
@@ -529,11 +529,7 @@ impl ProjectedState {
         graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }))
             .expect("seed paragraph never conflicts");
         Self::from_graph(graph).expect("seed paragraph always projects")
@@ -557,10 +553,11 @@ impl ProjectedState {
     }
 
     fn reproject(&mut self) -> Result<(), SpineError> {
-        let projected = project_from(&self.logs, &self.seq)?;
+        let (projected, paths) = project_from_with_paths(&self.logs, &self.seq)?;
         self.repair_stats.accumulate(&projected.repair_stats);
         self.projection_degraded_latch = projected.repair_stats.projection_degraded;
-        self.indexes = ProjectionIndexes::rebuild_from(&projected, &self.logs.spans, &self.seq);
+        self.indexes =
+            ProjectionIndexes::rebuild_with_paths(paths, &projected, &self.logs.spans, &self.seq);
         self.projected = projected;
         self.leaf_cursor = None;
         self.mark_dirty_full();
@@ -583,8 +580,7 @@ impl ProjectedState {
     /// anchor index describes the pre-delete spans) — the contract callers of
     /// [`apply_warm_only`](Self::apply_warm_only) with delete-only batches uphold.
     pub fn reproject_after_delete(&mut self) -> Result<(), SpineError> {
-        let projected = project_from(&self.logs, &self.seq)?;
-        let paths = BlockPaths::from_tree(&projected.tree);
+        let (projected, paths) = project_from_with_paths(&self.logs, &self.seq)?;
         let span_index = self.indexes.span_index.clone();
         self.repair_stats.accumulate(&projected.repair_stats);
         self.projection_degraded_latch = projected.repair_stats.projection_degraded;
@@ -865,7 +861,7 @@ impl ProjectedState {
     fn enclosing_marker_of(&self, leaf: Dot) -> Option<(Dot, bool)> {
         self.seq
             .enclosing_marker(&self.logs.seq, leaf, &|item: &SeqItem| {
-                matches!(item, SeqItem::Block { .. })
+                matches!(item, SeqItem::Block(_))
             })
     }
 
@@ -914,7 +910,7 @@ impl ProjectedState {
             matches!(
                 &self.logs.seq.entries[lv].op,
                 ListOp::Ins {
-                    item: SeqItem::Atom(_) | SeqItem::BlockAtom { .. },
+                    item: SeqItem::Atom(_) | SeqItem::BlockAtom(_),
                     ..
                 }
             )
@@ -1209,17 +1205,10 @@ impl ProjectedState {
     /// The deepest LIVE ancestor a block/block-atom Ins op intends to attach
     /// under, from its payload parents chain. `None` for leaf inserts.
     fn op_intended_parent(&self, op: &Op<EditOp>) -> Option<Dot> {
-        let parents = match &op.payload {
-            EditOp::Seq(ListOp::Ins {
-                item: SeqItem::Block { parents, .. },
-                ..
-            }) => parents,
-            EditOp::Seq(ListOp::Ins {
-                item: SeqItem::BlockAtom { parents, .. },
-                ..
-            }) => parents,
-            _ => return None,
+        let EditOp::Seq(ListOp::Ins { item, .. }) = &op.payload else {
+            return None;
         };
+        let parents = item.marker_parents()?;
         self.deepest_live_parent(parents)
     }
 
@@ -1232,11 +1221,7 @@ impl ProjectedState {
         let ListOp::Ins { item, .. } = &self.logs.seq.entries[lv].op else {
             return None;
         };
-        let parents = match item {
-            SeqItem::Block { parents, .. } => parents,
-            SeqItem::BlockAtom { parents, .. } => parents,
-            _ => return None,
-        };
+        let parents = item.marker_parents()?;
         self.deepest_live_parent(parents)
     }
 
@@ -1452,10 +1437,8 @@ impl ProjectedState {
             if !missing_set.contains(d) {
                 continue;
             }
-            let parents = match item {
-                SeqItem::Block { parents, .. } => parents,
-                SeqItem::BlockAtom { parents, .. } => parents,
-                _ => continue,
+            let Some(parents) = item.marker_parents() else {
+                continue;
             };
             for p in parents.iter().rev() {
                 if *p == Dot::ROOT || self.indexes.paths.node_type_of(*p).is_some() {
@@ -1798,14 +1781,14 @@ impl ProjectedState {
                 (e, Some(o))
             };
         for (d, item) in &elements {
-            if let SeqItem::Block { node_type, .. } = item {
-                if *node_type == NodeType::Root {
+            if let SeqItem::Block(b) = item {
+                if b.node_type == NodeType::Root {
                     return Err(ProjectionError::RootTypedBlock { dot: *d }.into());
                 }
-                if node_type.spec().is_leaf() {
+                if b.node_type.spec().is_leaf() {
                     return Err(ProjectionError::LeafTypedBlock {
                         dot: *d,
-                        node_type: *node_type,
+                        node_type: b.node_type,
                     }
                     .into());
                 }
@@ -1825,7 +1808,7 @@ impl ProjectedState {
         if scope != Dot::ROOT {
             let old_nodes_set: HashSet<Dot> = old_nodes.iter().copied().collect();
             for (d, item) in &elements {
-                if !matches!(item, SeqItem::Block { .. } | SeqItem::BlockAtom { .. }) {
+                if !matches!(item, SeqItem::Block(_) | SeqItem::BlockAtom(_)) {
                     continue;
                 }
                 let Some(prev_parent) = self.indexes.paths.parent_of(*d) else {
@@ -2609,11 +2592,17 @@ impl ProjectedState {
         let hidden = std::mem::take(&mut self.projected.hidden);
         let redirected = std::mem::take(&mut self.projected.redirected);
         let alias_classes = AliasClasses::from_log(&self.logs.aliases);
-        self.projected = project_from_tree(&elements, tree, &self.seq, &self.logs, alias_classes);
+        let (projected, paths) =
+            project_from_tree_with_paths(&elements, tree, &self.seq, &self.logs, alias_classes);
+        self.projected = projected;
         self.projected.hidden = hidden;
         self.projected.redirected = redirected;
-        self.indexes =
-            ProjectionIndexes::rebuild_from(&self.projected, &self.logs.spans, &self.seq);
+        self.indexes = ProjectionIndexes::rebuild_with_paths(
+            paths,
+            &self.projected,
+            &self.logs.spans,
+            &self.seq,
+        );
         self.mark_dirty_full();
         #[cfg(any(test, feature = "test-utils"))]
         {
@@ -2629,14 +2618,9 @@ impl ProjectedState {
                 self.try_insert_leaf(op.id, item, None)
             }
             EditOp::Seq(ListOp::Ins {
-                item:
-                    SeqItem::Block {
-                        node_type,
-                        parents,
-                        attrs,
-                    },
+                item: SeqItem::Block(b),
                 ..
-            }) => attrs.is_empty() && self.try_insert_block(op.id, *node_type, parents),
+            }) => b.attrs.is_empty() && self.try_insert_block(op.id, b.node_type, &b.parents),
             EditOp::Seq(ListOp::Del { .. }) => self.try_delete_chars(op.id),
             EditOp::Seq(ListOp::Undel { del }) => self.try_undelete(*del),
             EditOp::Span(span_op) => self.try_apply_span(op.id, span_op),
@@ -3051,7 +3035,7 @@ impl ProjectedState {
                 .skip(start)
                 .take(count)
             {
-                if matches!(item, SeqItem::Block { .. }) {
+                if matches!(item, SeqItem::Block(_)) {
                     continue;
                 }
                 let Some(block) = self.indexes.paths.block_of(dot) else {
@@ -4040,10 +4024,10 @@ impl ProjectedState {
             return Vec::new();
         };
         match &self.logs.seq.entries[lv].op {
-            ListOp::Ins {
-                item: SeqItem::Block { parents, .. } | SeqItem::BlockAtom { parents, .. },
-                ..
-            } => parents.clone(),
+            ListOp::Ins { item, .. } => item
+                .marker_parents()
+                .map(<[Dot]>::to_vec)
+                .unwrap_or_default(),
             _ => Vec::new(),
         }
     }
@@ -4498,11 +4482,7 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block {
-                node_type,
-                parents,
-                attrs: vec![],
-            },
+            item: SeqItem::block(node_type, parents, vec![]),
         })
     }
 
@@ -4652,10 +4632,12 @@ mod tests {
             };
             seed.apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![Dot::ROOT, callout],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![Dot::ROOT, callout],
+                ),
             }))
             .unwrap();
             pos += 1;
@@ -5559,10 +5541,12 @@ mod tests {
         let image = state
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: image_node },
-                    parents: vec![Dot::ROOT],
-                },
+                item: SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(image_node),
+                    },
+                    vec![Dot::ROOT],
+                ),
             }))
             .unwrap()
             .id;
@@ -7059,10 +7043,12 @@ mod tests {
         };
         warm.apply(EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::BlockAtom {
-                leaf: AtomLeaf::Image { node: img_node },
-                parents: vec![Dot::ROOT],
-            },
+            item: SeqItem::block_atom(
+                AtomLeaf::Image {
+                    node: Box::new(img_node),
+                },
+                vec![Dot::ROOT],
+            ),
         }))
         .unwrap();
         pos += 1;
@@ -7668,13 +7654,13 @@ mod tests {
         let id = warm
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 4,
-                item: SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![NodeAttr::Callout {
+                item: SeqItem::block(
+                    NodeType::Callout,
+                    vec![Dot::ROOT],
+                    vec![NodeAttr::Callout {
                         attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
                     }],
-                },
+                ),
             }))
             .unwrap()
             .id;

@@ -476,10 +476,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::Unknown {
-                    tag: 999,
-                    bytes: vec![0xAA],
-                },
+                item: SeqItem::unknown(999, vec![0xAA]),
             }))
             .unwrap();
         let base = live_heads(&state);
@@ -505,11 +502,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Unknown,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Unknown, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;
@@ -517,11 +510,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 4,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, unknown],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, unknown], vec![]),
             }))
             .unwrap()
             .id;

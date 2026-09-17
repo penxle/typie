@@ -249,22 +249,8 @@ mod tests {
         let p1 = Dot::new(1, 1);
         let p2 = Dot::new(1, 2);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
         ];
         let mut doc = logs(&items);
         if let Some(modifier) = block_gap {
@@ -288,21 +274,14 @@ mod tests {
         let items = vec![
             (
                 img,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
-            (
-                p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
         ];
         logs(&items)
     }

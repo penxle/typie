@@ -7,23 +7,35 @@ mod project;
 pub use normalize::*;
 pub use project::*;
 
+/// One element of the document sequence. Almost every element is a `Char`, and
+/// the enum is stored once per element in the op graph, the op log and the block
+/// tree, so every other variant keeps its payload behind a pointer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SeqItem {
     Char(char),
     Atom(AtomLeaf),
-    Block {
-        node_type: NodeType,
-        parents: Vec<Dot>,
-        attrs: Vec<crate::NodeAttr>,
-    },
-    BlockAtom {
-        leaf: AtomLeaf,
-        parents: Vec<Dot>,
-    },
-    Unknown {
-        tag: u64,
-        bytes: Vec<u8>,
-    },
+    Block(Box<BlockMarker>),
+    BlockAtom(Box<BlockAtomMarker>),
+    Unknown(Box<UnknownItem>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockMarker {
+    pub node_type: NodeType,
+    pub parents: Vec<Dot>,
+    pub attrs: Vec<crate::NodeAttr>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockAtomMarker {
+    pub leaf: AtomLeaf,
+    pub parents: Vec<Dot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownItem {
+    pub tag: u64,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,46 +47,66 @@ pub enum AtomLeaf {
         variant: crate::nodes::HorizontalRuleVariant,
     },
     Image {
-        node: crate::nodes::ImageNode,
+        node: Box<crate::nodes::ImageNode>,
     },
     File {
-        node: crate::nodes::FileNode,
+        node: Box<crate::nodes::FileNode>,
     },
     Embed {
-        node: crate::nodes::EmbedNode,
+        node: Box<crate::nodes::EmbedNode>,
     },
     Archived {
-        node: crate::nodes::ArchivedNode,
+        node: Box<crate::nodes::ArchivedNode>,
     },
     Unknown(crate::nodes::UnknownNode),
 }
 
 impl SeqItem {
+    pub fn block(node_type: NodeType, parents: Vec<Dot>, attrs: Vec<crate::NodeAttr>) -> Self {
+        SeqItem::Block(Box::new(BlockMarker {
+            node_type,
+            parents,
+            attrs,
+        }))
+    }
+
+    pub fn block_atom(leaf: AtomLeaf, parents: Vec<Dot>) -> Self {
+        SeqItem::BlockAtom(Box::new(BlockAtomMarker { leaf, parents }))
+    }
+
+    pub fn unknown(tag: u64, bytes: Vec<u8>) -> Self {
+        SeqItem::Unknown(Box::new(UnknownItem { tag, bytes }))
+    }
+
+    pub fn marker_parents(&self) -> Option<&[Dot]> {
+        match self {
+            SeqItem::Block(b) => Some(&b.parents),
+            SeqItem::BlockAtom(b) => Some(&b.parents),
+            _ => None,
+        }
+    }
+
     pub fn as_child_type(&self) -> Option<NodeType> {
         match self {
             SeqItem::Char(_) => Some(NodeType::Text),
             SeqItem::Atom(l) => Some(l.node_type()),
-            SeqItem::Block { node_type, .. } => Some(*node_type),
-            SeqItem::BlockAtom { leaf, .. } => Some(leaf.node_type()),
-            SeqItem::Unknown { .. } => None,
+            SeqItem::Block(b) => Some(b.node_type),
+            SeqItem::BlockAtom(b) => Some(b.leaf.node_type()),
+            SeqItem::Unknown(_) => None,
         }
     }
 
     /// Whether this item is one of the three placeholder shapes for lossy
     /// unknown content: a classless inline `Unknown`, or an atom/block-atom
-    /// carrying `AtomLeaf::Unknown`. `SeqItem::Block { node_type: NodeType::Unknown, .. }`
+    /// carrying `AtomLeaf::Unknown`. A `SeqItem::Block` typed `NodeType::Unknown`
     /// is a fourth shape but is addressed by `Child`/block-tree walking, not
     /// per-item inspection, since it is a container rather than a leaf value.
     pub fn is_unknown_bearing(&self) -> bool {
-        matches!(
-            self,
-            SeqItem::Unknown { .. }
-                | SeqItem::Atom(AtomLeaf::Unknown(_))
-                | SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Unknown(_),
-                    ..
-                }
-        )
+        match self {
+            SeqItem::Unknown(_) | SeqItem::Atom(AtomLeaf::Unknown(_)) => true,
+            SeqItem::BlockAtom(b) => matches!(b.leaf, AtomLeaf::Unknown(_)),
+            _ => false,
+        }
     }
 }
 
@@ -120,10 +152,10 @@ impl AtomLeaf {
             AtomLeaf::HorizontalRule { variant } => Node::HorizontalRule(HorizontalRuleNode {
                 variant: editor_crdt::LwwReg::with_value(variant),
             }),
-            AtomLeaf::Image { node } => Node::Image(node),
-            AtomLeaf::File { node } => Node::File(node),
-            AtomLeaf::Embed { node } => Node::Embed(node),
-            AtomLeaf::Archived { node } => Node::Archived(node),
+            AtomLeaf::Image { node } => Node::Image(*node),
+            AtomLeaf::File { node } => Node::File(*node),
+            AtomLeaf::Embed { node } => Node::Embed(*node),
+            AtomLeaf::Archived { node } => Node::Archived(*node),
             AtomLeaf::Unknown(node) => Node::Unknown(node),
         }
     }
@@ -137,10 +169,10 @@ impl AtomLeaf {
             Node::HorizontalRule(n) => AtomLeaf::HorizontalRule {
                 variant: *n.variant.get(),
             },
-            Node::Image(n) => AtomLeaf::Image { node: n },
-            Node::File(n) => AtomLeaf::File { node: n },
-            Node::Embed(n) => AtomLeaf::Embed { node: n },
-            Node::Archived(n) => AtomLeaf::Archived { node: n },
+            Node::Image(n) => AtomLeaf::Image { node: Box::new(n) },
+            Node::File(n) => AtomLeaf::File { node: Box::new(n) },
+            Node::Embed(n) => AtomLeaf::Embed { node: Box::new(n) },
+            Node::Archived(n) => AtomLeaf::Archived { node: Box::new(n) },
             Node::Unknown(n) => AtomLeaf::Unknown(n),
             _ => return None,
         })
@@ -183,6 +215,12 @@ pub fn classify(t: NodeType) -> SeqClass {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seq_item_stays_two_words() {
+        assert!(std::mem::size_of::<SeqItem>() <= 16);
+        assert!(std::mem::size_of::<AtomLeaf>() <= 16);
+    }
 
     #[test]
     fn atom_leaf_from_plain_node_preserves_image_attrs() {
@@ -253,28 +291,28 @@ mod tests {
                 NodeType::Image => {
                     let node = ty.into_node();
                     match node {
-                        Node::Image(n) => AtomLeaf::Image { node: n },
+                        Node::Image(n) => AtomLeaf::Image { node: Box::new(n) },
                         _ => unreachable!(),
                     }
                 }
                 NodeType::File => {
                     let node = ty.into_node();
                     match node {
-                        Node::File(n) => AtomLeaf::File { node: n },
+                        Node::File(n) => AtomLeaf::File { node: Box::new(n) },
                         _ => unreachable!(),
                     }
                 }
                 NodeType::Embed => {
                     let node = ty.into_node();
                     match node {
-                        Node::Embed(n) => AtomLeaf::Embed { node: n },
+                        Node::Embed(n) => AtomLeaf::Embed { node: Box::new(n) },
                         _ => unreachable!(),
                     }
                 }
                 NodeType::Archived => {
                     let node = ty.into_node();
                     match node {
-                        Node::Archived(n) => AtomLeaf::Archived { node: n },
+                        Node::Archived(n) => AtomLeaf::Archived { node: Box::new(n) },
                         _ => unreachable!(),
                     }
                 }

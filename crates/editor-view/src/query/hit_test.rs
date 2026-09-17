@@ -599,11 +599,7 @@ mod tests {
         let para = Dot::new(10, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, ch) in text.chars().enumerate() {
             items.push((Dot::new(10, 2 + i as u64), SeqItem::Char(ch)));
@@ -619,11 +615,7 @@ mod tests {
         let para = Dot::new(14, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, child) in children.into_iter().enumerate() {
             items.push((Dot::new(14, 2 + i as u64), child));
@@ -641,21 +633,14 @@ mod tests {
         let items = vec![
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
-            (
-                p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(11, 3), SeqItem::Char('x')),
         ];
         let doc = logs(&items);
@@ -669,11 +654,7 @@ mod tests {
         let para = Dot::new(12, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, ch) in text.chars().enumerate() {
             items.push((Dot::new(12, 2 + i as u64), SeqItem::Char(ch)));
@@ -698,54 +679,35 @@ mod tests {
         let right_para = Dot::new(15, 21);
 
         let mut items = vec![
-            (
-                table,
-                SeqItem::Block {
-                    node_type: NodeType::Table,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (table, SeqItem::block(NodeType::Table, vec![root], vec![])),
             (
                 row,
-                SeqItem::Block {
-                    node_type: NodeType::TableRow,
-                    parents: vec![root, table],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableRow, vec![root, table], vec![]),
             ),
             (
                 left_cell,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row], vec![]),
             ),
             (
                 left_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row, left_cell],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, table, row, left_cell],
+                    vec![],
+                ),
             ),
             (Dot::new(15, 5), SeqItem::Char('x')),
             (
                 right_cell,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row], vec![]),
             ),
             (
                 right_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row, right_cell],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, table, row, right_cell],
+                    vec![],
+                ),
             ),
         ];
         for (i, ch) in "right cell text wraps onto a second visual line"
@@ -765,23 +727,9 @@ mod tests {
         let p1 = Dot::new(13, 1);
         let p2 = Dot::new(13, 2);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(13, 3), SeqItem::Char('A')),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(13, 4), SeqItem::Char('B')),
         ];
         let mut doc = logs(&items);
@@ -1203,11 +1151,7 @@ mod tests {
                 let para = Dot::new(10 + i as u64, 1);
                 items.push((
                     para,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![root],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
                 ));
                 for (j, ch) in text.iter().enumerate() {
                     items.push((Dot::new(10 + i as u64, 2 + j as u64), SeqItem::Char(*ch)));

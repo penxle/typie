@@ -252,24 +252,10 @@ mod tests {
         let p1 = Dot::new(1, 1);
         let p2 = Dot::new(1, 5);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 2), SeqItem::Char('H')),
             (Dot::new(1, 3), SeqItem::Char('i')),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 6), SeqItem::Char('y')),
         ];
         (project_document(&logs(&items)).unwrap(), root, p1, p2)
@@ -283,31 +269,16 @@ mod tests {
         let callout = Dot::new(2, 4);
         let p_inside = Dot::new(2, 5);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(2, 2), SeqItem::Char('H')),
             (Dot::new(2, 3), SeqItem::Char('i')),
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![root], vec![]),
             ),
             (
                 p_inside,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, callout], vec![]),
             ),
             (Dot::new(2, 6), SeqItem::Char('x')),
         ];
@@ -326,25 +297,11 @@ mod tests {
         let p1 = Dot::new(3, 1);
         let p2 = Dot::new(3, 10);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(3, 2), SeqItem::Char('H')),
             (Dot::new(3, 3), SeqItem::Char('i')),
             (Dot::new(3, 4), SeqItem::Atom(AtomLeaf::PageBreak)),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(3, 11), SeqItem::Char('y')),
         ];
         (project_document(&logs(&items)).unwrap(), root, p1, p2)
@@ -360,27 +317,15 @@ mod tests {
         let items = vec![
             (
                 empty_p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![root], vec![]),
             ),
             (
                 p_inside,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, callout], vec![]),
             ),
         ];
         (
@@ -405,28 +350,16 @@ mod tests {
         let items = vec![
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![root], vec![]),
             ),
             (
                 p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, callout], vec![]),
             ),
             (Dot::new(5, 3), SeqItem::Char('a')),
             (
                 empty_p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, callout], vec![]),
             ),
         ];
         (
