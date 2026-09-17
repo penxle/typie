@@ -297,16 +297,7 @@ fn atom_init(leaf: &AtomLeaf) -> Vec<DurableAttr> {
 }
 
 fn to_durable_item(item: &SeqItem) -> CodecResult<DurableItem> {
-    if matches!(
-        item,
-        SeqItem::Block {
-            node_type: NodeType::Unknown,
-            ..
-        } | SeqItem::BlockAtom {
-            leaf: AtomLeaf::Unknown(_),
-            ..
-        } | SeqItem::Atom(AtomLeaf::Unknown(_))
-    ) {
+    if item.as_child_type() == Some(NodeType::Unknown) {
         return Err(EncodeInvariant::UnknownPayloadEncode.into());
     }
     Ok(match item {
@@ -316,23 +307,19 @@ fn to_durable_item(item: &SeqItem) -> CodecResult<DurableItem> {
             init: atom_init(leaf),
             tail: no_tail(),
         },
-        SeqItem::Block {
-            node_type,
-            parents,
-            attrs,
-        } => DurableItem::Block {
-            node_type: to_durable_node_type(*node_type),
-            parents: parents.clone(),
-            init: attrs.iter().map(to_durable_attr).collect(),
+        SeqItem::Block(b) => DurableItem::Block {
+            node_type: to_durable_node_type(b.node_type),
+            parents: b.parents.clone(),
+            init: b.attrs.iter().map(to_durable_attr).collect(),
             tail: no_tail(),
         },
-        SeqItem::BlockAtom { leaf, parents } => DurableItem::BlockAtom {
-            node_type: to_durable_node_type(leaf.node_type()),
-            parents: parents.clone(),
-            init: atom_init(leaf),
+        SeqItem::BlockAtom(b) => DurableItem::BlockAtom {
+            node_type: to_durable_node_type(b.leaf.node_type()),
+            parents: b.parents.clone(),
+            init: atom_init(&b.leaf),
             tail: no_tail(),
         },
-        SeqItem::Unknown { .. } => return Err(EncodeInvariant::UnknownPayloadEncode.into()),
+        SeqItem::Unknown(_) => return Err(EncodeInvariant::UnknownPayloadEncode.into()),
     })
 }
 
@@ -421,7 +408,7 @@ pub fn encode_changesets(css: ReencodableChangesets) -> CodecResult<Vec<u8>> {
         for op in &cs.ops {
             records.push(BundleRecord {
                 id: op.id,
-                parents: op.parents.clone(),
+                parents: op.parents.to_vec(),
                 payload: RecordPayload::Known(to_durable_op(&op.payload)?),
                 record_tail: Vec::new(),
             });
@@ -435,19 +422,10 @@ pub fn changesets_contain_unknown(css: &[Changeset<EditOp>]) -> bool {
     css.iter().any(|cs| {
         cs.ops.iter().any(|op| match &op.payload {
             EditOp::Unknown { .. } => true,
-            EditOp::Seq(ListOp::Ins { item, .. }) => matches!(
-                item,
-                SeqItem::Unknown { .. }
-                    | SeqItem::Block {
-                        node_type: NodeType::Unknown,
-                        ..
-                    }
-                    | SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Unknown(_),
-                        ..
-                    }
-                    | SeqItem::Atom(AtomLeaf::Unknown(_))
-            ),
+            EditOp::Seq(ListOp::Ins { item, .. }) => {
+                matches!(item, SeqItem::Unknown(_))
+                    || item.as_child_type() == Some(NodeType::Unknown)
+            }
             EditOp::Seq(_)
             | EditOp::Span(_)
             | EditOp::BlockModifier(_)
@@ -774,11 +752,11 @@ fn from_durable_item(item: &DurableItem) -> Result<(SeqItem, bool), Unrepresenta
                 return Err(Unrepresentable);
             }
             (
-                SeqItem::Block {
+                SeqItem::block(
                     node_type,
-                    parents: parents.clone(),
-                    attrs: init.iter().map(from_durable_attr).collect(),
-                },
+                    parents.clone(),
+                    init.iter().map(from_durable_attr).collect(),
+                ),
                 nt_unknown || !tail.0.is_empty(),
             )
         }
@@ -790,10 +768,10 @@ fn from_durable_item(item: &DurableItem) -> Result<(SeqItem, bool), Unrepresenta
         } => {
             if from_durable_node_type(node_type).is_err() {
                 return Ok((
-                    SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Unknown(editor_model::UnknownNode),
-                        parents: parents.clone(),
-                    },
+                    SeqItem::block_atom(
+                        AtomLeaf::Unknown(editor_model::UnknownNode),
+                        parents.clone(),
+                    ),
                     true,
                 ));
             }
@@ -802,10 +780,7 @@ fn from_durable_item(item: &DurableItem) -> Result<(SeqItem, bool), Unrepresenta
                 return Err(Unrepresentable);
             }
             (
-                SeqItem::BlockAtom {
-                    leaf,
-                    parents: parents.clone(),
-                },
+                SeqItem::block_atom(leaf, parents.clone()),
                 dropped || !tail.0.is_empty(),
             )
         }
@@ -818,10 +793,7 @@ fn item_as_unknown(item: &DurableItem, enc: &EncCtx) -> CodecResult<SeqItem> {
     item.encode(enc, &mut bytes)?;
     let mut slice = &bytes[..];
     let (tag, body) = read_open_variant(&mut slice)?;
-    Ok(SeqItem::Unknown {
-        tag,
-        bytes: body.to_vec(),
-    })
+    Ok(SeqItem::unknown(tag, body.to_vec()))
 }
 
 fn from_durable_alias_op(pairs: &[DurableAliasRun]) -> CodecResult<AliasOp> {
@@ -1038,7 +1010,7 @@ pub(crate) fn changesets_from_ctx_and_bundles(
                     };
                     Ok(Op {
                         id: r.id,
-                        parents: r.parents,
+                        parents: editor_crdt::OpParents::from_slice(&r.parents),
                         payload,
                     })
                 })
@@ -1084,19 +1056,15 @@ mod tests {
         vec![
             Op {
                 id: d(0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 }),
             },
             Op {
                 id: d(1),
-                parents: vec![d(0)],
+                parents: editor_crdt::smallvec![d(0)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 1,
                     item: SeqItem::Char('가'),
@@ -1104,7 +1072,7 @@ mod tests {
             },
             Op {
                 id: d(2),
-                parents: vec![d(1)],
+                parents: editor_crdt::smallvec![d(1)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 2,
                     item: SeqItem::Atom(AtomLeaf::HardBreak),
@@ -1112,36 +1080,36 @@ mod tests {
             },
             Op {
                 id: d(3),
-                parents: vec![d(2)],
+                parents: editor_crdt::smallvec![d(2)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 3,
-                    item: SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Image {
-                            node: editor_model::ImageNode::default(),
+                    item: SeqItem::block_atom(
+                        AtomLeaf::Image {
+                            node: Box::new(editor_model::ImageNode::default()),
                         },
-                        parents: vec![Dot::ROOT],
-                    },
+                        vec![Dot::ROOT],
+                    ),
                 }),
             },
             Op {
                 id: d(4),
-                parents: vec![d(3)],
+                parents: editor_crdt::smallvec![d(3)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 2,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Callout,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![NodeAttr::Callout {
+                    item: SeqItem::block(
+                        NodeType::Callout,
+                        vec![Dot::ROOT],
+                        vec![NodeAttr::Callout {
                             attr: editor_model::CalloutNodeAttr::Variant(
                                 editor_model::CalloutVariant::Warning,
                             ),
                         }],
-                    },
+                    ),
                 }),
             },
             Op {
                 id: d(5),
-                parents: vec![d(4)],
+                parents: editor_crdt::smallvec![d(4)],
                 payload: EditOp::Span(SpanOp::AddSpan {
                     start: editor_model::Anchor {
                         id: d(1),
@@ -1156,7 +1124,7 @@ mod tests {
             },
             Op {
                 id: d(6),
-                parents: vec![d(5)],
+                parents: editor_crdt::smallvec![d(5)],
                 payload: EditOp::NodeAttr(NodeAttrOp {
                     target: d(4),
                     attr: NodeAttr::Callout {
@@ -1168,7 +1136,7 @@ mod tests {
             },
             Op {
                 id: d(7),
-                parents: vec![d(6)],
+                parents: editor_crdt::smallvec![d(6)],
                 payload: EditOp::BlockModifier(ModifierAttrOp::SetModifier {
                     target: d(0),
                     modifier: Modifier::FontSize { value: 1400 },
@@ -1176,7 +1144,7 @@ mod tests {
             },
             Op {
                 id: d(8),
-                parents: vec![d(7)],
+                parents: editor_crdt::smallvec![d(7)],
                 payload: EditOp::NodeCarry(ModifierAttrOp::ClearModifier {
                     target: d(0),
                     key: ModifierType::FontSize,
@@ -1184,17 +1152,17 @@ mod tests {
             },
             Op {
                 id: d(9),
-                parents: vec![d(8)],
+                parents: editor_crdt::smallvec![d(8)],
                 payload: EditOp::Seq(ListOp::Del { pos: 1, len: 1 }),
             },
             Op {
                 id: d(10),
-                parents: vec![d(9)],
+                parents: editor_crdt::smallvec![d(9)],
                 payload: EditOp::Seq(ListOp::Undel { del: d(9) }),
             },
             Op {
                 id: d(11),
-                parents: vec![d(10)],
+                parents: editor_crdt::smallvec![d(10)],
                 payload: EditOp::Span(SpanOp::RemoveSpan {
                     start: editor_model::Anchor {
                         id: d(1),
@@ -1209,7 +1177,7 @@ mod tests {
             },
             Op {
                 id: d(12),
-                parents: vec![d(11)],
+                parents: editor_crdt::smallvec![d(11)],
                 payload: EditOp::BlockModifier(ModifierAttrOp::ClearModifier {
                     target: d(0),
                     key: ModifierType::FontSize,
@@ -1217,7 +1185,7 @@ mod tests {
             },
             Op {
                 id: d(13),
-                parents: vec![d(12)],
+                parents: editor_crdt::smallvec![d(12)],
                 payload: EditOp::NodeCarry(ModifierAttrOp::SetModifier {
                     target: d(0),
                     modifier: Modifier::Italic,
@@ -1225,7 +1193,7 @@ mod tests {
             },
             Op {
                 id: d(14),
-                parents: vec![d(13)],
+                parents: editor_crdt::smallvec![d(13)],
                 payload: EditOp::Alias(AliasOp {
                     pairs: vec![AliasRun {
                         old_start: Dot::new(1, 10),
@@ -1297,7 +1265,7 @@ mod tests {
         let css = vec![Changeset {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Unknown {
                     bytes: vec![0x63, 0x01, 0xAA],
                 },
@@ -1360,17 +1328,16 @@ mod tests {
     #[test]
     fn atom_round_trip_reseeds_ledger_but_preserves_values() {
         let node = editor_model::ImageNode::default();
-        let leaf = AtomLeaf::Image { node };
+        let leaf = AtomLeaf::Image {
+            node: Box::new(node),
+        };
         let css = vec![Changeset {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::BlockAtom {
-                        leaf,
-                        parents: vec![Dot::ROOT],
-                    },
+                    item: SeqItem::block_atom(leaf, vec![Dot::ROOT]),
                 }),
             }],
         }];
@@ -1418,17 +1385,14 @@ mod tests {
                 )
                 .unwrap();
 
-            let leaf = AtomLeaf::Image { node };
+            let leaf = AtomLeaf::Image { node: Box::new(node) };
             let css = vec![Changeset {
                 ops: vec![Op {
                     id: Dot::new(1, 0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::BlockAtom {
-                            leaf,
-                            parents: vec![Dot::ROOT],
-                        },
+                        item: SeqItem::block_atom(leaf, vec![Dot::ROOT]),
                     }),
                 }],
             }];
@@ -1436,18 +1400,17 @@ mod tests {
             let decoded = decode_changesets(&bytes).unwrap().into_graph_input();
 
             let EditOp::Seq(ListOp::Ins {
-                item:
-                    SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Image { node: decoded_node },
-                        ..
-                    },
+                item: SeqItem::BlockAtom(decoded_atom),
                 ..
             }) = &decoded[0].ops[0].payload
             else {
                 panic!(
-                    "expected an Image block-atom, got {:?}",
+                    "expected a block-atom, got {:?}",
                     decoded[0].ops[0].payload
                 );
+            };
+            let AtomLeaf::Image { node: decoded_node } = &decoded_atom.leaf else {
+                panic!("expected an Image block-atom, got {:?}", decoded_atom.leaf);
             };
 
             prop_assert_eq!(decoded_node.id.get(), &Some(id_value));
@@ -1463,7 +1426,7 @@ mod tests {
         let css_b = vec![Changeset {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 0,
                     item: SeqItem::Char('b'),

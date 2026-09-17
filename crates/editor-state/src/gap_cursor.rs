@@ -152,18 +152,16 @@ mod tests {
         let items = vec![
             (
                 img_dot,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![root],
-                },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![root],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (project_document(&logs(&items)).unwrap(), root)
@@ -179,61 +177,27 @@ mod tests {
         let fold2_content = Dot::new(1, 6);
         let para = Dot::new(1, 7);
         let items = vec![
-            (
-                fold1,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold1, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 fold1_title,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold1],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold1], vec![]),
             ),
             (
                 fold1_content,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold1],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold1], vec![]),
             ),
-            (
-                fold2,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold2, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 fold2_title,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold2],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold2], vec![]),
             ),
             (
                 fold2_content,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold2],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold2], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (project_document(&logs(&items)).unwrap(), root)
@@ -249,53 +213,30 @@ mod tests {
         let inner_para = Dot::new(2, 5);
         let para = Dot::new(2, 6);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 title,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (
                 content,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold], vec![]),
             ),
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root, fold, content],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![root, fold, content], vec![]),
             ),
             (
                 inner_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, fold, content, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, fold, content, callout],
+                    vec![],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (project_document(&logs(&items)).unwrap(), content)
@@ -310,45 +251,22 @@ mod tests {
         let inner_para = Dot::new(3, 4);
         let para = Dot::new(3, 5);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 title,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (
                 content,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold], vec![]),
             ),
             (
                 inner_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, fold, content],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, fold, content], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (project_document(&logs(&items)).unwrap(), content)
@@ -463,11 +381,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         let pd = project_document(&logs(&items)).unwrap();
         let view = DocView::new(&pd);

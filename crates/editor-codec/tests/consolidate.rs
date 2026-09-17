@@ -20,7 +20,7 @@ mod tests {
     fn char_op(clock: u64, parents: Vec<Dot>, ch: char) -> Op<EditOp> {
         Op {
             id: Dot::new(1, clock),
-            parents,
+            parents: parents.into(),
             payload: EditOp::Seq(ListOp::Ins {
                 pos: clock as usize,
                 item: SeqItem::Char(ch),
@@ -51,14 +51,10 @@ mod tests {
     fn consolidation_preserves_changeset_list() {
         let b0 = bundle(vec![Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         }]);
         let b1 = bundle(vec![char_op(1, vec![Dot::new(1, 0)], 'a')]);
@@ -189,7 +185,7 @@ mod tests {
                 };
                 Op {
                     id: Dot::new(1, i as u64),
-                    parents,
+                    parents: parents.into(),
                     payload,
                 }
             })

@@ -1068,10 +1068,7 @@ mod tests {
                         },
                         RawChild::Leaf {
                             id: Dot::new(1, 3),
-                            item: super::super::SeqItem::Unknown {
-                                tag: 999,
-                                bytes: vec![],
-                            },
+                            item: super::super::SeqItem::unknown(999, vec![]),
                         },
                     ],
                 })],
@@ -1378,7 +1375,7 @@ mod tests {
         // leaf up to Root — never wrapped in a Paragraph carrier — and survives.
         let image = Dot::new(1, 2);
         let image_item = super::super::SeqItem::Atom(AtomLeaf::Image {
-            node: crate::nodes::ImageNode::default(),
+            node: Box::new(crate::nodes::ImageNode::default()),
         });
         let tree = raw_root(vec![raw_block_child(
             1,
@@ -1796,10 +1793,7 @@ mod tests {
             children: vec![
                 RawChild::Leaf {
                     id: unknown,
-                    item: super::super::SeqItem::Unknown {
-                        tag: 999,
-                        bytes: vec![0xAA],
-                    },
+                    item: super::super::SeqItem::unknown(999, vec![0xAA]),
                 },
                 RawChild::Leaf {
                     id: pb1,
@@ -1815,7 +1809,7 @@ mod tests {
         assert!(
             matches!(
                 find_leaf(&out, unknown),
-                Some(super::super::SeqItem::Unknown { tag: 999, .. })
+                Some(super::super::SeqItem::Unknown(u)) if u.tag == 999
             ),
             "normalize가 unknown 리프를 드롭/변형하면 안 된다"
         );
@@ -1841,10 +1835,7 @@ mod tests {
                     tcell(21),
                     RawChild::Leaf {
                         id: unknown,
-                        item: super::super::SeqItem::Unknown {
-                            tag: 999,
-                            bytes: vec![0xAA],
-                        },
+                        item: super::super::SeqItem::unknown(999, vec![0xAA]),
                     },
                     tcell(23),
                 ],
@@ -1874,7 +1865,7 @@ mod tests {
         assert!(
             row20.children.iter().any(|c| matches!(
                 c,
-                RawChild::Leaf { id, item: super::super::SeqItem::Unknown { tag: 999, .. } } if *id == unknown
+                RawChild::Leaf { id, item: super::super::SeqItem::Unknown(u) } if *id == unknown && u.tag == 999
             )),
             "normalize_grid의 padding 경로가 unknown 리프를 건드리면 안 된다"
         );
@@ -1903,10 +1894,7 @@ mod tests {
                 }),
                 RawChild::Leaf {
                     id: unknown,
-                    item: super::super::SeqItem::Unknown {
-                        tag: 777,
-                        bytes: vec![0xCC],
-                    },
+                    item: super::super::SeqItem::unknown(777, vec![0xCC]),
                 },
             ],
         };
@@ -1918,7 +1906,7 @@ mod tests {
         assert!(
             out.roots[0].children.iter().any(|c| matches!(
                 c,
-                RawChild::Leaf { id, item: super::super::SeqItem::Unknown { tag: 777, .. } } if *id == unknown
+                RawChild::Leaf { id, item: super::super::SeqItem::Unknown(u) } if *id == unknown && u.tag == 777
             )),
             "the stray Root Unknown leaf stays a direct Root child (transparent)"
         );
@@ -2129,10 +2117,10 @@ mod tests {
             children: vec![
                 RawChild::Leaf {
                     id: block_atom_unknown,
-                    item: super::super::SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Unknown(crate::nodes::UnknownNode),
-                        parents: vec![para],
-                    },
+                    item: super::super::SeqItem::block_atom(
+                        AtomLeaf::Unknown(crate::nodes::UnknownNode),
+                        vec![para],
+                    ),
                 },
                 RawChild::Leaf {
                     id: pb1,
@@ -2148,10 +2136,7 @@ mod tests {
         assert!(
             matches!(
                 find_leaf(&out, block_atom_unknown),
-                Some(super::super::SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Unknown(_),
-                    ..
-                })
+                Some(super::super::SeqItem::BlockAtom(b)) if matches!(b.leaf, AtomLeaf::Unknown(_))
             ),
             "an AtomLeaf::Unknown-bearing leaf must survive normalize unmodified"
         );
@@ -2215,19 +2200,9 @@ mod tests {
         let items = [
             (
                 para,
-                super::super::SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                super::super::SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
-            (
-                unknown,
-                super::super::SeqItem::Unknown {
-                    tag: 999,
-                    bytes: vec![0xAA],
-                },
-            ),
+            (unknown, super::super::SeqItem::unknown(999, vec![0xAA])),
             (ch, super::super::SeqItem::Char('a')),
         ];
         let mut ev = Vec::new();
@@ -2260,7 +2235,7 @@ mod tests {
         );
         assert!(matches!(
             &p.children[0],
-            crate::seq::Child::Leaf { id, item: super::super::SeqItem::Unknown { tag: 999, .. } } if *id == unknown
+            crate::seq::Child::Leaf { id, item: super::super::SeqItem::Unknown(u) } if *id == unknown && u.tag == 999
         ));
     }
 

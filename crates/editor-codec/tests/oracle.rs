@@ -25,7 +25,7 @@ fn arb_history() -> impl Strategy<Value = Vec<Changeset<EditOp>>> {
             };
             ops.push(Op {
                 id: Dot::new(1, *clock),
-                parents,
+                parents: parents.into(),
                 payload,
             });
             *clock += 1;
@@ -35,11 +35,7 @@ fn arb_history() -> impl Strategy<Value = Vec<Changeset<EditOp>>> {
             &mut clock,
             EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         );
         count += 1;

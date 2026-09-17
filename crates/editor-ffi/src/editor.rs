@@ -1738,19 +1738,15 @@ mod tests {
             ops: vec![
                 Op {
                     id: Dot::new(1, 0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: NodeType::TableCell,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::TableCell, vec![Dot::ROOT], vec![]),
                     }),
                 },
                 Op {
                     id: Dot::new(1, 1),
-                    parents: vec![Dot::new(1, 0)],
+                    parents: editor_crdt::smallvec![Dot::new(1, 0)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -2057,7 +2053,7 @@ mod tests {
         let clean_cs = editor_crdt::Changeset {
             ops: vec![editor_crdt::Op {
                 id: editor_crdt::Dot::new(50, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
                     pos: 0,
                     item: editor_model::SeqItem::Char('a'),
@@ -2115,7 +2111,7 @@ mod tests {
         let clean_cs = editor_crdt::Changeset {
             ops: vec![editor_crdt::Op {
                 id: editor_crdt::Dot::new(51, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
                     pos: 0,
                     item: editor_model::SeqItem::Char('a'),
@@ -2159,7 +2155,7 @@ mod tests {
         let clean = |actor: u64, ch: char| editor_crdt::Changeset {
             ops: vec![editor_crdt::Op {
                 id: editor_crdt::Dot::new(actor, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
                     pos: 0,
                     item: editor_model::SeqItem::Char(ch),
@@ -2575,7 +2571,7 @@ mod tests {
         // on the other changeset in this payload, so unconditionally ready.
         let ready_op = editor_crdt::Op {
             id: editor_crdt::Dot::new(50, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
                 pos: 0,
                 item: editor_model::SeqItem::Char('r'),
@@ -2585,7 +2581,7 @@ mod tests {
         // changeset in this payload, so it stays blocked.
         let blocked_op = editor_crdt::Op {
             id: editor_crdt::Dot::new(51, 0),
-            parents: vec![editor_crdt::Dot::new(999, 5)],
+            parents: editor_crdt::smallvec![editor_crdt::Dot::new(999, 5)],
             payload: editor_model::EditOp::Seq(editor_crdt::ListOp::Ins {
                 pos: 0,
                 item: editor_model::SeqItem::Char('b'),

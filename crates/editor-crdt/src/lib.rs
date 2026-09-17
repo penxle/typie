@@ -18,10 +18,11 @@ pub use changeset::Changeset;
 pub use dot::{Dot, Dots, OpDot};
 pub use error::CrdtError;
 pub use lwwreg::{LwwReg, LwwRegOp};
-pub use op_graph::{ChangesetRef, Op, OpGraph};
+pub use op_graph::{ChangesetRef, Op, OpGraph, OpParents};
 pub use oplog::{InputEvent, ListOp, OpLog, build_oplog};
 pub use ormap::{OrMap, OrMapOp};
 pub use orset::{OrSet, OrSetOp};
+pub use smallvec::smallvec;
 pub use sync::SyncMessage;
 pub use to_plain::ToPlain;
 

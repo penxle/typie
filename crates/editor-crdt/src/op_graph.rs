@@ -10,6 +10,10 @@ use crate::{CrdtError, Dot, FastSet};
 /// one-child case heap-free.
 type ChildSet = smallvec::SmallVec<[Dot; 2]>;
 
+/// Inline capacity 1: almost every op has exactly one parent (linear typing
+/// history), so a `Vec` here costs one heap block per op in the whole graph.
+pub type OpParents = smallvec::SmallVec<[Dot; 1]>;
+
 fn child_insert(set: &mut ChildSet, dot: Dot) {
     if let Err(i) = set.binary_search(&dot) {
         set.insert(i, dot);
@@ -85,7 +89,8 @@ impl ChangesetRef {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Op<P> {
     pub id: Dot,
-    pub parents: Vec<Dot>,
+    #[cfg_attr(feature = "wasm", tsify(type = "Dot[]"))]
+    pub parents: smallvec::SmallVec<[Dot; 1]>,
     pub payload: P,
 }
 
@@ -407,7 +412,7 @@ impl<P: Clone> OpGraph<P> {
             .checked_add(1)
             .ok_or(CrdtError::ClockOverflow { dot: id })?;
 
-        let mut parents: Vec<Dot> = self.heads.iter().copied().collect();
+        let mut parents: OpParents = self.heads.iter().copied().collect();
         parents.sort();
 
         let op = Op {
@@ -1175,7 +1180,7 @@ mod tests {
         let (g, _) = g.add(10).unwrap();
         let (g, op2) = g.add(20).unwrap();
         assert_eq!(op2.id, Dot::new(1, 1));
-        assert_eq!(op2.parents, vec![Dot::new(1, 0)]);
+        assert_eq!(op2.parents.as_slice(), [Dot::new(1, 0)]);
         assert_eq!(g.len(), 2);
         let heads: Vec<&Dot> = g.current_heads().collect();
         assert_eq!(heads, vec![&Dot::new(1, 1)], "only the latest op is head");
@@ -1197,17 +1202,17 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(99, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let c = Op {
             id: Dot::new(99, 2),
-            parents: vec![b.id],
+            parents: smallvec::smallvec![b.id],
             payload: 3,
         };
         let g = g
@@ -1229,17 +1234,17 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let a = Op {
             id: Dot::new(1, 0),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(2, 0),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 2,
         };
         let g = g
@@ -1261,22 +1266,22 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let a = Op {
             id: Dot::new(1, 0),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(2, 0),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 2,
         };
         let m = Op {
             id: Dot::new(3, 0),
-            parents: vec![a.id, b.id],
+            parents: smallvec::smallvec![a.id, b.id],
             payload: 3,
         };
         let g = g
@@ -1304,7 +1309,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let present = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let g = g
@@ -1316,7 +1321,7 @@ mod tests {
         let missing_b = Dot::new(99, 6);
         let op = Op {
             id: Dot::new(99, 7),
-            parents: vec![present.id, missing_a, missing_b],
+            parents: smallvec::smallvec![present.id, missing_a, missing_b],
             payload: 1,
         };
         let result = g.receive_changeset(crate::Changeset { ops: vec![op] });
@@ -1337,12 +1342,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let child = Op {
             id: Dot::new(99, 1),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let g = g
@@ -1365,7 +1370,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(7);
         let observed = Op {
             id: Dot::new(99, 50),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -1382,7 +1387,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(7);
         let high = Op {
             id: Dot::new(99, 10),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -1390,7 +1395,7 @@ mod tests {
             .unwrap();
         let low = Op {
             id: Dot::new(98, 3),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let g = g
@@ -1405,7 +1410,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(7);
         let op = Op {
             id: Dot::new(99, 50),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let cs = crate::Changeset { ops: vec![op] };
@@ -1421,12 +1426,12 @@ mod tests {
         let g2: OpGraph<u32> = OpGraph::with_actor(42);
         let a = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let g1 = g1
@@ -1454,12 +1459,12 @@ mod tests {
         let g2: OpGraph<u32> = OpGraph::with_actor(42);
         let a = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let g1 = g1
@@ -1487,7 +1492,7 @@ mod tests {
         let (g, mine_a) = g.add(10).unwrap();
         let theirs = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 20,
         };
         let g = g
@@ -1626,7 +1631,7 @@ mod tests {
             .receive_changeset(crate::Changeset {
                 ops: vec![Op {
                     id: Dot::new(9, 0),
-                    parents: vec![],
+                    parents: smallvec::smallvec![],
                     payload: 99,
                 }],
             })
@@ -1656,22 +1661,22 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
             id: Dot::new(9, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let b = Op {
             id: Dot::new(1, 0),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 1,
         };
         let c = Op {
             id: Dot::new(2, 0),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let m = Op {
             id: Dot::new(3, 0),
-            parents: vec![b.id, c.id],
+            parents: smallvec::smallvec![b.id, c.id],
             payload: 3,
         };
         let g = g
@@ -1822,7 +1827,7 @@ mod tests {
         let missing = Dot::new(99, 0);
         let op = Op {
             id: Dot::new(99, 1),
-            parents: vec![missing],
+            parents: smallvec::smallvec![missing],
             payload: 1,
         };
         let cs = crate::Changeset { ops: vec![op] };
@@ -1836,7 +1841,7 @@ mod tests {
         let id = Dot::new(99, 0);
         let op = Op {
             id,
-            parents: vec![id],
+            parents: smallvec::smallvec![id],
             payload: 1,
         };
         let cs = crate::Changeset { ops: vec![op] };
@@ -1849,7 +1854,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let op_a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -1857,7 +1862,7 @@ mod tests {
             .unwrap();
         let op_b = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let result = g.receive_changeset(crate::Changeset { ops: vec![op_b] });
@@ -1869,7 +1874,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let op = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let cs = crate::Changeset { ops: vec![op] };
@@ -1884,7 +1889,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -1894,7 +1899,7 @@ mod tests {
             .unwrap();
         let b = Op {
             id: Dot::new(99, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let cs = crate::Changeset { ops: vec![a, b] };
@@ -1908,12 +1913,12 @@ mod tests {
         let dot = Dot::new(99, 0);
         let a = Op {
             id: dot,
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: dot,
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let cs = crate::Changeset { ops: vec![a, b] };
@@ -1926,12 +1931,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let p1 = Op {
             id: Dot::new(98, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let p2 = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 2,
         };
         let g = g
@@ -1941,7 +1946,7 @@ mod tests {
             .unwrap();
         let child = Op {
             id: Dot::new(99, 1),
-            parents: vec![p2.id, p1.id, p2.id],
+            parents: smallvec::smallvec![p2.id, p1.id, p2.id],
             payload: 3,
         };
         let g = g
@@ -1952,7 +1957,7 @@ mod tests {
         let stored = g.get(&child.id).unwrap();
         let mut expected = vec![p1.id, p2.id];
         expected.sort();
-        assert_eq!(stored.parents, expected);
+        assert_eq!(stored.parents.to_vec(), expected);
     }
 
     #[test]
@@ -1960,12 +1965,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let ok = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let bad = Op {
             id: Dot::new(99, u64::MAX),
-            parents: vec![ok.id],
+            parents: smallvec::smallvec![ok.id],
             payload: 2,
         };
         let cs = crate::Changeset { ops: vec![ok, bad] };
@@ -1978,12 +1983,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(99, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let g = g
@@ -2001,12 +2006,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(99, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let g = g
@@ -2028,12 +2033,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(1);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(99, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let cs = crate::Changeset {
@@ -2067,22 +2072,22 @@ mod tests {
     fn heads_of_matches_current_heads() {
         let root = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0u32,
         };
         let a = Op {
             id: Dot::new(1, 1),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(2, 0), // concurrent branch, different actor
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 2,
         };
         let m = Op {
             id: Dot::new(1, 2),
-            parents: vec![a.id, b.id], // merge
+            parents: smallvec::smallvec![a.id, b.id], // merge
             payload: 3,
         };
 
@@ -2119,7 +2124,7 @@ mod tests {
         let bad = crate::Changeset {
             ops: vec![Op {
                 id: Dot::new(99, 1),
-                parents: vec![Dot::new(99, 0)], // missing parent
+                parents: smallvec::smallvec![Dot::new(99, 0)], // missing parent
                 payload: 1u32,
             }],
         };
@@ -2217,22 +2222,22 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let a = Op {
             id: Dot::new(99, 1),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(99, 2),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let orphan = Op {
             id: Dot::new(99, 3),
-            parents: vec![Dot::new(77, 7)],
+            parents: smallvec::smallvec![Dot::new(77, 7)],
             payload: 3,
         };
 
@@ -2265,12 +2270,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let a = Op {
             id: Dot::new(99, 1),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let g = g
@@ -2286,17 +2291,17 @@ mod tests {
 
         let b = Op {
             id: Dot::new(99, 2),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let c = Op {
             id: Dot::new(99, 3),
-            parents: vec![b.id],
+            parents: smallvec::smallvec![b.id],
             payload: 3,
         };
         let blocked = Op {
             id: Dot::new(99, 9),
-            parents: vec![Dot::new(55, 5)],
+            parents: smallvec::smallvec![Dot::new(55, 5)],
             payload: 9,
         };
 
@@ -2330,12 +2335,12 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let a = Op {
             id: Dot::new(99, 1),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 1,
         };
         let g = g
@@ -2351,17 +2356,17 @@ mod tests {
 
         let b = Op {
             id: Dot::new(99, 2),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         let c = Op {
             id: Dot::new(99, 3),
-            parents: vec![b.id],
+            parents: smallvec::smallvec![b.id],
             payload: 3,
         };
         let blocked = Op {
             id: Dot::new(99, 9),
-            parents: vec![Dot::new(55, 5)],
+            parents: smallvec::smallvec![Dot::new(55, 5)],
             payload: 9,
         };
 
@@ -2394,7 +2399,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -2418,7 +2423,7 @@ mod tests {
         let g: OpGraph<u32> = OpGraph::with_actor(0);
         let a = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let g = g
@@ -2473,7 +2478,7 @@ mod tests {
     fn two_actor_branches() -> OpGraph<u32> {
         let root = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 0,
         };
         let mut ops = vec![root.clone()];
@@ -2486,29 +2491,29 @@ mod tests {
                 };
                 ops.push(Op {
                     id: Dot::new(actor, clock),
-                    parents,
+                    parents: parents.into(),
                     payload: (actor * 10 + clock) as u32,
                 });
             }
         }
         ops.push(Op {
             id: Dot::new(1, 4),
-            parents: vec![Dot::new(1, 3)],
+            parents: smallvec::smallvec![Dot::new(1, 3)],
             payload: 14,
         });
         ops.push(Op {
             id: Dot::new(2, 4),
-            parents: vec![Dot::new(2, 3)],
+            parents: smallvec::smallvec![Dot::new(2, 3)],
             payload: 24,
         });
         ops.push(Op {
             id: Dot::new(3, 0),
-            parents: vec![Dot::new(1, 4), Dot::new(2, 4)],
+            parents: smallvec::smallvec![Dot::new(1, 4), Dot::new(2, 4)],
             payload: 30,
         });
         ops.push(Op {
             id: Dot::new(4, 0),
-            parents: vec![root.id],
+            parents: smallvec::smallvec![root.id],
             payload: 40,
         });
 
@@ -2652,7 +2657,7 @@ mod proptests {
             emitted.push(id);
             ops.push(Op {
                 id,
-                parents,
+                parents: parents.into(),
                 payload,
             });
         }
@@ -2681,7 +2686,7 @@ mod proptests {
     fn build_ops_smoke_branching() {
         let ops = build_ops(vec![(1, 0, 1), (1, 0, 2), (2, 0b01, 3)]);
         assert_eq!(ops.len(), 3);
-        assert_eq!(ops[2].parents, vec![Dot::new(1, 0)]);
+        assert_eq!(ops[2].parents.as_slice(), [Dot::new(1, 0)]);
         let g = apply_all(&ops);
         let heads: HashSet<Dot> = g.current_heads().copied().collect();
         let expected: HashSet<Dot> = [Dot::new(1, 1), Dot::new(2, 0)].into_iter().collect();
@@ -2932,7 +2937,7 @@ mod proptests {
                     let parents = prev.map(|p| vec![p]).unwrap_or_default();
                     ops.push(Op {
                         id,
-                        parents,
+                        parents: parents.into(),
                         payload: *payload,
                     });
                     prev = Some(id);

@@ -114,7 +114,11 @@ fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> Str
         return "null".into();
     }
 
-    if rust_ty.starts_with("Vec<") || rust_ty.starts_with("imbl::Vector<") {
+    if rust_ty.starts_with("Vec<")
+        || rust_ty.starts_with("imbl::Vector<")
+        || rust_ty.starts_with("SmallVec<")
+        || rust_ty.starts_with("smallvec::SmallVec<")
+    {
         return "emptyList()".into();
     }
 
@@ -244,6 +248,15 @@ fn map_type_path(
             format!(
                 "kotlin.collections.List<{}>",
                 map_syn_type(inner, custom_types, known_types)
+            )
+        }
+        "SmallVec" | "smallvec::SmallVec" => {
+            let syn::Type::Array(array) = extract_single_type_arg(args) else {
+                panic!("SmallVec expects an array type argument");
+            };
+            format!(
+                "kotlin.collections.List<{}>",
+                map_syn_type(&array.elem, custom_types, known_types)
             )
         }
         "HashMap"
@@ -680,6 +693,10 @@ mod tests {
         assert_eq!(map_type("Option<Dot>", &ct, &kt), "String?");
         assert_eq!(
             map_type("Vec<Dot>", &ct, &kt),
+            "kotlin.collections.List<String>"
+        );
+        assert_eq!(
+            map_type("SmallVec<[Dot;1]>", &ct, &kt),
             "kotlin.collections.List<String>"
         );
     }

@@ -227,18 +227,16 @@ mod tests {
         let items = vec![
             (
                 img_dot,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![root],
-                },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![root],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
             (Dot::new(10, 3), SeqItem::Char('x')),
         ];
@@ -361,11 +359,7 @@ mod tests {
             let mut items = vec![
                 (
                     Dot::new(1, 1),
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: parents.clone(),
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, parents.clone(), vec![]),
                 ),
                 (Dot::new(1, 2), SeqItem::Char('x')),
             ];
@@ -374,14 +368,7 @@ mod tests {
                 if node_type == NodeType::Fold {
                     fold_states.insert(id, true);
                 }
-                items.push((
-                    id,
-                    SeqItem::Block {
-                        node_type,
-                        parents: parents.clone(),
-                        attrs: vec![],
-                    },
-                ));
+                items.push((id, SeqItem::block(node_type, parents.clone(), vec![])));
                 parents.push(id);
             }
             let image = Dot::new(1, items.len() as u64 + 1);
@@ -390,10 +377,12 @@ mod tests {
             };
             items.push((
                 image,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(node),
+                    },
                     parents,
-                },
+                ),
             ));
             let mut doc = logs(&items);
             doc.node_attrs = doc

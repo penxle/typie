@@ -118,7 +118,7 @@ fn vnext_item_occupies_one_slot_in_projection() {
         .iter()
         .map(|(_, item)| match item {
             SeqItem::Char(_) => "char",
-            SeqItem::Unknown { .. } => "unknown",
+            SeqItem::Unknown(_) => "unknown",
             _ => "other",
         })
         .collect();
@@ -128,9 +128,9 @@ fn vnext_item_occupies_one_slot_in_projection() {
         "v-next item은 SeqItem::Unknown으로 정확히 1 슬롯을 차지해야 한다"
     );
     match &items[1].1 {
-        SeqItem::Unknown { tag, bytes } => {
-            assert_eq!(*tag, VNEXT_ITEM_TAG);
-            assert_eq!(bytes, &vec![0xDD]);
+        SeqItem::Unknown(u) => {
+            assert_eq!(u.tag, VNEXT_ITEM_TAG);
+            assert_eq!(u.bytes, vec![0xDD]);
         }
         other => panic!("expected SeqItem::Unknown, got {other:?}"),
     }
@@ -428,9 +428,7 @@ fn unknown_init_attr_keeps_block_structure_and_child_attaches() {
         .unwrap()
         .into_graph_input();
     let EditOp::Seq(ListOp::Ins {
-        item: SeqItem::Block {
-            node_type, attrs, ..
-        },
+        item: SeqItem::Block(block),
         ..
     }) = &decoded[0].ops[0].payload
     else {
@@ -439,9 +437,9 @@ fn unknown_init_attr_keeps_block_structure_and_child_attaches() {
             decoded[0].ops[0].payload
         );
     };
-    assert_eq!(*node_type, NodeType::Paragraph);
+    assert_eq!(block.node_type, NodeType::Paragraph);
     assert!(matches!(
-        attrs.as_slice(),
+        block.attrs.as_slice(),
         [editor_model::NodeAttr::Unknown { tag: 99, bytes }] if bytes == &vec![0x01, 0x02]
     ));
 
@@ -497,7 +495,7 @@ fn unknown_init_attr_keeps_block_structure_and_child_attaches() {
         .unwrap()
         .into_graph_input();
     let EditOp::Seq(ListOp::Ins {
-        item: SeqItem::Block { attrs, .. },
+        item: SeqItem::Block(reencoded_block),
         ..
     }) = &decoded_reencoded[0].ops[0].payload
     else {
@@ -508,7 +506,7 @@ fn unknown_init_attr_keeps_block_structure_and_child_attaches() {
     };
     assert!(
         matches!(
-            attrs.as_slice(),
+            reencoded_block.attrs.as_slice(),
             [editor_model::NodeAttr::Unknown { tag: 99, bytes }] if bytes == &vec![0x01, 0x02]
         ),
         "재인코드 산출을 다시 디코드해도 원본 attr payload가 tag/bytes 그대로여야 한다"
@@ -780,30 +778,24 @@ fn synth_unknown_node_type_bundle() -> Vec<u8> {
 fn unknown_node_type_becomes_placeholder_and_stays_attached() {
     let bytes = synth_unknown_node_type_bundle();
 
-    // ① convert 경유 디코드: Block은 SeqItem::Block{node_type:Unknown,..}(구조 유지),
-    // BlockAtom은 SeqItem::BlockAtom{leaf:AtomLeaf::Unknown(_),..}(리프 모양 유지)
+    // ① convert 경유 디코드: Block은 node_type이 Unknown인 SeqItem::Block(구조 유지),
+    // BlockAtom은 leaf가 AtomLeaf::Unknown인 SeqItem::BlockAtom(리프 모양 유지)
     let decoded = editor_codec::decode_changesets(&bytes)
         .unwrap()
         .into_graph_input();
     assert!(matches!(
         &decoded[0].ops[0].payload,
         EditOp::Seq(ListOp::Ins {
-            item: SeqItem::Block {
-                node_type: NodeType::Unknown,
-                ..
-            },
+            item: SeqItem::Block(b),
             ..
-        })
+        }) if b.node_type == NodeType::Unknown
     ));
     assert!(matches!(
         &decoded[0].ops[2].payload,
         EditOp::Seq(ListOp::Ins {
-            item: SeqItem::BlockAtom {
-                leaf: AtomLeaf::Unknown(_),
-                ..
-            },
+            item: SeqItem::BlockAtom(b),
             ..
-        })
+        }) if matches!(b.leaf, AtomLeaf::Unknown(_))
     ));
 
     // ④ changesets_contain_unknown == true; encode_changesets/to_durable_item 거부

@@ -99,11 +99,7 @@ fn emit_node(
                 let d = graph
                     .add_mut(EditOp::Seq(ListOp::Ins {
                         pos: *seq_pos,
-                        item: SeqItem::Block {
-                            node_type,
-                            parents: parents.to_vec(),
-                            attrs: entry.node.to_attrs(),
-                        },
+                        item: SeqItem::block(node_type, parents.to_vec(), entry.node.to_attrs()),
                     }))
                     .expect("local seq block insert never conflicts")
                     .id;
@@ -189,10 +185,7 @@ fn emit_node(
         SeqClass::Atom => {
             let leaf = AtomLeaf::from_plain_node(&entry.node).expect("atom plain node converts");
             let item = if leaf.is_block_level() {
-                SeqItem::BlockAtom {
-                    leaf,
-                    parents: parents.to_vec(),
-                }
+                SeqItem::block_atom(leaf, parents.to_vec())
             } else {
                 SeqItem::Atom(leaf)
             };

@@ -362,11 +362,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, ch) in text.chars().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
@@ -384,54 +380,35 @@ mod tests {
         let right_para = Dot::new(15, 21);
 
         let mut items = vec![
-            (
-                table,
-                SeqItem::Block {
-                    node_type: NodeType::Table,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (table, SeqItem::block(NodeType::Table, vec![root], vec![])),
             (
                 row,
-                SeqItem::Block {
-                    node_type: NodeType::TableRow,
-                    parents: vec![root, table],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableRow, vec![root, table], vec![]),
             ),
             (
                 left_cell,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row], vec![]),
             ),
             (
                 left_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row, left_cell],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, table, row, left_cell],
+                    vec![],
+                ),
             ),
             (Dot::new(15, 5), SeqItem::Char('x')),
             (
                 right_cell,
-                SeqItem::Block {
-                    node_type: NodeType::TableCell,
-                    parents: vec![root, table, row],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::TableCell, vec![root, table, row], vec![]),
             ),
             (
                 right_para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, table, row, right_cell],
-                    attrs: vec![],
-                },
+                SeqItem::block(
+                    NodeType::Paragraph,
+                    vec![root, table, row, right_cell],
+                    vec![],
+                ),
             ),
         ];
         for (i, ch) in "right cell text wraps onto a second visual line"
@@ -602,14 +579,7 @@ mod tests {
             let mut items = Vec::new();
             for node_type in ancestors {
                 let id = Dot::new(19, parents.len() as u64);
-                items.push((
-                    id,
-                    SeqItem::Block {
-                        node_type,
-                        parents: parents.clone(),
-                        attrs: vec![],
-                    },
-                ));
+                items.push((id, SeqItem::block(node_type, parents.clone(), vec![])));
                 parents.push(id);
             }
             let container = *parents.last().unwrap();
@@ -620,18 +590,16 @@ mod tests {
             items.extend([
                 (
                     Dot::new(19, 10),
-                    SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Image { node: image },
-                        parents: parents.clone(),
-                    },
+                    SeqItem::block_atom(
+                        AtomLeaf::Image {
+                            node: Box::new(image),
+                        },
+                        parents.clone(),
+                    ),
                 ),
                 (
                     paragraph,
-                    SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents,
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::Paragraph, parents, vec![]),
                 ),
                 (Dot::new(19, 12), SeqItem::Char('x')),
             ]);
@@ -685,22 +653,8 @@ mod tests {
         let p1 = Dot::new(1, 1);
         let p2 = Dot::new(1, 2);
         let items = vec![
-            (
-                p1,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
-            (
-                p2,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p1, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
+            (p2, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
         ];
         let mut doc = logs(&items);
         doc.block_modifiers = ModifierAttrLog::new()
@@ -797,21 +751,14 @@ mod tests {
         let items = vec![
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
-            (
-                p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
         let doc = logs(&items);

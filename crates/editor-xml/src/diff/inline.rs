@@ -300,10 +300,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::Unknown {
-                    tag: 999,
-                    bytes: vec![0xAA],
-                },
+                item: SeqItem::unknown(999, vec![0xAA]),
             }))
             .unwrap();
         (state, p)

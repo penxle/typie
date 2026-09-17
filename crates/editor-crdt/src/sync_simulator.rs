@@ -749,7 +749,7 @@ mod tests {
         let mut r: Replica<u32> = Replica::with_actor(1);
         let foreign = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 99,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -770,7 +770,7 @@ mod tests {
         let mut r: Replica<u32> = Replica::with_actor(1);
         let orphan = Op {
             id: Dot::new(2, 0),
-            parents: vec![Dot::new(99, 0)],
+            parents: smallvec::smallvec![Dot::new(99, 0)],
             payload: 1,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -789,7 +789,7 @@ mod tests {
         let mut r: Replica<u32> = Replica::with_actor(1);
         let original = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -800,7 +800,7 @@ mod tests {
         r.process_one();
         let conflict = Op {
             id: Dot::new(2, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 999,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -906,7 +906,7 @@ mod tests {
         let mut r: Replica<u32> = Replica::with_actor(1);
         let foreign = Op {
             id: Dot::new(99, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 42,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -930,7 +930,7 @@ mod tests {
         s.register(2);
         let op = Op {
             id: Dot::new(10, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 99,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -960,12 +960,12 @@ mod tests {
         s.register(1);
         let a = Op {
             id: Dot::new(10, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         let b = Op {
             id: Dot::new(10, 1),
-            parents: vec![a.id],
+            parents: smallvec::smallvec![a.id],
             payload: 2,
         };
         s.debug_receive(a.clone()).unwrap();
@@ -1008,7 +1008,7 @@ mod tests {
         s.register(1);
         let orphan = Op {
             id: Dot::new(10, 0),
-            parents: vec![Dot::new(99, 0)],
+            parents: smallvec::smallvec![Dot::new(99, 0)],
             payload: 1,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -1030,7 +1030,7 @@ mod tests {
         s.register(1);
         let original = Op {
             id: Dot::new(10, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 1,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary
@@ -1043,7 +1043,7 @@ mod tests {
         s.tick(1);
         let conflict = Op {
             id: Dot::new(10, 0),
-            parents: vec![],
+            parents: smallvec::smallvec![],
             payload: 999,
         };
         // single-cs envelope: simulator-synthetic batch, no real boundary

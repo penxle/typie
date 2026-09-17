@@ -994,11 +994,7 @@ mod tests {
             .projected_mut()
             .apply_warm_only(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Root,
-                    parents: vec![Dot::ROOT],
-                    attrs: Vec::new(),
-                },
+                item: SeqItem::block(NodeType::Root, vec![Dot::ROOT], Vec::new()),
             }))
             .unwrap();
         let invalid_pos = after
@@ -1190,10 +1186,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 2,
-                item: SeqItem::Unknown {
-                    tag: 42,
-                    bytes: vec![0xFF],
-                },
+                item: SeqItem::unknown(42, vec![0xFF]),
             }))
             .unwrap()
             .id;
@@ -1540,14 +1533,7 @@ mod tests {
     fn collect_items(ps: &ProjectedState, block: Dot) -> BTreeMap<Dot, SeqItem> {
         fn walk(ps: &ProjectedState, block: Dot, out: &mut BTreeMap<Dot, SeqItem>) {
             if let Some(node_type) = ps.block_node_type(block) {
-                out.insert(
-                    block,
-                    SeqItem::Block {
-                        node_type,
-                        parents: Vec::new(),
-                        attrs: Vec::new(),
-                    },
-                );
+                out.insert(block, SeqItem::block(node_type, Vec::new(), Vec::new()));
             }
             if let Some(children) = ps.block_children(block) {
                 for c in children {
@@ -1567,11 +1553,7 @@ mod tests {
 
     fn item_of(ps: &ProjectedState, dot: Dot) -> Option<SeqItem> {
         if let Some(node_type) = ps.block_node_type(dot) {
-            return Some(SeqItem::Block {
-                node_type,
-                parents: Vec::new(),
-                attrs: Vec::new(),
-            });
+            return Some(SeqItem::block(node_type, Vec::new(), Vec::new()));
         }
         let parent = ps.parent_of(dot)?;
         ps.block_children(parent)?
@@ -1605,8 +1587,8 @@ mod tests {
                 match (old_item, &new_item) {
                     (SeqItem::Char(a), SeqItem::Char(b)) => assert_eq!(a, b, "char 페어링 불일치"),
                     (SeqItem::Atom(a), SeqItem::Atom(b)) => assert_eq!(a, b, "atom 페어링 불일치"),
-                    (SeqItem::Block { node_type: a, .. }, SeqItem::Block { node_type: b, .. }) => {
-                        assert_eq!(a, b, "block 페어링 불일치")
+                    (SeqItem::Block(a), SeqItem::Block(b)) => {
+                        assert_eq!(a.node_type, b.node_type, "block 페어링 불일치")
                     }
                     (a, b) => panic!("kind 불일치 페어링: {a:?} -> {b:?}"),
                 }
@@ -1628,23 +1610,22 @@ mod tests {
                 let old_item = before_items.get(&old).expect("replace 전 스냅샷에 존재");
                 let new_item = item_of(pd, new).expect("replace 후 상태에 존재");
                 match (old_item, &new_item) {
-                    (
-                        SeqItem::Block {
-                            node_type: old_type,
-                            ..
-                        },
-                        SeqItem::Block {
-                            node_type: actual_type,
-                            ..
-                        },
-                    ) if old == replaced => {
-                        assert_ne!(*old_type, new_type, "테스트 전제: root type changes");
-                        assert_eq!(*actual_type, new_type, "replaced block type mismatch");
+                    (SeqItem::Block(old_block), SeqItem::Block(actual_block))
+                        if old == replaced =>
+                    {
+                        assert_ne!(
+                            old_block.node_type, new_type,
+                            "테스트 전제: root type changes"
+                        );
+                        assert_eq!(
+                            actual_block.node_type, new_type,
+                            "replaced block type mismatch"
+                        );
                     }
                     (SeqItem::Char(a), SeqItem::Char(b)) => assert_eq!(a, b, "char 페어링 불일치"),
                     (SeqItem::Atom(a), SeqItem::Atom(b)) => assert_eq!(a, b, "atom 페어링 불일치"),
-                    (SeqItem::Block { node_type: a, .. }, SeqItem::Block { node_type: b, .. }) => {
-                        assert_eq!(a, b, "descendant block 페어링 불일치")
+                    (SeqItem::Block(a), SeqItem::Block(b)) => {
+                        assert_eq!(a.node_type, b.node_type, "descendant block 페어링 불일치")
                     }
                     (a, b) => panic!("kind 불일치 페어링: {a:?} -> {b:?}"),
                 }
@@ -1783,10 +1764,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Unknown {
-                    tag: 7,
-                    bytes: vec![0x01],
-                },
+                item: SeqItem::unknown(7, vec![0x01]),
             }))
             .unwrap();
 
@@ -1824,11 +1802,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Block {
-                    node_type: NodeType::Unknown,
-                    parents: vec![root, bq],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Unknown, vec![root, bq], vec![]),
             }))
             .unwrap();
 
@@ -1866,10 +1840,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Unknown(UnknownNode),
-                    parents: vec![root, p1],
-                },
+                item: SeqItem::block_atom(AtomLeaf::Unknown(UnknownNode), vec![root, p1]),
             }))
             .unwrap();
 
@@ -2525,10 +2496,7 @@ mod tests {
                 .projected_mut()
                 .apply(EditOp::Seq(ListOp::Ins {
                     pos,
-                    item: SeqItem::BlockAtom {
-                        leaf: AtomLeaf::Unknown(UnknownNode),
-                        parents: vec![root, p1],
-                    },
+                    item: SeqItem::block_atom(AtomLeaf::Unknown(UnknownNode), vec![root, p1]),
                 }))
                 .unwrap()
                 .id

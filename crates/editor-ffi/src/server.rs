@@ -1300,14 +1300,14 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
@@ -1322,7 +1322,7 @@ mod tests {
         assert_eq!(merged.len(), 2);
         assert_eq!(merged[0].ops[0].id, cs_a.ops[0].id);
         assert_eq!(merged[1].ops[0].id, cs_b.ops[0].id);
-        assert_eq!(merged[1].ops[0].parents, vec![Dot::new(1, 0)]);
+        assert_eq!(merged[1].ops[0].parents.as_slice(), [Dot::new(1, 0)]);
     }
 
     #[test]
@@ -1330,7 +1330,7 @@ mod tests {
         let cs = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
@@ -1352,7 +1352,7 @@ mod tests {
         let cs = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(7, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
@@ -1373,12 +1373,12 @@ mod tests {
     fn apply_rejects_causally_broken_payload() {
         let parent = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: dummy_payload(),
         };
         let child = Op {
             id: Dot::new(1, 1),
-            parents: vec![parent.id],
+            parents: editor_crdt::smallvec![parent.id],
             payload: dummy_payload(),
         };
         let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
@@ -1395,12 +1395,12 @@ mod tests {
     fn apply_accepts_correctly_ordered_chain() {
         let parent = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: dummy_payload(),
         };
         let child = Op {
             id: Dot::new(1, 1),
-            parents: vec![parent.id],
+            parents: editor_crdt::smallvec![parent.id],
             payload: dummy_payload(),
         };
         let parent_cs = Changeset::<EditOp> { ops: vec![parent] };
@@ -1420,12 +1420,12 @@ mod tests {
     fn apply_accepts_intra_cs_parent_chain() {
         let op1 = Op {
             id: Dot::new(5, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: dummy_payload(),
         };
         let op2 = Op {
             id: Dot::new(5, 1),
-            parents: vec![op1.id],
+            parents: editor_crdt::smallvec![op1.id],
             payload: dummy_payload(),
         };
         let cs = Changeset::<EditOp> {
@@ -1444,7 +1444,7 @@ mod tests {
         let dot = Dot::new(33, 0);
         let bad = Op {
             id: dot,
-            parents: vec![dot],
+            parents: editor_crdt::smallvec![dot],
             payload: dummy_payload(),
         };
         let cs = Changeset::<EditOp> { ops: vec![bad] };
@@ -1462,18 +1462,18 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: x,
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let new_first = Op {
             id: Dot::new(21, 0),
-            parents: vec![x],
+            parents: editor_crdt::smallvec![x],
             payload: dummy_payload(),
         };
         let new_reuse = Op {
             id: x,
-            parents: vec![new_first.id],
+            parents: editor_crdt::smallvec![new_first.id],
             payload: dummy_payload(),
         };
         let cs_bad = Changeset::<EditOp> {
@@ -1493,14 +1493,14 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
@@ -1517,7 +1517,7 @@ mod tests {
         let missing = dec_css(&missing_bytes);
         assert_eq!(missing.len(), 1);
         assert_eq!(missing[0].ops[0].id, cs_b.ops[0].id);
-        assert_eq!(missing[0].ops[0].parents, vec![Dot::new(1, 0)]);
+        assert_eq!(missing[0].ops[0].parents.as_slice(), [Dot::new(1, 0)]);
     }
 
     #[test]
@@ -1525,7 +1525,7 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
@@ -1566,14 +1566,14 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
@@ -1610,14 +1610,14 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let orphan_bundle = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(3, 0),
-                parents: vec![Dot::new(9, 99)],
+                parents: editor_crdt::smallvec![Dot::new(9, 99)],
                 payload: dummy_payload(),
             }],
         };
@@ -1643,7 +1643,7 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
@@ -1651,12 +1651,12 @@ mod tests {
             ops: vec![
                 Op {
                     id: Dot::new(1, 0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: dummy_payload(),
                 },
                 Op {
                     id: Dot::new(5, 0),
-                    parents: vec![Dot::new(1, 0)],
+                    parents: editor_crdt::smallvec![Dot::new(1, 0)],
                     payload: dummy_payload(),
                 },
             ],
@@ -1676,7 +1676,7 @@ mod tests {
     fn seq_char(actor: u64, counter: u64, parents: &[Dot], pos: usize, ch: char) -> Op<EditOp> {
         Op {
             id: Dot::new(actor, counter),
-            parents: parents.to_vec(),
+            parents: parents.into(),
             payload: EditOp::Seq(ListOp::Ins {
                 pos,
                 item: SeqItem::Char(ch),
@@ -1689,14 +1689,10 @@ mod tests {
         let server = EditorServer::new_test();
         let para = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: editor_model::NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         };
         let a = seq_char(1, 1, &[para.id], 1, 'a');
@@ -1705,7 +1701,7 @@ mod tests {
         let del_id = Dot::new(1, 3);
         let del = Op {
             id: del_id,
-            parents: vec![b_id],
+            parents: editor_crdt::smallvec![b_id],
             payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
         };
         let bundle1 = enc_css(&[Changeset {
@@ -1732,14 +1728,10 @@ mod tests {
         let server = EditorServer::new_test();
         let para = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: editor_model::NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         };
         let a = seq_char(1, 1, &[para.id], 1, 'a');
@@ -1749,12 +1741,12 @@ mod tests {
         let del_id = Dot::new(1, 4);
         let del = Op {
             id: del_id,
-            parents: vec![c_id],
+            parents: editor_crdt::smallvec![c_id],
             payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
         };
         let undel = Op {
             id: Dot::new(1, 5),
-            parents: vec![del_id],
+            parents: editor_crdt::smallvec![del_id],
             payload: EditOp::Seq(ListOp::Undel { del: del_id }),
         };
         let bundle1 = enc_css(&[Changeset {
@@ -1785,14 +1777,10 @@ mod tests {
         let server = EditorServer::new_test();
         let para = Op {
             id: Dot::new(1, 0),
-            parents: vec![],
+            parents: editor_crdt::smallvec![],
             payload: EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: editor_model::NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }),
         };
         let a = seq_char(1, 1, &[para.id], 1, 'a');
@@ -1802,12 +1790,12 @@ mod tests {
         let del_id = Dot::new(1, 4);
         let del = Op {
             id: del_id,
-            parents: vec![c_id],
+            parents: editor_crdt::smallvec![c_id],
             payload: EditOp::Seq(ListOp::Del { pos: 1, len: 2 }),
         };
         let undel = Op {
             id: Dot::new(1, 5),
-            parents: vec![del_id],
+            parents: editor_crdt::smallvec![del_id],
             payload: EditOp::Seq(ListOp::Undel { del: del_id }),
         };
         let bundle1 = enc_css(&[Changeset {
@@ -1850,19 +1838,19 @@ mod tests {
             ops: vec![
                 Op {
                     id: d(0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: editor_model::NodeType::TableCell,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(
+                            editor_model::NodeType::TableCell,
+                            vec![Dot::ROOT],
+                            vec![],
+                        ),
                     }),
                 },
                 Op {
                     id: d(1),
-                    parents: vec![d(0)],
+                    parents: editor_crdt::smallvec![d(0)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -1926,19 +1914,19 @@ mod tests {
             ops: vec![
                 Op {
                     id: Dot::new(4, 0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: editor_model::NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(
+                            editor_model::NodeType::Paragraph,
+                            vec![Dot::ROOT],
+                            vec![],
+                        ),
                     }),
                 },
                 Op {
                     id: Dot::new(4, 1),
-                    parents: vec![Dot::new(4, 0)],
+                    parents: editor_crdt::smallvec![Dot::new(4, 0)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -1956,14 +1944,11 @@ mod tests {
     fn collect_fold_counts_graphemes_of_the_extracted_document() {
         let ins = |id: Dot, parents: Vec<Dot>, pos: usize, item: SeqItem| Op {
             id,
-            parents,
+            parents: parents.into(),
             payload: EditOp::Seq(ListOp::Ins { pos, item }),
         };
-        let paragraph = || SeqItem::Block {
-            node_type: editor_model::NodeType::Paragraph,
-            parents: vec![Dot::ROOT],
-            attrs: vec![],
-        };
+        let paragraph =
+            || SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]);
         let d = |c| Dot::new(6, c);
         let e = |c| Dot::new(7, c);
 
@@ -2032,21 +2017,21 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
         let cs_c = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(3, 0),
-                parents: vec![Dot::new(2, 0)],
+                parents: editor_crdt::smallvec![Dot::new(2, 0)],
                 payload: dummy_payload(),
             }],
         };
@@ -2092,28 +2077,28 @@ mod tests {
         let cs_a = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(1, 0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: dummy_payload(),
             }],
         };
         let cs_b = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
         let cs_c = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(3, 0),
-                parents: vec![Dot::new(1, 0)],
+                parents: editor_crdt::smallvec![Dot::new(1, 0)],
                 payload: dummy_payload(),
             }],
         };
         let cs_d = Changeset::<EditOp> {
             ops: vec![Op {
                 id: Dot::new(2, 1),
-                parents: vec![Dot::new(2, 0), Dot::new(3, 0)],
+                parents: editor_crdt::smallvec![Dot::new(2, 0), Dot::new(3, 0)],
                 payload: dummy_payload(),
             }],
         };
@@ -2149,14 +2134,14 @@ mod tests {
         let cs_v1 = Changeset::<EditOp> {
             ops: vec![Op {
                 id: dot,
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: payload_a,
             }],
         };
         let cs_v2 = Changeset::<EditOp> {
             ops: vec![Op {
                 id: dot,
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: payload_b,
             }],
         };
@@ -2359,11 +2344,7 @@ mod tests {
             let mut g = OpGraph::<EditOp>::with_actor(1);
             g.add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: editor_model::NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }))
             .unwrap();
             g.commit_mut();
@@ -2411,11 +2392,7 @@ mod tests {
         // Insert Para2 as sibling of Para1 (both children of ROOT)
         ps.apply(EditOp::Seq(ListOp::Ins {
             pos: 1,
-            item: SeqItem::Block {
-                node_type: editor_model::NodeType::Paragraph,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            item: SeqItem::block(editor_model::NodeType::Paragraph, vec![Dot::ROOT], vec![]),
         }))
         .unwrap();
         ps.commit();
@@ -2530,19 +2507,15 @@ mod tests {
         let ops = vec![
             Op {
                 id: d(0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 }),
             },
             Op {
                 id: d(1),
-                parents: vec![d(0)],
+                parents: editor_crdt::smallvec![d(0)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 1,
                     item: SeqItem::Char('a'),
@@ -2550,19 +2523,19 @@ mod tests {
             },
             Op {
                 id: d(2),
-                parents: vec![d(1)],
+                parents: editor_crdt::smallvec![d(1)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 2,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT, Dot::new(9, 999)],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(
+                        NodeType::Paragraph,
+                        vec![Dot::ROOT, Dot::new(9, 999)],
+                        vec![],
+                    ),
                 }),
             },
             Op {
                 id: d(3),
-                parents: vec![d(2)],
+                parents: editor_crdt::smallvec![d(2)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 3,
                     item: SeqItem::Char('z'),
@@ -2606,7 +2579,7 @@ mod tests {
         let mut css = zombie_css();
         let span_op = editor_crdt::Op {
             id: editor_crdt::Dot::new(1, 10),
-            parents: vec![editor_crdt::Dot::new(1, 3)],
+            parents: editor_crdt::smallvec![editor_crdt::Dot::new(1, 3)],
             payload: editor_model::EditOp::Span(SpanOp::AddSpan {
                 start: Anchor {
                     id: editor_crdt::Dot::new(1, 1),
@@ -2641,19 +2614,15 @@ mod tests {
         let ops = vec![
             Op {
                 id: d(0),
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 }),
             },
             Op {
                 id: d(1),
-                parents: vec![d(0)],
+                parents: editor_crdt::smallvec![d(0)],
                 payload: EditOp::Seq(ListOp::Ins {
                     pos: 1,
                     item: SeqItem::Char('a'),
@@ -2672,19 +2641,19 @@ mod tests {
             ops: vec![
                 Op {
                     id: para,
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: editor_model::NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(
+                            editor_model::NodeType::Paragraph,
+                            vec![Dot::ROOT],
+                            vec![],
+                        ),
                     }),
                 },
                 Op {
                     id: a,
-                    parents: vec![para],
+                    parents: editor_crdt::smallvec![para],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -2692,7 +2661,7 @@ mod tests {
                 },
                 Op {
                     id: b,
-                    parents: vec![a],
+                    parents: editor_crdt::smallvec![a],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 2,
                         item: SeqItem::Char('b'),

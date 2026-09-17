@@ -152,11 +152,7 @@ mod tests {
         let para = Dot::new(1, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, ch) in text.chars().enumerate() {
             items.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
@@ -172,11 +168,7 @@ mod tests {
         let para = Dot::new(10, 1);
         let mut items = vec![(
             para,
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![root],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
         )];
         for (i, child) in children.into_iter().enumerate() {
             items.push((Dot::new(10, 2 + i as u64), child));
@@ -257,21 +249,14 @@ mod tests {
         let items = vec![
             (
                 hr,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::HorizontalRule {
+                SeqItem::block_atom(
+                    AtomLeaf::HorizontalRule {
                         variant: HorizontalRuleVariant::default(),
                     },
-                    parents: vec![root],
-                },
+                    vec![root],
+                ),
             ),
-            (
-                p,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (p, SeqItem::block(NodeType::Paragraph, vec![root], vec![])),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
         let doc = logs(&items);

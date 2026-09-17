@@ -680,11 +680,7 @@ mod tests {
     fn seq_block(pos: usize, node_type: NodeType, parents: Vec<editor_crdt::Dot>) -> EditOp {
         EditOp::Seq(ListOp::Ins {
             pos,
-            item: SeqItem::Block {
-                node_type,
-                parents,
-                attrs: vec![],
-            },
+            item: SeqItem::block(node_type, parents, vec![]),
         })
     }
 
@@ -1525,13 +1521,13 @@ mod tests {
         let callout = state
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 1,
-                item: SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![root],
-                    attrs: vec![NodeAttr::Callout {
+                item: SeqItem::block(
+                    NodeType::Callout,
+                    vec![root],
+                    vec![NodeAttr::Callout {
                         attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
                     }],
-                },
+                ),
             }))
             .unwrap()
             .id;
@@ -1782,11 +1778,7 @@ mod tests {
         fn seed_block() -> EditOp {
             EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             })
         }
         fn ins(pos: usize, c: char) -> EditOp {
@@ -1842,7 +1834,7 @@ mod tests {
         let del_a_ro = RecordedOp {
             op: Op {
                 id: del_a,
-                parents: vec![],
+                parents: editor_crdt::smallvec![],
                 payload: EditOp::Seq(ListOp::Del { pos: 1, len: 3 }),
             },
             prior: None,
@@ -1874,11 +1866,7 @@ mod tests {
         fn seed_block() -> EditOp {
             EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             })
         }
 
@@ -2207,11 +2195,7 @@ mod concurrency_proptest {
         base_graph
             .add_mut(EditOp::Seq(ListOp::Ins {
                 pos: 0,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             }))
             .unwrap();
         base_graph.commit_mut();

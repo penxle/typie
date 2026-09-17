@@ -456,8 +456,8 @@ pub(crate) fn remove_child_slots_steps(
                 flush_opaque_step(&mut steps, &mut opaque_dots);
                 let atom = match item {
                     SeqItem::Atom(atom) => atom,
-                    SeqItem::BlockAtom { leaf, .. } => leaf,
-                    SeqItem::Char(_) | SeqItem::Block { .. } | SeqItem::Unknown { .. } => {
+                    SeqItem::BlockAtom(b) => &b.leaf,
+                    SeqItem::Char(_) | SeqItem::Block(_) | SeqItem::Unknown(_) => {
                         return Err(StepError::InvalidChildSlot { parent, index: idx });
                     }
                 };
@@ -696,9 +696,9 @@ pub fn capture_subtree(ps: &ProjectedState, block: Dot) -> Option<Subtree> {
                         frame.flush_text();
                         frame.captured.push(atom_leaf_subtree(ps, id, atom));
                     }
-                    SeqItem::BlockAtom { leaf, .. } => {
+                    SeqItem::BlockAtom(b) => {
                         frame.flush_text();
-                        frame.captured.push(atom_leaf_subtree(ps, id, leaf));
+                        frame.captured.push(atom_leaf_subtree(ps, id, b.leaf));
                     }
                     _ => {}
                 }
@@ -858,11 +858,7 @@ pub(crate) fn emit_subtree(
                 let dot = batched
                     .apply(EditOp::Seq(ListOp::Ins {
                         pos: *seq_pos,
-                        item: SeqItem::Block {
-                            node_type,
-                            parents: parents.clone(),
-                            attrs: subtree.node.to_attrs(),
-                        },
+                        item: SeqItem::block(node_type, parents.clone(), subtree.node.to_attrs()),
                     }))?
                     .id;
                 *seq_pos += 1;
@@ -929,7 +925,7 @@ pub(crate) fn emit_subtree(
                     .ok_or(StepError::NodeNotFound(Dot::ROOT))?;
                 let is_block_level = leaf.is_block_level();
                 let item = if is_block_level {
-                    SeqItem::BlockAtom { leaf, parents }
+                    SeqItem::block_atom(leaf, parents)
                 } else {
                     SeqItem::Atom(leaf)
                 };
@@ -1059,11 +1055,7 @@ mod tests {
     }
 
     fn seq_block(node_type: NodeType, parents: Vec<Dot>) -> SeqItem {
-        SeqItem::Block {
-            node_type,
-            parents,
-            attrs: vec![],
-        }
+        SeqItem::block(node_type, parents, vec![])
     }
 
     /// Weave raw changesets whose sequence order is exactly `items` (each appended
@@ -1253,19 +1245,15 @@ mod tests {
             ops: vec![
                 Op {
                     id: d(0),
-                    parents: vec![],
+                    parents: editor_crdt::smallvec![],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 0,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                     }),
                 },
                 Op {
                     id: d(1),
-                    parents: vec![d(0)],
+                    parents: editor_crdt::smallvec![d(0)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 1,
                         item: SeqItem::Char('a'),
@@ -1273,19 +1261,19 @@ mod tests {
                 },
                 Op {
                     id: d(2),
-                    parents: vec![d(1)],
+                    parents: editor_crdt::smallvec![d(1)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 2,
-                        item: SeqItem::Block {
-                            node_type: NodeType::Paragraph,
-                            parents: vec![Dot::ROOT, Dot::new(9, 999)],
-                            attrs: vec![],
-                        },
+                        item: SeqItem::block(
+                            NodeType::Paragraph,
+                            vec![Dot::ROOT, Dot::new(9, 999)],
+                            vec![],
+                        ),
                     }),
                 },
                 Op {
                     id: d(3),
-                    parents: vec![d(2)],
+                    parents: editor_crdt::smallvec![d(2)],
                     payload: EditOp::Seq(ListOp::Ins {
                         pos: 3,
                         item: SeqItem::Char('z'),

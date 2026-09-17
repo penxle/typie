@@ -365,11 +365,7 @@ fn perf_synthetic_wrapper_typing() {
             *prev = Some(id);
             id
         };
-        let para = |parents: Vec<Dot>| SeqItem::Block {
-            node_type: NodeType::Paragraph,
-            parents,
-            attrs: vec![],
-        };
+        let para = |parents: Vec<Dot>| SeqItem::block(NodeType::Paragraph, parents, vec![]);
         let mut host = Dot::ROOT;
         for i in 0..fanout {
             let is_cell_slot = if mixed { i % 2 == 1 } else { i == fanout - 1 };
@@ -379,11 +375,7 @@ fn perf_synthetic_wrapper_typing() {
                     &mut pos,
                     &mut prev,
                     &mut clock,
-                    SeqItem::Block {
-                        node_type: NodeType::TableCell,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    SeqItem::block(NodeType::TableCell, vec![Dot::ROOT], vec![]),
                 );
                 let p = push(
                     &mut ops,

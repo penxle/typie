@@ -223,21 +223,10 @@ mod tests {
         let ft = Dot::new(1, 2);
         let para_root = Dot::new(1, 10);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 ft,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('T')),
             (Dot::new(1, 4), SeqItem::Char('i')),
@@ -246,11 +235,7 @@ mod tests {
             (Dot::new(1, 7), SeqItem::Char('e')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), ft)
@@ -264,47 +249,24 @@ mod tests {
         let para_inner = Dot::new(2, 4);
         let para_root = Dot::new(2, 10);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 ft,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (Dot::new(2, 9), SeqItem::Char('T')),
             (
                 fc,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold], vec![]),
             ),
             (
                 para_inner,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, fold, fc],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, fold, fc], vec![]),
             ),
             (Dot::new(2, 5), SeqItem::Char('C')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), fc)
@@ -424,47 +386,24 @@ mod tests {
         let para_inner = Dot::new(3, 4);
         let para_root = Dot::new(3, 10);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 ft,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (Dot::new(3, 8), SeqItem::Char('T')),
             (
                 fc,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![root, fold], vec![]),
             ),
             (
                 para_inner,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root, fold, fc],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root, fold, fc], vec![]),
             ),
             (Dot::new(3, 5), SeqItem::Char('C')),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), root, fold)
@@ -590,29 +529,14 @@ mod tests {
         let ft = Dot::new(5, 2);
         let para_root = Dot::new(5, 10);
         let items = vec![
-            (
-                fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
-            ),
+            (fold, SeqItem::block(NodeType::Fold, vec![root], vec![])),
             (
                 ft,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![root, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![root, fold], vec![]),
             ),
             (
                 para_root,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![root],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![root], vec![]),
             ),
         ];
         (logs(&items), ft)

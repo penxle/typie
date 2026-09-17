@@ -53,11 +53,7 @@ fn seq_char(pos: usize, c: char) -> EditOp {
 fn seq_block(pos: usize, node_type: NodeType, parents: Vec<Dot>) -> EditOp {
     EditOp::Seq(ListOp::Ins {
         pos,
-        item: SeqItem::Block {
-            node_type,
-            parents,
-            attrs: vec![],
-        },
+        item: SeqItem::block(node_type, parents, vec![]),
     })
 }
 
@@ -1290,10 +1286,12 @@ pub fn mixed_atoms() -> ProjectedState {
     };
     s.apply(EditOp::Seq(ListOp::Ins {
         pos,
-        item: SeqItem::BlockAtom {
-            leaf: AtomLeaf::Image { node: img },
-            parents: vec![Dot::ROOT],
-        },
+        item: SeqItem::block_atom(
+            AtomLeaf::Image {
+                node: Box::new(img),
+            },
+            vec![Dot::ROOT],
+        ),
     }))
     .unwrap();
     s.apply(EditOp::Span(SpanOp::AddSpan {

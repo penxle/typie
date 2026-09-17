@@ -17,9 +17,22 @@ use super::resolve::ResolvedTextStyle;
 /// offsets and rebased to the segment's current absolute start on reuse, so a
 /// keystroke inside a huge multi-line paragraph re-shapes only the one edited
 /// segment instead of all of them.
+/// Paragraphs kept in the cache. Reuse only ever pays off for a paragraph that is
+/// re-measured with an unchanged segment — the one being edited or around the
+/// caret — so an unbounded cache just held a second copy of every shaped line in
+/// the document.
+const MAX_PARAGRAPHS: usize = 128;
+
 #[derive(Default)]
 pub(crate) struct SegmentCache {
-    entries: HashMap<(Dot, usize), Cached>,
+    paragraphs: HashMap<Dot, Paragraph>,
+    clock: u64,
+}
+
+#[derive(Default)]
+struct Paragraph {
+    used: u64,
+    segments: Vec<Option<Cached>>,
 }
 
 struct Cached {
@@ -30,22 +43,30 @@ struct Cached {
 
 impl SegmentCache {
     pub(crate) fn clear(&mut self) {
-        self.entries.clear();
+        self.paragraphs.clear();
+    }
+
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
     }
 
     /// Cached lines for `(para, index)` rebased to `seg_start`, if the content hash
     /// matches; `None` on miss.
     pub(crate) fn get(
-        &self,
+        &mut self,
         para: Dot,
         index: usize,
         hash: u64,
         seg_start: usize,
     ) -> Option<Vec<MeasuredLine>> {
-        let c = self.entries.get(&(para, index))?;
+        let now = self.tick();
+        let paragraph = self.paragraphs.get_mut(&para)?;
+        let c = paragraph.segments.get(index)?.as_ref()?;
         if c.hash != hash {
             return None;
         }
+        paragraph.used = now;
         Some(
             c.lines
                 .iter()
@@ -68,12 +89,30 @@ impl SegmentCache {
             .iter()
             .map(|l| shifted(l, -(seg_start as isize)))
             .collect();
-        self.entries.insert((para, index), Cached { hash, lines });
+        let now = self.tick();
+        if !self.paragraphs.contains_key(&para) && self.paragraphs.len() >= MAX_PARAGRAPHS {
+            let oldest = self
+                .paragraphs
+                .iter()
+                .min_by_key(|(_, p)| p.used)
+                .map(|(dot, _)| *dot);
+            if let Some(oldest) = oldest {
+                self.paragraphs.remove(&oldest);
+            }
+        }
+        let paragraph = self.paragraphs.entry(para).or_default();
+        paragraph.used = now;
+        if paragraph.segments.len() <= index {
+            paragraph.segments.resize_with(index + 1, || None);
+        }
+        paragraph.segments[index] = Some(Cached { hash, lines });
     }
 
     /// Drop `para`'s entries at indices `>= keep` (segments removed since last measure).
     pub(crate) fn prune(&mut self, para: Dot, keep: usize) {
-        self.entries.retain(|(p, i), _| *p != para || *i < keep);
+        if let Some(paragraph) = self.paragraphs.get_mut(&para) {
+            paragraph.segments.truncate(keep);
+        }
     }
 
     /// Drop every cached segment of `para`. For invalidations where the shaped output
@@ -81,12 +120,14 @@ impl SegmentCache {
     /// load — hash-matched reuse would keep serving the fallback-shaped lines until an
     /// edit happened to change the hash.
     pub(crate) fn invalidate_para(&mut self, para: Dot) {
-        self.entries.retain(|(p, _), _| *p != para);
+        self.paragraphs.remove(&para);
     }
 
     #[cfg(test)]
     pub(crate) fn contains_para(&self, para: Dot) -> bool {
-        self.entries.keys().any(|(p, _)| *p == para)
+        self.paragraphs
+            .get(&para)
+            .is_some_and(|p| p.segments.iter().any(Option::is_some))
     }
 }
 
@@ -196,6 +237,37 @@ mod tests {
             letter_spacing: 0.0,
             line_height: 1.6,
         }
+    }
+
+    #[test]
+    fn keeps_recently_used_paragraphs_and_drops_the_oldest() {
+        let mut cache = SegmentCache::default();
+        let para = |i: usize| Dot::new(1, i as u64);
+        cache.put(para(0), 0, 7, &[], 0);
+        for i in 1..MAX_PARAGRAPHS {
+            cache.put(para(i), 0, 7, &[], 0);
+        }
+        assert!(cache.get(para(0), 0, 7, 0).is_some());
+        cache.put(para(MAX_PARAGRAPHS), 0, 7, &[], 0);
+        assert!(cache.get(para(0), 0, 7, 0).is_some(), "just used, so kept");
+        assert!(cache.get(para(1), 0, 7, 0).is_none(), "oldest, so dropped");
+        assert!(cache.get(para(MAX_PARAGRAPHS), 0, 7, 0).is_some());
+        assert_eq!(cache.paragraphs.len(), MAX_PARAGRAPHS);
+    }
+
+    #[test]
+    fn prune_drops_only_trailing_segments_of_that_paragraph() {
+        let mut cache = SegmentCache::default();
+        let (a, b) = (Dot::new(1, 0), Dot::new(1, 1));
+        for index in 0..3 {
+            cache.put(a, index, 7, &[], 0);
+            cache.put(b, index, 7, &[], 0);
+        }
+        cache.prune(a, 1);
+        assert!(cache.get(a, 0, 7, 0).is_some());
+        assert!(cache.get(a, 1, 7, 0).is_none());
+        assert!(cache.get(b, 2, 7, 0).is_some());
+        assert!(cache.get(a, 0, 8, 0).is_none(), "hash mismatch is a miss");
     }
 
     // Two runs identical in every input except one own modifier's value (a Link

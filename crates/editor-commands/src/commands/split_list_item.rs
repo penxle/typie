@@ -207,10 +207,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos,
-                item: SeqItem::Unknown {
-                    tag: 1,
-                    bytes: vec![],
-                },
+                item: SeqItem::unknown(1, vec![]),
             }))
             .unwrap();
         let before = initial.clone();

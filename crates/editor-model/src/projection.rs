@@ -170,28 +170,45 @@ fn collect_block_init(tree: &BlockTree) -> FastMap<Dot, Node> {
     out
 }
 
+#[cfg(test)]
 fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
-    fn walk(tree: &BlockTree, node: &BlockNode, out: &mut HashMap<Dot, Node>) {
-        if let Some(d) = anchor_dot(node.id) {
+    collect_real_nodes_where(tree, &|_| true)
+}
+
+fn collect_real_nodes_where(tree: &BlockTree, wanted: &dyn Fn(Dot) -> bool) -> HashMap<Dot, Node> {
+    fn walk(
+        tree: &BlockTree,
+        node: &BlockNode,
+        wanted: &dyn Fn(Dot) -> bool,
+        out: &mut HashMap<Dot, Node>,
+    ) {
+        if let Some(d) = anchor_dot(node.id)
+            && wanted(d)
+        {
             let seeded = seed_block_init(node.node_type, &node.attrs)
                 .unwrap_or_else(|| node.node_type.into_node());
             out.insert(d, seeded);
         }
         for c in &node.children {
             match c {
-                Child::Leaf { id, item } => match item {
-                    SeqItem::Atom(atom) => {
-                        out.insert(*id, atom.clone().into_node());
+                Child::Leaf { id, item } => {
+                    if !wanted(*id) {
+                        continue;
                     }
-                    _ => {
-                        if let Some(t) = item.as_child_type() {
-                            out.insert(*id, t.into_node());
+                    match item {
+                        SeqItem::Atom(atom) => {
+                            out.insert(*id, atom.clone().into_node());
+                        }
+                        _ => {
+                            if let Some(t) = item.as_child_type() {
+                                out.insert(*id, t.into_node());
+                            }
                         }
                     }
-                },
+                }
                 Child::Block(id) => {
                     if let Some(b) = tree.get(*id) {
-                        walk(tree, b, out);
+                        walk(tree, b, wanted, out);
                     }
                 }
             }
@@ -199,7 +216,7 @@ fn collect_real_nodes(tree: &BlockTree) -> HashMap<Dot, Node> {
     }
     let mut out = HashMap::new();
     if let Some(r) = tree.root_node() {
-        walk(tree, r, &mut out);
+        walk(tree, r, wanted, &mut out);
     }
     out
 }
@@ -287,7 +304,7 @@ fn collect_node_carries(
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlockPaths {
     parent: FastMap<Dot, Dot>,
-    block_of_leaf: FastMap<Dot, Dot>,
+    block_of_leaf: crate::leaf_blocks::LeafBlocks,
     node_type: FastMap<Dot, NodeType>,
 }
 
@@ -297,7 +314,7 @@ impl BlockPaths {
             tree: &BlockTree,
             node: &BlockNode,
             parent: &mut FastMap<Dot, Dot>,
-            bol: &mut FastMap<Dot, Dot>,
+            bol: &mut crate::leaf_blocks::LeafBlocksBuilder,
             nt: &mut FastMap<Dot, NodeType>,
         ) {
             nt.insert(node.id, node.node_type);
@@ -310,20 +327,20 @@ impl BlockPaths {
                         }
                     }
                     Child::Leaf { id, .. } => {
-                        bol.insert(*id, node.id);
+                        bol.push(*id, node.id);
                     }
                 }
             }
         }
         let mut parent = FastMap::new();
-        let mut block_of_leaf = FastMap::new();
+        let mut block_of_leaf = crate::leaf_blocks::LeafBlocksBuilder::default();
         let mut node_type = FastMap::new();
         if let Some(root) = tree.root_node() {
             walk(tree, root, &mut parent, &mut block_of_leaf, &mut node_type);
         }
         Self {
             parent,
-            block_of_leaf,
+            block_of_leaf: block_of_leaf.finish(),
             node_type,
         }
     }
@@ -341,12 +358,12 @@ impl BlockPaths {
     }
 
     pub fn block_of(&self, leaf: Dot) -> Option<Dot> {
-        self.block_of_leaf.get(&leaf).copied()
+        self.block_of_leaf.get(leaf)
     }
 
     /// Whether `dot` is a live node (leaf or block) in the current tree.
     pub fn contains(&self, dot: Dot) -> bool {
-        self.block_of_leaf.contains_key(&dot) || self.node_type.contains_key(&dot)
+        self.block_of_leaf.contains(dot) || self.node_type.contains_key(&dot)
     }
 
     pub fn node_type_of(&self, node: Dot) -> Option<NodeType> {
@@ -372,7 +389,7 @@ impl BlockPaths {
     }
 
     pub fn remove_leaf(&mut self, leaf: Dot) {
-        self.block_of_leaf.remove(&leaf);
+        self.block_of_leaf.remove(leaf);
     }
 
     pub fn path_of(&self, node: Dot) -> Vec<Dot> {
@@ -383,7 +400,7 @@ impl BlockPaths {
                 .parent
                 .get(&cur)
                 .copied()
-                .or_else(|| self.block_of_leaf.get(&cur).copied());
+                .or_else(|| self.block_of_leaf.get(cur));
             match next {
                 Some(p) if p != cur => {
                     out.push(p);
@@ -400,7 +417,7 @@ impl BlockPaths {
         for (&child, &par) in &self.parent {
             children.entry(par).or_default().push(child);
         }
-        for (&leaf, &par) in &self.block_of_leaf {
+        for (leaf, par) in self.block_of_leaf.iter() {
             children.entry(par).or_default().push(leaf);
         }
         let mut out = Vec::new();
@@ -434,7 +451,21 @@ impl ProjectionIndexes {
         spans: &SpanLog,
         seq: &editor_crdt::sequence::SeqCheckout,
     ) -> Self {
-        let paths = BlockPaths::from_tree(&projected.tree);
+        Self::rebuild_with_paths(
+            BlockPaths::from_tree(&projected.tree),
+            projected,
+            spans,
+            seq,
+        )
+    }
+
+    /// `paths` must describe `projected.tree`.
+    pub fn rebuild_with_paths(
+        paths: BlockPaths,
+        projected: &ProjectedDoc,
+        spans: &SpanLog,
+        seq: &editor_crdt::sequence::SeqCheckout,
+    ) -> Self {
         let (redirect_values, redirect_blocks) = redirect_reverse(&projected.redirected, &paths);
         Self {
             paths,
@@ -769,18 +800,25 @@ pub fn project_document(logs: &DocLogs) -> Result<ProjectedDoc, ProjectionError>
 }
 
 pub fn project_from(logs: &DocLogs, seq: &SeqCheckout) -> Result<ProjectedDoc, ProjectionError> {
+    project_from_with_paths(logs, seq).map(|(pd, _)| pd)
+}
+
+pub fn project_from_with_paths(
+    logs: &DocLogs,
+    seq: &SeqCheckout,
+) -> Result<(ProjectedDoc, BlockPaths), ProjectionError> {
     if logs.aliases.is_empty() {
         let elements = seq.snapshot(&logs.seq);
-        return project_core(&elements, seq, logs);
+        return project_core_with_paths(&elements, seq, logs);
     }
     let (elements, origins) = seq.snapshot_with_origins(&logs.seq);
     let prev = |d: Dot| seq.prev_in_order(&logs.seq, d);
     let enclosing = |d: Dot| {
         seq.enclosing_marker(&logs.seq, d, &|item: &SeqItem| {
-            matches!(item, SeqItem::Block { .. })
+            matches!(item, SeqItem::Block(_))
         })
     };
-    project_core_with_origins(
+    project_core_with_origins_and_paths(
         &elements,
         Some(&origins),
         seq,
@@ -850,8 +888,16 @@ pub fn project_with_overlay(
     seq: &SeqCheckout,
     overlay: &[Dot],
 ) -> Result<ProjectedDoc, ProjectionError> {
+    project_with_overlay_and_paths(logs, seq, overlay).map(|(pd, _)| pd)
+}
+
+pub fn project_with_overlay_and_paths(
+    logs: &DocLogs,
+    seq: &SeqCheckout,
+    overlay: &[Dot],
+) -> Result<(ProjectedDoc, BlockPaths), ProjectionError> {
     if overlay.is_empty() {
-        return project_from(logs, seq);
+        return project_from_with_paths(logs, seq);
     }
     let swept: HashSet<Dot> = overlay.iter().copied().collect();
     let resolver = OverlayResolve::new(seq, overlay);
@@ -861,7 +907,7 @@ pub fn project_with_overlay(
             .into_iter()
             .filter(|(d, _)| !swept.contains(d))
             .collect();
-        return project_core(&elements, &resolver, logs);
+        return project_core_with_paths(&elements, &resolver, logs);
     }
     let (all, all_origins) = seq.snapshot_with_origins(&logs.seq);
     let mut elements = Vec::with_capacity(all.len());
@@ -877,11 +923,11 @@ pub fn project_with_overlay(
     // this projection even though the sequence still carries it as visible.
     let enclosing = |d: Dot| {
         seq.enclosing_marker(&logs.seq, d, &|item: &SeqItem| {
-            matches!(item, SeqItem::Block { .. })
+            matches!(item, SeqItem::Block(_))
         })
         .map(|(m, visible)| (m, visible && !swept.contains(&m)))
     };
-    project_core_with_origins(
+    project_core_with_origins_and_paths(
         &elements,
         Some(&origins),
         &resolver,
@@ -897,7 +943,15 @@ pub fn project_core<R: SeqResolve>(
     resolver: &R,
     logs: &DocLogs,
 ) -> Result<ProjectedDoc, ProjectionError> {
-    project_core_with_origins(
+    project_core_with_paths(elements, resolver, logs).map(|(pd, _)| pd)
+}
+
+fn project_core_with_paths<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    resolver: &R,
+    logs: &DocLogs,
+) -> Result<(ProjectedDoc, BlockPaths), ProjectionError> {
+    project_core_with_origins_and_paths(
         elements,
         None,
         resolver,
@@ -917,15 +971,36 @@ pub fn project_core_with_origins<R: SeqResolve>(
     outside: &dyn Fn(Dot) -> Outside,
     enclosing_marker: &dyn Fn(Dot) -> Option<(Dot, bool)>,
 ) -> Result<ProjectedDoc, ProjectionError> {
+    project_core_with_origins_and_paths(
+        elements,
+        origins,
+        resolver,
+        logs,
+        prev,
+        outside,
+        enclosing_marker,
+    )
+    .map(|(pd, _)| pd)
+}
+
+fn project_core_with_origins_and_paths<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    origins: Option<&[Option<Dot>]>,
+    resolver: &R,
+    logs: &DocLogs,
+    prev: &dyn Fn(Dot) -> Option<(Dot, bool)>,
+    outside: &dyn Fn(Dot) -> Outside,
+    enclosing_marker: &dyn Fn(Dot) -> Option<(Dot, bool)>,
+) -> Result<(ProjectedDoc, BlockPaths), ProjectionError> {
     for (d, item) in elements {
-        if let SeqItem::Block { node_type, .. } = item {
-            if *node_type == NodeType::Root {
+        if let SeqItem::Block(b) = item {
+            if b.node_type == NodeType::Root {
                 return Err(ProjectionError::RootTypedBlock { dot: *d });
             }
-            if node_type.spec().is_leaf() {
+            if b.node_type.spec().is_leaf() {
                 return Err(ProjectionError::LeafTypedBlock {
                     dot: *d,
-                    node_type: *node_type,
+                    node_type: b.node_type,
                 });
             }
         }
@@ -961,6 +1036,7 @@ pub fn project_core_with_origins<R: SeqResolve>(
     }
     let raw_tree = normalize_with_stats(raw, &mut stats);
     let tree = BlockTree::from_raw(&raw_tree);
+    drop(raw_tree);
     // A degraded projection (repair-pass cap reached) preserves totality and order
     // but not necessarily schema validity — surface it via telemetry rather than
     // failing the load/collect.
@@ -968,7 +1044,7 @@ pub fn project_core_with_origins<R: SeqResolve>(
         validate_block_tree(&tree).map_err(ProjectionError::SchemaInvalid)?;
     }
 
-    let mut pd = project_from_tree(elements, tree, resolver, logs, classes);
+    let (mut pd, paths) = project_from_tree_with_paths(elements, tree, resolver, logs, classes);
     pd.repair_stats = stats;
     if hidden.is_empty() {
         totality_check(elements, &pd.tree, &mut pd.repair_stats);
@@ -982,7 +1058,7 @@ pub fn project_core_with_origins<R: SeqResolve>(
     }
     pd.hidden = hidden;
     pd.redirected = placed.into_iter().collect();
-    Ok(pd)
+    Ok((pd, paths))
 }
 
 /// Charge `stats.totality_violations` with the count of visible sequence elements
@@ -1068,10 +1144,27 @@ pub fn project_from_tree<R: SeqResolve>(
     logs: &DocLogs,
     alias_classes: AliasClasses,
 ) -> ProjectedDoc {
-    let node_of = collect_real_nodes(&tree);
+    project_from_tree_with_paths(elements, tree, resolver, logs, alias_classes).0
+}
+
+pub fn project_from_tree_with_paths<R: SeqResolve>(
+    elements: &[(Dot, SeqItem)],
+    tree: BlockTree,
+    resolver: &R,
+    logs: &DocLogs,
+    alias_classes: AliasClasses,
+) -> (ProjectedDoc, BlockPaths) {
     let block_modifiers = collect_block_modifiers(&tree, &logs.block_modifiers);
 
-    let mut node_attrs = logs.node_attrs.project(|d| node_of.get(&d).cloned());
+    let mut node_attrs = {
+        let targets: HashSet<Dot> = logs.node_attrs.iter().map(|(_, op)| op.target).collect();
+        let node_of = if targets.is_empty() {
+            HashMap::new()
+        } else {
+            collect_real_nodes_where(&tree, &|d| targets.contains(&d))
+        };
+        logs.node_attrs.project(|d| node_of.get(&d).cloned())
+    };
     for (d, seeded) in collect_block_init(&tree) {
         if !node_attrs.contains_key(&d) {
             node_attrs.insert(d, seeded);
@@ -1107,7 +1200,7 @@ pub fn project_from_tree<R: SeqResolve>(
             .map(|&pos| resolved.covering(pos))
             .unwrap_or_default()
     });
-    pd
+    (pd, paths)
 }
 
 /// Resolve `block_effective` for every block. Block-level effective resolution never
@@ -1138,30 +1231,18 @@ mod tests {
         vec![
             (
                 Dot::new(1, 1),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('H')),
             (Dot::new(1, 3), SeqItem::Char('i')),
             (Dot::new(1, 4), SeqItem::Atom(AtomLeaf::HardBreak)),
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 Dot::new(1, 6),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (Dot::new(1, 7), SeqItem::Char('y')),
             (Dot::new(1, 8), SeqItem::Char('o')),
@@ -1303,11 +1384,7 @@ mod tests {
         let elems = vec![
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 2), SeqItem::Char('a')),
             (Dot::new(1, 3), SeqItem::Char('b')),
@@ -1479,19 +1556,11 @@ mod tests {
         let elems = vec![
             (
                 callout,
-                SeqItem::Block {
-                    node_type: NodeType::Callout,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![]),
             ),
             (
                 Dot::new(1, 2),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, callout],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, callout], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
@@ -1538,22 +1607,14 @@ mod tests {
 
         let a_items = vec![(
             callout,
-            SeqItem::Block {
-                node_type: NodeType::Callout,
-                parents: vec![Dot::ROOT],
-                attrs: vec![init_attr.clone()],
-            },
+            SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![init_attr.clone()]),
         )];
         let a_logs = logs_of(&a_items);
         let a = project_document(&a_logs).unwrap();
 
         let b_items = vec![(
             callout,
-            SeqItem::Block {
-                node_type: NodeType::Callout,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![]),
         )];
         let mut b_logs = logs_of(&b_items);
         b_logs.node_attrs = NodeAttrLog::new()
@@ -1608,19 +1669,15 @@ mod tests {
         let a_items = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![sent_attr.clone()],
-                },
+                SeqItem::block(
+                    NodeType::Blockquote,
+                    vec![Dot::ROOT],
+                    vec![sent_attr.clone()],
+                ),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (text, SeqItem::Char('a')),
         ];
@@ -1629,19 +1686,11 @@ mod tests {
         let plain_items = vec![
             (
                 bq,
-                SeqItem::Block {
-                    node_type: NodeType::Blockquote,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Blockquote, vec![Dot::ROOT], vec![]),
             ),
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, bq],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, bq], vec![]),
             ),
             (text, SeqItem::Char('a')),
         ];
@@ -1676,13 +1725,13 @@ mod tests {
         let callout = Dot::new(1, 1);
         let items = vec![(
             callout,
-            SeqItem::Block {
-                node_type: NodeType::Callout,
-                parents: vec![Dot::ROOT],
-                attrs: vec![NodeAttr::Callout {
+            SeqItem::block(
+                NodeType::Callout,
+                vec![Dot::ROOT],
+                vec![NodeAttr::Callout {
                     attr: CalloutNodeAttr::Variant(CalloutVariant::Warning),
                 }],
-            },
+            ),
         )];
         let mut logs = logs_of(&items);
         logs.node_attrs = NodeAttrLog::new()
@@ -1786,18 +1835,16 @@ mod tests {
         let elems = vec![
             (
                 image,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node },
-                    parents: vec![Dot::ROOT],
-                },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node),
+                    },
+                    vec![Dot::ROOT],
+                ),
             ),
             (
                 Dot::new(1, 2),
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (Dot::new(1, 3), SeqItem::Char('x')),
         ];
@@ -1827,11 +1874,7 @@ mod tests {
     fn structural_malformation_revives_marker() {
         let elems = vec![(
             Dot::new(1, 1),
-            SeqItem::Block {
-                node_type: NodeType::Paragraph,
-                parents: vec![Dot::new(9, 9)],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Paragraph, vec![Dot::new(9, 9)], vec![]),
         )];
         let pd = project_document(&logs_of(&elems)).unwrap();
         let nodes = collect_real_nodes(&pd.tree);
@@ -1852,11 +1895,7 @@ mod tests {
                 parents: vec![],
                 op: ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Callout,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Callout, vec![Dot::ROOT], vec![]),
                 },
             },
             InputEvent {
@@ -1864,11 +1903,7 @@ mod tests {
                 parents: vec![c],
                 op: ListOp::Ins {
                     pos: 1,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT, c],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, c], vec![]),
                 },
             },
             InputEvent {
@@ -1889,11 +1924,7 @@ mod tests {
                 parents: vec![a],
                 op: ListOp::Ins {
                     pos: 3,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT, c],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, c], vec![]),
                 },
             },
             InputEvent {
@@ -1920,11 +1951,7 @@ mod tests {
         for leaf_ty in [NodeType::Text, NodeType::Image] {
             let elems = vec![(
                 Dot::new(1, 1),
-                SeqItem::Block {
-                    node_type: leaf_ty,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(leaf_ty, vec![Dot::ROOT], vec![]),
             )];
             assert!(
                 matches!(
@@ -1940,11 +1967,7 @@ mod tests {
     fn root_typed_block_errors() {
         let elems = vec![(
             Dot::new(1, 1),
-            SeqItem::Block {
-                node_type: NodeType::Root,
-                parents: vec![Dot::ROOT],
-                attrs: vec![],
-            },
+            SeqItem::block(NodeType::Root, vec![Dot::ROOT], vec![]),
         )];
         assert!(matches!(
             project_document(&logs_of(&elems)),
@@ -1963,11 +1986,7 @@ mod tests {
                 parents: vec![],
                 op: ListOp::Ins {
                     pos: 0,
-                    item: SeqItem::Block {
-                        node_type: NodeType::Paragraph,
-                        parents: vec![Dot::ROOT],
-                        attrs: vec![],
-                    },
+                    item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
                 },
             },
             InputEvent {
@@ -2044,11 +2063,7 @@ mod tests {
         let mut ev = events(&[
             (
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (a, SeqItem::Char('a')),
             (b, SeqItem::Char('b')),
@@ -2106,35 +2121,19 @@ mod tests {
         let elems = vec![
             (
                 fold,
-                SeqItem::Block {
-                    node_type: NodeType::Fold,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Fold, vec![Dot::ROOT], vec![]),
             ),
             (
                 title1,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![Dot::ROOT, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![Dot::ROOT, fold], vec![]),
             ),
             (
                 loser,
-                SeqItem::Block {
-                    node_type: NodeType::FoldTitle,
-                    parents: vec![Dot::ROOT, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldTitle, vec![Dot::ROOT, fold], vec![]),
             ),
             (
                 content,
-                SeqItem::Block {
-                    node_type: NodeType::FoldContent,
-                    parents: vec![Dot::ROOT, fold],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::FoldContent, vec![Dot::ROOT, fold], vec![]),
             ),
         ];
         let mut l = logs_of(&elems);
@@ -2236,11 +2235,7 @@ mod tests {
             let para = Dot::new(1, 1);
             let mut v = vec![(
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             )];
             for (i, ch) in s.chars().enumerate() {
                 v.push((Dot::new(1, 2 + i as u64), SeqItem::Char(ch)));
@@ -2313,11 +2308,7 @@ mod tests {
             let para = Dot::new(1, 1);
             let base = vec![(
                 para,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             )];
             let mut full = base.clone();
             for (i, ch) in s.chars().enumerate() {
@@ -2361,17 +2352,21 @@ mod tests {
         let elems = vec![
             (
                 img1,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node() },
-                    parents: vec![Dot::ROOT],
-                },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node()),
+                    },
+                    vec![Dot::ROOT],
+                ),
             ),
             (
                 img2,
-                SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Image { node: img_node() },
-                    parents: vec![Dot::ROOT],
-                },
+                SeqItem::block_atom(
+                    AtomLeaf::Image {
+                        node: Box::new(img_node()),
+                    },
+                    vec![Dot::ROOT],
+                ),
             ),
         ];
         let mut l = logs_of(&elems);
@@ -2410,20 +2405,12 @@ mod tests {
         let elems = vec![
             (
                 a,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT], vec![]),
             ),
             (ax, SeqItem::Char('x')),
             (
                 b,
-                SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, ghost],
-                    attrs: vec![],
-                },
+                SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, ghost], vec![]),
             ),
             (by, SeqItem::Char('y')),
         ];

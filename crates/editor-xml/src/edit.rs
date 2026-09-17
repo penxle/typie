@@ -857,11 +857,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Unknown,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Unknown, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;
@@ -931,10 +927,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::BlockAtom {
-                    leaf: AtomLeaf::Unknown(UnknownNode),
-                    parents: vec![Dot::ROOT],
-                },
+                item: SeqItem::block_atom(AtomLeaf::Unknown(UnknownNode), vec![Dot::ROOT]),
             }))
             .unwrap()
             .id;
@@ -965,11 +958,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 3,
-                item: SeqItem::Block {
-                    node_type: NodeType::Unknown,
-                    parents: vec![Dot::ROOT],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Unknown, vec![Dot::ROOT], vec![]),
             }))
             .unwrap()
             .id;
@@ -977,11 +966,7 @@ mod tests {
             .projected_mut()
             .apply(EditOp::Seq(ListOp::Ins {
                 pos: 4,
-                item: SeqItem::Block {
-                    node_type: NodeType::Paragraph,
-                    parents: vec![Dot::ROOT, unknown],
-                    attrs: vec![],
-                },
+                item: SeqItem::block(NodeType::Paragraph, vec![Dot::ROOT, unknown], vec![]),
             }))
             .unwrap();
         let hidden = editor_state::to_plain_subtree(&state, unknown).expect("opaque subtree");
