@@ -170,6 +170,7 @@ export interface CharacterCounts {
 export interface ClipboardPayload {
     html: string;
     text: string;
+    drag_ghost?: DragGhost;
 }
 
 export interface CursorMetrics {
@@ -188,6 +189,17 @@ export interface DecorationStyle {
 export interface DocumentDomProjection {
     html: string;
     source: PlainDoc;
+}
+
+export interface DragGhost {
+    text: string;
+    kind: NodeType;
+    blocks: DragGhostBlock[];
+}
+
+export interface DragGhostBlock {
+    kind: NodeType;
+    count: number;
 }
 
 export interface ExpansionAffordances {
@@ -849,7 +861,7 @@ declare class Editor {
      * Read a browser range (or the editor selection) without changing selection,
      * focus, history, or view state. Both web surfaces use this copy policy.
      */
-    copy_content(selection: Selection | null | undefined, assets: ClipboardAsset[], prefix: string | null | undefined, suffix: string | null | undefined): ClipboardPayload | undefined;
+    copy_content(selection: Selection | null | undefined, assets: ClipboardAsset[], prefix: string | null | undefined, suffix: string | null | undefined, include_drag_ghost: boolean): ClipboardPayload | undefined;
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;

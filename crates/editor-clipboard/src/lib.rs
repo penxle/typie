@@ -1,5 +1,6 @@
 editor_macros::preamble!();
 
+pub mod drag_ghost;
 pub mod html;
 pub mod payload;
 pub mod slice;

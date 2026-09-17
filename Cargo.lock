@@ -788,6 +788,7 @@ dependencies = [
  "serde_json",
  "serde_stacker",
  "tsify",
+ "unicode-segmentation",
  "uniffi",
  "wasm-bindgen",
  "workspace-hack",
