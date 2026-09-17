@@ -452,6 +452,7 @@
                   style={css.raw({ paddingBottom: isPaginated ? '40px' : '0' })}
                   active={false}
                   document$key={document}
+                  mode="viewer"
                   onReady={handleEditorReady}
                   useWindowScroll
                 />
@@ -461,6 +462,7 @@
                 style={css.raw({ paddingBottom: isPaginated ? '40px' : '0' })}
                 active={false}
                 document$key={document}
+                mode="viewer"
                 onReady={handleEditorReady}
                 useWindowScroll
               />

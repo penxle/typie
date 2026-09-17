@@ -12,6 +12,7 @@
 
   type Props = {
     editor: Editor;
+    mode: 'editor' | 'viewer';
     active?: boolean;
     layout: DocumentZoomLayout | null;
     viewportWidth: number;
@@ -34,7 +35,7 @@
 
   type PinchContact = Pick<Touch, 'clientX' | 'clientY'>;
 
-  let { editor, active = true, layout, viewportWidth, editorViewSurface, scroll, zoomControls }: Props = $props();
+  let { editor, mode, active = true, layout, viewportWidth, editorViewSurface, scroll, zoomControls }: Props = $props();
 
   let pinchSession = $state<PinchSession | null>(null);
   let pinchQueuedUpdate = $state<PinchUpdate | null>(null);
@@ -123,7 +124,7 @@
   };
 
   const ownsZoomTarget = (target: EventTarget | null): boolean => {
-    if (!active || !zoomEnabled) return false;
+    if (!active || !zoomEnabled || mode === 'viewer') return false;
 
     const editorPane = editor.inputEl?.closest<HTMLElement>('[data-pane-id]');
     const targetPane = target instanceof Element ? target.closest<HTMLElement>('[data-pane-id]') : null;
@@ -329,13 +330,19 @@
   }
 
   $effect(() => {
-    const wheelTarget = editorViewSurface;
-    const touchTarget = editor.scrollViewport?.target;
-    if (!wheelTarget || !touchTarget) return;
-
+    const wheelTarget = mode === 'viewer' ? editor.documentTrackEl : editorViewSurface;
+    if (!wheelTarget) return;
     const handleWheelForZoom = (event: Event) => {
       void zoom.handleWheel(event as WheelEvent);
     };
+    wheelTarget.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
+    return () => wheelTarget.removeEventListener('wheel', handleWheelForZoom, { capture: true });
+  });
+
+  $effect(() => {
+    if (mode === 'viewer') return;
+    const touchTarget = editor.scrollViewport?.target;
+    if (!touchTarget) return;
     const handleTouchStart = (event: Event) => {
       handleTouchStartForPinch(event as TouchEvent);
     };
@@ -349,7 +356,6 @@
       handleTouchCancelForPinch(event as TouchEvent);
     };
 
-    wheelTarget.addEventListener('wheel', handleWheelForZoom, { capture: true, passive: false });
     touchTarget.addEventListener('touchstart', handleTouchStart, { passive: true });
     touchTarget.addEventListener('touchmove', handleTouchMove, { passive: false });
     touchTarget.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -360,7 +366,6 @@
       pinchQueuedUpdate = null;
       suppressPinchUntilAllUp = false;
       zoom.cancelDirectZoom('touch');
-      wheelTarget.removeEventListener('wheel', handleWheelForZoom, { capture: true });
       touchTarget.removeEventListener('touchstart', handleTouchStart);
       touchTarget.removeEventListener('touchmove', handleTouchMove);
       touchTarget.removeEventListener('touchend', handleTouchEnd);
@@ -390,6 +395,7 @@
   displayZoom,
   enabled: zoomEnabled,
   indicatorZoom,
+  keyboardShortcuts: mode === 'editor',
   landmark,
   onToggleZoom: toggleZoom,
   onZoomIn: zoomIn,

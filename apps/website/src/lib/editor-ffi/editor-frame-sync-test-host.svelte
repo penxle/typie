@@ -35,6 +35,7 @@
 
   type Props = {
     editor: Editor;
+    mode?: 'editor' | 'viewer';
     onReady?: (harness: EditorFrameSyncTestHarness) => void;
     onPublishedReady?: () => void;
     onclick?: MouseEventHandler<HTMLDivElement>;
@@ -52,6 +53,7 @@
 
   let {
     editor,
+    mode = 'editor',
     onReady,
     onPublishedReady,
     onclick,
@@ -232,7 +234,7 @@
   </div>
 
   {#if withZoom}
-    <EditorZoom active {editor} {editorViewSurface} layout={zoomLayout} scroll={ctx.scroll} {viewportWidth}>
+    <EditorZoom active {editor} {editorViewSurface} layout={zoomLayout} {mode} scroll={ctx.scroll} {viewportWidth}>
       {#snippet zoomControls(controls)}
         <FloatingEditorZoomControls {controls} fixed={useWindowScroll} revealOnHover={!useWindowScroll} />
       {/snippet}
