@@ -7,7 +7,7 @@
   import { Toast } from '@typie/ui/notification';
   import DownloadIcon from '~icons/lucide/download';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import FileIcon from '~icons/lucide/file';
+  import PaperclipIcon from '~icons/lucide/paperclip';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { formatFileSize } from '$lib/utils/format';
   import { getEditorContext } from '../editor.svelte';
@@ -123,7 +123,7 @@
         }),
       )}
     >
-      <Icon class={css({ color: 'text.default', flexShrink: '0' })} icon={FileIcon} size={20} />
+      <Icon class={css({ color: 'text.default', flexShrink: '0' })} icon={PaperclipIcon} size={20} />
 
       <div class={flex({ direction: 'column', flex: '1', minWidth: '0' })}>
         <span
@@ -221,7 +221,7 @@
           color: isAttachmentDropTarget ? 'accent.default' : 'text.hint',
         })}
       >
-        <Icon icon={FileIcon} size={20} />
+        <Icon icon={PaperclipIcon} size={20} />
         {stage === 'resolving' ? '파일을 불러오는 중...' : isAttachmentDropTarget ? '놓아서 업로드하기' : '파일'}
       </div>
 
@@ -285,7 +285,7 @@
     type="button"
     use:floating
   >
-    <Icon icon={FileIcon} size={14} />
+    <Icon icon={PaperclipIcon} size={14} />
     파일 선택
   </button>
 {/if}

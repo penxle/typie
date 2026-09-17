@@ -65,7 +65,7 @@ internal fun EditorFileExternalElement(data: ExternalElementData.File, nodeId: S
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Icon(
-        icon = Lucide.File,
+        icon = Lucide.Paperclip,
         contentDescription = null,
         modifier = Modifier.size(20.dp),
         tint = AppTheme.colors.textMuted,
@@ -106,7 +106,7 @@ private fun FilePlaceholder(resolvingAsset: Boolean, unavailableAsset: Boolean) 
   Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Box(modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()) {
       EditorExternalElementPlaceholder(
-        icon = Lucide.File,
+        icon = Lucide.Paperclip,
         text =
           when {
             unavailableAsset -> "파일을 불러올 수 없어요"
