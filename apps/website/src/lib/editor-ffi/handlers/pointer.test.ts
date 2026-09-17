@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   cancelPointerInteraction,
   handleClick,
+  handlePointerCancel,
   handlePointerCaptureLost,
   handlePointerDown,
   handlePointerMove,
@@ -51,6 +52,7 @@ const createPointerEvent = ({
   clientY = 220,
   shiftKey = false,
   isPrimary = true,
+  pointerType = 'mouse',
 }: {
   pointerId?: number;
   button?: number;
@@ -60,10 +62,11 @@ const createPointerEvent = ({
   clientY?: number;
   shiftKey?: boolean;
   isPrimary?: boolean;
+  pointerType?: string;
 } = {}) => {
   return {
     pointerId,
-    pointerType: 'mouse',
+    pointerType,
     button,
     buttons: button === 0 ? 1 : 0,
     isPrimary,
@@ -576,6 +579,102 @@ it('reuses fold pointer hit testing without starting editor selection in the vie
   vi.mocked(editor.clientToLocal).mockReturnValue({ page: 0, x: 40, y: 20 });
   handlePointerDown(editor, event);
   expect(editor.enqueue).not.toHaveBeenCalled();
+});
+
+describe.each([false, true])('read-only fold touch, nativeSelection=%s', (nativeSelection) => {
+  const fold = { type: 'fold_title', id: 'fold', text_rect: { x: 30, y: 10, width: 100, height: 20 } } as const;
+  const setup = () => {
+    const editor = createEditor({ readOnly: true, nativeSelection });
+    vi.mocked(editor.interactiveHitTest).mockReturnValue(fold);
+    const event = createPointerEvent({ pointerType: 'touch' });
+    handlePointerDown(editor, event);
+    return { editor, event };
+  };
+
+  it('waits for the browser click, without preventing native scrolling', () => {
+    const { editor, event } = setup();
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.currentTarget.setPointerCapture).not.toHaveBeenCalled();
+    handlePointerUp(editor, event);
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    // Implicit touch capture is released before the browser dispatches click.
+    handlePointerCaptureLost(editor, event);
+    handleClick(editor, event);
+    expect(editor.enqueue.mock.calls).toEqual([[{ type: 'view', op: { type: 'toggle_fold', id: 'fold' } }]]);
+    handleClick(editor, event);
+    expect(editor.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['cancel', 'second finger', 'layout changed', 'release elsewhere', 'explicit cancel'])('does not toggle after %s', (reason) => {
+    const { editor, event } = setup();
+    if (reason === 'cancel') handlePointerCancel(editor, event);
+    else if (reason === 'second finger') handlePointerDown(editor, { ...event, pointerId: 2, isPrimary: false });
+    else if (reason === 'layout changed') vi.mocked(editor.interactiveHitTest).mockReturnValue({ ...fold, id: 'another-fold' });
+    else if (reason === 'release elsewhere') vi.mocked(editor.interactiveHitTest).mockReturnValue(undefined);
+    else if (reason === 'explicit cancel') cancelPointerInteraction(editor);
+    handlePointerUp(editor, event);
+    handleClick(editor, event);
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('ignores another pointer click without losing the original target', () => {
+    const { editor, event } = setup();
+    const other = createPointerEvent({ pointerType: 'touch', pointerId: 2 });
+    handlePointerUp(editor, other);
+    handleClick(editor, other);
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    handlePointerUp(editor, event);
+    handleClick(editor, event);
+    expect(editor.enqueue.mock.calls).toEqual([[{ type: 'view', op: { type: 'toggle_fold', id: 'fold' } }]]);
+  });
+
+  it('does not toggle when a touch starts outside the fold and ends over it', () => {
+    const editor = createEditor({ readOnly: true, nativeSelection });
+    const event = createPointerEvent({ pointerType: 'touch' });
+    handlePointerDown(editor, event);
+    editor.enqueue.mockClear();
+    vi.mocked(editor.interactiveHitTest).mockReturnValue(fold);
+    handlePointerUp(editor, event);
+    handleClick(editor, event);
+    expect(editor.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+it('does not activate a callout icon from a read-only viewer touch', () => {
+  const editor = createEditor({ readOnly: true, nativeSelection: true });
+  vi.mocked(editor.interactiveHitTest).mockReturnValue({ type: 'callout_icon', id: 'callout', next_variant: 'info' });
+  const event = createPointerEvent({ pointerType: 'touch' });
+  handlePointerDown(editor, event);
+  handlePointerUp(editor, event);
+  handleClick(editor, event);
+  expect(editor.enqueue).not.toHaveBeenCalled();
+});
+
+it.each([
+  { type: 'fold_title', id: 'fold', text_rect: undefined },
+  { type: 'callout_icon', id: 'callout', next_variant: 'info' },
+] as const)('uses browser clicks for editable $type touches too', (hit) => {
+  const editor = createEditor();
+  vi.mocked(editor.interactiveHitTest).mockReturnValue(hit);
+  const event = createPointerEvent({ pointerType: 'touch' });
+  handlePointerDown(editor, event);
+  handlePointerCancel(editor, event);
+  handleClick(editor, event);
+  expect(editor.enqueue).not.toHaveBeenCalled();
+
+  handlePointerDown(editor, event);
+  handlePointerUp(editor, event);
+  expect(editor.enqueue).not.toHaveBeenCalled();
+  handlePointerCaptureLost(editor, event);
+  handleClick(editor, event);
+  expect(editor.enqueue.mock.calls).toEqual([
+    [
+      hit.type === 'fold_title'
+        ? { type: 'view', op: { type: 'toggle_fold', id: hit.id } }
+        : { type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } },
+    ],
+  ]);
 });
 
 it('keeps engine mouse selection in a read-only editor', () => {

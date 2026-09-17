@@ -26,7 +26,7 @@
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
   import { handle } from './handlers';
-  import { handlePointerDown } from './handlers/pointer';
+  import { cancelPointerInteraction, handleClick, handlePointerCancel, handlePointerDown } from './handlers/pointer';
   import { setupEditorScroll } from './scroll.svelte';
   import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
@@ -179,7 +179,9 @@
       editor.extensionAreaEl = el;
     }}
     data-editor-extension-area
-    {onclick}
+    onclick={editor.nativeSelection ? handle(editor, handleClick) : onclick}
+    oncontextmenu={editor.nativeSelection ? () => cancelPointerInteraction(editor) : undefined}
+    onpointercancel={editor.nativeSelection ? handle(editor, handlePointerCancel) : undefined}
     onpointerdown={editor.nativeSelection ? handle(editor, handlePointerDown) : undefined}
   >
     <div
