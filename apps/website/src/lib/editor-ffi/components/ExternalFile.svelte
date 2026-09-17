@@ -25,7 +25,7 @@
 
   const fileData = $derived(element.data.type === 'file' ? element.data : undefined);
   const fileId = $derived(fileData?.id || undefined);
-  const asset = $derived(fileId ? ctx.fileAssets.get(fileId) : undefined);
+  const asset = $derived(fileId ? ctx.editor?.fileAssets.get(fileId) : undefined);
   const inflight = $derived(ctx.editor?.inflightFiles.get(element.node));
   const stage = $derived.by(() => {
     if (asset) return 'ready';

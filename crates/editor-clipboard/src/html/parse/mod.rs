@@ -113,7 +113,7 @@ mod tests {
             selection: (p1, 1) -> (p2, 3)
         };
         let original = Slice::extract(&s).unwrap();
-        let html = original.to_html(&Resource::new_test());
+        let html = original.to_html(&Resource::new_test(), &[]);
         let resource = Resource::new_test();
         let parsed = Slice::from_html(&html, &resource);
         assert_eq!(parsed, original);
@@ -138,9 +138,9 @@ mod tests {
                 let slice = Slice::new(vec![fragment], 0, 0);
                 let resource = Resource::new_test();
 
-                let html = slice.to_html(&resource);
+                let html = slice.to_html(&resource, &[]);
                 assert_eq!(html.matches("<blockquote ").count(), DEPTH);
-                assert_eq!(slice.to_text(), "deep");
+                assert_eq!(slice.to_text(&[]), "deep");
 
                 let parsed = Slice::from_html(&html, &resource);
                 let mut node_count = 0;
@@ -174,7 +174,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 10)
         };
         let resource = Resource::new_test();
-        let html = Slice::extract(&s).unwrap().to_html(&resource);
+        let html = Slice::extract(&s).unwrap().to_html(&resource, &[]);
         let stripped = &html[html.find("<div data-root>").unwrap()..];
 
         let parsed = Slice::from_html(stripped, &resource);
@@ -213,7 +213,7 @@ mod tests {
                 .iter()
                 .all(|fragment| fragment.node.as_type() == NodeType::Paragraph)
         );
-        assert_eq!(slice.to_text(), "1\n2\n3\n4\n5\n6");
+        assert_eq!(slice.to_text(&[]), "1\n2\n3\n4\n5\n6");
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
                 r#"<meta data-slice-v2="{encoded}" data-version="{version}"><div data-root><p>body</p></div>"#
             );
             let slice = Slice::from_html(&html, &Resource::new_test());
-            assert_eq!(slice.to_text(), "body");
+            assert_eq!(slice.to_text(&[]), "body");
             assert_eq!((slice.open_start, slice.open_end), (0, 0));
         }
     }
@@ -388,7 +388,7 @@ mod tests {
 
         let slice = Slice::from_html(&html, &Resource::new_test());
 
-        assert_eq!(slice.to_text(), "body");
+        assert_eq!(slice.to_text(&[]), "body");
         assert_eq!((slice.open_start, slice.open_end), (0, 0));
     }
 
@@ -399,7 +399,7 @@ mod tests {
             selection: (p1, 0) -> (p1, 5)
         };
         let original = Slice::extract(&s).unwrap();
-        let html = original.to_html(&Resource::new_test());
+        let html = original.to_html(&Resource::new_test(), &[]);
         let legacy_html = html.replacen("data-slice-v2=", "data-slice=", 1);
 
         let slice = Slice::from_html(&legacy_html, &Resource::new_test());
@@ -600,7 +600,7 @@ mod tests {
             open_start: 0,
             open_end: 0,
         };
-        let html = original.to_html(&Resource::new_test());
+        let html = original.to_html(&Resource::new_test(), &[]);
         let body_start = html.find("<div data-root>").expect("root div present");
         let body_only = &html[body_start..];
         let parsed = Slice::from_html(body_only, &resource);
@@ -1477,7 +1477,7 @@ mod tests {
             Position::new(para, 3),
         )));
         let slice = Slice::extract(&s).unwrap();
-        let html = slice.to_html(&Resource::new_test());
+        let html = slice.to_html(&Resource::new_test(), &[]);
         assert!(
             html.contains('\t'),
             "serialized HTML must contain a tab char: {html}"

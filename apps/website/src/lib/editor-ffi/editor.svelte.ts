@@ -215,7 +215,6 @@ export class EditorContext {
   editor = $state<Editor>();
   scroll = $state<EditorScrollScope>();
   liveEditor = $state<Editor>();
-  fileAssets = $state(new SvelteMap<string, FileAsset>());
   // v1 chrome 호환 필드 — v2 sync 환경에선 갱신되지 않음
   user = $state<unknown>();
   paneFocused = $state(false);
@@ -474,6 +473,7 @@ export class Editor {
   commentClickHandler: ((id: string) => void) | null = null;
   requestCommentCompose: (() => void) | null = null;
 
+  fileAssets = $state(new SvelteMap<string, FileAsset>());
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   inflightEmbeds = $state(new SvelteMap<string, { uploadId: string; url: string }>());
   archivedAssets = $state(new SvelteMap<string, ArchivedAsset>());
@@ -2227,8 +2227,22 @@ export class Editor {
     this.#requestWasmTick();
   }
 
-  copySelection(): ClipboardPayload | undefined {
-    return this.#invokeCore((core) => core.copy_selection());
+  copySelection({
+    selection,
+    prefix,
+    suffix,
+  }: {
+    selection?: Selection;
+    prefix?: string;
+    suffix?: string;
+  } = {}): ClipboardPayload | undefined {
+    if (this.readOnly && this.protectContent) return;
+    const assets = [
+      ...[...this.images.assets.values()].map((asset) => ({ id: asset.id, url: asset.originalUrl, label: '이미지' })),
+      ...[...this.fileAssets.values()].map((asset) => ({ id: asset.id, url: asset.url, label: asset.name })),
+      ...[...this.embedAssets.values()].map((asset) => ({ id: asset.id, url: asset.url, label: asset.title || asset.url })),
+    ];
+    return this.#invokeCore((core) => core.copy_content(selection, assets, prefix, suffix));
   }
 
   get searchMatches(): { active: boolean }[] {

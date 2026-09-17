@@ -1,7 +1,7 @@
 use crate::slice::Slice;
 use editor_model::{Fragment, PlainNode, Schema};
 
-pub fn to_text(slice: &Slice) -> String {
+pub fn to_text(slice: &Slice, assets: &[crate::ClipboardAsset]) -> String {
     let mut out = String::new();
     let mut context = TextContext::default();
     let mut stack: Vec<_> = slice.content.iter().rev().collect();
@@ -10,7 +10,11 @@ pub fn to_text(slice: &Slice) -> String {
             PlainNode::Text(t) => out.push_str(&t.text),
             PlainNode::HardBreak(_) => out.push('\n'),
             PlainNode::Tab(_) => out.push('\t'),
-            PlainNode::Table(_) => walk_table(fragment, &mut out, &mut context),
+            PlainNode::Table(_) => walk_table(fragment, &mut out, &mut context, assets),
+            PlainNode::Image(_) | PlainNode::Embed(_) | PlainNode::File(_) => {
+                separate_textblock(&mut out, &mut context);
+                write_asset(&fragment.node, assets, &mut out);
+            }
             _ => {
                 if is_textblock_node(&fragment.node) {
                     separate_textblock(&mut out, &mut context);
@@ -40,7 +44,12 @@ fn separate_textblock(out: &mut String, context: &mut TextContext) {
 
 // TSV-style emission: tabs between cells, newlines between rows. Cell content
 // is flattened to inline text so multi-block cells don't shred the row layout.
-fn walk_table(table: &Fragment, out: &mut String, context: &mut TextContext) {
+fn walk_table(
+    table: &Fragment,
+    out: &mut String,
+    context: &mut TextContext,
+    assets: &[crate::ClipboardAsset],
+) {
     separate_textblock(out, context);
     let mut first_row = true;
     for row in &table.children {
@@ -60,19 +69,50 @@ fn walk_table(table: &Fragment, out: &mut String, context: &mut TextContext) {
                 out.push('\t');
             }
             first_cell = false;
-            collect_cell_text(cell, out);
+            collect_cell_text(cell, out, assets);
         }
     }
 }
 
-fn collect_cell_text(node: &Fragment, out: &mut String) {
+fn collect_cell_text(node: &Fragment, out: &mut String, assets: &[crate::ClipboardAsset]) {
     let mut stack = vec![node];
+    let mut seen_block = false;
     while let Some(fragment) = stack.pop() {
+        if is_textblock_node(&fragment.node)
+            || matches!(
+                fragment.node,
+                PlainNode::Image(_) | PlainNode::Embed(_) | PlainNode::File(_)
+            )
+        {
+            if seen_block {
+                out.push(' ');
+            }
+            seen_block = true;
+        }
         match &fragment.node {
             PlainNode::Text(t) => out.push_str(&t.text),
             PlainNode::HardBreak(_) | PlainNode::Tab(_) => out.push(' '),
+            PlainNode::Image(_) | PlainNode::Embed(_) | PlainNode::File(_) => {
+                write_asset(&fragment.node, assets, out)
+            }
             _ => stack.extend(fragment.children.iter().rev()),
         }
+    }
+}
+
+fn write_asset(node: &PlainNode, assets: &[crate::ClipboardAsset], out: &mut String) {
+    let (id, fallback) = match node {
+        PlainNode::Image(node) => (node.id.as_deref(), "이미지"),
+        PlainNode::Embed(node) => (node.id.as_deref(), "임베드"),
+        PlainNode::File(node) => (node.id.as_deref(), "파일"),
+        _ => return,
+    };
+    let asset = id.and_then(|id| assets.iter().find(|asset| asset.id == id));
+    out.push_str(asset.map_or(fallback, |asset| asset.label.as_str()));
+    if let Some(asset) = asset.filter(|_| !matches!(node, PlainNode::Image(_))) {
+        out.push_str(" (");
+        out.push_str(&asset.url);
+        out.push(')');
     }
 }
 
@@ -88,13 +128,35 @@ mod tests {
     use editor_state::{Position, Selection};
 
     #[test]
+    fn cell_blocks_and_media_remain_separate_in_plain_text() {
+        let mut b = DocBuilder::new();
+        let root = Dot::ROOT;
+        let table = b.block(NodeType::Table, &[root]);
+        let row = b.block(NodeType::TableRow, &[root, table]);
+        let cell = b.block(NodeType::TableCell, &[root, table, row]);
+        b.block(NodeType::Paragraph, &[root, table, row, cell]);
+        b.text("first");
+        b.image(&[root, table, row, cell]);
+        b.block(NodeType::Paragraph, &[root, table, row, cell]);
+        b.text("last");
+        let state = b.finish(Some(Selection::new(
+            Position::new(root, 0),
+            Position::new(root, 1),
+        )));
+        assert_eq!(
+            Slice::extract(&state).unwrap().to_text(&[]),
+            "first 이미지 last"
+        );
+    }
+
+    #[test]
     fn to_text_single_paragraph() {
         let (s, _p1) = state! {
             doc { root { p1: paragraph { text("Hello World") } } }
             selection: (p1, 0) -> (p1, 11)
         };
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(to_text(&slice), "Hello World");
+        assert_eq!(slice.to_text(&[]), "Hello World");
     }
 
     #[test]
@@ -112,7 +174,7 @@ mod tests {
             Position::new(p2, 6),
         )));
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "first\nline\nsecond");
+        assert_eq!(slice.to_text(&[]), "first\nline\nsecond");
     }
 
     #[test]
@@ -130,7 +192,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 7, <)
         };
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "a\n\n\n\nb\n\nc");
+        assert_eq!(slice.to_text(&[]), "a\n\n\n\nb\n\nc");
     }
 
     #[test]
@@ -147,7 +209,7 @@ mod tests {
             Position::new(p2, 1),
         )));
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "a\n\nb");
+        assert_eq!(slice.to_text(&[]), "a\n\nb");
     }
 
     #[test]
@@ -165,7 +227,7 @@ mod tests {
             selection: (r, 0, >) -> (r, 7, <)
         };
         let original = Slice::extract(&s).unwrap();
-        let reparsed = Slice::from_text(&original.to_text());
+        let reparsed = Slice::from_text(&original.to_text(&[]));
         let texts: Vec<String> = reparsed
             .content
             .iter()
@@ -185,7 +247,7 @@ mod tests {
     #[test]
     fn to_text_preserves_empty_paragraph_separator() {
         let slice = Slice::from_text("\n\n");
-        assert_eq!(slice.to_text(), "\n\n");
+        assert_eq!(slice.to_text(&[]), "\n\n");
     }
 
     #[test]
@@ -201,7 +263,7 @@ mod tests {
             Position::new(para, 3),
         )));
         let slice = Slice::extract(&s2).unwrap();
-        assert_eq!(slice.to_text(), "a\tb");
+        assert_eq!(slice.to_text(&[]), "a\tb");
     }
 
     #[test]
@@ -225,7 +287,7 @@ mod tests {
             ..s
         };
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "a\tb\nc\td");
+        assert_eq!(slice.to_text(&[]), "a\tb\nc\td");
     }
 
     #[test]
@@ -249,7 +311,7 @@ mod tests {
             ..s
         };
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), "x y\tz");
+        assert_eq!(slice.to_text(&[]), "x y\tz");
     }
 
     #[test]
@@ -294,7 +356,7 @@ mod tests {
             Position::new(p3, 3),
         )));
         let slice = Slice::extract(&s).unwrap();
-        assert_eq!(slice.to_text(), doc_plain_text(&s.view()));
+        assert_eq!(slice.to_text(&[]), doc_plain_text(&s.view()));
     }
 
     #[test]

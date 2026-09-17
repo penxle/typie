@@ -48,6 +48,7 @@ class FakeEditor {
   failure: unknown = undefined;
   externalElements: ReturnType<typeof external>[] = [];
   inflightFiles = new Map<string, InflightFile>();
+  fileAssets = new Map<string, FileAsset>();
   images = { assets: new Map<string, ImageAsset>(), uploads: new Map<string, InflightImage>() };
   messages: Message[] = [];
   focus = vi.fn();
@@ -84,11 +85,11 @@ class FakeEditor {
   }
 }
 
-type FakeContext = { editor?: FakeEditor; fileAssets: Map<string, FileAsset> };
+type FakeContext = { editor?: FakeEditor };
 
 const createImporter = () => {
   const editor = new FakeEditor();
-  const ctx: FakeContext = { editor, fileAssets: new Map() };
+  const ctx: FakeContext = { editor };
   const importer = new EditorAttachmentImporter(ctx as never);
   return { ctx, editor, importer };
 };
@@ -161,7 +162,7 @@ afterEach(() => {
 
 describe('attachment receipt mapping', () => {
   it('uses the exact update receipt, ignores unrelated events, and preserves ordered item-to-node mapping', async () => {
-    const { ctx, editor, importer } = createImporter();
+    const { editor, importer } = createImporter();
     const image = file('cover.png', 'image/png');
     const document = file('notes.pdf', 'application/pdf');
     installReceipt(editor, ['image-node', 'file-node'], { unrelated: true });
@@ -182,7 +183,7 @@ describe('attachment receipt mapping', () => {
     expect(upload.uploadImageFile).toHaveBeenCalledWith(image);
     expect(upload.uploadFileAsFile).toHaveBeenCalledWith(document);
     expect(editor.images.assets.has('image-cover.png')).toBe(true);
-    expect(ctx.fileAssets.has('file-notes.pdf')).toBe(true);
+    expect(editor.fileAssets.has('file-notes.pdf')).toBe(true);
     expect(nodeMessages(editor)).toHaveLength(2);
     expect(nodeMessages(editor)).toContainEqual({
       type: 'node',
@@ -539,7 +540,7 @@ describe('attachment target lifecycle', () => {
   });
 
   it('commits image/file IDs, caches assets, cleans only owned tokens, and never focuses', async () => {
-    const { ctx, editor, importer } = createImporter();
+    const { editor, importer } = createImporter();
     const picture = file('picture.png', 'image/png');
     const document = file('document.pdf', 'application/pdf');
     installReceipt(editor, ['image-node', 'file-node']);
@@ -558,7 +559,7 @@ describe('attachment target lifecycle', () => {
 
     await waitForIdle(editor);
     expect(editor.images.assets.get('image-asset')).toEqual(imageAsset('image-asset'));
-    expect(ctx.fileAssets.get('file-asset')).toEqual(fileAsset('file-asset'));
+    expect(editor.fileAssets.get('file-asset')).toEqual(fileAsset('file-asset'));
     expect(nodeMessages(editor)).toHaveLength(2);
     expect(nodeMessages(editor)).toContainEqual({
       type: 'node',
@@ -587,7 +588,7 @@ describe('attachment target lifecycle', () => {
   });
 
   it('leaves a reused target empty, deletes an auto-created target, and lets a successful sibling finish', async () => {
-    const { ctx, editor, importer } = createImporter();
+    const { editor, importer } = createImporter();
     const first = file('failed.pdf');
     const second = file('ok.pdf');
     const onFailure = vi.fn();
@@ -610,7 +611,7 @@ describe('attachment target lifecycle', () => {
 
     await waitForIdle(editor);
     expect(onFailure).toHaveBeenCalledExactlyOnceWith({ file: first, kind: 'file' });
-    expect(ctx.fileAssets.has('successful')).toBe(true);
+    expect(editor.fileAssets.has('successful')).toBe(true);
     expect(nodeMessages(editor)).toEqual([
       { type: 'node', op: { type: 'set_attrs', id: 'created', attrs: { type: 'file', id: 'successful' } } },
     ]);
@@ -698,7 +699,7 @@ describe('attachment target lifecycle', () => {
   });
 
   it('swallows a throwing failure callback and still cleans the owned target without cancelling siblings', async () => {
-    const { ctx, editor, importer } = createImporter();
+    const { editor, importer } = createImporter();
     const failed = file('failed.pdf');
     const successful = file('successful.pdf');
     installReceipt(editor, ['failed-node', 'successful-node']);
@@ -722,7 +723,7 @@ describe('attachment target lifecycle', () => {
     await waitForIdle(editor);
 
     expect(onFailure).toHaveBeenCalledOnce();
-    expect(ctx.fileAssets.has('successful')).toBe(true);
+    expect(editor.fileAssets.has('successful')).toBe(true);
     expect(nodeMessages(editor)).toEqual([
       { type: 'node', op: { type: 'delete', id: 'failed-node' } },
       { type: 'node', op: { type: 'set_attrs', id: 'successful-node', attrs: { type: 'file', id: 'successful' } } },

@@ -190,7 +190,7 @@ export class EditorAttachmentImporter {
       if (!this.#isCurrent(target)) return;
       const uploaded = await uploadFileAsFile(target.item.file);
       if (!this.#isCurrent(target)) return;
-      this.#ctx.fileAssets.set(uploaded.id, uploaded);
+      target.editor.fileAssets.set(uploaded.id, uploaded);
       if (!this.#isCurrent(target)) return;
       const update = target.editor.updateNow(() => {
         target.editor.enqueue({

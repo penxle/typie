@@ -354,7 +354,7 @@
         placeholder: asset.placeholder,
       });
     } else if (asset.__typename === 'File') {
-      ctx.fileAssets.set(asset.id, {
+      editor.fileAssets.set(asset.id, {
         id: asset.id,
         url: asset.url,
         name: asset.name,
@@ -620,7 +620,7 @@
 
     const hydrator = createAssetHydrator<DocumentAsset>({
       hasAsset: (id) =>
-        editor.images.assets.has(id) || ctx.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
+        editor.images.assets.has(id) || editor.fileAssets.has(id) || editor.embedAssets.has(id) || editor.archivedAssets.has(id),
       fetchAssets: async (ids) => {
         await cache.invalidate({ __typename: 'Document', id: currentDocumentId, $field: 'assetsByIds', $args: { ids } });
         const result = await mearieClient.query(assetsByIdsQuery, { slug, ids });

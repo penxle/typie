@@ -446,7 +446,7 @@ impl Editor {
         self.with_inner(|inner| {
             let payload = editor_clipboard::Slice::extract(inner.editor.state()).map(|slice| {
                 let resource = inner.editor.resource().lock().unwrap();
-                slice.to_payload(&resource)
+                slice.to_payload(&resource, &[])
             });
             Ok(payload.into_ffi()?)
         })
@@ -1292,6 +1292,46 @@ impl Editor {
 #[cfg(feature = "wasm-browser")]
 #[editor_macros::ffi_export(wasm)]
 impl Editor {
+    /// Read a browser range (or the editor selection) without changing selection,
+    /// focus, history, or view state. Both web surfaces use this copy policy.
+    pub fn copy_content(
+        &self,
+        selection: Option<Complex<editor_state::Selection>>,
+        assets: Vec<Complex<editor_clipboard::ClipboardAsset>>,
+        prefix: Option<String>,
+        suffix: Option<String>,
+    ) -> EditorResult<Option<Complex<editor_clipboard::ClipboardPayload>>> {
+        let selection = selection.from_ffi()?;
+        let assets = assets.from_ffi()?;
+        self.with_inner(|inner| {
+            let state = inner.editor.state();
+            let selection = selection.or(state.selection);
+            let mut slice = selection
+                .as_ref()
+                .and_then(|selection| editor_clipboard::Slice::extract_selection(state, selection));
+            for (text, prepend) in [(prefix.as_deref(), true), (suffix.as_deref(), false)] {
+                if let Some(text) = text.filter(|text| !text.is_empty()) {
+                    let edge = editor_clipboard::Slice::from_text(text);
+                    if let Some(slice) = &mut slice {
+                        if prepend {
+                            slice.content.splice(0..0, edge.content);
+                            slice.open_start = edge.open_start;
+                        } else {
+                            slice.content.extend(edge.content);
+                            slice.open_end = edge.open_end;
+                        }
+                    } else {
+                        slice = Some(edge);
+                    }
+                }
+            }
+            let resource = inner.editor.resource().lock().unwrap();
+            Ok(slice
+                .map(|slice| slice.to_payload(&resource, &assets))
+                .into_ffi()?)
+        })
+    }
+
     pub fn document_dom_projection(&self) -> EditorResult<Complex<DocumentDomProjection>> {
         self.with_inner(|inner| {
             let source = inner.editor.state().to_plain();
@@ -2990,7 +3030,7 @@ mod tests {
         };
         let payload = editor_clipboard::Slice::extract(&source)
             .unwrap()
-            .to_payload(&editor_resource::Resource::new_test());
+            .to_payload(&editor_resource::Resource::new_test(), &[]);
 
         let (initial, ..) = state! {
             doc { root { p2: paragraph { text("Hi") } } }
