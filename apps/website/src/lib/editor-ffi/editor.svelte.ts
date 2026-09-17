@@ -11,7 +11,6 @@ import { EditorRequest, EditorUpdate } from './editor-update';
 import { EditorExternalImageElementState } from './external-image-element-state';
 import { fontDataMissingHandler } from './fonts';
 import { isSelectionCollapsed, presentedPageElement, resolveCachedPageSpans, resolvePageAtY, roundToScale } from './geometry';
-import { TouchGestureController } from './gesture.svelte';
 import { readClipboardRich, writeClipboardPayload } from './handlers/clipboard';
 import { encodeLengthPrefixedBlobs } from './length-prefix';
 import { isMutatingMessage } from './message-gate';
@@ -49,6 +48,7 @@ import type {
   Selection,
   SelectionEndpoints,
   SelectionKind,
+  SelectionLayoutBlock,
   Size,
   StableSelection,
   StateField,
@@ -72,7 +72,6 @@ import type {
   ContextMenuContributorContext,
   ContextMenuItem,
   ContextMenuPlacement,
-  ContextMenuSource,
   EditorEventListener,
   EmbedAsset,
   FileAsset,
@@ -108,6 +107,7 @@ export type EditorSnapshot = Readonly<{
   tableOverlays: TableOverlay[];
   linkRects: LinkRect[];
   pageData: ReadonlyMap<number, PageSnapshot>;
+  selectionLayout?: SelectionLayoutBlock[];
   rootAttrs: PlainRootNode | undefined;
   rootModifiers: Modifier[];
   trackedRanges: TrackedRange[];
@@ -389,6 +389,8 @@ export class Editor {
 
   #linkHover = $state<{ link: LinkRect; page: number; clientX: number; clientY: number } | undefined>();
   #modifierHeld = $state(false);
+  #nativeSelection = $state(false);
+  #protectContent = $state(false);
 
   #searchInput = { query: '', matchWholeWord: false };
   #searchMatches = $state<{ id: string; selection: Selection }[]>([]);
@@ -396,8 +398,6 @@ export class Editor {
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #contextMenuContributors = new Set<ContextMenuContributor>();
-
-  #gesture!: TouchGestureController;
 
   #spellcheckDecorationsInstalled = false;
   #spellcheckMembershipIds: string[] | null = null;
@@ -449,7 +449,7 @@ export class Editor {
   renderZoom = $state(1);
 
   readOnly = $state(false);
-  protectContent = $state(false);
+
   editBlockedHandler: (() => void) | null = null;
   escapeKeyHandler: (() => boolean) | null = null;
 
@@ -457,7 +457,6 @@ export class Editor {
 
   contextMenu = $state({
     isOpen: false,
-    source: 'mouse' as ContextMenuSource,
     x: 0,
     y: 0,
     placement: 'bottom-start' as ContextMenuPlacement,
@@ -573,7 +572,6 @@ export class Editor {
     this.#applyViewportResize.cancel();
     this.#effectCleanup?.();
     this.#effectCleanup = null;
-    this.#gesture?.destroy();
   }
 
   #clearScheduledTick(): void {
@@ -628,6 +626,12 @@ export class Editor {
           : previous.tableOverlays,
         linkRects: pageGeometryDataChanged ? [...pageData.values()].flatMap((page) => page.linkRects) : previous.linkRects,
         pageData,
+        selectionLayout:
+          this.nativeSelection && !this.protectContent
+            ? pageGeometryDataChanged || fields.has('page_sizes') || !previous.selectionLayout
+              ? core.document_selection_layout()
+              : previous.selectionLayout
+            : undefined,
         rootAttrs,
         rootModifiers: fields.has('block') || fields.has('modifiers') ? core.root_modifiers() : previous.rootModifiers,
         // Resolved ranges depend on document positions and layout as well as registration.
@@ -984,7 +988,6 @@ export class Editor {
   #initInstance(viewport: Viewport): void {
     this.#viewport = viewport;
     this.#appliedViewport = viewport;
-    this.#gesture = new TouchGestureController(this);
 
     this.on('font_data_missing', fontDataMissingHandler);
     this.on('tracked_range_replace_result', (_, { id, outcome }) => {
@@ -1164,10 +1167,6 @@ export class Editor {
     }
   }
 
-  get gesture(): TouchGestureController {
-    return this.#gesture;
-  }
-
   setDoc(plain: PlainDoc): void {
     if (this.#destroyed) return;
     this.#invokeCore((core) => core.set_doc(plain));
@@ -1197,6 +1196,35 @@ export class Editor {
 
   recentEditRegions(): RecentEditRegion[] {
     return this.#invokeCore((core) => core.recent_edit_regions(Date.now()));
+  }
+
+  get protectContent(): boolean {
+    return this.#protectContent;
+  }
+  set protectContent(value: boolean) {
+    if (value === this.#protectContent) return;
+    this.#protectContent = value;
+    if (!this.nativeSelection) return;
+    this.#applied = {
+      ...this.#applied,
+      selectionLayout: value ? undefined : this.#invokeCore((core) => core.document_selection_layout()),
+    };
+    this.#publicationChanged();
+  }
+
+  /** The public web viewer uses browser selection; read-only editors keep editor input. */
+  get nativeSelection(): boolean {
+    return this.#nativeSelection;
+  }
+  set nativeSelection(value: boolean) {
+    if (value === this.#nativeSelection) return;
+    this.#nativeSelection = value;
+    // Mode changes also need a publication when the document does not relayout.
+    this.#applied = {
+      ...this.#applied,
+      selectionLayout: value && !this.protectContent ? this.#invokeCore((core) => core.document_selection_layout()) : undefined,
+    };
+    this.#publicationChanged();
   }
 
   get cursor() {
@@ -1381,16 +1409,9 @@ export class Editor {
     release();
   }
 
-  openContextMenu(opts: {
-    x: number;
-    y: number;
-    source: ContextMenuSource;
-    placement: ContextMenuPlacement;
-    extraItems?: ContextMenuItem[];
-  }): void {
+  openContextMenu(opts: { x: number; y: number; placement: ContextMenuPlacement; extraItems?: ContextMenuItem[] }): void {
     this.contextMenu.x = opts.x;
     this.contextMenu.y = opts.y;
-    this.contextMenu.source = opts.source;
     this.contextMenu.placement = opts.placement;
     this.contextMenu.extraItems = opts.extraItems ?? [];
     this.contextMenu.isOpen = true;
@@ -2225,6 +2246,16 @@ export class Editor {
     if (this.terminal) return;
     this.#invokeCore((core) => core.receive_resource_update(update));
     this.#requestWasmTick();
+  }
+
+  selectionFont(family: number, weight: number): Uint8Array<ArrayBuffer> | undefined {
+    const bytes = this.#invokeCore((core) => core.selection_font(family, weight));
+    return bytes === undefined ? undefined : new Uint8Array(bytes);
+  }
+
+  /** Caret geometry for a known document position, without hit testing or changing selection. */
+  cursorForPosition(position: Position): CursorMetrics | undefined {
+    return this.#invokeCore((core) => core.cursor_for_position(position));
   }
 
   copySelection({

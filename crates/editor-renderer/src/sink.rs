@@ -6,6 +6,8 @@ use crate::types::Color;
 use crate::types::{Image, Path, Stroke, Transform};
 
 pub trait RenderSink {
+    /// Separates backgrounds and below-content marks from the page foreground.
+    fn start_foreground(&mut self) {}
     fn pixel_size(&self) -> (u32, u32);
     fn fill_rect(&mut self, rect: Rect, color: Color, transform: Transform);
     fn fill_path(&mut self, path: &Path, color: Color, transform: Transform);

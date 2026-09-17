@@ -1072,6 +1072,8 @@ mod tests {
             x,
             width,
             graphemes,
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         }

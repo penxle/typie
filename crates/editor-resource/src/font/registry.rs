@@ -424,6 +424,19 @@ impl FontRegistry {
         Ok(true)
     }
 
+    pub fn metrics_font_key(&self, family_id: u16, weight: u16) -> Option<String> {
+        self.font_entries
+            .get(&(family_id, weight))
+            .map(|entry| format!("{family_id}-{weight}-{:x}", entry.base_hash))
+    }
+
+    pub fn metrics_font(&self, family_id: u16, weight: u16) -> Result<Vec<u8>, ResourceError> {
+        let data = self
+            .font_data(family_id, weight)
+            .ok_or_else(|| ResourceError::UnknownFont(format!("{family_id}:{weight}")))?;
+        super::metrics::metrics_font(data)
+    }
+
     pub fn font_version(&self, family_id: u16, weight: u16) -> u64 {
         self.font_versions
             .get(&(family_id, weight))

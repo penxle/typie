@@ -49,7 +49,10 @@ impl SurfaceHandle {
         editor_revision: u64,
         frame_key: FrameKey,
     ) -> bool {
-        if !self.raster.apply_damage(dl, damage, frame_key.value) {
+        if !self
+            .raster
+            .apply_damage(&dl.primitives, damage, frame_key.value)
+        {
             return false;
         }
         self.publish_frame(editor_revision, frame_key)

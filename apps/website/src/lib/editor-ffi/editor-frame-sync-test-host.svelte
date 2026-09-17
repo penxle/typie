@@ -18,7 +18,6 @@
   import Input from './components/Input.svelte';
   import LineHighlight from './components/LineHighlight.svelte';
   import Scrollbar from './components/Scrollbar.svelte';
-  import SelectionHandles from './components/SelectionHandles.svelte';
   import EditorZoom from './components/ui/EditorZoom.svelte';
   import FloatingEditorZoomControls from './components/ui/FloatingEditorZoomControls.svelte';
   import ViewportOverlay from './components/ViewportOverlay.svelte';
@@ -26,6 +25,8 @@
   import { setupEditorContext } from './editor.svelte';
   import { setupEditorPublication } from './editor-publication.svelte';
   import { EditorSurfaceHost } from './editor-surface-host.svelte';
+  import { handle } from './handlers';
+  import { handlePointerDown } from './handlers/pointer';
   import { setupEditorScroll } from './scroll.svelte';
   import { resolveContinuousLayoutViewportWidth } from './zoom';
   import type { MouseEventHandler } from 'svelte/elements';
@@ -38,6 +39,7 @@
     onPublishedReady?: () => void;
     onclick?: MouseEventHandler<HTMLDivElement>;
     readOnly?: boolean;
+    nativeSelection?: boolean;
     typewriterEnabled?: boolean;
     useWindowScroll?: boolean;
     userId: string;
@@ -54,6 +56,7 @@
     onPublishedReady,
     onclick,
     readOnly = false,
+    nativeSelection = false,
     typewriterEnabled = false,
     useWindowScroll = false,
     userId,
@@ -95,6 +98,7 @@
 
   $effect(() => {
     editor.readOnly = readOnly;
+    editor.nativeSelection = nativeSelection;
   });
 
   $effect(() => {
@@ -176,6 +180,7 @@
     }}
     data-editor-extension-area
     {onclick}
+    onpointerdown={editor.nativeSelection ? handle(editor, handlePointerDown) : undefined}
   >
     <div
       bind:this={editor.documentTrackEl}
@@ -185,17 +190,18 @@
     >
       <EditorPages {editor} {surfaceHost} />
 
-      <DocumentOverlayLayer />
-      <Caret />
-      <LineHighlight />
+      {#if !editor.nativeSelection}
+        <DocumentOverlayLayer />
+        <Caret />
+        <LineHighlight />
+      {/if}
     </div>
 
-    <ViewportOverlay>
-      <Input />
-      {#if editor.readOnly}
-        <SelectionHandles />
-      {/if}
-    </ViewportOverlay>
+    {#if !editor.nativeSelection}
+      <ViewportOverlay>
+        <Input />
+      </ViewportOverlay>
+    {/if}
   </div>
 {/snippet}
 

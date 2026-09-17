@@ -1,4 +1,8 @@
-use editor_renderer::{backend::cpu::unpremultiply, damage::IRect, display_list::DisplayList};
+use editor_renderer::{
+    backend::cpu::unpremultiply,
+    damage::IRect,
+    display_list::{DisplayList, Primitive},
+};
 use wasm_bindgen::prelude::*;
 
 use super::tiled_surface::{RenderedTile, TiledSurface};
@@ -14,7 +18,7 @@ struct CanvasTile {
     pending: Option<(IRect, Vec<u8>)>,
 }
 
-pub struct SurfaceHandle {
+struct SurfaceLayer {
     handle: PlatformHandle,
     container: web_sys::HtmlElement,
     raster: TiledSurface,
@@ -24,12 +28,13 @@ pub struct SurfaceHandle {
     mounted: bool,
 }
 
-impl SurfaceHandle {
+impl SurfaceLayer {
     pub fn new(
         handle: PlatformHandle,
         width: f64,
         height: f64,
         scale_factor: f64,
+        layer: Option<&str>,
     ) -> Result<Self, FfiError> {
         let container = handle
             .owner_document()
@@ -44,6 +49,11 @@ impl SurfaceHandle {
         container
             .set_attribute("style", "position:absolute;left:0;top:0;")
             .map_err(|_| FfiError::Surface("could not style tile container".into()))?;
+        if let Some(layer) = layer {
+            container
+                .set_attribute("data-surface-layer", layer)
+                .map_err(|_| FfiError::Surface("could not name surface layer".into()))?;
+        }
         Ok(Self {
             handle,
             container,
@@ -76,12 +86,15 @@ impl SurfaceHandle {
 
     pub fn apply_damage(
         &mut self,
-        dl: &DisplayList,
+        primitives: &[Primitive],
         damage: &[IRect],
         _revision: u64,
         frame_key: FrameKey,
     ) -> bool {
-        if !self.raster.apply_damage(dl, damage, frame_key.value) {
+        if !self
+            .raster
+            .apply_damage(primitives, damage, frame_key.value)
+        {
             return false;
         }
         self.tiles_changed |= self.tiles.iter().map(|tile| tile.bounds).ne(self
@@ -222,10 +235,112 @@ impl SurfaceHandle {
             self.tiles_changed = false;
         }
         if !self.mounted {
-            self.handle
-                .replace_children_with_node(&js_sys::Array::of1(&self.container));
+            let _ = self.handle.append_child(&self.container);
             self.mounted = true;
         }
         true
+    }
+}
+
+/// Viewer backgrounds and foregrounds share one frame proof and tile request.
+/// The DOM selection paints between them; editable surfaces keep one layer.
+pub struct SurfaceHandle {
+    foreground: SurfaceLayer,
+    background: Option<SurfaceLayer>,
+}
+
+impl SurfaceHandle {
+    pub fn new(
+        handle: PlatformHandle,
+        width: f64,
+        height: f64,
+        scale_factor: f64,
+    ) -> Result<Self, FfiError> {
+        let split = handle.has_attribute("data-separate-background");
+        let background = if split {
+            Some(SurfaceLayer::new(
+                handle.clone(),
+                width,
+                height,
+                scale_factor,
+                Some("background"),
+            )?)
+        } else {
+            None
+        };
+        let foreground = SurfaceLayer::new(
+            handle,
+            width,
+            height,
+            scale_factor,
+            split.then_some("foreground"),
+        )?;
+        Ok(Self {
+            foreground,
+            background,
+        })
+    }
+    pub fn scale_factor(&self) -> f64 {
+        self.foreground.scale_factor()
+    }
+    pub fn needs_render(&self) -> bool {
+        self.foreground.needs_render()
+            || self
+                .background
+                .as_ref()
+                .is_some_and(SurfaceLayer::needs_render)
+    }
+    pub fn configure_tiles(&mut self, bounds: &[i32]) -> Result<(), FfiError> {
+        self.foreground.configure_tiles(bounds)?;
+        if let Some(background) = &mut self.background {
+            background.configure_tiles(bounds)?;
+        }
+        Ok(())
+    }
+    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) -> bool {
+        let changed = self.foreground.resize(width, height, scale_factor);
+        if let Some(background) = &mut self.background {
+            background.resize(width, height, scale_factor);
+        }
+        changed
+    }
+    pub fn apply_damage(
+        &mut self,
+        dl: &DisplayList,
+        damage: &[IRect],
+        revision: u64,
+        frame_key: FrameKey,
+    ) -> bool {
+        let primitives = if let Some(background) = &mut self.background {
+            if !background.apply_damage(
+                &dl.primitives[..dl.foreground_start],
+                damage,
+                revision,
+                frame_key,
+            ) {
+                return false;
+            }
+            &dl.primitives[dl.foreground_start..]
+        } else {
+            &dl.primitives
+        };
+        self.foreground
+            .apply_damage(primitives, damage, revision, frame_key)
+    }
+    pub fn present(&mut self, frame_key: u64) -> bool {
+        if self.foreground.prepared_frame != Some(frame_key)
+            || self
+                .background
+                .as_ref()
+                .is_some_and(|b| b.prepared_frame != Some(frame_key))
+        {
+            return false;
+        }
+        if let Some(background) = &mut self.background {
+            if !background.present(frame_key) {
+                return false;
+            }
+        }
+        self.foreground.present(frame_key)
     }
 }

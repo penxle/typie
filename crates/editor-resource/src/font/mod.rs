@@ -1,6 +1,7 @@
 mod config;
 mod data;
 mod manifest;
+mod metrics;
 mod placeholder;
 mod registry;
 mod resolution;

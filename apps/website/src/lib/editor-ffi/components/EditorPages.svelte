@@ -1,5 +1,6 @@
 <script lang="ts">
   import DocumentExternalElements from './DocumentExternalElements.svelte';
+  import NativeSelectionLayer from './NativeSelectionLayer.svelte';
   import Page from './Page.svelte';
   import type { Editor } from '../editor.svelte';
   import type { EditorSurfaceHost } from '../editor-surface-host.svelte';
@@ -23,5 +24,9 @@
     {/key}
   {/if}
 
-  <DocumentExternalElements {editor} />
+  {#if editor.nativeSelection && !editor.protectContent}
+    <NativeSelectionLayer {editor} />
+  {:else}
+    <DocumentExternalElements {editor} />
+  {/if}
 {/key}

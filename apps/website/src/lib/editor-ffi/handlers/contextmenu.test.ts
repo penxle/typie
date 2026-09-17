@@ -15,18 +15,18 @@ const createEvent = () =>
 
 const createEditor = ({
   readOnly = false,
+  nativeSelection = false,
   selectionHit = false,
   cursorHit = false,
 }: {
   readOnly?: boolean;
+  nativeSelection?: boolean;
   selectionHit?: boolean;
   cursorHit?: boolean;
 } = {}) =>
   ({
     readOnly,
-    gesture: {
-      shouldSuppressNativeContextMenu: vi.fn(() => false),
-    },
+    nativeSelection,
     clientToLocal: vi.fn(() => ({ page: 0, x: 10, y: 20 })),
     interactiveHitTest: vi.fn(),
     selectionHitTest: vi.fn(() => selectionHit),
@@ -59,18 +59,13 @@ describe('handleContextMenu', () => {
     expect(editor.updateNow.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
   });
 
-  it('selects the hit word before opening a read-only context menu', () => {
-    const editor = createEditor({ readOnly: true });
+  it('leaves the native viewer context menu and selection untouched', () => {
+    const editor = createEditor({ readOnly: true, nativeSelection: true });
     const event = createEvent();
-
     handleContextMenu(editor, event);
-
-    expect(editor.enqueue).toHaveBeenCalledWith({
-      type: 'selection',
-      op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'word' },
-    });
-    expect(editor.updateNow).toHaveBeenCalledTimes(1);
-    expect(editor.updateNow.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(editor.updateNow).not.toHaveBeenCalled();
+    expect(editor.openContextMenu).not.toHaveBeenCalled();
   });
 
   it('preserves a range selection when opening inside it', () => {
@@ -101,4 +96,18 @@ describe('handleContextMenu', () => {
 
     expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(editor.updateNow.mock.invocationCallOrder[0] ?? 0);
   });
+});
+
+it('selects the hit word before opening a read-only context menu', () => {
+  const editor = createEditor({ readOnly: true });
+  const event = createEvent();
+
+  handleContextMenu(editor, event);
+
+  expect(editor.enqueue).toHaveBeenCalledWith({
+    type: 'selection',
+    op: { type: 'select_unit_at', page: 0, x: 10, y: 20, unit: 'word' },
+  });
+  expect(editor.updateNow).toHaveBeenCalledTimes(1);
+  expect(editor.updateNow.mock.invocationCallOrder[0]).toBeLessThan(editor.openContextMenu.mock.invocationCallOrder[0]);
 });

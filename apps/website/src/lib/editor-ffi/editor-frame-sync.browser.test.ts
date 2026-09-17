@@ -7,7 +7,6 @@ import { CURSOR_VISIBLE_MARGIN, PAGE_GAP } from './constants';
 import { Editor } from './editor.svelte';
 import EditorFrameSyncTestHost from './editor-frame-sync-test-host.svelte';
 import { caretPageRect, isSelectionCollapsed, pageRectsToClientRect, pageRectToClientRect, selectionHeadRect } from './geometry';
-import { computeSelectionHandleVisual } from './gesture.svelte';
 import { defaultPaginatedLayout, setRootLayoutMode } from './root-attrs';
 import type { PlainDoc, PlainNode, PlainNodeEntry } from '@typie/editor-ffi/browser';
 import type { EditorFrameSyncTestHarness } from './editor-frame-sync-test-host.svelte';
@@ -282,6 +281,7 @@ async function mountEditor(
   plain: PlainDoc,
   options: {
     readOnly?: boolean;
+    nativeSelection?: boolean;
     useWindowScroll?: boolean;
     typewriterEnabled?: boolean;
     withZoom?: boolean;
@@ -292,6 +292,8 @@ async function mountEditor(
   } = {},
 ) {
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });
+  editor.readOnly = options.readOnly ?? false;
+  editor.nativeSelection = options.nativeSelection ?? false;
   if (options.displayZoom !== undefined) {
     editor.displayZoom = options.displayZoom;
     editor.commitRenderZoom(options.displayZoom);
@@ -305,6 +307,7 @@ async function mountEditor(
       editor,
       onReady: harness.resolve,
       readOnly: options.readOnly,
+      nativeSelection: options.nativeSelection,
       useWindowScroll: options.useWindowScroll,
       typewriterEnabled: options.typewriterEnabled,
       userId: `frame-sync-${crypto.randomUUID()}`,
@@ -679,6 +682,7 @@ describe('web editor frame synchronization', () => {
   it('keeps window scrolling when the visual viewport event arrives before the window event', async () => {
     const { context } = await mountEditor(continuousDoc('public viewer scrolling '.repeat(300)), {
       readOnly: true,
+      nativeSelection: true,
       useWindowScroll: true,
     });
     const visualViewport = window.visualViewport;
@@ -2097,7 +2101,7 @@ describe('web editor frame synchronization', () => {
           ],
         ),
       };
-      const result = await mountEditor(plain, { readOnly: true, useWindowScroll: true });
+      const result = await mountEditor(plain, { readOnly: true, nativeSelection: true, useWindowScroll: true });
       await expect.poll(() => result.editor.externalElements.map((element) => element.bounds.height)).toEqual([48, 48, 48]);
       return result;
     }
@@ -2687,50 +2691,47 @@ describe('web editor frame synchronization', () => {
     expect(editor.clientToLocal(pageRect.left + PAGE_MARGIN, pageRect.top + PAGE_MARGIN)).toBeNull();
   });
 
-  it('keeps non-vacuous fixed selection handles on the published page and scroll geometry', async () => {
-    const href = 'https://example.com/selection-handles';
-    const { editor, scrollRoot } = await mountEditor(doc('select this link', href), { readOnly: true });
-    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set_at', page: 0, x: PAGE_MARGIN, y: PAGE_MARGIN } }));
+  it('keeps read-only editor selection, input and copy without creating a native text layer', async () => {
+    const { editor } = await mountEditor(doc('timeline selection', 'https://example.com/timeline'), { readOnly: true });
+    editor.focus();
+    await tick();
+    await userEvent.keyboard(navigator.platform.startsWith('Mac') ? '{Meta>}a{/Meta}' : '{Control>}a{/Control}');
     await waitForPresentation(editor);
-    const selection = editor.selection;
-    const span = selection && editor.modifierSpanSelection(selection.head, 'link');
-    expect(span).toBeDefined();
-    if (!span) throw new Error('Expected the linked text to produce an expanded selection');
-    editor.updateNow((request) => request.enqueue({ type: 'selection', op: { type: 'set', selection: span } }));
-    await waitForPresentation(editor);
+    expect(document.querySelector('[data-native-selection-layer]')).toBeNull();
+    expect(document.querySelector('[data-surface-layer="background"]')).toBeNull();
+    expect(editor.appliedSnapshot.selectionLayout).toBeUndefined();
+    expect(editor.inputEl).toBeDefined();
+    expect(editor.isSelectionCollapsed).toBe(false);
+    expect(editor.copySelection()?.text).toContain('timeline selection');
+    const before = editor.copySelection()?.text;
+    editor.updateNow((request) => request.enqueue({ type: 'insertion', op: { type: 'text', text: 'must not edit' } }));
+    expect(editor.copySelection()?.text).toBe(before);
+  });
 
+  it('uses native viewer text without editor input, caret, or selection handles', async () => {
+    const { editor, scrollRoot } = await mountEditor(doc('select this link', 'https://example.com/native-selection'), {
+      readOnly: true,
+      nativeSelection: true,
+    });
+    await waitForPresentation(editor);
+    await vi.waitFor(() => expect(document.querySelector('[data-selection-run]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('[data-native-selection-layer]')?.classList.contains('fonts-ready')).toBe(true));
+    const span = document.querySelector('[data-selection-run]');
+    const selection = window.getSelection();
+    if (!span || !selection) throw new Error('Native selection is unavailable');
+    const range = document.createRange();
+    range.selectNodeContents(span);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(selection.toString()).toBe('select this link');
     scrollRoot.scrollTop = 24;
     scrollRoot.dispatchEvent(new Event('scroll'));
-    editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'cursor_guard' });
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-    const endpoints = editor.selectionEndpoints();
-    const fromHandle = document.querySelector<HTMLButtonElement>('[data-selection-handle="from"]');
-    const toHandle = document.querySelector<HTMLButtonElement>('[data-selection-handle="to"]');
-    expect(endpoints).toBeDefined();
-    expect(fromHandle).toBeDefined();
-    expect(toHandle).toBeDefined();
-    if (!endpoints || !fromHandle || !toHandle) throw new Error('Expected both production selection handles');
-
-    for (const [kind, endpoint, handle] of [
-      ['from', endpoints.from, fromHandle],
-      ['to', endpoints.to, toHandle],
-    ] as const) {
-      const anchorRect = pageRectToClientRect(editor, endpoint);
-      expect(anchorRect).toBeDefined();
-      if (!anchorRect) throw new Error(`Expected the ${kind} endpoint to resolve to client geometry`);
-      const visual = computeSelectionHandleVisual({ kind, anchorRect });
-      expect(getComputedStyle(handle).position).toBe('fixed');
-      expect(Number.parseFloat(handle.style.left)).toBeCloseTo(visual.left);
-      expect(Number.parseFloat(handle.style.top)).toBeCloseTo(visual.top);
-    }
-
-    const bundle = editor.published;
-    if (!bundle) throw new Error('Expected a published selection bundle');
-    editor.published = { snapshot: bundle.snapshot, frames: new Map() };
-    await tick();
-    expect(document.querySelector('[data-selection-handle="from"]')).toBeNull();
-    expect(document.querySelector('[data-selection-handle="to"]')).toBeNull();
+    expect(selection.toString()).toBe('select this link');
+    expect(document.querySelector('[data-selection-handle]')).toBeNull();
+    expect(document.querySelector('[data-editor-caret]')).toBeNull();
+    expect(editor.inputEl).toBeUndefined();
+    selection.removeAllRanges();
   });
 
   it('keeps cursor-guard bottom padding when typewriter mode is disabled', async () => {

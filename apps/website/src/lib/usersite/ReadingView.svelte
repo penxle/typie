@@ -28,7 +28,6 @@
   import { parseDocumentViewLayoutMode } from './document-view-layout';
   import DocumentDomMirror from './DocumentDomMirror.svelte';
   import DocumentViewFrame from './DocumentViewFrame.svelte';
-  import ReadOnlyTouchSelectionSuppress from './ReadOnlyTouchSelectionSuppress.svelte';
   import type { Snippet } from 'svelte';
   import type { UsersiteReadingView_document$key, UsersiteReadingView_user$key } from '$mearie';
 
@@ -277,6 +276,7 @@
 
         editor.readOnly = true;
         editor.protectContent = protectContent;
+        editor.nativeSelection = true;
         editorForDocumentId = id;
         ctx.editor = editor;
       } catch (err) {
@@ -435,8 +435,6 @@
 
   {#if document.documentBody.__typename === 'DocumentViewBodyAvailableV2'}
     {#if graph}
-      <ReadOnlyTouchSelectionSuppress enabled={ctx.editor?.gesture.gestureActive ?? false} />
-
       {#key document.id}
         <div class={css({ position: 'relative', isolation: 'isolate' })}>
           <DocumentViewFrame {layoutMode} ready={editorReady} bind:bodySurface={fallbackBodySurface}>

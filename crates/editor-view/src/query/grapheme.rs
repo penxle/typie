@@ -11,12 +11,26 @@ pub(crate) fn visual_bounds(line: &LayoutLine) -> (VisualEdge, VisualEdge) {
 
     for run in &line.glyph_runs {
         if first.is_none_or(|(x, _)| run.x < x) {
-            first = Some((run.x, run.offset_range.start));
+            first = Some((
+                run.x,
+                if run.rtl {
+                    run.offset_range.end
+                } else {
+                    run.offset_range.start
+                },
+            ));
         }
 
         let end_x = run.x + run.width;
         if last.is_none_or(|(x, _)| end_x > x) {
-            last = Some((end_x, run.offset_range.end));
+            last = Some((
+                end_x,
+                if run.rtl {
+                    run.offset_range.start
+                } else {
+                    run.offset_range.end
+                },
+            ));
         }
     }
 
@@ -93,11 +107,14 @@ fn x_at_offset_raw(line: &LayoutLine, pos: &Position) -> f32 {
 
     if pos.node == line.node {
         for run in &line.glyph_runs {
-            let local_offset = pos.offset.saturating_sub(run.offset_range.start);
-            let run_cp_count = run.offset_range.len();
-            if local_offset > run_cp_count {
+            if pos.offset < run.offset_range.start || pos.offset > run.offset_range.end {
                 continue;
             }
+            let local_offset = if run.rtl {
+                run.offset_range.end - pos.offset
+            } else {
+                pos.offset - run.offset_range.start
+            };
 
             let mut acc = 0usize;
             let mut x = run.x;
@@ -193,16 +210,23 @@ pub(crate) fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
         if local_x < run.x || local_x > run.x + run.width {
             continue;
         }
+        let offset_at = |count| {
+            if run.rtl {
+                run.offset_range.end - count
+            } else {
+                run.offset_range.start + count
+            }
+        };
         let mut acc = run.x;
         let mut cp_offset = 0usize;
         for g in &run.graphemes {
             if local_x < acc + g.advance / 2.0 {
-                return Position::new(line.node, run.offset_range.start + cp_offset);
+                return Position::new(line.node, offset_at(cp_offset));
             }
             acc += g.advance;
             cp_offset += g.codepoints as usize;
         }
-        let offset = run.offset_range.start + cp_offset;
+        let offset = offset_at(cp_offset);
         if offset == last_position.offset {
             return last_position;
         }
@@ -249,6 +273,8 @@ mod tests {
             x,
             width,
             graphemes,
+            rtl: false,
+            letter_spacing: 0.0,
             cursor_ascent: 0.0,
             cursor_descent: 0.0,
         }
@@ -280,6 +306,25 @@ mod tests {
                 content_edge_x,
             }),
         }
+    }
+
+    #[test]
+    fn rtl_positions_follow_logical_offsets_in_both_directions() {
+        let mut rtl = run(3..6, 30.0, vec![gs(10.0, 1), gs(20.0, 1), gs(15.0, 1)]);
+        rtl.rtl = true;
+        let line = line(
+            node(),
+            Some(0..6),
+            vec![run(0..3, 0.0, vec![gs(10.0, 1); 3]), rtl],
+            vec![],
+            0.0,
+            None,
+        );
+        for (offset, x) in [(4, 60.0), (5, 40.0), (6, 30.0)] {
+            assert_eq!(x_at_offset(&line, &Position::new(node(), offset)), x);
+            assert_eq!(position_at_x(&line, x + 0.1).offset, offset);
+        }
+        assert_eq!(last_position_in_line(&line).offset, 3);
     }
 
     fn node() -> Dot {

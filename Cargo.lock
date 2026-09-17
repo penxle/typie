@@ -1089,6 +1089,7 @@ dependencies = [
  "uniffi",
  "wasm-bindgen",
  "workspace-hack",
+ "write-fonts",
 ]
 
 [[package]]
@@ -4649,7 +4650,6 @@ dependencies = [
  "objc2-metal",
  "once_cell",
  "phf_shared 0.14.0",
- "read-fonts 0.43.3",
  "serde",
  "serde_core",
  "serde_json",

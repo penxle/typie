@@ -86,15 +86,18 @@ const createEditor = ({
   selection = collapsedSelection,
   appliedSelection = selection,
   readOnly = false,
+  nativeSelection = false,
 }: {
   selectionHit?: boolean;
   isSelectionCollapsed?: boolean;
   selection?: typeof collapsedSelection | typeof rangeSelection | undefined;
   appliedSelection?: typeof collapsedSelection | typeof rangeSelection | undefined;
   readOnly?: boolean;
+  nativeSelection?: boolean;
 } = {}) => {
   const editor = {
     readOnly,
+    nativeSelection,
     isSelectionCollapsed,
     selection,
     appliedSnapshot: { selection: appliedSelection },
@@ -117,12 +120,6 @@ const createEditor = ({
     scrollIntoView: vi.fn(),
     suspendToolbarSync: vi.fn(),
     resumeToolbarSync: vi.fn(),
-    gesture: {
-      handlePointerDown: vi.fn(),
-      handlePointerMove: vi.fn(),
-      handlePointerUp: vi.fn(),
-      handlePointerCancel: vi.fn(),
-    },
     updatePointerHover: vi.fn(),
     commentClickHandler: vi.fn(),
     commentIdAt: vi.fn(() => 'comment-1'),
@@ -249,14 +246,15 @@ describe('pointer native drag admission', () => {
     });
   });
 
-  it('updates a read-only mouse selection without requesting pointer guard reveal', () => {
-    const editor = createEditor({ readOnly: true });
+  it('leaves native viewer mouse selection to the browser', () => {
+    const editor = createEditor({ readOnly: true, nativeSelection: true });
     const target = createPointerTarget({ captured: true });
 
     handlePointerDown(editor, createPointerEvent({ target }));
     handlePointerUp(editor, createPointerEvent({ target }));
 
-    expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+    expect(editor.enqueue).not.toHaveBeenCalled();
+    expect(target.setPointerCapture).not.toHaveBeenCalled();
     expect(editor.scrollIntoView).not.toHaveBeenCalled();
   });
 
@@ -327,18 +325,6 @@ describe('pointer native drag admission', () => {
     expect(editor.resumeToolbarSync).toHaveBeenCalledOnce();
   });
 
-  it('ignores non-touch pointer down on a selection handle marker', () => {
-    const editor = createEditor();
-    const target = createPointerTarget();
-    target.dataset.selectionHandle = 'from';
-
-    handlePointerDown(editor, createPointerEvent({ target }));
-
-    expect(editor.enqueue).not.toHaveBeenCalled();
-    expect(target.setPointerCapture).not.toHaveBeenCalled();
-    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
-  });
-
   it('suspends toolbar sync during a regular selection interaction and resumes on pointer up', () => {
     const editor = createEditor();
     const target = createPointerTarget({ captured: true });
@@ -388,28 +374,30 @@ describe('pointer native drag admission', () => {
     expect(editor.suspendToolbarSync).not.toHaveBeenCalled();
   });
 
-  it('routes read-only touch pointers to the gesture controller without capturing', () => {
-    const editor = createEditor({ readOnly: true });
+  it('leaves native viewer touch pointers to native selection', () => {
+    const editor = createEditor({ readOnly: true, nativeSelection: true });
     const target = createPointerTarget();
     const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as unknown as PointerEvent & { currentTarget: HTMLElement };
 
     handlePointerDown(editor, down);
 
-    expect(editor.gesture.handlePointerDown).toHaveBeenCalledWith(down, { page: 0, x: 10, y: 20 }, null);
     expect(target.setPointerCapture).not.toHaveBeenCalled();
     expect(editor.enqueue).not.toHaveBeenCalled();
   });
 
-  it('does not toggle a fold on read-only touch down and starts a gesture instead', () => {
-    const editor = createEditor({ readOnly: true });
-    editor.interactiveHitTest = vi.fn(() => ({ type: 'fold_title', id: 'fold-1' })) as unknown as Editor['interactiveHitTest'];
+  it('keeps a native viewer touch on the fold title available for text selection', () => {
+    const editor = createEditor({ readOnly: true, nativeSelection: true });
+    editor.interactiveHitTest = vi.fn(() => ({
+      type: 'fold_title',
+      id: 'fold-1',
+      text_rect: { x: 0, y: 0, width: 100, height: 30 },
+    })) as unknown as Editor['interactiveHitTest'];
     const target = createPointerTarget();
-    const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as unknown as PointerEvent & { currentTarget: HTMLElement };
-
+    const down = { ...createPointerEvent({ target }), pointerType: 'touch' } as PointerEvent & { currentTarget: HTMLElement };
     handlePointerDown(editor, down);
-
     expect(editor.enqueue).not.toHaveBeenCalled();
-    expect(editor.gesture.handlePointerDown).toHaveBeenCalledWith(down, { page: 0, x: 10, y: 20 }, null);
+    expect(down.preventDefault).not.toHaveBeenCalled();
+    expect(target.setPointerCapture).not.toHaveBeenCalled();
   });
 
   it('sends edit-mode touch pointers through the regular pointer path', () => {
@@ -419,7 +407,6 @@ describe('pointer native drag admission', () => {
 
     handlePointerDown(editor, down);
 
-    expect(editor.gesture.handlePointerDown).not.toHaveBeenCalled();
     expect(target.setPointerCapture).toHaveBeenCalledWith(1);
     expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
   });
@@ -573,4 +560,37 @@ describe('pointer native drag admission', () => {
       vi.unstubAllGlobals();
     }
   });
+});
+
+it('reuses fold pointer hit testing without starting editor selection in the viewer', () => {
+  const editor = createEditor({ readOnly: true, nativeSelection: true });
+  vi.mocked(editor.interactiveHitTest).mockReturnValue({
+    type: 'fold_title',
+    id: 'fold',
+    text_rect: { x: 30, y: 10, width: 100, height: 20 },
+  });
+  const event = createPointerEvent({ target: createPointerTarget() });
+  handlePointerDown(editor, event);
+  expect(editor.enqueue).toHaveBeenCalledWith({ type: 'view', op: { type: 'toggle_fold', id: 'fold' } });
+  vi.mocked(editor.enqueue).mockClear();
+  vi.mocked(editor.clientToLocal).mockReturnValue({ page: 0, x: 40, y: 20 });
+  handlePointerDown(editor, event);
+  expect(editor.enqueue).not.toHaveBeenCalled();
+});
+
+it('keeps engine mouse selection in a read-only editor', () => {
+  const editor = createEditor({ readOnly: true });
+  const target = createPointerTarget({ captured: true });
+  handlePointerDown(editor, createPointerEvent({ target }));
+  handlePointerUp(editor, createPointerEvent({ target }));
+  expect(target.setPointerCapture).toHaveBeenCalled();
+  expect(editor.enqueue).toHaveBeenCalledWith({ type: 'selection', op: { type: 'set_at', page: 0, x: 10, y: 20 } });
+  expect(editor.scrollIntoView).not.toHaveBeenCalled();
+});
+
+it('ignores viewer clicks so finishing a native selection drag cannot toggle a fold', () => {
+  const editor = createEditor({ readOnly: true, nativeSelection: true });
+  handleClick(editor, { button: 0, clientX: 110, clientY: 220 } as MouseEvent & { currentTarget: HTMLElement });
+  expect(editor.interactiveHitTest).not.toHaveBeenCalled();
+  expect(editor.enqueue).not.toHaveBeenCalled();
 });

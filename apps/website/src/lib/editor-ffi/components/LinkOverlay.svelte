@@ -43,9 +43,11 @@
       })}
       aria-label={link.href}
       {href}
+      onclick={(e) => e.stopPropagation()}
       onpointerdown={(e) => e.stopPropagation()}
       rel="noopener noreferrer"
       tabindex={-1}
+      target="_blank"
     ></a>
   {/each}
 {/each}
