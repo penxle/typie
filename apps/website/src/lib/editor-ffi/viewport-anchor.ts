@@ -18,10 +18,10 @@ export type EditorViewportAnchorGeometry = {
 type ActiveViewportAnchor = {
   identity: ViewportAnchor;
   source: 'selection' | 'viewport';
+  geometry: EditorViewportAnchorGeometry;
   pointAttachmentX: number;
   pointAttachmentY: number;
   attachmentPending: boolean;
-  rect?: { top: number; bottom: number };
   revealOrigin?: EditorViewportAnchorRevealOrigin;
 };
 
@@ -66,10 +66,10 @@ export class EditorViewportAnchorState {
     this.#active = {
       identity,
       source,
+      geometry,
       pointAttachmentX: geometry.pointX - scroll.left,
       pointAttachmentY: geometry.pointY - scroll.top,
       attachmentPending,
-      rect: geometry.rect,
       revealOrigin,
     };
   }
@@ -92,7 +92,11 @@ export class EditorViewportAnchorState {
 
   translateAttachmentY(deltaY: number): void {
     if (deltaY === 0 || !Number.isFinite(deltaY) || !this.#active) return;
-    this.#active = { ...this.#active, pointAttachmentY: this.#active.pointAttachmentY + deltaY };
+    this.#active = {
+      ...this.#active,
+      geometry: { ...this.#active.geometry, pointY: this.#active.geometry.pointY + deltaY },
+      pointAttachmentY: this.#active.pointAttachmentY + deltaY,
+    };
   }
 
   get pendingViewportAttachment(): { identity: ViewportAnchor; focalX: number; focalY: number } | null {
@@ -203,10 +207,14 @@ export class EditorViewportAnchorState {
     ) {
       return { scroll: currentScroll, attachmentAchieved: false };
     }
-    const desiredScroll = {
-      left: geometry.pointX - active.pointAttachmentX,
-      top: geometry.pointY - active.pointAttachmentY,
-    };
+    // Ordinary publication compensates only for document layout movement.
+    // A pending zoom attachment still has an explicit viewport destination.
+    const desiredScroll = active.attachmentPending
+      ? { left: geometry.pointX - active.pointAttachmentX, top: geometry.pointY - active.pointAttachmentY }
+      : {
+          left: currentScroll.left + geometry.pointX - active.geometry.pointX,
+          top: currentScroll.top + geometry.pointY - active.geometry.pointY,
+        };
     const scroll = {
       left: clamp(desiredScroll.left, 0, maximumScroll.left),
       top: clamp(desiredScroll.top, 0, maximumScroll.top),
@@ -232,7 +240,7 @@ export class EditorViewportAnchorState {
       { left: currentScrollLeft, top: currentScrollTop },
       { left: maximumScrollLeft, top: Math.max(0, scrollHeight - clientHeight) },
     );
-    if (!rectHeightChanged(this.#active?.rect, geometry.rect)) return exact;
+    if (!rectHeightChanged(this.#active?.geometry.rect, geometry.rect)) return exact;
     const revealOrigin = this.#active?.revealOrigin;
     if (revealOrigin) {
       const reveal = resolveReveal?.(revealOrigin);
@@ -252,13 +260,12 @@ export class EditorViewportAnchorState {
     };
   }
 
-  acceptGeometry(geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition): void {
+  acceptGeometry(geometry: EditorViewportAnchorGeometry, scroll: EditorViewportScrollPosition, attachmentAchieved = true): void {
     const active = this.#active;
-    if (active) this.#attachActive(active.identity, geometry, scroll, active.revealOrigin, active.source);
-  }
-
-  deferAttachment(): void {
-    if (this.#active) this.#active = { ...this.#active, attachmentPending: true };
+    if (!active) return;
+    if (attachmentAchieved || !active.attachmentPending) {
+      this.#attachActive(active.identity, geometry, scroll, active.revealOrigin, active.source);
+    } else this.#active = { ...active, geometry };
   }
 
   finishRevealConvergence(): void {
@@ -284,6 +291,8 @@ export class EditorViewportAnchorState {
     scrollHeight: number,
     visibleArea: EditorVisibleArea,
   ): number {
+    // A viewport anchor tracks layout displacement; it is not a reveal request.
+    if (this.#active?.source !== 'selection') return currentScrollTop;
     if (this.canRetainAfterDirectScroll(geometry, currentScrollTop, clientHeight, visibleArea)) return currentScrollTop;
 
     const guard = resolveGuard(geometry, clientHeight, visibleArea);

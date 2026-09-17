@@ -29,8 +29,7 @@ export function setupEditorPublication(ctx: EditorContext, getSurfaceHost: () =>
 
     const offResize = on(visualViewport, 'resize', () => editor.requestPublication());
     const offScroll = on(visualViewport, 'scroll', () => {
-      // Firefox can fire this before window.scroll. Observe the new position first
-      // so publication does not restore the viewport anchor to the old position.
+      // Observe direct scrolling promptly, even before window.scroll arrives.
       if (editor.scrollViewport?.target === window) {
         scroll.observeViewportScroll();
       }
@@ -250,13 +249,14 @@ export function resolveEditorSurfacePreparation(
   // the visible part of the layout viewport. Keep scroll planning in layout
   // coordinates, but allocate pixels only around that visible intersection.
   const visualViewport = window.visualViewport;
-  const visibleLeft = Math.max(viewportRect.left, visualViewport?.offsetLeft ?? viewportRect.left);
-  const visibleTop = Math.max(viewportRect.top, visualViewport?.offsetTop ?? viewportRect.top);
-  const visibleRight = Math.min(viewportRect.right, visualViewport ? visualViewport.offsetLeft + visualViewport.width : viewportRect.right);
-  const visibleBottom = Math.min(
-    viewportRect.bottom,
-    visualViewport ? visualViewport.offsetTop + visualViewport.height : viewportRect.bottom,
-  );
+  // offsetLeft/Top are layout-relative. Convert the visual bounds to DOM client
+  // coordinates as well, since Safari's DOM rects already include pinch panning.
+  const visualLeft = visualViewport ? visualViewport.pageLeft - window.scrollX : viewportRect.left;
+  const visualTop = visualViewport ? visualViewport.pageTop - window.scrollY : viewportRect.top;
+  const visibleLeft = Math.max(viewportRect.left, visualLeft);
+  const visibleTop = Math.max(viewportRect.top, visualTop);
+  const visibleRight = Math.min(viewportRect.right, visualViewport ? visualLeft + visualViewport.width : viewportRect.right);
+  const visibleBottom = Math.min(viewportRect.bottom, visualViewport ? visualTop + visualViewport.height : viewportRect.bottom);
   const visibleWidth = Math.max(0, visibleRight - visibleLeft);
   const visibleHeight = Math.max(0, visibleBottom - visibleTop);
   const left = currentScrollLeft ?? metrics.scrollLeft;

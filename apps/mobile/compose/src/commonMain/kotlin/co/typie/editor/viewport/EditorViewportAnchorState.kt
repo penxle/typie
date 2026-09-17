@@ -30,12 +30,18 @@ internal data class EditorViewportAnchorScroll(
 )
 
 internal class EditorViewportAnchorState {
+  private enum class Source {
+    Selection,
+    Viewport,
+  }
+
   private data class Active(
     val identity: ViewportAnchor,
+    val source: Source,
+    val geometry: EditorViewportAnchorGeometry,
     val pointAttachmentX: Float,
     val pointAttachmentY: Float,
     val attachmentPending: Boolean,
-    val rect: VerticalSpan?,
     val revealOrigin: EditorViewportAnchorRevealOrigin?,
   )
 
@@ -125,7 +131,7 @@ internal class EditorViewportAnchorState {
     revealOrigin: EditorViewportAnchorRevealOrigin? = null,
   ) {
     preferredSelection = identity
-    attachActive(identity, geometry, scrollOffset, revealOrigin)
+    attachActive(identity, geometry, scrollOffset, revealOrigin, source = Source.Selection)
   }
 
   fun attachViewport(
@@ -149,7 +155,7 @@ internal class EditorViewportAnchorState {
       !preserveActiveAnchor &&
         (active != null || canRetainAfterDirectScroll(geometry, scrollOffset.y, visibleArea))
     preferredSelection = identity
-    if (activate) attachActive(identity, geometry, scrollOffset)
+    if (activate) attachActive(identity, geometry, scrollOffset, source = Source.Selection)
   }
 
   fun clearPreferredSelection() {
@@ -168,7 +174,7 @@ internal class EditorViewportAnchorState {
     if (!rect.top.isFinite() || !rect.bottom.isFinite() || rect.bottom < rect.top) return false
     if (rect.top - scrollOffset.y < guard.top || rect.bottom - scrollOffset.y > guard.bottom)
       return false
-    attachActive(identity, geometry, scrollOffset)
+    attachActive(identity, geometry, scrollOffset, source = Source.Selection)
     return true
   }
 
@@ -178,16 +184,18 @@ internal class EditorViewportAnchorState {
     scrollOffset: Offset,
     revealOrigin: EditorViewportAnchorRevealOrigin? = null,
     attachmentPending: Boolean = false,
+    source: Source = Source.Viewport,
   ) {
     if (!geometry.pointX.isFinite() || !geometry.pointY.isFinite()) return
     if (!scrollOffset.x.isFinite() || !scrollOffset.y.isFinite()) return
     active =
       Active(
         identity = identity,
+        source = source,
+        geometry = geometry,
         pointAttachmentX = geometry.pointX - scrollOffset.x,
         pointAttachmentY = geometry.pointY - scrollOffset.y,
         attachmentPending = attachmentPending,
-        rect = geometry.rect,
         revealOrigin = revealOrigin,
       )
   }
@@ -208,11 +216,20 @@ internal class EditorViewportAnchorState {
     if (maximumScrollOffset.x < 0f || maximumScrollOffset.y < 0f) {
       return EditorViewportAnchorScroll(currentScrollOffset, attachmentAchieved = false)
     }
+    // Ordinary publication compensates only for document layout movement.
+    // A pending zoom attachment still has an explicit viewport destination.
     val desiredScrollOffset =
-      Offset(
-        x = geometry.pointX - current.pointAttachmentX,
-        y = geometry.pointY - current.pointAttachmentY,
-      )
+      if (current.attachmentPending) {
+        Offset(
+          x = geometry.pointX - current.pointAttachmentX,
+          y = geometry.pointY - current.pointAttachmentY,
+        )
+      } else {
+        Offset(
+          x = currentScrollOffset.x + geometry.pointX - current.geometry.pointX,
+          y = currentScrollOffset.y + geometry.pointY - current.geometry.pointY,
+        )
+      }
     val scrollOffset =
       Offset(
         x = desiredScrollOffset.x.coerceIn(0f, maximumScrollOffset.x),
@@ -232,7 +249,7 @@ internal class EditorViewportAnchorState {
     resolveReveal: ((EditorViewportAnchorRevealOrigin) -> Float?)? = null,
   ): EditorViewportAnchorScroll {
     val exact = publicationScroll(geometry, currentScrollOffset, maximumScrollOffset)
-    if (!rectHeightChanged(active?.rect, geometry.rect)) return exact
+    if (!rectHeightChanged(active?.geometry?.rect, geometry.rect)) return exact
     active?.revealOrigin?.let { origin ->
       resolveReveal?.invoke(origin)?.let {
         return EditorViewportAnchorScroll(
@@ -250,50 +267,35 @@ internal class EditorViewportAnchorState {
     )
   }
 
-  fun acceptGeometry(geometry: EditorViewportAnchorGeometry, scrollOffset: Offset) {
+  fun acceptGeometry(
+    geometry: EditorViewportAnchorGeometry,
+    scrollOffset: Offset,
+    attachmentAchieved: Boolean = true,
+  ) {
     val current = active ?: return
-    attachActive(
-      identity = current.identity,
-      geometry = geometry,
-      scrollOffset = scrollOffset,
-      revealOrigin = current.revealOrigin,
-    )
-  }
-
-  fun deferAttachment() {
-    active = active?.copy(attachmentPending = true)
+    if (attachmentAchieved || !current.attachmentPending) {
+      attachActive(
+        identity = current.identity,
+        geometry = geometry,
+        scrollOffset = scrollOffset,
+        revealOrigin = current.revealOrigin,
+        source = current.source,
+      )
+    } else {
+      active = current.copy(geometry = geometry)
+    }
   }
 
   fun acceptGeometryAfterAutomaticScroll(
     geometry: EditorViewportAnchorGeometry,
     scrollOffset: Offset,
   ) {
-    if (active?.attachmentPending == true) {
-      acceptGeometryIfAttached(geometry, scrollOffset)
-    } else {
-      acceptGeometry(geometry, scrollOffset)
-    }
-  }
-
-  private fun acceptGeometryIfAttached(
-    geometry: EditorViewportAnchorGeometry,
-    scrollOffset: Offset,
-    tolerance: Float = 1f,
-  ): Boolean {
-    val current = active ?: return false
-    val desiredScrollOffset =
-      Offset(
-        x = geometry.pointX - current.pointAttachmentX,
-        y = geometry.pointY - current.pointAttachmentY,
-      )
-    if (
-      abs(scrollOffset.x - desiredScrollOffset.x) > tolerance ||
-        abs(scrollOffset.y - desiredScrollOffset.y) > tolerance
-    ) {
-      return false
-    }
-    acceptGeometry(geometry, scrollOffset)
-    return true
+    val current = active ?: return
+    val attachmentAchieved =
+      !current.attachmentPending ||
+        (abs(scrollOffset.x - (geometry.pointX - current.pointAttachmentX)) <= 1f &&
+          abs(scrollOffset.y - (geometry.pointY - current.pointAttachmentY)) <= 1f)
+    acceptGeometry(geometry, scrollOffset, attachmentAchieved)
   }
 
   fun finishRevealConvergence() {
@@ -319,6 +321,8 @@ internal class EditorViewportAnchorState {
     maximumScrollY: Float,
     visibleArea: EditorVisibleArea,
   ): Float {
+    // A viewport anchor tracks layout displacement; it is not a reveal request.
+    if (active?.source != Source.Selection) return currentScrollY
     if (canRetainAfterDirectScroll(geometry, currentScrollY, visibleArea)) {
       return currentScrollY
     }

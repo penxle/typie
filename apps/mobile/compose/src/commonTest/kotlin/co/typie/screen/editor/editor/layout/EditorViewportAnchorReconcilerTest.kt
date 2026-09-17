@@ -281,6 +281,87 @@ class EditorViewportAnchorReconcilerTest {
     }
 
   @Test
+  fun `publication preserves scrolling before the next observation`() = runTest {
+    val initial = frame(visibleArea())
+    val candidate = initial.copy(state = initial.state.copy(version = 2L))
+    for ((displacement, expectedY) in listOf(0f to 160f, 120f to 280f)) {
+      val anchorState =
+        EditorViewportAnchorState().apply {
+          attachViewport(viewportAnchor, anchorGeometry(200f), Offset(0f, 100f))
+        }
+      val viewportState = viewportState(scrollY = 100f)
+      val editor =
+        Editor(
+          FakeFfiEditor(
+            resolveViewportAnchorProvider = { _, _ ->
+              ViewportAnchorResolution.Resolved(selectionGeometry(200f + displacement))
+            }
+          ),
+          this,
+          StandardTestDispatcher(testScheduler),
+        )
+      viewportState.consumePan(Offset(0f, 60f))
+
+      val publication =
+        reconcileViewportAnchorPublication(
+          editor = editor,
+          anchorState = anchorState,
+          publishedBundle = PublishedBundle(snapshot = initial.state, frames = emptyMap()),
+          candidateState = candidate.state,
+          measuredScrollFrame = candidate,
+          currentScrollOffset = viewportState.scrollOffset,
+          maximumScrollY = viewportState.maxScrollY,
+          contentOriginY = 0f,
+        )
+          as EditorViewportAnchorPublication.Ready
+
+      assertEquals(Offset(0f, expectedY), publication.scrollOffset)
+    }
+  }
+
+  @Test
+  fun `clipped horizontal compensation does not retain an old vertical destination`() = runTest {
+    val initial = frame(visibleArea())
+    val candidate = initial.copy(state = initial.state.copy(version = 2L))
+    val anchorState =
+      EditorViewportAnchorState().apply {
+        attachViewport(viewportAnchor, anchorGeometry(200f).copy(pointX = 100f), Offset(0f, 100f))
+      }
+    val editor =
+      Editor(
+        FakeFfiEditor(
+          resolveViewportAnchorProvider = { _, _ ->
+            ViewportAnchorResolution.Resolved(
+              selectionGeometry(200f)
+                .copy(point = ViewportAnchorPoint(pageIdx = 0, x = 127f, y = 200f))
+            )
+          }
+        ),
+        this,
+        StandardTestDispatcher(testScheduler),
+      )
+    val publication =
+      reconcileViewportAnchorPublication(
+        editor = editor,
+        anchorState = anchorState,
+        publishedBundle = PublishedBundle(snapshot = initial.state, frames = emptyMap()),
+        candidateState = candidate.state,
+        measuredScrollFrame = candidate,
+        currentScrollOffset = Offset(0f, 100f),
+        maximumScrollY = 600f,
+        contentOriginY = 0f,
+      )
+        as EditorViewportAnchorPublication.Ready
+    val geometry = requireNotNull(publication.geometry)
+    anchorState.acceptGeometryAfterAutomaticScroll(geometry, publication.scrollOffset)
+
+    assertEquals(
+      Offset(0f, 160f),
+      anchorState.publicationScroll(geometry, Offset(0f, 160f), Offset(0f, 600f)).scrollOffset,
+    )
+  }
+
+  @Test
   fun `publication skips vertical anchor correction at the scroll origin`() = runTest {
     val initial = frame(visibleArea())
     val candidate = initial.copy(state = initial.state.copy(version = 2L))
@@ -314,6 +395,12 @@ class EditorViewportAnchorReconcilerTest {
       assertEquals(if (scrollY == 0f) 0f else 400f, publication.scrollOffset.y)
       assertEquals(scrollY != 0f, publication.attachmentAchieved)
       assertEquals(200f - scrollY, anchorState.pointAttachmentY)
+      anchorState.acceptGeometry(
+        requireNotNull(publication.geometry),
+        publication.scrollOffset,
+        publication.attachmentAchieved,
+      )
+      assertEquals(if (scrollY == 0f) 500f else 100f, anchorState.pointAttachmentY)
     }
   }
 
@@ -424,6 +511,45 @@ class EditorViewportAnchorReconcilerTest {
 
     assertEquals(Offset(x = 0f, y = 130f), viewportState.scrollOffset)
     assertTrue(viewportState.lastScrollWasAuto)
+  }
+
+  @Test
+  fun `visible area change preserves a pending zoom destination`() = runTest {
+    val visibleArea = visibleArea()
+    val occluded = visibleArea(bottomOcclusionInset = 100f)
+    val frame = frame(visibleArea)
+    val viewportState = viewportState(scrollY = 500f)
+    val geometry = EditorViewportAnchorGeometry(pointY = 800f)
+    val anchorState =
+      EditorViewportAnchorState().apply {
+        attachViewport(viewportAnchor, geometry, Offset(0f, 700f), attachmentPending = true)
+      }
+    val editor =
+      Editor(
+        FakeFfiEditor(
+          resolveViewportAnchorProvider = { _, _ ->
+            ViewportAnchorResolution.Resolved(
+              ResolvedViewportAnchor(
+                point = ViewportAnchorPoint(pageIdx = 0, x = 0f, y = 800f),
+                rect = null,
+              )
+            )
+          }
+        ),
+        this,
+        StandardTestDispatcher(testScheduler),
+      )
+
+    reconcile(editor, anchorState, frame, viewportState, visibleArea)
+    reconcile(editor, anchorState, frame.copy(visibleArea = occluded), viewportState, occluded)
+
+    assertEquals(Offset(0f, 500f), viewportState.scrollOffset)
+    assertEquals(
+      Offset(0f, 700f),
+      anchorState
+        .publicationScroll(geometry, viewportState.scrollOffset, Offset(0f, 1000f))
+        .scrollOffset,
+    )
   }
 
   @Test

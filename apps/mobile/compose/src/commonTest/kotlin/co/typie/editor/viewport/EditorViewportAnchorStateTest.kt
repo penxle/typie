@@ -75,6 +75,45 @@ class EditorViewportAnchorStateTest {
   }
 
   @Test
+  fun `publication preserves unobserved scrolling on both axes`() {
+    for ((displacement, expected) in listOf(0f to Offset(50f, 160f), 120f to Offset(170f, 280f))) {
+      val state = EditorViewportAnchorState()
+      state.attachViewport(
+        viewportIdentity,
+        geometry(pointX = 100f, pointY = 200f),
+        Offset(20f, 100f),
+      )
+
+      val result =
+        state.publicationScroll(
+          geometry = geometry(pointX = 100f + displacement, pointY = 200f + displacement),
+          currentScrollOffset = Offset(50f, 160f),
+          maximumScrollOffset = Offset(500f, 500f),
+        )
+
+      assertEquals(expected, result.scrollOffset)
+      assertTrue(result.attachmentAchieved)
+    }
+  }
+
+  @Test
+  fun `viewport resize does not reveal a layout tracking anchor`() {
+    val state = EditorViewportAnchorState()
+    val geometry = geometry(pointY = 260f)
+    state.attachViewport(viewportIdentity, geometry, Offset(0f, 100f))
+
+    assertEquals(
+      100f,
+      state.resizeScroll(
+        geometry = geometry,
+        currentScrollY = 100f,
+        maximumScrollY = 700f,
+        visibleArea = EditorVisibleArea(viewport = Size(300f, 200f)),
+      ),
+    )
+  }
+
+  @Test
   fun `direct scroll retains identity inside cursor guard and replaces it outside`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
@@ -104,7 +143,7 @@ class EditorViewportAnchorStateTest {
   fun `oversized rect uses its point instead of trying to fit the whole rect`() {
     val state = EditorViewportAnchorState()
     val visibleArea = EditorVisibleArea(viewport = Size(width = 300f, height = 300f))
-    state.attach(
+    state.attachSelection(
       identity,
       geometry(pointY = 150f, top = 0f, bottom = 1_000f),
       scrollOffset = Offset.Zero,
@@ -131,7 +170,7 @@ class EditorViewportAnchorStateTest {
   @Test
   fun `resize moves minimally only after the anchor leaves cursor guard`() {
     val state = EditorViewportAnchorState()
-    state.attach(
+    state.attachSelection(
       identity,
       geometry(pointY = 260f, top = 250f, bottom = 270f),
       scrollOffset = Offset(x = 0f, y = 100f),
@@ -151,9 +190,14 @@ class EditorViewportAnchorStateTest {
   }
 
   @Test
-  fun `publication preserves the desired attachment until bounds can reach it`() {
+  fun `publication preserves an explicit zoom attachment until bounds can reach it`() {
     val state = EditorViewportAnchorState()
-    state.attach(identity, geometry(pointY = 200f), scrollOffset = Offset(x = 0f, y = 100f))
+    state.attachViewport(
+      viewportIdentity,
+      geometry(pointY = 200f),
+      scrollOffset = Offset(x = 0f, y = 100f),
+      attachmentPending = true,
+    )
     val candidate = geometry(pointY = 800f)
 
     val constrained =
@@ -165,6 +209,8 @@ class EditorViewportAnchorStateTest {
 
     assertEquals(Offset(x = 0f, y = 500f), constrained.scrollOffset)
     assertFalse(constrained.attachmentAchieved)
+    state.acceptGeometry(candidate, constrained.scrollOffset, constrained.attachmentAchieved)
+    state.acceptGeometryAfterAutomaticScroll(candidate, constrained.scrollOffset)
     val recovered =
       state.publicationScroll(
         geometry = candidate,
@@ -174,6 +220,26 @@ class EditorViewportAnchorStateTest {
     assertEquals(Offset(x = 0f, y = 700f), recovered.scrollOffset)
     assertTrue(recovered.attachmentAchieved)
     assertEquals(100f, state.pointAttachmentY)
+  }
+
+  @Test
+  fun `clipped ordinary publication consumes geometry without retrying when bounds grow`() {
+    val state = EditorViewportAnchorState()
+    state.attachViewport(
+      viewportIdentity,
+      geometry(pointX = 100f, pointY = 200f),
+      Offset(20f, 100f),
+    )
+    val candidate = geometry(pointX = 300f, pointY = 800f)
+    val constrained = state.publicationScroll(candidate, Offset(20f, 100f), Offset(0f, 500f))
+    assertEquals(Offset(0f, 500f), constrained.scrollOffset)
+    assertFalse(constrained.attachmentAchieved)
+    state.acceptGeometry(candidate, constrained.scrollOffset, constrained.attachmentAchieved)
+
+    assertEquals(
+      Offset(0f, 560f),
+      state.publicationScroll(candidate, Offset(0f, 560f), Offset(500f, 1000f)).scrollOffset,
+    )
   }
 
   @Test

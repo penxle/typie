@@ -47,6 +47,7 @@ export type EditorViewportAnchorPublication =
   | {
       type: 'ready';
       geometry: EditorViewportAnchorGeometry | null;
+      sourceScroll: EditorViewportScrollPosition;
       targetScrollLeft: number | null;
       targetScrollTop: number | null;
       attachmentAchieved: boolean;
@@ -309,9 +310,10 @@ export class EditorScrollScope {
 
   prepareViewportAnchorPublication(snapshot: EditorSnapshot): EditorViewportAnchorPublication {
     const viewport = this.#editor.scrollViewport;
-    if (!viewport) return { type: 'ready', geometry: null, targetScrollLeft: null, targetScrollTop: null, attachmentAchieved: false };
+    if (!viewport) return { type: 'unavailable' };
     const metrics = this.viewportMetrics(snapshot, true);
     if (!metrics) return { type: 'unavailable' };
+    const sourceScroll = { left: metrics.scrollLeft, top: metrics.scrollTop };
 
     // Establish the initial position before any scroll events arrive.
     this.#lastObservedScroll ??= { left: metrics.scrollLeft, top: metrics.scrollTop };
@@ -340,6 +342,7 @@ export class EditorScrollScope {
     const fallbackPublication = (): EditorViewportAnchorPublication => ({
       type: 'ready',
       geometry: null,
+      sourceScroll,
       targetScrollLeft: clampedScrollLeft === metrics.scrollLeft ? null : clampedScrollLeft,
       targetScrollTop: clampedScrollTop === metrics.scrollTop ? null : clampedScrollTop,
       attachmentAchieved: false,
@@ -381,13 +384,13 @@ export class EditorScrollScope {
       metrics.scrollLeft,
       metrics.maximumScrollLeft,
     );
-    // At the scroll origin, skip vertical correction and leave the attachment unchanged.
-    if (metrics.scrollTop !== 0 && !targetScroll.attachmentAchieved) this.#viewportAnchor.deferAttachment();
+    // At the scroll origin, consume the new geometry without vertical correction.
     return {
       type: 'ready',
       geometry,
+      sourceScroll,
       targetScrollLeft: targetScroll.scroll.left === metrics.scrollLeft ? null : targetScroll.scroll.left,
-      targetScrollTop: metrics.scrollTop === 0 ? 0 : targetScroll.scroll.top,
+      targetScrollTop: metrics.scrollTop === 0 || targetScroll.scroll.top === metrics.scrollTop ? null : targetScroll.scroll.top,
       attachmentAchieved: metrics.scrollTop !== 0 && targetScroll.attachmentAchieved,
     };
   }
@@ -396,11 +399,12 @@ export class EditorScrollScope {
     if (publication.type !== 'ready') return;
     const viewport = this.#editor.scrollViewport;
     if (publication.targetScrollLeft === null && publication.targetScrollTop === null) {
-      if (viewport && publication.geometry && publication.attachmentAchieved) {
-        this.#viewportAnchor.acceptGeometry(publication.geometry, {
-          left: viewport.getScrollLeft(),
-          top: viewport.getScrollTop(),
-        });
+      if (viewport && publication.geometry) {
+        this.#viewportAnchor.acceptGeometry(
+          publication.geometry,
+          { left: viewport.getScrollLeft(), top: viewport.getScrollTop() },
+          publication.attachmentAchieved,
+        );
       } else {
         this.#ensureViewportAnchor();
       }
@@ -414,8 +418,21 @@ export class EditorScrollScope {
     const maximumScrollTop = Math.max(0, viewport.getScrollHeight() - clientHeight);
     const previousScrollLeft = viewport.getScrollLeft();
     const previousScrollTop = viewport.getScrollTop();
-    const targetLeft = Math.max(0, Math.min(publication.targetScrollLeft ?? previousScrollLeft, maximumScrollLeft));
-    const targetTop = Math.max(0, Math.min(publication.targetScrollTop ?? previousScrollTop, maximumScrollTop));
+    // Preserve scrolling that continued after preparation. DOM publication may
+    // already have clamped the source position to a smaller content extent.
+    const sourceLeft = Math.max(0, Math.min(publication.sourceScroll.left, maximumScrollLeft));
+    const sourceTop = Math.max(0, Math.min(publication.sourceScroll.top, maximumScrollTop));
+    const targetLeft = Math.max(
+      0,
+      Math.min(
+        previousScrollLeft + (publication.targetScrollLeft === null ? 0 : publication.targetScrollLeft - sourceLeft),
+        maximumScrollLeft,
+      ),
+    );
+    const targetTop = Math.max(
+      0,
+      Math.min(previousScrollTop + (publication.targetScrollTop === null ? 0 : publication.targetScrollTop - sourceTop), maximumScrollTop),
+    );
     if (Math.abs(previousScrollLeft - targetLeft) > 1 || Math.abs(previousScrollTop - targetTop) > 1) {
       viewport.scrollTo({ left: targetLeft, top: targetTop, behavior: 'instant' });
       const actualScrollLeft = viewport.getScrollLeft();
@@ -430,9 +447,7 @@ export class EditorScrollScope {
     }
     const actualScroll = { left: viewport.getScrollLeft(), top: viewport.getScrollTop() };
     const reachedPublicationTarget = Math.abs(actualScroll.left - targetLeft) <= 1 && Math.abs(actualScroll.top - targetTop) <= 1;
-    if (reachedPublicationTarget && publication.attachmentAchieved) {
-      this.#viewportAnchor.acceptGeometry(publication.geometry, actualScroll);
-    }
+    this.#viewportAnchor.acceptGeometry(publication.geometry, actualScroll, reachedPublicationTarget && publication.attachmentAchieved);
   }
 
   observeViewportScroll(): void {

@@ -1,3 +1,4 @@
+import { windowScrollViewport } from '@typie/ui/utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveEditorSurfacePreparation } from './editor-publication.svelte';
 import { EditorScrollScope } from './scroll.svelte';
@@ -25,6 +26,7 @@ const snapshot = (overrides: Partial<EditorSnapshot>): EditorSnapshot => ({
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -86,6 +88,10 @@ describe('editor publication preparation', () => {
       rootAttrs: { layout_mode: { type: 'continuous', max_width: 2000 } } as EditorSnapshot['rootAttrs'],
     });
     const visualViewport = { offsetLeft: 400, offsetTop: 300, width: 240, height: 180, scale: 5 };
+    Object.defineProperties(visualViewport, {
+      pageLeft: { get: () => window.scrollX + visualViewport.offsetLeft },
+      pageTop: { get: () => window.scrollY + visualViewport.offsetTop },
+    });
     vi.stubGlobal('visualViewport', visualViewport);
     vi.stubGlobal('devicePixelRatio', 2);
     let scaleFactor = 10;
@@ -134,6 +140,47 @@ describe('editor publication preparation', () => {
 
     visualViewport.offsetLeft = 5000;
     expect(tiles()).toEqual([]);
+  });
+
+  it('keeps visible window tiles when Safari shrinks inner dimensions during browser pinch zoom', () => {
+    const visualViewport = { offsetLeft: 180, offsetTop: 450, pageLeft: 180, pageTop: 1450, width: 78, height: 160, scale: 5 };
+    vi.stubGlobal('visualViewport', visualViewport);
+    vi.stubGlobal('devicePixelRatio', 3);
+    vi.stubGlobal('innerWidth', 78);
+    vi.stubGlobal('innerHeight', 160);
+    vi.stubGlobal('scrollX', 180);
+    vi.stubGlobal('scrollY', 1450);
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(390);
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(800);
+    const candidate = snapshot({
+      pageSizes: [{ width: 390, height: 10_000 }],
+      pageBackingSizes: [{ width: 390, height: 10_000 }],
+      rootAttrs: { layout_mode: { type: 'continuous', max_width: 390 } } as EditorSnapshot['rootAttrs'],
+    });
+    const editor = {
+      appliedSnapshot: candidate,
+      published: { snapshot: candidate, frames: new Map([[0, {}]]) },
+      scaleFactor: 15,
+      surfaceScaleFactor: 15,
+      displayZoom: 1,
+      activeSurfacePages: new Set([0]),
+      extensionAreaEl: { getBoundingClientRect: () => new DOMRect(-180, -1450, 390, 10_000) },
+      scrollViewport: windowScrollViewport(),
+      safeDisplayZoom: () => 1,
+    } as unknown as Editor;
+    const scroll = new EditorScrollScope(editor, () => ({ enabled: false, position: undefined }));
+    expect(scroll.viewportMetrics(candidate, true)?.layout.pages[0]).toMatchObject({ left: 0, top: 0 });
+    const bounds = resolveEditorSurfacePreparation(editor, scroll)?.tiles.get(0) ?? [];
+    expect(bounds.length).toBeGreaterThan(0);
+    for (const x of [180, 257]) {
+      for (const y of [1450, 1609]) {
+        expect(
+          bounds.some(
+            (left, i) => i % 4 === 0 && left <= x * 15 && bounds[i + 2] > x * 15 && bounds[i + 1] <= y * 15 && bounds[i + 3] > y * 15,
+          ),
+        ).toBe(true);
+      }
+    }
   });
 
   it('completes a current-selection reveal when the candidate has no selection geometry', async () => {
