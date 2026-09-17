@@ -54,7 +54,10 @@ async function viewer(
             }
           : { type: 'continuous', max_width: 320 },
       },
-      Array.from({ length: 120 }, () => paragraph('긴 한글 문장과 emoji 😀를 여러 줄에 걸쳐 선택합니다. '.repeat(6))),
+      [
+        entry({ type: 'horizontal_rule' }),
+        ...Array.from({ length: 120 }, () => paragraph('긴 한글 문장과 emoji 😀를 여러 줄에 걸쳐 선택합니다. '.repeat(6))),
+      ],
     ),
   };
   editor = await Editor.createFromDoc(plain, { width: 360, height: 180, scale_factor: 1 });

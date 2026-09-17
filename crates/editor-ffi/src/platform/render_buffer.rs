@@ -423,6 +423,10 @@ mod tests {
     fn reused_pixels_can_be_delivered_to_a_new_consumer_at_the_requested_revision() {
         use super::super::cpu_surface::SurfaceHandle;
         use crate::editor::FrameKey;
+        use editor_common::{Color, Rect};
+        use editor_renderer::{
+            damage::IRect, display_list::DisplayListRecorder, sink::RenderSink, types::Transform,
+        };
         let buffer = RenderBuffer::default();
         let handle = (&buffer as *const RenderBuffer) as u64;
         let mut surface = SurfaceHandle::new(handle, 10_000.0, 20_000.0, 2.0).unwrap();
@@ -430,8 +434,20 @@ mod tests {
         assert!(!surface.resize(10_000.0, 20_000.0, 2.0));
         surface.configure_tiles(&[0, 0, 512, 512]).unwrap();
         assert!(surface.needs_render());
+        let bounds = IRect {
+            x0: 0,
+            y0: 0,
+            x1: 512,
+            y1: 512,
+        };
+        let mut recorder = DisplayListRecorder::new(bounds);
+        recorder.fill_rect(
+            Rect::from_xywh(10.0, 10.0, 20.0, 20.0),
+            Color::new(255, 0, 0, 255),
+            Transform::IDENTITY,
+        );
         let key = FrameKey { value: 1 };
-        assert!(surface.apply_damage(&Default::default(), &[], 1, key));
+        assert!(surface.apply_damage(&recorder.into_list(), &[bounds], 1, key));
         assert!(buffer.begin_read());
         let pixels = buffer.tile(0, |tile| tile.pixels.clone());
         buffer.end_read();
@@ -442,6 +458,15 @@ mod tests {
             (2, 1)
         );
         assert!(buffer.tile(0, |tile| Arc::ptr_eq(&tile.pixels, &pixels)));
+        assert!(surface.apply_damage(&Default::default(), &[bounds], 3, FrameKey { value: 2 }));
+        assert_eq!(buffer.pinned(|frame| frame.tiles.len()), 1);
+        assert!(buffer.tile(0, |tile| Arc::ptr_eq(&tile.pixels, &pixels)));
+        buffer.end_read();
+        assert!(buffer.begin_read());
+        assert_eq!(
+            buffer.pinned(|frame| (frame.editor_revision, frame.frame_key, frame.tiles.len())),
+            (3, 2, 0)
+        );
         buffer.end_read();
     }
 

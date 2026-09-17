@@ -8,6 +8,99 @@ vi.mock('@mearie/svelte', async (importOriginal) => {
   return { ...original, createMutation: () => [vi.fn()] };
 });
 
+it.each([true, false])('omits empty tiles and presents removals atomically (separate background: %s)', async (separateBackground) => {
+  const host = await initWasm();
+  host.set_theme_variant('light-white')?.free();
+  const text: PlainNodeEntry = {
+    node: { type: 'text', text: 'highlight' },
+    modifiers: { background_color: { type: 'background_color', value: 'yellow' } } as PlainNodeEntry['modifiers'],
+    carry: [],
+    children: [],
+  };
+  const plain: PlainDoc = {
+    root: {
+      node: {
+        type: 'root',
+        layout_mode: {
+          type: 'paginated',
+          page_width: 400,
+          page_height: 1400,
+          page_margin_top: 20,
+          page_margin_bottom: 20,
+          page_margin_left: 20,
+          page_margin_right: 20,
+        },
+      },
+      modifiers: {} as PlainNodeEntry['modifiers'],
+      carry: [],
+      children: [
+        { node: { type: 'paragraph' }, modifiers: {} as PlainNodeEntry['modifiers'], carry: [], children: [text] },
+        { node: { type: 'horizontal_rule' }, modifiers: {} as PlainNodeEntry['modifiers'], carry: [], children: [] },
+      ],
+    },
+  };
+  const core = host.create_editor_from_doc(plain, { width: 400, height: 1400, scale_factor: 1 });
+  try {
+    const surface = document.createElement('div');
+    if (separateBackground) surface.dataset.separateBackground = '';
+    core.attach_surface(0, surface, 400, 1400, 1);
+    const prepare = (revision: Revision) => {
+      const frame = core.render_surface(0, revision);
+      if (!frame) throw new Error('Expected a prepared frame');
+      return BigInt(frame.value);
+    };
+    const initialized = core.tick_through(core.enqueue_request([{ type: 'system', event: { type: 'initialize' } }]));
+    const initialFrame = prepare(initialized.revision);
+    expect(core.present_surface(0, initialFrame)).toBe(true);
+    const backgrounds = () => [...surface.querySelectorAll<HTMLCanvasElement>(':scope [data-surface-layer="background"] canvas')];
+    const canvases = () => [...surface.querySelectorAll('canvas')];
+    expect(backgrounds()).toHaveLength(separateBackground ? 1 : 0);
+    expect(canvases()).toHaveLength(separateBackground ? 2 : 1);
+    const initialCanvases = canvases();
+    const initialCanvas = initialCanvases[0];
+    expect(
+      initialCanvas
+        .getContext('2d')
+        ?.getImageData(0, 0, 400, 512)
+        .data.some((channel) => channel !== 0),
+    ).toBe(true);
+
+    const selection = core.find_matches('highlight')[0];
+    if (!selection) throw new Error('Expected a text range');
+    const erased = core.tick_through(
+      core.enqueue_request([
+        { type: 'selection', op: { type: 'set', selection } },
+        { type: 'modifier', op: { type: 'edit', modifier_type: 'background_color', modifier: undefined } },
+        { type: 'selection', op: { type: 'unset' } },
+      ]),
+    );
+    const emptyFrame = prepare(erased.revision);
+    expect(core.present_surface(0, initialFrame)).toBe(false);
+    expect(canvases()).toEqual(initialCanvases);
+    expect(core.present_surface(0, emptyFrame)).toBe(true);
+    expect(backgrounds()).toHaveLength(0);
+    expect(canvases()).toHaveLength(1);
+    const remainingCanvases = canvases();
+    const deleted = core.tick_through(
+      core.enqueue_request([
+        { type: 'selection', op: { type: 'expand', unit: 'all' } },
+        { type: 'deletion', op: { type: 'selection' } },
+        { type: 'selection', op: { type: 'unset' } },
+      ]),
+    );
+    const deletedFrame = prepare(deleted.revision);
+    expect(core.present_surface(0, emptyFrame)).toBe(false);
+    expect(canvases()).toEqual(remainingCanvases);
+    expect(core.present_surface(0, deletedFrame)).toBe(true);
+    expect(canvases()).toHaveLength(0);
+    core.resize_surface(0, 400, 1400, 1.25);
+    expect(core.present_surface(0, prepare(deleted.revision))).toBe(true);
+    expect(canvases()).toHaveLength(0);
+  } finally {
+    core.free();
+  }
+});
+
 it('reuses canvas tiles and presents all accumulated damage only with the matching frame', async () => {
   const host = await initWasm();
   host.set_theme_variant('light-white')?.free();
