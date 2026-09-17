@@ -717,6 +717,10 @@ describe('web editor frame synchronization', () => {
       height: 180,
       scale: 1,
     });
+    Object.defineProperties(visualViewport, {
+      pageLeft: { get: () => window.scrollX + visualViewport.offsetLeft },
+      pageTop: { get: () => window.scrollY + visualViewport.offsetTop },
+    });
     vi.stubGlobal('visualViewport', visualViewport);
     const plain = longDoc();
     plain.root.children = plain.root.children?.map((child) => entry({ type: 'callout' }, [child]));
@@ -756,6 +760,126 @@ describe('web editor frame synchronization', () => {
     await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(2);
     expect(editor.terminal).toBeFalsy();
     expectActualCanvas(editor, 0);
+  });
+
+  it('preserves window movement when publication runs before its scroll event', async () => {
+    const { editor } = await mountEditor(longDoc(), { readOnly: true, nativeSelection: true, useWindowScroll: true });
+    window.scrollTo({ top: 1000, behavior: 'instant' });
+    window.dispatchEvent(new Event('scroll'));
+    await tick();
+    await nextAnimationFrame();
+
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+    try {
+      for (const top of [1060, 940]) {
+        // Safari advances scrolling during toolbar animation before delivering
+        // scroll/resize events; an already queued publication can run first.
+        window.scrollTo({ top, behavior: 'instant' });
+        scrollTo.mockClear();
+        editor.requestPublication();
+        await tick();
+        expect(scrollTo).not.toHaveBeenCalled();
+        expect(window.scrollY).toBe(top);
+        await nextAnimationFrame();
+        expect(window.scrollY).toBe(top);
+      }
+    } finally {
+      scrollTo.mockRestore();
+    }
+  });
+
+  it.each(['Chrome', 'Safari'])('covers the visible window without restoring browser zoom panning in %s', async (browser) => {
+    const previousViewport = { width: innerWidth, height: innerHeight };
+    await page.viewport(360, 800);
+    try {
+      const visualViewport = Object.assign(new EventTarget(), { offsetLeft: 0, offsetTop: 0, width: 360, height: 800, scale: 1 });
+      Object.defineProperties(visualViewport, {
+        pageLeft: { get: () => window.pageXOffset + visualViewport.offsetLeft },
+        pageTop: { get: () => window.pageYOffset + visualViewport.offsetTop },
+      });
+      vi.stubGlobal('visualViewport', visualViewport);
+      if (browser === 'Safari') {
+        // Safari reports both window scrolling and DOM rects relative to the
+        // visual viewport; Chrome keeps them relative to the layout viewport.
+        vi.spyOn(window, 'scrollX', 'get').mockImplementation(() => window.pageXOffset + visualViewport.offsetLeft);
+        vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => window.pageYOffset + visualViewport.offsetTop);
+        const getBoundingClientRect = Element.prototype.getBoundingClientRect;
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+          const rect = getBoundingClientRect.call(this);
+          return new DOMRect(rect.x - visualViewport.offsetLeft, rect.y - visualViewport.offsetTop, rect.width, rect.height);
+        });
+      }
+      const document = longDoc();
+      document.root.children = document.root.children?.map((child) => entry({ type: 'callout' }, [child]));
+      const { editor } = await mountEditor(document, {
+        readOnly: true,
+        nativeSelection: true,
+        useWindowScroll: true,
+      });
+      window.scrollTo({ top: 1000, behavior: 'instant' });
+      window.dispatchEvent(new Event('scroll'));
+      await tick();
+      await nextAnimationFrame();
+
+      Object.assign(visualViewport, {
+        offsetLeft: 120,
+        offsetTop: 450,
+        width: 45,
+        height: 100,
+        scale: 8,
+      });
+      vi.stubGlobal('devicePixelRatio', 3);
+      vi.stubGlobal('innerWidth', 45);
+      vi.stubGlobal('innerHeight', 100);
+      editor.resizeViewport(360, 100, 24);
+      await expect.poll(() => editor.published?.snapshot.viewport.scale_factor).toBe(24);
+
+      const scrollTo = vi.spyOn(window, 'scrollTo');
+      for (const [x, y] of [
+        [120, 450],
+        [240, 300],
+        [80, 500],
+      ]) {
+        Object.assign(visualViewport, { offsetLeft: x, offsetTop: y });
+        scrollTo.mockClear();
+        visualViewport.dispatchEvent(new Event('scroll'));
+        await expect
+          .poll(() => {
+            const tiles = [...(editor.published?.frames.values() ?? [])].flatMap((frame) => [...frame.surface.querySelectorAll('canvas')]);
+            const rects = tiles.map((tile) => tile.getBoundingClientRect());
+            const left = browser === 'Safari' ? 0 : x;
+            const top = browser === 'Safari' ? 0 : y;
+            return [left + 1, left + 44].every((left) =>
+              [top + 1, top + 99].every((top) =>
+                rects.some((rect) => rect.left <= left && rect.right > left && rect.top <= top && rect.bottom > top),
+              ),
+            );
+          })
+          .toBe(true);
+        expect(scrollTo).not.toHaveBeenCalled();
+      }
+      // Safari can move the layout viewport while its address bar resizes,
+      // then dispatch resize before either window.scroll or visualViewport.scroll.
+      for (const target of [visualViewport, window]) {
+        const top = window.pageYOffset + 160;
+        window.scrollTo({ top, behavior: 'instant' });
+        scrollTo.mockClear();
+        target.dispatchEvent(new Event('resize'));
+        editor.requestPublication();
+        await tick();
+        await nextAnimationFrame();
+        expect(scrollTo).not.toHaveBeenCalled();
+        expect(editor.scrollViewport?.getScrollTop()).toBe(top);
+      }
+      expect(editor.terminal).toBe(false);
+      for (const [page, frame] of editor.published?.frames ?? []) {
+        if (frame.surface.querySelector('canvas')) expectActualCanvas(editor, page);
+      }
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+      await page.viewport(previousViewport.width, previousViewport.height);
+    }
   });
 
   it('bounds raster allocation and reuses visible tiles at 200% zoom on a dense display', async () => {

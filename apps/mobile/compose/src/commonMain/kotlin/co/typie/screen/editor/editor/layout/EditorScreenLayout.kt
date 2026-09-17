@@ -473,13 +473,14 @@ internal fun EditorScreenLayout(
         )
         smoothScrollSession.translate(state.viewportState.scrollOffset.y - previousScrollOffset.y)
         anchorPublication.geometry?.let { geometry ->
-          if (
-            anchorPublication.attachmentAchieved &&
-              (state.viewportState.scrollOffset - anchorPublication.scrollOffset).getDistance() <=
-                1f
-          ) {
-            activeViewportAnchorState.acceptGeometry(geometry, state.viewportState.scrollOffset)
-          }
+          activeViewportAnchorState.acceptGeometry(
+            geometry = geometry,
+            scrollOffset = state.viewportState.scrollOffset,
+            attachmentAchieved =
+              anchorPublication.attachmentAchieved &&
+                (state.viewportState.scrollOffset - anchorPublication.scrollOffset).getDistance() <=
+                  1f,
+          )
         }
         candidate
       }

@@ -55,14 +55,34 @@ export function elementScrollViewport(el: HTMLElement): ScrollViewport {
 }
 
 export function windowScrollViewport(): ScrollViewport {
+  const getScrollLeft = () => {
+    const viewport = window.visualViewport;
+    return viewport ? viewport.pageLeft - viewport.offsetLeft : window.scrollX;
+  };
+  const getScrollTop = () => {
+    const viewport = window.visualViewport;
+    return viewport ? viewport.pageTop - viewport.offsetTop : window.scrollY;
+  };
   return {
     target: window,
-    getRect: () => ({ top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth }),
-    getScrollTop: () => window.scrollY,
-    getScrollLeft: () => window.scrollX,
+    // Keep scrolling in layout coordinates and express its bounds in the same
+    // client coordinates as DOM rects. Safari includes pinch panning in both
+    // window scrolling and DOM rects; Chrome includes it in neither.
+    getRect: () => {
+      const left = getScrollLeft() - window.scrollX;
+      const top = getScrollTop() - window.scrollY;
+      return { top, bottom: top + document.documentElement.clientHeight, left, right: left + document.documentElement.clientWidth };
+    },
+    getScrollTop,
+    getScrollLeft,
     getScrollWidth: () => document.scrollingElement?.scrollWidth ?? 0,
     getScrollHeight: () => document.scrollingElement?.scrollHeight ?? 0,
     scrollBy: (x, y) => window.scrollBy(x, y),
-    scrollTo: (options) => window.scrollTo(options),
+    scrollTo: (options) => {
+      const target = { ...options };
+      if (target.left !== undefined) target.left += window.scrollX - getScrollLeft();
+      if (target.top !== undefined) target.top += window.scrollY - getScrollTop();
+      window.scrollTo(target);
+    },
   };
 }

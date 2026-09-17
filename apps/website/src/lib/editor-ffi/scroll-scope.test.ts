@@ -853,6 +853,56 @@ describe('EditorScrollScope', () => {
     expect(scrollTop).toBe(220);
   });
 
+  it.each([0, 120])('preserves scrolling before and after preparing a layout displacement of %d', (displacement) => {
+    const current = trackedSnapshot('unused', { page_idx: 0, rect: { x: 0, y: 200, width: 1, height: 20 } });
+    const candidate = { ...current, revision: 2 };
+    const { editor, scope, setScrollTop, getScrollTop, scrollTo } = setup(current);
+    const anchor = { type: 'node' as const, node: 'viewport', offset_x: 0, offset_y: 0 };
+    editor.captureViewportAnchorAt = vi.fn(() => ({
+      identity: anchor,
+      geometry: { point: { page_idx: 0, x: 0, y: 200 }, rect: undefined },
+    }));
+    editor.resolveViewportAnchor = vi.fn((revision) => ({
+      type: 'resolved' as const,
+      geometry: { point: { page_idx: 0, x: 0, y: 200 + (revision === 2 ? displacement : 0) }, rect: undefined },
+    }));
+    setScrollTop(100);
+    scope.prepareViewportAnchorPublication(current);
+
+    setScrollTop(160);
+    const publication = scope.prepareViewportAnchorPublication(candidate);
+    setScrollTop(190);
+    scope.applyViewportAnchorPublication(publication);
+
+    expect(getScrollTop()).toBe(190 + displacement);
+    if (displacement === 0) expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('accounts for the browser clamping scroll when the published content shrinks', () => {
+    const current = trackedSnapshot('unused', { page_idx: 0, rect: { x: 0, y: 900, width: 1, height: 20 } });
+    const candidate = { ...current, revision: 2, pageSizes: [{ width: 600, height: 1000 }] };
+    const { editor, scope, setScrollTop, getScrollTop } = setup(current);
+    const anchor = { type: 'node' as const, node: 'viewport', offset_x: 0, offset_y: 0 };
+    editor.captureViewportAnchorAt = vi.fn(() => ({
+      identity: anchor,
+      geometry: { point: { page_idx: 0, x: 0, y: 900 }, rect: undefined },
+    }));
+    editor.resolveViewportAnchor = vi.fn((revision) => ({
+      type: 'resolved' as const,
+      geometry: { point: { page_idx: 0, x: 0, y: revision === 1 ? 900 : 600 }, rect: undefined },
+    }));
+    setScrollTop(800);
+    scope.prepareViewportAnchorPublication(current);
+    const publication = scope.prepareViewportAnchorPublication(candidate);
+
+    if (!editor.scrollViewport) throw new Error('Expected a scroll viewport');
+    editor.scrollViewport.getScrollHeight = () => 1000;
+    setScrollTop(600);
+    scope.applyViewportAnchorPublication(publication);
+
+    expect(getScrollTop()).toBe(500);
+  });
+
   it('settles a retained zoom focal on both axes with one scroll operation', () => {
     const current = selectionSnapshot(false, { page_idx: 0, rect: { x: 0, y: 0, width: 1, height: 1 } });
     const candidate = { ...current, revision: 2 };
@@ -1107,8 +1157,9 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(initial)).toEqual({
       type: 'ready',
       geometry: { pointX: 0, pointY: 200, rect: undefined },
+      sourceScroll: { left: 0, top: 0 },
       targetScrollLeft: null,
-      targetScrollTop: 0,
+      targetScrollTop: null,
       attachmentAchieved: false,
     });
   });
@@ -1150,8 +1201,9 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
       geometry: { pointX: 0, pointY: 500, rect: undefined },
+      sourceScroll: { left: 0, top: 0 },
       targetScrollLeft: null,
-      targetScrollTop: 0,
+      targetScrollTop: null,
       attachmentAchieved: false,
     });
     expect(scrollTo).not.toHaveBeenCalled();
@@ -1207,6 +1259,7 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
       geometry: null,
+      sourceScroll: { left: 0, top: 0 },
       targetScrollLeft: null,
       targetScrollTop: null,
       attachmentAchieved: false,
@@ -1232,6 +1285,7 @@ describe('EditorScrollScope', () => {
     expect(publication).toEqual({
       type: 'ready',
       geometry: null,
+      sourceScroll: { left: 0, top: 800 },
       targetScrollLeft: null,
       targetScrollTop: 0,
       attachmentAchieved: false,
@@ -1258,6 +1312,7 @@ describe('EditorScrollScope', () => {
     expect(scope.prepareViewportAnchorPublication(candidate)).toEqual({
       type: 'ready',
       geometry: null,
+      sourceScroll: { left: 0, top: 800 },
       targetScrollLeft: null,
       targetScrollTop: null,
       attachmentAchieved: false,
@@ -1269,7 +1324,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { advanceAnimation, animationFrameCount, scope, scrollTo } = setup(snapshot);
+    const { advanceAnimation, animationFrameCount, getScrollTop, scope, scrollTo } = setup(snapshot);
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
@@ -1280,6 +1335,7 @@ describe('EditorScrollScope', () => {
     scope.applyViewportAnchorPublication({
       type: 'ready',
       geometry: { pointX: 0, pointY: 320 },
+      sourceScroll: { left: 0, top: getScrollTop() },
       targetScrollLeft: null,
       targetScrollTop: 220,
       attachmentAchieved: true,
@@ -1330,7 +1386,7 @@ describe('EditorScrollScope', () => {
       page_idx: 0,
       rect: { x: 0, y: 900, width: 1, height: 20 },
     });
-    const { scope, scrollTo } = setup(snapshot);
+    const { getScrollTop, scope, scrollTo } = setup(snapshot);
     scope.scrollIntoView({ target: { type: 'tracked_item', id: 'target' }, policy: 'reveal', behavior: 'smooth' });
     const request = scope.pendingRequest;
     if (!request) throw new Error('Expected a pending reveal');
@@ -1339,6 +1395,7 @@ describe('EditorScrollScope', () => {
     scope.applyViewportAnchorPublication({
       type: 'ready',
       geometry: { pointX: 0, pointY: 320 },
+      sourceScroll: { left: 0, top: getScrollTop() },
       targetScrollLeft: null,
       targetScrollTop: 220,
       attachmentAchieved: true,

@@ -73,6 +73,25 @@ describe('EditorViewportAnchorState', () => {
     });
   });
 
+  it.each([0, 120])('adds only the layout displacement %d to unobserved scrolling', (displacement) => {
+    const state = new EditorViewportAnchorState();
+    state.attach(viewportIdentity, { pointX: 100, pointY: 200 }, { left: 20, top: 100 });
+
+    expect(
+      state.publicationScroll({ pointX: 100 + displacement, pointY: 200 + displacement }, { left: 50, top: 160 }, { left: 500, top: 500 }),
+    ).toEqual({ scroll: { left: 50 + displacement, top: 160 + displacement }, attachmentAchieved: true });
+  });
+
+  it('preserves an explicitly pending zoom attachment', () => {
+    const state = new EditorViewportAnchorState();
+    state.attachViewport(viewportIdentity, { pointX: 200, pointY: 300 }, { left: 80, top: 180 }, true);
+
+    expect(state.publicationScroll({ pointX: 260, pointY: 420 }, { left: 100, top: 200 }, { left: 500, top: 500 })).toEqual({
+      scroll: { left: 140, top: 300 },
+      attachmentAchieved: true,
+    });
+  });
+
   it('translates the attachment when the scroll content origin moves inside the viewport', () => {
     const state = new EditorViewportAnchorState();
     state.attach(viewportIdentity, { pointX: 0, pointY: 200 }, { left: 0, top: 100 });
@@ -107,19 +126,28 @@ describe('EditorViewportAnchorState', () => {
   it('moves minimally after resize pushes the anchor outside the cursor guard', () => {
     const state = new EditorViewportAnchorState();
     const geometry = { pointX: 0, pointY: 260, rect: { top: 250, bottom: 270 } };
-    state.attach(identity, geometry, { left: 0, top: 100 });
+    state.attachSelection(identity, geometry, { left: 0, top: 100 });
 
     expect(state.resizeScroll(geometry, 100, 300, 1000, { topInset: 0, bottomInset: 100 })).toBe(130);
   });
 
-  it('preserves the desired attachment until publication bounds can reach it', () => {
+  it('does not reveal a viewport anchor when browser chrome shrinks the visible area', () => {
     const state = new EditorViewportAnchorState();
-    state.attach(identity, { pointX: 200, pointY: 200 }, { left: 100, top: 100 });
+    const geometry = { pointX: 0, pointY: 260 };
+    state.attachViewport(viewportIdentity, geometry, { left: 0, top: 100 });
+
+    expect(state.resizeScroll(geometry, 100, 200, 1000, visibleArea)).toBe(100);
+  });
+
+  it('preserves an explicit zoom attachment until publication bounds can reach it', () => {
+    const state = new EditorViewportAnchorState();
+    state.attachViewport(viewportIdentity, { pointX: 200, pointY: 200 }, { left: 100, top: 100 }, true);
     const candidate = { pointX: 800, pointY: 800 };
 
     const constrained = state.publicationScroll(candidate, { left: 100, top: 100 }, { left: 500, top: 500 });
 
     expect(constrained).toEqual({ scroll: { left: 500, top: 500 }, attachmentAchieved: false });
+    state.acceptGeometry(candidate, constrained.scroll, false);
     expect(state.publicationScroll(candidate, constrained.scroll, { left: 1000, top: 1000 })).toEqual({
       scroll: { left: 700, top: 700 },
       attachmentAchieved: true,

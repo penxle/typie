@@ -131,8 +131,7 @@ internal fun reconcileViewportAnchorPublication(
             }
           },
         )
-      // At the scroll origin, skip vertical correction and leave the attachment unchanged.
-      if (currentScrollY != 0f && !anchorScroll.attachmentAchieved) anchorState.deferAttachment()
+      // At the scroll origin, consume the new geometry without vertical correction.
       EditorViewportAnchorPublication.Ready(
         scrollOffset =
           if (currentScrollY == 0f) anchorScroll.scrollOffset.copy(y = 0f)
@@ -331,7 +330,7 @@ internal fun reconcileViewportAnchorObservation(
         visibleArea = visibleArea,
       )
     viewportState.scrollToY(targetY = targetY, isAutoScroll = true)
-    anchorState.acceptGeometry(geometry, viewportState.scrollOffset)
+    anchorState.acceptGeometryAfterAutomaticScroll(geometry, viewportState.scrollOffset)
   }
 }
 
