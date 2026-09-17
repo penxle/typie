@@ -11,23 +11,26 @@ const pointInRect = (x: number, y: number, r: Rect): boolean => x >= r.x && x <=
 type LocalPoint = { page: number; x: number; y: number };
 type DragPoint = LocalPoint & { clientX: number; clientY: number };
 
-const tryHandleInteractiveHit = (editor: Editor, hit: InteractiveHit, local: { x: number; y: number }): boolean => {
-  const editMode = !editor.readOnly;
-  const selectableTitle = editMode || (editor.nativeSelection && !editor.protectContent);
-  if (hit.type === 'fold_title') {
-    const onText = selectableTitle && hit.text_rect !== undefined && pointInRect(local.x, local.y, hit.text_rect);
-    if (!onText) {
-      editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
-      return true;
-    }
-  } else if (editMode && hit.type === 'callout_icon') {
-    editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
-    return true;
+const interactiveTarget = (editor: Editor, hit: InteractiveHit | undefined, local: { x: number; y: number }) => {
+  if (hit?.type === 'fold_title') {
+    const selectableTitle = !editor.readOnly || (editor.nativeSelection && !editor.protectContent);
+    if (selectableTitle && hit.text_rect && pointInRect(local.x, local.y, hit.text_rect)) return;
+    return hit;
   }
-  return false;
+  if (hit?.type === 'callout_icon' && !editor.readOnly) return hit;
+};
+
+const activateInteractiveTarget = (editor: Editor, hit: InteractiveHit) => {
+  if (hit.type === 'fold_title') {
+    editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id: hit.id } });
+  } else {
+    editor.enqueue({ type: 'node', op: { type: 'set_attrs', id: hit.id, attrs: { type: 'callout', variant: hit.next_variant } } });
+  }
 };
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
+  // A new press, including a second finger, invalidates the previous click target.
+  PointerState.of(editor).clickTarget = undefined;
   if (!e.isPrimary) return;
 
   if (e.button !== 0) return;
@@ -37,12 +40,19 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
     return;
   }
 
-  const hit = editor.interactiveHitTest(local.page, local.x, local.y);
-  if (hit && tryHandleInteractiveHit(editor, hit, local)) {
-    if (editor.nativeSelection) e.preventDefault();
+  const hit = interactiveTarget(editor, editor.interactiveHitTest(local.page, local.x, local.y), local);
+  if (hit) {
+    if (e.pointerType === 'touch') {
+      // The browser decides whether this gesture produces a click. Retain only
+      // its engine target because multiple canvas controls share one DOM node.
+      PointerState.of(editor).clickTarget = { pointerId: e.pointerId, hit };
+    } else {
+      activateInteractiveTarget(editor, hit);
+      if (editor.nativeSelection) e.preventDefault();
+    }
     return;
   }
-  // The viewer shares fold hit testing, then leaves text selection to the browser.
+  // The viewer shares interactive hit testing, then leaves text selection to the browser.
   if (editor.nativeSelection) return;
 
   const { page, x, y } = local;
@@ -119,7 +129,6 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
   if (editor.nativeSelection) return;
 
   editor.updatePointerHover(e.clientX, e.clientY);
-
   if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
     return;
   }
@@ -148,20 +157,28 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
 };
 
 export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
-  if (editor.nativeSelection || e.button !== 0 || !editor.commentClickHandler) return;
+  const state = PointerState.of(editor);
+  const target = state.clickTarget;
+  if (target && 'pointerId' in e && e.pointerId !== target.pointerId) return;
+  state.clickTarget = undefined;
+  if (e.button !== 0) return;
+
   const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) return;
+  if (target) {
+    const hit = interactiveTarget(editor, editor.interactiveHitTest(local.page, local.x, local.y), local);
+    if (hit?.type === target.hit.type && hit.id === target.hit.id) activateInteractiveTarget(editor, hit);
+    return;
+  }
+  if (editor.nativeSelection || !editor.commentClickHandler) return;
   const id = editor.commentIdAt(local.page, local.x, local.y);
   if (id !== null) editor.commentClickHandler(id);
 };
 
 export const handlePointerCancel: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  if (editor.nativeSelection) return;
-
   const state = PointerState.of(editor);
-  if (!state.hasActivePointer(e.pointerId)) {
-    return;
-  }
+  if (state.clickTarget?.pointerId === e.pointerId) state.clickTarget = undefined;
+  if (!state.hasActivePointer(e.pointerId)) return;
 
   state.cancelPointer(e.pointerId);
   state.releasePointer(e.currentTarget, e.pointerId);
@@ -221,6 +238,8 @@ class PointerState {
     nativeDragStarted: boolean;
     dragging: boolean;
   } | null = null;
+
+  clickTarget: { pointerId: number; hit: InteractiveHit } | undefined;
 
   #flushDragPending(editor: Editor): void {
     const point = this.#dragPending;
@@ -373,6 +392,7 @@ class PointerState {
   }
 
   cancelActivePointer(): boolean {
+    this.clickTarget = undefined;
     const pointerId = this.#session?.pointerId;
     if (pointerId === undefined) return false;
     this.cancelPointer(pointerId);

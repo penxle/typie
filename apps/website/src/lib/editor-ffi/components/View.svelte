@@ -97,7 +97,13 @@
         ctx.scroll?.cancel();
         handlePointerDown(editor, event);
       },
+      onclick: handle(editor, handleClick),
+      oncontextmenu: (event) => {
+        cancelPointerInteraction(editor);
+        if (!editor.nativeSelection) handleContextMenu(editor, event);
+      },
       onpointerleave: () => editor.clearLinkHover(),
+      onpointercancel: handle(editor, handlePointerCancel),
     };
     if (editor.nativeSelection) {
       return {
@@ -107,8 +113,6 @@
     }
     return {
       ...common,
-      onclick: handle(editor, handleClick),
-      oncontextmenu: handle(editor, handleContextMenu),
       ondragend: () => handleDragEnd(ctx),
       ondragenter: (event) => handleDragEnter(ctx, event),
       ondragleave: (event) => handleDragLeave(ctx, event),
@@ -124,7 +128,6 @@
         editor.blur();
       },
       onlostpointercapture: handle(editor, handlePointerCaptureLost),
-      onpointercancel: handle(editor, handlePointerCancel),
       onpointermove: handle(editor, handlePointerMove),
       onpointerup: handle(editor, handlePointerUp),
     };
