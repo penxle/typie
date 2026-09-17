@@ -1,13 +1,16 @@
 import Core
 import Design
+import SwiftUI
 import UIKit
 
 @MainActor
 final class Router {
   private let theme: ThemeSettings
+  private let services: CoreServices
 
-  init(theme: ThemeSettings) {
+  init(theme: ThemeSettings, services: CoreServices) {
     self.theme = theme
+    self.services = services
   }
 
   func root(for tab: MainTab) -> UIViewController {
@@ -63,57 +66,72 @@ final class Router {
     UIImage(named: name.assetName, in: DesignBundle.bundle, with: nil)
   }
 
-  func showDesignShowcase(from presenter: UIViewController) {
-    let controller = ThemedHostingController.make(title: "Design", DesignShowcase(theme: theme))
-    presenter.navigationController?.pushViewController(controller, animated: true)
+  private func pushScreen(title: String, _ screen: some View, from presenter: UIViewController) {
+    presenter.navigationController?.pushViewController(
+      ThemedHostingController.make(title: title, screen), animated: true)
+  }
+
+  private func pushAction(_ title: String, _ route: Route, host: HostReference)
+    -> PlaceholderAction
+  {
+    PlaceholderAction(title: title) { [weak self] in
+      guard let presenter = host.controller else { return }
+      self?.push(route, from: presenter)
+    }
+  }
+
+  private func presentAction(_ title: String, _ route: Route, host: HostReference)
+    -> PlaceholderAction
+  {
+    PlaceholderAction(title: title) { [weak self] in
+      guard let presenter = host.controller else { return }
+      self?.present(route, from: presenter)
+    }
+  }
+
+  private func homeActions(host: HostReference) -> [PlaceholderAction] {
+    var actions = [
+      pushAction("push settings", .settings, host: host),
+      pushAction("push document", .document(entityId: "sample"), host: host),
+      PlaceholderAction(title: "push design showcase") { [weak self] in
+        guard let self, let presenter = host.controller else { return }
+        pushScreen(title: "Design", DesignShowcase(theme: theme), from: presenter)
+      },
+      PlaceholderAction(title: "logout") { [weak self] in
+        guard let authService = self?.services.authService else { return }
+        Task { await authService.logout() }
+      },
+    ]
+    if let probe = services.serverProbe {
+      let authState = services.authState
+      actions.append(
+        PlaceholderAction(title: "push server probe") { [weak self] in
+          guard let presenter = host.controller else { return }
+          self?.pushScreen(
+            title: "server probe", ServerProbeScreen(probe: probe, authState: authState),
+            from: presenter)
+        })
+    }
+    return actions
   }
 
   private func viewController(for route: Route) -> UIViewController {
     let host = HostReference()
     let actions: [PlaceholderAction] =
       switch route {
-      case .home:
-        [
-          PlaceholderAction(title: "push settings") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.push(.settings, from: presenter)
-          },
-          PlaceholderAction(title: "push document") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.push(.document(entityId: "sample"), from: presenter)
-          },
-          PlaceholderAction(title: "push design showcase") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.showDesignShowcase(from: presenter)
-          },
-        ]
+      case .home: homeActions(host: host)
       case .document:
         [
-          PlaceholderAction(title: "present body settings") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.present(.documentBodySettings(entityId: "sample"), from: presenter)
-          }
+          presentAction(
+            "present body settings", .documentBodySettings(entityId: "sample"), host: host)
         ]
       case .studio:
         [
-          PlaceholderAction(title: "push folder") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.push(.folder(entityId: "sample"), from: presenter)
-          },
-          PlaceholderAction(title: "present folder details") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.present(.folderDetails(entityId: "sample"), from: presenter)
-          },
+          pushAction("push folder", .folder(entityId: "sample"), host: host),
+          presentAction("present folder details", .folderDetails(entityId: "sample"), host: host),
         ]
-      case .folder:
-        [
-          PlaceholderAction(title: "push folder") { [weak self] in
-            guard let presenter = host.controller else { return }
-            self?.push(.folder(entityId: "nested"), from: presenter)
-          }
-        ]
-      default:
-        []
+      case .folder: [pushAction("push folder", .folder(entityId: "nested"), host: host)]
+      default: []
       }
     let controller = ThemedHostingController.make(
       title: String(describing: route).components(separatedBy: "(")[0],

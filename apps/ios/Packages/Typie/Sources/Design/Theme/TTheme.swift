@@ -28,8 +28,20 @@ private struct TThemeModifier: ViewModifier {
   }
 }
 
+private struct CanvasBackground: ViewModifier {
+  @Environment(\.theme) private var theme
+
+  func body(content: Content) -> some View {
+    content.background(theme.colors.surfaceCanvas.ignoresSafeArea())
+  }
+}
+
 extension View {
   public func themed() -> some View {
     modifier(TThemeModifier())
+  }
+
+  public func canvasBackground() -> some View {
+    modifier(CanvasBackground())
   }
 }

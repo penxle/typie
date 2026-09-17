@@ -1,0 +1,6 @@
+query ServerProbe {
+  randomName
+  me {
+    id
+  }
+}

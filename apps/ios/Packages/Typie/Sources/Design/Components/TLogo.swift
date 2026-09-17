@@ -1,6 +1,8 @@
 import SwiftUI
 
 public struct TLogo: View {
+  public static let launchHeight: CGFloat = 64 * 148 / 208
+
   @Environment(\.theme) private var theme
   private var colors: TColors { theme.colors }
 

@@ -9,10 +9,12 @@ public enum Route: Hashable, Sendable {
   case documentBodySettings(entityId: String)
 }
 
-public enum MainTab: CaseIterable, Sendable {
+public enum MainTab: String, CaseIterable, Sendable {
   case home
   case studio
   case notes
+
+  public static let initial = MainTab.home
 
   public var route: Route {
     switch self {

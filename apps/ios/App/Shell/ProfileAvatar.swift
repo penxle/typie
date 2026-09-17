@@ -3,6 +3,12 @@ import SwiftUI
 import UIKit
 
 enum ProfileAvatar {
+  static let assetName = "ProfilePlaceholder"
+
+  static func shape(side: CGFloat) -> RoundedRectangle {
+    TShapes.squircle(side * 0.3)
+  }
+
   private static let side: CGFloat = 28
   private static let shadowOffset: CGFloat = 2
   private static let shadowBlur: CGFloat = 5
@@ -12,10 +18,12 @@ enum ProfileAvatar {
   private static let width = leadingMargin + side + margin
   private static let height = side + margin * 2
 
+  @MainActor private static let rendered = render()
+
   @MainActor
   static func barButtonItem() -> UIBarButtonItem {
     let container = UIView(frame: CGRect(x: 0, y: 0, width: width, height: height))
-    let imageView = UIImageView(image: image())
+    let imageView = UIImageView(image: rendered)
     imageView.frame = container.bounds
     container.addSubview(imageView)
     let item = UIBarButtonItem(customView: container)
@@ -26,12 +34,12 @@ enum ProfileAvatar {
   }
 
   @MainActor
-  private static func image() -> UIImage? {
-    guard let source = UIImage(named: "ProfilePlaceholder") else { return nil }
+  private static func render() -> UIImage? {
+    guard let source = UIImage(named: assetName) else { return nil }
     let format = UIGraphicsImageRendererFormat.default()
     format.scale = 0
     let rect = CGRect(x: 0, y: 0, width: side, height: side)
-    let clip = TShapes.squircle(side * 0.3).path(in: rect).cgPath
+    let clip = shape(side: side).path(in: rect).cgPath
     return UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
       .image { context in
         let cg = context.cgContext

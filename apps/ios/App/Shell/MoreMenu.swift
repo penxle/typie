@@ -53,11 +53,11 @@ struct MoreMenu: View {
   private var header: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        Image("ProfilePlaceholder")
+        Image(ProfileAvatar.assetName)
           .resizable()
           .scaledToFill()
           .frame(width: Self.avatarSide, height: Self.avatarSide)
-          .clipShape(TShapes.squircle(Self.avatarSide * 0.3))
+          .clipShape(ProfileAvatar.shape(side: Self.avatarSide))
         TText(state.profileName, style: TTypography.label, color: theme.colors.textDefault)
         Spacer(minLength: 0)
       }

@@ -22,7 +22,7 @@ final class MainTabBarController: UITabBarController, UITabBarControllerDelegate
     super.init(nibName: nil, bundle: nil)
     tabs = MainTab.allCases.map { tab in
       UITab(
-        title: tab.label, image: tab.image, identifier: String(describing: tab)
+        title: tab.label, image: tab.image, identifier: tab.rawValue
       ) { _ in
         ShellNavigationController.make(root: rootProvider(tab))
       }
@@ -50,7 +50,7 @@ final class MainTabBarController: UITabBarController, UITabBarControllerDelegate
         performCreate?(presenter)
       }, for: .primaryActionTriggered)
     createButton = button
-    configureCreateButton(for: .home)
+    configureCreateButton(for: .initial)
   }
 
   @available(iOS 26, *)
@@ -156,7 +156,7 @@ final class MainTabBarController: UITabBarController, UITabBarControllerDelegate
   func tabBarController(
     _ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?
   ) {
-    guard let mainTab = mainTab(for: selectedTab) else { return }
+    guard let mainTab = MainTab(rawValue: selectedTab.identifier) else { return }
     configureCreateButton(for: mainTab)
   }
 
@@ -204,10 +204,6 @@ final class MainTabBarController: UITabBarController, UITabBarControllerDelegate
 
   private var presenter: UIViewController? {
     (selectedTab?.viewController as? UINavigationController)?.topViewController
-  }
-
-  private func mainTab(for tab: UITab) -> MainTab? {
-    MainTab.allCases.first { String(describing: $0) == tab.identifier }
   }
 }
 

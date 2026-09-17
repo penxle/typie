@@ -2,6 +2,7 @@ workspace_dir := justfile_directory() / "../.."
 target_dir := workspace_dir / "target"
 mobile_dir := workspace_dir / "apps/mobile"
 generated_dir := mobile_dir / "generated/uniffi"
+ios_package_dir := workspace_dir / "apps/ios/Packages/EditorFFI"
 
 crate := "editor_ffi"
 mode := "release"
@@ -51,6 +52,25 @@ ios: bindings-swift bindings-kotlin (build "uniffi" "aarch64-apple-ios") (build 
         -output {{mobile_dir}}/ios/Frameworks/Editor.xcframework
     rm -rf "$headers"
     just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{mobile_dir}}/ios/Resources/icu.zst
+
+# Build the Swift package artifacts for apps/ios
+ios-package: host-bindgen (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim")
+    #!/usr/bin/env bash
+    set -e
+    headers=$(mktemp -d)
+    {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
+        "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name EditorFFI
+    rm -rf {{ios_package_dir}}/Sources/EditorBindings/Generated
+    mkdir -p {{ios_package_dir}}/Sources/EditorBindings/Generated
+    {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
+        {{ios_package_dir}}/Sources/EditorBindings/Generated --swift-sources
+    rm -rf {{ios_package_dir}}/Editor.xcframework
+    xcodebuild -create-xcframework \
+        -library {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
+        -library {{target_dir}}/aarch64-apple-ios-sim/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
+        -output {{ios_package_dir}}/Editor.xcframework
+    rm -rf "$headers"
+    just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{ios_package_dir}}/Sources/EditorBindings/Resources/icu.zst
 
 # Build client + server WASM
 wasm: wasm-browser wasm-server

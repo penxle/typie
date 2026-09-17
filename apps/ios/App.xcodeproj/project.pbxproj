@@ -9,6 +9,13 @@
 /* Begin PBXBuildFile section */
 		C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0002A1B2C3D4E5F60002 /* Core */; };
 		C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0004A1B2C3D4E5F60004 /* Design */; };
+		C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0007A1B2C3D4E5F60007 /* EditorBindings */; };
+		C0DE000AA1B2C3D4E5F6000A /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0009A1B2C3D4E5F60009 /* Auth */; };
+		C0DE0013A1B2C3D4E5F60013 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */; };
+		C0DE0014A1B2C3D4E5F60014 /* KakaoSDKCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */; };
+		C0DE0015A1B2C3D4E5F60015 /* KakaoSDKAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */; };
+		C0DE0016A1B2C3D4E5F60016 /* KakaoSDKUser in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */; };
+		C0DE0017A1B2C3D4E5F60017 /* NidThirdPartyLogin in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,8 +53,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0DE000AA1B2C3D4E5F6000A /* Auth in Frameworks */,
 				C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */,
 				C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */,
+				C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */,
+				C0DE0013A1B2C3D4E5F60013 /* GoogleSignIn in Frameworks */,
+				C0DE0014A1B2C3D4E5F60014 /* KakaoSDKCommon in Frameworks */,
+				C0DE0015A1B2C3D4E5F60015 /* KakaoSDKAuth in Frameworks */,
+				C0DE0016A1B2C3D4E5F60016 /* KakaoSDKUser in Frameworks */,
+				C0DE0017A1B2C3D4E5F60017 /* NidThirdPartyLogin in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,8 +113,15 @@
 			);
 			name = App;
 			packageProductDependencies = (
+				C0DE0009A1B2C3D4E5F60009 /* Auth */,
 				C0DE0002A1B2C3D4E5F60002 /* Core */,
 				C0DE0004A1B2C3D4E5F60004 /* Design */,
+				C0DE0007A1B2C3D4E5F60007 /* EditorBindings */,
+				C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */,
+				C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */,
+				C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */,
+				C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */,
+				C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */,
 			);
 			productName = App;
 			productReference = 842029C347CE17DD479773A2 /* Typie.app */;
@@ -133,6 +154,10 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */,
+				C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */,
+				C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
+				C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0E2EDBC5D892DD3F91C268A /* Products */;
@@ -170,6 +195,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Manual;
@@ -200,6 +226,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
@@ -224,6 +251,37 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		C0DE0018A1B2C3D4E5F60018 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_ASSET_PATHS = "\"App/Preview Content\"";
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = "$(TEAM_ID)";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "match Development co.typie";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
 		};
 		D98EB048EA55A7A524D32169 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -282,6 +340,64 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
+		};
+		C0DE0019A1B2C3D4E5F60019 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = D9DF8733A6D024534604AFF0 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
 		};
 		F3457514A944C662DF4EB98B /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -356,6 +472,7 @@
 			buildConfigurations = (
 				F3457514A944C662DF4EB98B /* Debug */,
 				D98EB048EA55A7A524D32169 /* Release */,
+				C0DE0019A1B2C3D4E5F60019 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -365,6 +482,7 @@
 			buildConfigurations = (
 				8F054C1D32C8097DF6EA1771 /* Debug */,
 				93B4BD245D135B4D4D03BD87 /* Release */,
+				C0DE0018A1B2C3D4E5F60018 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -376,7 +494,38 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Typie;
 		};
+		C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/EditorFFI;
+		};
 /* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.0.0;
+			};
+		};
+		C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kakao/kakao-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.29.0;
+			};
+		};
+		C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/naver/naveridlogin-sdk-ios-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.2.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		C0DE0002A1B2C3D4E5F60002 /* Core */ = {
@@ -388,6 +537,41 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */;
 			productName = Design;
+		};
+		C0DE0007A1B2C3D4E5F60007 /* EditorBindings */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */;
+			productName = EditorBindings;
+		};
+		C0DE0009A1B2C3D4E5F60009 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */;
+			productName = Auth;
+		};
+		C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKCommon;
+		};
+		C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKAuth;
+		};
+		C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKUser;
+		};
+		C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */;
+			productName = NidThirdPartyLogin;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

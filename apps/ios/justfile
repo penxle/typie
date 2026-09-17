@@ -1,6 +1,9 @@
 project := "App.xcodeproj"
 scheme := "iOS"
 simulator := "generic/platform=iOS Simulator"
+apollo_version := "2.4.0"
+apollo_cli_sha256 := "c48b2137144bfc823c1b4f219d5b1d7f4f36a059744150e7f2505aa971f0b1fc"
+swift_sources := "find App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests Packages/EditorFFI/Package.swift Packages/EditorFFI/Sources -name '*.swift' -not -path '*/__generated__/*' -not -path 'App/Generated/*' -not -path 'Packages/Typie/Sources/GraphQL/*' -not -path '*/EditorBindings/Generated/*' -print0"
 
 [private]
 default:
@@ -16,11 +19,62 @@ test:
 
 # Check formatting
 lint:
-    swift format lint --strict --recursive App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests
+    {{swift_sources}} | xargs -0 swift format lint --strict
 
 # Apply formatting
 format:
-    swift format --in-place --recursive App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests
+    {{swift_sources}} | xargs -0 swift format --in-place
+
+# Generate GraphQL code (schema types + operations)
+graphql:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    resolved=$(jq -r '.pins[] | select(.identity == "apollo-ios") | .state.version' Packages/Typie/Package.resolved)
+    [ "$resolved" = "{{apollo_version}}" ] || { echo "apollo-ios $resolved is resolved but apollo_version is {{apollo_version}}"; exit 1; }
+    cli=".tools/apollo-ios-cli-{{apollo_version}}"
+    if [ ! -x "$cli" ]; then
+      mkdir -p .tools
+      archive=$(mktemp)
+      trap 'rm -f "$archive"' EXIT
+      curl -fsSL -o "$archive" "https://github.com/apollographql/apollo-ios/releases/download/{{apollo_version}}/apollo-ios-cli.tar.gz"
+      echo "{{apollo_cli_sha256}}  $archive" | shasum -a 256 -c -
+      tar -xz -C .tools -f "$archive"
+      mv .tools/apollo-ios-cli "$cli"
+    fi
+    "$cli" generate --path apollo-codegen-config.json
+
+# Write Configuration/Config.local.xcconfig and App/Generated/Secrets.swift from Doppler (mobile/dev)
+env config="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    keys='["API_URL","AUTH_URL","OIDC_CLIENT_ID","GOOGLE_IOS_CLIENT_ID","GOOGLE_DOT_REVERSED_IOS_CLIENT_ID","GOOGLE_SERVER_CLIENT_ID","KAKAO_NATIVE_APP_KEY","NAVER_CLIENT_ID"]'
+    config_tmp=$(mktemp)
+    secrets_tmp=$(mktemp)
+    trap 'rm -f "$config_tmp" "$secrets_tmp"' EXIT
+    downloaded=$(doppler secrets download -p mobile -c {{config}} --no-file --format json)
+    printf '%s' "$downloaded" | jq -r --argjson keys "$keys" '
+        . as $all
+        | $keys[]
+        | . as $key
+        | $all[$key]
+        | if type != "string" or test("^\\s*$") then error("missing \($key)") else . end
+        | if test("[$\n]") then error("unsupported character in \($key)") else . end
+        | "\($key) = \(gsub("//"; "/$()/"))"
+      ' > "$config_tmp"
+    [ "$(wc -l < "$config_tmp" | tr -d ' ')" -eq "$(jq length <<< "$keys")" ]
+    printf '%s' "$downloaded" | jq -r '
+        def secret(name): .[name]
+          | if type != "string" or test("^\\s*$") then error("missing \(name)") else . end
+          | if test("[[:cntrl:]]") then error("unsupported character in \(name)") else . end
+          | gsub("\\\\"; "\\\\") | gsub("\""; "\\\"");
+        "enum Secrets {\n  static let oidcClientSecret = \"\(secret("OIDC_CLIENT_SECRET"))\"\n  static let naverClientSecret = \"\(secret("NAVER_CLIENT_SECRET"))\"\n}"
+      ' > "$secrets_tmp"
+    [ "$(wc -l < "$secrets_tmp" | tr -d ' ')" -eq 4 ]
+    chmod 600 "$config_tmp" "$secrets_tmp"
+    mkdir -p App/Generated
+    mv "$config_tmp" Configuration/Config.local.xcconfig
+    mv "$secrets_tmp" App/Generated/Secrets.swift
+    echo "wrote Configuration/Config.local.xcconfig ($(wc -l < Configuration/Config.local.xcconfig | tr -d ' ') keys) and App/Generated/Secrets.swift"
 
 # Sync signing credentials (match)
 setup:

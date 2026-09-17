@@ -1,12 +1,18 @@
+import CoreText
 import Testing
 
 @testable import Design
 
 @Suite struct TypographyTests {
+  private func resolvedFontName(_ style: TTextStyle) -> String {
+    CTFontCopyPostScriptName(CTFontCreateWithName(style.fontName as CFString, style.size, nil))
+      as String
+  }
+
   @Test func fontsRegisterAndMeasure() {
     TFonts.registerAll()
-    #expect(TTypography.body.resolvedFontName == "SUIT-Regular")
-    #expect(TTypography.display.resolvedFontName == "SUIT-SemiBold")
+    #expect(resolvedFontName(TTypography.body) == "SUIT-Regular")
+    #expect(resolvedFontName(TTypography.display) == "SUIT-SemiBold")
     #expect(TTypography.body.naturalLineHeight > 0)
   }
 

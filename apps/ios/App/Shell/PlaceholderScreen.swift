@@ -18,7 +18,7 @@ struct PlaceholderScreen: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 12) {
+      LazyVStack(alignment: .leading, spacing: 12) {
         TText(String(describing: route), style: TTypography.caption, color: colors.textHint)
         ForEach(actions) { action in
           TButton(action.title, variant: .secondary) { action.perform() }
@@ -39,6 +39,6 @@ struct PlaceholderScreen: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(16)
     }
-    .background(colors.surfaceCanvas.ignoresSafeArea())
+    .canvasBackground()
   }
 }

@@ -19,6 +19,7 @@ public struct TButton: View {
   private let loading: Bool
   private let loadingText: String?
   private let height: CGFloat
+  private let textStyle: TTextStyle
   private let leadingIcon: TIconName?
   private let trailingIcon: TIconName?
   private let action: () async -> Void
@@ -30,6 +31,7 @@ public struct TButton: View {
     loading: Bool = false,
     loadingText: String? = nil,
     height: CGFloat = 48,
+    textStyle: TTextStyle = TTypography.action,
     leadingIcon: TIconName? = nil,
     trailingIcon: TIconName? = nil,
     action: @escaping () async -> Void
@@ -40,6 +42,7 @@ public struct TButton: View {
     self.loading = loading
     self.loadingText = loadingText
     self.height = height
+    self.textStyle = textStyle
     self.leadingIcon = leadingIcon
     self.trailingIcon = trailingIcon
     self.action = action
@@ -82,7 +85,7 @@ public struct TButton: View {
           TIcon(leadingIcon, size: 16, tint: foreground)
           Spacer().frame(width: 8)
         }
-        TText(displayText, style: TTypography.action, color: foreground)
+        TText(displayText, style: textStyle, color: foreground)
           .contentTransition(.interpolate)
         if let trailingIcon {
           Spacer().frame(width: 8)

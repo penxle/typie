@@ -1,33 +1,71 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
-  },
+  "features" : [
+    "refractivity"
+  ],
+  "fill-specializations" : [
+    {
+      "value" : {
+        "solid" : "extended-srgb:0.06275,0.05882,0.05098,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "solid" : "extended-srgb:0.06275,0.05882,0.05098,1.00000"
+      }
+    }
+  ],
   "groups" : [
     {
+      "blur-material" : 0.25,
       "layers" : [
         {
           "blend-mode" : "normal",
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "extended-srgb:0.99608,0.99216,0.97647,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-srgb:0.99608,0.99216,0.97647,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "automatic"
+            }
+          ],
           "glass" : false,
           "hidden" : false,
-          "image-name" : "AppIcon.png",
-          "name" : "AppIcon",
+          "image-name" : "mark.svg",
+          "name" : "Glyph",
           "opacity" : 1
         }
       ],
+      "lighting" : "combined",
+      "name" : "Mark",
+      "refractivity" : {
+        "depth" : 0.5,
+        "enabled" : true,
+        "strength" : 0.3
+      },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0
+        "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
-        "enabled" : false,
-        "value" : 0
+        "enabled" : true,
+        "value" : 0.25
       }
     }
   ],
   "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
-    "squares" : "shared"
+    "squares" : [
+      "iOS"
+    ]
   }
 }
