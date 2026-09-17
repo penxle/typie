@@ -181,6 +181,7 @@ export interface ChunkCodepoints {
 export interface ClipboardPayload {
     html: string;
     text: string;
+    drag_ghost?: DragGhost;
 }
 
 export interface CollectResult {
@@ -214,6 +215,17 @@ export interface DecorationStyle {
     background_radius?: number | undefined;
     background_inset?: number | undefined;
     underline: Underline | undefined;
+}
+
+export interface DragGhost {
+    text: string;
+    kind: NodeType;
+    blocks: DragGhostBlock[];
+}
+
+export interface DragGhostBlock {
+    kind: NodeType;
+    count: number;
 }
 
 export interface ExpansionAffordances {

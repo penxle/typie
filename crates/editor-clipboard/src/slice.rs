@@ -217,6 +217,7 @@ impl Slice {
         ClipboardPayload {
             html: self.to_html(resource, assets),
             text: self.to_text(assets),
+            drag_ghost: None,
         }
     }
 }

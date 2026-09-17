@@ -1,4 +1,5 @@
 import { EditorEdgeAutoScroll } from '../edge-auto-scroll';
+import { clearSelectionDragGhost, setSelectionDragGhost } from '../selection-drag-ghost';
 import { markNativeSelectionDragStarted } from './pointer';
 import type { DndDropPayload, ExternalDndPayloadKind, InputModifiers } from '@typie/editor-ffi/browser';
 import type { AttachmentImportFailureHandler, AttachmentImportItem } from '../attachment-importer';
@@ -25,18 +26,6 @@ const scheduleDndOver = (editor: EditorInstance, update: () => void): void => {
     frame.update();
   });
   dndOverFrames.set(editor, frame);
-};
-
-let EMPTY_DRAG_IMAGE: HTMLImageElement | null = null;
-const setEmptyDragImage = (dataTransfer: DataTransfer): void => {
-  if (!EMPTY_DRAG_IMAGE && typeof Image !== 'undefined') {
-    EMPTY_DRAG_IMAGE = new Image();
-    EMPTY_DRAG_IMAGE.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  }
-
-  if (EMPTY_DRAG_IMAGE) {
-    dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0);
-  }
 };
 
 const edgeAutoScrollFor = (editor: EditorInstance): EditorEdgeAutoScroll => {
@@ -220,6 +209,7 @@ const dropEffectFromTransfer = (editor: EditorInstance, dataTransfer: DataTransf
 };
 
 export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
+  clearSelectionDragGhost();
   setAttachmentDropTarget(ctx, null);
   const editor = ctx.editor;
   if (editor) stopDndHover(editor);
@@ -241,13 +231,13 @@ export const handleDragStart = (ctx: EditorContext, event: DragEvent) => {
     return;
   }
 
-  const payload = editor.copySelection();
+  const payload = editor.copySelection({ includeDragGhost: true });
   if (!payload) {
     event.preventDefault();
     return;
   }
 
-  setEmptyDragImage(dataTransfer);
+  if (payload.drag_ghost) setSelectionDragGhost(dataTransfer, payload.drag_ghost);
 
   if (editor.readOnly) {
     markNativeSelectionDragStarted(editor);
@@ -344,6 +334,7 @@ export const handleDragLeave = (ctx: EditorContext, event: DragEvent) => {
 };
 
 export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: AttachmentImportFailureHandler) => {
+  clearSelectionDragGhost();
   const editor = ctx.editor;
   const dataTransfer = event.dataTransfer;
   if (!editor) {
@@ -432,6 +423,7 @@ export const handleDrop = (ctx: EditorContext, event: DragEvent, onFailure: Atta
 };
 
 export const handleDragEnd = (ctx: EditorContext) => {
+  clearSelectionDragGhost();
   setAttachmentDropTarget(ctx, null);
   const editor = ctx.editor;
   if (!editor) return;

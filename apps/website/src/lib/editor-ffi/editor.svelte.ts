@@ -2262,10 +2262,12 @@ export class Editor {
     selection,
     prefix,
     suffix,
+    includeDragGhost = false,
   }: {
     selection?: Selection;
     prefix?: string;
     suffix?: string;
+    includeDragGhost?: boolean;
   } = {}): ClipboardPayload | undefined {
     if (this.readOnly && this.protectContent) return;
     const assets = [
@@ -2273,7 +2275,7 @@ export class Editor {
       ...[...this.fileAssets.values()].map((asset) => ({ id: asset.id, url: asset.url, label: asset.name })),
       ...[...this.embedAssets.values()].map((asset) => ({ id: asset.id, url: asset.url, label: asset.title || asset.url })),
     ];
-    return this.#invokeCore((core) => core.copy_content(selection, assets, prefix, suffix));
+    return this.#invokeCore((core) => core.copy_content(selection, assets, prefix, suffix, includeDragGhost));
   }
 
   get searchMatches(): { active: boolean }[] {

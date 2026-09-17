@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearSelectionDragGhost } from '../selection-drag-ghost';
 import { handleDragEnd, handleDragEnter, handleDragLeave, handleDragOver, handleDragStart, handleDrop } from './dnd';
 import type { Message } from '@typie/editor-ffi/browser';
 import type { AttachmentImportItem } from '../attachment-importer';
@@ -100,7 +101,11 @@ const createCtx = ({ readOnly = false, protectContent = false, nativeSelection =
     isSelectionCollapsed: false,
     clientToLocal: vi.fn<(x: number, y: number) => { page: number; x: number; y: number }>(() => ({ page: 0, x: 10, y: 20 })),
     selectionHitTest: vi.fn(() => true),
-    copySelection: vi.fn(() => ({ text: 'Hello', html: '<p>Hello</p>' })),
+    copySelection: vi.fn(() => ({
+      text: 'Hello',
+      html: '<p>Hello</p>',
+      drag_ghost: { text: 'Hello', kind: 'paragraph' as const, blocks: [] },
+    })),
     endNativeDragAdmission: vi.fn(),
     enqueue,
     updateNow,
@@ -152,7 +157,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  clearSelectionDragGhost();
+  vi.useRealTimers();
+});
 
 describe('handleDragStart', () => {
   it('starts internal selection drag and exposes html/plain data for external drops', () => {
@@ -167,7 +175,11 @@ describe('handleDragStart', () => {
     expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-typie-internal-selection', '1');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'Hello');
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/html', '<p>Hello</p>');
-    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0);
+    expect(editor.copySelection).toHaveBeenCalledWith({ includeDragGhost: true });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(expect.any(HTMLElement), -8, -12);
+    expect(document.querySelector('[data-selection-drag-ghost]')?.textContent).toContain('Hello');
+    vi.advanceTimersToNextFrame();
+    expect(document.querySelector('[data-selection-drag-ghost]')).toBeNull();
     expect(messages).toEqual([
       {
         type: 'dnd',
@@ -185,6 +197,27 @@ describe('handleDragStart', () => {
     expect(dataTransfer.setData).not.toHaveBeenCalled();
     expect(updateNow).not.toHaveBeenCalled();
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('preserves the transfer and drag admission when native ghost capture fails', () => {
+    const { ctx, messages } = createCtx();
+    const transfer = createDataTransfer();
+    vi.mocked(transfer.setDragImage).mockImplementation(() => {
+      throw new Error('capture failed');
+    });
+    const event = createDragEvent(transfer);
+    handleDragStart(ctx, event);
+    expect(transfer.getData('text/plain')).toBe('Hello');
+    expect(messages).toEqual([{ type: 'dnd', op: { type: 'start_internal_selection' } }]);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-selection-drag-ghost]')).toBeNull();
+  });
+
+  it('removes a pending ghost when the drag ends before the capture frame', () => {
+    const { ctx } = createCtx();
+    handleDragStart(ctx, createDragEvent());
+    handleDragEnd(ctx);
+    expect(document.querySelector('[data-selection-drag-ghost]')).toBeNull();
   });
   it('allows read-only selection drag as external copy data and clears pending pointer press', () => {
     const { ctx, messages, updateNow } = createCtx({ readOnly: true });

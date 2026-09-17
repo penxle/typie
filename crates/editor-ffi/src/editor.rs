@@ -1327,6 +1327,7 @@ impl Editor {
         assets: Vec<Complex<editor_clipboard::ClipboardAsset>>,
         prefix: Option<String>,
         suffix: Option<String>,
+        include_drag_ghost: bool,
     ) -> EditorResult<Option<Complex<editor_clipboard::ClipboardPayload>>> {
         let selection = selection.from_ffi()?;
         let assets = assets.from_ffi()?;
@@ -1354,7 +1355,11 @@ impl Editor {
             }
             let resource = inner.editor.resource().lock().unwrap();
             Ok(slice
-                .map(|slice| slice.to_payload(&resource, &assets))
+                .map(|slice| {
+                    let mut payload = slice.to_payload(&resource, &assets);
+                    payload.drag_ghost = include_drag_ghost.then(|| slice.drag_ghost(&assets));
+                    payload
+                })
                 .into_ffi()?)
         })
     }
@@ -1861,6 +1866,7 @@ mod tests {
             .expect("non-collapsed selection produces payload");
         assert_eq!(payload.text, "Hello");
         assert!(payload.html.contains("data-slice"));
+        assert!(payload.drag_ghost.is_none());
     }
 
     #[test]
