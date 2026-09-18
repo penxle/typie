@@ -740,7 +740,7 @@ Electron 데스크톱 앱이다. 원격 typie.co를 탭당 `WebContentsView`로 
 | 항목     | 값                                                                                                      |
 | -------- | ------------------------------------------------------------------------------------------------------- |
 | 개발     | `pnpm --filter @typie/desktop run dev:desktop` (local 환경 기본, `ENVIRONMENT=dev\|prod`로 백엔드 교체) |
-| dev 포트 | `5300` (렌더러 dev 서버)                                                                                |
+| dev 포트 | `5400` (렌더러 dev 서버)                                                                                |
 | 릴리즈   | `apps/desktop/justfile` `just release` (오너 로컬)                                                      |
 
 > `crates/editor-ffi`의 `just desktop` 레시피는 이 앱이 아니라 `apps/mobile` KMP의
