@@ -2,6 +2,7 @@ import '../app.css';
 
 import { Marquee } from '@typie/ui/components';
 import { mount, tick, unmount } from 'svelte';
+import { fromStore, writable } from 'svelte/store';
 import { afterEach, describe, expect, it } from 'vitest';
 import { userEvent } from 'vitest/browser';
 
@@ -24,6 +25,44 @@ afterEach(async () => {
 });
 
 describe('shared marquee', () => {
+  it('preserves its scroll position across parent snapshots unless the displayed text changes', async () => {
+    const target = document.createElement('div');
+    target.style.width = '240px';
+    document.body.append(target);
+    const text = '긴 문서 제목을 읽는 동안 다른 상태가 바뀌더라도 읽던 위치가 처음으로 돌아가면 안 돼요';
+    const snapshot = fromStore(writable({ text, revision: 0 }));
+
+    component = mount(Marquee, {
+      target,
+      props: {
+        get text() {
+          return snapshot.current.text;
+        },
+      },
+    });
+    await tick();
+    await document.fonts.ready;
+    await frames();
+
+    const viewport = target.firstElementChild;
+    expect(viewport).toBeInstanceOf(HTMLSpanElement);
+    if (!(viewport instanceof HTMLSpanElement)) throw new Error('Marquee viewport missing');
+
+    pointer(viewport, 'pointerenter');
+    await expect.poll(() => viewport.scrollLeft, { timeout: 3000 }).toBeGreaterThan(20);
+    const position = viewport.scrollLeft;
+
+    snapshot.current = { text, revision: 1 };
+    await tick();
+    expect(viewport.isConnected).toBe(true);
+    expect(viewport.scrollLeft).toBeGreaterThanOrEqual(position);
+
+    snapshot.current = { text: `${text} — 수정된 제목`, revision: 2 };
+    await tick();
+    expect(viewport.textContent).toBe(`${text} — 수정된 제목`);
+    expect(viewport.scrollLeft).toBe(0);
+  });
+
   it('reveals overflowing text from keyboard focus or parent hover and resets afterward', async () => {
     const before = document.createElement('button');
     const button = document.createElement('button');
