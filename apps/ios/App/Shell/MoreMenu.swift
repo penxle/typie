@@ -30,6 +30,7 @@ struct MoreMenu: View {
   private static let dividerGap: CGFloat = 6
   static let headerHeight: CGFloat = headerRowHeight + 1 + dividerGap
   private static let avatarSide: CGFloat = 32
+  private static let avatarAssetName = "ProfilePlaceholder"
   private static let entranceDelay: TimeInterval = 0.06
   private static let entranceDuration: TimeInterval = 0.25
   private static let exitDuration: TimeInterval = 0.1
@@ -48,16 +49,17 @@ struct MoreMenu: View {
       header
       rows
     }
+    .dynamicTypeSize(.large)
   }
 
   private var header: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        Image(ProfileAvatar.assetName)
+        Image(Self.avatarAssetName)
           .resizable()
           .scaledToFill()
           .frame(width: Self.avatarSide, height: Self.avatarSide)
-          .clipShape(ProfileAvatar.shape(side: Self.avatarSide))
+          .clipShape(TShapes.squircle(Self.avatarSide * 0.3))
         TText(state.profileName, style: TTypography.label, color: theme.colors.textDefault)
         Spacer(minLength: 0)
       }
@@ -89,7 +91,7 @@ struct MoreMenu: View {
         ForEach(Array(state.items.enumerated()), id: \.element.id) { index, item in
           HStack(spacing: 12) {
             TIcon(item.icon, size: 18, tint: theme.colors.textDefault)
-            TText(item.title, style: TTypography.action, color: theme.colors.textDefault)
+            TText(item.title, style: TTypography.control, color: theme.colors.textDefault)
             Spacer(minLength: 0)
           }
           .padding(.horizontal, 12)

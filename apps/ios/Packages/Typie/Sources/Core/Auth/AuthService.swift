@@ -20,6 +20,7 @@ public final class AuthService: Sendable {
   private let preferences: any UserScopedPreferences
   private let authState: any AuthStatePublishing
   private let oidc: any OIDCExchanging
+  private let activeSite: any ActiveSitePublishing
   private let editingSessions: any EditingSessionRegistry
   private let orphanSweeper: any OrphanSweeping
   private let sync: any SyncConnectionLifecycle
@@ -35,6 +36,7 @@ public final class AuthService: Sendable {
     preferences: any UserScopedPreferences,
     authState: any AuthStatePublishing,
     oidc: any OIDCExchanging,
+    activeSite: any ActiveSitePublishing = NoopActiveSitePublisher(),
     editingSessions: any EditingSessionRegistry = NoopEditingSessionRegistry(),
     orphanSweeper: any OrphanSweeping = NoopOrphanSweeper(),
     sync: any SyncConnectionLifecycle = NoopSyncConnection(),
@@ -46,6 +48,7 @@ public final class AuthService: Sendable {
     self.preferences = preferences
     self.authState = authState
     self.oidc = oidc
+    self.activeSite = activeSite
     self.editingSessions = editingSessions
     self.orphanSweeper = orphanSweeper
     self.sync = sync
@@ -127,6 +130,7 @@ public final class AuthService: Sendable {
       throw error
     }
     await publish(.authenticated(tokens))
+    await activeSite.publish(preferences.siteId)
 
     if let previousSessionToken, previousSessionToken != sessionToken {
       await disconnectSubscriptions()
@@ -138,6 +142,7 @@ public final class AuthService: Sendable {
     try? secureStore.setAuthTokens(nil)
     await discardEntitlementCache()
     preferences.switchUser(nil)
+    await activeSite.publish(nil)
     await publish(.unauthenticated)
     await clearGraphQLCache()
     await disconnectSubscriptions()

@@ -17,10 +17,14 @@
 
     private let singleSignOn: SingleSignOnModel
     private let onEmail: () -> Void
+    private let toast: TToastCenter
 
-    public init(singleSignOn: SingleSignOnModel, onEmail: @escaping () -> Void) {
+    public init(
+      singleSignOn: SingleSignOnModel, onEmail: @escaping () -> Void, toast: TToastCenter
+    ) {
       self.singleSignOn = singleSignOn
       self.onEmail = onEmail
+      self.toast = toast
     }
 
     public var body: some View {
@@ -61,7 +65,11 @@
               glassID: .option(option), in: glass
             ) {
               if let provider = option.provider {
-                Task { await singleSignOn.signIn(with: provider) }
+                Task {
+                  if await singleSignOn.signIn(with: provider) == .failed {
+                    toast.error("오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+                  }
+                }
               } else {
                 onEmail()
               }
@@ -146,8 +154,9 @@
     }
 
     private var label: some View {
-      TText("시작하기", style: TTypography.action.weight(.semibold), color: colors.textDefault)
-        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height)
+      TText("시작하기", style: TTypography.control, color: colors.textDefault)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: Self.height)
         .contentShape(TShapes.capsule)
     }
 

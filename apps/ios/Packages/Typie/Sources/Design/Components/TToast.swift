@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 public enum TToastKind: Sendable {
+  case success
   case error
 }
 
@@ -23,6 +24,10 @@ public final class TToastCenter {
     sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) {
     self.sleep = sleep
+  }
+
+  public func success(_ message: String) {
+    show(TToastItem(id: UUID(), kind: .success, message: message))
   }
 
   public func error(_ message: String) {
@@ -62,6 +67,8 @@ public struct TToastView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private var colors: TColors { theme.colors }
 
+  @ScaledMetric(relativeTo: TTypography.caption.textStyle) private var badgeSide: CGFloat = 20
+
   private let center: TToastCenter
 
   public init(center: TToastCenter) {
@@ -93,8 +100,18 @@ public struct TToastView: View {
     let shape = TShapes.rounded(TShapes.lg)
     return HStack(spacing: 8) {
       ZStack {
-        Circle().fill(colors.dangerDefault).frame(width: 20, height: 20)
-        TIcon(TypieIcon.exclamation, size: 12, tint: colors.textOnDanger)
+        switch item.kind {
+        case .success:
+          Circle().fill(colors.successDefault).frame(width: badgeSide, height: badgeSide)
+          TIcon(
+            LucideIcon.check, size: 12, tint: colors.textOnSuccess,
+            relativeTo: TTypography.caption)
+        case .error:
+          Circle().fill(colors.dangerDefault).frame(width: badgeSide, height: badgeSide)
+          TIcon(
+            TypieIcon.exclamation, size: 12, tint: colors.textOnDanger,
+            relativeTo: TTypography.caption)
+        }
       }
       TText(item.message, style: TTypography.caption, color: colors.textOnInverse)
     }

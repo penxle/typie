@@ -20,7 +20,7 @@ public struct ServerProbe: Sendable {
   public func graphQL() async -> String {
     do {
       let response = try await client.apollo.fetch(
-        query: ServerProbeQuery(), cachePolicy: .networkOnly)
+        query: ServerProbe_Query(), cachePolicy: .networkOnly)
       if let errors = response.errors, !errors.isEmpty {
         return "errors: \(errors.compactMap(\.message).joined(separator: "; "))"
       }

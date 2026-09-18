@@ -1,9 +1,11 @@
+import Core
 import Design
 import UIKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   private var toastWindow: ToastWindow?
+  private var dialogWindow: DialogWindow?
   private var theme: ThemeSettings?
 
   func scene(
@@ -20,6 +22,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.rootViewController = RootViewController(environment: environment, theme: theme)
     self.window = window
     toastWindow = ToastWindow(windowScene: windowScene, toast: environment.toast)
+    dialogWindow = DialogWindow(windowScene: windowScene, dialog: environment.dialog)
     observeTheme(theme, window: window)
     window.makeKeyAndVisible()
     handle(connectionOptions.urlContexts)
@@ -38,6 +41,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   func sceneDidDisconnect(_ scene: UIScene) {
     window = nil
     toastWindow = nil
+    dialogWindow = nil
     theme = nil
   }
 
@@ -52,6 +56,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
       window?.overrideUserInterfaceStyle = style
       self?.toastWindow?.overrideUserInterfaceStyle = style
+      self?.dialogWindow?.overrideUserInterfaceStyle = style
     }
   }
 }

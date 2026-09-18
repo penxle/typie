@@ -1,6 +1,7 @@
 import Auth
 import Core
 import Design
+import Home
 import SwiftUI
 import UIKit
 
@@ -81,10 +82,18 @@ final class RootViewController: UIViewController {
             }
             let credential = try await adapter.authenticate()
             try await services.singleSignOnLogin(credential)
-          }, toast: environment.toast, onSuccess: {})
-        return LoginViewController(emailLogin: services.emailLogin, singleSignOn: singleSignOn)
+          }, onSuccess: {})
+        return LoginViewController(
+          emailLogin: services.emailLogin, singleSignOn: singleSignOn, dialog: environment.dialog,
+          toast: environment.toast)
       }
-      let router = Router(theme: theme, services: services)
+      let spaceSwitcher = SpaceSwitcherModel(
+        query: WatchQuery(client: services.client, query: SpaceSwitcher_Query()),
+        activeSite: services.activeSite,
+        createSite: { [createSite = services.createSite] in try await createSite(name: $0) },
+        onCreated: { [weak self] in self?.dismiss(animated: true) })
+      let router = Router(
+        theme: theme, services: services, spaceSwitcher: spaceSwitcher, toast: environment.toast)
       return MainTabBarController(
         rootProvider: { tab in router.root(for: tab) },
         createAction: { tab in router.createAction(for: tab) })
@@ -130,7 +139,7 @@ private struct LaunchingScreen: View {
 
 private struct ConfigurationMissingScreen: View {
   var body: some View {
-    TText("AppConfig missing: run just env", style: TTypography.body)
+    TText("AppConfig missing: run just env", style: TTypography.text)
       .padding(16)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .canvasBackground()

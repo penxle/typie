@@ -7,6 +7,7 @@ final class AppEnvironment {
   let config: AppConfig?
   let services: CoreServices?
   let toast = TToastCenter()
+  let dialog = TDialogCenter()
 
   init() {
     guard

@@ -61,28 +61,22 @@ struct LoginOptionButton: View {
 
   private var foreground: Color { mark?.foreground ?? colors.textDefault }
 
-  private var textStyle: TTextStyle {
-    switch option {
-    case .provider(.naver), .provider(.apple): TTypography.action.weight(.semibold)
-    default: TTypography.action
-    }
-  }
-
   private var label: some View {
     HStack(spacing: 8) {
       if loading {
-        TSpinner(color: foreground, size: 18, strokeWidth: 2)
+        TSpinner(color: foreground, size: 18, relativeTo: TTypography.control)
       } else {
         switch option {
         case .provider(let mark):
-          TBrandMarkView(mark, size: 18)
+          TBrandMarkView(mark, size: 18, relativeTo: TTypography.control)
         case .email:
-          TIcon(LucideIcon.mail, size: 18, tint: foreground)
+          TIcon(LucideIcon.mail, size: 18, tint: foreground, relativeTo: TTypography.control)
         }
       }
-      TText(option.text, style: textStyle, color: foreground)
+      TText(option.text, style: TTypography.control, color: foreground)
     }
-    .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, minHeight: 48)
     .contentShape(TShapes.capsule)
   }
 

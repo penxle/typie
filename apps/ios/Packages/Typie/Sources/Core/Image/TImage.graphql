@@ -1,0 +1,6 @@
+fragment TImage_image on Image {
+  id
+  url
+  width
+  height
+}

@@ -6,13 +6,20 @@ import UIKit
 final class LoginViewController: UIViewController, UINavigationControllerDelegate {
   private let emailLogin: EmailLogin
   private let singleSignOn: SingleSignOnModel
+  private let dialog: TDialogCenter
+  private let toast: TToastCenter
   private var navigation: UINavigationController?
   private var login: UIViewController?
   private var emailModel: LoginModel?
 
-  init(emailLogin: EmailLogin, singleSignOn: SingleSignOnModel) {
+  init(
+    emailLogin: EmailLogin, singleSignOn: SingleSignOnModel, dialog: TDialogCenter,
+    toast: TToastCenter
+  ) {
     self.emailLogin = emailLogin
     self.singleSignOn = singleSignOn
+    self.dialog = dialog
+    self.toast = toast
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -27,7 +34,9 @@ final class LoginViewController: UIViewController, UINavigationControllerDelegat
 
     let login = ThemedHostingController.make(
       title: "",
-      LoginScreen(singleSignOn: singleSignOn, onEmail: { [weak self] in self?.showEmailLogin() }))
+      LoginScreen(
+        singleSignOn: singleSignOn, onEmail: { [weak self] in self?.showEmailLogin() },
+        toast: toast))
     let navigation = ShellNavigationController.make(root: login)
     navigation.delegate = self
     applyTransparentBar(to: login, in: navigation)
@@ -52,7 +61,8 @@ final class LoginViewController: UIViewController, UINavigationControllerDelegat
     let model = LoginModel(
       login: { [emailLogin] in try await emailLogin(email: $0, password: $1) }, onSuccess: {})
     emailModel = model
-    let screen = ThemedHostingController.make(title: "", EmailLoginScreen(model: model))
+    let screen = ThemedHostingController.make(
+      title: "", EmailLoginScreen(model: model, dialog: dialog))
     applyTransparentBar(to: screen, in: navigation)
     navigation.pushViewController(screen, animated: true)
     guard let coordinator = navigation.transitionCoordinator else {
