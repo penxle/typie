@@ -53,7 +53,7 @@ internal val EditorToolbarToolItems =
       action = EditorToolbarToolAction.AiFeedback,
     ),
     EditorToolbarToolItem(
-      icon = Lucide.History,
+      icon = Lucide.RotateCcwClock,
       label = "타임라인",
       action = EditorToolbarToolAction.Timeline,
     ),

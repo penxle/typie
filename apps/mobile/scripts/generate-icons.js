@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { IconSet, runSVGO, SVG } from '@iconify/tools';
@@ -37,6 +38,66 @@ const kotlinKeywords = new Set([
 
 const OUTPUT_DIR = 'compose/src/commonMain/kotlin/co/typie/icons';
 const TYPIE_SVG_DIR = path.resolve('..', 'website', 'src', 'icons');
+
+const IOS_ROOT = path.resolve('..', 'ios');
+const IOS_DESIGN_DIR = path.join(IOS_ROOT, 'Packages', 'Typie', 'Sources', 'Design');
+const IOS_ASSETS_DIR = path.join(IOS_DESIGN_DIR, 'Resources', 'Icons.xcassets');
+const IOS_GENERATED_DIR = path.join(IOS_DESIGN_DIR, 'Generated');
+const IOS_STROKE_WIDTH = 2;
+
+const swiftKeywords = new Set([
+  'as',
+  'associatedtype',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'continue',
+  'default',
+  'defer',
+  'deinit',
+  'do',
+  'else',
+  'enum',
+  'extension',
+  'fallthrough',
+  'false',
+  'fileprivate',
+  'for',
+  'func',
+  'guard',
+  'if',
+  'import',
+  'in',
+  'init',
+  'inout',
+  'internal',
+  'is',
+  'let',
+  'nil',
+  'operator',
+  'private',
+  'precedencegroup',
+  'protocol',
+  'public',
+  'repeat',
+  'rethrows',
+  'return',
+  'self',
+  'static',
+  'struct',
+  'subscript',
+  'super',
+  'switch',
+  'throw',
+  'throws',
+  'true',
+  'try',
+  'typealias',
+  'var',
+  'where',
+  'while',
+]);
 
 // ─── SVG Parsing ───
 
@@ -159,7 +220,7 @@ function generateIconEntry(icon, indent = '    ') {
 }
 
 function generateKotlin(objectName, icons) {
-  const sorted = icons.toSorted((a, b) => a.name.localeCompare(b.name));
+  const sorted = icons.toSorted((a, b) => a.name.localeCompare(b.name, 'en'));
 
   const header = `// automatically generated — do not edit
 // spell-checker:disable
@@ -272,7 +333,14 @@ async function processIcon(name, svgContent) {
   }
 
   const { width, height } = parseViewBox(processed);
-  return { name: toKotlinName(name), paths, viewportWidth: width, viewportHeight: height };
+  return {
+    name: toKotlinName(name),
+    rawName: name,
+    svg: processed,
+    paths,
+    viewportWidth: width,
+    viewportHeight: height,
+  };
 }
 
 // ─── Icon Sources ───
@@ -305,6 +373,106 @@ async function loadTypieIcons() {
   return icons;
 }
 
+// ─── iOS Generation ───
+
+function toSwiftName(name) {
+  let n = Case.camel(name).replaceAll('_', '');
+  if (/^\d/.test(n)) n = `n${n}`;
+  if (swiftKeywords.has(n)) n = `\`${n}\``;
+  return n;
+}
+
+async function collectIosIconReferences() {
+  const refs = { LucideIcon: new Set(), TypieIcon: new Set() };
+  const skip = new Set(['.build', '.swiftpm', 'build', 'DerivedData', 'xcuserdata', 'node_modules', 'Generated']);
+  async function walk(dir) {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.name.endsWith('.swift')) {
+        const source = await fs.readFile(full, 'utf8');
+        for (const match of source.matchAll(/\b(LucideIcon|TypieIcon)\.(`?[A-Za-z0-9_]+`?)/g)) refs[match[1]].add(match[2]);
+      }
+    }
+  }
+  await walk(IOS_ROOT);
+  return refs;
+}
+
+function selectReferenced(sets) {
+  const selected = {};
+  const missing = [];
+  for (const [label, { icons, referenced }] of Object.entries(sets)) {
+    const bySwiftName = new Map(icons.map((icon) => [toSwiftName(icon.rawName), icon]));
+    for (const name of referenced) {
+      if (!bySwiftName.has(name)) missing.push(`${label}.${name}`);
+    }
+    selected[label] = [...referenced].filter((name) => bySwiftName.has(name)).map((name) => bySwiftName.get(name));
+  }
+  if (missing.length > 0) {
+    console.error(`✖ referenced icons not found: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+  return selected;
+}
+
+function iosSvg(svg) {
+  return svg.replaceAll(/stroke-width="[^"]*"/g, `stroke-width="${IOS_STROKE_WIDTH}"`);
+}
+
+async function writeIosCatalog(namespace, icons) {
+  const dir = path.join(IOS_ASSETS_DIR, namespace);
+  await fs.rm(dir, { recursive: true, force: true });
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(
+    path.join(dir, 'Contents.json'),
+    JSON.stringify({ info: { author: 'xcode', version: 1 }, properties: { 'provides-namespace': true } }, null, 2) + '\n',
+  );
+  for (const icon of icons) {
+    const set = path.join(dir, `${icon.rawName}.imageset`);
+    await fs.mkdir(set, { recursive: true });
+    await fs.writeFile(path.join(set, `${icon.rawName}.svg`), iosSvg(icon.svg) + '\n');
+    await fs.writeFile(
+      path.join(set, 'Contents.json'),
+      JSON.stringify(
+        {
+          images: [{ filename: `${icon.rawName}.svg`, idiom: 'universal' }],
+          info: { author: 'xcode', version: 1 },
+          properties: { 'preserves-vector-representation': true, 'template-rendering-intent': 'template' },
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+  }
+}
+
+function generateSwift(enumName, namespace, icons) {
+  const sorted = icons.toSorted((a, b) => a.rawName.localeCompare(b.rawName, 'en'));
+  const names = sorted.map((icon) => toSwiftName(icon.rawName));
+  if (new Set(names).size !== names.length) {
+    console.error(`✖ ${enumName}: duplicate Swift names`);
+    process.exit(1);
+  }
+  const entries = sorted.map((icon, i) => `  public static let ${names[i]} = TIconName("${namespace}/${icon.rawName}")`);
+  return `// automatically generated — do not edit\n// spell-checker:disable\n\npublic enum ${enumName} {\n${entries.join('\n')}\n}\n`;
+}
+
+function formatSwift(content, filepath) {
+  return new Promise((resolve, reject) => {
+    const child = execFile('swift', ['format', '--assume-filename', filepath, '-'], (error, stdout) =>
+      error ? reject(error) : resolve(stdout),
+    );
+    child.stdin.end(content);
+  });
+}
+
+async function writeSwift(enumName, namespace, icons) {
+  const filepath = path.join(IOS_GENERATED_DIR, `${enumName}.swift`);
+  await fs.writeFile(filepath, await formatSwift(generateSwift(enumName, namespace, icons), filepath));
+}
+
 // ─── Main ───
 
 const lucideIcons2 = await loadLucideIcons();
@@ -313,8 +481,24 @@ const typieIcons = await loadTypieIcons();
 console.log(`Lucide: ${lucideIcons2.length} icons`);
 console.log(`Typie: ${typieIcons.length} icons`);
 
+const iosRefs = await collectIosIconReferences();
+const { LucideIcon: iosLucide, TypieIcon: iosTypie } = selectReferenced({
+  LucideIcon: { icons: lucideIcons2, referenced: iosRefs.LucideIcon },
+  TypieIcon: { icons: typieIcons, referenced: iosRefs.TypieIcon },
+});
+console.log(`iOS Lucide: ${iosLucide.length} referenced icons`);
+console.log(`iOS Typie: ${iosTypie.length} referenced icons`);
+
 await fs.mkdir(OUTPUT_DIR, { recursive: true });
 await fs.writeFile(path.join(OUTPUT_DIR, 'Lucide.kt'), generateKotlin('Lucide', lucideIcons2));
 await fs.writeFile(path.join(OUTPUT_DIR, 'Typie.kt'), generateKotlin('Typie', typieIcons));
+
+await fs.mkdir(IOS_ASSETS_DIR, { recursive: true });
+await fs.writeFile(path.join(IOS_ASSETS_DIR, 'Contents.json'), JSON.stringify({ info: { author: 'xcode', version: 1 } }, null, 2) + '\n');
+await writeIosCatalog('lucide', iosLucide);
+await writeIosCatalog('typie', iosTypie);
+await fs.mkdir(IOS_GENERATED_DIR, { recursive: true });
+await writeSwift('LucideIcon', 'lucide', iosLucide);
+await writeSwift('TypieIcon', 'typie', iosTypie);
 
 console.log('Done!');

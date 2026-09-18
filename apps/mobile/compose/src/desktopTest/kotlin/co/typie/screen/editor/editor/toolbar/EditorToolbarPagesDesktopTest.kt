@@ -2429,7 +2429,7 @@ class EditorToolbarPagesDesktopTest {
           EditorToolbarPageKey.Fold ->
             EditorToolbarPage(
               key = EditorToolbarPageKey.Fold,
-              icon = Lucide.TextSelect,
+              icon = Lucide.SquareDashedText,
               contentDescription = "접기 툴바",
               content = { Box(Modifier.fillMaxSize().testTag(FoldPageTag)) },
             )

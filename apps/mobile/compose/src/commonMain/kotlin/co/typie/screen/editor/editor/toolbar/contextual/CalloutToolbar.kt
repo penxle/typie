@@ -30,7 +30,7 @@ internal fun editorCalloutToolbarPage(
           },
         )
         EditorToolbarButton(
-          icon = Lucide.TextSelect,
+          icon = Lucide.SquareDashedText,
           contentDescription = "강조 해제",
           onClick = {
             val nodeId = target?.id ?: return@EditorToolbarButton

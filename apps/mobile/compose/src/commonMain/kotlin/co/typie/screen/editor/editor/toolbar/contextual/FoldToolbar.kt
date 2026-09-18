@@ -17,7 +17,7 @@ internal fun editorFoldToolbarPage(targetId: String?): EditorToolbarPage =
     content = { scope ->
       EditorToolbarRow(scope = scope) {
         EditorToolbarButton(
-          icon = Lucide.TextSelect,
+          icon = Lucide.SquareDashedText,
           contentDescription = "접기 해제",
           onClick = {
             val nodeId = targetId ?: return@EditorToolbarButton

@@ -1,0 +1,31 @@
+project := "App.xcodeproj"
+scheme := "iOS"
+simulator := "generic/platform=iOS Simulator"
+
+[private]
+default:
+    @just --list
+
+# Build the app for the simulator
+build:
+    xcodebuild build -project {{project}} -scheme {{scheme}} -destination '{{simulator}}' -quiet
+
+# Run package tests on the host
+test:
+    swift test --package-path Packages/Typie
+
+# Check formatting
+lint:
+    swift format lint --strict --recursive App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests
+
+# Apply formatting
+format:
+    swift format --in-place --recursive App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests
+
+# Sync signing credentials (match)
+setup:
+    doppler run -p mobile -c prod -- fastlane setup
+
+# Build Release and upload to TestFlight
+beta:
+    doppler run -p mobile -c prod -- fastlane beta

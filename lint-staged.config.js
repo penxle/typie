@@ -5,4 +5,5 @@ export default {
   '*.dart': (files) => [...files.map((f) => `dart fix --apply "${f}"`), `dart format ${files.join(' ')}`],
   '*.rs': ['cargo fmt --'],
   '*.{kt,kts}': ['ktfmt --google-style'],
+  '*.swift': ['swift format --in-place'],
 };

@@ -194,7 +194,7 @@ private fun EditorContextMenuSelectionRow(
   progress: Float = if (expanded) 1f else 0f,
 ) {
   Row(verticalAlignment = Alignment.CenterVertically) {
-    PopoverMenuItemRow(Lucide.TextSelect, "선택 확장")
+    PopoverMenuItemRow(Lucide.SquareDashedText, "선택 확장")
     Spacer(Modifier.weight(1f))
     Icon(
       Lucide.ChevronRight,

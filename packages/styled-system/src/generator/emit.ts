@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import * as prettier from 'prettier';
 import { oklchComment } from './color.ts';
 import { renderContrastReport } from './contrast.ts';
@@ -47,6 +48,42 @@ export const emitSemanticColors = (source: ThemeSource): string => {
     lines.push('    },', '  },');
   }
   lines.push('});', '');
+  return lines.join('\n');
+};
+
+const swiftName = (token: string) =>
+  token
+    .split('.')
+    .map((part, index) => (index === 0 ? part : capitalize(part)))
+    .join('');
+const swiftArgb = (hex: string) => {
+  const digits = hex.slice(1);
+  const alpha = digits.length === 8 ? digits.slice(6) : 'ff';
+  return `0x${`${alpha}${digits.slice(0, 6)}`.toUpperCase()}`;
+};
+
+export const emitSwiftColors = (source: ThemeSource): string => {
+  const { light, dark } = defaults(source);
+  const lines = [
+    '// automatically generated — do not edit',
+    '// spell-checker:disable',
+    '',
+    'import SwiftUI',
+    '',
+    'public struct TColors: Sendable {',
+  ];
+  for (const token of UI_TOKENS) lines.push(`  public let ${swiftName(token)}: Color`);
+  for (const [name, preset] of [
+    ['light', light],
+    ['dark', dark],
+  ] as const) {
+    lines.push(
+      '',
+      `  public static let ${name} = TColors(`,
+      `${UI_TOKENS.map((token) => `    ${swiftName(token)}: Color(argb: ${swiftArgb(preset.ui[token])})`).join(',\n')})`,
+    );
+  }
+  lines.push('}', '');
   return lines.join('\n');
 };
 
@@ -142,7 +179,16 @@ export const emitThemeJson = (source: ThemeSource): string => `${JSON.stringify(
 
 export const emitContrastReport = (source: ThemeSource): string => renderContrastReport(source.presets);
 
+const formatSwift = (content: string, filepath: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const child = execFile('swift', ['format', '--assume-filename', filepath, '-'], (error, stdout) =>
+      error ? reject(error) : resolve(stdout),
+    );
+    child.stdin?.end(content);
+  });
+
 export const formatOutput = async (content: string, filepath: string): Promise<string> => {
+  if (filepath.endsWith('.swift')) return formatSwift(content, filepath);
   const config = await prettier.resolveConfig(filepath);
   return prettier.format(content, { ...config, filepath });
 };
