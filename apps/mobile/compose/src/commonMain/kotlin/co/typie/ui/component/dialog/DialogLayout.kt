@@ -95,6 +95,7 @@ context(rowScope: RowScope)
 internal fun DialogActionButton(
   text: String,
   color: Color = AppTheme.colors.textDefault,
+  trailing: (@Composable () -> Unit)? = null,
   onClick: () -> Unit,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -106,7 +107,13 @@ internal fun DialogActionButton(
         .padding(vertical = 14.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(text = text, style = AppTheme.typography.action, color = color)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(text = text, style = AppTheme.typography.action, color = color)
+      if (trailing != null) {
+        Spacer(Modifier.width(6.dp))
+        trailing()
+      }
+    }
   }
 }
 

@@ -12,7 +12,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -90,6 +92,8 @@ class SyncEngine(
   private val captureFailuresFlow = MutableStateFlow(0)
   val captureFailures: StateFlow<Int> = captureFailuresFlow
   private val protectionStateFlow = MutableStateFlow(ProtectionState())
+  private val activeSaves = MutableStateFlow(0)
+  internal val saveInProgress = activeSaves.map { it > 0 }.distinctUntilChanged()
 
   internal val protectionGeneration: Long
     get() = protectionStateFlow.value.generation
@@ -98,8 +102,8 @@ class SyncEngine(
     scope.launch(start = CoroutineStart.UNDISPATCHED) { firePush() }
   }
 
-  private suspend fun capture() {
-    if (stopped) return
+  private suspend fun capture(): Unit = trackSave {
+    if (stopped) return@trackSave
     val records = store.load(documentId)
     val localAll = editor.changesetIds().toSet()
     for (record in records) {
@@ -130,28 +134,30 @@ class SyncEngine(
       scope.async(start = CoroutineStart.UNDISPATCHED) {
         previous.await()
         persistQueued = false
-        catchingNonCancellation {
-          if (stopped) return@catchingNonCancellation
-          val heads = editor.currentHeads()
-          val missing = editor.missingChangesetsFor(capturedHeads)
-          if (missing.bytes.isNotEmpty()) {
-            for (entry in editor.splitChangesets(missing.bytes)) {
-              store.put(
-                DeltaRecord(
-                  id = entry.id,
-                  documentId = documentId,
-                  changeset = entry.bytes,
-                  createdAt = now(),
+        trackSave {
+          catchingNonCancellation {
+            if (stopped) return@catchingNonCancellation
+            val heads = editor.currentHeads()
+            val missing = editor.missingChangesetsFor(capturedHeads)
+            if (missing.bytes.isNotEmpty()) {
+              for (entry in editor.splitChangesets(missing.bytes)) {
+                store.put(
+                  DeltaRecord(
+                    id = entry.id,
+                    documentId = documentId,
+                    changeset = entry.bytes,
+                    createdAt = now(),
+                  )
                 )
-              )
+              }
             }
-          }
-          if (missing.withheld > 0) {
-            onEvent(SyncEvent.PersistWithheld(missing.withheld))
-          } else {
-            if (!protectionStateFlow.value.stopped && !capturedHeads.contentEquals(heads)) {
-              capturedHeads = heads
-              publishProtectionAdvance()
+            if (missing.withheld > 0) {
+              onEvent(SyncEvent.PersistWithheld(missing.withheld))
+            } else {
+              if (!protectionStateFlow.value.stopped && !capturedHeads.contentEquals(heads)) {
+                capturedHeads = heads
+                publishProtectionAdvance()
+              }
             }
           }
         }
@@ -182,13 +188,25 @@ class SyncEngine(
       scope.async(start = CoroutineStart.UNDISPATCHED) {
         previous.await()
         pushQueued = false
-        catchingNonCancellation {
-          if (stopped) return@catchingNonCancellation
-          drain()
+        trackSave {
+          catchingNonCancellation {
+            if (stopped) return@catchingNonCancellation
+            drain()
+          }
         }
       }
     pushTail = run
     return run
+  }
+
+  // Includes direct checkpoints and background retries, not only scheduled sync pushes.
+  private suspend fun <T> trackSave(block: suspend () -> T): T {
+    activeSaves.update { it + 1 }
+    try {
+      return block()
+    } finally {
+      activeSaves.update { it - 1 }
+    }
   }
 
   private suspend fun frontierCoveredBy(heads: ByteArray): Boolean {

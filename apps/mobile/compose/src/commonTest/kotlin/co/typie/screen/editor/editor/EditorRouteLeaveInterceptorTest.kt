@@ -1,6 +1,8 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.runtime.State
 import co.typie.editor.DocumentEditingStop
+import co.typie.editor.DocumentSaveState
 import co.typie.editor.EditingCheckpointResult
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.navigation.RouteRemovalPreparation
@@ -22,6 +24,122 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorRouteLeaveInterceptorTest {
+  @Test
+  fun recoveryKeepsTheDialogOpenUntilItsCompletionAction() = runTest {
+    val recovered = CompletableDeferred<EditingCheckpointResult>()
+    val choice = CompletableDeferred<RouteRemovalDecision>()
+    lateinit var protection: State<DocumentSaveState>
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("storage"))
+        },
+        awaitProtection = { _, _ -> recovered.await() },
+        resolveDecision = {
+          protection = it
+          choice.await()
+        },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    val decision = async { interceptor.resolveDecision() }
+    runCurrent()
+    assertEquals(DocumentSaveState.Pending, protection.value)
+
+    recovered.complete(EditingCheckpointResult.Protected)
+    runCurrent()
+    assertEquals(DocumentSaveState.Protected, protection.value)
+    assertFalse(decision.isCompleted)
+
+    choice.complete(RouteRemovalDecision.ProceedWithRemoval)
+    assertEquals(RouteRemovalDecision.ProceedWithRemoval, decision.await())
+  }
+
+  @Test
+  fun completedDialogCanStillCancelRemoval() = runTest {
+    val recovered = CompletableDeferred<EditingCheckpointResult>()
+    val choice = CompletableDeferred<RouteRemovalDecision>()
+    lateinit var protection: State<DocumentSaveState>
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("storage"))
+        },
+        awaitProtection = { _, _ -> recovered.await() },
+        resolveDecision = {
+          protection = it
+          choice.await()
+        },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    val decision = async { interceptor.resolveDecision() }
+    runCurrent()
+    recovered.complete(EditingCheckpointResult.Protected)
+    runCurrent()
+    assertEquals(DocumentSaveState.Protected, protection.value)
+    choice.complete(RouteRemovalDecision.CancelRemoval)
+    assertEquals(RouteRemovalDecision.CancelRemoval, decision.await())
+    interceptor.rollback()
+  }
+
+  @Test
+  fun cancellingDecisionStopsRecoveryAndDoesNotReplayRemoval() = runTest {
+    val choice = CompletableDeferred<RouteRemovalDecision>()
+    val recovered = CompletableDeferred<EditingCheckpointResult>()
+    var watching = false
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("storage"))
+        },
+        awaitProtection = { _, _ ->
+          watching = true
+          try {
+            recovered.await()
+          } finally {
+            watching = false
+          }
+        },
+        resolveDecision = { choice.await() },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    val decision = async { interceptor.resolveDecision() }
+    runCurrent()
+    assertTrue(watching)
+    choice.complete(RouteRemovalDecision.CancelRemoval)
+    assertEquals(RouteRemovalDecision.CancelRemoval, decision.await())
+    interceptor.rollback()
+    recovered.complete(EditingCheckpointResult.Protected)
+    runCurrent()
+    assertFalse(watching)
+    assertEquals(RouteRemovalDecision.CancelRemoval, decision.await())
+  }
+
+  @Test
+  fun recoveredBodyCannotBypassFailedPendingSubPaneSave() = runTest {
+    val choice = CompletableDeferred<RouteRemovalDecision>()
+    lateinit var protection: State<DocumentSaveState>
+    val interceptor =
+      interceptor(
+        awaitResult = {
+          EditingCheckpointResult.ProtectionFailed(IllegalStateException("storage"))
+        },
+        awaitProtection = { _, _ -> EditingCheckpointResult.Protected },
+        savePendingChanges = { false },
+        resolveDecision = {
+          protection = it
+          choice.await()
+        },
+      )
+    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
+    val decision = async { interceptor.resolveDecision() }
+    runCurrent()
+    assertEquals(DocumentSaveState.Failed, protection.value)
+    assertFalse(decision.isCompleted)
+    choice.complete(RouteRemovalDecision.CancelRemoval)
+    assertEquals(RouteRemovalDecision.CancelRemoval, decision.await())
+    interceptor.rollback()
+  }
+
   @Test
   fun editFailureNeedsDecisionAndRollbackRestoresInput() = runTest {
     var cancelled = 0
@@ -63,28 +181,6 @@ class EditorRouteLeaveInterceptorTest {
 
     assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
     assertEquals(10L, currentTime)
-  }
-
-  @Test
-  fun defaultCheckpointWatchdogExpiresAtThreeSeconds() = runTest {
-    val interceptor =
-      EditorRouteLeaveInterceptor(
-        finalizeInput = {},
-        restoreInput = {},
-        beginStop = {
-          object : DocumentEditingStop {
-            override suspend fun awaitCheckpoint(): EditingCheckpointResult = awaitCancellation()
-
-            override suspend fun retryCheckpoint(): EditingCheckpointResult = awaitCancellation()
-
-            override fun cancel() = Unit
-          }
-        },
-        resolveDecision = { RouteRemovalDecision.CancelRemoval },
-      )
-
-    assertEquals(RouteRemovalPreparation.NeedsDecision, interceptor.prepare())
-    assertEquals(3_000L, currentTime)
   }
 
   @Test
@@ -439,6 +535,14 @@ private fun interceptor(
   hideDelayedFeedback: () -> Unit = {},
   resumeReloadBeforeRollback: suspend () -> Boolean = { false },
   savePendingChanges: suspend () -> Boolean = { true },
+  awaitProtection:
+    suspend (DocumentEditingStop, (DocumentSaveState) -> Unit) -> EditingCheckpointResult =
+    { _, _ ->
+      awaitCancellation()
+    },
+  resolveDecision: suspend (State<DocumentSaveState>) -> RouteRemovalDecision = {
+    RouteRemovalDecision.CancelRemoval
+  },
 ): EditorRouteLeaveInterceptor =
   EditorRouteLeaveInterceptor(
     finalizeInput = {},
@@ -454,7 +558,8 @@ private fun interceptor(
         }
       }
     },
-    resolveDecision = { RouteRemovalDecision.CancelRemoval },
+    resolveDecision = resolveDecision,
+    awaitProtection = awaitProtection,
     delayedFeedbackMillis = delayedFeedbackMillis,
     checkpointWatchdogMillis = checkpointWatchdogMillis,
     showDelayedFeedback = showDelayedFeedback,

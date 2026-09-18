@@ -60,6 +60,7 @@ class DocumentEditingSessionTest {
     val editor: Editor,
     val session: DocumentEditingSession,
     val store: FakeDeltaStore,
+    val engine: SyncEngine,
   )
 
   private fun TestScope.harness(
@@ -98,7 +99,45 @@ class DocumentEditingSessionTest {
         pipeline = pipeline,
         scope = scope,
       )
-    return Harness(editor = editor, session = session, store = store)
+    return Harness(editor = editor, session = session, store = store, engine = engine)
+  }
+
+  @Test
+  fun failedCheckpointRecoversAfterBackgroundCaptureWithoutAnotherEdit() = runTest {
+    val store = FakeDeltaStore()
+    store.onPut = { throw IllegalStateException("disk unavailable") }
+    val syncEditor = FakeSyncEditor()
+    val (_, session, _, engine) =
+      harness(
+        store = store,
+        syncEditor = syncEditor,
+        pushFn = { throw IllegalStateException("offline") },
+      )
+    runCurrent()
+    syncEditor.known.add(1)
+    val stop = session.beginStop()
+    assertTrue(stop.awaitCheckpoint() is EditingCheckpointResult.ProtectionFailed)
+
+    var saveState = DocumentSaveState.Pending
+    val recovery = async { session.awaitProtectedCheckpoint(stop) { saveState = it } }
+    runCurrent()
+    assertFalse(recovery.isCompleted)
+    assertEquals(DocumentSaveState.Failed, saveState)
+    val releaseCapture = CompletableDeferred<Unit>()
+    store.onPut = {
+      releaseCapture.await()
+      store.defaultPut(it)
+    }
+    val capture = async { engine.captureNow() }
+    runCurrent()
+    assertEquals(DocumentSaveState.Pending, saveState)
+    releaseCapture.complete(Unit)
+    capture.await()
+
+    assertEquals(EditingCheckpointResult.Protected, recovery.await())
+    assertEquals(listOf("1"), store.load("doc").map { it.id })
+    stop.cancel()
+    session.stop()
   }
 
   @Test

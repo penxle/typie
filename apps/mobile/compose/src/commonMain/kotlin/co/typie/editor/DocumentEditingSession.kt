@@ -15,6 +15,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -29,6 +33,12 @@ internal sealed interface EditingCheckpointResult {
   data object StopCancelled : EditingCheckpointResult
 
   data object SessionStopped : EditingCheckpointResult
+}
+
+internal enum class DocumentSaveState {
+  Pending,
+  Failed,
+  Protected,
 }
 
 internal interface DocumentEditingStop {
@@ -229,6 +239,45 @@ internal class DocumentEditingSession(
 
   internal suspend fun awaitProtectionAfter(observedGeneration: Long): Boolean =
     engine.awaitProtectionAfter(observedGeneration)
+
+  suspend fun awaitProtectedCheckpoint(
+    stop: DocumentEditingStop,
+    onStateChange: (DocumentSaveState) -> Unit = {},
+  ): EditingCheckpointResult = coroutineScope {
+    val checkpoint = MutableStateFlow<EditingCheckpointResult?>(null)
+    val progress =
+      launch(start = CoroutineStart.UNDISPATCHED) {
+        combine(checkpoint, engine.saveInProgress) { result, saving ->
+            when (result) {
+              EditingCheckpointResult.Protected -> DocumentSaveState.Protected
+              is EditingCheckpointResult.EditFailed -> DocumentSaveState.Failed
+              is EditingCheckpointResult.ProtectionFailed ->
+                if (saving) DocumentSaveState.Pending else DocumentSaveState.Failed
+              else -> DocumentSaveState.Pending
+            }
+          }
+          .distinctUntilChanged()
+          .collect(onStateChange)
+      }
+    try {
+      var result: EditingCheckpointResult
+      do {
+        val observedGeneration = protectionGeneration
+        checkpoint.value = null
+        result = stop.retryCheckpoint()
+        checkpoint.value = result
+        if (
+          result is EditingCheckpointResult.ProtectionFailed &&
+            !awaitProtectionAfter(observedGeneration)
+        ) {
+          result = EditingCheckpointResult.SessionStopped
+        }
+      } while (result is EditingCheckpointResult.ProtectionFailed)
+      result
+    } finally {
+      progress.cancel()
+    }
+  }
 
   fun start() {
     check(state.load() === State.Active) { "Document editing session is not active" }

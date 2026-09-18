@@ -31,8 +31,10 @@ import co.typie.editor.DefaultRootPaginatedLayout
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.DocumentProtectedReloadResult
 import co.typie.editor.DocumentReloadFailureDecision
+import co.typie.editor.DocumentSaveState
 import co.typie.editor.Editor
 import co.typie.editor.EditorRequestScope
+import co.typie.editor.confirmDocumentSave
 import co.typie.editor.currentEditorThemeVariant
 import co.typie.editor.enqueueRootLayoutMode
 import co.typie.editor.enqueueRootModifier
@@ -70,7 +72,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.editorsettings.EditorSettingsBasicStyleSection
 import co.typie.ui.component.editorsettings.EditorSettingsDetailLayoutSection
@@ -236,19 +237,13 @@ fun DocumentBodySettingsScreen(entityId: String) {
                   savingToastId = toast.state?.id
                 },
                 hideDelayedFeedback = { dismissSavingToast() },
-                resolveFailure = {
-                  val result =
-                    dialog.confirm(
-                      title = "최신 버전을 불러올 수 없어요",
-                      message = "최근 변경사항을 안전하게 저장하지 못했어요.",
-                      confirmText = "변경사항 버리고 불러오기",
-                      cancelText = "다시 시도",
-                      confirmIsDestructive = true,
-                    )
-                  if (result is DialogResult.Resolved) {
-                    DocumentReloadFailureDecision.Discard
-                  } else {
-                    DocumentReloadFailureDecision.Retry
+                resolveFailure = { saveState ->
+                  val result = dialog.confirmDocumentSave(saveState, reload = true)
+                  when {
+                    result !is DialogResult.Resolved -> DocumentReloadFailureDecision.Retry
+                    saveState.value == DocumentSaveState.Protected ->
+                      DocumentReloadFailureDecision.Continue
+                    else -> DocumentReloadFailureDecision.Discard
                   }
                 },
                 replaceIfCurrent = { claimReloadReplacement(request) },
@@ -524,6 +519,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
           },
           restoreInput = {},
           beginStop = activeSession::beginStop,
+          awaitProtection = activeSession::awaitProtectedCheckpoint,
           onPreparationStarted = {
             routeLeaveActive = true
             try {
@@ -560,15 +556,8 @@ fun DocumentBodySettingsScreen(entityId: String) {
             savingToastId = toast.state?.id
           },
           hideDelayedFeedback = { dismissSavingToast() },
-          resolveDecision = {
-            val result =
-              dialog.confirm(
-                title = "저장을 완료하지 못했어요",
-                message = "지금 닫으면 최근 변경사항을 잃을 수 있어요.",
-                confirmText = "저장하지 않고 닫기",
-                cancelText = "계속 편집",
-                confirmIsDestructive = true,
-              )
+          resolveDecision = { saveState ->
+            val result = dialog.confirmDocumentSave(saveState)
             if (result is DialogResult.Resolved) {
               RouteRemovalDecision.ProceedWithRemoval
             } else {

@@ -1,11 +1,14 @@
 package co.typie.editor
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import co.touchlab.kermit.Logger
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -16,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 internal enum class DocumentReloadFailureDecision {
   Retry,
   Discard,
+  Continue,
 }
 
 internal enum class DocumentProtectedReloadResult {
@@ -27,17 +31,7 @@ internal enum class DocumentProtectedReloadResult {
 private sealed interface FailureResolution {
   data class Decision(val decision: DocumentReloadFailureDecision) : FailureResolution
 
-  data class ProtectionAdvanced(val active: Boolean) : FailureResolution
-}
-
-private sealed interface RecoveryResult {
-  data object Protected : RecoveryResult
-
-  data object SessionStopped : RecoveryResult
-
-  data object StopCancelled : RecoveryResult
-
-  data class TimedOut(val observedGeneration: Long) : RecoveryResult
+  data object SessionStopped : FailureResolution
 }
 
 internal suspend fun runProtectedDocumentReload(
@@ -46,17 +40,15 @@ internal suspend fun runProtectedDocumentReload(
   onStopAcquired: () -> Unit = {},
   showDelayedFeedback: () -> Unit = {},
   hideDelayedFeedback: () -> Unit = {},
-  resolveFailure: suspend () -> DocumentReloadFailureDecision,
+  resolveFailure: suspend (State<DocumentSaveState>) -> DocumentReloadFailureDecision,
   replaceIfCurrent: (DocumentEditingSession) -> Boolean,
   delayedFeedbackMillis: Long = 350,
   checkpointWatchdogMillis: Long = 3_000,
-  retryWindowMillis: Long = 3_000,
 ): DocumentProtectedReloadResult {
   finalizeInput()
   val stop = session.beginStop()
   try {
     onStopAcquired()
-    var observedGeneration = session.protectionGeneration
     val initialResult =
       withDelayedFeedback(
         delayMillis = delayedFeedbackMillis,
@@ -79,42 +71,37 @@ internal suspend fun runProtectedDocumentReload(
     while (true) {
       when (
         val resolution =
-          awaitFailureResolution(
-            session = session,
-            observedGeneration = observedGeneration,
-            resolveFailure = resolveFailure,
-          )
+          awaitFailureResolution(session = session, stop = stop, resolveFailure = resolveFailure)
       ) {
         is FailureResolution.Decision ->
           when (resolution.decision) {
-            DocumentReloadFailureDecision.Discard -> return replaceExact(session, replaceIfCurrent)
+            DocumentReloadFailureDecision.Discard,
+            DocumentReloadFailureDecision.Continue -> return replaceExact(session, replaceIfCurrent)
             DocumentReloadFailureDecision.Retry -> {
               // TODO: 저장 실패 상태 인디케이터가 생기면 reload 실패 시 admission을 다시 열고
               // `계속 편집`을 제공한다. 현재는 실패 상태를 숨기지 않기 위해 재시도 modal로 막는다.
             }
           }
-        is FailureResolution.ProtectionAdvanced -> {
-          if (!resolution.active) return DocumentProtectedReloadResult.SessionStopped
-        }
+        FailureResolution.SessionStopped -> return DocumentProtectedReloadResult.SessionStopped
       }
 
-      observedGeneration = session.protectionGeneration
       when (
-        val recovery =
-          runRecoveryWindow(
-            session = session,
-            stop = stop,
-            initialObservedGeneration = observedGeneration,
-            delayedFeedbackMillis = delayedFeedbackMillis,
-            retryWindowMillis = retryWindowMillis,
-            showDelayedFeedback = showDelayedFeedback,
-            hideDelayedFeedback = hideDelayedFeedback,
-          )
+        withDelayedFeedback(
+          delayMillis = delayedFeedbackMillis,
+          timeoutMillis = checkpointWatchdogMillis,
+          show = showDelayedFeedback,
+          hide = hideDelayedFeedback,
+        ) {
+          stop.retryCheckpoint()
+        }
       ) {
-        RecoveryResult.Protected -> return replaceExact(session, replaceIfCurrent)
-        RecoveryResult.SessionStopped -> return DocumentProtectedReloadResult.SessionStopped
-        RecoveryResult.StopCancelled -> return DocumentProtectedReloadResult.NotCurrent
-        is RecoveryResult.TimedOut -> observedGeneration = recovery.observedGeneration
+        EditingCheckpointResult.Protected -> Unit
+        EditingCheckpointResult.SessionStopped ->
+          return DocumentProtectedReloadResult.SessionStopped
+        EditingCheckpointResult.StopCancelled -> return DocumentProtectedReloadResult.NotCurrent
+        is EditingCheckpointResult.EditFailed,
+        is EditingCheckpointResult.ProtectionFailed,
+        null -> {}
       }
     }
   } finally {
@@ -163,12 +150,25 @@ private inline fun runReloadFeedback(stage: String, block: () -> Unit) {
 
 private suspend fun awaitFailureResolution(
   session: DocumentEditingSession,
-  observedGeneration: Long,
-  resolveFailure: suspend () -> DocumentReloadFailureDecision,
+  stop: DocumentEditingStop,
+  resolveFailure: suspend (State<DocumentSaveState>) -> DocumentReloadFailureDecision,
 ): FailureResolution = coroutineScope {
-  val decision = async { FailureResolution.Decision(resolveFailure()) }
+  val saveState = mutableStateOf(DocumentSaveState.Pending)
+  val decision = async { FailureResolution.Decision(resolveFailure(saveState)) }
   val protection = async {
-    FailureResolution.ProtectionAdvanced(session.awaitProtectionAfter(observedGeneration))
+    when (session.awaitProtectedCheckpoint(stop) { saveState.value = it }) {
+      EditingCheckpointResult.Protected -> {
+        saveState.value = DocumentSaveState.Protected
+        awaitCancellation()
+      }
+      EditingCheckpointResult.SessionStopped,
+      EditingCheckpointResult.StopCancelled -> FailureResolution.SessionStopped
+      is EditingCheckpointResult.EditFailed,
+      is EditingCheckpointResult.ProtectionFailed -> {
+        saveState.value = DocumentSaveState.Failed
+        awaitCancellation()
+      }
+    }
   }
   try {
     select {
@@ -186,41 +186,6 @@ private suspend fun awaitFailureResolution(
       }
     }
   }
-}
-
-private suspend fun runRecoveryWindow(
-  session: DocumentEditingSession,
-  stop: DocumentEditingStop,
-  initialObservedGeneration: Long,
-  delayedFeedbackMillis: Long,
-  retryWindowMillis: Long,
-  showDelayedFeedback: () -> Unit,
-  hideDelayedFeedback: () -> Unit,
-): RecoveryResult {
-  var observedGeneration = initialObservedGeneration
-  suspend fun retryUntilProtected(): RecoveryResult {
-    while (true) {
-      when (stop.retryCheckpoint()) {
-        EditingCheckpointResult.Protected -> return RecoveryResult.Protected
-        EditingCheckpointResult.SessionStopped -> return RecoveryResult.SessionStopped
-        EditingCheckpointResult.StopCancelled -> return RecoveryResult.StopCancelled
-        is EditingCheckpointResult.EditFailed,
-        is EditingCheckpointResult.ProtectionFailed -> {}
-      }
-      if (!session.awaitProtectionAfter(observedGeneration)) {
-        return RecoveryResult.SessionStopped
-      }
-      observedGeneration = session.protectionGeneration
-    }
-  }
-  return withDelayedFeedback(
-    delayMillis = delayedFeedbackMillis,
-    timeoutMillis = retryWindowMillis,
-    show = showDelayedFeedback,
-    hide = hideDelayedFeedback,
-  ) {
-    retryUntilProtected()
-  } ?: RecoveryResult.TimedOut(observedGeneration)
 }
 
 private fun replaceExact(
