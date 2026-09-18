@@ -12,7 +12,7 @@ const startElectron = () => {
   electron?.kill();
   const proc = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['electron', '.'], {
     stdio: 'inherit',
-    env: { ...process.env, ELECTRON_RENDERER_URL: 'http://localhost:5300', ENVIRONMENT: process.env.ENVIRONMENT ?? 'local' },
+    env: { ...process.env, ELECTRON_RENDERER_URL: 'http://localhost:5400', ENVIRONMENT: process.env.ENVIRONMENT ?? 'local' },
   });
   electron = proc;
   proc.on('exit', (code) => {
