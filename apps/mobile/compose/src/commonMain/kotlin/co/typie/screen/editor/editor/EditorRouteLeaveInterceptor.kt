@@ -1,6 +1,9 @@
 package co.typie.screen.editor.editor
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import co.typie.editor.DocumentEditingStop
+import co.typie.editor.DocumentSaveState
 import co.typie.editor.EditingCheckpointResult
 import co.typie.navigation.RouteRemovalDecision
 import co.typie.navigation.RouteRemovalInterceptor
@@ -8,7 +11,9 @@ import co.typie.navigation.RouteRemovalPreparation
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -19,7 +24,12 @@ internal class EditorRouteLeaveInterceptor(
   private val onPreparationStarted: suspend () -> Unit = {},
   private val resumeReloadBeforeRollback: suspend () -> Boolean = { false },
   private val savePendingChanges: suspend () -> Boolean = { true },
-  private val resolveDecision: suspend () -> RouteRemovalDecision,
+  private val resolveDecision: suspend (State<DocumentSaveState>) -> RouteRemovalDecision,
+  private val awaitProtection:
+    suspend (DocumentEditingStop, (DocumentSaveState) -> Unit) -> EditingCheckpointResult =
+    { _, _ ->
+      awaitCancellation()
+    },
   private val delayedFeedbackMillis: Long = DEFAULT_DELAYED_FEEDBACK_MILLIS,
   private val checkpointWatchdogMillis: Long = DEFAULT_CHECKPOINT_WATCHDOG_MILLIS,
   private val showDelayedFeedback: () -> Unit = {},
@@ -50,7 +60,7 @@ internal class EditorRouteLeaveInterceptor(
         onPreparationStarted()
         reloadPaused = true
       }
-      return if (awaitProtection(currentStop, onDelayed)) {
+      return if (awaitInitialProtection(currentStop, onDelayed)) {
         RouteRemovalPreparation.Ready
       } else {
         RouteRemovalPreparation.NeedsDecision
@@ -65,7 +75,47 @@ internal class EditorRouteLeaveInterceptor(
     }
   }
 
-  override suspend fun resolveDecision(): RouteRemovalDecision = resolveDecision.invoke()
+  override suspend fun resolveDecision(): RouteRemovalDecision = coroutineScope {
+    val currentStop = stop ?: return@coroutineScope RouteRemovalDecision.CancelRemoval
+    val saveState = mutableStateOf(DocumentSaveState.Pending)
+    val decision = async { resolveDecision.invoke(saveState) }
+    val recovery = async {
+      when (
+        awaitProtection(currentStop) {
+          saveState.value = if (it == DocumentSaveState.Protected) DocumentSaveState.Pending else it
+        }
+      ) {
+        EditingCheckpointResult.Protected -> {
+          saveState.value =
+            if (savePendingChanges()) DocumentSaveState.Protected else DocumentSaveState.Failed
+          awaitCancellation()
+        }
+        EditingCheckpointResult.SessionStopped,
+        EditingCheckpointResult.StopCancelled -> RouteRemovalDecision.CancelRemoval
+        is EditingCheckpointResult.EditFailed,
+        is EditingCheckpointResult.ProtectionFailed -> {
+          saveState.value = DocumentSaveState.Failed
+          awaitCancellation()
+        }
+      }
+    }
+    try {
+      select {
+        decision.onAwait { it }
+        recovery.onAwait { it }
+      }
+    } finally {
+      decision.cancel()
+      recovery.cancel()
+      withContext(NonCancellable) {
+        try {
+          decision.join()
+        } finally {
+          recovery.join()
+        }
+      }
+    }
+  }
 
   override suspend fun rollback() {
     val currentStop = stop ?: return
@@ -92,7 +142,7 @@ internal class EditorRouteLeaveInterceptor(
     return cleanup(currentStop, restore = !reloadResumed, failure)
   }
 
-  private suspend fun awaitProtection(
+  private suspend fun awaitInitialProtection(
     stop: DocumentEditingStop,
     onDelayed: (suspend () -> Unit)? = null,
   ): Boolean {

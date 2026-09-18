@@ -1,5 +1,6 @@
 package co.typie.editor
 
+import androidx.compose.runtime.State
 import co.typie.editor.sync.FakeDeltaStore
 import co.typie.editor.sync.FakeSyncEditor
 import co.typie.editor.sync.PullResult
@@ -173,15 +174,17 @@ class DocumentProtectedReloadTest {
   }
 
   @Test
-  fun immediateRetryFailureWaitsTheCompleteProductWindow() = runTest {
+  fun immediateRetryFailureReturnsToTheDialogWithoutLoadingFeedback() = runTest {
     val (session, _, syncEditor) = harness(store = failingStore(), pushFn = ::failingPush)
     syncEditor.known.add(1)
     var decisions = 0
+    var loadingFeedback = 0
     val policy =
       async(start = CoroutineStart.UNDISPATCHED) {
         runProtectedDocumentReload(
           session = session,
           finalizeInput = {},
+          showDelayedFeedback = { loadingFeedback++ },
           resolveFailure = {
             decisions += 1
             if (decisions == 1) DocumentReloadFailureDecision.Retry else awaitCancellation()
@@ -191,36 +194,82 @@ class DocumentProtectedReloadTest {
       }
     runCurrent()
 
-    advanceTimeBy(2_999)
-    runCurrent()
-    assertEquals(1, decisions)
-
-    advanceTimeBy(1)
-    runCurrent()
     assertEquals(2, decisions)
+    assertEquals(0, loadingFeedback)
 
     policy.cancelAndJoin()
     session.stop()
   }
 
   @Test
-  fun exactProtectionCancelsTheVisibleDecisionAndReplaces() = runTest {
+  fun localFailureStaysPendingUntilPushFailsAndBackgroundRetryUpdatesTheSameDialog() = runTest {
+    var releasePush = CompletableDeferred<Unit>()
+    var pushSucceeds = false
+    val (session, engine, syncEditor) =
+      harness(store = failingStore()) {
+        releasePush.await()
+        if (!pushSucceeds) throw IllegalStateException("offline")
+        PushResult(heads = enc(1), durableHeads = enc())
+      }
+    syncEditor.known.add(1)
+    lateinit var saveState: State<DocumentSaveState>
+    var dialogs = 0
+    val choice = CompletableDeferred<DocumentReloadFailureDecision>()
+    val policy = async {
+      runProtectedDocumentReload(
+        session = session,
+        finalizeInput = {},
+        resolveFailure = {
+          dialogs++
+          saveState = it
+          choice.await()
+        },
+        replaceIfCurrent = {
+          it.stop()
+          true
+        },
+      )
+    }
+    advanceTimeBy(3_001)
+    runCurrent()
+    assertEquals(DocumentSaveState.Pending, saveState.value)
+
+    releasePush.complete(Unit)
+    runCurrent()
+    assertEquals(DocumentSaveState.Failed, saveState.value)
+    assertFalse(policy.isCompleted)
+
+    releasePush = CompletableDeferred()
+    pushSucceeds = true
+    engine.retryNow()
+    runCurrent()
+    assertEquals(DocumentSaveState.Pending, saveState.value)
+    releasePush.complete(Unit)
+    runCurrent()
+    assertEquals(DocumentSaveState.Protected, saveState.value)
+    assertEquals(1, dialogs)
+    assertFalse(policy.isCompleted)
+
+    choice.complete(DocumentReloadFailureDecision.Continue)
+    assertEquals(DocumentProtectedReloadResult.Replaced, policy.await())
+  }
+
+  @Test
+  fun exactProtectionKeepsTheDialogUntilItsCompletionActionAndReplaces() = runTest {
     val (session, engine, syncEditor) = harness(store = failingStore(), pushFn = ::failingPush)
     syncEditor.known.add(1)
     val dialogStarted = CompletableDeferred<Unit>()
-    var dialogCancelled = false
+    val choice = CompletableDeferred<DocumentReloadFailureDecision>()
+    lateinit var protection: State<DocumentSaveState>
     val policy =
       async(start = CoroutineStart.UNDISPATCHED) {
         runProtectedDocumentReload(
           session = session,
           finalizeInput = {},
           resolveFailure = {
+            protection = it
             dialogStarted.complete(Unit)
-            try {
-              awaitCancellation()
-            } finally {
-              dialogCancelled = true
-            }
+            choice.await()
           },
           replaceIfCurrent = {
             it.stop()
@@ -233,12 +282,15 @@ class DocumentProtectedReloadTest {
     engine.setConfirmedHeads(enc(1))
     runCurrent()
 
+    assertEquals(DocumentSaveState.Protected, protection.value)
+    assertFalse(policy.isCompleted)
+    assertNull(session.submit { _, context -> async(context) {} })
+    choice.complete(DocumentReloadFailureDecision.Continue)
     assertEquals(DocumentProtectedReloadResult.Replaced, policy.await())
-    assertTrue(dialogCancelled)
   }
 
   @Test
-  fun partialProtectionRechecksWithoutExtendingTheRecoveryWindow() = runTest {
+  fun partialProtectionRechecksButDoesNotReloadOrLoopWithoutAnotherAdvance() = runTest {
     val (session, engine, syncEditor) = harness(store = failingStore(), pushFn = ::failingPush)
     syncEditor.known.addAll(listOf(1, 2, 3))
     var decisions = 0
@@ -264,6 +316,7 @@ class DocumentProtectedReloadTest {
 
     engine.setConfirmedHeads(enc(1))
     runCurrent()
+    assertEquals(1, decisions)
     advanceTimeBy(1_000)
     engine.setConfirmedHeads(enc(2))
     runCurrent()
@@ -275,7 +328,7 @@ class DocumentProtectedReloadTest {
 
     advanceTimeBy(1)
     runCurrent()
-    assertEquals(2, decisions)
+    assertEquals(1, decisions)
     assertEquals(0, replacements)
 
     policy.cancelAndJoin()
