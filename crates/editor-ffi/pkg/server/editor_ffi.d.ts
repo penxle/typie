@@ -11,6 +11,15 @@
 export type ChainSegment = { type: "real"; dot: Dot } | { type: "synthetic"; owner: Dot; role: NodeType; depth: number };
 
 /**
+ * Already-resolved asset metadata. Copy never fetches or encodes asset bytes.
+ */
+export interface ClipboardAsset {
+    id: string;
+    url: string;
+    label: string;
+}
+
+/**
  * An IME composition range, expressed in flat-offset coordinates.
  *
  * `start` and `end` are **flat offsets** — absolute positions over the
@@ -595,6 +604,39 @@ export interface SelectionEndpoints {
     to_position: Position;
 }
 
+export interface SelectionFont {
+    family: number;
+    weight: number;
+    key: string;
+}
+
+export interface SelectionLayoutBlock {
+    node: Dot;
+    kind: NodeType;
+    before: Position;
+    after: Position;
+    runs: SelectionTextRun[];
+    /**
+     * The final newline represents this structural range, not a hard-break leaf.
+     */
+    trailing_break: Selection | undefined;
+}
+
+export interface SelectionTextRun {
+    font: SelectionFont | undefined;
+    offset: number;
+    text: string;
+    page_idx: number;
+    rect: Rect;
+    line: Rect;
+    letter_spacing: number;
+    font_size: number;
+    weight: number;
+    italic: boolean;
+    rtl: boolean;
+    link: string | undefined;
+}
+
 export interface Size {
     width: number;
     height: number;
@@ -963,6 +1005,10 @@ declare class Editor {
     copy_selection(): ClipboardPayload | undefined;
     current_heads(): Uint8Array;
     cursor(): CursorMetrics | undefined;
+    /**
+     * Hit-test a page point in the given revision and return caret geometry
+     * without changing the selection.
+     */
     cursor_at(revision: Revision, page: number, x: number, y: number): CursorMetrics | undefined;
     cursor_hit_rects(): PageRect[];
     cursor_hit_test(page: number, x: number, y: number): boolean;
