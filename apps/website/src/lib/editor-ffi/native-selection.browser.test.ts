@@ -437,6 +437,7 @@ it('keeps mixed media in order with external URLs and original internal asset re
     title: 'Article title',
     description: 'Description',
     thumbnailUrl: null,
+    faviconUrl: null,
     html: null,
   });
   await tick();
@@ -828,6 +829,7 @@ it('copies only selected visible embed text at either endpoint or within the emb
     title: 'Article',
     description: null,
     thumbnailUrl: null,
+    faviconUrl: null,
     html: '<div style="height:100px"><span>embedded <strong>title</strong></span><br><span>second line</span><span hidden>hidden</span><style>.unused { color: red }</style><script type="application/json">{"private":"metadata"}</script></div>',
   });
   await tick();
@@ -865,6 +867,7 @@ it('preserves an embed origin when it is the partial selection endpoint', async 
     title: 'Article',
     description: null,
     thumbnailUrl: null,
+    faviconUrl: null,
     html: null,
   });
   await tick();

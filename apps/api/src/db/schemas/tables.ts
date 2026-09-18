@@ -248,6 +248,7 @@ export const Embeds = pgTable('embeds', {
   description: text('description'),
   html: text('html'),
   thumbnailUrl: text('thumbnail_url'),
+  faviconUrl: text('favicon_url'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),

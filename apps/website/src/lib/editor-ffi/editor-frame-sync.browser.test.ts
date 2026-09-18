@@ -2238,6 +2238,7 @@ describe('web editor frame synchronization', () => {
           title: null,
           description: null,
           thumbnailUrl: null,
+          faviconUrl: null,
           html: `<div data-embed-content style="height: ${height}px"></div>`,
         });
       }
@@ -2285,6 +2286,7 @@ describe('web editor frame synchronization', () => {
       title: null,
       description: null,
       thumbnailUrl: null,
+      faviconUrl: null,
       html: '<div data-embed-content style="position: relative; aspect-ratio: 2"><iframe src="about:blank" style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div>',
     });
     await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(editor.externalElements[0].bounds.width / 2);
@@ -2336,6 +2338,7 @@ describe('web editor frame synchronization', () => {
       title: null,
       description: null,
       thumbnailUrl: null,
+      faviconUrl: null,
       html: '<div style="max-width: 660px"><div style="position: relative; height: 0; padding-bottom: 63%; padding-top: 284px"><iframe data-dynamic-embed src="https://iframely.net/example" srcdoc="" sandbox style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div></div>',
     });
     await expect.poll(() => document.querySelector('[data-dynamic-embed]')).not.toBeNull();
@@ -2364,6 +2367,7 @@ describe('web editor frame synchronization', () => {
       title: 'Original embed title',
       description: 'Original embed description',
       thumbnailUrl: null,
+      faviconUrl: null,
       html: '<div style="position: relative; height: 400px"><iframe data-cancel-embed src="https://iframely.net/example" srcdoc="" sandbox style="position: absolute; width: 100%; height: 100%; border: 0"></iframe></div>',
     };
     editor.embedAssets.set('embed', asset);
@@ -2416,6 +2420,7 @@ describe('web editor frame synchronization', () => {
       title: null,
       description: null,
       thumbnailUrl: null,
+      faviconUrl: null,
       html: '<div style="height: 120px"></div>',
     };
     await expect.poll(() => editor.externalElements[0]?.bounds.height).toBe(48);
@@ -2439,6 +2444,7 @@ describe('web editor frame synchronization', () => {
       title: 'Example',
       description: 'Embedded content',
       thumbnailUrl: null,
+      faviconUrl: null,
       html: null,
     });
 

@@ -1,8 +1,7 @@
 import type { ExternalElement, ExternalElementHeight } from '@typie/editor-ffi/browser';
 import type { EditorContext } from './editor.svelte';
 
-export const EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT = 48;
-export const EXTERNAL_FILE_CARD_HEIGHT = 64;
+export const EXTERNAL_CARD_HEIGHT = 64;
 
 // Undefined heights need DOM measurement. Keep these decisions aligned with
 // the content rendered by the external element components.
@@ -15,19 +14,17 @@ export function getExternalElementHeight(ctx: EditorContext, element: ExternalEl
     case 'image': {
       const asset = data.id ? editor.images.assets.get(data.id) : undefined;
       const upload = editor.images.uploads.get(element.node);
-      if (!(asset?.url ?? upload?.url)) return EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT;
+      if (!(asset?.url ?? upload?.url)) return EXTERNAL_CARD_HEIGHT;
       return editor.images.displaySize(element)?.height;
     }
     case 'file': {
-      return (data.id && editor.fileAssets.has(data.id)) || editor.inflightFiles.has(element.node)
-        ? EXTERNAL_FILE_CARD_HEIGHT
-        : EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT;
+      return EXTERNAL_CARD_HEIGHT;
     }
     case 'embed': {
-      return data.id && editor.embedAssets.has(data.id) ? undefined : EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT;
+      return data.id && editor.embedAssets.has(data.id) ? undefined : EXTERNAL_CARD_HEIGHT;
     }
     case 'archived': {
-      return EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT;
+      return EXTERNAL_CARD_HEIGHT;
     }
   }
 }

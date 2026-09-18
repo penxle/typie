@@ -1,29 +1,32 @@
 <script lang="ts">
-  import { flip, hide } from '@floating-ui/dom';
+  import { flip, hide, shift } from '@floating-ui/dom';
   import { createMutation } from '@mearie/svelte';
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
-  import { Button, Icon, RingSpinner, TextInput } from '@typie/ui/components';
+  import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
+  import { pushEscapeHandler } from '@typie/ui/utils';
   import ExternalLinkIcon from '~icons/lucide/external-link';
-  import FileUpIcon from '~icons/lucide/file-up';
+  import LinkIcon from '~icons/lucide/link';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
   import { getEditorContext } from '../editor.svelte';
-  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT } from '../external-element-height';
   import { createDeleteEmbedNodeMessage, processEmbedUpload } from '../handlers/embed-flow';
   import EmbedHtml from './EmbedHtml.svelte';
+  import ExternalCard from './ExternalCard.svelte';
+  import ExternalCardAction from './ExternalCardAction.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
+  import ExternalMediaAction from './ExternalMediaAction.svelte';
+  import ExternalMediaControls from './ExternalMediaControls.svelte';
+  import ExternalPlaceholder from './ExternalPlaceholder.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
   type Props = {
     element: ExternalElement;
   };
 
-  const ACTION_SIZE = 28;
-  const ACTION_INSET = 8;
-  const ACTION_GAP = 4;
+  const LINK_CARD_WIDTH = 400;
 
   let { element }: Props = $props();
 
@@ -38,30 +41,45 @@
   const displayZoom = $derived(ctx.editor?.safeDisplayZoom() ?? 1);
 
   let inflightUrl = $state('');
-  let error = $state(false);
+  let editing = $state(false);
+  let urlInputEl = $state<HTMLInputElement>();
   let componentWidth = $state(0);
   let componentHeight = $state(0);
 
   const layoutReady = $derived(componentHeight > 0 && Math.abs(componentHeight - element.bounds.height) < 1);
 
-  const fixedControlTransform = $derived(displayZoom === 1 ? undefined : `scale(${1 / displayZoom})`);
-  const visibleActionCount = $derived.by(() => {
-    const availableWidth = componentWidth * displayZoom - ACTION_INSET * displayZoom;
-    const availableHeight = componentHeight * displayZoom - ACTION_INSET * displayZoom;
-    if (availableWidth < ACTION_SIZE || availableHeight < ACTION_SIZE) return 0;
-    return availableWidth >= ACTION_SIZE * 2 + ACTION_GAP * displayZoom ? 2 : 1;
-  });
-
-  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
-  const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
-  );
-  const showUrlInput = $derived(isOnlySelectedElement && !embedId && !inflight && canEdit);
-
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom',
-    offset: 4,
-    middleware: [flip(), hide()],
+    offset: 8,
+    middleware: [flip(), shift({ padding: 8 }), hide()],
+    onClickOutside: () => {
+      editing = false;
+    },
+  });
+
+  $effect(() => {
+    if (!editing) return;
+    return pushEscapeHandler(() => {
+      editing = false;
+      ctx.editor?.focus();
+      return true;
+    });
+  });
+
+  const embedOrigin = $derived.by(() => {
+    if (!asset) return '';
+    try {
+      return new URL(asset.url).host;
+    } catch {
+      return asset.url;
+    }
+  });
+
+  // The floating bar mounts into the body, so focus has to wait for it to land.
+  $effect(() => {
+    if (!editing || !urlInputEl) return;
+    const timer = setTimeout(() => urlInputEl?.focus({ preventScroll: true }), 0);
+    return () => clearTimeout(timer);
   });
 
   const [unfurlEmbed] = createMutation(
@@ -73,6 +91,7 @@
           title
           description
           thumbnailUrl
+          faviconUrl
           html
         }
       }
@@ -83,7 +102,6 @@
     const editor = ctx.editor;
     if (!inflightUrl || !editor) return;
 
-    error = false;
     const url = inflightUrl;
     const uploadId = crypto.randomUUID();
     const isCurrent = () =>
@@ -111,6 +129,7 @@
           title: result.unfurlEmbed.title ?? null,
           description: result.unfurlEmbed.description ?? null,
           thumbnailUrl: result.unfurlEmbed.thumbnailUrl ?? null,
+          faviconUrl: result.unfurlEmbed.faviconUrl ?? null,
           html: result.unfurlEmbed.html ?? null,
         };
       },
@@ -123,12 +142,12 @@
     });
 
     if (result === 'uploaded') {
+      editing = false;
+      inflightUrl = '';
       editor.focus();
     } else if (result === 'failed') {
-      error = true;
       Toast.error('링크를 임베드할 수 없습니다.');
     }
-    inflightUrl = '';
   };
 
   const deleteNode = () => {
@@ -142,8 +161,12 @@
 </script>
 
 <ExternalElementWrapper {element}>
-  <div class={css({ position: 'relative', width: 'full' })} bind:clientWidth={componentWidth} bind:clientHeight={componentHeight}>
-    {#if asset}
+  <div
+    class={cx('group', css({ position: 'relative', width: 'full' }))}
+    bind:clientWidth={componentWidth}
+    bind:clientHeight={componentHeight}
+  >
+    {#if asset && html}
       {#key html}
         <EmbedHtml
           class={css({ display: 'contents' }, canEdit && { pointerEvents: 'none' })}
@@ -152,194 +175,222 @@
           scrollRoot={ctx.editor?.scrollRootEl ?? null}
         >
           {#snippet fallback()}
-            <div class={flex({ borderWidth: '1px', borderColor: 'border.hairline', borderRadius: '6px' })}>
-              <div class={flex({ direction: 'column', grow: '1', paddingX: '16px', paddingY: '15px', gap: '4px', minWidth: '0' })}>
-                <p
-                  class={css({
-                    fontSize: '14px',
-                    fontWeight: 'medium',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                  })}
-                  data-selection-label
-                >
-                  {asset.title ?? '(제목 없음)'}
-                </p>
-                {#if asset.description}
-                  <p
-                    class={css({
-                      fontSize: '12px',
-                      color: 'text.muted',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                    })}
-                    data-selection-label
-                  >
-                    {asset.description}
-                  </p>
-                {/if}
-                <p
-                  class={css({
-                    fontSize: '12px',
-                    color: 'text.muted',
-                    marginTop: 'auto',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                  })}
-                  data-selection-label
-                >
-                  {new URL(asset.url).origin}
-                </p>
-              </div>
-              {#if asset.thumbnailUrl}
-                <img
-                  class={css({
-                    flexShrink: '0',
-                    borderTopRightRadius: '5px',
-                    borderBottomRightRadius: '5px',
-                    size: '118px',
-                    objectFit: 'cover',
-                  })}
-                  alt={asset.title ?? '(제목 없음)'}
-                  src={asset.thumbnailUrl}
-                />
-              {/if}
-            </div>
+            {@render linkCard()}
           {/snippet}
         </EmbedHtml>
       {/key}
 
-      {#if visibleActionCount > 0}
-        <div
-          style:gap={`${ACTION_GAP * displayZoom}px`}
-          style:transform={fixedControlTransform}
-          style:transform-origin="top right"
-          class={flex({ position: 'absolute', top: '8px', right: '8px' })}
+      {#if canEdit}
+        <ExternalMediaControls
+          height={componentHeight}
+          meta={`${asset.title ?? '(제목 없음)'} · ${embedOrigin}`}
+          selected={element.is_selected}
+          width={componentWidth}
+          zoom={displayZoom}
         >
-          <button
-            class={css({
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '4px',
-              color: 'text.on.inverse',
-              backgroundColor: 'surface.inverse/70',
-              size: '28px',
-              _hover: { backgroundColor: 'surface.inverse/85' },
-            })}
-            aria-label="링크 열기"
+          <ExternalMediaAction
+            icon={ExternalLinkIcon}
+            label="링크 열기"
             onclick={() => window.open(asset.url, '_blank', 'noopener,noreferrer')}
-            onpointerdown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            type="button"
-          >
-            <Icon icon={ExternalLinkIcon} size={16} />
-          </button>
-
-          {#if canEdit && visibleActionCount > 1}
-            <button
-              class={css({
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '4px',
-                color: 'text.on.inverse',
-                backgroundColor: 'surface.inverse/70',
-                size: '28px',
-                _hover: { backgroundColor: 'surface.inverse/85' },
-              })}
-              aria-label="임베드 삭제"
-              onclick={deleteNode}
-              onpointerdown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              type="button"
-            >
-              <Icon icon={Trash2Icon} size={16} />
-            </button>
-          {/if}
-        </div>
+          />
+          <ExternalMediaAction icon={Trash2Icon} label="임베드 삭제" onclick={deleteNode} />
+        </ExternalMediaControls>
       {/if}
+    {:else if asset}
+      {@render linkCard()}
+    {:else if inflight}
+      <ExternalCard icon={LinkIcon} meta="불러오는 중" spinner title={inflight.url} />
+    {:else if embedId}
+      <ExternalCard icon={LinkIcon} loading />
     {:else}
-      <div
-        style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
-        class={flex({
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderRadius: '4px',
-          backgroundColor: 'surface.inset',
-          width: 'full',
-          paddingX: '14px',
-          paddingY: '12px',
-        })}
-        use:anchor
-      >
-        <div class={flex({ align: 'center', gap: '12px', fontSize: '14px', color: error ? 'danger.default' : 'text.hint', minWidth: '0' })}>
-          {#if inflight}
-            <RingSpinner style={css.raw({ size: '20px', flexShrink: '0' })} />
-            <span class={css({ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>링크 임베드 중...</span>
-          {:else}
-            <Icon class={css({ flexShrink: '0' })} icon={FileUpIcon} size={20} />
-            <span class={css({ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' })}>
-              {#if error}
-                링크를 임베드할 수 없습니다
-              {:else if canEdit}
-                링크 임베드 (Youtube, Google Drive, 일반 링크 등)
-              {:else}
-                링크 임베드 없음
-              {/if}
-            </span>
+      <div use:anchor>
+        <ExternalPlaceholder
+          {canEdit}
+          hint={canEdit ? 'Youtube, Google Drive, 일반 링크를 넣을 수 있어요' : undefined}
+          icon={LinkIcon}
+          onclick={() => (editing = true)}
+          title={canEdit ? '링크 임베드 추가' : '비어있는 임베드'}
+        >
+          {#if canEdit}
+            <ExternalCardAction danger icon={Trash2Icon} label="임베드 삭제" onclick={deleteNode} />
           {/if}
-        </div>
-
-        {#if canEdit && !inflight}
-          <button
-            class={flex({
-              align: 'center',
-              borderRadius: '4px',
-              padding: '4px',
-              color: 'text.muted',
-              _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
-            })}
-            aria-label="임베드 삭제"
-            onclick={deleteNode}
-            onpointerdown={(e) => e.stopPropagation()}
-            type="button"
-          >
-            <Icon icon={Trash2Icon} size={16} />
-          </button>
-        {/if}
+        </ExternalPlaceholder>
       </div>
     {/if}
   </div>
 </ExternalElementWrapper>
 
-{#if showUrlInput}
-  <form
-    class={flex({
-      alignItems: 'center',
-      gap: '6px',
-      borderWidth: '1px',
+{#if editing && canEdit}
+  {@render urlForm()}
+{/if}
+
+{#snippet linkCard()}
+  <div
+    style:max-width={`${LINK_CARD_WIDTH}px`}
+    class={css({
+      marginX: 'auto',
       borderRadius: '8px',
-      paddingX: '6px',
-      paddingY: '4px',
+      borderWidth: '1px',
+      borderColor: 'border.default',
       backgroundColor: 'surface.default',
-      boxShadow: 'sm',
-      zIndex: 'editor',
+      overflow: 'hidden',
     })}
-    onsubmit={(e) => {
-      e.preventDefault();
-      void handleSubmit();
-    }}
+  >
+    {#if asset?.thumbnailUrl}
+      <img
+        class={css({
+          display: 'block',
+          width: 'full',
+          aspectRatio: '[1200 / 630]',
+          objectFit: 'cover',
+          backgroundColor: 'surface.inset',
+        })}
+        alt=""
+        src={asset.thumbnailUrl}
+      />
+    {/if}
+
+    <div class={flex({ alignItems: 'center', gap: '12px', paddingX: '14px', paddingY: '12px' })}>
+      <div class={flex({ direction: 'column', flexGrow: '1', minWidth: '0' })}>
+        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', truncate: true })} data-selection-label>
+          {asset?.title ?? '(제목 없음)'}
+        </span>
+        {#if asset?.description}
+          <span class={css({ marginTop: '2px', fontSize: '12px', color: 'text.muted', truncate: true })} data-selection-label>
+            {asset.description}
+          </span>
+        {/if}
+        <span class={flex({ alignItems: 'center', gap: '6px', marginTop: '6px', minWidth: '0', fontSize: '12px', color: 'text.hint' })}>
+          {#if asset?.faviconUrl}
+            <img
+              class={css({ display: 'block', flexShrink: '0', size: '14px', borderRadius: '2px', objectFit: 'cover' })}
+              alt=""
+              src={asset.faviconUrl}
+            />
+          {:else}
+            <Icon icon={LinkIcon} size={14} />
+          {/if}
+          <span class={css({ truncate: true })} data-selection-label>{embedOrigin}</span>
+        </span>
+      </div>
+
+      <div
+        class={flex({
+          alignItems: 'center',
+          gap: '2px',
+          flexShrink: '0',
+          opacity: '0',
+          transition: 'common',
+          _groupActive: { opacity: '100' },
+          _groupHover: { opacity: '100' },
+          '&:focus-within': { opacity: '100' },
+        })}
+      >
+        <ExternalCardAction
+          icon={ExternalLinkIcon}
+          label="링크 열기"
+          onclick={() => asset && window.open(asset.url, '_blank', 'noopener,noreferrer')}
+        />
+        {#if canEdit}
+          <ExternalCardAction danger icon={Trash2Icon} label="임베드 삭제" onclick={deleteNode} />
+        {/if}
+      </div>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet urlForm()}
+  <div
+    class={`embed-url-bar ${css({
+      zIndex: 'overEditor',
+      borderRadius: '8px',
+      backgroundColor: 'surface.default',
+      boxShadow: 'lg',
+      overflow: 'hidden',
+      _dark: { borderWidth: '1px', borderColor: 'border.hairline' },
+    })}`}
     use:floating
   >
-    <TextInput name="url" style={css.raw({ flex: '1', minWidth: '200px' })} placeholder="https://..." size="sm" bind:value={inflightUrl} />
-    <Button size="sm" type="submit">확인</Button>
-  </form>
-{/if}
+    <div class={flex({ alignItems: 'center', gap: '8px', height: '36px', paddingLeft: '12px', paddingRight: '4px' })}>
+      <Icon style={css.raw({ flexShrink: '0', color: 'text.hint' })} icon={LinkIcon} size={14} />
+
+      <input
+        bind:this={urlInputEl}
+        class={css({
+          flexGrow: '1',
+          width: '208px',
+          minWidth: '0',
+          height: 'full',
+          fontSize: '13px',
+          fontWeight: 'medium',
+          color: 'text.default',
+          backgroundColor: 'transparent',
+          border: 'none',
+          outline: 'none',
+          _placeholder: { color: 'text.hint', fontWeight: 'normal' },
+        })}
+        aria-label="링크"
+        onkeydown={(e) => {
+          if (e.isComposing) return;
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            void handleSubmit();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            editing = false;
+          }
+        }}
+        placeholder="https://..."
+        type="url"
+        bind:value={inflightUrl}
+      />
+
+      <button
+        class={css({
+          flexShrink: '0',
+          height: '28px',
+          paddingX: '10px',
+          borderRadius: '6px',
+          fontSize: '12px',
+          fontWeight: 'medium',
+          color: 'text.default',
+          backgroundColor: 'surface.inset',
+          transition: 'common',
+          _enabled: { _hover: { backgroundColor: 'surface.active' } },
+          _disabled: { opacity: '40' },
+        })}
+        disabled={inflightUrl.trim().length === 0}
+        onclick={() => void handleSubmit()}
+        onpointerdown={(e) => e.preventDefault()}
+        type="button"
+      >
+        삽입
+      </button>
+    </div>
+  </div>
+{/snippet}
+
+<style>
+  .embed-url-bar {
+    transform-origin: top center;
+    animation: embed-url-bar-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+
+  @keyframes embed-url-bar-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .embed-url-bar {
+      animation: none;
+    }
+  }
+</style>

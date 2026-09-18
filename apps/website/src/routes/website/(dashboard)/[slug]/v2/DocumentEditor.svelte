@@ -180,6 +180,7 @@
                   title
                   description
                   thumbnailUrl
+                  faviconUrl
                   html
                 }
 
@@ -260,6 +261,7 @@
             title
             description
             thumbnailUrl
+            faviconUrl
             html
           }
 
@@ -367,6 +369,7 @@
         title: asset.title ?? null,
         description: asset.description ?? null,
         thumbnailUrl: asset.thumbnailUrl ?? null,
+        faviconUrl: asset.faviconUrl ?? null,
         html: asset.html ?? null,
       });
     } else if (asset.__typename === 'DocumentArchivedNode') {

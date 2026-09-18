@@ -1,18 +1,17 @@
 <script lang="ts">
-  import { flip, hide } from '@floating-ui/dom';
   import { css, cx } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
-  import { createFloatingActions } from '@typie/ui/actions';
-  import { Icon, Menu, MenuItem, RingSpinner } from '@typie/ui/components';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import DownloadIcon from '~icons/lucide/download';
-  import EllipsisIcon from '~icons/lucide/ellipsis';
   import PaperclipIcon from '~icons/lucide/paperclip';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { formatFileSize } from '$lib/utils/format';
   import { getEditorContext } from '../editor.svelte';
-  import { EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT, EXTERNAL_FILE_CARD_HEIGHT } from '../external-element-height';
+  import ExternalCard from './ExternalCard.svelte';
+  import ExternalCardAction from './ExternalCardAction.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
+  import ExternalPlaceholder from './ExternalPlaceholder.svelte';
   import type { ExternalElement } from '@typie/editor-ffi/browser';
 
   type Props = {
@@ -35,26 +34,9 @@
   });
 
   const canEdit = $derived(!ctx.editor?.readOnly);
-  const hasFile = $derived(!!asset || stage === 'uploading');
   const displayName = $derived(asset?.name || inflight?.name || '파일');
-  const displaySize = $derived(asset ? formatFileSize(Number(asset.size)) : undefined);
-  const selectedBlockNodes = $derived(ctx.editor?.blockState?.nodes ?? []);
-  const isOnlySelectedElement = $derived(
-    element.is_selected && selectedBlockNodes.length === 1 && selectedBlockNodes[0]?.id === element.node,
-  );
+  const downloadOnly = $derived(!canEdit && !!asset);
   const isAttachmentDropTarget = $derived(stage === 'empty' && ctx.attachmentDropTargetNodeId === element.node);
-
-  let pickerOpened = $state(false);
-
-  const { anchor, floating } = createFloatingActions({
-    placement: 'bottom',
-    offset: 4,
-    middleware: [flip(), hide()],
-  });
-
-  $effect(() => {
-    pickerOpened = isOnlySelectedElement && stage === 'empty';
-  });
 
   const deleteNode = () => {
     const editor = ctx.editor;
@@ -102,190 +84,75 @@
     a.download = asset.name;
     a.click();
   };
+
+  const handleCardClick = () => {
+    if (ctx.editor?.nativeSelection && !window.getSelection()?.isCollapsed) return;
+    handleDownload();
+  };
 </script>
 
 <ExternalElementWrapper {element}>
-  {#if hasFile}
-    <div
-      style:height={`${EXTERNAL_FILE_CARD_HEIGHT}px`}
-      class={cx(
-        'group',
-        flex({
-          alignItems: 'center',
-          gap: '12px',
-          borderWidth: '1px',
-          borderColor: 'border.hairline',
-          borderRadius: '8px',
-          paddingX: '16px',
-          backgroundColor: 'surface.inset',
-          transition: 'common',
-          _hover: { borderColor: 'border.emphasis' },
-        }),
-      )}
-    >
-      <Icon class={css({ color: 'text.default', flexShrink: '0' })} icon={PaperclipIcon} size={20} />
-
-      <div class={flex({ direction: 'column', flex: '1', minWidth: '0' })}>
-        <span
-          class={css({
-            fontSize: '14px',
-            fontWeight: 'medium',
-            color: 'text.default',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          })}
-          data-selection-label
-        >
-          {displayName}
-        </span>
-        {#if displaySize}
-          <span
-            class={css({ fontSize: '12px', color: 'text.muted', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}
-            data-selection-label
-          >
-            {displaySize}
-          </span>
-        {/if}
-      </div>
-
-      {#if canEdit}
-        <button
-          class={css({
-            padding: '4px',
-            borderRadius: '4px',
-            color: 'text.muted',
-            opacity: '0',
-            transition: 'common',
-            _hover: { backgroundColor: 'surface.hover', color: 'danger.default' },
-            _groupHover: { opacity: '100' },
-          })}
-          aria-label="파일 삭제"
-          onclick={deleteNode}
-          onpointerdown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          type="button"
-        >
-          <Icon icon={Trash2Icon} size={16} />
-        </button>
-      {/if}
-
-      {#if stage === 'uploading'}
-        <RingSpinner style={css.raw({ size: '20px', color: 'text.muted' })} />
-      {:else if asset}
-        <button
-          class={css({
-            padding: '4px',
-            borderRadius: '4px',
-            color: 'text.muted',
-            transition: 'common',
-            _hover: { backgroundColor: 'surface.hover', color: 'text.default' },
-          })}
-          aria-label="파일 다운로드"
-          onclick={handleDownload}
-          onpointerdown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          type="button"
-        >
-          <Icon icon={DownloadIcon} size={16} />
-        </button>
-      {/if}
-    </div>
-  {:else}
-    <div
-      style:height={`${EXTERNAL_ELEMENT_PLACEHOLDER_HEIGHT}px`}
-      class={cx(
-        'group',
-        flex({
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderRadius: '4px',
-          backgroundColor: 'surface.inset',
-          width: 'full',
-        }),
-        isAttachmentDropTarget && css({ boxShadow: '[inset 0 0 0 1px token(colors.accent.default)]' }),
-      )}
-      use:anchor
-    >
-      <div
-        class={flex({
-          align: 'center',
-          gap: '12px',
-          paddingX: '14px',
-          paddingY: '12px',
-          fontSize: '14px',
-          color: isAttachmentDropTarget ? 'accent.default' : 'text.hint',
-        })}
+  <div class={cx('group', css({ width: 'full' }))}>
+    {#if stage === 'ready' || stage === 'uploading'}
+      <ExternalCard
+        icon={PaperclipIcon}
+        label={downloadOnly ? `${displayName} 내려받기` : undefined}
+        meta={asset ? formatFileSize(Number(asset.size)) : '업로드 중'}
+        onclick={downloadOnly ? handleCardClick : undefined}
+        progress={undefined}
+        spinner={stage === 'uploading'}
+        title={displayName}
       >
-        <Icon icon={PaperclipIcon} size={20} />
-        {stage === 'resolving' ? '파일을 불러오는 중...' : isAttachmentDropTarget ? '놓아서 업로드하기' : '파일'}
-      </div>
-
-      {#if stage === 'resolving'}
-        <div class={css({ marginRight: '14px' })}>
-          <RingSpinner style={css.raw({ size: '16px', color: 'text.muted' })} />
-        </div>
-      {:else if canEdit && !isAttachmentDropTarget}
-        <div
-          onpointerdown={(e) => {
-            e.stopPropagation();
-          }}
-          role="none"
-        >
-          <Menu
-            style={css.raw({
-              marginRight: '12px',
-              borderRadius: '4px',
-              padding: '2px',
+        {#if downloadOnly}
+          <div
+            class={center({
+              flexShrink: '0',
+              padding: '4px',
               color: 'text.muted',
+              transition: 'common',
+              _groupHover: { color: 'text.default' },
+            })}
+            aria-hidden="true"
+          >
+            <Icon icon={DownloadIcon} size={16} />
+          </div>
+        {:else}
+          <div
+            class={flex({
+              alignItems: 'center',
+              gap: '2px',
+              flexShrink: '0',
               opacity: '0',
               transition: 'common',
-              _hover: { backgroundColor: 'surface.hover' },
+              _groupActive: { opacity: '100' },
               _groupHover: { opacity: '100' },
-              _expanded: { opacity: '100', backgroundColor: 'surface.active' },
+              '&:focus-within': { opacity: '100' },
             })}
           >
-            {#snippet button()}
-              <Icon icon={EllipsisIcon} size={20} />
-            {/snippet}
-
-            <MenuItem onclick={deleteNode} variant="danger">
-              <Icon icon={Trash2Icon} size={12} />
-              <span>삭제</span>
-            </MenuItem>
-          </Menu>
-        </div>
-      {/if}
-    </div>
-  {/if}
+            {#if asset}
+              <ExternalCardAction icon={DownloadIcon} label="파일 내려받기" onclick={handleDownload} />
+            {/if}
+            {#if canEdit}
+              <ExternalCardAction danger icon={Trash2Icon} label="파일 삭제" onclick={deleteNode} />
+            {/if}
+          </div>
+        {/if}
+      </ExternalCard>
+    {:else if stage === 'resolving'}
+      <ExternalCard icon={PaperclipIcon} loading />
+    {:else}
+      <ExternalPlaceholder
+        {canEdit}
+        dropActive={isAttachmentDropTarget}
+        hint={canEdit ? (isAttachmentDropTarget ? '놓아서 업로드하기' : '클릭하거나 파일을 끌어다 놓으세요') : undefined}
+        icon={PaperclipIcon}
+        onclick={handleUpload}
+        title={canEdit ? '파일 추가' : '비어있는 파일'}
+      >
+        {#if canEdit}
+          <ExternalCardAction danger icon={Trash2Icon} label="파일 삭제" onclick={deleteNode} />
+        {/if}
+      </ExternalPlaceholder>
+    {/if}
+  </div>
 </ExternalElementWrapper>
-
-{#if pickerOpened && canEdit}
-  <button
-    class={flex({
-      alignItems: 'center',
-      gap: '6px',
-      borderWidth: '1px',
-      borderRadius: '8px',
-      paddingX: '12px',
-      paddingY: '6px',
-      fontSize: '13px',
-      color: 'text.muted',
-      backgroundColor: 'surface.default',
-      boxShadow: 'sm',
-      transition: 'common',
-      zIndex: 'editor',
-      _hover: { backgroundColor: 'surface.hover' },
-    })}
-    onclick={handleUpload}
-    type="button"
-    use:floating
-  >
-    <Icon icon={PaperclipIcon} size={14} />
-    파일 선택
-  </button>
-{/if}

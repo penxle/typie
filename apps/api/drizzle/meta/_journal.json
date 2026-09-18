@@ -974,6 +974,13 @@
       "when": 1789443032702,
       "tag": "0138_folder-series",
       "breakpoints": false
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1789557669062,
+      "tag": "0139_embed-favicon",
+      "breakpoints": false
     }
   ]
 }
