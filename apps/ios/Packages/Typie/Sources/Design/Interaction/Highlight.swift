@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension View {
-  func highlight<S: Shape>(
+  public func highlight<S: Shape>(
     hovered: Bool, isPressed: Bool, enabled: Bool = true, hoverColor: Color, pressedColor: Color,
     in shape: S
   ) -> some View {

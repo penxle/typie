@@ -12,9 +12,9 @@
   import qs from 'query-string';
   import { onMount, tick } from 'svelte';
   import { z } from 'zod';
-  import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
+  import NaverIcon from '~icons/typie/naver';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';

@@ -27,6 +27,7 @@ apca
 apng
 apollographql
 apos
+applesignin
 argb
 batang
 bbox
@@ -98,6 +99,7 @@ highp
 hkeys
 hmget
 hset
+hypot
 icns
 iconify
 iframely
@@ -222,6 +224,7 @@ pwith
 rabbitmq
 reanchor
 rects
+redirector
 reengagement
 remeda
 repaste

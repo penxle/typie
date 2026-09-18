@@ -5,9 +5,9 @@
   import { Button, Icon } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';
+  import NaverIcon from '~icons/typie/naver';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
   import UpdatePasswordModal from './UpdatePasswordModal.svelte';

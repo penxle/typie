@@ -7,8 +7,8 @@
   import { createForm, FormError } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
+  import NaverIcon from '~icons/typie/naver';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { graphql } from '$mearie';

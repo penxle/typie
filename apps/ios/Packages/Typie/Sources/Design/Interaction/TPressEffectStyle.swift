@@ -1,13 +1,13 @@
 import SwiftUI
 
-struct TPressEffectStyle<Look: ButtonStyle>: PrimitiveButtonStyle {
+public struct TPressEffectStyle<Look: ButtonStyle>: PrimitiveButtonStyle {
   private let look: Look
 
-  init(_ look: Look) {
+  public init(_ look: Look) {
     self.look = look
   }
 
-  func makeBody(configuration: Configuration) -> some View {
+  public func makeBody(configuration: Configuration) -> some View {
     PressEffectBody(configuration: configuration, look: look)
   }
 

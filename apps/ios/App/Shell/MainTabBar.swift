@@ -81,7 +81,7 @@ final class MainTabBar: UIView {
       images: images, normalTint: normalTint, accentTint: accentTint, iconSide: Self.iconSide)
     super.init(frame: .zero)
 
-    segmentedControl.selectedSegmentIndex = 0
+    segmentedControl.selectedSegmentIndex = MainTab.allCases.firstIndex(of: .initial) ?? 0
     segmentedControl.backgroundColor = .clear
     segmentedControl.selectedSegmentTintColor = Self.selectionTint
     segmentedControl.accessibilityTraits = .tabBar
@@ -242,7 +242,7 @@ final class MainTabBar: UIView {
       isIgnoringTouch = true
       return
     }
-    scrub(at: touch.location(in: self), in: self)
+    scrub(at: touch.location(in: self))
   }
 
   override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -251,7 +251,7 @@ final class MainTabBar: UIView {
       return
     }
     guard !isIgnoringTouch else { return }
-    scrub(at: touch.location(in: self), in: self)
+    scrub(at: touch.location(in: self))
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -264,7 +264,7 @@ final class MainTabBar: UIView {
       isIgnoringTouch = false
       return
     }
-    scrub(at: touch.location(in: self), in: self)
+    scrub(at: touch.location(in: self))
     onScrubCommit?()
   }
 
@@ -281,8 +281,8 @@ final class MainTabBar: UIView {
     onScrubHighlight?(nil)
   }
 
-  private func scrub(at point: CGPoint, in source: UIView?) {
-    let local = menuView.convert(point, from: source)
+  private func scrub(at point: CGPoint) {
+    let local = menuView.convert(point, from: self)
     var index: Int?
     if menuView.bounds.insetBy(dx: -Self.menuPadding, dy: 0).contains(local) {
       let rowsY = local.y - menuHeaderHeight

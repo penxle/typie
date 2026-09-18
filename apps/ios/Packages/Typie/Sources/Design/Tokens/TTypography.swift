@@ -1,5 +1,8 @@
 import CoreText
 import SwiftUI
+import Synchronization
+
+private let naturalLineHeights = Mutex<[String: CGFloat]>([:])
 
 public enum TFontFamily: Sendable {
   case ui
@@ -34,17 +37,21 @@ public struct TTextStyle: Sendable {
     self.lineHeight = lineHeight
   }
 
+  public func weight(_ weight: TFontWeight) -> TTextStyle {
+    TTextStyle(family: family, size: size, weight: weight, lineHeight: lineHeight)
+  }
+
   var fontName: String { family.postScriptName(weight: weight) }
 
   public var font: Font { .custom(fontName, fixedSize: size) }
 
   var naturalLineHeight: CGFloat {
+    let key = "\(fontName)@\(size)"
+    if let cached = naturalLineHeights.withLock({ $0[key] }) { return cached }
     let font = CTFontCreateWithName(fontName as CFString, size, nil)
-    return CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
-  }
-
-  var resolvedFontName: String {
-    CTFontCopyPostScriptName(CTFontCreateWithName(fontName as CFString, size, nil)) as String
+    let height = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+    naturalLineHeights.withLock { $0[key] = height }
+    return height
   }
 
   public var extraLineSpacing: CGFloat { max(0, lineHeight - naturalLineHeight) }

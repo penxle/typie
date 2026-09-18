@@ -10,7 +10,13 @@ xcuserdata/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 Configuration/Config.local.xcconfig
+App/Generated/
 Packages/*/.swiftpm/
 node_modules/
 **/fastlane/README.md
 **/fastlane/report.xml
+.tools/
+**/__generated__/
+Packages/Typie/Sources/GraphQL/*
+!Packages/Typie/Sources/GraphQL/SchemaConfiguration.swift
+!Packages/Typie/Sources/GraphQL/CustomScalars/

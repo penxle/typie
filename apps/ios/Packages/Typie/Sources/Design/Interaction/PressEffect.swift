@@ -40,7 +40,7 @@ private struct PressEffect: ViewModifier {
 }
 
 extension View {
-  func pressEffect(_ isPressed: Bool, scale: CGFloat = 0.98) -> some View {
+  public func pressEffect(_ isPressed: Bool, scale: CGFloat = 0.98) -> some View {
     modifier(PressEffect(isPressed: isPressed, scale: scale))
   }
 }
