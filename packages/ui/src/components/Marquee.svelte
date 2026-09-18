@@ -25,6 +25,8 @@
   let viewport = $state<HTMLSpanElement>();
   let viewportWidth = $state(0);
   let contentWidth = $state(0);
+  // Parent snapshots can change without changing the displayed string.
+  const displayedText = $derived(text);
   const prefersReducedMotion = $derived(reducedMotionPreference.current);
   const bleedInsets = $derived.by(() => {
     if (typeof bleed === 'number') {
@@ -106,7 +108,7 @@
   };
 
   $effect(() => {
-    void text;
+    void displayedText;
     untrack(() => {
       reset();
       if (active()) startMotion();
