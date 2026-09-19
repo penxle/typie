@@ -98,7 +98,7 @@
               href={document.data.entity.url}
               rel="noopener noreferrer"
               target="_blank"
-              use:tooltip={{ message: '조회 페이지에서 열기' }}
+              use:tooltip={{ message: '공개 페이지에서 열기' }}
             >
               <Icon style={css.raw({ color: 'text.muted', _groupHover: { color: 'text.default' } })} icon={ExternalLinkIcon} size={14} />
             </a>
@@ -156,7 +156,7 @@
               userSelect: 'none',
             })}
           >
-            링크 조회
+            링크 공개
           </div>
         {:else}
           <div

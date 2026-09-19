@@ -35,9 +35,9 @@ internal fun entityVisibilityPresentation(
     visibility == EntityVisibility.PUBLIC ->
       EntityVisibilityPresentation(label = "공개", isShared = true)
     visibility == EntityVisibility.UNLISTED && availability == EntityAvailability.UNLISTED ->
-      EntityVisibilityPresentation(label = "링크 조회/편집 가능", isShared = true)
+      EntityVisibilityPresentation(label = "링크 공개 · 편집 가능", isShared = true)
     visibility == EntityVisibility.UNLISTED ->
-      EntityVisibilityPresentation(label = "링크 조회 가능", isShared = true)
+      EntityVisibilityPresentation(label = "링크 공개", isShared = true)
     availability == EntityAvailability.UNLISTED ->
       EntityVisibilityPresentation(label = "링크 편집 가능", isShared = true)
     else -> EntityVisibilityPresentation(label = "비공개", isShared = false)

@@ -98,7 +98,7 @@ internal fun EntitySelectionActionsSheet(
       if (summary.folderItems.isNotEmpty()) {
         SheetActionRow(
           icon = Lucide.Blend,
-          label = "폴더 ${summary.folderItems.size}개 공유 및 게시",
+          label = "폴더 ${summary.folderItems.size}개 공유 및 발행",
           contentPadding = SelectionSheetRowPadding,
           onClick = {
             dismiss()
@@ -110,7 +110,7 @@ internal fun EntitySelectionActionsSheet(
       if (summary.documentItems.isNotEmpty()) {
         SheetActionRow(
           icon = Lucide.Blend,
-          label = "문서 ${summary.documentItems.size}개 공유 및 게시",
+          label = "문서 ${summary.documentItems.size}개 공유 및 발행",
           contentPadding = SelectionSheetRowPadding,
           onClick = {
             dismiss()

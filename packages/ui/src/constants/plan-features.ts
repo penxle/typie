@@ -19,7 +19,7 @@ export const PLAN_FEATURES: Record<'full', PlanFeature[]> = {
     { icon: TypeIcon, label: '무제한 글자 수' },
     { icon: ImagesIcon, label: '무제한 파일 업로드' },
     { icon: SpellCheckIcon, label: '맞춤법 검사' },
-    { icon: LinkIcon, label: '커스텀 게시 주소' },
+    { icon: LinkIcon, label: '커스텀 스페이스 주소' },
     { icon: TypeOutlineIcon, label: '커스텀 폰트 업로드' },
     { icon: FlaskConicalIcon, label: '베타 기능 우선 접근' },
     { icon: HeadsetIcon, label: '문제 발생 시 우선 지원' },

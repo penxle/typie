@@ -23,7 +23,7 @@
     {#if visibility === EntityVisibility.PUBLIC}
       <span>발행됨</span>
     {:else if visibility === EntityVisibility.UNLISTED}
-      <span>링크 조회</span>
+      <span>링크 공개</span>
     {:else}
       <span>비공개</span>
     {/if}

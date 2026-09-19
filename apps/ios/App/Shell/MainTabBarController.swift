@@ -59,7 +59,7 @@ final class MainTabBarController: UITabBarController, UITabBarControllerDelegate
     let menuState = MoreMenuState(
       items: [
         MoreMenuItem(icon: LucideIcon.settings, title: "스페이스 설정"),
-        MoreMenuItem(icon: LucideIcon.externalLink, title: "게시 페이지 열기"),
+        MoreMenuItem(icon: LucideIcon.externalLink, title: "스페이스 열기"),
         MoreMenuItem(icon: LucideIcon.trash2, title: "휴지통"),
         MoreMenuItem(icon: LucideIcon.squarePlus, title: "새 스페이스 생성"),
         MoreMenuItem(icon: LucideIcon.sunMoon, title: "테마"),
