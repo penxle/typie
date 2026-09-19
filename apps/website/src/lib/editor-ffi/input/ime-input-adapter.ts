@@ -277,6 +277,39 @@ export class ImeInputAdapter {
     return { target, text: pending };
   }
 
+  #applyInput(input: ImeTextInput): void {
+    if (this.#resyncInProgress) {
+      return;
+    }
+
+    const context = this.#currentContext(input, false);
+    if (!context) {
+      return;
+    }
+
+    const diff = readDomInputDiff(context, input.value);
+    if (!diff) {
+      this.#handleInputWithoutDiff(context, input);
+      return;
+    }
+
+    if (this.#compositionActive) {
+      this.#handleCompositionInputWithDiff(context, input, diff);
+      return;
+    }
+    this.#handleTextInputWithDiff(context, input, diff);
+  }
+
+  get composing(): boolean {
+    return this.#compositionActive;
+  }
+
+  finalizeComposition(input: ImeTextInput): void {
+    if (!this.#compositionActive) return;
+    this.#applyInput(input);
+    this.handleCompositionEnd();
+  }
+
   resetForResync(input: ImeTextInput | null): void {
     const wasComposing = this.#compositionActive;
 
@@ -418,26 +451,7 @@ export class ImeInputAdapter {
   }
 
   handleInput(e: Event & { currentTarget: ImeTextInput }): void {
-    if (this.#resyncInProgress) {
-      return;
-    }
-
-    const context = this.#currentContext(e.currentTarget, false);
-    if (!context) {
-      return;
-    }
-
-    const diff = readDomInputDiff(context, e.currentTarget.value);
-    if (!diff) {
-      this.#handleInputWithoutDiff(context, e.currentTarget);
-      return;
-    }
-
-    if (this.#compositionActive) {
-      this.#handleCompositionInputWithDiff(context, e.currentTarget, diff);
-      return;
-    }
-    this.#handleTextInputWithDiff(context, e.currentTarget, diff);
+    this.#applyInput(e.currentTarget);
   }
 
   handleCompositionStart(e: CompositionEvent & { currentTarget: ImeTextInput }): void {

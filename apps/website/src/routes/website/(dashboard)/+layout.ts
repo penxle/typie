@@ -1,7 +1,7 @@
-import { redirect } from '@sveltejs/kit';
 import { serializeOAuthState } from '@typie/ui/utils';
 import qs from 'query-string';
 import { env } from '$env/dynamic/public';
+import { redirectForAuthentication } from '$lib/auth';
 import { checkBootstrapAssertion } from '$lib/bootstrap';
 import { loadQuery } from '$lib/graphql';
 import { graphql } from '$mearie';
@@ -112,8 +112,7 @@ export const load: LayoutLoad = async (event) => {
   );
 
   if (!query.data.me) {
-    redirect(
-      302,
+    await redirectForAuthentication(
       qs.stringifyUrl({
         url: `${env.PUBLIC_AUTH_URL}/authorize`,
         query: {

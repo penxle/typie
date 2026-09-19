@@ -38,6 +38,7 @@
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
   import { desktop } from '$lib/desktop';
+  import { leavePage } from '$lib/navigation';
   import { cleanupBrowserPushForLogout } from '$lib/push';
   import { graphql } from '$mearie';
   import type { DashboardLayout_Profile_user$key } from '$mearie';
@@ -281,7 +282,7 @@
                   redirect_uri: env.PUBLIC_WEBSITE_URL,
                 },
               });
-              void cleanupBrowserPushForLogout().finally(() => location.assign(logoutUrl));
+              void leavePage(logoutUrl, 'logout', () => cleanupBrowserPushForLogout().catch(() => null));
             }}
             type="button"
           >

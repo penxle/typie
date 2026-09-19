@@ -37,6 +37,18 @@ const mountFixture = async (props: FixtureProps = {}) => {
 };
 
 describe('breadcrumb navigation keyboard interaction', () => {
+  it('leaves no trailing gap outside the last breadcrumb hit target', async () => {
+    await mountFixture();
+    const path = document.querySelector<HTMLElement>('nav[aria-label="문서 경로"]');
+    const current = path?.querySelector<HTMLElement>(':scope [aria-current="page"] > button');
+    if (!path || !current) throw new Error('Missing current breadcrumb');
+    // The production breadcrumb lives in an intrinsic-width scroll lane.
+    path.style.width = 'max-content';
+    const bounds = path.getBoundingClientRect();
+    const last = current.getBoundingClientRect();
+    expect(bounds.right - last.right).toBeCloseTo(0, 1);
+  });
+
   it('keeps the path segment structure and geometry when navigation is non-interactive', async () => {
     await mountFixture();
     const interactiveSegment = document.querySelector('nav[aria-label="문서 경로"] > ol > li:first-child > button');

@@ -13,6 +13,21 @@ describe('IndexeddbDeltaStore', () => {
     indexedDB.deleteDatabase('typie:changeset-delta');
   });
 
+  it('cannot report a successful write after disposal', async () => {
+    store = new IndexeddbDeltaStore();
+    store.destroy();
+
+    await expect(store.put({ id: 'a', documentId: 'doc1', changeset: bytes(1), createdAt: 1 })).rejects.toThrow();
+  });
+
+  it('rejects an operation whose database finishes opening after disposal', async () => {
+    store = new IndexeddbDeltaStore();
+    const result = store.put({ id: 'a', documentId: 'doc1', changeset: bytes(1), createdAt: 1 });
+    store.destroy();
+
+    await expect(result).rejects.toThrow();
+  });
+
   it('put then load returns records for the document, sorted by createdAt', async () => {
     store = new IndexeddbDeltaStore();
     await store.put({ id: 'a', documentId: 'doc1', changeset: bytes(1), createdAt: 2 });

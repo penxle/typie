@@ -22,7 +22,8 @@
   import SquarePenIcon from '~icons/lucide/square-pen';
   import XIcon from '~icons/lucide/x';
   import PrismIcon from '~icons/typie/prism';
-  import { beforeNavigate, goto, pushState } from '$app/navigation';
+  import { beforeNavigate, pushState } from '$app/navigation';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import EntityIcon from './@context-menu/EntityIcon.svelte';
   import { SubscribeModal } from './@subscription/subscribe-modal.svelte';

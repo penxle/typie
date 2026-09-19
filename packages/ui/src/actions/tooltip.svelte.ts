@@ -17,6 +17,7 @@ export type TooltipParameter = {
   keepOnClick?: boolean;
   force?: boolean;
   arrow?: boolean;
+  getReference?: (trigger: HTMLElement) => HTMLElement | null;
 };
 
 type Parameter = TooltipParameter;
@@ -33,6 +34,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, parameter) => {
     force,
     arrow = true,
     keys,
+    getReference,
   }: Parameter) => {
     const presentation =
       typeof message === 'function'
@@ -40,7 +42,7 @@ export const tooltip: Action<HTMLElement, Parameter> = (element, parameter) => {
         : { kind: 'action' as const, message, trailing, trailingIcon, keys };
 
     return {
-      element,
+      element: getReference?.(element) ?? element,
       container: element.ownerDocument.querySelector('.tooltip-container') ?? element.ownerDocument.body,
       eligible: Boolean(message),
       pinned: force === true,

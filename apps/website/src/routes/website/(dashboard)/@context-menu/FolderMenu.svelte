@@ -28,9 +28,9 @@
   import TargetIcon from '~icons/lucide/target';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
-  import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { josa } from '$lib/josa';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';

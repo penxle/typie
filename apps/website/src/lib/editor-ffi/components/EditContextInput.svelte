@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { Toast } from '@typie/ui/notification';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
   import { caretPageRect, pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
@@ -26,12 +26,21 @@
       return ime ? normalizeImeContext(ime) : null;
     },
     (messages) => {
-      if (!editor || editor.terminal || editor.readOnly) return;
+      if (!editor || !editor.editable) return;
       for (const message of messages) editor.enqueue(message);
       editor.scrollIntoView({ target: { type: 'current_selection_head' }, policy: 'typewriter' });
     },
   );
   const editContext = adapter.editContext;
+  onMount(() =>
+    editor?.localEdits.registerInput({
+      pending: () => adapter.composing,
+      finalize: () => {
+        pendingCompositionDispatch = undefined;
+        editor.updateNow(() => adapter.handleCompositionEnd());
+      },
+    }),
+  );
 
   const clientRect = (start: number, end: number): DOMRect | null => {
     if (!editor || editor.terminal || editor.published?.snapshot.revision !== editor.appliedRevision) return null;
@@ -85,7 +94,7 @@
     editContext.addEventListener(
       'textupdate',
       (event) => {
-        if (resyncing || editor.readOnly || editor.terminal) return;
+        if (resyncing || !editor.editable) return;
         editor.updateNow(() => adapter.handleTextUpdate(event));
         syncInput();
       },
@@ -94,9 +103,10 @@
     editContext.addEventListener(
       'compositionstart',
       () => {
-        if (resyncing || editor.readOnly) return;
+        if (resyncing || !editor.editable) return;
         pendingCompositionDispatch = undefined;
         adapter.handleCompositionStart();
+        editor.localEdits.notify();
       },
       options,
     );
@@ -112,6 +122,7 @@
           editor.updateNow(() => {
             committed = adapter.handleCompositionEnd();
           });
+        editor.localEdits.notify();
         if (committed) action?.();
         // Chromium clears its native composition after dispatching this event.
         // Updating its selection inside the callback can cancel that composition.
@@ -124,7 +135,7 @@
     editContext.addEventListener(
       'textformatupdate',
       (event) => {
-        if (resyncing || editor.readOnly || editor.terminal) return;
+        if (resyncing || !editor.editable) return;
         const ranges = adapter.composing
           ? event
               .getTextFormats()
@@ -154,7 +165,7 @@
           input.editContext = null;
           adapter.resetForResync();
           boundsRequest = undefined;
-          if (!editor.readOnly) input.editContext = editContext;
+          if (editor.editable) input.editContext = editContext;
           if (focused) input.focus({ preventScroll: true });
         } finally {
           resyncing = false;
@@ -171,8 +182,8 @@
 
   $effect(() => {
     if (!element || !editor || editor.terminal) return;
-    element.editContext = editor.readOnly ? null : editContext;
-    if (editor.readOnly) {
+    element.editContext = editor.editable ? editContext : null;
+    if (!editor.editable) {
       pendingCompositionDispatch = undefined;
       untrack(() => editor.updateNow(() => editor.enqueue({ type: 'text_input', ops: [{ type: 'clear_composition' }] })));
     }
@@ -200,9 +211,9 @@
     style:height={`${Math.max(1, inputRect?.height ?? 1)}px`}
     class={css({ position: 'fixed', opacity: '0', pointerEvents: 'none' })}
     aria-multiline="true"
-    aria-readonly={editor.readOnly}
+    aria-readonly={!editor.editable}
     onbeforeinput={(event) => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         event.preventDefault();
         return;
       }
@@ -213,7 +224,7 @@
     }}
     oncopy={handle(editor, handleCopy)}
     oncut={(event) => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         editor.editBlockedHandler?.();
         return;
       }
@@ -221,7 +232,7 @@
     }}
     onfocus={syncInput}
     onkeydown={(event) => {
-      if (editor.readOnly && event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+      if (!editor.editable && event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
         editor.editBlockedHandler?.();
       }
       // EditContext owns composition independently of DOM composition events;
@@ -242,7 +253,7 @@
       });
     }}
     onpaste={(event) => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         editor.editBlockedHandler?.();
         return;
       }

@@ -11,6 +11,7 @@
     "./catalogs": "./src/catalogs.ts",
     "./const": "./src/const.ts",
     "./desktop": "./src/desktop.ts",
+    "./document-save": "./src/document-save.ts",
     "./enums": "./src/enums.ts",
     "./errors": "./src/errors.ts",
     "./image": "./src/image.ts",

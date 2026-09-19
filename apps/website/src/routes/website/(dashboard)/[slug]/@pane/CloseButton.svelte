@@ -36,8 +36,9 @@
     e.stopPropagation();
 
     // NOTE: setTimeout을 빼면 마지막 스플릿 뷰를 길게 눌러 닫을 때 unmount가 안 되는 이상한 버그가 있음
-    setTimeout(() => {
-      const success = paneGroup.removePane(paneId);
+    const closingPaneId = paneId;
+    setTimeout(async () => {
+      const success = await paneGroup.removePane(closingPaneId);
       if (!success) return;
 
       mixpanel.track('close_pane');

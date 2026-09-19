@@ -29,9 +29,9 @@
   import ScissorsIcon from '~icons/lucide/scissors';
   import TargetIcon from '~icons/lucide/target';
   import TrashIcon from '~icons/lucide/trash';
-  import { goto } from '$app/navigation';
   import { desktop } from '$lib/desktop';
   import { cache, unwrapError } from '$lib/graphql';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';

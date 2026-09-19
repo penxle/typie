@@ -17,7 +17,7 @@
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TargetIcon from '~icons/lucide/target';
   import PrismIcon from '~icons/typie/prism';
-  import { goto } from '$app/navigation';
+  import { goto } from '$lib/navigation';
   import { dailyGoalStatus, mergeTodayCharacterCountChanges, writingStreaks } from '$lib/user-stats';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';

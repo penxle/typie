@@ -1,8 +1,9 @@
 import { AggregatedError, cacheExchange, createClient, httpExchange, isExchangeError, isGraphQLError } from '@mearie/svelte';
-import { error, redirect } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import { TypieError } from '@typie/lib/errors';
 import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
+import { redirectForAuthentication } from '$lib/auth';
 import { schema } from '$mearie';
 import { mearieClient, scalars } from './client';
 import { errorExchange } from './error';
@@ -51,7 +52,7 @@ export async function loadQuery<T extends Artifact<'query'>>(
       for (const inner of err.errors) {
         if (inner instanceof TypieError) {
           if (inner.status === 401) {
-            redirect(302, `${env.PUBLIC_AUTH_URL}/login`);
+            await redirectForAuthentication(`${env.PUBLIC_AUTH_URL}/login`);
           }
 
           error(inner.status, { message: inner.message, code: inner.code });
@@ -60,7 +61,7 @@ export async function loadQuery<T extends Artifact<'query'>>(
         if (isExchangeError(inner, 'http')) {
           const status = inner.extensions?.statusCode;
           if (status === 401) {
-            redirect(302, event.url.href);
+            await redirectForAuthentication(event.url.href);
           }
 
           if (inner.cause instanceof TypeError) {

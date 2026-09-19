@@ -11,7 +11,7 @@
   import TargetIcon from '~icons/lucide/target';
   import ThumbsDownIcon from '~icons/lucide/thumbs-down';
   import ThumbsUpIcon from '~icons/lucide/thumbs-up';
-  import { goto } from '$app/navigation';
+  import { goto } from '$lib/navigation';
   import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
   import { expand } from '../lib/motion.ts';

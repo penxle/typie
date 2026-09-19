@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { reloadPage } from '$lib/navigation';
 
 export type MaintenanceConfig = {
   enabled: boolean;
@@ -37,7 +38,7 @@ export function pollBootstrapAssertion(): () => void {
       const resp = await fetch('/api/bootstrap');
       const body = await resp.json().catch(() => null);
       if (body?.code === 'maintenance') {
-        location.reload();
+        void reloadPage();
       }
     } catch {
       // 네트워크 오류 무시

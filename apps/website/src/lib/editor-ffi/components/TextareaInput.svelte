@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { Toast } from '@typie/ui/notification';
+  import { onMount } from 'svelte';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { caretPageRect, pageRectToClientRect } from '../geometry';
   import { handle } from '../handlers';
@@ -42,6 +43,17 @@
     readContext: readEditorImeContext,
     enqueue: enqueueMessages,
   });
+  onMount(() =>
+    editor?.localEdits.registerInput({
+      pending: () => inputAdapter.composing,
+      finalize: () => {
+        const input = editor.inputEl;
+        if (!(input instanceof HTMLTextAreaElement)) return;
+        pendingCompositionDispatch = undefined;
+        editor.updateNow(() => inputAdapter.finalizeComposition(input));
+      },
+    }),
+  );
   let pendingCompositionDispatch: (() => void) | undefined;
   const handlePasteFailure = ({ file, kind }: { file: File; kind: 'image' | 'file' }) => {
     Toast.error(`${file.name} ${kind === 'image' ? '이미지' : '파일'} 업로드에 실패했습니다.`);
@@ -99,7 +111,7 @@
   });
 
   $effect(() => {
-    if (editor?.readOnly) {
+    if (editor && !editor.editable) {
       pendingCompositionDispatch = undefined;
     }
   });
@@ -127,14 +139,17 @@
     autocomplete="off"
     autocorrect="off"
     onbeforeinput={(e) => {
-      if (editor.readOnly) return;
+      if (!editor.editable) {
+        e.preventDefault();
+        return;
+      }
       editor.updateNow(() => inputAdapter.handleBeforeInput(e as InputEvent & { currentTarget: ImeTextInput }));
     }}
     onblur={() => {
       pendingCompositionDispatch = undefined;
     }}
     oncompositionend={() => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         pendingCompositionDispatch = undefined;
         return;
       }
@@ -144,20 +159,22 @@
       editor.updateNow(() => {
         committed = inputAdapter.handleCompositionEnd();
       });
+      editor.localEdits.notify();
       if (committed) action?.();
     }}
     oncompositionstart={(e) => {
-      if (editor.readOnly) return;
+      if (!editor.editable) return;
       pendingCompositionDispatch = undefined;
       inputAdapter.handleCompositionStart(e as CompositionEvent & { currentTarget: ImeTextInput });
+      editor.localEdits.notify();
     }}
     oncompositionupdate={(e) => {
-      if (editor.readOnly) return;
+      if (!editor.editable) return;
       inputAdapter.handleCompositionUpdate(e);
     }}
     oncopy={handle(editor, handleCopy)}
     oncut={(e) => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         editor.editBlockedHandler?.();
         return;
       }
@@ -165,11 +182,11 @@
     }}
     onfocus={syncInput}
     oninput={(e) => {
-      if (editor.readOnly) return;
+      if (!editor.editable) return;
       editor.updateNow(() => inputAdapter.handleInput(e));
     }}
     onkeydown={(e) => {
-      if (editor.readOnly && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      if (!editor.editable && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
         editor.editBlockedHandler?.();
       }
       editor.updateNow(() => {
@@ -186,7 +203,7 @@
       });
     }}
     onpaste={(e) => {
-      if (editor.readOnly) {
+      if (!editor.editable) {
         editor.editBlockedHandler?.();
         return;
       }
@@ -194,6 +211,6 @@
     }}
     onscroll={syncInputScroll}
     onselect={syncInputScroll}
-    readonly={editor.readOnly}
+    readonly={!editor.editable}
     spellcheck={false}></textarea>
 {/if}

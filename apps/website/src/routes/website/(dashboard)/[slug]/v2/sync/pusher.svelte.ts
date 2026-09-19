@@ -25,7 +25,10 @@ export class Pusher {
   private readonly dormant = new Set<string>();
   private inflight = false;
   private persistTail: Promise<void> = Promise.resolve();
-  private persistQueued = false;
+  private persistQueued: Promise<void> | null = null;
+  private pendingPush: Promise<void> | null = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- synchronous protection notifications
+  private readonly protectionListeners = new Set<() => void>();
   private readonly resolveFlushWaiters: (() => void)[] = [];
   private flushAfterInflight = false;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -39,6 +42,7 @@ export class Pusher {
   status = $state<PushStatus>('idle');
   retryAttempt = $state(0);
   captureFailures = $state(0);
+  pushFailed = $state(false);
 
   constructor(opts: PusherOpts) {
     this.opts = opts;
@@ -58,8 +62,9 @@ export class Pusher {
   }
 
   private async capture(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped) throw new Error('Pusher is stopped');
     const records = await this.opts.store.load(this.opts.documentId);
+    if (this.stopped) throw new Error('Pusher is stopped');
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
     const localAll = new Set(this.localChangesetIds());
     const adopted: Promise<number>[] = [];
@@ -90,11 +95,10 @@ export class Pusher {
   // it from the delta store — only the push waits for the idle window. Runs are
   // chained (never concurrent) and a queued run subsumes later requests.
   private persistFresh(): Promise<void> {
-    if (this.persistQueued) return this.persistTail;
-    this.persistQueued = true;
+    if (this.persistQueued) return this.persistQueued;
     const run = this.persistTail.then(async () => {
-      this.persistQueued = false;
-      if (this.stopped) return;
+      this.persistQueued = null;
+      if (this.stopped) throw new Error('Pusher is stopped');
       // Snapshot the frontier before computing the delta (both reads are
       // synchronous, so they agree), and advance `capturedHeads` only to that
       // snapshot. Reading the frontier after the awaited writes would swallow
@@ -113,24 +117,45 @@ export class Pusher {
         this.opts.onEvent?.({ kind: 'persist.withheld', count: withheld });
       } else {
         this.capturedHeads = heads;
+        this.captureFailures = 0;
+        this.notifyProtectionChanged();
       }
     });
     // The chain must survive a failed run; `capturedHeads` is untouched on
     // failure, so the next persist retries the same delta.
     // eslint-disable-next-line @typescript-eslint/no-empty-function -- failure is surfaced to the awaiting caller via `run`
     this.persistTail = run.catch(() => {});
+    this.persistQueued = run;
     return run;
   }
 
   private async drain(): Promise<void> {
+    if (this.pendingPush) {
+      await this.pendingPush;
+      return this.drain();
+    }
     if (this.stopped) return;
     const { bytes: payload, withheld } = this.opts.editor.missingChangesetsFor(this.confirmedHeads);
     if (withheld > 0) this.opts.onEvent?.({ kind: 'persist.withheld', count: withheld });
     if (payload.length === 0) return;
     this.opts.onEvent?.({ kind: 'push.fired', bytes: payload.length });
-    const result: PushResult = await this.opts.pushFn(payload);
-    this.setConfirmedHeads(result.heads);
-    this.setDurableHeads(result.durableHeads);
+    const pending = (async () => {
+      const result: PushResult = await this.opts.pushFn(payload);
+      this.setConfirmedHeads(result.heads);
+      this.setDurableHeads(result.durableHeads);
+    })();
+    this.pendingPush = pending;
+    try {
+      await pending;
+    } catch (err) {
+      if (!this.stopped) {
+        this.pushFailed = true;
+        this.notifyProtectionChanged();
+      }
+      throw err;
+    } finally {
+      if (this.pendingPush === pending) this.pendingPush = null;
+    }
   }
 
   private async prune(): Promise<void> {
@@ -192,6 +217,7 @@ export class Pusher {
         captureFailed = true;
         captureError = err;
         this.captureFailures += 1;
+        this.notifyProtectionChanged();
       }
       if (this.stopped) return;
       await this.drain();
@@ -248,8 +274,45 @@ export class Pusher {
     void this.firePush();
   }
 
+  private notifyProtectionChanged(): void {
+    if (this.stopped) return;
+    for (const listener of this.protectionListeners) listener();
+  }
+
+  private coveredBy(heads: Uint8Array): boolean {
+    const { bytes, withheld } = this.opts.editor.missingChangesetsFor(heads);
+    return bytes.length === 0 && withheld === 0;
+  }
+
   setConfirmedHeads(heads: Uint8Array): void {
+    if (this.stopped) return;
     this.confirmedHeads = heads;
+    if (this.isSynced()) this.pushFailed = false;
+    this.notifyProtectionChanged();
+  }
+
+  isSynced(): boolean {
+    return !this.stopped && this.coveredBy(this.confirmedHeads);
+  }
+
+  isProtected(): boolean {
+    return !this.stopped && (this.coveredBy(this.capturedHeads) || this.isSynced());
+  }
+
+  onProtectionChange(listener: () => void): () => void {
+    this.protectionListeners.add(listener);
+    return () => this.protectionListeners.delete(listener);
+  }
+
+  async checkpoint(): Promise<void> {
+    const requireProtection = () => {
+      if (!this.isProtected()) throw new Error('Document changes are not protected');
+    };
+    if (this.isProtected()) return;
+    // A blocked/failed local write must not prevent server acknowledgement from
+    // protecting the same changes. The caller bounds its wait, not these writes.
+    await Promise.any([this.captureNow().then(requireProtection), this.drain().then(requireProtection)]);
+    requireProtection();
   }
 
   setDurableHeads(durableHeads: Uint8Array): void {
@@ -262,7 +325,13 @@ export class Pusher {
   }
 
   async captureNow(): Promise<void> {
-    await this.capture();
+    try {
+      await this.capture();
+    } catch (err) {
+      this.captureFailures += 1;
+      this.notifyProtectionChanged();
+      throw err;
+    }
   }
 
   async flushNow(): Promise<void> {
@@ -275,11 +344,21 @@ export class Pusher {
     await this.drain();
   }
 
+  async pushNow(): Promise<void> {
+    if (this.stopped) throw new Error('Pusher is stopped');
+    const startedAt = performance.now();
+    await this.drain();
+    if (!this.isSynced()) throw new Error('Document changes are not confirmed by the server');
+    this.finishSuccess(startedAt);
+  }
+
   schedule(): void {
     if (this.stopped) return;
     // Before the error gate: a permanent push failure stops pushing, but local
     // crash durability must keep running — that is when it matters most.
     this.persistFresh().catch((err) => {
+      this.captureFailures += 1;
+      this.notifyProtectionChanged();
       console.warn('Pusher: persist failed, will retry on next edit', err);
     });
     if (this.status === 'error') return;
@@ -302,5 +381,6 @@ export class Pusher {
     this.stopped = true;
     this.clearTimers();
     window.removeEventListener('online', this.handleOnline);
+    this.protectionListeners.clear();
   }
 }
