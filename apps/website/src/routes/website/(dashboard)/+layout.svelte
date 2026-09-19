@@ -11,8 +11,8 @@
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
-  import { onMount, untrack } from 'svelte';
-  import { goto, pushState, replaceState } from '$app/navigation';
+  import { onDestroy, onMount, untrack } from 'svelte';
+  import { pushState, replaceState } from '$app/navigation';
   import { page, updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -20,9 +20,13 @@
   import { EnvironmentBanner } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { desktop } from '$lib/desktop';
+  import { guardBrowserUnload } from '$lib/document-editing/browser';
+  import DocumentSaveDialog from '$lib/document-editing/DocumentSaveDialog.svelte';
+  import { documentEditing } from '$lib/document-editing/state.svelte';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
   import { hydrateQuery } from '$lib/graphql';
   import { invalidateRecentDocumentsForSort } from '$lib/graphql/recent-documents';
+  import { guardNavigation, leavePage, reflectPaneUrl, registerNavigationInterceptor, reloadPage } from '$lib/navigation';
   import { setupOpenDocuments } from '$lib/prism/open-documents.svelte';
   import { requestSessionJump } from '$lib/prism/session-jump.svelte';
   import { cleanupBrowserPushForLogout, getBrowserPushManager } from '$lib/push';
@@ -283,13 +287,22 @@
 
   const paneGroup = setupPaneGroup(siteId, {
     userId,
-    navigate: (path, opts) => goto(path, opts),
+    navigate: (path, opts) => reflectPaneUrl(path, opts),
     onSiteChange: (id) => {
       if (query.data.me.sites.some((site) => site.id === id)) {
         app.preference.current.currentSiteId = id;
       }
     },
   });
+
+  onDestroy(
+    registerNavigationInterceptor(({ reason, paneIds }) =>
+      documentEditing.prepareDeparture(
+        () => (paneIds ? documentEditing.sessions.filter((session) => paneIds.includes(session.paneId)) : documentEditing.sessions),
+        reason,
+      ),
+    ),
+  );
 
   const editorRegistry = setupEditorRegistry();
   let workbenchFocusTarget = $state<HTMLElement>();
@@ -469,13 +482,15 @@
       Updater.show({
         onRefresh: () => {
           mixpanel.track('reload_app', { reason: 'update' });
-          location.reload();
+          void reloadPage();
         },
       });
     }
   });
 
   onMount(pollBootstrapAssertion);
+  onMount(guardBrowserUnload);
+  guardNavigation();
 
   onMount(() => {
     const open = page.url.searchParams.get('open');
@@ -519,6 +534,8 @@
     }
   });
 </script>
+
+<DocumentSaveDialog />
 
 {#if isMobileDevice()}
   <div
@@ -585,7 +602,7 @@
                 redirect_uri: env.PUBLIC_WEBSITE_URL,
               },
             });
-            void cleanupBrowserPushForLogout().finally(() => location.assign(logoutUrl));
+            void leavePage(logoutUrl, 'logout', () => cleanupBrowserPushForLogout().catch(() => null));
           }}
           size="lg"
           variant="secondary"

@@ -36,6 +36,15 @@ export const toast = {
   success: (message: string, options?: ToastOptions) => add('success', message, options),
   error: (message: string, options?: ToastOptions) => add('error', message, options),
 
+  loading: (message: string): (() => void) => {
+    const id = sonner.custom(PromiseItem, {
+      componentProps: { message, loading: true },
+      duration: Infinity,
+      dismissible: false,
+    });
+    return () => sonner.dismiss(id);
+  },
+
   promise: <T>(promise: Promise<T>, messages: PromiseToastMessages<T>, options?: PromiseToastOptions): Promise<T> => {
     const duration = options?.duration ?? 3000;
 

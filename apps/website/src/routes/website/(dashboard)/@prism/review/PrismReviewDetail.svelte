@@ -6,7 +6,7 @@
   import mixpanel from 'mixpanel-browser';
   import { MediaQuery } from 'svelte/reactivity';
   import PrismIcon from '~icons/typie/prism';
-  import { goto } from '$app/navigation';
+  import { goto } from '$lib/navigation';
   import { requestMarginJump } from '$lib/prism/margin-jump.svelte';
   import { graphql } from '$mearie';
   import { reducedMotion } from '../lib/motion.ts';

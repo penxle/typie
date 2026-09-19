@@ -189,7 +189,6 @@
     alignItems: 'center',
     height: '32px',
     paddingLeft: '4px',
-    paddingRight: '4px',
     fontSize: '12px',
     fontWeight: 'medium',
     color: focused ? 'text.default' : 'text.muted',

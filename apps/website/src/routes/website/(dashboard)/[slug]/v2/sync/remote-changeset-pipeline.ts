@@ -6,11 +6,9 @@ type ChangesetReceiver = {
   receiveRemoteChangeset(payload: Uint8Array): Promise<number>;
 };
 
-// TODO: Move channel subscription, polling/refetch, and resync lifecycle from
-// DocumentEditor into this class. KMP RemoteChangesetPipeline already owns those
-// responsibilities. This narrower Web version currently owns one Editor's remote
-// event application and ordered seq/heads updates; admissions stay immediate so
-// events delivered together can still share a tick.
+// Apply remote events and advance their metadata in order. Admissions stay
+// immediate so events delivered together can share a tick; DocumentEditingSession
+// owns the surrounding polling, peer connection and editor lifetime.
 export class RemoteChangesetPipeline {
   readonly #editor: ChangesetReceiver;
   readonly #onApplied: (event: RemoteChangesetEvent) => void;

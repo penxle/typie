@@ -78,8 +78,7 @@ internal suspend fun runProtectedDocumentReload(
             DocumentReloadFailureDecision.Discard,
             DocumentReloadFailureDecision.Continue -> return replaceExact(session, replaceIfCurrent)
             DocumentReloadFailureDecision.Retry -> {
-              // TODO: 저장 실패 상태 인디케이터가 생기면 reload 실패 시 admission을 다시 열고
-              // `계속 편집`을 제공한다. 현재는 실패 상태를 숨기지 않기 위해 재시도 modal로 막는다.
+              // Sync reload keeps admission closed until protection or explicit discard.
             }
           }
         FailureResolution.SessionStopped -> return DocumentProtectedReloadResult.SessionStopped

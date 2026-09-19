@@ -73,7 +73,7 @@ type DropOps = {
   swapPane: (firstPaneId: string, secondPaneId: string) => boolean;
   addPane: (pane: PaneInit, placement: PanePlacement) => boolean;
   movePane: (paneId: string, placement: PanePlacement) => boolean;
-  replacePane: (paneId: string, pane: PaneInit) => boolean;
+  replacePane: (paneId: string, pane: PaneInit) => boolean | Promise<boolean>;
 };
 
 export const resolveDrop = (

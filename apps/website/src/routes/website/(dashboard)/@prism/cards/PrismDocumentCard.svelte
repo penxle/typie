@@ -4,7 +4,7 @@
   import { Icon, Marquee } from '@typie/ui/components';
   import { z } from 'zod';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
-  import { goto } from '$app/navigation';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import EntityIcon from '../../@context-menu/EntityIcon.svelte';
   import PrismBrokenCard from './PrismBrokenCard.svelte';

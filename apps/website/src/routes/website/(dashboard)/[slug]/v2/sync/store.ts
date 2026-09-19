@@ -35,13 +35,25 @@ function openDatabase(): Promise<IDBDatabase> {
 
 export class IndexeddbDeltaStore implements DeltaStore {
   #db: IDBDatabase | null = null;
+  #opening: Promise<IDBDatabase> | null = null;
   #destroyed = false;
 
   async #ensureDb(): Promise<IDBDatabase> {
+    if (this.#destroyed) throw new Error('Delta store is disposed');
     if (this.#db) return this.#db;
-    const db = await openDatabase();
-    this.#db = db;
-    return db;
+    this.#opening ??= openDatabase()
+      .then((db) => {
+        if (this.#destroyed) {
+          db.close();
+          throw new Error('Delta store is disposed');
+        }
+        this.#db = db;
+        return db;
+      })
+      .finally(() => {
+        this.#opening = null;
+      });
+    return this.#opening;
   }
 
   #request<T>(request: IDBRequest<T>): Promise<T> {
@@ -60,7 +72,6 @@ export class IndexeddbDeltaStore implements DeltaStore {
   }
 
   async load(documentId: string): Promise<DeltaRecord[]> {
-    if (this.#destroyed) return [];
     const db = await this.#ensureDb();
     const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
     const records = (await this.#request(store.index(DOCUMENT_ID_INDEX).getAll(documentId))) as DeltaRecord[];
@@ -68,20 +79,19 @@ export class IndexeddbDeltaStore implements DeltaStore {
   }
 
   async put(record: DeltaRecord): Promise<void> {
-    if (this.#destroyed) return;
     const db = await this.#ensureDb();
     const transaction = db.transaction(STORE_NAME, 'readwrite');
-    await this.#request(transaction.objectStore(STORE_NAME).put(record));
-    await this.#transaction(transaction);
+    const completed = this.#transaction(transaction);
+    await Promise.all([completed, this.#request(transaction.objectStore(STORE_NAME).put(record))]);
   }
 
   async deleteMany(documentId: string, ids: string[]): Promise<void> {
-    if (this.#destroyed || ids.length === 0) return;
+    if (ids.length === 0) return;
     const db = await this.#ensureDb();
     const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const completed = this.#transaction(transaction);
     const store = transaction.objectStore(STORE_NAME);
-    await Promise.all(ids.map((id) => this.#request(store.delete([documentId, id])))); // 복합키로 삭제
-    await this.#transaction(transaction);
+    await Promise.all([completed, ...ids.map((id) => this.#request(store.delete([documentId, id])))]);
   }
 
   destroy(): void {

@@ -6,8 +6,8 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import FileIcon from '~icons/lucide/file';
-  import { goto } from '$app/navigation';
   import { navigating, page } from '$app/state';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import EntityIcon from '../@context-menu/EntityIcon.svelte';

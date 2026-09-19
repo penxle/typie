@@ -1,4 +1,4 @@
-import { goto } from '$app/navigation';
+import { goto } from '$lib/navigation';
 import type { CommandOutcome, PageRect } from '@typie/editor-ffi/browser';
 import type { Editor, EditorContext, EditorSnapshot } from '../editor.svelte';
 import type { EditorRequest } from '../editor-update';

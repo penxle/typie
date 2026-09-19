@@ -15,9 +15,9 @@
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
-  import { goto } from '$app/navigation';
   import Logo from '$assets/logos/logo.svg?component';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
+  import { goto } from '$lib/navigation';
   import { dailyGoalStatus } from '$lib/user-stats';
   import { graphql } from '$mearie';
   import ActivityGrid from '../../@stats/ActivityGrid.svelte';

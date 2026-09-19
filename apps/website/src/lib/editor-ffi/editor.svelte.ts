@@ -7,6 +7,7 @@ import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { EditorAttachmentImporter } from './attachment-importer';
 import { IS_MAC, PAGE_GAP } from './constants';
+import { EditorLocalEditCoordinator } from './editor-local-edit-coordinator.svelte';
 import { EditorRequest, EditorUpdate } from './editor-update';
 import { EditorExternalImageElementState } from './external-image-element-state';
 import { fontDataMissingHandler } from './fonts';
@@ -472,6 +473,7 @@ export class Editor {
   commentClickHandler: ((id: string) => void) | null = null;
   requestCommentCompose: (() => void) | null = null;
 
+  readonly localEdits = new EditorLocalEditCoordinator();
   fileAssets = $state(new SvelteMap<string, FileAsset>());
   embedAssets = $state(new SvelteMap<string, EmbedAsset>());
   inflightEmbeds = $state(new SvelteMap<string, { uploadId: string; url: string }>());
@@ -526,19 +528,23 @@ export class Editor {
       this.#admission.enqueue(message);
       return { type: 'enqueued' };
     }
-    if (this.readOnly && isMutatingMessage(message)) {
+    if (!this.editable && isMutatingMessage(message)) {
       this.editBlockedHandler?.();
       return { type: 'ignored' };
     }
     const result = this.#invokeCore((core): TryEnqueueResult => {
       try {
-        core.enqueue_request([message]);
+        const requestId = core.enqueue_request([message]);
+        if (isMutatingMessage(message)) this.localEdits.accept(requestId.value);
         return { type: 'enqueued' };
       } catch (err) {
         return { type: 'failed', error: err };
       }
     });
-    if (result.type === 'enqueued') this.#requestWasmTick();
+    if (result.type === 'enqueued') {
+      this.#requestWasmTick();
+      if (isMutatingMessage(message)) this.localEdits.notify();
+    }
     return result;
   }
 
@@ -686,6 +692,7 @@ export class Editor {
   }
 
   #installTick(result: TickResult): EditorEvent[] {
+    const hadPendingEdits = this.localEdits.beginTick();
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const fields = new Set<StateField>();
     let renderInvalidated = false;
@@ -704,6 +711,7 @@ export class Editor {
     const completedReceiptIds: number[] = [];
     const completedReceipts: { receipt: UpdateReceipt; update: EditorUpdate }[] = [];
     for (const outcome of result.request_outcomes) {
+      this.localEdits.apply(outcome.request_id.value);
       const receipt = this.#receipts.get(outcome.request_id.value);
       if (!receipt) continue;
       const update = new EditorUpdate(result.revision.value, this.#applied, outcome.command_outcomes, publicEvents, (signal) =>
@@ -736,6 +744,7 @@ export class Editor {
     for (const { receipt, update } of completedReceipts) {
       receipt.resolve(update);
     }
+    if (hadPendingEdits || fields.has('doc')) this.localEdits.notify();
     return publicEvents;
   }
 
@@ -1114,7 +1123,7 @@ export class Editor {
     } finally {
       this.#admission = undefined;
     }
-    if (!this.readOnly) return request;
+    if (this.editable) return request;
 
     if (request.removeMessagesWhere(isMutatingMessage)) this.editBlockedHandler?.();
     return request;
@@ -1168,9 +1177,11 @@ export class Editor {
   }
 
   setDoc(plain: PlainDoc): void {
-    if (this.#destroyed) return;
+    if (this.#destroyed || !this.localEdits.accepting) return;
     this.#invokeCore((core) => core.set_doc(plain));
+    this.localEdits.recordDirectMutation();
     this.#requestWasmTick();
+    this.localEdits.notify();
   }
 
   materializeAt(heads: Uint8Array, sweepTombstones: string[]): PlainDoc {
@@ -1481,12 +1492,14 @@ export class Editor {
   }
 
   insertTemplateFragment(changesets: Uint8Array): void {
-    if (this.readOnly) {
+    if (!this.editable) {
       this.editBlockedHandler?.();
       return;
     }
     this.#invokeCore((core) => core.insert_template_fragment(changesets));
+    this.localEdits.recordDirectMutation();
     this.#requestWasmTick();
+    this.localEdits.notify();
   }
 
   handleRepasteAsText(): void {
@@ -1783,6 +1796,30 @@ export class Editor {
     throw result.error;
   }
 
+  get editable(): boolean {
+    return !this.terminal && !this.readOnly && this.localEdits.accepting;
+  }
+
+  finalizeInput(): void {
+    this.settlePendingEdits();
+    this.localEdits.finalizeInput();
+    this.settlePendingEdits();
+    this.localEdits.notify();
+  }
+
+  settlePendingEdits(): void {
+    if (this.#transitionActive || this.#admission) throw new Error('Cannot settle edits during an editor update');
+    if (this.#tickScheduled) {
+      this.#clearScheduledTick();
+      this.#tickScheduled = true;
+      this.#runFrame();
+    }
+    if (this.terminal) throw this.#failure ?? new Error('Editor is disposed');
+    if (this.localEdits.queued) {
+      throw new Error('Accepted editing work has not been applied');
+    }
+  }
+
   async update(build: (request: EditorRequest) => void): Promise<EditorUpdate | null> {
     if (this.terminal) return null;
 
@@ -1803,7 +1840,10 @@ export class Editor {
     const promise = new Promise<EditorUpdate>((resolve, reject) => {
       this.#receipts.set(requestId.value, { resolve, reject, request });
     });
+    const mutating = request.messages.some(isMutatingMessage);
+    if (mutating) this.localEdits.accept(requestId.value);
     this.#requestWasmTick();
+    if (mutating) this.localEdits.notify();
     return promise;
   }
 
@@ -1827,6 +1867,7 @@ export class Editor {
 
       const requestId = this.#invokeCore((core) => core.enqueue_request([...builtRequest.messages]));
       admitted = true;
+      if (builtRequest.messages.some(isMutatingMessage)) this.localEdits.accept(requestId.value);
       this.#receipts.set(requestId.value, {
         request: builtRequest,
         resolve: (value) => {
@@ -2123,6 +2164,7 @@ export class Editor {
     const reason = error ?? new Error('Editor operation failed');
     this.#failure = reason;
     this.#failed = true;
+    this.localEdits.notify();
     console.error(reason);
     try {
       Sentry.captureException(reason);
@@ -2695,6 +2737,8 @@ export class Editor {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.localEdits.notify();
+    this.localEdits.clear();
     unregister(this);
 
     this.#stopRuntime();

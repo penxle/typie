@@ -7,8 +7,8 @@
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import MinusIcon from '~icons/lucide/minus';
   import SquarePenIcon from '~icons/lucide/square-pen';
-  import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
+  import { goto } from '$lib/navigation';
   import { graphql } from '$mearie';
   import { SubscribeModal } from '../@subscription/subscribe-modal.svelte';
   import { createEntityTreeRevealRequest, entityTreeRevealState } from '../@tree/entity-reveal.svelte';

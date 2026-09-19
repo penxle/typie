@@ -14,6 +14,98 @@ const baseOpts = (editor: FakeEditor, store: FakeStore, pushFn: PusherOpts['push
 });
 
 describe('Pusher (single-source-of-truth)', () => {
+  it('keeps locally captured changes protected when server saving fails, then confirms an explicit retry', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const push = vi.fn(async () => ({ heads: editor.currentHeads(), durableHeads: enc() }));
+    const pusher = new Pusher(baseOpts(editor, store, push));
+    await pusher.flushNow();
+    editor.known.add(1);
+    await pusher.captureNow();
+    expect(pusher.isProtected()).toBe(true);
+    expect(pusher.isSynced()).toBe(false);
+    expect(pusher.pushFailed).toBe(false);
+    push.mockRejectedValueOnce(new Error('offline'));
+    await expect(pusher.pushNow()).rejects.toThrow('offline');
+    expect(pusher.pushFailed).toBe(true);
+    expect(pusher.isProtected()).toBe(true);
+    await pusher.pushNow();
+    expect(pusher.isSynced()).toBe(true);
+    expect(pusher.pushFailed).toBe(false);
+    pusher.stop();
+  });
+
+  it('does not treat a stale server acknowledgement as a completed server save', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    await pusher.flushNow();
+    editor.known.add(1);
+    await pusher.captureNow();
+    await expect(pusher.pushNow()).rejects.toThrow();
+    expect(pusher.isProtected()).toBe(true);
+    expect(pusher.isSynced()).toBe(false);
+    pusher.stop();
+  });
+
+  it('concurrent capture callers both observe a failed serialized write', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    await pusher.flushNow();
+    store.put = async () => {
+      throw new Error('quota');
+    };
+    editor.known.add(1);
+
+    const results = await Promise.allSettled([pusher.captureNow(), pusher.captureNow()]);
+    expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+    pusher.stop();
+  });
+
+  it('a checkpoint rejects withheld changes even when capture and push fulfill', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    await pusher.flushNow();
+    editor.known.add(1);
+    editor.withheld = 1;
+
+    await expect(pusher.checkpoint()).rejects.toThrow();
+    expect(pusher.isProtected()).toBe(false);
+    pusher.stop();
+  });
+
+  it('an exact server acknowledgement protects edits while a local write is still pending', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(1), durableHeads: enc() })));
+    await pusher.flushNow();
+    const write = Promise.withResolvers<undefined>();
+    store.put = () => write.promise;
+    editor.known.add(1);
+
+    await expect(pusher.checkpoint()).resolves.toBeUndefined();
+    expect(pusher.isProtected()).toBe(true);
+    write.resolve(undefined);
+    pusher.stop();
+  });
+
+  it('a stale acknowledgement cannot protect edits after failed local capture', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    await pusher.flushNow();
+    store.put = async () => {
+      throw new Error('quota');
+    };
+    editor.known.add(1);
+
+    await expect(pusher.checkpoint()).rejects.toThrow();
+    expect(pusher.isProtected()).toBe(false);
+    pusher.stop();
+  });
+
   it('REGRESSION(orig bug): stale store delta is adopted and pushed without throwing', async () => {
     const editor = new FakeEditor([]);
     const store = new FakeStore();

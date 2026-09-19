@@ -10,7 +10,6 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { onDestroy, tick, untrack } from 'svelte';
-  import { fly } from 'svelte/transition';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -22,6 +21,9 @@
   import SpellCheckIcon from '~icons/lucide/spell-check';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { desktop } from '$lib/desktop';
+  import DocumentSaveIndicator from '$lib/document-editing/DocumentSaveIndicator.svelte';
+  import { DocumentEditingSession } from '$lib/document-editing/session';
+  import { documentEditing } from '$lib/document-editing/state.svelte';
   import { Editor as EditorComponent, EditorFailureOverlay } from '$lib/editor-ffi/components';
   import EditorBreadcrumb from '$lib/editor-ffi/components/ui/EditorBreadcrumb.svelte';
   import { CONTINUOUS_MIN_WIDTH, CONTINUOUS_VIEW_PADDING, IS_MAC } from '$lib/editor-ffi/constants';
@@ -40,7 +42,6 @@
   import { getZenMode } from '../../zen-mode.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import { getEditorRegistry } from '../@pane/editor-registry.svelte';
-  import { paneChromeAttachment } from '../@pane/pane-chrome-attachment';
   import PaneHeader from '../@pane/PaneHeader.svelte';
   import PaneHeaderControls from '../@pane/PaneHeaderControls.svelte';
   import TabIcon from '../@pane/TabIcon.svelte';
@@ -54,15 +55,12 @@
   import PrismMarginLayer from './@prism-review/PrismMarginLayer.svelte';
   import PrismReviewButton from './@prism-review/PrismReviewButton.svelte';
   import PrismReviewMargin from './@prism-review/PrismReviewMargin.svelte';
+  import DocumentEditorNotice from './DocumentEditorNotice.svelte';
   import DocumentFindReplace from './DocumentFindReplace.svelte';
   import DocumentTemplateMenu from './DocumentTemplateMenu.svelte';
   import DocumentToolbars from './DocumentToolbars.svelte';
   import { headerVerticalNavigation } from './header-vertical-navigation';
   import SpellcheckPopover from './SpellcheckPopover.svelte';
-  import { GapBuffer } from './sync/gap-buffer';
-  import { PeerChannel } from './sync/peer-channel';
-  import { Pusher } from './sync/pusher.svelte';
-  import { RemoteChangesetPipeline } from './sync/remote-changeset-pipeline';
   import { IndexeddbDeltaStore } from './sync/store';
   import type { StableSelection } from '@typie/editor-ffi/browser';
   import type { DocumentEditorV2_query$key } from '$mearie';
@@ -302,7 +300,7 @@
   const paneChrome = getZenModePaneChrome();
   const zenMode = getZenMode();
   const floatingZoomChromeAttachment = paneChrome.attachmentHandle();
-  const lockedToastChromeAttachment = paneChrome.attachmentHandle();
+  const noticeChromeAttachment = paneChrome.attachmentHandle();
   const breadcrumbHoldHandle = paneChrome.segmentHandle('identity');
 
   const ctx = getEditorContext();
@@ -397,13 +395,9 @@
   let liveEditorCreated = false;
   let editorFailureReported = false;
   let destroyed = false;
-  let editorStore: IndexeddbDeltaStore | null = null;
-  let editorServerHeads: Uint8Array = new Uint8Array();
-  let editorServerDurableHeads: Uint8Array = new Uint8Array();
 
   let channelUnsubscribe: (() => void) | null = null;
   let pendingRemoteEvents: RemoteChangesetEvent[] = [];
-  let remoteChangesetPipeline: RemoteChangesetPipeline | undefined;
 
   const failLiveEditor = (error: unknown) => {
     if (editorFailureReported) return;
@@ -411,7 +405,8 @@
     liveEditorFailed = true;
     channelUnsubscribe?.();
     channelUnsubscribe = null;
-    pusher?.stop();
+    editingSession?.dispose();
+    editingSession = undefined;
     onEditorFailed?.(error);
   };
 
@@ -443,34 +438,36 @@
     if (failure !== undefined) failLiveEditor(failure);
   });
 
-  let resyncPrep: Promise<void> = Promise.resolve();
-  let resyncing = false;
+  let resyncPrep: Promise<void> | undefined;
+  let editingSession = $state.raw<DocumentEditingSession>();
+  let snapshotVersion = 0;
 
   // Single-flight: a second reload signal (server push racing the pull poll)
   // during the capture gap would re-capture the same editor/store and destroy
   // them twice. The in-flight prep plus the coming snapshot already cover it.
   const beginResync = () => {
-    if (resyncing) return;
-    resyncing = true;
+    if (resyncPrep) return;
+    snapshotVersion++;
+    pendingRemoteEvents = [];
     const oldEditor = ctx.liveEditor;
-    const oldStore = editorStore;
-    const oldPusher = pusher;
+    const oldSession = editingSession;
     resyncPrep = (async () => {
+      const preparation = await documentEditing.prepareDeparture(() => (oldSession ? [oldSession] : []), 'reload');
+      if (!preparation) return;
       try {
-        await oldPusher?.captureNow();
-      } catch (err) {
-        console.warn('resync: capture failed; pending edits fall back to the last persisted delta', err);
+        if (!preparation.isCurrent()) return;
+        if (destroyed || ctx.liveEditor !== oldEditor) return;
+        if (oldEditor && !oldSession) throw new Error('Live editor has no document editing session');
+        ctx.editor = undefined;
+        ctx.liveEditor = undefined;
+        editingSession = undefined;
+        await tick();
+        oldSession?.dispose();
+      } finally {
+        preparation.release();
       }
-      if (destroyed) return;
-      editorStore = null;
-      pendingRemoteEvents = [];
-      ctx.editor = undefined;
-      ctx.liveEditor = undefined;
-      await tick();
-      oldEditor?.destroy();
-      oldStore?.destroy();
     })().finally(() => {
-      resyncing = false;
+      resyncPrep = undefined;
     });
   };
 
@@ -483,19 +480,20 @@
 
     channelUnsubscribe = getDocumentChannels().subscribe(currentDocumentId, {
       onSnapshot: (graph, meta) => {
+        const version = ++snapshotVersion;
+        pendingRemoteEvents = [];
+        const current = () => !destroyed && version === snapshotVersion;
         untrack(async () => {
           let createdEditor: Editor | undefined;
           let createdStore: IndexeddbDeltaStore | undefined;
+          let createdSession: DocumentEditingSession | undefined;
           try {
             await resyncPrep;
+            if (!current()) return;
             const store = new IndexeddbDeltaStore();
             createdStore = store;
             const pendingRecords = await store.load(currentDocumentId);
             const pending = pendingRecords.map((r) => r.changeset);
-
-            editorStore = store;
-            editorServerDurableHeads = meta.durableHeads;
-            syncSeq = meta.seq;
 
             let liveEditor: Editor;
             try {
@@ -508,41 +506,39 @@
               createdEditor = liveEditor;
             } catch (err) {
               store.destroy();
-              failLiveEditor(err);
+              if (current()) failLiveEditor(err);
               return;
             }
 
-            if (destroyed) {
+            if (!current()) {
               liveEditor.destroy();
               store.destroy();
               return;
             }
 
-            const queued = pendingRemoteEvents;
-            pendingRemoteEvents = [];
             let latestHeads = meta.heads;
             let latestDurableHeads = meta.durableHeads;
-            const queuedApplied: Promise<number>[] = [];
-            for (const event of queued) {
-              for (const payload of event.bundles) {
-                if (payload.length === 0) continue;
-                queuedApplied.push(liveEditor.receiveRemoteChangeset(payload));
+            let latestSeq = meta.seq;
+            while (pendingRemoteEvents.length > 0) {
+              const queued = pendingRemoteEvents;
+              pendingRemoteEvents = [];
+              const queuedApplied: Promise<number>[] = [];
+              for (const event of queued) {
+                for (const payload of event.bundles) {
+                  if (payload.length === 0) continue;
+                  queuedApplied.push(liveEditor.receiveRemoteChangeset(payload));
+                }
+                if (event.seq) latestSeq = event.seq;
+                latestHeads = event.heads;
+                latestDurableHeads = event.durableHeads;
               }
-              if (event.seq) syncSeq = event.seq;
-              latestHeads = event.heads;
-              latestDurableHeads = event.durableHeads;
+              if (queuedApplied.length > 0) await Promise.all(queuedApplied);
+              if (!current()) {
+                liveEditor.destroy();
+                store.destroy();
+                return;
+              }
             }
-            if (queuedApplied.length > 0) await Promise.all(queuedApplied);
-
-            editorServerHeads = latestHeads;
-            editorServerDurableHeads = latestDurableHeads;
-            remoteChangesetPipeline = new RemoteChangesetPipeline(liveEditor, (event) => {
-              if (ctx.liveEditor !== liveEditor) return;
-              if (event.seq) syncSeq = event.seq;
-              if (event.bundles.length === 0 && event.seq) return;
-              pusher?.setConfirmedHeads(event.heads);
-              pusher?.setDurableHeads(event.durableHeads);
-            });
 
             liveEditor.enableRecentEdits();
 
@@ -566,9 +562,33 @@
               })();
             }
 
+            // Publish only after the editor's capture, remote apply and lifetime
+            // registration are ready; reload never waits for a binding effect.
+            const session = DocumentEditingSession.create({
+              documentId: currentDocumentId,
+              paneId: pane.id,
+              title: () => localTitle || title,
+              entity: () => entity,
+              editor: liveEditor,
+              store,
+              snapshot: { heads: latestHeads, durableHeads: latestDurableHeads, seq: latestSeq },
+              connection: getSyncConnection(),
+              onReload: () => getDocumentChannels().resync(currentDocumentId),
+              onError: (error) => handleEditorOperationError(liveEditor, error),
+            });
+            createdSession = session;
+            documentEditing.register(session);
+            editingSession = session;
             ctx.editor = liveEditor;
             ctx.liveEditor = liveEditor;
           } catch (err) {
+            createdSession?.dispose();
+            if (editingSession === createdSession) editingSession = undefined;
+            if (!current()) {
+              createdEditor?.destroy();
+              createdStore?.destroy();
+              return;
+            }
             if (createdEditor?.failure === undefined) {
               console.error(err);
             } else {
@@ -581,12 +601,12 @@
       },
       onChangesets: (event) => {
         const receivingEditor = ctx.liveEditor;
-        const pipeline = remoteChangesetPipeline;
-        if (!receivingEditor || !pipeline) {
+        const session = editingSession;
+        if (!receivingEditor || !session || resyncPrep) {
           pendingRemoteEvents.push(event);
           return;
         }
-        void pipeline.apply(event).catch((err) => handleEditorOperationError(receivingEditor, err));
+        void session.applyRemoteChangesets(event).catch((err) => handleEditorOperationError(receivingEditor, err));
       },
       onReload: () => {
         beginResync();
@@ -664,108 +684,11 @@
   });
   let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let subtitleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
-  let pusher = $state<Pusher | null>(null);
-  // Sync cursor: the last Redis-Stream id this client has fully caught up to.
-  // Non-reactive — pull/subscription read and advance it without re-subscribing.
-  let syncSeq = '';
-
   $effect(() => {
     const editor = ctx.liveEditor;
     if (!editor || editor.terminal) return;
-
-    const store = editorStore;
-    if (!store) return;
-
-    const serverHeads = editorServerHeads;
-    const serverDurableHeads = editorServerDurableHeads;
-
-    const currentDocumentId = documentId;
-    if (!currentDocumentId) return;
-
-    // Full-load recovery when the client's cursor has fallen out of the stream's
-    // retained window (offline past retention) — resync rebuilds the editor in
-    // place from a fresh snapshot. Unpushed local edits survive via the IndexedDB
-    // delta store, which the rebuild replays as pending.
-    const reloadDocument = () => {
-      getDocumentChannels().resync(currentDocumentId);
-    };
-
-    const refetchFromServer = async () => {
-      const ed = ctx.liveEditor;
-      if (!ed) return;
-      const result = await getSyncConnection().pull(currentDocumentId, syncSeq || null);
-      if (result.needsReload) {
-        reloadDocument();
-        return;
-      }
-      // O(missing) tail: each entry is a standalone bundle blob.
-      const applied: Promise<number>[] = [];
-      for (const bytes of result.changesets) {
-        if (bytes.length === 0) continue;
-        applied.push(ed.receiveRemoteChangeset(bytes));
-      }
-      if (applied.length > 0) await Promise.all(applied);
-      if (result.seq) syncSeq = result.seq;
-      pusher?.setConfirmedHeads(result.heads);
-      pusher?.setDurableHeads(result.durableHeads);
-    };
-    const refetchInBackground = () => {
-      void refetchFromServer().catch((err) => handleEditorOperationError(editor, err));
-    };
-
-    const gap = new GapBuffer({
-      partition: (p) => editor.partitionRemoteChangesets(p),
-      apply: (ready) => {
-        void editor.receiveRemoteChangeset(ready).catch((err) => handleEditorOperationError(editor, err));
-      },
-      onStuck: () => {
-        refetchInBackground();
-      },
-    });
-
-    const peer = new PeerChannel(currentDocumentId, (cs) => gap.ingest(cs));
-
-    const ps = new Pusher({
-      editor,
-      documentId: currentDocumentId,
-      initialServerHeads: serverHeads,
-      initialDurableHeads: serverDurableHeads,
-      store,
-      pushFn: async (changesets) => {
-        return getSyncConnection().push(currentDocumentId, changesets);
-      },
-      broadcast: (cs) => peer.post(cs),
-    });
-    pusher = ps;
-
-    let observedDocumentRevision = untrack(() => editor.documentRevision);
-    const stopDocumentWatch = $effect.root(() => {
-      $effect(() => {
-        const revision = editor.documentRevision;
-        if (revision === observedDocumentRevision) return;
-        observedDocumentRevision = revision;
-        untrack(() => ps.schedule());
-      });
-    });
-
-    const offExitedDocStart = editor.on('cursor_exited_document_start', () => {
-      subtitleEl?.focus();
-    });
-
-    const pollIntervalId = setInterval(() => {
-      refetchInBackground();
-    }, 10_000);
-
-    return () => {
-      clearInterval(pollIntervalId);
-      stopDocumentWatch();
-      offExitedDocStart();
-      peer.close();
-      ps.stop();
-      pusher = null;
-    };
+    return editor.on('cursor_exited_document_start', () => subtitleEl?.focus());
   });
-
   $effect(() => {
     const editor = ctx.editor;
     if (!editor || editor.terminal) return;
@@ -901,8 +824,13 @@
     }
   });
 
-  let showEditLockedToast = $state(false);
-  let lockedToastTimer: ReturnType<typeof setTimeout> | null = null;
+  let editorNotice = $state<DocumentEditorNotice>();
+
+  function showSaveDetails() {
+    if (editingSession) {
+      void documentEditing.showSaveStatus([editingSession], editingSession.saveStatus === 'sync-failed');
+    }
+  }
 
   $effect(() => {
     const editor = ctx.liveEditor;
@@ -913,11 +841,7 @@
         SubscribeModal.gate('editor_readonly');
         return;
       }
-      if (showEditLockedToast) return;
-      showEditLockedToast = true;
-      lockedToastTimer = setTimeout(() => {
-        showEditLockedToast = false;
-      }, 5000);
+      editorNotice?.showLocked();
     };
 
     return () => {
@@ -1075,15 +999,13 @@
     destroyed = true;
     const currentEditor = ctx.editor;
     const currentLiveEditor = ctx.liveEditor;
-    const currentEditorStore = editorStore;
     channelUnsubscribe?.();
     channelUnsubscribe = null;
-    pusher?.stop();
+    editingSession?.dispose();
+    editingSession = undefined;
     flushTitleUpdate();
     flushSubtitleUpdate();
     queueMicrotask(() => {
-      currentLiveEditor?.destroy();
-      currentEditorStore?.destroy();
       if (ctx.editor === currentEditor) ctx.editor = undefined;
       if (ctx.liveEditor === currentLiveEditor) ctx.liveEditor = undefined;
     });
@@ -1155,16 +1077,23 @@
                 />
               {/key}
             </EditorBreadcrumb>
-            {#if document.locked}
-              <span
-                class={center({ flexShrink: '0', color: focused ? 'text.default' : 'text.muted' })}
-                aria-label="편집이 잠겨있는 문서예요."
-                role="img"
-                use:tooltip={{ message: '편집이 잠겨있는 문서예요.' }}
-              >
-                <Icon icon={LockIcon} size={12} />
-              </span>
-            {/if}
+            <div class={flex({ alignItems: 'center', flexShrink: '0' })}>
+              {#if document.locked}
+                <span
+                  class={center({ size: '20px', flexShrink: '0', color: focused ? 'text.default' : 'text.muted' })}
+                  aria-label="편집이 잠겨있는 문서예요."
+                  role="img"
+                  use:tooltip={{ message: '편집이 잠겨있는 문서예요' }}
+                >
+                  <Icon icon={LockIcon} size={12} />
+                </span>
+              {/if}
+              <DocumentSaveIndicator
+                onShowDetails={showSaveDetails}
+                protectedChanges={editingSession?.isProtected() ?? false}
+                status={editingSession?.saveStatus ?? null}
+              />
+            </div>
 
             {#snippet scrollableActions()}
               {#if document && isOwner}
@@ -1247,74 +1176,18 @@
                       })}
                       bind:clientWidth={editorAreaWidth}
                     >
-                      {#if showEditLockedToast}
-                        <div
-                          style:top={zenMode.active ? 'calc(var(--editor-pane-overlay-top-inset, 0px) + 12px)' : undefined}
-                          style:transition="var(--editor-pane-overlay-position-transition, none)"
-                          class={flex({
-                            position: 'absolute',
-                            top: zenMode.active ? undefined : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated' ? '36px' : '12px',
-                            right: '12px',
-                            zIndex: 'editorOverlay',
-                            alignItems: 'center',
-                            gap: '10px',
-                            paddingX: '14px',
-                            paddingY: '10px',
-                            borderRadius: '6px',
-                            borderWidth: '1px',
-                            borderColor: 'border.default',
-                            backgroundColor: 'surface.default',
-                            boxShadow: 'sm',
-                            fontSize: '13px',
-                            color: 'text.muted',
-                          })}
-                          data-pane-chrome-reveal-exclusion
-                          onpointerenter={() => {
-                            if (!lockedToastTimer) {
-                              return;
-                            }
-
-                            clearTimeout(lockedToastTimer);
-                            lockedToastTimer = null;
-                          }}
-                          onpointerleave={() => {
-                            lockedToastTimer = setTimeout(() => {
-                              showEditLockedToast = false;
-                            }, 5000);
-                          }}
-                          role="alert"
-                          use:paneChromeAttachment={lockedToastChromeAttachment}
-                          transition:fly={{ y: -8, duration: 150 }}
-                        >
-                          <Icon style={css.raw({ flexShrink: '0' })} icon={LockIcon} size={14} />
-                          <span>편집이 잠겨있는 문서예요.</span>
-                          {#if query.data.me.id === entity.user.id}
-                            <button
-                              class={css({
-                                marginLeft: '4px',
-                                paddingX: '8px',
-                                paddingY: '4px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                fontWeight: 'medium',
-                                color: 'text.default',
-                                backgroundColor: 'surface.canvas',
-                                cursor: 'pointer',
-                                transition: 'common',
-                                _hover: { backgroundColor: 'surface.hover' },
-                              })}
-                              onclick={() => {
-                                toggleEditLock();
-                                showEditLockedToast = false;
-                                if (lockedToastTimer) clearTimeout(lockedToastTimer);
-                              }}
-                              type="button"
-                            >
-                              해제하기
-                            </button>
-                          {/if}
-                        </div>
-                      {/if}
+                      <DocumentEditorNotice
+                        bind:this={editorNotice}
+                        attachment={noticeChromeAttachment}
+                        onShowSaveDetails={showSaveDetails}
+                        onUnlock={query.data.me.id === entity.user.id ? toggleEditLock : undefined}
+                        saveFailed={editingSession?.saveFailedOnBoth ?? false}
+                        top={zenMode.active
+                          ? 'calc(var(--editor-pane-overlay-top-inset, 0px) + 12px)'
+                          : ctx.editor?.rootAttrs?.layout_mode.type === 'paginated'
+                            ? '36px'
+                            : '12px'}
+                      />
 
                       <div
                         class={flex({

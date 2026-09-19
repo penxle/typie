@@ -60,8 +60,8 @@ export type PaneGroup = {
   addPane: (pane: PaneInit, placement: PanePlacement) => boolean;
   movePane: (paneId: string, placement: PanePlacement) => boolean;
   swapPane: (firstPaneId: string, secondPaneId: string) => boolean;
-  removePane: (paneId: string) => boolean;
-  replacePane: (paneId: string, pane: PaneInit) => boolean;
+  removePane: (paneId: string) => boolean | Promise<boolean>;
+  replacePane: (paneId: string, pane: PaneInit) => boolean | Promise<boolean>;
   readPanelExpandedByPaneId: (siteId: string) => Record<string, boolean>;
   restorePanelExpandedByPaneId: (siteId: string, entry: Record<string, boolean>) => void;
 

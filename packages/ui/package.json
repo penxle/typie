@@ -16,7 +16,9 @@
     "./state/reduced-motion": "./src/state/reduced-motion.svelte.ts",
     "./transitions": "./src/transitions/index.ts",
     "./utils": "./src/utils/index.ts",
-    "./styles.css": "./styles/index.css"
+    "./styles.css": "./styles/index.css",
+    "./components/document-save-dialog-content": "./src/components/DocumentSaveDialogContent.svelte",
+    "./components/document-save-status-icon": "./src/components/DocumentSaveStatusIcon.svelte"
   },
   "scripts": {
     "codegen": "svelte-kit sync",
