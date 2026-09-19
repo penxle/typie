@@ -1,4 +1,5 @@
 import { beforeNavigate, goto as svelteGoto } from '$app/navigation';
+import { desktop } from '$lib/desktop';
 
 export type NavigationRequest = { reason: 'leave' | 'reload' | 'logout' | 'login'; paneIds?: readonly string[] };
 export type NavigationPreparation = { isCurrent: () => boolean; release: () => void };
@@ -69,24 +70,30 @@ export function guardNavigation(): void {
     pending = true;
     const restored =
       navigation.type === 'popstate' && navigation.from ? waitForHistoryRestoration(navigation.from.url.href) : Promise.resolve(true);
-    void runNavigation({ reason: 'leave' }, async () => {
-      if (!(await restored)) return;
-      if (navigation.willUnload) {
-        await performPageUnload(() => location.assign(target));
-        return;
-      }
-      if (navigation.type === 'popstate' && navigation.delta) {
-        const complete = Promise.withResolvers<undefined>();
-        historyNavigation = { url: target, complete };
-        history.go(navigation.delta);
-        await complete.promise;
-      } else {
-        await performNavigation(target);
-      }
-    }).finally(() => {
-      pending = false;
-      historyNavigation = undefined;
-    });
+    void restored
+      .then((restored) => {
+        if (!restored) return;
+        // A pane may finish loading during history restoration. Prepare the
+        // current editors only after that wait, immediately before navigation.
+        return runNavigation({ reason: 'leave' }, async () => {
+          if (navigation.willUnload) {
+            await performPageUnload(() => location.assign(target));
+            return;
+          }
+          if (navigation.type === 'popstate' && navigation.delta) {
+            const complete = Promise.withResolvers<undefined>();
+            historyNavigation = { url: target, complete };
+            history.go(navigation.delta);
+            await complete.promise;
+          } else {
+            await performNavigation(target);
+          }
+        });
+      })
+      .finally(() => {
+        pending = false;
+        historyNavigation = undefined;
+      });
   });
 }
 
@@ -132,6 +139,7 @@ export function reloadPage(): Promise<unknown> {
 }
 
 export function leavePage(url: string, reason: 'logout' | 'login', beforeLeave?: () => Promise<unknown>): Promise<unknown> {
+  if (desktop?.requestDocumentDeparture) return desktop.requestDocumentDeparture(reason);
   return runNavigation({ reason }, async () => {
     await beforeLeave?.();
     await performPageUnload(() => location.assign(url));

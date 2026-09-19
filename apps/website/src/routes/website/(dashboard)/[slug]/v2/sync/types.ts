@@ -24,6 +24,8 @@ export type PusherOpts = {
   documentId: string;
   initialServerHeads: Uint8Array;
   initialDurableHeads: Uint8Array;
+  // The restored frontier, containing only server changes and persisted local deltas.
+  initialCapturedHeads?: Uint8Array;
   store: DeltaStore;
   pushFn: (changesets: Uint8Array) => Promise<PushResult>;
   broadcast?: (changeset: Uint8Array) => void;

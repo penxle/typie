@@ -6,10 +6,10 @@
     if (state === 'failed') return '저장하지 못했어요';
     if (state === 'sync-failed')
       return protectedChanges
-        ? '최근 변경사항은 이 기기에만 저장되어 있어요.\n서버에 전송하지 못했어요.'
+        ? '이 기기에는 안전하게 저장되었지만,\n서버와 동기화하지 못했어요'
         : '최근 변경사항을 서버에 저장하지 못했어요';
     if (state === 'protected' || (state === 'pending' && protectedChanges))
-      return '최근 변경사항은 이 기기에만 저장되어 있어요.\n서버에 전송하는 중이에요.';
+      return '이 기기에는 안전하게 저장되었지만,\n서버와 동기화하는 데 평소보다 오래 걸리고 있어요';
     if (state === 'pending') return '저장이 평소보다 오래 걸리고 있어요.\n최근 변경사항을 저장하는 중이에요.';
     return '서버에 저장했어요';
   };
@@ -22,7 +22,7 @@
   import CheckIcon from '~icons/lucide/check';
   import CircleQuestionMarkIcon from '~icons/lucide/circle-question-mark';
   import CloudOffIcon from '~icons/lucide/cloud-off';
-  import MonitorCheckIcon from '~icons/lucide/monitor-check';
+  import LaptopIcon from '~icons/lucide/laptop';
   import { tooltip } from '../actions/tooltip.svelte';
   import { prefersReducedMotion } from '../state/reduced-motion.svelte';
   import Icon from './Icon.svelte';
@@ -40,7 +40,10 @@
     onShowDetails?: () => void;
   } = $props();
 
-  const displayedStatus = $derived(protectedChanges && (status === 'pending' || status === 'sync-failed') ? 'protected' : status);
+  const displayedStatus = $derived.by<Exclude<DocumentSaveState, 'sync-failed'> | null>(() => {
+    if (status !== 'pending' && status !== 'sync-failed') return status;
+    return protectedChanges ? 'protected' : 'pending';
+  });
   const style = center({ size: '20px', flexShrink: '0' });
   const dangerStyle = css({ color: 'danger.default' });
   const successStyle = css({ color: 'success.default' });
@@ -49,15 +52,13 @@
     unknown: mutedStyle,
     pending: mutedStyle,
     failed: dangerStyle,
-    'sync-failed': mutedStyle,
     protected: mutedStyle,
     synced: successStyle,
   };
   const iconByState = {
     unknown: CircleQuestionMarkIcon,
     failed: CloudOffIcon,
-    'sync-failed': CloudOffIcon,
-    protected: MonitorCheckIcon,
+    protected: LaptopIcon,
     synced: CheckIcon,
   };
 </script>

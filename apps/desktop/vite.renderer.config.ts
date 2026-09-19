@@ -17,6 +17,7 @@ export default defineConfig({
         login: 'login/index.html',
         offline: 'offline/index.html',
         crash: 'crash/index.html',
+        'document-save': 'document-save/index.html',
       },
     },
   },

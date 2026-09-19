@@ -19,6 +19,9 @@ export class Pusher {
   private confirmedHeads: Uint8Array;
   private durableHeads: Uint8Array;
   private capturedHeads: Uint8Array;
+  private observedHeads: Uint8Array;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- exposed through protection notifications
+  private readonly unconfirmedChanges = new Map<string, { observedAt: number; captured: boolean }>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- intentionally non-reactive bookkeeping
   private readonly blockedCount = new Map<string, number>();
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- intentionally non-reactive bookkeeping
@@ -48,7 +51,8 @@ export class Pusher {
     this.opts = opts;
     this.confirmedHeads = opts.initialServerHeads;
     this.durableHeads = opts.initialDurableHeads;
-    this.capturedHeads = opts.initialServerHeads;
+    this.capturedHeads = opts.initialCapturedHeads ?? opts.initialServerHeads;
+    this.observedHeads = this.capturedHeads;
     window.addEventListener('online', this.handleOnline);
     void this.firePush();
   }
@@ -94,7 +98,16 @@ export class Pusher {
   // persist immediately, so a refresh right after the last edit still restores
   // it from the delta store — only the push waits for the idle window. Runs are
   // chained (never concurrent) and a queued run subsumes later requests.
-  private persistFresh(): Promise<void> {
+  private async persistFresh(): Promise<void> {
+    // Track each newly observed change once. Local capture protects it without
+    // resetting its age while it still awaits server acknowledgement.
+    const observedHeads = this.opts.editor.currentHeads();
+    const observed = this.opts.editor.missingChangesetsFor(this.observedHeads);
+    const now = Date.now();
+    for (const { id } of this.opts.editor.splitChangesets(observed.bytes)) {
+      if (!this.unconfirmedChanges.has(id)) this.unconfirmedChanges.set(id, { observedAt: now, captured: false });
+    }
+    if (observed.withheld === 0) this.observedHeads = observedHeads;
     if (this.persistQueued) return this.persistQueued;
     const run = this.persistTail.then(async () => {
       this.persistQueued = null;
@@ -109,6 +122,9 @@ export class Pusher {
       if (fresh.length > 0) {
         for (const { id, bytes } of this.opts.editor.splitChangesets(fresh)) {
           await this.opts.store.put({ id, documentId: this.opts.documentId, changeset: bytes, createdAt: Date.now() });
+          const change = this.unconfirmedChanges.get(id);
+          if (change) change.captured = true;
+          this.notifyProtectionChanged();
         }
         this.opts.broadcast?.(fresh);
       }
@@ -287,12 +303,33 @@ export class Pusher {
   setConfirmedHeads(heads: Uint8Array): void {
     if (this.stopped) return;
     this.confirmedHeads = heads;
+    if (this.unconfirmedChanges.size > 0) {
+      const missing = this.opts.editor.missingChangesetsFor(heads);
+      if (missing.withheld === 0) {
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local-only, not reactive state
+        const ids = new Set(this.opts.editor.splitChangesets(missing.bytes).map(({ id }) => id));
+        for (const id of this.unconfirmedChanges.keys()) {
+          if (!ids.has(id)) this.unconfirmedChanges.delete(id);
+        }
+      }
+    }
     if (this.isSynced()) this.pushFailed = false;
     this.notifyProtectionChanged();
   }
 
   isSynced(): boolean {
     return !this.stopped && this.coveredBy(this.confirmedHeads);
+  }
+
+  get unprotectedSince(): number | null {
+    for (const change of this.unconfirmedChanges.values()) {
+      if (!change.captured) return change.observedAt;
+    }
+    return null;
+  }
+
+  get unconfirmedSince(): number | null {
+    return this.unconfirmedChanges.values().next().value?.observedAt ?? null;
   }
 
   isProtected(): boolean {

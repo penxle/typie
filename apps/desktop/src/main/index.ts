@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, autoUpdater as nativeUpdater, ipcMain, Menu, screen, session, shell, webContents } from 'electron';
+import { app, ipcMain, Menu, screen, session, shell, webContents } from 'electron';
 import { AuthService } from './auth-service';
 import { showContextMenu } from './context-menu';
 import { env } from './env';
@@ -61,10 +61,28 @@ if (singleInstance) {
   app.quit();
 }
 
-app.on('before-quit', () => {
-  quitting = true;
+let quitRequested = false;
+app.on('before-quit', (event) => {
+  if (quitting || !tabManager) {
+    quitting = true;
+    return;
+  }
+  event.preventDefault();
+  const modal = windowManager?.window.getChildWindows().find((child) => child.isModal() && child.isVisible());
+  if (modal) {
+    modal.focus();
+    return;
+  }
+  if (quitRequested) return;
+  quitRequested = true;
+  const request = updater.ready ? updater.install(windowManager?.window) : tabManager.prepareDeparture('quit', commitQuit);
+  void request
+    .catch((err: unknown) => console.error('Could not quit the application', err))
+    .finally(() => {
+      quitRequested = false;
+    });
 });
-nativeUpdater.on('before-quit-for-update', () => {
+updater.on('before-quit', () => {
   quitting = true;
 });
 
@@ -88,17 +106,28 @@ const sanitizeWindowState = (state: WindowState): WindowState => {
   return visible ? state : { maximized: state.maximized };
 };
 
+let loginTransition: Promise<unknown> | undefined;
 const showLoginKeepingTabs = () => {
-  if (tabManager && tabManager.tabs.length > 0) store.save({ tabs: tabManager.serialize() });
-  tabManager?.closeAll();
-  void auth.clearSession().catch(() => null);
-  windowManager?.showLogin();
+  if (loginTransition) return loginTransition;
+  const commit = async () => {
+    if (tabManager && tabManager.tabs.length > 0) store.save({ tabs: tabManager.serialize() });
+    await tabManager?.closeAll();
+    await auth.clearSession();
+    windowManager?.showLogin();
+  };
+  return (loginTransition = (tabManager ? tabManager.prepareDeparture('login', commit) : commit()).finally(() => {
+    loginTransition = undefined;
+  }));
 };
 
-const showLoggedOut = () => {
-  store.save({ tabs: null });
-  tabManager?.closeAll();
-  windowManager?.showLogin();
+const logout = () => {
+  const commit = async () => {
+    await auth.logout();
+    store.save({ tabs: null });
+    await tabManager?.closeAll();
+    windowManager?.showLogin();
+  };
+  return tabManager ? tabManager.prepareDeparture('logout', commit) : commit();
 };
 
 const showLoggedIn = () => {
@@ -109,6 +138,13 @@ const showLoggedIn = () => {
   if (urls.length > 0) tabManager.restore({ urls, active: saved?.active ?? 0 });
   else tabManager.create(`${env.websiteUrl}/`);
   store.save({ tabs: null });
+};
+
+const commitQuit = async () => {
+  if (windowManager && tabManager) store.save({ window: windowManager.state(), tabs: tabManager.serialize() });
+  await tabManager?.closeAll();
+  quitting = true;
+  app.quit();
 };
 
 const applyTheme = (theme: ThemePayload) => {
@@ -129,9 +165,16 @@ const createWindow = async () => {
   }
   windowManager = new WindowManager(sanitizeWindowState(store.data.window), theme, { version: app.getVersion(), env: env.name });
   policy = new NavigationPolicy(env, {
-    onLoginRequired: showLoginKeepingTabs,
-    onLogout: () => auth.logout().catch(() => null),
+    onLoginRequired: () => {
+      void showLoginKeepingTabs();
+    },
+    onLogout: () => {
+      void logout();
+    },
     onOpenTab: (url, background, opener) => tabManager?.openFrom(opener, url, background),
+    onNavigateWebsite: (contents, url) => {
+      void tabManager?.navigate(contents, url);
+    },
   });
   tabManager = new TabManager(windowManager, policy, store.data.zoomLevel);
   const chrome = windowManager.chrome.webContents;
@@ -167,12 +210,20 @@ const createWindow = async () => {
     }
     if (!quitting && process.platform === 'darwin') {
       event.preventDefault();
+      tabManager?.capture();
       windowManager?.window.hide();
+    } else if (!quitting && tabManager) {
+      event.preventDefault();
+      void tabManager.prepareDeparture('close', async () => {
+        // BaseWindow owns no renderer; dispose its views only after all agreed.
+        await tabManager?.closeAll();
+        windowManager?.window.destroy();
+      });
     }
   });
 
   windowManager.window.on('closed', () => {
-    tabManager?.closeAll();
+    void tabManager?.closeAll();
     windowManager?.dispose();
     windowManager = undefined;
     tabManager = undefined;
@@ -194,9 +245,21 @@ ipcMain.on(IPC.themeChanged, (event, theme: ThemePayload) => {
   if (event.sender === tabManager?.activeTab?.view.webContents) applyTheme(theme);
 });
 ipcMain.handle(IPC.authLogin, () => auth.startLogin());
+ipcMain.handle('document:departure', (event, reason: unknown) => {
+  if (
+    event.senderFrame !== event.sender.mainFrame ||
+    policy?.classify(event.sender.getURL()) !== 'website' ||
+    !tabManager?.hasWebContents(event.sender)
+  )
+    return;
+  if (reason === 'logout') return logout();
+  if (reason === 'login') return showLoginKeepingTabs();
+});
 ipcMain.on(IPC.authCancel, () => auth.cancelLogin());
 ipcMain.on(IPC.tabsNew, () => tabManager?.create(`${env.websiteUrl}/`));
-ipcMain.on(IPC.tabsClose, (_event, id: string) => tabManager?.close(id));
+ipcMain.on(IPC.tabsClose, (event, id: string) => {
+  if (typeof id === 'string' && event.sender === chromeWebContents()) void tabManager?.close(id);
+});
 ipcMain.on(IPC.tabsActivate, (_event, id: string) => tabManager?.activate(id));
 ipcMain.on(IPC.tabsMove, (_event, id: string, toIndex: number) => tabManager?.move(id, toIndex));
 ipcMain.on(IPC.menuPopup, () => {
@@ -257,8 +320,9 @@ updater.on('ready', () => {
   applyMenu();
 });
 
+updater.beforeInstall = (install) => (tabManager ? tabManager.prepareDeparture('quit', install) : install());
+
 auth.on('authenticated', showLoggedIn);
-auth.on('logged-out', showLoggedOut);
 auth.on('error', (message) => {
   const login = windowManager?.loginWebContents;
   if (!login || login.isDestroyed()) return;

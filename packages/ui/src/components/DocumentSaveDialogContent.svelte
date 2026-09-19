@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { untrack } from 'svelte';
   import FileIcon from '~icons/lucide/file';
   import { tooltip } from '../actions/tooltip.svelte';
   import { entityIconMap, getEntityIconColor } from '../constants/entity-icons';
@@ -14,6 +15,7 @@
     description,
     documents,
     completed = false,
+    onCompletedShown,
     continueLabel = '닫기',
     cancelLabel,
     discardLabel,
@@ -24,6 +26,7 @@
     description: string;
     documents: DocumentSaveDocument[];
     completed?: boolean;
+    onCompletedShown?: () => void;
     continueLabel?: string;
     cancelLabel?: string;
     discardLabel?: string;
@@ -37,6 +40,7 @@
   $effect(() => {
     if (!saved) return;
     countdown = 5;
+    untrack(() => onCompletedShown?.());
     // Start only while the completed dialog is mounted. The operation owner
     // still revalidates protection and identity before acting on this choice.
     const timer = setInterval(() => {

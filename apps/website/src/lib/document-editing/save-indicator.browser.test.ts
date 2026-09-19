@@ -1,9 +1,10 @@
 import '../../app.css';
 
 import { mount, tick, unmount } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DocumentSaveIndicator from './DocumentSaveIndicator.svelte';
+import type { DocumentSaveState } from '@typie/lib/document-save';
 
 const motion = vi.hoisted(() => ({ current: true }));
 vi.mock('@typie/ui/state/reduced-motion', () => ({
@@ -20,9 +21,13 @@ describe('document save indicator', () => {
     motion.current = true;
   });
 
-  const create = async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const flags = new SvelteSet<string>();
+  const create = async (initialFlags: string[] = []) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(0);
+    const flags = new SvelteSet(initialFlags);
+    const inspection = new SvelteMap<string, DocumentSaveState>();
+    let unprotectedSince: number | null = null;
+    let unconfirmedSince: number | null = null;
     const showDetails = vi.fn();
     target = document.createElement('div');
     document.body.append(target);
@@ -30,20 +35,144 @@ describe('document save indicator', () => {
       target,
       props: {
         get status() {
+          if (flags.has('loading')) return null;
           if (flags.has('failed')) return 'failed';
           if (flags.has('sync-failed')) return 'sync-failed';
-          if (flags.has('idle')) return 'idle';
           return flags.has('pending') ? 'pending' : 'synced';
         },
         get protectedChanges() {
           return !flags.has('unprotected');
         },
+        get unprotectedSince() {
+          if (!flags.has('unprotected') || (!flags.has('pending') && !flags.has('sync-failed'))) return (unprotectedSince = null);
+          return (unprotectedSince ??= Date.now());
+        },
+        get unconfirmedSince() {
+          if (!flags.has('pending') && !flags.has('sync-failed')) return (unconfirmedSince = null);
+          return (unconfirmedSince ??= Date.now());
+        },
+        get inspectedStatus() {
+          return inspection.get('status') ?? null;
+        },
         onShowDetails: showDetails,
       },
     });
     await tick();
-    return { flags, showDetails };
+    return { flags, showDetails, inspection };
   };
+
+  it('shows restored local changes immediately while keeping subsequent routine saves quiet', async () => {
+    const { flags } = await create(['loading', 'pending']);
+    expect(target.querySelector('[role="status"]')).toBeNull();
+    flags.delete('loading');
+    await tick();
+    expect(target.querySelector('[aria-label^="이 기기에는 안전하게 저장되었지만,"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+
+    flags.clear();
+    await tick();
+    await vi.advanceTimersByTimeAsync(2000);
+    flags.add('pending');
+    flags.add('unprotected');
+    await tick();
+    await vi.advanceTimersByTimeAsync(100);
+    flags.delete('unprotected');
+    await tick();
+    expect(target.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('reveals a slow server save after five seconds without confusing quick local writes with a stall', async () => {
+    const { flags } = await create();
+    flags.add('pending');
+    await tick();
+    for (let i = 0; i < 4; i++) {
+      flags.add('unprotected');
+      await tick();
+      await vi.advanceTimersByTimeAsync(800);
+      flags.delete('unprotected');
+      await tick();
+    }
+    await vi.advanceTimersByTimeAsync(1799);
+    expect(target.querySelector('[role="status"]')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await tick();
+    const saved = target.querySelector('[aria-label^="이 기기에는 안전하게 저장되었지만,"]');
+    expect(saved).not.toBeNull();
+    flags.add('unprotected');
+    await tick();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(target.querySelector('[aria-label^="이 기기에는 안전하게 저장되었지만,"]')).toBe(saved);
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+    flags.delete('unprotected');
+    await tick();
+
+    flags.add('unprotected');
+    await tick();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    await tick();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).not.toBeNull();
+    flags.delete('unprotected');
+    await tick();
+    expect(target.querySelector('[aria-label^="이 기기에는 안전하게 저장되었지만,"]')).not.toBeNull();
+
+    flags.clear();
+    await tick();
+    expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(2000);
+    await tick();
+    expect(target.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('retains the last local save during quick edits but reveals a genuinely unprotected delay', async () => {
+    const { flags } = await create();
+    flags.add('sync-failed');
+    await tick();
+    const saved = target.querySelector('[aria-label="서버 저장 상태 확인"]');
+    for (let i = 0; i < 8; i++) {
+      flags.add('unprotected');
+      await tick();
+      await vi.advanceTimersByTimeAsync(800);
+      expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).toBe(saved);
+      expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+      flags.delete('unprotected');
+      await tick();
+    }
+    flags.add('unprotected');
+    await tick();
+    await vi.advanceTimersByTimeAsync(5000);
+    await tick();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).toBeNull();
+    flags.delete('unprotected');
+    await tick();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+    expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).not.toBeNull();
+  });
+
+  it('bypasses header delay during confirmation and retains the original age after cancellation', async () => {
+    const { flags, inspection } = await create();
+    flags.add('sync-failed');
+    await tick();
+    flags.add('unprotected');
+    await tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    inspection.set('status', 'pending');
+    await tick();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).toBeNull();
+    inspection.clear();
+    await tick();
+    expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
+    await vi.advanceTimersByTimeAsync(4000);
+    await tick();
+    expect(target.querySelector('[aria-label="저장 시도 중"]')).not.toBeNull();
+    flags.delete('unprotected');
+    await tick();
+    expect(target.querySelector('[aria-label="서버 저장 상태 확인"]')).not.toBeNull();
+  });
 
   it('keeps normal saving quiet for five seconds and restarts the delay for later edits', async () => {
     const { flags } = await create();
@@ -102,7 +231,7 @@ describe('document save indicator', () => {
 
     flags.delete('unprotected');
     await tick();
-    const locallySaved = () => target.querySelector('[aria-label^="최근 변경사항은 이 기기에만 저장되어 있어요"]');
+    const locallySaved = () => target.querySelector('[aria-label^="이 기기에는 안전하게 저장되었지만,"]');
     expect(locallySaved()).not.toBeNull();
     expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
     expect(target.querySelector('[aria-label="서버에 저장했어요"]')).toBeNull();
@@ -171,6 +300,7 @@ describe('document save indicator', () => {
     async (initialStatus) => {
       const { flags } = await create();
       flags.add(initialStatus);
+      if (initialStatus === 'pending') flags.add('unprotected');
       await tick();
       if (initialStatus === 'pending') await vi.advanceTimersByTimeAsync(5000);
       flags.clear();
@@ -180,7 +310,7 @@ describe('document save indicator', () => {
       await tick();
       expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
       await vi.advanceTimersByTimeAsync(500);
-      flags.add('idle');
+      flags.delete('pending');
       await tick();
       expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
       await vi.advanceTimersByTimeAsync(500);
@@ -188,6 +318,7 @@ describe('document save indicator', () => {
       await tick();
       expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
       flags.add('pending');
+      flags.add('unprotected');
       await tick();
       await vi.advanceTimersByTimeAsync(499);
       expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
@@ -196,7 +327,6 @@ describe('document save indicator', () => {
       expect(target.querySelector('[role="status"]')).toBeNull();
       await vi.advanceTimersByTimeAsync(4499);
       expect(target.querySelector('[aria-label="저장 시도 중"]')).toBeNull();
-      flags.add('unprotected');
       await vi.advanceTimersByTimeAsync(1);
       await tick();
       expect(target.querySelector('[aria-label="저장 시도 중"]')).not.toBeNull();
@@ -295,40 +425,5 @@ describe('document save indicator', () => {
     });
     await vi.waitFor(() => expect(container.isConnected).toBe(false));
     expect(target.childElementCount).toBe(0);
-  });
-
-  it.each(['sync-failed', 'pending'])('does not confirm %s while input finalization remains', async (initialStatus) => {
-    const { flags } = await create();
-    flags.add(initialStatus);
-    await tick();
-    if (initialStatus === 'pending') await vi.advanceTimersByTimeAsync(5000);
-    flags.add('idle');
-    flags.delete(initialStatus);
-    await tick();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(target.querySelector('[role="status"]')).toBeNull();
-    flags.delete('idle');
-    await tick();
-    expect(target.querySelector('[aria-label="서버에 저장했어요"]')).not.toBeNull();
-  });
-
-  it('only promises local protection in the server failure tooltip after pending input is preserved', async () => {
-    const { flags } = await create();
-    flags.add('sync-failed');
-    flags.add('unprotected');
-    await tick();
-    const failure = target.querySelector<HTMLButtonElement>('[aria-label="서버 저장 상태 확인"]');
-    if (!failure) throw new Error('Save status button missing');
-    failure.dispatchEvent(new PointerEvent('pointerenter'));
-    await vi.advanceTimersByTimeAsync(500);
-    await tick();
-    const tooltip = () => document.querySelector('[role="tooltip"]')?.textContent ?? '';
-    await vi.waitFor(() => expect(tooltip()).toContain('서버에 저장하지 못했어요'));
-    expect(tooltip()).not.toContain('이 기기에만 저장되어 있어요');
-    flags.delete('unprotected');
-    await tick();
-    target.querySelector('[aria-label="서버 저장 상태 확인"]')?.dispatchEvent(new PointerEvent('pointerenter'));
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.waitFor(() => expect(tooltip()).toContain('이 기기에만 저장되어 있어요'));
   });
 });

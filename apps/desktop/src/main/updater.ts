@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { captureException } from '@sentry/electron/main';
-import { dialog } from 'electron';
+import { autoUpdater as nativeUpdater, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import type { BaseWindow } from 'electron';
 
@@ -8,15 +8,18 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const INITIAL_DELAY_MS = 10 * 1000;
 
 // eslint-disable-next-line unicorn/prefer-event-target
-export class Updater extends EventEmitter<{ ready: [] }> {
+export class Updater extends EventEmitter<{ ready: []; 'before-quit': [] }> {
   #enabled: boolean;
   #ready = false;
+  beforeInstall?: (install: () => Promise<void>) => Promise<unknown>;
 
   constructor(enabled: boolean) {
     super();
     this.#enabled = enabled;
     autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Installation must enter the same all-tab preflight before the installer
+    // starts. electron-updater's automatic quit hook runs too early for that.
+    autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.on('update-downloaded', () => {
       this.#ready = true;
       this.emit('ready');
@@ -31,8 +34,51 @@ export class Updater extends EventEmitter<{ ready: [] }> {
     autoUpdater.checkForUpdates().catch(() => null);
   }
 
+  #installPrepared(): Promise<void> {
+    // quitAndInstall can return before native preparation finishes, or report an
+    // error without quitting. Retain departure preparation until either event.
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        nativeUpdater.removeListener('before-quit-for-update', beforeQuit);
+        autoUpdater.removeListener('error', failed);
+      };
+      const beforeQuit = () => {
+        cleanup();
+        this.emit('before-quit');
+        resolve();
+      };
+      const failed = (err: unknown) => {
+        cleanup();
+        reject(err);
+      };
+      nativeUpdater.once('before-quit-for-update', beforeQuit);
+      autoUpdater.once('error', failed);
+      try {
+        autoUpdater.quitAndInstall();
+      } catch (err) {
+        failed(err);
+      }
+    });
+  }
+
   get ready() {
     return this.#ready;
+  }
+
+  async install(window?: BaseWindow) {
+    if (!this.#ready) return;
+    try {
+      await this.beforeInstall?.(() => this.#installPrepared());
+    } catch {
+      const options = {
+        type: 'error' as const,
+        message: '업데이트를 설치하지 못했어요.',
+        detail: '열려 있는 문서는 그대로 유지돼요. 잠시 후 다시 시도해 주세요.',
+        buttons: ['확인'],
+      };
+      if (window && !window.isDestroyed()) await dialog.showMessageBox(window, options);
+      else await dialog.showMessageBox(options);
+    }
   }
 
   simulateReady() {
@@ -90,6 +136,6 @@ export class Updater extends EventEmitter<{ ready: [] }> {
     };
     const { response } =
       window && !window.isDestroyed() ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options);
-    if (response === 0) autoUpdater.quitAndInstall();
+    if (response === 0) await this.install(window);
   }
 }

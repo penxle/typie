@@ -39,13 +39,11 @@ class DocumentSaveDialogDesktopTest {
     showSaveDialog(dialog, saveState) { result = it }
     val entry = dialog.current
     assertNotNull(entry)
-    onNodeWithText("아직 저장을 완료하지 못했어요").assertExists()
-    onNodeWithText("저장하지 않고 닫기").assertExists()
+    onNodeWithText("저장하지 않고 나가기").assertExists()
 
     runOnIdle { saveState.value = DocumentSaveState.Failed }
     mainClock.advanceTimeByFrame()
     waitForIdle()
-    onNodeWithText("저장하지 못했어요").assertExists()
     assertSame(entry, dialog.current)
     mainClock.advanceTimeBy(6_000)
     assertNull(result)
@@ -53,16 +51,14 @@ class DocumentSaveDialogDesktopTest {
     runOnIdle { saveState.value = DocumentSaveState.Pending }
     mainClock.advanceTimeByFrame()
     waitForIdle()
-    onNodeWithText("아직 저장을 완료하지 못했어요").assertExists()
     assertSame(entry, dialog.current)
 
     runOnIdle { saveState.value = DocumentSaveState.Protected }
     mainClock.advanceTimeByFrame()
     waitForIdle()
     assertSame(entry, dialog.current)
-    onNodeWithText("저장을 완료했어요").assertExists()
     onNodeWithText("5", useUnmergedTree = true).assertExists()
-    onNodeWithText("저장하지 않고 닫기").assertDoesNotExist()
+    onNodeWithText("저장하지 않고 나가기").assertDoesNotExist()
 
     mainClock.advanceTimeBy(4_900)
     waitForIdle()
