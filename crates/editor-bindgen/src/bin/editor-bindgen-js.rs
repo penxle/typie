@@ -95,13 +95,36 @@ fn generate_js(parsed: &ParsedJs) -> String {
 
     format!(
         "\
-export async function createInstance(wasmModule) {{
+export async function createInstance(wasmModule, onRuntimeError) {{
 let wasm;
+let runtimeError;
 
 {body}
 
 const __instance = await WebAssembly.instantiate(wasmModule, __wbg_get_imports());
-wasm = __instance.exports;
+// Guard the exports themselves, including calls made by generated finalizers.
+wasm = Object.fromEntries(Object.entries(__instance.exports).map(([name, value]) => [
+    name,
+    typeof value !== 'function' ? value : (...args) => {{
+        if (runtimeError !== undefined) {{
+            if (name.startsWith('__wbg_') && name.endsWith('_free')) return;
+            throw runtimeError;
+        }}
+        try {{
+            return value(...args);
+        }} catch (error) {{
+            if (error instanceof WebAssembly.RuntimeError && runtimeError === undefined) {{
+                runtimeError = error;
+                try {{
+                    onRuntimeError?.(error);
+                }} catch {{
+                    // Notification must not replace the original trap.
+                }}
+            }}
+            throw error;
+        }}
+    }},
+]));
 {start}
 return {{ {exports} }};
 }}
@@ -132,7 +155,7 @@ fn generate_dts(src: &str, export_names: &[String]) -> String {
 
 export type {{ {exports} }};
 
-export function createInstance(wasmModule: WebAssembly.Module): Promise<{{
+export function createInstance(wasmModule: WebAssembly.Module, onRuntimeError?: (error: WebAssembly.RuntimeError) => void): Promise<{{
 {members}
 }}>;
 "
@@ -164,4 +187,85 @@ fn write_file(path: &str, content: &str) {
 fn fail(msg: &str) -> ! {
     eprintln!("ERROR: {msg}");
     process::exit(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn runtime_error_stops_exports_including_finalizers_before_notifying_the_host() {
+        let parsed = ParsedJs {
+            body_lines: vec![
+                "class Editor { render() { return wasm.render(); } read() { return wasm.read(); } free() { wasm.__wbg_editor_free(); } }".into(),
+                "function finalize() { wasm.__wbg_editor_free(); }".into(),
+                "function __wbg_get_imports() { return {}; }".into(),
+            ],
+            export_names: vec!["Editor".into(), "finalize".into()],
+            has_start: false,
+        };
+        let script = format!(
+            r#"
+import assert from 'node:assert/strict';
+{}
+// A real Wasm unreachable trap, independent of the editor's current renderer.
+const trapped = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
+    0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,
+    7,8,1,4,116,114,97,112,0,0,10,5,1,3,0,0,11
+])));
+let reads = 0;
+let frees = 0;
+WebAssembly.instantiate = async () => ({{ exports: {{
+    render: () => trapped.exports.trap(),
+    read: () => ++reads,
+    __wbg_editor_free: () => ++frees,
+}} }});
+let notified;
+let notifications = 0;
+const bindings = await createInstance({{}}, (error) => {{
+    notified = error;
+    notifications++;
+    assert.throws(() => second.read(), (caught) => caught === error);
+    second.free();
+    bindings.finalize();
+}});
+const first = new bindings.Editor();
+const second = new bindings.Editor();
+assert.equal(second.read(), 1);
+assert.equal(notifications, 0);
+assert.throws(() => first.render(), (error) => error instanceof WebAssembly.RuntimeError);
+assert.ok(notified instanceof WebAssembly.RuntimeError);
+assert.equal(notifications, 1);
+assert.throws(() => second.read(), (error) => error === notified);
+assert.throws(() => first.render(), (error) => error === notified);
+first.free();
+bindings.finalize();
+assert.equal(reads, 1);
+assert.equal(frees, 0);
+assert.equal(notifications, 1);
+"#,
+            generate_js(&parsed)
+        );
+        let mut child = Command::new("node")
+            .arg("--input-type=module")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Node.js is required to test generated bindings");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(script.as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

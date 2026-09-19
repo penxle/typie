@@ -1000,7 +1000,7 @@ declare class ResourceUpdate {
 
 export type { Editor, EditorHost, ResourceUpdate };
 
-export function createInstance(wasmModule: WebAssembly.Module): Promise<{
+export function createInstance(wasmModule: WebAssembly.Module, onRuntimeError?: (error: WebAssembly.RuntimeError) => void): Promise<{
     Editor: typeof Editor;
     EditorHost: typeof EditorHost;
     ResourceUpdate: typeof ResourceUpdate;

@@ -15,6 +15,16 @@ export function snapshot(): Editor[] {
   return [...editors];
 }
 
+export function failAll(error: unknown): void {
+  for (const editor of snapshot()) {
+    try {
+      editor.fail(error);
+    } catch (err) {
+      console.error('Failed to stop an editor after a WASM trap.', err);
+    }
+  }
+}
+
 export function destroyAll(): void {
   for (const editor of snapshot()) {
     try {
