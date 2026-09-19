@@ -32,11 +32,12 @@ pub fn rasterize_bitmap(
     } else {
         1.0
     };
-    let dst_w = ((src_w as f32) * scale).ceil() as u32;
-    let dst_h = ((src_h as f32) * scale).ceil() as u32;
-    if dst_w == 0 || dst_h == 0 {
-        return None;
-    }
+    let scaled = |w: u32, h: u32| {
+        let dst_w = ((w as f32) * scale).ceil() as u32;
+        let dst_h = ((h as f32) * scale).ceil() as u32;
+        (dst_w > 0 && dst_h > 0).then_some((dst_w, dst_h))
+    };
+    let (dst_w, dst_h) = scaled(src_w, src_h)?;
 
     let (bearing_x, bearing_y) = match bg.placement_origin {
         Origin::TopLeft => (bg.inner_bearing_x, -bg.inner_bearing_y),
@@ -67,9 +68,11 @@ pub fn rasterize_bitmap(
         BitmapData::Png(png) => {
             // resize_mitchell_rgba 는 straight-alpha 입력 전제(색상을 α-가중 후 재정규화)라
             // premultiply 는 리사이즈 뒤에 해야 premul 불변식(rgb ≤ a)이 유지된다.
-            let rgba = decode_png_to_rgba(png)?;
+            // Some fonts declare metrics that disagree with the embedded PNG (Twemoji U+1F349).
+            let (rgba, png_w, png_h) = decode_png_to_rgba(png)?;
+            let (dst_w, dst_h) = scaled(png_w, png_h)?;
             let mut data = if need_resize {
-                resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?
+                resize_mitchell_rgba(ctx, &rgba, png_w, png_h, dst_w, dst_h)?
             } else {
                 rgba
             };
@@ -155,7 +158,7 @@ fn read_packed_sample(data: &[u8], bit_start: usize, bpp: usize) -> u8 {
     sample
 }
 
-fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
+fn decode_png_to_rgba(png_data: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let options = DecoderOptions::default()
         .png_set_add_alpha_channel(true)
         .png_set_strip_to_8bit(true);
@@ -163,15 +166,15 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
     let pixels = decoder.decode_raw().ok()?;
     let (w, h) = decoder.dimensions()?;
     let colorspace = decoder.colorspace()?;
-    match colorspace {
-        ColorSpace::RGBA => Some(pixels),
+    let rgba = match colorspace {
+        ColorSpace::RGBA => pixels,
         ColorSpace::RGB => {
             let mut rgba = Vec::with_capacity(w * h * 4);
             for chunk in pixels.as_chunks::<3>().0 {
                 rgba.extend_from_slice(chunk);
                 rgba.push(255);
             }
-            Some(rgba)
+            rgba
         }
         ColorSpace::LumaA => {
             let mut rgba = Vec::with_capacity(w * h * 4);
@@ -179,17 +182,21 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
                 let (l, a) = (chunk[0], chunk[1]);
                 rgba.extend_from_slice(&[l, l, l, a]);
             }
-            Some(rgba)
+            rgba
         }
         ColorSpace::Luma => {
             let mut rgba = Vec::with_capacity(w * h * 4);
             for &l in &pixels {
                 rgba.extend_from_slice(&[l, l, l, 255]);
             }
-            Some(rgba)
+            rgba
         }
-        _ => None,
+        _ => return None,
+    };
+    if rgba.len() != w * h * 4 {
+        return None;
     }
+    Some((rgba, w as u32, h as u32))
 }
 
 fn decode_bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
@@ -462,6 +469,15 @@ mod tests {
         0x60, 0x82,
     ];
 
+    // 8x6 opaque red RGBA PNG, shorter than the 8x8 metrics.
+    const SHORT_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x06, 0x08, 0x06, 0x00, 0x00, 0x00, 0xFE,
+        0x05, 0xDF, 0xFB, 0x00, 0x00, 0x00, 0x12, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA, 0x63, 0xF8,
+        0xCF, 0xC0, 0xF0, 0x1F, 0x1F, 0x66, 0x18, 0x0A, 0x0A, 0x00, 0xFD, 0xC2, 0x5F, 0xA1, 0x9F,
+        0x7A, 0x39, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
     fn push_u16(v: &mut Vec<u8>, x: u16) {
         v.extend_from_slice(&x.to_be_bytes());
     }
@@ -569,6 +585,24 @@ mod tests {
         assert_eq!(densest[0], densest[3]);
         assert_eq!(densest[1], 0);
         assert_eq!(densest[2], 0);
+    }
+
+    #[test]
+    fn png_shorter_than_metrics_downscales_by_actual_dimensions() {
+        let font = synthetic_cbdt_font(17, SHORT_PNG);
+        let mut ctx = ScaleContext::new();
+        let raster = rasterize_bitmap(&mut ctx, &font, 1, 4.0).expect("png bitmap glyph");
+        assert_eq!((raster.width, raster.height), (4, 3));
+        assert_eq!(raster.data.len(), 4 * 3 * 4);
+    }
+
+    #[test]
+    fn png_shorter_than_metrics_reports_actual_dimensions_without_resize() {
+        let font = synthetic_cbdt_font(17, SHORT_PNG);
+        let mut ctx = ScaleContext::new();
+        let raster = rasterize_bitmap(&mut ctx, &font, 1, 8.0).expect("png bitmap glyph");
+        assert_eq!((raster.width, raster.height), (8, 6));
+        assert_eq!(raster.data.len(), 8 * 6 * 4);
     }
 
     #[test]
