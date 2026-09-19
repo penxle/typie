@@ -12,18 +12,18 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
   public private(set) var error: (any Error)?
   public private(set) var isSettled = false
 
-  @ObservationIgnored private let client: GraphQLClient
+  @ObservationIgnored private let client: any GraphQLClient
   @ObservationIgnored private let input: () -> Input?
   @ObservationIgnored private let query: (Input) -> Query
   @ObservationIgnored private let keepsDataOnInputChange: Bool
   @ObservationIgnored private var currentInput: Input?
-  @ObservationIgnored private var watcher: GraphQLQueryWatcher<Query>?
+  @ObservationIgnored private var watcher: (any QueryWatcher)?
   @ObservationIgnored private var consumer: Task<Void, Never>?
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var refetchPending = false
 
   public init(
-    client: GraphQLClient,
+    client: any GraphQLClient,
     input: @escaping () -> Input?,
     query: @escaping (Input) -> Query,
     keepsDataOnInputChange: Bool = false
@@ -35,7 +35,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
     observeInput()
   }
 
-  public convenience init(client: GraphQLClient, query: Query) where Input == NoInput {
+  public convenience init(client: any GraphQLClient, query: Query) where Input == NoInput {
     self.init(client: client, input: { NoInput() }, query: { _ in query })
   }
 
@@ -49,7 +49,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
       refetchPending = currentInput != nil
       return
     }
-    Task { await watcher.fetch(fetchBehavior: .NetworkOnly) }
+    Task { await watcher.refetch() }
   }
 
   private func observeInput() {
@@ -79,7 +79,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
     generation += 1
     let generation = generation
     let (stream, continuation) = AsyncStream.makeStream(
-      of: Result<GraphQLResponse<Query>, any Error>.self)
+      of: Result<Query.Data, any Error>.self)
     consumer = Task { [weak self] in
       for await result in stream {
         guard let self, self.generation == generation else { return }
@@ -88,9 +88,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
     }
     let client = client
     Task { [weak self] in
-      let watcher = await client.apollo.watch(query: query, cachePolicy: .cacheAndNetwork) {
-        continuation.yield($0)
-      }
+      let watcher = await client.watch(query) { continuation.yield($0) }
       guard let self, self.generation == generation else {
         watcher.cancel()
         return
@@ -112,18 +110,12 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
     refetchPending = false
   }
 
-  private func receive(_ result: Result<GraphQLResponse<Query>, any Error>) {
+  private func receive(_ result: Result<Query.Data, any Error>) {
     switch result {
-    case .success(let response):
-      if let first = response.errors?.first {
-        fail(mappedGraphQLError(first))
-      } else if let data = response.data {
-        self.data = data
-        error = nil
-        isSettled = true
-      } else {
-        fail(HTTPError.malformedResponse("\(Query.operationName): no data"))
-      }
+    case .success(let data):
+      self.data = data
+      error = nil
+      isSettled = true
     case .failure(let error):
       fail(error)
     }

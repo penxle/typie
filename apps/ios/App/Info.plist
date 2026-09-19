@@ -37,6 +37,8 @@
 	<true/>
 	<key>OIDC_CLIENT_ID</key>
 	<string>$(OIDC_CLIENT_ID)</string>
+	<key>OIDC_CLIENT_SECRET</key>
+	<string>$(OIDC_CLIENT_SECRET)</string>
 	<key>GIDClientID</key>
 	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
 	<key>GIDServerClientID</key>
@@ -51,6 +53,8 @@
 	</array>
 	<key>NAVER_CLIENT_ID</key>
 	<string>$(NAVER_CLIENT_ID)</string>
+	<key>NAVER_CLIENT_SECRET</key>
+	<string>$(NAVER_CLIENT_SECRET)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

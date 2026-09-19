@@ -10,7 +10,6 @@ xcuserdata/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 Configuration/Config.local.xcconfig
-App/Generated/
 Packages/*/.swiftpm/
 node_modules/
 **/fastlane/README.md
@@ -20,3 +19,5 @@ node_modules/
 Packages/Typie/Sources/GraphQL/*
 !Packages/Typie/Sources/GraphQL/SchemaConfiguration.swift
 !Packages/Typie/Sources/GraphQL/CustomScalars/
+Packages/Typie/Sources/GraphQLMocks/*
+!Packages/Typie/Sources/GraphQLMocks/GraphQLMocks.swift

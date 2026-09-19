@@ -136,7 +136,7 @@ public enum TTypography {
     }
 
     public func uiFont(atSize size: CGFloat) -> UIFont {
-      UIFont(name: fontName, size: size) ?? .systemFont(ofSize: size)
+      UIFont(name: fontName, size: size)!
     }
 
     public func uiFont(for traits: UITraitCollection) -> UIFont {

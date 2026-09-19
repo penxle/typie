@@ -1,4 +1,4 @@
-#include? "Config.local.xcconfig"
+#include "Config.local.xcconfig"
 
 TEAM_ID = 4V96GK9874
 

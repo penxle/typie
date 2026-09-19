@@ -62,7 +62,7 @@ public final class TToastCenter {
   }
 }
 
-public struct TToastView: View {
+public struct TToastOverlay: View {
   @Environment(\.theme) private var theme
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private var colors: TColors { theme.colors }

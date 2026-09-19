@@ -1,6 +1,0 @@
-query ServerProbe_Query {
-  randomName
-  me {
-    id
-  }
-}
