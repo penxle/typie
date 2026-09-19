@@ -520,13 +520,13 @@ fun DocumentScreen(entityId: String) {
 
       DocumentActionRow(
         icon = Lucide.Blend,
-        label = "공유 및 게시",
+        label = "공유 및 발행",
         supporting = documentVisibilityLabel(entity.visibility),
         onClick = shareDocument,
       )
       DocumentActionRow(
         icon = Lucide.Globe,
-        label = "게시 페이지에서 열기",
+        label = "공개 페이지에서 열기",
         trailingIcon = Lucide.ExternalLink,
         onClick = openPublicPage,
       )

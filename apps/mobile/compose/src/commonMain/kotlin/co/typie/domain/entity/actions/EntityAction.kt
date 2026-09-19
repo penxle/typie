@@ -57,11 +57,11 @@ internal fun entityItemActionSections(): List<EntityActionSection> {
         listOf(
           EntityActionMenuItem(
             icon = Lucide.Globe,
-            label = "게시 페이지에서 열기",
+            label = "공개 페이지에서 열기",
             trailingIcon = Lucide.ExternalLink,
             action = EntityAction.OpenExternal,
           ),
-          EntityActionMenuItem(icon = Lucide.Blend, label = "공유 및 게시", action = EntityAction.Share),
+          EntityActionMenuItem(icon = Lucide.Blend, label = "공유 및 발행", action = EntityAction.Share),
         )
     ),
     EntityActionSection(

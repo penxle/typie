@@ -488,7 +488,7 @@
   <HorizontalDivider color="secondary" />
 {/if}
 
-<MenuItem external href={entity.url} icon={GlobeIcon} type="link">조회 페이지에서 열기</MenuItem>
+<MenuItem external href={entity.url} icon={GlobeIcon} type="link">공개 페이지에서 열기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 
@@ -758,7 +758,7 @@
     {#if entity.visibility === EntityVisibility.PUBLIC}
       <span class={css({ color: 'success.default' })}>시리즈로 발행된 폴더</span>
     {:else if entity.visibility === EntityVisibility.UNLISTED}
-      <span class={css({ color: 'accent.default' })}>링크 조회 가능 폴더</span>
+      <span class={css({ color: 'accent.default' })}>링크 공개 폴더</span>
     {:else}
       <span>비공개 폴더</span>
     {/if}

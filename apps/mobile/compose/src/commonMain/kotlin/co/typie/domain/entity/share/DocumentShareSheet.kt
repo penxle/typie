@@ -566,7 +566,7 @@ internal fun DocumentShareSheet(
     }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
-      ShareSection(title = "문서 조회 권한") {
+      ShareSection(title = "공개 설정") {
         ShareOptionRow(
           icon = Lucide.Blend,
           label = "공개 범위",
@@ -579,7 +579,7 @@ internal fun DocumentShareSheet(
                     SelectFieldItem(
                       value = EntityVisibility.PUBLIC,
                       label = "공개",
-                      description = "누구나 볼 수 있고 게시 페이지에 노출돼요.",
+                      description = "누구나 볼 수 있고 스페이스에 노출돼요.",
                       icon = Lucide.Globe,
                     ),
                     SelectFieldItem(
