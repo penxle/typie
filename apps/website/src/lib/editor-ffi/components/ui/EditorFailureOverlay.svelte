@@ -5,6 +5,8 @@
   import { Grain } from '@typie/ui/effects';
   import { fade, scale } from 'svelte/transition';
   import Logo from '$assets/logos/logo.svg?component';
+  import { reloadPage } from '$lib/navigation';
+  import { wasm } from '$lib/wasm-ffi.svelte';
 
   type Rectangle = {
     top: number;
@@ -145,8 +147,12 @@
         >
           <Logo class={css({ width: '24px', height: '24px' })} />
           <h2 id={titleId} class={css({ fontSize: '20px', fontWeight: 'bold' })}>앗! 문제가 발생했어요</h2>
-          <p id={messageId} class={css({ fontSize: '14px', color: 'text.muted' })}>잠시 후 다시 시도해주세요.</p>
-          <Button onclick={onAction} size="md" bind:element={actionButton}>{actionLabel}</Button>
+          <p id={messageId} class={css({ fontSize: '14px', color: 'text.muted' })}>
+            {wasm.panicked ? '페이지를 새로고침한 뒤 다시 시도해주세요.' : '잠시 후 다시 시도해주세요.'}
+          </p>
+          <Button onclick={wasm.panicked ? () => void reloadPage() : onAction} size="md" bind:element={actionButton}>
+            {wasm.panicked ? '페이지 새로고침' : actionLabel}
+          </Button>
         </div>
       </div>
     </div>

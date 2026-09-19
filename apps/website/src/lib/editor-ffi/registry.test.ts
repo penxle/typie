@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { destroyAll, fanOutResourceUpdate, register, snapshot, unregister } from './registry';
+import { destroyAll, failAll, fanOutResourceUpdate, register, snapshot, unregister } from './registry';
 import type { ResourceUpdate } from '@typie/editor-ffi/browser';
 import type { Editor } from './editor.svelte';
 
@@ -9,6 +9,26 @@ afterEach(() => {
 });
 
 describe('editor registry resource fan-out', () => {
+  it('fails every live editor even when one failure cleanup throws', () => {
+    const panic = new WebAssembly.RuntimeError('unreachable');
+    const first = { fail: vi.fn() } as unknown as Editor;
+    const second = { fail: vi.fn() } as unknown as Editor;
+    vi.mocked(first.fail).mockImplementation(() => {
+      unregister(first);
+      throw new Error('cleanup failed');
+    });
+    vi.mocked(second.fail).mockImplementation(() => unregister(second));
+    vi.spyOn(console, 'error').mockImplementation(() => false);
+    register(first);
+    register(second);
+
+    failAll(panic);
+
+    expect(first.fail).toHaveBeenCalledWith(panic);
+    expect(second.fail).toHaveBeenCalledWith(panic);
+    expect(snapshot()).toEqual([]);
+  });
+
   it('isolates one Host admission failure and releases the shared update once', () => {
     const error = new Error('admission failed');
     const first = {

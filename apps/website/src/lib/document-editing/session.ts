@@ -39,14 +39,15 @@ export class DocumentEditingSession {
   }): DocumentEditingSession {
     let seq = snapshot.seq;
     const refetch = async () => {
+      if (session.disposed || editor.terminal) return;
       const result = await connection.pull(documentId, seq || null);
-      if (session.disposed) return;
+      if (session.disposed || editor.terminal) return;
       if (result.needsReload) {
         onReload();
         return;
       }
       await Promise.all(result.changesets.filter((bytes) => bytes.length > 0).map((bytes) => editor.receiveRemoteChangeset(bytes)));
-      if (session.disposed) return;
+      if (session.disposed || editor.terminal) return;
       if (result.seq) seq = result.seq;
       pusher.setConfirmedHeads(result.heads);
       pusher.setDurableHeads(result.durableHeads);
@@ -71,7 +72,7 @@ export class DocumentEditingSession {
     });
     const session = new DocumentEditingSession(documentId, paneId, title, editor, pusher, entity);
     session.#pipeline = new RemoteChangesetPipeline(editor, (event) => {
-      if (session.disposed) return;
+      if (session.disposed || editor.terminal) return;
       if (event.seq) seq = event.seq;
       if (event.bundles.length === 0 && event.seq) return;
       pusher.setConfirmedHeads(event.heads);
@@ -141,6 +142,10 @@ export class DocumentEditingSession {
     let observedRevision = editor.documentRevision;
     this.#unsubscribe = [
       editor.localEdits.onChange(() => {
+        if (editor.terminal) {
+          this.dispose();
+          return;
+        }
         if (editor.documentRevision !== observedRevision) {
           observedRevision = editor.documentRevision;
           pusher.schedule();
@@ -159,7 +164,7 @@ export class DocumentEditingSession {
   }
 
   applyRemoteChangesets(event: RemoteChangesetEvent): Promise<void> {
-    if (this.#disposed) return Promise.resolve();
+    if (this.#disposed || this.editor.terminal) return Promise.resolve();
     if (!this.#pipeline) throw new Error('Document sync is not initialized');
     return this.#pipeline.apply(event);
   }
@@ -248,7 +253,7 @@ export class DocumentEditingSession {
 
   beginStop(preparation: DocumentPreparation): () => void {
     if (this.#disposed) throw new Error('Document editing session is disposed');
-    if (this.#preparations.size === 0) {
+    if (this.#preparations.size === 0 && !this.editor.terminal) {
       this.#finalizeError = undefined;
       try {
         this.editor.finalizeInput();
@@ -273,6 +278,7 @@ export class DocumentEditingSession {
 
   async checkpoint(requireServer = false): Promise<void> {
     if (this.#disposed) throw new Error('Document editing session is disposed');
+    if (this.editor.terminal) throw new Error('Document editor has failed');
     if (this.#finalizeError !== undefined) throw this.#finalizeError;
     this.editor.settlePendingEdits();
     if (requireServer) await this.pusher.pushNow();

@@ -8,11 +8,14 @@ function fixture(id = 'document') {
   let protectedChanges = false;
   let synced = false;
   let pendingInput = false;
+  let terminal = false;
   let stops = 0;
   const changes = new Set<() => void>();
   const protectedListeners = new Set<() => void>();
   const editor: DocumentEditingSession['editor'] = {
-    terminal: false,
+    get terminal() {
+      return terminal;
+    },
     get documentRevision() {
       return revision;
     },
@@ -78,6 +81,10 @@ function fixture(id = 'document') {
       pendingInput = pending;
       for (const notify of changes) notify();
     },
+    fail: () => {
+      terminal = true;
+      for (const notify of changes) notify();
+    },
     protect: () => {
       protectedChanges = true;
       for (const notify of protectedListeners) notify();
@@ -102,6 +109,27 @@ describe('document editing preparation', () => {
   });
   afterEach(() => unregisterNavigation());
   afterEach(() => vi.useRealTimers());
+
+  it('continues protecting a healthy editor when another editor has failed', async () => {
+    const failed = fixture('failed');
+    const healthy = fixture('healthy');
+    const off = [documentEditing.register(failed.session), documentEditing.register(healthy.session)];
+    const commit = vi.fn(() => true);
+    try {
+      failed.fail();
+      expect(documentEditing.sessions).toEqual([healthy.session]);
+      expect(documentEditing.hasUnprotectedChanges()).toBe(true);
+      const leaving = runNavigation({ reason: 'reload' }, commit);
+      await vi.waitFor(() => expect(documentEditing.operations[0]?.phase).toBe('blocked'));
+      expect(documentEditing.operations[0]?.unprotectedSessions).toEqual([healthy.session]);
+      expect(commit).not.toHaveBeenCalled();
+      healthy.protect();
+      expect(await leaving).toBe(true);
+      expect(commit).toHaveBeenCalledOnce();
+    } finally {
+      for (const dispose of off) dispose();
+    }
+  });
 
   it('shares the active confirmation status with the header through retry and cancellation', async () => {
     const doc = fixture();

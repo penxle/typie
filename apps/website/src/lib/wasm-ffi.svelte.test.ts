@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@typie/editor-ffi/browser', () => ({ createInstance: mocks.createInstance }));
 vi.mock('@typie/editor-ffi/browser/icu.zst?url', () => ({ default: '/editor-icu.zst' }));
 vi.mock('@typie/editor-ffi/browser/wasm?url', () => ({ default: '/editor.wasm' }));
-vi.mock('$lib/editor-ffi/registry', () => ({ destroyAll: mocks.destroyAll }));
+vi.mock('$lib/editor-ffi/registry', () => ({ destroyAll: mocks.destroyAll, failAll: vi.fn() }));
 vi.mock('$lib/wasm-hmr', () => ({ registerWasmHmrCleanup: mocks.registerWasmHmrCleanup }));
 
 const editorModule = () => ({ EditorHost: { create: vi.fn(() => mocks.host) } });
