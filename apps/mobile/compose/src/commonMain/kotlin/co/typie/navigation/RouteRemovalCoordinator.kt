@@ -28,7 +28,7 @@ internal data class PreparedRemovalSegment(val destination: Route, val blockedRo
 internal class RouteRemovalCoordinator {
   private data class RegisteredInterceptor(val interceptor: RouteRemovalInterceptor)
 
-  private data class PreparedRoute(val route: Route, val registration: RegisteredInterceptor)
+  private data class PreparedRoute(val route: Route, val registration: RegisteredInterceptor?)
 
   private val interceptors = mutableMapOf<Route, RegisteredInterceptor>()
   private val approvedRoutes = mutableListOf<PreparedRoute>()
@@ -70,7 +70,7 @@ internal class RouteRemovalCoordinator {
 
     try {
       routesToRemove.forEach { route ->
-        val registration = interceptors[route] ?: return@forEach
+        val registration = interceptors[route]
         val approved = approvedRoutes.firstOrNull { it.route == route }
         if (approved != null) {
           if (approved.registration === registration) return@forEach
@@ -79,6 +79,11 @@ internal class RouteRemovalCoordinator {
         }
 
         val preparedRoute = PreparedRoute(route, registration)
+        if (registration == null) {
+          // Loading routes can register an editor before the exit animation finishes.
+          preparedRoutes += preparedRoute
+          return@forEach
+        }
         preparingRoute = preparedRoute
         val preparation =
           try {
@@ -127,7 +132,7 @@ internal class RouteRemovalCoordinator {
       rollbackRoutes(listOf(blocked))?.let { throw it }
       return null
     }
-    val decision = blocked.registration.interceptor.resolveDecision()
+    val decision = checkNotNull(blocked.registration).interceptor.resolveDecision()
 
     return when (decision) {
       RouteRemovalDecision.CancelRemoval -> {
@@ -169,7 +174,7 @@ internal class RouteRemovalCoordinator {
       var firstFailure: Throwable? = null
       routes.forEach { prepared ->
         try {
-          prepared.registration.interceptor.rollback()
+          prepared.registration?.interceptor?.rollback()
         } catch (throwable: Throwable) {
           val previousFailure = firstFailure
           if (previousFailure == null) {

@@ -392,6 +392,10 @@ class SyncEngine(
   internal suspend fun awaitProtectionAfter(observedGeneration: Long): Boolean =
     !protectionStateFlow.first { it.stopped || it.generation > observedGeneration }.stopped
 
+  internal suspend fun awaitStopped() {
+    protectionStateFlow.first { it.stopped }
+  }
+
   suspend fun checkpointCurrentFrontier(): Result<Unit> =
     try {
       checkpointCurrentFrontierUnchecked()

@@ -3,8 +3,11 @@ package co.typie.editor.sync
 import co.typie.editor.DocumentEditingSession
 import co.typie.editor.Editor
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.TestScope
 
 internal fun enc(vararg ids: Int): ByteArray = ByteArray(ids.size) { ids[it].toByte() }
 
@@ -18,6 +21,9 @@ internal fun createTestDocumentEditingSession(
   store: DeltaStore = FakeDeltaStore(),
   pushFn: suspend (ByteArray) -> PushResult = TestSyncTransport::push,
 ): DocumentEditingSession {
+  val parentScope = (scope as? TestScope)?.backgroundScope ?: scope
+  val syncScope =
+    CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
   val engine =
     SyncEngine(
       editor = syncEditor,
@@ -26,7 +32,7 @@ internal fun createTestDocumentEditingSession(
       initialDurableHeads = enc(),
       store = store,
       pushFn = pushFn,
-      scope = scope,
+      scope = syncScope,
       now = { 0L },
     )
   val pipeline =
@@ -35,7 +41,7 @@ internal fun createTestDocumentEditingSession(
       headsSink = engine,
       transport = TestSyncTransport,
       initialSeq = "",
-      scope = scope,
+      scope = syncScope,
       onNeedsReload = {},
     )
   return DocumentEditingSession(
@@ -43,7 +49,7 @@ internal fun createTestDocumentEditingSession(
     editor = editor,
     engine = engine,
     pipeline = pipeline,
-    scope = scope,
+    scope = syncScope,
   )
 }
 

@@ -46,19 +46,13 @@ import co.typie.editor.preview.EditorPreview
 import co.typie.editor.preview.EditorPreviewSource
 import co.typie.editor.runProtectedDocumentReload
 import co.typie.editor.runtime.EditorRuntime
-import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
-import co.typie.editor.sync.RemoteChangesetPipeline
-import co.typie.editor.sync.SyncEngine
-import co.typie.editor.sync.asSyncEditor
 import co.typie.editor.sync.concatChangesets
-import co.typie.editor.sync.isPermanentSyncError
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.syncAppScope
 import co.typie.editor.sync.ws.AttachEvent
 import co.typie.editor.sync.ws.DocumentSyncBaseline
 import co.typie.editor.sync.ws.SyncWs
-import co.typie.editor.sync.ws.WsSyncTransport
 import co.typie.editor.sync.ws.replacementSnapshotInFlight
 import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
@@ -92,17 +86,11 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalAtomicApi::class)
@@ -201,24 +189,25 @@ fun DocumentBodySettingsScreen(entityId: String) {
       return true
     }
 
-    fun launchReloadPolicy(
-      request: DocumentBodySettingsReloadRequest
-    ): CompletableDeferred<Boolean> {
-      val acquired = CompletableDeferred<Boolean>()
+    fun launchReloadPolicy(request: DocumentBodySettingsReloadRequest) {
       if (
-        routeLeaveActive ||
-          reloadRequest !== request ||
+        reloadRequest !== request ||
           settingsRuntime.session !== request.session ||
           load !== request.load ||
           liveLoad !== request.load ||
           request.policyJob != null
       ) {
-        acquired.complete(false)
-        return acquired
+        return
       }
 
       val job =
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
+          var reloadToastId: Long? = null
+          fun dismissReloadToast() {
+            val id = reloadToastId ?: return
+            reloadToastId = null
+            if (toast.state?.id == id) toast.dismiss()
+          }
           try {
             when (
               runProtectedDocumentReload(
@@ -231,12 +220,12 @@ fun DocumentBodySettingsScreen(entityId: String) {
                   }
                   settingsRuntime.deactivateScene()
                 },
-                onStopAcquired = { acquired.complete(true) },
+                canPresent = { !routeLeaveActive },
                 showDelayedFeedback = {
                   toast.show(ToastType.Loading, "저장 중…")
-                  savingToastId = toast.state?.id
+                  reloadToastId = toast.state?.id
                 },
-                hideDelayedFeedback = { dismissSavingToast() },
+                hideDelayedFeedback = { dismissReloadToast() },
                 resolveFailure = { saveState ->
                   val result = dialog.confirmDocumentSave(saveState, reload = true)
                   when {
@@ -263,11 +252,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
           }
         }
       request.policyJob = job
-      job.invokeOnCompletion {
-        acquired.complete(false)
-        if (request.policyJob === job) request.policyJob = null
-      }
-      return acquired
+      job.invokeOnCompletion { if (request.policyJob === job) request.policyJob = null }
     }
 
     suspend fun requestReload(
@@ -294,7 +279,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
             )
             .also { reloadRequest = it }
         }
-      if (!routeLeaveActive && request.policyJob == null) {
+      if (request.policyJob == null) {
         launchReloadPolicy(request)
       }
       request.completion.await()
@@ -378,8 +363,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
       var readyEditor: Editor? = null
       var session: DocumentEditingSession? = null
       var attached = false
-      var registered = false
-      val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
       try {
         val createdEditor =
@@ -406,7 +389,6 @@ fun DocumentBodySettingsScreen(entityId: String) {
         if (bodyStyle == null) bodyStyle = nextInitial.style
         if (layout == null) layout = nextInitial.layout
 
-        lateinit var createdSession: DocumentEditingSession
         readyLoad.activate(
           apply = { event ->
             if (!createdEditor.applyRemoteChangesets(event.bundles)) {
@@ -415,58 +397,22 @@ fun DocumentBodySettingsScreen(entityId: String) {
             }
           },
           startLive = { baseline ->
-            suspend fun awaitStreamReloadDecision() {
-              requestReload(createdSession, readyLoad, snapshotInFlight = true)
-            }
-            suspend fun awaitPullReloadDecision() {
-              requestReload(createdSession, readyLoad, snapshotInFlight = false)
-            }
-
-            val transport =
-              WsSyncTransport(
-                channel = channel,
-                connection = SyncWs.connection,
-                documentId = document.id,
-                onReload = { awaitStreamReloadDecision() },
-                scope = engineScope,
-              )
-            val engine =
-              SyncEngine(
-                editor = createdEditor.asSyncEditor(),
-                documentId = document.id,
-                initialServerHeads = baseline.heads,
-                initialDurableHeads = baseline.durableHeads,
-                store = ChangesetDeltaStore,
-                pushFn = { transport.push(it) },
-                scope = engineScope,
-                isPermanent = ::isPermanentSyncError,
-                now = { Clock.System.now().toEpochMilliseconds() },
-              )
-            val pipeline =
-              RemoteChangesetPipeline(
-                editor = createdEditor.asSyncEditor(),
-                headsSink = engine,
-                transport = transport,
-                initialSeq = baseline.seq,
-                scope = engineScope,
-                onNeedsReload = { awaitPullReloadDecision() },
-              )
-            createdSession =
-              DocumentEditingSession(
+            val createdSession =
+              DocumentEditingSession.create(
                 documentId = document.id,
                 editor = createdEditor,
-                engine = engine,
-                pipeline = pipeline,
-                scope = engineScope,
+                baseline = baseline,
+                channel = channel,
+                onReload = { currentSession, snapshotInFlight ->
+                  requestReload(currentSession, readyLoad, snapshotInFlight)
+                },
               )
             session = createdSession
             settingsRuntime.attach(createdSession)
             check(settingsRuntime.session === createdSession)
             attached = true
-            createdSession.start()
-            ActiveDocumentEditingSessions.register(createdSession)
-            registered = true
             liveLoad = readyLoad
+            createdSession.start()
           },
         )
 
@@ -486,11 +432,9 @@ fun DocumentBodySettingsScreen(entityId: String) {
         if (closingSession != null) {
           settingsRuntime.clear(closingSession)
           closingSession.stop()
-          if (registered) ActiveDocumentEditingSessions.unregister(closingSession)
         } else {
           readyEditor?.dispose()
         }
-        engineScope.cancel()
         if (attached) syncAppScope.launch { orphanSweeper.sweep() }
       }
     }
@@ -520,37 +464,7 @@ fun DocumentBodySettingsScreen(entityId: String) {
           restoreInput = {},
           beginStop = activeSession::beginStop,
           awaitProtection = activeSession::awaitProtectedCheckpoint,
-          onPreparationStarted = {
-            routeLeaveActive = true
-            try {
-              val request = reloadRequest?.takeIf {
-                it.session === activeSession && it.load === load
-              }
-              request?.policyJob?.cancelAndJoin()
-            } catch (throwable: Throwable) {
-              routeLeaveActive = false
-              throw throwable
-            }
-          },
-          resumeReloadBeforeRollback = {
-            routeLeaveActive = false
-            val request = reloadRequest?.takeIf {
-              it.session === activeSession &&
-                settingsRuntime.session === activeSession &&
-                it.load === load &&
-                liveLoad === it.load
-            }
-            if (request == null) {
-              false
-            } else {
-              val stopAcquired = launchReloadPolicy(request).await()
-              val reloadOwnsStop =
-                stopAcquired &&
-                  (request.policyJob?.isActive == true || settingsRuntime.session !== activeSession)
-              if (!reloadOwnsStop) finishReloadRequest(request)
-              reloadOwnsStop
-            }
-          },
+          onPreparationChanged = { routeLeaveActive = it },
           showDelayedFeedback = {
             toast.show(ToastType.Loading, "저장 중…")
             savingToastId = toast.state?.id
