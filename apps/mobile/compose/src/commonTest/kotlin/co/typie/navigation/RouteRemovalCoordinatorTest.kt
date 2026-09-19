@@ -153,6 +153,34 @@ class RouteRemovalCoordinatorTest {
   }
 
   @Test
+  fun interceptorRegisteredAfterPreparationRequiresFreshPreparation() = runTest {
+    val coordinator = RouteRemovalCoordinator()
+    val route = Route.Editor("loading")
+    coordinator.prepareSegment(listOf(route), Route.Home)
+    val editor = RecordingRemovalInterceptor(RouteRemovalPreparation.NeedsDecision)
+
+    coordinator.register(route, editor)
+
+    assertEquals(false, coordinator.activeSegmentIsCurrent())
+    coordinator.rollbackActiveSegment()
+    val segment = coordinator.prepareSegment(listOf(route), Route.Home)
+    assertEquals(route, segment.blockedRoute)
+  }
+
+  @Test
+  fun registrationOutsideTheRemovalDoesNotInvalidateUnprotectedRoutes() = runTest {
+    val coordinator = RouteRemovalCoordinator()
+    coordinator.prepareSegment(listOf(Route.Document("leaving")), Route.Home)
+
+    coordinator.register(
+      Route.Editor("staying"),
+      RecordingRemovalInterceptor(RouteRemovalPreparation.NeedsDecision),
+    )
+
+    assertTrue(coordinator.activeSegmentIsCurrent())
+  }
+
+  @Test
   fun replacedBlockedInterceptorRestartsPreparationWithoutPromptingStaleHandler() = runTest {
     val coordinator = RouteRemovalCoordinator()
     val editorRoute = Route.Editor("editor")

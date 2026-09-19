@@ -5,6 +5,7 @@ import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
+import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.FakeDeltaStore
 import co.typie.editor.sync.FakeSyncEditor
 import co.typie.editor.sync.PullResult
@@ -26,7 +27,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -70,7 +73,7 @@ class DocumentEditingSessionTest {
     pushFn: suspend (ByteArray) -> PushResult = { PushResult(heads = enc(), durableHeads = enc()) },
   ): Harness {
     val transport = FakeTransport(pushFn)
-    val scope = CoroutineScope(coroutineContext)
+    val scope = CoroutineScope(coroutineContext + SupervisorJob())
     val engine =
       SyncEngine(
         editor = syncEditor,
@@ -214,6 +217,38 @@ class DocumentEditingSessionTest {
     session.stop()
 
     assertFailsWith<IllegalStateException> { session.start() }
+  }
+
+  @Test
+  fun sessionOwnsActiveRegistrationAndCancelsOutstandingSyncOnStop() = runTest {
+    val pushStarted = CompletableDeferred<Unit>()
+    var pushCancelled = false
+    val (_, session) =
+      harness(
+        syncEditor = FakeSyncEditor(listOf(1)),
+        pushFn = {
+          pushStarted.complete(Unit)
+          try {
+            awaitCancellation()
+          } finally {
+            pushCancelled = true
+          }
+        },
+      )
+    try {
+      session.start()
+      pushStarted.await()
+      assertTrue("doc" in ActiveDocumentEditingSessions.openDocumentIds())
+
+      session.stop()
+      runCurrent()
+
+      assertFalse("doc" in ActiveDocumentEditingSessions.openDocumentIds())
+      assertTrue(pushCancelled)
+    } finally {
+      session.stop()
+      ActiveDocumentEditingSessions.unregister(session)
+    }
   }
 
   @Test

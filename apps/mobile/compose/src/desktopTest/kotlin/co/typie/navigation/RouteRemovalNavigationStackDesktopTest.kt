@@ -155,6 +155,71 @@ class RouteRemovalNavigationStackDesktopTest {
   }
 
   @Test
+  fun editorLoadedDuringDelayedPrefixRemovalCanCancelLeaving() = runComposeUiTest {
+    val navigator = Navigator(Route.Home)
+    val lowerRoute = Route.Folder("lower")
+    val loadingRoute = Route.Editor("loading")
+    val requestRemoval = CompletableDeferred<Unit>()
+    val prefixAnimationStarted = CompletableDeferred<Unit>()
+    var removalResult: NavigationResult? = null
+
+    navigator.routeRemovals.register(
+      lowerRoute,
+      object : RouteRemovalInterceptor {
+        override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation {
+          prefixAnimationStarted.complete(Unit)
+          checkNotNull(onDelayed).invoke()
+          return RouteRemovalPreparation.Ready
+        }
+
+        override suspend fun resolveDecision(): RouteRemovalDecision = error("Ready route")
+
+        override suspend fun rollback() = Unit
+      },
+    )
+
+    setContent {
+      NavigationStackTestHost(
+        navigator = navigator,
+        topBarState = remember { TopBarState() },
+        modifier = Modifier.size(width = 320.dp, height = 640.dp),
+      ) {
+        Box(Modifier.fillMaxSize())
+      }
+      LaunchedEffect(Unit) {
+        navigator.navigate(lowerRoute)
+        navigator.navigate(loadingRoute)
+        requestRemoval.await()
+        removalResult = navigator.popTo(Route.Home)
+      }
+    }
+    waitUntil { navigator.current == loadingRoute && !navigator.isTransitioning }
+
+    mainClock.autoAdvance = false
+    requestRemoval.complete(Unit)
+    waitUntil { prefixAnimationStarted.isCompleted }
+    runOnIdle {
+      navigator.routeRemovals.register(
+        loadingRoute,
+        object : RouteRemovalInterceptor {
+          override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation =
+            RouteRemovalPreparation.NeedsDecision
+
+          override suspend fun resolveDecision(): RouteRemovalDecision =
+            RouteRemovalDecision.CancelRemoval
+
+          override suspend fun rollback() = Unit
+        },
+      )
+    }
+    mainClock.autoAdvance = true
+    waitUntil { removalResult != null }
+
+    assertEquals(NavigationResult.StoppedAt(loadingRoute), removalResult)
+    assertEquals(listOf(Route.Home, lowerRoute, loadingRoute), navigator.stack)
+  }
+
+  @Test
   fun backSwipeUsesRouteRemovalInterceptor() = runComposeUiTest {
     val navigator = Navigator(Route.Home)
     val guardedRoute = Route.Folder("guarded")

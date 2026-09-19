@@ -106,13 +106,8 @@ import co.typie.editor.scroll.resolveForState
 import co.typie.editor.scroll.resolveScrollPastEndBottomPadding
 import co.typie.editor.scroll.updateWithBringIntoView
 import co.typie.editor.surface.EditorSurfaceHost
-import co.typie.editor.sync.ActiveDocumentEditingSessions
 import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.editor.sync.DocumentEditorLoad
-import co.typie.editor.sync.RemoteChangesetPipeline
-import co.typie.editor.sync.SyncEngine
-import co.typie.editor.sync.asSyncEditor
-import co.typie.editor.sync.isPermanentSyncError
 import co.typie.editor.sync.isSubscriptionRequiredSyncError
 import co.typie.editor.sync.orphanSweeper
 import co.typie.editor.sync.syncAppScope
@@ -121,7 +116,6 @@ import co.typie.editor.sync.ws.DocumentGraphLoader
 import co.typie.editor.sync.ws.DocumentGraphLoaderEvent
 import co.typie.editor.sync.ws.SyncWs
 import co.typie.editor.sync.ws.SyncWsException
-import co.typie.editor.sync.ws.WsSyncTransport
 import co.typie.editor.sync.ws.replacementSnapshotInFlight
 import co.typie.editor.viewport.EditorViewportAnchorState
 import co.typie.editor.viewport.consumeEditorViewportTouchPan
@@ -231,17 +225,12 @@ import co.typie.ui.input.PointerInputModeState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.HazeState
-import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -701,21 +690,24 @@ fun EditorScreen(entityId: String) {
     return true
   }
 
-  fun launchReloadPolicy(request: EditorReloadRequest): CompletableDeferred<Boolean> {
-    val acquired = CompletableDeferred<Boolean>()
+  fun launchReloadPolicy(request: EditorReloadRequest) {
     if (
-      routeRemovalOwnsPriority ||
-        reloadRequest !== request ||
+      reloadRequest !== request ||
         runtime.session !== request.session ||
         editorLoadState !== request.load ||
         request.policyJob != null
     ) {
-      acquired.complete(false)
-      return acquired
+      return
     }
 
     val job =
       scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        var reloadToastId: Long? = null
+        fun dismissReloadToast() {
+          val id = reloadToastId ?: return
+          reloadToastId = null
+          if (toast.state?.id == id) toast.dismiss()
+        }
         try {
           val result =
             runProtectedDocumentReload(
@@ -728,12 +720,12 @@ fun EditorScreen(entityId: String) {
                 }
                 runtime.deactivateScene()
               },
-              onStopAcquired = { acquired.complete(true) },
+              canPresent = { !routeRemovalOwnsPriority },
               showDelayedFeedback = {
                 toast.show(ToastType.Loading, "저장 중…")
-                savingToastId = toast.state?.id
+                reloadToastId = toast.state?.id
               },
-              hideDelayedFeedback = { dismissSavingToast() },
+              hideDelayedFeedback = { dismissReloadToast() },
               resolveFailure = { saveState ->
                 val result = dialog.confirmDocumentSave(saveState, reload = true)
                 when {
@@ -766,11 +758,7 @@ fun EditorScreen(entityId: String) {
         }
       }
     request.policyJob = job
-    job.invokeOnCompletion {
-      acquired.complete(false)
-      if (request.policyJob === job) request.policyJob = null
-    }
-    return acquired
+    job.invokeOnCompletion { if (request.policyJob === job) request.policyJob = null }
   }
 
   suspend fun requestReload(
@@ -788,7 +776,7 @@ fun EditorScreen(entityId: String) {
         EditorReloadRequest(session = session, load = load, snapshotInFlight = snapshotInFlight)
           .also { reloadRequest = it }
       }
-    if (!routeRemovalOwnsPriority && request.policyJob == null) {
+    if (request.policyJob == null) {
       launchReloadPolicy(request)
     }
     request.completion.await()
@@ -816,6 +804,7 @@ fun EditorScreen(entityId: String) {
             restoreFocusAfterRollback = false
             if (
               shouldRestoreFocus &&
+                reloadRequest == null &&
                 nav.current == Route.Editor(entityId) &&
                 runtime.editor === editor
             ) {
@@ -827,33 +816,7 @@ fun EditorScreen(entityId: String) {
           beginStop = session::beginStop,
           awaitProtection = session::awaitProtectedCheckpoint,
           savePendingChanges = subPaneState::prepareForRouteRemoval,
-          onPreparationStarted = {
-            routeRemovalOwnsPriority = true
-            try {
-              val request = reloadRequest?.takeIf {
-                it.session === session && it.load === editorLoadState
-              }
-              request?.policyJob?.cancelAndJoin()
-            } catch (throwable: Throwable) {
-              routeRemovalOwnsPriority = false
-              throw throwable
-            }
-          },
-          resumeReloadBeforeRollback = {
-            routeRemovalOwnsPriority = false
-            val request = reloadRequest?.takeIf {
-              it.session === session && runtime.session === session && it.load === editorLoadState
-            }
-            if (request == null) {
-              false
-            } else {
-              val stopAcquired = launchReloadPolicy(request).await()
-              val reloadOwnsStop =
-                stopAcquired && (request.policyJob?.isActive == true || runtime.session !== session)
-              if (!reloadOwnsStop) finishReloadRequest(request)
-              reloadOwnsStop
-            }
-          },
+          onPreparationChanged = { routeRemovalOwnsPriority = it },
           showDelayedFeedback = {
             toast.show(ToastType.Loading, "저장 중…")
             savingToastId = toast.state?.id
@@ -989,7 +952,6 @@ fun EditorScreen(entityId: String) {
     if (editorLoadState !== readyLoad || readyLoad.isClosed) return@LaunchedEffect
     var effectiveBaseline = readyLoad.initialBaseline
     var session: DocumentEditingSession? = null
-    val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     try {
       while (true) {
@@ -1014,64 +976,27 @@ fun EditorScreen(entityId: String) {
         }
       }
 
-      lateinit var createdEngine: SyncEngine
-      lateinit var createdSession: DocumentEditingSession
-      val handleStreamReload: suspend () -> Unit = {
-        requestReload(createdSession, readyLoad, snapshotInFlight = true)
-      }
-      val handlePullReload: suspend () -> Unit = {
-        requestReload(createdSession, readyLoad, snapshotInFlight = false)
-      }
-      val transport =
-        WsSyncTransport(
-          channel = SyncWs.channel(currentDocumentId),
-          connection = SyncWs.connection,
-          documentId = currentDocumentId,
-          onReload = handleStreamReload,
-          scope = engineScope,
-        )
-      createdEngine =
-        SyncEngine(
-          editor = readyEditor.asSyncEditor(),
-          documentId = currentDocumentId,
-          initialServerHeads = effectiveBaseline.heads,
-          initialDurableHeads = effectiveBaseline.durableHeads,
-          store = ChangesetDeltaStore,
-          pushFn = { transport.push(it) },
-          scope = engineScope,
-          isPermanent = ::isPermanentSyncError,
-          canPush = { shouldAttemptPush(SubscriptionService.entitlement) },
-          onPermanentError = { error ->
-            // 클라 게이트를 뚫고 나간 push가 서버 subscription_required(permanent)를 받은 경우:
-            // 조용히 실패시키지 않고 엔타이틀먼트를 재조회한다(→ Expired 판명 시 에디터가 반응형으로 읽기 전용 전환).
-            if (isSubscriptionRequiredSyncError(error)) SubscriptionService.refresh()
-          },
-          now = { Clock.System.now().toEpochMilliseconds() },
-        )
-      val createdPipeline =
-        RemoteChangesetPipeline(
-          editor = readyEditor.asSyncEditor(),
-          headsSink = createdEngine,
-          transport = transport,
-          initialSeq = effectiveBaseline.seq,
-          scope = engineScope,
-          onNeedsReload = handlePullReload,
-        )
-      createdSession =
-        DocumentEditingSession(
+      val createdSession =
+        DocumentEditingSession.create(
           documentId = currentDocumentId,
           editor = readyEditor,
-          engine = createdEngine,
-          pipeline = createdPipeline,
-          scope = engineScope,
+          baseline = effectiveBaseline,
+          channel = SyncWs.channel(currentDocumentId),
+          onReload = { currentSession, snapshotInFlight ->
+            requestReload(currentSession, readyLoad, snapshotInFlight)
+          },
+          canPush = { shouldAttemptPush(SubscriptionService.entitlement) },
+          onPermanentError = { error ->
+            // A server-side subscription rejection refreshes the entitlement/read-only state.
+            if (isSubscriptionRequiredSyncError(error)) SubscriptionService.refresh()
+          },
         )
       session = createdSession
       runtime.attach(createdSession)
       if (runtime.session !== createdSession) return@LaunchedEffect
 
-      createdSession.start()
-      ActiveDocumentEditingSessions.register(createdSession)
       syncActiveLoadState = readyLoad
+      createdSession.start()
 
       awaitCancellation()
     } finally {
@@ -1085,9 +1010,7 @@ fun EditorScreen(entityId: String) {
       closingSession?.let {
         runtime.clear(it)
         it.stop()
-        ActiveDocumentEditingSessions.unregister(it)
       }
-      engineScope.cancel()
       if (closingSession != null) syncAppScope.launch { orphanSweeper.sweep() }
     }
   }

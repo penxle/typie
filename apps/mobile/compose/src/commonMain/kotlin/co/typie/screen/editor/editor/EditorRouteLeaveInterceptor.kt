@@ -21,8 +21,7 @@ internal class EditorRouteLeaveInterceptor(
   private val finalizeInput: () -> Unit,
   private val restoreInput: () -> Unit,
   private val beginStop: () -> DocumentEditingStop,
-  private val onPreparationStarted: suspend () -> Unit = {},
-  private val resumeReloadBeforeRollback: suspend () -> Boolean = { false },
+  private val onPreparationChanged: (Boolean) -> Unit = {},
   private val savePendingChanges: suspend () -> Boolean = { true },
   private val resolveDecision: suspend (State<DocumentSaveState>) -> RouteRemovalDecision,
   private val awaitProtection:
@@ -36,7 +35,6 @@ internal class EditorRouteLeaveInterceptor(
   private val hideDelayedFeedback: () -> Unit = {},
 ) : RouteRemovalInterceptor {
   private var stop: DocumentEditingStop? = null
-  private var reloadPaused = false
   private var delayedFeedbackVisible = false
 
   override suspend fun prepare(onDelayed: (suspend () -> Unit)?): RouteRemovalPreparation {
@@ -56,10 +54,7 @@ internal class EditorRouteLeaveInterceptor(
     stop = currentStop
 
     try {
-      withContext(NonCancellable) {
-        onPreparationStarted()
-        reloadPaused = true
-      }
+      onPreparationChanged(true)
       return if (awaitInitialProtection(currentStop, onDelayed)) {
         RouteRemovalPreparation.Ready
       } else {
@@ -67,10 +62,7 @@ internal class EditorRouteLeaveInterceptor(
       }
     } catch (throwable: Throwable) {
       if (stop === currentStop) stop = null
-      val shouldResumeReload = reloadPaused
-      reloadPaused = false
-      val failure =
-        withContext(NonCancellable) { releaseStop(currentStop, shouldResumeReload, throwable) }
+      val failure = cleanup(currentStop, throwable)
       throw failure ?: throwable
     }
   }
@@ -120,26 +112,7 @@ internal class EditorRouteLeaveInterceptor(
   override suspend fun rollback() {
     val currentStop = stop ?: return
     stop = null
-    val shouldResumeReload = reloadPaused
-    reloadPaused = false
-    releaseStop(currentStop, shouldResumeReload, initialFailure = null)?.let { throw it }
-  }
-
-  private suspend fun releaseStop(
-    currentStop: DocumentEditingStop,
-    shouldResumeReload: Boolean,
-    initialFailure: Throwable?,
-  ): Throwable? {
-    var reloadResumed = false
-    var failure = initialFailure
-    if (shouldResumeReload) {
-      try {
-        reloadResumed = resumeReloadBeforeRollback()
-      } catch (throwable: Throwable) {
-        failure = recordFailure(failure, throwable)
-      }
-    }
-    return cleanup(currentStop, restore = !reloadResumed, failure)
+    cleanup(currentStop, initialFailure = null)?.let { throw it }
   }
 
   private suspend fun awaitInitialProtection(
@@ -181,11 +154,7 @@ internal class EditorRouteLeaveInterceptor(
     hideDelayedFeedback()
   }
 
-  private fun cleanup(
-    currentStop: DocumentEditingStop,
-    restore: Boolean,
-    initialFailure: Throwable?,
-  ): Throwable? {
+  private fun cleanup(currentStop: DocumentEditingStop, initialFailure: Throwable?): Throwable? {
     var failure = initialFailure
     try {
       currentStop.cancel()
@@ -197,12 +166,15 @@ internal class EditorRouteLeaveInterceptor(
     } catch (throwable: Throwable) {
       failure = recordFailure(failure, throwable)
     }
-    if (restore) {
-      try {
-        restoreInput()
-      } catch (throwable: Throwable) {
-        failure = recordFailure(failure, throwable)
-      }
+    try {
+      onPreparationChanged(false)
+    } catch (throwable: Throwable) {
+      failure = recordFailure(failure, throwable)
+    }
+    try {
+      restoreInput()
+    } catch (throwable: Throwable) {
+      failure = recordFailure(failure, throwable)
     }
     return failure
   }

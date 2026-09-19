@@ -4,7 +4,6 @@ import co.typie.editor.sync.PullResult
 import co.typie.editor.sync.PushResult
 import co.typie.editor.sync.RemoteChangesetEvent
 import co.typie.editor.sync.SyncTransport
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -16,7 +15,6 @@ class WsSyncTransport(
   private val connection: SyncWsConnection,
   private val documentId: String,
   private val onReload: suspend () -> Unit,
-  private val scope: CoroutineScope,
 ) : SyncTransport {
   override suspend fun push(changesets: ByteArray): PushResult =
     connection.push(documentId, changesets)

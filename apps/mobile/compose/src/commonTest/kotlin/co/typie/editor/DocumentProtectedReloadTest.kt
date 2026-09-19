@@ -1,6 +1,8 @@
 package co.typie.editor
 
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import co.typie.editor.sync.FakeDeltaStore
 import co.typie.editor.sync.FakeSyncEditor
 import co.typie.editor.sync.PullResult
@@ -19,11 +21,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -59,7 +63,7 @@ class DocumentProtectedReloadTest {
     pushFn: suspend (ByteArray) -> PushResult = { PushResult(heads = enc(), durableHeads = enc()) },
   ): Harness {
     val syncEditor = FakeSyncEditor()
-    val scope = CoroutineScope(coroutineContext)
+    val scope = CoroutineScope(coroutineContext + SupervisorJob())
     val transport = FakeTransport(pushFn)
     val engine =
       SyncEngine(
@@ -126,6 +130,168 @@ class DocumentProtectedReloadTest {
 
     assertEquals(DocumentProtectedReloadResult.Replaced, result)
     assertEquals(0, decisions)
+  }
+
+  @Test
+  fun reloadRequestedDuringRouteLeaveKeepsItsStopUntilPresentationResumes() = runTest {
+    val (session) = harness()
+    val routeStop = session.beginStop()
+    val canPresent = mutableStateOf(false)
+    var replaced = false
+    val reload =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        runProtectedDocumentReload(
+          session = session,
+          finalizeInput = {},
+          canPresent = { canPresent.value },
+          resolveFailure = { error("Already protected") },
+          replaceIfCurrent = {
+            replaced = true
+            session.stop()
+            true
+          },
+        )
+      }
+    runCurrent()
+    assertFalse(replaced)
+    routeStop.cancel()
+    assertNull(session.submit { _, context -> async(context) {} })
+
+    Snapshot.withMutableSnapshot { canPresent.value = true }
+
+    assertEquals(DocumentProtectedReloadResult.Replaced, reload.await())
+  }
+
+  @Test
+  fun routePriorityReacquiredBeforeReplacementKeepsReloadWaiting() = runTest {
+    val (session) = harness()
+    val canPresent = mutableStateOf(false)
+    var routeStop: DocumentEditingStop? = session.beginStop()
+    var prepareRouteAfterObservation = false
+    var replaced = false
+    val reload =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        runProtectedDocumentReload(
+          session = session,
+          finalizeInput = {},
+          canPresent = {
+            val allowed = canPresent.value
+            if (allowed && prepareRouteAfterObservation) {
+              prepareRouteAfterObservation = false
+              // Reacquire priority after observation, before the reload continuation runs.
+              launch {
+                routeStop = session.beginStop()
+                Snapshot.withMutableSnapshot { canPresent.value = false }
+              }
+            }
+            allowed
+          },
+          resolveFailure = { error("Already protected") },
+          replaceIfCurrent = {
+            replaced = true
+            session.stop()
+            true
+          },
+        )
+      }
+    try {
+      runCurrent()
+      routeStop?.cancel()
+      routeStop = null
+      prepareRouteAfterObservation = true
+      Snapshot.withMutableSnapshot { canPresent.value = true }
+      runCurrent()
+
+      assertFalse(canPresent.value)
+      assertFalse(replaced)
+      assertFalse(reload.isCompleted)
+      routeStop?.cancel()
+      routeStop = null
+      assertNull(session.submit { _, context -> async(context) {} })
+
+      Snapshot.withMutableSnapshot { canPresent.value = true }
+      assertEquals(DocumentProtectedReloadResult.Replaced, reload.await())
+      assertTrue(replaced)
+    } finally {
+      routeStop?.cancel()
+      reload.cancelAndJoin()
+      session.stop()
+    }
+  }
+
+  @Test
+  fun stoppingSessionEndsReloadWhilePresentationIsSuspended() = runTest {
+    val (session) = harness()
+    val reload =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        runProtectedDocumentReload(
+          session = session,
+          finalizeInput = {},
+          canPresent = { false },
+          resolveFailure = { error("Already protected") },
+          replaceIfCurrent = { error("Stopped session must not replace") },
+        )
+      }
+    try {
+      runCurrent()
+      session.stop()
+      runCurrent()
+
+      assertTrue(reload.isCompleted)
+      assertEquals(DocumentProtectedReloadResult.SessionStopped, reload.await())
+    } finally {
+      reload.cancelAndJoin()
+    }
+  }
+
+  @Test
+  fun routePriorityHidesOnlyReloadPresentationAndRetainsBackgroundRecovery() = runTest {
+    val (session, engine, syncEditor) = harness(store = failingStore(), pushFn = ::failingPush)
+    syncEditor.known.add(1)
+    val canPresent = mutableStateOf(true)
+    val choice = CompletableDeferred<DocumentReloadFailureDecision>()
+    var visibleState: State<DocumentSaveState>? = null
+    var replaced = false
+    val reload =
+      async(start = CoroutineStart.UNDISPATCHED) {
+        runProtectedDocumentReload(
+          session = session,
+          finalizeInput = {},
+          canPresent = { canPresent.value },
+          resolveFailure = {
+            visibleState = it
+            try {
+              choice.await()
+            } finally {
+              visibleState = null
+            }
+          },
+          replaceIfCurrent = {
+            replaced = true
+            session.stop()
+            true
+          },
+        )
+      }
+    runCurrent()
+    assertNotNull(visibleState)
+
+    val routeStop = session.beginStop()
+    Snapshot.withMutableSnapshot { canPresent.value = false }
+    runCurrent()
+    assertNull(visibleState)
+    engine.setConfirmedHeads(enc(1))
+    runCurrent()
+    assertFalse(replaced)
+    routeStop.cancel()
+    assertNull(session.submit { _, context -> async(context) {} })
+
+    Snapshot.withMutableSnapshot { canPresent.value = true }
+    runCurrent()
+    assertEquals(DocumentSaveState.Protected, visibleState?.value)
+    assertFalse(replaced)
+    choice.complete(DocumentReloadFailureDecision.Continue)
+    assertEquals(DocumentProtectedReloadResult.Replaced, reload.await())
   }
 
   @Test
@@ -469,7 +635,7 @@ class DocumentProtectedReloadTest {
   }
 
   @Test
-  fun stopAcquisitionCallbackRunsBeforeThePolicySuspends() = runTest {
+  fun reloadFinalizesAndStopsInputBeforeThePolicySuspends() = runTest {
     val putStarted = CompletableDeferred<Unit>()
     val releasePut = CompletableDeferred<Unit>()
     val releasePush = CompletableDeferred<Unit>()
@@ -493,14 +659,14 @@ class DocumentProtectedReloadTest {
         runProtectedDocumentReload(
           session = session,
           finalizeInput = { events += "finalize" },
-          onStopAcquired = { events += "acquired" },
           resolveFailure = { awaitCancellation() },
           replaceIfCurrent = { false },
         )
       }
     putStarted.await()
 
-    assertEquals(listOf("finalize", "acquired"), events)
+    assertEquals(listOf("finalize"), events)
+    assertNull(session.submit { _, context -> async(context) {} })
     assertFalse(policy.isCompleted)
 
     policy.cancelAndJoin()

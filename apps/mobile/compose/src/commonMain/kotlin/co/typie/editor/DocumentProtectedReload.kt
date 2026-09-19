@@ -2,15 +2,20 @@ package co.typie.editor
 
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
@@ -37,7 +42,7 @@ private sealed interface FailureResolution {
 internal suspend fun runProtectedDocumentReload(
   session: DocumentEditingSession,
   finalizeInput: () -> Unit,
-  onStopAcquired: () -> Unit = {},
+  canPresent: () -> Boolean = { true },
   showDelayedFeedback: () -> Unit = {},
   hideDelayedFeedback: () -> Unit = {},
   resolveFailure: suspend (State<DocumentSaveState>) -> DocumentReloadFailureDecision,
@@ -48,9 +53,9 @@ internal suspend fun runProtectedDocumentReload(
   finalizeInput()
   val stop = session.beginStop()
   try {
-    onStopAcquired()
     val initialResult =
       withDelayedFeedback(
+        canPresent = canPresent,
         delayMillis = delayedFeedbackMillis,
         timeoutMillis = checkpointWatchdogMillis,
         show = showDelayedFeedback,
@@ -60,7 +65,8 @@ internal suspend fun runProtectedDocumentReload(
       }
 
     when (initialResult) {
-      EditingCheckpointResult.Protected -> return replaceExact(session, replaceIfCurrent)
+      EditingCheckpointResult.Protected ->
+        return replaceExact(session, canPresent, replaceIfCurrent)
       EditingCheckpointResult.SessionStopped -> return DocumentProtectedReloadResult.SessionStopped
       EditingCheckpointResult.StopCancelled -> return DocumentProtectedReloadResult.NotCurrent
       is EditingCheckpointResult.EditFailed,
@@ -71,12 +77,19 @@ internal suspend fun runProtectedDocumentReload(
     while (true) {
       when (
         val resolution =
-          awaitFailureResolution(session = session, stop = stop, resolveFailure = resolveFailure)
+          awaitFailureResolution(
+            session = session,
+            stop = stop,
+            resolveFailure = { state ->
+              withReloadPresentation(canPresent) { resolveFailure(state) }
+            },
+          )
       ) {
         is FailureResolution.Decision ->
           when (resolution.decision) {
             DocumentReloadFailureDecision.Discard,
-            DocumentReloadFailureDecision.Continue -> return replaceExact(session, replaceIfCurrent)
+            DocumentReloadFailureDecision.Continue ->
+              return replaceExact(session, canPresent, replaceIfCurrent)
             DocumentReloadFailureDecision.Retry -> {
               // Sync reload keeps admission closed until protection or explicit discard.
             }
@@ -86,6 +99,7 @@ internal suspend fun runProtectedDocumentReload(
 
       when (
         withDelayedFeedback(
+          canPresent = canPresent,
           delayMillis = delayedFeedbackMillis,
           timeoutMillis = checkpointWatchdogMillis,
           show = showDelayedFeedback,
@@ -112,7 +126,14 @@ internal suspend fun runProtectedDocumentReload(
   }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
+private suspend fun <T> withReloadPresentation(
+  canPresent: () -> Boolean,
+  block: suspend () -> T,
+): T = snapshotFlow(canPresent).transformLatest { allowed -> if (allowed) emit(block()) }.first()
+
 private suspend fun <T> withDelayedFeedback(
+  canPresent: () -> Boolean,
   delayMillis: Long,
   timeoutMillis: Long,
   show: () -> Unit,
@@ -121,8 +142,17 @@ private suspend fun <T> withDelayedFeedback(
 ): T? = coroutineScope {
   val feedback =
     launch(start = CoroutineStart.UNDISPATCHED) {
-      delay(delayMillis)
-      runReloadFeedback("show", show)
+      snapshotFlow(canPresent).collectLatest { allowed ->
+        if (allowed) {
+          delay(delayMillis)
+          try {
+            runReloadFeedback("show", show)
+            awaitCancellation()
+          } finally {
+            runReloadFeedback("hide", hide)
+          }
+        }
+      }
     }
   try {
     withTimeoutOrNull(timeoutMillis) { block() }
@@ -158,14 +188,16 @@ private suspend fun awaitFailureResolution(
     when (session.awaitProtectedCheckpoint(stop) { saveState.value = it }) {
       EditingCheckpointResult.Protected -> {
         saveState.value = DocumentSaveState.Protected
-        awaitCancellation()
+        session.awaitStopped()
+        FailureResolution.SessionStopped
       }
       EditingCheckpointResult.SessionStopped,
       EditingCheckpointResult.StopCancelled -> FailureResolution.SessionStopped
       is EditingCheckpointResult.EditFailed,
       is EditingCheckpointResult.ProtectionFailed -> {
         saveState.value = DocumentSaveState.Failed
-        awaitCancellation()
+        session.awaitStopped()
+        FailureResolution.SessionStopped
       }
     }
   }
@@ -187,12 +219,36 @@ private suspend fun awaitFailureResolution(
   }
 }
 
-private fun replaceExact(
+private suspend fun replaceExact(
   session: DocumentEditingSession,
+  canPresent: () -> Boolean,
   replaceIfCurrent: (DocumentEditingSession) -> Boolean,
-): DocumentProtectedReloadResult =
-  if (replaceIfCurrent(session)) {
-    DocumentProtectedReloadResult.Replaced
-  } else {
-    DocumentProtectedReloadResult.NotCurrent
+): DocumentProtectedReloadResult = coroutineScope {
+  val stopped = async { session.awaitStopped() }
+  try {
+    var result: DocumentProtectedReloadResult?
+    do {
+      val presentation = async { snapshotFlow(canPresent).first { it } }
+      try {
+        result = select {
+          stopped.onAwait { DocumentProtectedReloadResult.SessionStopped }
+          presentation.onAwait {
+            // Observation can precede this continuation. Recheck without suspending before
+            // replacement, and wait again if route removal has reclaimed priority.
+            when {
+              session.isStopped -> DocumentProtectedReloadResult.SessionStopped
+              !canPresent() -> null
+              replaceIfCurrent(session) -> DocumentProtectedReloadResult.Replaced
+              else -> DocumentProtectedReloadResult.NotCurrent
+            }
+          }
+        }
+      } finally {
+        presentation.cancel()
+      }
+    } while (result == null)
+    result
+  } finally {
+    stopped.cancel()
   }
+}
