@@ -423,7 +423,6 @@ fun NavigationStack(
 
   suspend fun animateRemovalTo(
     target: Route,
-    verifyPreparedSegment: Boolean = true,
     committedKeyboardHide: Deferred<Unit>? = null,
   ): Boolean {
     val requiresTransition = target != navigator.current
@@ -448,8 +447,7 @@ fun NavigationStack(
       }
     }
 
-    if (verifyPreparedSegment && !navigator.routeRemovals.activeSegmentIsCurrent()) {
-      navigator.routeRemovals.rollbackActiveSegment()
+    if (!navigator.routeRemovals.activeSegmentIsCurrent()) {
       settleAtCurrentRoute(restoreKeyboard = committedKeyboardHide == null)
       return false
     }
@@ -467,10 +465,14 @@ fun NavigationStack(
         navigator.stack.subList(targetIndex + 1, navigator.stack.size).asReversed()
       val segment =
         navigator.routeRemovals.prepareSegment(routesToRemove, target) { delayedRoute ->
-          animateRemovalTo(delayedRoute, verifyPreparedSegment = false)
-          navigator.routeRemovals.commitReadyPrefix()
+          if (animateRemovalTo(delayedRoute)) {
+            navigator.routeRemovals.commitReadyPrefix()
+          }
         }
-      if (!animateRemovalTo(segment.destination)) continue
+      if (!animateRemovalTo(segment.destination)) {
+        navigator.routeRemovals.rollbackActiveSegment()
+        continue
+      }
 
       if (segment.blockedRoute == null) {
         navigator.routeRemovals.commitSegment()
@@ -534,8 +536,7 @@ fun NavigationStack(
         if (animatesSeparately) {
           exitAnimation.cancelAndJoin()
           if (!animateRemovalTo(target, committedKeyboardHide = committedKeyboardHide)) {
-            committedKeyboardHide.await()
-            return@coroutineScope performProgressiveRemoval(target)
+            return@coroutineScope rollbackGestureAndRetry()
           }
         } else {
           exitAnimation.await()

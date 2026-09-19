@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -19,7 +18,7 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorRuntimeTest {
   private fun TestScope.createSession(editor: Editor): DocumentEditingSession =
-    createTestDocumentEditingSession(editor, CoroutineScope(coroutineContext))
+    createTestDocumentEditingSession(editor, this)
 
   @Test
   fun editorOnlyAttachmentHasNoDocumentSession() = runTest {

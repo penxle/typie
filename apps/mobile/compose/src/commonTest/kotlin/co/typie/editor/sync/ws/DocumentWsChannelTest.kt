@@ -434,14 +434,7 @@ class DocumentWsChannelTest {
   fun reloadSuspendsSubscribeInsteadOfCompleting() = runTest {
     val (connection, channel, sockets) = harness()
     var reloadCalls = 0
-    val transport =
-      WsSyncTransport(
-        channel,
-        connection,
-        DOC_ID,
-        onReload = { reloadCalls += 1 },
-        scope = backgroundScope,
-      )
+    val transport = WsSyncTransport(channel, connection, DOC_ID, onReload = { reloadCalls += 1 })
     val received = mutableListOf<RemoteChangesetEvent>()
     val job = collectJob(transport.subscribe(null), received)
     runCurrent()
@@ -712,14 +705,7 @@ class DocumentWsChannelTest {
   fun pipelineSubscribeStopsEmittingAfterSnapshotRestart() = runTest {
     val (connection, channel, sockets) = harness()
     var reloadCalls = 0
-    val transport =
-      WsSyncTransport(
-        channel,
-        connection,
-        DOC_ID,
-        onReload = { reloadCalls += 1 },
-        scope = backgroundScope,
-      )
+    val transport = WsSyncTransport(channel, connection, DOC_ID, onReload = { reloadCalls += 1 })
     val pipelineEvents = mutableListOf<RemoteChangesetEvent>()
     val pipelineJob = collectJob(transport.subscribe(null), pipelineEvents)
     runCurrent()

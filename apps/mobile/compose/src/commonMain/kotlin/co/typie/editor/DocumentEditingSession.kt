@@ -1,20 +1,32 @@
 package co.typie.editor
 
 import androidx.compose.runtime.snapshotFlow
+import co.typie.editor.sync.ActiveDocumentEditingSessions
+import co.typie.editor.sync.ChangesetDeltaStore
 import co.typie.editor.sync.RemoteChangesetPipeline
 import co.typie.editor.sync.SyncEngine
+import co.typie.editor.sync.asSyncEditor
+import co.typie.editor.sync.isPermanentSyncError
+import co.typie.editor.sync.ws.DocumentSyncBaseline
+import co.typie.editor.sync.ws.DocumentWsChannel
+import co.typie.editor.sync.ws.SyncWs
+import co.typie.editor.sync.ws.WsSyncTransport
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicInt
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -49,6 +61,7 @@ internal interface DocumentEditingStop {
   fun cancel()
 }
 
+/** Owns its sync scope and resources; the runtime retains ownership of the editor core. */
 @OptIn(ExperimentalAtomicApi::class)
 internal class DocumentEditingSession(
   val documentId: String,
@@ -57,6 +70,60 @@ internal class DocumentEditingSession(
   private val pipeline: RemoteChangesetPipeline,
   private val scope: CoroutineScope,
 ) {
+  companion object {
+    fun create(
+      documentId: String,
+      editor: Editor,
+      baseline: DocumentSyncBaseline,
+      channel: DocumentWsChannel,
+      onReload: suspend (DocumentEditingSession, Boolean) -> Unit,
+      canPush: () -> Boolean = { true },
+      onPermanentError: (Throwable) -> Unit = {},
+    ): DocumentEditingSession {
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+      try {
+        lateinit var session: DocumentEditingSession
+        val transport =
+          WsSyncTransport(
+            channel = channel,
+            connection = SyncWs.connection,
+            documentId = documentId,
+            onReload = { onReload(session, true) },
+          )
+        // SyncEngine starts capture/push here. Reload callbacks start only after the
+        // screen attaches this session and calls start() for the remote pipeline.
+        val engine =
+          SyncEngine(
+            editor = editor.asSyncEditor(),
+            documentId = documentId,
+            initialServerHeads = baseline.heads,
+            initialDurableHeads = baseline.durableHeads,
+            store = ChangesetDeltaStore,
+            pushFn = transport::push,
+            scope = scope,
+            isPermanent = ::isPermanentSyncError,
+            canPush = canPush,
+            onPermanentError = onPermanentError,
+            now = { Clock.System.now().toEpochMilliseconds() },
+          )
+        val pipeline =
+          RemoteChangesetPipeline(
+            editor = editor.asSyncEditor(),
+            headsSink = engine,
+            transport = transport,
+            initialSeq = baseline.seq,
+            scope = scope,
+            onNeedsReload = { onReload(session, false) },
+          )
+        session = DocumentEditingSession(documentId, editor, engine, pipeline, scope)
+        return session
+      } catch (throwable: Throwable) {
+        scope.cancel()
+        throw throwable
+      }
+    }
+  }
+
   private sealed interface State {
     data object Active : State
 
@@ -240,6 +307,11 @@ internal class DocumentEditingSession(
   internal suspend fun awaitProtectionAfter(observedGeneration: Long): Boolean =
     engine.awaitProtectionAfter(observedGeneration)
 
+  internal val isStopped: Boolean
+    get() = state.load() === State.Closed
+
+  internal suspend fun awaitStopped() = engine.awaitStopped()
+
   suspend fun awaitProtectedCheckpoint(
     stop: DocumentEditingStop,
     onStateChange: (DocumentSaveState) -> Unit = {},
@@ -282,9 +354,11 @@ internal class DocumentEditingSession(
   fun start() {
     check(state.load() === State.Active) { "Document editing session is not active" }
     if (!started.compareAndSet(expectedValue = false, newValue = true)) return
+    ActiveDocumentEditingSessions.register(this)
     pipeline.start()
     if (state.load() !== State.Active) {
       pipeline.stop()
+      if (isStopped) ActiveDocumentEditingSessions.unregister(this)
       return
     }
 
@@ -296,6 +370,7 @@ internal class DocumentEditingSession(
     if (state.load() !== State.Active) {
       revisionJob.exchange(null)?.cancel()
       pipeline.stop()
+      if (isStopped) ActiveDocumentEditingSessions.unregister(this)
     }
   }
 
@@ -315,6 +390,7 @@ internal class DocumentEditingSession(
   fun stop() {
     val previous = state.exchange(State.Closed)
     if (previous === State.Closed) return
+    ActiveDocumentEditingSessions.unregister(this)
     when (previous) {
       is State.PreparingStop -> previous.preparation.stop()
       is State.ResumingStop -> previous.preparation.stop()
@@ -323,6 +399,7 @@ internal class DocumentEditingSession(
     revisionJob.exchange(null)?.cancel()
     pipeline.stop()
     engine.stop()
+    scope.cancel()
   }
 
   private fun release(preparation: StopPreparation) {
