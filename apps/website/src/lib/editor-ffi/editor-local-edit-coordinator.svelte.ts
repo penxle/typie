@@ -6,9 +6,10 @@ export class EditorLocalEditCoordinator {
   #input: { pending: () => boolean; finalize: () => void } | undefined;
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- synchronous admission/application notifications
   readonly #listeners = new Set<() => void>();
+  isInputAllowed = $state.raw<() => boolean>(() => true);
 
   get accepting(): boolean {
-    return this.#stops === 0;
+    return this.#stops === 0 && this.isInputAllowed();
   }
 
   get queued(): boolean {

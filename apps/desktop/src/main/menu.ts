@@ -1,4 +1,4 @@
-import { Menu, nativeImage } from 'electron';
+import { BaseWindow, Menu, nativeImage } from 'electron';
 import type { DesktopZoomAction } from '@typie/lib/desktop';
 import type { MenuItemConstructorOptions } from 'electron';
 
@@ -190,5 +190,23 @@ export const buildMenu = (
     },
   ];
 
+  // Native modality blocks the parent window, but custom application-menu
+  // callbacks can still target its tabs. Keep those commands behind the modal.
+  const guard = (items: MenuItemConstructorOptions[]) => {
+    for (const item of items) {
+      const click = item.click;
+      if (click)
+        item.click = (...args) => {
+          const modal = BaseWindow.getAllWindows().find((window) => window.isModal() && window.isVisible());
+          if (modal) {
+            modal.focus();
+            return;
+          }
+          click(...args);
+        };
+      if (Array.isArray(item.submenu)) guard(item.submenu);
+    }
+  };
+  guard(template);
   return Menu.buildFromTemplate(template);
 };

@@ -2,6 +2,13 @@
 <html lang="ko" data-theme="%app.theme%" data-variant-light="%app.variant.light%" data-variant-dark="%app.variant.dark%">
   <head>
     <meta charset="utf-8" />
+    <script>
+      // No editor exists while the application modules are loading. The dashboard
+      // replaces this response before constructing its editor children.
+      if (window.typieDesktop?.onDocumentSave) {
+        window.typieDesktop.onDocumentSave(async () => ({ status: 'protected', documents: [] }));
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
     <link rel="icon" type="image/png" href="/icons/favicon.png" sizes="32x32" />
     <link rel="preconnect" href="https://typie.net" />

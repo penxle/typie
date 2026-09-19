@@ -571,6 +571,9 @@
               entity: () => entity,
               editor: liveEditor,
               store,
+              // No local editing is exposed yet: this graph comes entirely from
+              // the server snapshot/events and deltas restored from IndexedDB.
+              capturedHeads: liveEditor.currentHeads(),
               snapshot: { heads: latestHeads, durableHeads: latestDurableHeads, seq: latestSeq },
               connection: getSyncConnection(),
               onReload: () => getDocumentChannels().resync(currentDocumentId),
@@ -1089,9 +1092,12 @@
                 </span>
               {/if}
               <DocumentSaveIndicator
+                inspectedStatus={editingSession?.inspectedSaveStatus ?? null}
                 onShowDetails={showSaveDetails}
-                protectedChanges={editingSession?.isProtected() ?? false}
+                protectedChanges={editingSession?.protectedChanges ?? false}
                 status={editingSession?.saveStatus ?? null}
+                unconfirmedSince={editingSession?.unconfirmedSince ?? null}
+                unprotectedSince={editingSession?.unprotectedSince ?? null}
               />
             </div>
 

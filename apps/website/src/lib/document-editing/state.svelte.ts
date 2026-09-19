@@ -72,15 +72,17 @@ class DocumentOperation {
 class DocumentEditingState {
   #listeners = new Set<() => void>();
   #departing = new Map<DocumentEditingSession, number>();
+  #nativePreparations = $state(0);
   sessions = $state.raw<readonly DocumentEditingSession[]>([]);
   operations = $state.raw<readonly DocumentOperation[]>([]);
+  nativeProgress = $state(false);
   #changed(): void {
     untrack(() => {
       for (const operation of this.operations) {
         if (operation.preparation.sessions.some((session) => session.disposed)) operation.finish('cancel');
         // Only an already displayed dialog needs a completion screen. A fast,
         // locally safe departure must not wait for unrelated server-save details.
-        else if (operation.phase === 'protected' && !operation.dialogShown) operation.finish('protected');
+        else if (operation.phase === 'protected' && (this.nativePreparations > 0 || !operation.dialogShown)) operation.finish('protected');
       }
       for (const listener of this.#listeners) listener();
     });
@@ -111,6 +113,15 @@ class DocumentEditingState {
     return active.length > 0 && active.every((operation) => operation.phase === 'protected');
   }
 
+  get nativePreparations(): number {
+    return this.#nativePreparations;
+  }
+
+  set nativePreparations(value: number) {
+    this.#nativePreparations = value;
+    this.#changed();
+  }
+
   completeRecovery(): void {
     const active = this.operations.filter((operation) => operation.phase !== 'finished');
     if (active.length === 0 || active.some((operation) => !operation.preparation.isProtected())) {
@@ -123,10 +134,14 @@ class DocumentEditingState {
   }
 
   register(session: DocumentEditingSession): () => void {
+    const { localEdits } = session.editor;
+    const isInputAllowed = localEdits.isInputAllowed;
+    localEdits.isInputAllowed = () => this.nativePreparations === 0 && isInputAllowed();
     this.sessions = [...this.sessions, session];
     const unsubscribe = session.onChange(() => {
       if (session.disposed) {
         unsubscribe();
+        localEdits.isInputAllowed = isInputAllowed;
         this.sessions = this.sessions.filter((entry) => entry !== session);
       }
       this.#changed();

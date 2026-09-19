@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     "./actions": "./src/actions/index.ts",
+    "./actions/focus-trap": "./src/actions/focus-trap.svelte.ts",
     "./components": "./src/components/index.ts",
+    "./components/marquee": "./src/components/Marquee.svelte",
+    "./components/ring-spinner": "./src/components/RingSpinner.svelte",
     "./constants": "./src/constants/index.ts",
     "./context": "./src/context/index.ts",
     "./context/stable": "./src/context/stable-context.ts",

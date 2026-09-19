@@ -29,7 +29,7 @@ const deserializeOAuthState = (state: string): Record<string, unknown> => {
 };
 
 // eslint-disable-next-line unicorn/prefer-event-target
-export class AuthService extends EventEmitter<{ authenticated: []; 'logged-out': []; error: [string] }> {
+export class AuthService extends EventEmitter<{ authenticated: []; error: [string] }> {
   #pending: Pending | null = null;
   #env: Env;
 
@@ -150,6 +150,5 @@ export class AuthService extends EventEmitter<{ authenticated: []; 'logged-out':
 
   async logout() {
     await this.clearSession();
-    this.emit('logged-out');
   }
 }

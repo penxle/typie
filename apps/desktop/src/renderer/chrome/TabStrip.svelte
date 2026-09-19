@@ -1,8 +1,11 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import Marquee from '@typie/ui/components/marquee';
+  import RingSpinner from '@typie/ui/components/ring-spinner';
   import { entityIconMap, getEntityIconColor } from '@typie/ui/constants';
   import { prefersReducedMotion } from '@typie/ui/state/reduced-motion';
   import { untrack } from 'svelte';
+  import { cubicOut } from 'svelte/easing';
   import { SvelteMap } from 'svelte/reactivity';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileXIcon from '~icons/lucide/file-x';
@@ -15,7 +18,6 @@
 
   const isMac = window.shell.platform === 'darwin';
   const extraIcons = new Map([['file-x', FileXIcon]]);
-  const CLOSE_MS = 160;
   const SETTLE_MIN_MS = 80;
   const SETTLE_MAX_MS = 200;
   const COMMIT_TIMEOUT_MS = 400;
@@ -40,7 +42,6 @@
   let scroller = $state<HTMLDivElement | null>(null);
   let overflowLeft = $state(false);
   let overflowRight = $state(false);
-  let closing = $state<string[]>([]);
   let entering = $state<string | null>(null);
   const animating = new SvelteMap<string, number>();
   let drag = $state<Drag | null>(null);
@@ -83,8 +84,6 @@
     knownIds = ids;
     const pending = untrack(() => drag);
     if (pending?.committed && tabs.findIndex((tab) => tab.id === pending.id) === pending.target) releaseDrag();
-    const stale = untrack(() => closing).filter((id) => !ids.has(id));
-    if (stale.length > 0) closing = untrack(() => closing).filter((id) => ids.has(id));
     for (const id of untrack(() => [...animating.keys()])) {
       if (!ids.has(id)) releaseWidth(id);
     }
@@ -97,7 +96,7 @@
     element?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 
-  const closable = $derived(tabs.length - closing.length > 1);
+  const closable = $derived(tabs.length > 1);
 
   const tabWidth = (id: string) => scroller?.querySelector<HTMLElement>(`[data-id="${id}"]`)?.getBoundingClientRect().width;
 
@@ -116,19 +115,19 @@
   };
 
   const startClose = (id: string) => {
-    if (!closable || closing.includes(id)) return;
-    if (prefersReducedMotion.current) {
-      window.shell.closeTab?.(id);
-      return;
-    }
-    holdWidth(id, tabWidth(id));
-    if (id === activeId) {
-      const index = tabs.findIndex((tab) => tab.id === id);
-      const neighbor = [...tabs.slice(index + 1), ...tabs.slice(0, index).toReversed()].find((tab) => !closing.includes(tab.id));
-      if (neighbor) window.shell.activateTab?.(neighbor.id);
-    }
-    closing = [...closing, id];
-    setTimeout(() => window.shell.closeTab?.(id), CLOSE_MS);
+    if (!closable) return;
+    // Main owns the prepare/commit decision. Keep both the tab and its active
+    // neighbor unchanged until the confirmed tabs state arrives.
+    window.shell.closeTab?.(id);
+  };
+
+  const closeTransition = (element: HTMLElement) => {
+    const width = element.getBoundingClientRect().width;
+    return {
+      duration: prefersReducedMotion.current ? 0 : 160,
+      easing: cubicOut,
+      css: (t: number) => `width: ${width * t}px; min-width: 0; flex-shrink: 0; opacity: ${t}; overflow: hidden;`,
+    };
   };
 
   $effect(() => {
@@ -251,18 +250,14 @@
       boxShadow: '[0 0 0 1px {colors.border.hairline}, 0 1px 2px {colors.shadow.default/6}]',
     },
     '&:hover .close, &[data-active="true"] .close, & .close:focus-visible': { opacity: '100', pointerEvents: 'auto' },
-    '&[data-closing="true"], &[data-entering="true"]': {
+    '&[data-entering="true"]': {
+      transition: '[none]',
       width: '[0px]',
       minWidth: '[0px]',
       opacity: '0',
       overflow: 'hidden',
     },
     '&[data-animating="true"]': { overflow: 'hidden' },
-    '&[data-closing="true"]': {
-      transition:
-        '[width 160ms cubic-bezier(0.23, 1, 0.32, 1), min-width 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 100ms cubic-bezier(0.23, 1, 0.32, 1)]',
-    },
-    '&[data-entering="true"]': { transition: '[none]' },
     '&[data-dragging="true"]': { zIndex: '2', backgroundColor: 'surface.default', boxShadow: 'sm' },
     _focusVisible: { boxShadow: '[inset 0 0 0 2px {colors.accent.default}]' },
     _motionReduce: { transitionDuration: '[0ms]' },
@@ -344,7 +339,10 @@
       flexShrink: '1',
       minWidth: '0',
       height: 'full',
+      marginX: '-4px',
+      paddingX: '4px',
       paddingY: '6px',
+      scrollPaddingX: '4px',
       overflowX: 'auto',
       overflowY: 'hidden',
       scrollbarWidth: 'none',
@@ -362,7 +360,6 @@
         aria-selected={active}
         data-active={active}
         data-animating={animating.has(tab.id)}
-        data-closing={closing.includes(tab.id)}
         data-dragging={dragging}
         data-entering={entering === tab.id}
         data-id={tab.id}
@@ -375,6 +372,8 @@
             window.shell.activateTab?.(tab.id);
           }
         }}
+        onoutroend={() => requestAnimationFrame(updateOverflow)}
+        onoutrostart={(event) => (event.currentTarget.inert = true)}
         onpointercancel={finishDrag}
         onpointerdown={(event) => onPointerDown(event, tab, index)}
         onpointermove={onPointerMove}
@@ -384,6 +383,7 @@
         }}
         role="tab"
         tabindex={active ? 0 : -1}
+        out:closeTransition
       >
         <div
           style:flex={animating.has(tab.id) ? 'none' : undefined}
@@ -401,12 +401,22 @@
               </span>
             {/if}
           {/if}
-          <span
-            class={css({ flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}
-            title={tab.title || undefined}
-          >
-            {tab.title || '불러오는 중…'}
-          </span>
+          <Marquee
+            class={css({ flex: '1', minWidth: '0' })}
+            fogSize={12}
+            getTrigger={(element) => element.closest('[role="tab"]')}
+            text={tab.title || '불러오는 중…'}
+          />
+          {#if tab.saving}
+            <span
+              class={css({ display: 'flex', color: 'text.muted', flexShrink: '0' })}
+              aria-label="저장 시도 중"
+              role="status"
+              title="최근 변경사항을 저장하는 중이에요"
+            >
+              <RingSpinner style={css.raw({ size: '12px' })} />
+            </span>
+          {/if}
           {#if closable}
             <button
               style:opacity={animating.has(tab.id) ? '0' : undefined}

@@ -19,6 +19,7 @@ function fixture(id = 'document') {
     finalizeInput: vi.fn(),
     settlePendingEdits: vi.fn(),
     localEdits: {
+      isInputAllowed: () => true,
       get pending() {
         return pendingInput;
       },
@@ -40,6 +41,8 @@ function fixture(id = 'document') {
     stop: vi.fn(),
     captureFailures: 0,
     pushFailed: false,
+    unprotectedSince: null,
+    unconfirmedSince: null,
     isProtected: () => protectedChanges,
     isSynced: () => synced,
     pushNow: vi.fn(async () => {
@@ -100,6 +103,32 @@ describe('document editing preparation', () => {
   afterEach(() => unregisterNavigation());
   afterEach(() => vi.useRealTimers());
 
+  it('shares the active confirmation status with the header through retry and cancellation', async () => {
+    const doc = fixture();
+    const write = Promise.withResolvers<undefined>();
+    doc.pusher.captureFailures = 1;
+    doc.pusher.pushFailed = true;
+    doc.pusher.checkpoint = () => write.promise;
+    expect(doc.session.inspectedSaveStatus).toBeNull();
+    const preparation = new DocumentPreparation([doc.session]);
+    try {
+      const checking = preparation.checkpoint();
+      expect(doc.session.inspectedSaveStatus).toBe('pending');
+      expect(preparation.getSessionStatus(doc.session)).toBe('pending');
+      doc.protect();
+      write.resolve(undefined);
+      await checking;
+      expect(doc.session.inspectedSaveStatus).toBe('sync-failed');
+      expect(doc.session.isProtected()).toBe(true);
+      preparation.release();
+      expect(doc.session.inspectedSaveStatus).toBeNull();
+    } finally {
+      write.resolve(undefined);
+      preparation.release();
+      doc.session.dispose();
+    }
+  });
+
   it('distinguishes local preservation from server acknowledgement while allowing locally safe departure', () => {
     const doc = fixture();
     const departure = new DocumentPreparation([doc.session]);
@@ -142,12 +171,12 @@ describe('document editing preparation', () => {
     doc.session.dispose();
   });
 
-  it('does not show slow saving or confirmed success for composition alone', () => {
+  it('reports confirmed document storage while active composition still blocks departure', () => {
     const doc = fixture();
     doc.sync();
     doc.input(true);
 
-    expect(doc.session.saveStatus).toBe('idle');
+    expect(doc.session.saveStatus).toBe('synced');
     expect(doc.session.isProtected()).toBe(false);
     expect(doc.session.isSynced()).toBe(false);
     doc.input(false);
@@ -241,6 +270,27 @@ describe('document editing preparation', () => {
     preparation.release();
     expect(first.stops).toBe(0);
     expect(second.stops).toBe(0);
+  });
+
+  it('hands an already protected web confirmation to native departure without waiting for a hidden countdown', async () => {
+    const doc = fixture();
+    const off = documentEditing.register(doc.session);
+    try {
+      const leaving = runNavigation({ reason: 'reload' }, () => true);
+      await vi.waitFor(() => expect(documentEditing.operations[0]?.phase).toBe('blocked'));
+      documentEditing.markDialogShown();
+      doc.protect();
+      expect(documentEditing.completed).toBe(true);
+      documentEditing.nativePreparations++;
+      expect(await leaving).toBe(true);
+      expect(doc.stops).toBe(0);
+      expect(doc.editor.localEdits.isInputAllowed()).toBe(false);
+    } finally {
+      documentEditing.nativePreparations = 0;
+      expect(doc.stops).toBe(0);
+      expect(doc.editor.localEdits.isInputAllowed()).toBe(true);
+      off();
+    }
   });
 
   it('one cancelled owner cannot reopen another owner stop', () => {

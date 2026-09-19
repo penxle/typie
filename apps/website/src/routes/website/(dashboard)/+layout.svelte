@@ -12,6 +12,7 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onDestroy, onMount, untrack } from 'svelte';
+  import { browser } from '$app/environment';
   import { pushState, replaceState } from '$app/navigation';
   import { page, updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
@@ -21,6 +22,7 @@
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { desktop } from '$lib/desktop';
   import { guardBrowserUnload } from '$lib/document-editing/browser';
+  import { watchDesktopDocumentSave } from '$lib/document-editing/desktop';
   import DocumentSaveDialog from '$lib/document-editing/DocumentSaveDialog.svelte';
   import { documentEditing } from '$lib/document-editing/state.svelte';
   import { fanOutResourceUpdate } from '$lib/editor-ffi/registry';
@@ -69,6 +71,9 @@
   import type { IntroKind } from './intro';
 
   let { data, children } = $props();
+
+  // Replace the initial HTML's empty save response before any child can edit.
+  if (browser) onDestroy(watchDesktopDocumentSave());
 
   const query = $derived(hydrateQuery(() => data.query));
 

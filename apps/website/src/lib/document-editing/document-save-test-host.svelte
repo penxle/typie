@@ -16,8 +16,11 @@
 <DocumentSaveDialog />
 {#if session}
   <DocumentSaveIndicator
+    inspectedStatus={session.inspectedSaveStatus}
     onShowDetails={() => session && documentEditing.showSaveStatus([session])}
-    protectedChanges={session.isProtected()}
+    protectedChanges={session.protectedChanges}
     status={session.saveStatus}
+    unconfirmedSince={session.unconfirmedSince}
+    unprotectedSince={session.unprotectedSince}
   />
 {/if}

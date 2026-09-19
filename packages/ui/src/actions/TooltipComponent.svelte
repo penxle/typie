@@ -1,7 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Icon } from '../components';
+  import Icon from '../components/Icon.svelte';
   import type { Action } from 'svelte/action';
   import type { TooltipPresentation } from './tooltip-coordinator.svelte';
 

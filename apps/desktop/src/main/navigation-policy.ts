@@ -8,6 +8,7 @@ export type NavigationHandlers = {
   onLoginRequired: () => void;
   onLogout: () => void;
   onOpenTab: (url: string, background: boolean, opener: WebContents) => void;
+  onNavigateWebsite: (contents: WebContents, url: string) => void;
 };
 
 export class NavigationPolicy {
@@ -50,7 +51,7 @@ export class NavigationPolicy {
       return 'blocked';
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'blocked';
-    if (url.origin === this.#websiteOrigin) return 'website';
+    if (url.origin === this.#websiteOrigin) return url.pathname === '/logout' ? 'auth-logout' : 'website';
     if (url.origin === this.#authOrigin) return url.pathname === '/logout' ? 'auth-logout' : 'auth-login';
     return 'external';
   }
@@ -58,8 +59,11 @@ export class NavigationPolicy {
   attach(webContents: WebContents) {
     webContents.on('will-navigate', (event, url) => {
       const kind = this.classify(url);
-      if (kind === 'website') return;
       event.preventDefault();
+      if (kind === 'website') {
+        this.#handlers.onNavigateWebsite(webContents, url);
+        return;
+      }
       this.#dispatch(kind, url);
     });
     webContents.on('will-redirect', (event, url) => {

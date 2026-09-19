@@ -22,7 +22,8 @@ const rendererUrl = (page: string, query: Record<string, string> = {}) => {
   return url.toString();
 };
 
-export const preloadPath = (name: 'chrome' | 'page' | 'tab') => path.join(import.meta.dirname, '../preload', `${name}.cjs`);
+export const preloadPath = (name: 'chrome' | 'page' | 'tab' | 'document-save') =>
+  path.join(import.meta.dirname, '../preload', `${name}.cjs`);
 
 export type WindowState = { bounds?: Rectangle; maximized?: boolean };
 
@@ -99,6 +100,10 @@ export class WindowManager {
 
   get theme(): Theme {
     return this.#theme.theme;
+  }
+
+  get themePayload(): ThemePayload {
+    return this.#theme;
   }
 
   get background(): string {

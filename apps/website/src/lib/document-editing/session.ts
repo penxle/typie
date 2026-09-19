@@ -1,4 +1,4 @@
-import { createSubscriber } from 'svelte/reactivity';
+import { createSubscriber, SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { GapBuffer } from '../../routes/website/(dashboard)/[slug]/v2/sync/gap-buffer';
 import { PeerChannel } from '../../routes/website/(dashboard)/[slug]/v2/sync/peer-channel';
 import { Pusher } from '../../routes/website/(dashboard)/[slug]/v2/sync/pusher.svelte';
@@ -9,7 +9,7 @@ import type { SyncConnection } from '$lib/sync/connection';
 import type { RemoteChangesetEvent } from '../../routes/website/(dashboard)/[slug]/v2/sync/remote-changeset-pipeline';
 import type { IndexeddbDeltaStore } from '../../routes/website/(dashboard)/[slug]/v2/sync/store';
 
-export type DocumentSaveStatus = 'idle' | 'pending' | 'failed' | 'sync-failed' | 'synced';
+export type DocumentSaveStatus = 'pending' | 'failed' | 'sync-failed' | 'synced';
 
 export class DocumentEditingSession {
   static create({
@@ -19,6 +19,7 @@ export class DocumentEditingSession {
     entity,
     editor,
     store,
+    capturedHeads,
     snapshot,
     connection,
     onReload,
@@ -30,6 +31,7 @@ export class DocumentEditingSession {
     entity: DocumentEditingSession['entity'];
     editor: Editor;
     store: IndexeddbDeltaStore;
+    capturedHeads: Uint8Array;
     snapshot: { heads: Uint8Array; durableHeads: Uint8Array; seq: string };
     connection: Pick<SyncConnection, 'push' | 'pull'>;
     onReload: () => void;
@@ -61,6 +63,7 @@ export class DocumentEditingSession {
       documentId,
       initialServerHeads: snapshot.heads,
       initialDurableHeads: snapshot.durableHeads,
+      initialCapturedHeads: capturedHeads,
       store,
       // eslint-disable-next-line unicorn/no-return-array-push -- SyncConnection.push returns a server acknowledgement
       pushFn: (changesets) => connection.push(documentId, changesets),
@@ -91,7 +94,7 @@ export class DocumentEditingSession {
   // The same change stream drives synchronous departure checks and Svelte views.
   readonly #subscribe = createSubscriber((update) => this.onChange(update));
   readonly #unsubscribe: (() => void)[];
-  #stops = 0;
+  readonly #preparations = new SvelteSet<DocumentPreparation>();
   #finalizeError: unknown;
   #disposed = false;
   #checkpointFailed = false;
@@ -103,7 +106,7 @@ export class DocumentEditingSession {
   readonly title: () => string;
   readonly entity?: () => { icon: string; iconColor: string } | undefined;
   readonly editor: Pick<Editor, 'terminal' | 'documentRevision' | 'finalizeInput' | 'settlePendingEdits'> & {
-    localEdits: Pick<Editor['localEdits'], 'pending' | 'stop' | 'onChange'>;
+    localEdits: Pick<Editor['localEdits'], 'pending' | 'stop' | 'onChange' | 'isInputAllowed'>;
   };
   readonly pusher: Pick<
     Pusher,
@@ -116,6 +119,8 @@ export class DocumentEditingSession {
     | 'onProtectionChange'
     | 'captureFailures'
     | 'pushFailed'
+    | 'unprotectedSince'
+    | 'unconfirmedSince'
     | 'stop'
   >;
 
@@ -172,9 +177,9 @@ export class DocumentEditingSession {
     if (this.#disposed || this.editor.terminal) return null;
     try {
       if (this.saveFailed || (this.pusher.captureFailures > 0 && this.pusher.pushFailed && !this.pusher.isProtected())) return 'failed';
-      // Departure protection includes active composition; storage feedback must not
-      // mistake that input for slow storage or hide an already confirmed push error.
-      if (this.pusher.isSynced()) return this.isSynced() ? 'synced' : 'idle';
+      // Applied composition text is part of the document and can already be saved.
+      // Only departure checks require the input session itself to be finalized.
+      if (this.pusher.isSynced()) return 'synced';
       return this.pusher.pushFailed ? 'sync-failed' : 'pending';
     } catch {
       return 'failed';
@@ -185,19 +190,45 @@ export class DocumentEditingSession {
     return this.saveStatus === 'failed' && this.pusher.captureFailures > 0 && this.pusher.pushFailed;
   }
 
+  get unprotectedSince(): number | null {
+    this.#subscribe();
+    return this.pusher.unprotectedSince;
+  }
+
+  get unconfirmedSince(): number | null {
+    this.#subscribe();
+    return this.pusher.unconfirmedSince;
+  }
+
+  get inspectedSaveStatus(): DocumentSaveState | null {
+    let status: DocumentSaveState | null = null;
+    for (const preparation of this.#preparations) {
+      if (status !== null && preparation.isSessionProtected(this)) continue;
+      status = preparation.getSessionStatus(this);
+    }
+    return status;
+  }
+
   markSaveFailure(): void {
     this.#checkpointFailed = true;
     this.#notify();
   }
 
-  isProtected(): boolean {
+  // Storage coverage includes composing text already applied to the document.
+  // isProtected() additionally requires pending browser input to be finalized.
+  get protectedChanges(): boolean {
     this.#subscribe();
-    if (this.#disposed || this.editor.terminal || this.editor.localEdits.pending || this.#finalizeError !== undefined) return false;
+    if (this.#disposed || this.editor.terminal || this.#finalizeError !== undefined) return false;
     try {
       return this.pusher.isProtected();
     } catch {
       return false;
     }
+  }
+
+  isProtected(): boolean {
+    this.#subscribe();
+    return !this.editor.localEdits.pending && this.protectedChanges;
   }
 
   isSynced(): boolean {
@@ -215,9 +246,9 @@ export class DocumentEditingSession {
     return () => this.#listeners.delete(listener);
   }
 
-  beginStop(): () => void {
+  beginStop(preparation: DocumentPreparation): () => void {
     if (this.#disposed) throw new Error('Document editing session is disposed');
-    if (this.#stops === 0) {
+    if (this.#preparations.size === 0) {
       this.#finalizeError = undefined;
       try {
         this.editor.finalizeInput();
@@ -226,14 +257,14 @@ export class DocumentEditingSession {
       }
     }
     const releaseEditor = this.editor.localEdits.stop();
-    this.#stops++;
+    this.#preparations.add(preparation);
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.#stops--;
+      this.#preparations.delete(preparation);
       releaseEditor();
-      if (this.#stops === 0) {
+      if (this.#preparations.size === 0) {
         this.#finalizeError = undefined;
         this.#notify();
       }
@@ -268,7 +299,7 @@ export class DocumentEditingSession {
 
 export class DocumentPreparation {
   readonly #release: (() => void)[] = [];
-  readonly #pendingCheckpoints = new Map<DocumentEditingSession, Promise<void>>();
+  readonly #pendingCheckpoints = new SvelteMap<DocumentEditingSession, Promise<void>>();
   #released = false;
   readonly sessions: readonly DocumentEditingSession[];
   readonly requireServer: boolean;
@@ -277,7 +308,7 @@ export class DocumentPreparation {
     this.sessions = sessions;
     this.requireServer = requireServer;
     try {
-      for (const session of sessions) this.#release.push(session.beginStop());
+      for (const session of sessions) this.#release.push(session.beginStop(this));
     } catch (err) {
       this.release();
       throw err;

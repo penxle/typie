@@ -63,6 +63,28 @@ describe('Editor accepted editing work', () => {
     expect(editor.proseText()).toContain('accepted');
   });
 
+  it('checks the owner input permission synchronously without releasing a document stop', async () => {
+    await create();
+    let allowed = true;
+    editor.localEdits.isInputAllowed = () => allowed;
+    insert('first');
+    editor.settlePendingEdits();
+    allowed = false;
+    insert('blocked');
+    editor.settlePendingEdits();
+    expect(editor.proseText()).toBe('first');
+
+    const release = editor.localEdits.stop();
+    allowed = true;
+    insert('still blocked');
+    editor.settlePendingEdits();
+    expect(editor.proseText()).toBe('first');
+    release();
+    insert(' accepted');
+    editor.settlePendingEdits();
+    expect(editor.proseText()).toBe('first accepted');
+  });
+
   it('does not notify save observers for selection-only updates', async () => {
     await create();
     insert('text');

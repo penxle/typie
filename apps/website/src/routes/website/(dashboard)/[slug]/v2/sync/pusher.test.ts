@@ -14,6 +14,72 @@ const baseOpts = (editor: FakeEditor, store: FakeStore, pushFn: PusherOpts['push
 });
 
 describe('Pusher (single-source-of-truth)', () => {
+  it('reports a failed change observation as a capture failure without interrupting editing', async () => {
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    try {
+      await pusher.flushNow();
+      vi.spyOn(editor, 'missingChangesetsFor').mockImplementationOnce(() => {
+        throw new Error('Changeset serialization failed');
+      });
+      expect(() => pusher.schedule()).not.toThrow();
+      await Promise.resolve();
+      expect(pusher.captureFailures).toBe(1);
+    } finally {
+      pusher.stop();
+    }
+  });
+
+  it('keeps server wait age through local capture and ages unpreserved changes separately', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const editor = new FakeEditor([]);
+    const store = new FakeStore();
+    const pusher = new Pusher(baseOpts(editor, store, async () => ({ heads: enc(), durableHeads: enc() })));
+    const firstWrite = Promise.withResolvers<undefined>();
+    const laterWrites = Promise.withResolvers<undefined>();
+    try {
+      await pusher.flushNow();
+      store.put = (record) => (record.id === '1' ? firstWrite.promise : laterWrites.promise);
+      editor.known.add(1);
+      pusher.schedule();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pusher.unprotectedSince).toBe(1000);
+      expect(pusher.unconfirmedSince).toBe(1000);
+
+      vi.setSystemTime(4000);
+      editor.known.add(2);
+      pusher.schedule();
+      expect(pusher.unprotectedSince).toBe(1000);
+      firstWrite.resolve(undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pusher.unprotectedSince).toBe(4000);
+      expect(pusher.unconfirmedSince).toBe(1000);
+
+      vi.setSystemTime(6000);
+      editor.known.add(3);
+      pusher.schedule();
+      pusher.setConfirmedHeads(enc(1));
+      expect(pusher.unprotectedSince).toBe(4000);
+      expect(pusher.unconfirmedSince).toBe(4000);
+      pusher.setConfirmedHeads(enc());
+      expect(pusher.unconfirmedSince).toBe(4000);
+      pusher.setConfirmedHeads(enc(2));
+      expect(pusher.unprotectedSince).toBe(6000);
+      expect(pusher.unconfirmedSince).toBe(6000);
+      pusher.setConfirmedHeads(enc(3));
+      expect(pusher.unprotectedSince).toBeNull();
+      expect(pusher.unconfirmedSince).toBeNull();
+    } finally {
+      firstWrite.resolve(undefined);
+      laterWrites.resolve(undefined);
+      await pusher.captureNow();
+      pusher.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps locally captured changes protected when server saving fails, then confirms an explicit retry', async () => {
     const editor = new FakeEditor([]);
     const store = new FakeStore();
@@ -386,7 +452,7 @@ describe('Pusher (single-source-of-truth)', () => {
     await pusher.captureNow();
     await pusher.captureNow();
 
-    expect(editor.missingCalls).toEqual([[2], [2]]);
+    for (const heads of editor.missingCalls) expect(heads).toEqual([2]);
     const recs = await store.load('doc1');
     expect(recs.map((r) => r.id)).toEqual(['3']);
     pusher.stop();

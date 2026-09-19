@@ -10,7 +10,12 @@ export default defineConfig({
     minify: false,
     sourcemap: true,
     lib: {
-      entry: { chrome: 'src/preload/chrome.ts', page: 'src/preload/page.ts', tab: 'src/preload/tab.ts' },
+      entry: {
+        chrome: 'src/preload/chrome.ts',
+        page: 'src/preload/page.ts',
+        tab: 'src/preload/tab.ts',
+        'document-save': 'src/preload/document-save.ts',
+      },
       formats: ['cjs'],
       fileName: (_format, name) => `${name}.cjs`,
     },

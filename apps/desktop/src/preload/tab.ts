@@ -1,6 +1,13 @@
 import { DEFAULT_DARK_VARIANT, DEFAULT_LIGHT_VARIANT } from '@typie/styled-system/presets';
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopBridgeListeners, DesktopZoomAction, TabIcon, TypieDesktopBridge } from '@typie/lib/desktop';
+import type {
+  DesktopBridgeListeners,
+  DesktopZoomAction,
+  DocumentSaveRequest,
+  DocumentSaveResult,
+  TabIcon,
+  TypieDesktopBridge,
+} from '@typie/lib/desktop';
 
 const IPC_THEME_CHANGED = 'theme:changed';
 const IPC_CONTEXT_MENU = 'contextmenu:request';
@@ -10,7 +17,7 @@ const IPC_TAB_OPEN = 'tab:open';
 const IPC_BRIDGE_ZOOM = 'bridge:zoom';
 const IPC_BRIDGE_ZOOM_SHORTCUT = 'bridge:zoom-shortcut';
 
-const RENDERER_DEV_PORT = '5300';
+const RENDERER_DEV_PORT = '5400';
 
 const resolveTheme = (value: string | undefined) => {
   if (value === 'dark' || value === 'light') return value;
@@ -58,9 +65,48 @@ window.addEventListener(
 
 const appVersion = process.argv.find((arg) => arg.startsWith('--typie-app-version='))?.split('=')[1] ?? '0.0.0';
 
+let documentSave: ((request: DocumentSaveRequest) => Promise<DocumentSaveResult>) | undefined;
+const documentGeneration = crypto.getRandomValues(new Uint32Array(4)).join('-');
+let saveRegistration = 0;
+const departures = new Map<string, { committed: boolean }>();
+ipcRenderer.on('document:save', async (_event, request: DocumentSaveRequest) => {
+  if (request.phase === 'release') departures.delete(request.operationId);
+  const commit = request.phase === 'commit' ? { committed: false } : undefined;
+  if (commit) departures.set(request.operationId, commit);
+  const registration = saveRegistration;
+  try {
+    let result = (await documentSave?.(request)) ?? { status: 'unknown', documents: [] };
+    if (registration !== saveRegistration || (commit && departures.get(request.operationId) !== commit)) {
+      result = { status: 'unknown', documents: [] };
+    }
+    if (commit && departures.get(request.operationId) === commit) {
+      if (result.status === 'protected') commit.committed = true;
+      else departures.delete(request.operationId);
+    }
+    ipcRenderer.send('document:saved', {
+      ...result,
+      id: request.id,
+      // Pane replacement can change editing sessions without replacing the page
+      // or its handler. Bind approval to all three identities.
+      generation: JSON.stringify([documentGeneration, saveRegistration, result.generation]),
+    });
+  } catch (err) {
+    if (commit && departures.get(request.operationId) === commit) departures.delete(request.operationId);
+    console.error('Document save response could not be delivered', err);
+    ipcRenderer.send('document:saved', {
+      status: 'unknown',
+      documents: [],
+      id: request.id,
+      generation: JSON.stringify([documentGeneration, saveRegistration, null]),
+    });
+  }
+});
+
 const listeners: { [Event in keyof DesktopBridgeListeners]: Set<DesktopBridgeListeners[Event]> } = {
   focus: new Set(),
   preference: new Set(),
+  'document-save-recovered': new Set(),
+  'document-save-progress': new Set(),
   'zoom-shortcut': new Set(),
 };
 ipcRenderer.on('bridge:focus', () => {
@@ -68,6 +114,12 @@ ipcRenderer.on('bridge:focus', () => {
 });
 ipcRenderer.on('bridge:preference', () => {
   for (const listener of listeners.preference) listener();
+});
+ipcRenderer.on('bridge:document-save-recovered', () => {
+  for (const listener of listeners['document-save-recovered']) listener();
+});
+ipcRenderer.on('bridge:document-save-progress', (_event, visible: boolean) => {
+  for (const listener of listeners['document-save-progress']) listener(visible);
 });
 ipcRenderer.on(IPC_BRIDGE_ZOOM_SHORTCUT, (_event, action: DesktopZoomAction) => {
   const handled = [...listeners['zoom-shortcut']].some((listener) => listener(action));
@@ -91,6 +143,21 @@ contextBridge.exposeInMainWorld(
     },
     setTabIcon: (icon: TabIcon) => ipcRenderer.send(IPC_TAB_ICON, icon),
     openTab: (url: string) => ipcRenderer.send(IPC_TAB_OPEN, url),
+    onDocumentSave: (handler: (request: DocumentSaveRequest) => Promise<DocumentSaveResult>) => {
+      // The HTML's empty response is replaced before any editor is created.
+      // A committed close must not race with that replacement and admit edits.
+      if ([...departures.values()].some((departure) => departure.committed))
+        throw new Error('Document departure has already been approved');
+      documentSave = handler;
+      saveRegistration++;
+      return () => {
+        if (documentSave === handler) {
+          documentSave = undefined;
+          saveRegistration++;
+        }
+      };
+    },
+    requestDocumentDeparture: (reason: 'logout' | 'login') => ipcRenderer.invoke('document:departure', reason) as Promise<void>,
   } satisfies TypieDesktopBridge),
 );
 

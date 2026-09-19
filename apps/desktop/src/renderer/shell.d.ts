@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/consistent-type-definitions */
 
-import type { TabIcon } from '@typie/lib/desktop';
+import type { DocumentSaveDialogAction, DocumentSaveDialogData, TabIcon } from '@typie/lib/desktop';
 
 declare global {
-  type TabState = { id: string; title: string; url: string; icon: TabIcon | null };
+  type TabState = { id: string; title: string; url: string; icon: TabIcon | null; saving: boolean };
   type TabsStatePayload = { tabs: TabState[]; activeId: string | null };
   type ThemePayload = { theme: 'light' | 'dark'; variantLight: string; variantDark: string };
 
@@ -27,6 +27,12 @@ declare global {
   };
 
   interface Window {
+    documentSaveDialog: {
+      subscribe: (callback: (data: DocumentSaveDialogData) => void) => () => void;
+      ready: (id: string, height: number, completed?: boolean) => void;
+      respond: (id: string, action: DocumentSaveDialogAction) => void;
+      resize: (height: number) => void;
+    };
     shell: ShellApi;
   }
 }
