@@ -32,7 +32,7 @@ final class GraphQLStub: StubURLProtocol, @unchecked Sendable {
       accessToken: { nil }, onSessionCookie: { _ in },
       configuration: stubbedConfiguration(GraphQLStub.self))
     let response = try await client.apollo.fetch(
-      query: ServerProbeQuery(), cachePolicy: .networkOnly)
+      query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(response.data?.randomName == "probe")
     let request = try #require(GraphQLStub.lastRequest)
     #expect(request.url?.absoluteString == "https://api.example.test/graphql")

@@ -36,9 +36,26 @@ private struct CanvasBackground: ViewModifier {
   }
 }
 
+private struct SheetBackground: ViewModifier {
+  @Environment(\.theme) private var theme
+
+  func body(content: Content) -> some View {
+    content.background(
+      theme.colors.surfaceDefault.opacity(TTheme.sheetTintOpacity).ignoresSafeArea())
+  }
+}
+
+extension TTheme {
+  public static let sheetTintOpacity: Double = 0.25
+}
+
 extension View {
   public func themed() -> some View {
     modifier(TThemeModifier())
+  }
+
+  public func sheetBackground() -> some View {
+    modifier(SheetBackground())
   }
 
   public func canvasBackground() -> some View {

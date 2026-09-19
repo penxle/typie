@@ -29,12 +29,16 @@ public enum TBrandMark: String, CaseIterable, Sendable {
 
 public struct TBrandMarkView: View {
   private let mark: TBrandMark
-  private let size: CGFloat
+  private let fixedSize: CGFloat?
+  @ScaledMetric private var scaledSize: CGFloat
 
-  public init(_ mark: TBrandMark, size: CGFloat = 20) {
+  public init(_ mark: TBrandMark, size: CGFloat = 20, relativeTo style: TTextStyle? = nil) {
     self.mark = mark
-    self.size = size
+    fixedSize = style == nil ? size : nil
+    _scaledSize = ScaledMetric(wrappedValue: size, relativeTo: style?.textStyle ?? .body)
   }
+
+  private var size: CGFloat { fixedSize ?? scaledSize }
 
   public var body: some View {
     Image(decorative: mark.assetName, bundle: .module)

@@ -12,6 +12,15 @@ func waitUntil(_ condition: @Sendable () -> Bool) async throws {
   throw WaitTimeout()
 }
 
+@MainActor
+func waitOnMain(_ condition: @MainActor () -> Bool) async throws {
+  for _ in 0..<1000 {
+    if condition() { return }
+    try await Task.sleep(for: .milliseconds(2))
+  }
+  throw WaitTimeout()
+}
+
 func makeTestConfig() throws -> AppConfig {
   try AppConfig(
     infoDictionary: [
@@ -32,6 +41,16 @@ func withFreshDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
   let defaults = UserDefaults(suiteName: name)!
   defer { defaults.removePersistentDomain(forName: name) }
   try body(defaults)
+}
+
+func withFreshDefaultsAsync(
+  isolation: isolated (any Actor)? = #isolation,
+  _ body: (UserDefaults) async throws -> Void
+) async rethrows {
+  let name = "test-\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: name)!
+  defer { defaults.removePersistentDomain(forName: name) }
+  try await body(defaults)
 }
 
 class StubURLProtocol: URLProtocol, @unchecked Sendable {

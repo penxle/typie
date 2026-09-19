@@ -119,4 +119,38 @@ import Testing
       #expect(defaults.object(forKey: "site_id@A") == nil)
     }
   }
+
+  @Test func storesRecentSearchesUnderScopedKey() {
+    withFreshDefaults { defaults in
+      let preferences = UserScopedDefaults(defaults: defaults)
+      preferences.switchUser("A")
+      preferences.recentSearches = ["x", "y"]
+      #expect(preferences.recentSearches == ["x", "y"])
+      #expect(defaults.stringArray(forKey: "recent_searches@A") == ["x", "y"])
+      preferences.switchUser("B")
+      #expect(preferences.recentSearches == [])
+      preferences.switchUser("A")
+      #expect(preferences.recentSearches == ["x", "y"])
+    }
+  }
+
+  @Test func migratesUnscopedRecentSearches() {
+    withFreshDefaults { defaults in
+      defaults.set(["old"], forKey: "recent_searches")
+      let preferences = UserScopedDefaults(defaults: defaults)
+      preferences.switchUser("A")
+      #expect(preferences.recentSearches == ["old"])
+      #expect(defaults.object(forKey: "recent_searches") == nil)
+    }
+  }
+
+  @Test func emptyRecentSearchesRemovesKey() {
+    withFreshDefaults { defaults in
+      let preferences = UserScopedDefaults(defaults: defaults)
+      preferences.switchUser("A")
+      preferences.recentSearches = ["x"]
+      preferences.recentSearches = []
+      #expect(defaults.object(forKey: "recent_searches@A") == nil)
+    }
+  }
 }

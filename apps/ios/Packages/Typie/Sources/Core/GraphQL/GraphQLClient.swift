@@ -34,7 +34,7 @@ final class RedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
   }
 }
 
-struct GraphQLClient: Sendable {
+public struct GraphQLClient: Sendable {
   let apollo: ApolloClient
 
   static func make(

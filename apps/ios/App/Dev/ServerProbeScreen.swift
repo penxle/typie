@@ -42,7 +42,7 @@ struct ServerProbeScreen: View {
   private func row(_ label: String, _ value: String) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       TText(label, style: TTypography.caption, color: colors.textMuted)
-      TText(value, style: TTypography.body, color: colors.textDefault)
+      TText(value, style: TTypography.text, color: colors.textDefault)
     }
   }
 
@@ -55,7 +55,7 @@ struct ServerProbeScreen: View {
         results[label] = await run()
         running.remove(label)
       }
-      TText(results[label] ?? "-", style: TTypography.body, color: colors.textDefault)
+      TText(results[label] ?? "-", style: TTypography.text, color: colors.textDefault)
     }
   }
 }

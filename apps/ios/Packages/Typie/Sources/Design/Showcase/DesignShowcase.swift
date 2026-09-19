@@ -11,7 +11,8 @@
     @State private var loading = false
     @State private var sample = ShowcaseForm()
     @State private var toast = TToastCenter()
-    @State private var dialog: TDialogItem?
+    @State private var dialog = TDialogCenter()
+    @State private var typeSize: DynamicTypeSize = .large
 
     public init(theme: ThemeSettings) {
       settings = theme
@@ -30,14 +31,30 @@
           .pickerStyle(.segmented)
 
           section("타이포그래피") {
-            TText("화면 대제목 display 28/36", style: TTypography.display)
-            TText("섹션 제목 heading 22/28", style: TTypography.heading)
-            TText("카드 제목 title 17/22", style: TTypography.title)
-            TText("메뉴 항목 label 15/20", style: TTypography.label)
-            TText("본문 body 16/24 — 언제든 이어 쓰는 글쓰기 앱, 타이피.", style: TTypography.body)
-            TText("버튼 action 15/20", style: TTypography.action)
-            TText("헬퍼 caption 13/18", style: TTypography.caption, color: colors.textMuted)
-            TText("배지 micro 11/16", style: TTypography.micro, color: colors.textHint)
+            Picker("글자 크기", selection: $typeSize) {
+              Text("기본").tag(DynamicTypeSize.large)
+              Text("큼").tag(DynamicTypeSize.xxxLarge)
+              Text("최대").tag(DynamicTypeSize.accessibility5)
+            }
+            .pickerStyle(.segmented)
+            VStack(alignment: .leading, spacing: 12) {
+              TText("화면 제목 hero 28/36", style: TTypography.hero)
+              TText("섹션 제목 heading 22/28", style: TTypography.heading)
+              TText("내비·대화상자 제목 title 17/22", style: TTypography.title)
+              TText("본문 text 16/24 — 언제든 이어 쓰는 글쓰기 앱, 타이피.", style: TTypography.text)
+              TText("행 제목 label 15/20", style: TTypography.label)
+              TText("버튼·입력 control 15/20", style: TTypography.control)
+              TText("보조 본문 detail 14/20", style: TTypography.detail, color: colors.textMuted)
+              TText("설명 caption 13/18", style: TTypography.caption, color: colors.textMuted)
+              TText("섹션 헤더 section 13/18", style: TTypography.section, color: colors.textMuted)
+              TText("경로·시각 meta 12/16", style: TTypography.meta, color: colors.textHint)
+              TText("극소 fine 11/16", style: TTypography.fine, color: colors.textHint)
+              HStack(spacing: 8) {
+                TIcon(LucideIcon.search, size: 16, relativeTo: TTypography.control)
+                TText("아이콘은 동반 텍스트를 따라 배율", style: TTypography.control)
+              }
+            }
+            .dynamicTypeSize(typeSize)
           }
 
           section("색") {
@@ -86,10 +103,11 @@
 
           section("대화상자") {
             TButton("보조 버튼", variant: .secondary) {
-              dialog = TDialogItem(
-                title: "잘못된 이메일 또는 비밀번호예요",
-                message: "입력한 로그인 정보가 일치하지 않아요. 이메일과 비밀번호를 다시 한번 확인해주세요.",
-                confirmText: "확인")
+              dialog.present(
+                TDialogItem(
+                  title: "잘못된 이메일 또는 비밀번호예요",
+                  message: "입력한 로그인 정보가 일치하지 않아요. 이메일과 비밀번호를 다시 한번 확인해주세요.",
+                  confirmText: "확인"))
             }
           }
 
@@ -124,7 +142,7 @@
       }
       .canvasBackground()
       .overlay { TToastView(center: toast) }
-      .dialog(dialog) { dialog = nil }
+      .overlay { TDialogOverlay(center: dialog) }
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {

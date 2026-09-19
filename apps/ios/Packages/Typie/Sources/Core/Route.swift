@@ -3,6 +3,7 @@ public enum Route: Hashable, Sendable {
   case studio
   case notes
   case settings
+  case spaceSwitcher
   case folder(entityId: String)
   case folderDetails(entityId: String)
   case document(entityId: String)

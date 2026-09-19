@@ -60,14 +60,14 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st=abc; Path=/; HttpOnly", headerName: "set-cookie")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls == ["abc"])
   }
 
   @Test func attachesBearerHeaderWhenAuthenticated() async throws {
     AuthGraphQLStub.reset()
     let client = try makeClient(accessToken: { "token-value" })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     let request = try #require(AuthGraphQLStub.lastRequest)
     #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer token-value")
     #expect(request.value(forHTTPHeaderField: "X-Device-Id") == "abc")
@@ -78,7 +78,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
   @Test func omitsBearerHeaderWhenUnauthenticated() async throws {
     AuthGraphQLStub.reset()
     let client = try makeClient()
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     let request = try #require(AuthGraphQLStub.lastRequest)
     #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
     #expect(request.value(forHTTPHeaderField: "X-Device-Id") == "abc")
@@ -88,7 +88,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st=abc; Path=/; HttpOnly")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls == ["abc"])
   }
 
@@ -96,7 +96,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("other=1; Path=/, typie-st=abc; Path=/; HttpOnly")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls == ["abc"])
   }
 
@@ -105,7 +105,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
       "other=1; Expires=Wed, 01 Jan 2030 00:00:00 GMT; Path=/, typie-st=abc; Path=/; HttpOnly")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls == ["abc"])
   }
 
@@ -113,7 +113,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st-x=abc; Path=/, typie-stx=def; Path=/")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls.isEmpty)
   }
 
@@ -122,7 +122,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
     await #expect(throws: ResponseCodeInterceptor.ResponseCodeError.self) {
-      _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+      _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     }
     #expect(recorder.calls.isEmpty)
   }
@@ -131,7 +131,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st=abc; Path=/; HttpOnly")
     let client = try makeClient(onSessionCookie: { _ in throw HTTPError.status(503) })
     do {
-      _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+      _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
       Issue.record("expected an error")
     } catch let error as SessionEstablishmentError {
       #expect(error.underlying as? HTTPError == .status(503))
@@ -143,7 +143,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st=abc; Path=/; HttpOnly")
     let client = try makeClient(onSessionCookie: { _ in throw CancellationError() })
     await #expect(throws: CancellationError.self) {
-      _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+      _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     }
   }
 
@@ -151,7 +151,7 @@ final class AuthGraphQLStub: StubURLProtocol, @unchecked Sendable {
     setCookieHeader("typie-st=abc; Path=/; Expires=Wed, 01 Jan 2030 00:00:00 GMT; HttpOnly")
     let recorder = CallRecorder()
     let client = try makeClient(onSessionCookie: { recorder.record($0) })
-    _ = try await client.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .networkOnly)
+    _ = try await client.apollo.fetch(query: ServerProbe_Query(), cachePolicy: .networkOnly)
     #expect(recorder.calls == ["abc"])
   }
 }

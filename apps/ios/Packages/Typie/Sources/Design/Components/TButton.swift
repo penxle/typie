@@ -31,7 +31,7 @@ public struct TButton: View {
     loading: Bool = false,
     loadingText: String? = nil,
     height: CGFloat = 48,
-    textStyle: TTextStyle = TTypography.action,
+    textStyle: TTextStyle = TTypography.control,
     leadingIcon: TIconName? = nil,
     trailingIcon: TIconName? = nil,
     action: @escaping () async -> Void
@@ -77,19 +77,19 @@ public struct TButton: View {
     } label: {
       HStack(spacing: 0) {
         if debouncedLoading {
-          TSpinner(color: foreground)
+          TSpinner(color: foreground, relativeTo: textStyle)
             .transition(.opacity)
           Spacer().frame(width: 10)
         }
         if let leadingIcon {
-          TIcon(leadingIcon, size: 16, tint: foreground)
+          TIcon(leadingIcon, size: 16, tint: foreground, relativeTo: textStyle)
           Spacer().frame(width: 8)
         }
         TText(displayText, style: textStyle, color: foreground)
           .contentTransition(.interpolate)
         if let trailingIcon {
           Spacer().frame(width: 8)
-          TIcon(trailingIcon, size: 16, tint: foreground)
+          TIcon(trailingIcon, size: 16, tint: foreground, relativeTo: textStyle)
         }
       }
     }
@@ -128,7 +128,8 @@ private struct TButtonLook: ButtonStyle {
     let shape = TShapes.rounded(TShapes.lg)
     configuration.label
       .pressEffect(configuration.isPressed)
-      .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity, minHeight: height)
       .background(background, in: shape)
       .highlight(
         hovered: hovered, isPressed: configuration.isPressed, enabled: interactive,

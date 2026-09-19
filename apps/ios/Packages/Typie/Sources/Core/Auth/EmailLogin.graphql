@@ -1,0 +1,3 @@
+mutation EmailLogin_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
+  loginWithEmail(input: $input)
+}

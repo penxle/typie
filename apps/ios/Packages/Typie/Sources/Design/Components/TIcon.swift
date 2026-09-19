@@ -5,16 +5,23 @@ public struct TIcon: View {
   private var colors: TColors { theme.colors }
 
   private let name: TIconName
-  private let size: CGFloat
+  private let fixedSize: CGFloat?
+  @ScaledMetric private var scaledSize: CGFloat
   private let tint: Color?
   private let label: String?
 
-  public init(_ name: TIconName, size: CGFloat = 24, tint: Color? = nil, label: String? = nil) {
+  public init(
+    _ name: TIconName, size: CGFloat = 24, tint: Color? = nil, label: String? = nil,
+    relativeTo style: TTextStyle? = nil
+  ) {
     self.name = name
-    self.size = size
+    fixedSize = style == nil ? size : nil
+    _scaledSize = ScaledMetric(wrappedValue: size, relativeTo: style?.textStyle ?? .body)
     self.tint = tint
     self.label = label
   }
+
+  private var side: CGFloat { fixedSize ?? scaledSize }
 
   private var image: Image {
     if let label {
@@ -28,7 +35,7 @@ public struct TIcon: View {
     image
       .renderingMode(.template)
       .resizable()
-      .frame(width: size, height: size)
+      .frame(width: side, height: side)
       .foregroundStyle(tint ?? colors.textDefault)
   }
 }

@@ -1,0 +1,52 @@
+fragment EntityIcon_entity on Entity {
+  type
+  icon
+  iconColor
+}
+
+fragment EntityRowPath_entity on Entity {
+  ancestors {
+    id
+
+    node {
+      __typename
+
+      ... on Folder {
+        id
+        name
+      }
+    }
+  }
+}
+
+fragment EntityRowDocument_document on Document {
+  id
+  title
+  subtitle
+  excerpt
+  updatedAt
+}
+
+fragment EntityRowFolder_folder on Folder {
+  id
+  name
+  folderCount
+  documentCount
+}
+
+fragment EntityRow_entity on Entity {
+  id
+  ...EntityIcon_entity
+
+  node {
+    __typename
+
+    ... on Folder {
+      ...EntityRowFolder_folder
+    }
+
+    ... on Document {
+      ...EntityRowDocument_document
+    }
+  }
+}

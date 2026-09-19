@@ -14,19 +14,41 @@ public struct TDialogItem: Identifiable, Equatable, Sendable {
   }
 }
 
-extension View {
-  public func dialog(_ item: TDialogItem?, onDismiss: @escaping () -> Void) -> some View {
-    overlay { TDialogOverlay(item: item, onDismiss: onDismiss) }
+@MainActor
+@Observable
+public final class TDialogCenter {
+  public private(set) var current: TDialogItem?
+  @ObservationIgnored private var onDismiss: (@MainActor () -> Void)?
+
+  public init() {}
+
+  public func present(_ item: TDialogItem, onDismiss: @escaping @MainActor () -> Void = {}) {
+    current = item
+    self.onDismiss = onDismiss
+  }
+
+  public func dismiss() {
+    current = nil
+    onDismiss = nil
+  }
+
+  public func confirm() {
+    let action = onDismiss
+    dismiss()
+    action?()
   }
 }
 
-private struct TDialogOverlay: View {
+public struct TDialogOverlay: View {
   @Environment(\.theme) private var theme
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private var colors: TColors { theme.colors }
 
-  let item: TDialogItem?
-  let onDismiss: () -> Void
+  private let center: TDialogCenter
+
+  public init(center: TDialogCenter) {
+    self.center = center
+  }
 
   private var animation: Animation {
     reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.25)
@@ -36,13 +58,13 @@ private struct TDialogOverlay: View {
     reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.08))
   }
 
-  var body: some View {
+  public var body: some View {
     ZStack {
-      if let item {
+      if let item = center.current {
         colors.scrim
           .ignoresSafeArea()
           .contentShape(Rectangle())
-          .onTapGesture(perform: onDismiss)
+          .onTapGesture { center.confirm() }
           .transition(.opacity)
           .zIndex(0)
         card(item)
@@ -52,8 +74,9 @@ private struct TDialogOverlay: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .allowsHitTesting(item != nil)
-    .animation(animation, value: item)
+    .ignoresSafeArea(.keyboard)
+    .allowsHitTesting(center.current != nil)
+    .animation(animation, value: center.current)
   }
 
   private func card(_ item: TDialogItem) -> some View {
@@ -63,7 +86,7 @@ private struct TDialogOverlay: View {
       Spacer().frame(height: 6)
       TText(item.message, style: TTypography.caption, color: colors.textMuted)
       Spacer().frame(height: 20)
-      TButton(item.confirmText, variant: .secondary) { onDismiss() }
+      TButton(item.confirmText, variant: .secondary) { center.confirm() }
     }
     .padding(.horizontal, 20)
     .padding(.top, 24)

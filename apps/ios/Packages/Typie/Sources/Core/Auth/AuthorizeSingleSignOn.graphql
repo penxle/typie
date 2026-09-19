@@ -1,3 +1,0 @@
-mutation AuthorizeSingleSignOn($input: AuthorizeSingleSignOnInput!) {
-  authorizeSingleSignOn(input: $input)
-}

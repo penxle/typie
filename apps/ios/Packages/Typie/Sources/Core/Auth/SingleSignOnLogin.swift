@@ -11,7 +11,7 @@ public struct SingleSignOnLogin: Sendable {
     let input = AuthorizeSingleSignOnInput(
       params: JSON(credential.params), provider: .case(Self.wireProvider(credential.provider)))
     let response = try await client.apollo.perform(
-      mutation: AuthorizeSingleSignOnMutation(input: input))
+      mutation: SingleSignOnLogin_AuthorizeSingleSignOn_Mutation(input: input))
     guard let error = response.errors?.first else {
       guard response.data != nil else {
         throw HTTPError.malformedResponse("authorizeSingleSignOn: no data")

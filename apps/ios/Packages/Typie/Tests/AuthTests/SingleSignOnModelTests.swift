@@ -1,66 +1,62 @@
 import Core
-import Design
 import Testing
 
 @testable import Auth
 
 @MainActor
 @Suite struct SingleSignOnModelTests {
-  nonisolated private static let defaultError = "오류가 발생했어요. 잠시 후 다시 시도해주세요."
-
   @Test func successCallsLoginOnceAndReportsSuccess() async {
     let context = TestContext()
 
-    await context.model.signIn(with: .kakao)
+    let outcome = await context.model.signIn(with: .kakao)
 
+    #expect(outcome == .succeeded)
     #expect(context.login.calls == [.kakao])
     #expect(context.success.count == 1)
-    #expect(context.toast.current == nil)
     #expect(context.model.activeProvider == nil)
     #expect(context.model.isBusy == false)
   }
 
-  @Test func userCancellationIsSilent() async {
+  @Test func userCancellationReportsCancelled() async {
     let context = TestContext()
     context.login.error = SingleSignOnError.cancelled
 
-    await context.model.signIn(with: .google)
+    let outcome = await context.model.signIn(with: .google)
 
+    #expect(outcome == .cancelled)
     #expect(context.login.calls == [.google])
     #expect(context.success.count == 0)
-    #expect(context.toast.current == nil)
     #expect(context.model.activeProvider == nil)
   }
 
-  @Test func taskCancellationIsSilent() async {
+  @Test func taskCancellationReportsCancelled() async {
     let context = TestContext()
     context.login.error = CancellationError()
 
-    await context.model.signIn(with: .apple)
+    let outcome = await context.model.signIn(with: .apple)
 
+    #expect(outcome == .cancelled)
     #expect(context.success.count == 0)
-    #expect(context.toast.current == nil)
   }
 
-  @Test func otherFailuresShowDefaultToast() async {
+  @Test func otherFailuresReportFailed() async {
     let context = TestContext()
     context.login.error = HTTPError.status(500)
 
-    await context.model.signIn(with: .naver)
+    let outcome = await context.model.signIn(with: .naver)
 
+    #expect(outcome == .failed)
     #expect(context.success.count == 0)
-    #expect(context.toast.current?.kind == .error)
-    #expect(context.toast.current?.message == Self.defaultError)
     #expect(context.model.activeProvider == nil)
   }
 
-  @Test func missingCredentialShowsDefaultToast() async {
+  @Test func missingCredentialReportsFailed() async {
     let context = TestContext()
     context.login.error = SingleSignOnError.missingCredential
 
-    await context.model.signIn(with: .google)
+    let outcome = await context.model.signIn(with: .google)
 
-    #expect(context.toast.current?.message == Self.defaultError)
+    #expect(outcome == .failed)
   }
 
   @Test func secondTapIsIgnoredWhileFirstIsInFlight() async {
@@ -73,12 +69,14 @@ import Testing
     #expect(context.model.activeProvider == .kakao)
     #expect(context.model.isBusy)
 
-    await context.model.signIn(with: .naver)
+    let second = await context.model.signIn(with: .naver)
+    #expect(second == .cancelled)
     #expect(context.login.calls == [.kakao])
 
     context.login.release()
-    await first.value
+    let outcome = await first.value
 
+    #expect(outcome == .succeeded)
     #expect(context.login.calls == [.kakao])
     #expect(context.success.count == 1)
     #expect(context.model.activeProvider == nil)
@@ -89,12 +87,11 @@ import Testing
 private final class TestContext {
   let login = SingleSignOnStub()
   let success = SuccessCounter()
-  let toast = TToastCenter(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
   let model: SingleSignOnModel
 
   init() {
     let success = success
-    model = SingleSignOnModel(login: login.login, toast: toast, onSuccess: { success.record() })
+    model = SingleSignOnModel(login: login.login, onSuccess: { success.record() })
   }
 }
 

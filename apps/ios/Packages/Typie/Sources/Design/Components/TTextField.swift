@@ -10,6 +10,7 @@
     private var colors: TColors { theme.colors }
 
     @State private var revealed = false
+    @ScaledMetric(relativeTo: TTypography.text.textStyle) private var statusBadgeSide: CGFloat = 18
 
     private let field: TFieldState
     private let form: TFormState
@@ -68,7 +69,7 @@
 
     private func statusBadge(_ color: Color, @ViewBuilder glyph: () -> some View) -> some View {
       ZStack {
-        Circle().fill(color).frame(width: 18, height: 18)
+        Circle().fill(color).frame(width: statusBadgeSide, height: statusBadgeSide)
         glyph()
       }
     }
@@ -87,6 +88,7 @@
             keyboardType: isSecure && keyboardType == .default ? .asciiCapable : keyboardType,
             isSecure: isSecure && !revealed, onSubmit: onSubmit
           )
+          .padding(.vertical, 12)
           if hasAccessory {
             Spacer().frame(width: 8)
           }
@@ -95,44 +97,55 @@
               revealed.toggle()
             } label: {
               TIcon(
-                revealed ? LucideIcon.eyeOff : LucideIcon.eye, size: 18, tint: colors.textHint
+                revealed ? LucideIcon.eyeOff : LucideIcon.eye, size: 18, tint: colors.textHint,
+                relativeTo: TTypography.text
               )
               .contentTransition(.identity)
+              .frame(minWidth: 36, minHeight: 44)
+              .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessorySlot()
             .accessibilityLabel(revealed ? "비밀번호 가리기" : "비밀번호 보기")
           }
           if showsClear {
             Button {
               field.value = ""
             } label: {
-              TIcon(LucideIcon.circleX, size: 18, tint: colors.textHint)
+              TIcon(
+                LucideIcon.circleX, size: 18, tint: colors.textHint, relativeTo: TTypography.text
+              )
+              .frame(minWidth: 36, minHeight: 44)
+              .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessorySlot()
             .accessibilityLabel("지우기")
             .transition(.opacity)
           }
           if field.error != nil {
             statusBadge(colors.dangerDefault) {
-              TIcon(TypieIcon.exclamation, size: 10, tint: colors.textOnDanger, label: "오류")
+              TIcon(
+                TypieIcon.exclamation, size: 10, tint: colors.textOnDanger, label: "오류",
+                relativeTo: TTypography.text)
             }
-            .accessorySlot()
+            .frame(minWidth: 36, minHeight: 44)
+            .contentShape(Rectangle())
             .allowsHitTesting(false)
             .transition(.move(edge: .trailing).combined(with: .opacity))
           } else if showsVerified {
             statusBadge(colors.successDefault) {
-              TIcon(LucideIcon.check, size: 11, tint: colors.textOnSuccess, label: "확인됨")
+              TIcon(
+                LucideIcon.check, size: 11, tint: colors.textOnSuccess, label: "확인됨",
+                relativeTo: TTypography.text)
             }
-            .accessorySlot()
+            .frame(minWidth: 36, minHeight: 44)
+            .contentShape(Rectangle())
             .allowsHitTesting(false)
             .transition(.move(edge: .trailing).combined(with: .opacity))
           }
         }
         .padding(.leading, 16)
         .padding(.trailing, hasAccessory ? 7 : 16)
-        .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48)
+        .frame(maxWidth: .infinity, minHeight: 48)
         .background(colors.surfaceDefault, in: shape)
         .clipShape(shape)
         .overlay(shape.strokeBorder(borderColor, lineWidth: borderWidth))
@@ -175,9 +188,7 @@
     let isSecure: Bool
     let onSubmit: (() -> Void)?
 
-    @MainActor private static let font =
-      UIFont(name: TTypography.body.fontName, size: TTypography.body.size)
-      ?? .systemFont(ofSize: TTypography.body.size)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func makeCoordinator() -> TTextFieldCoordinator {
       TTextFieldCoordinator(field: field, form: form, onSubmit: onSubmit)
@@ -193,7 +204,8 @@
       view.textContentType = contentType
       view.keyboardType = keyboardType
       view.returnKeyType = form.isLast(field) ? .done : .next
-      view.font = Self.font
+      view.font = TTypography.text.uiFont(for: view.traitCollection)
+      view.adjustsFontForContentSizeCategory = true
       view.text = value
       view.delegate = context.coordinator
       view.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -220,10 +232,15 @@
         uiView.tintColor = textColor
       }
       let hintColor = UIColor(colors.textHint)
-      if uiView.attributedPlaceholder?.string != placeholder || coordinator.hintColor != hintColor {
+      let font = TTypography.text.uiFont(for: uiView.traitCollection)
+      if uiView.font != font { uiView.font = font }
+      if uiView.attributedPlaceholder?.string != placeholder || coordinator.hintColor != hintColor
+        || coordinator.placeholderFont != font
+      {
         coordinator.hintColor = hintColor
+        coordinator.placeholderFont = font
         uiView.attributedPlaceholder = NSAttributedString(
-          string: placeholder, attributes: [.font: Self.font, .foregroundColor: hintColor])
+          string: placeholder, attributes: [.font: font, .foregroundColor: hintColor])
       }
       if uiView.markedTextRange == nil, uiView.text != value {
         uiView.text = value
@@ -260,12 +277,6 @@
     }
   }
 
-  extension View {
-    fileprivate func accessorySlot() -> some View {
-      frame(width: 36, height: 44).contentShape(Rectangle())
-    }
-  }
-
   private final class TTextFieldCoordinator: NSObject, UITextFieldDelegate {
     private let field: TFieldState
     private let form: TFormState
@@ -273,6 +284,7 @@
     var focusRequest = 0
     var resignRequest = 0
     var hintColor: UIColor?
+    var placeholderFont: UIFont?
 
     init(field: TFieldState, form: TFormState, onSubmit: (() -> Void)?) {
       self.field = field

@@ -107,6 +107,14 @@ private final class FakeAuthStatePublisher: AuthStatePublishing, @unchecked Send
   var snapshotsAtPublish: [String?] { lock.withLock { snapshots } }
 }
 
+private struct FakeActiveSitePublisher: ActiveSitePublishing {
+  let recorder: CallRecorder
+
+  func publish(_ siteId: String?) async {
+    recorder.record("activeSite=\(siteId ?? "nil")")
+  }
+}
+
 private struct FakeEditingSessions: EditingSessionRegistry {
   let recorder: CallRecorder
   let onFlush: @Sendable () async throws -> Void
@@ -170,6 +178,7 @@ private func makeHarness(
     authState: publisher,
     oidc: FakeOIDC(
       recorder: recorder, onExchange: exchange, onFetchMe: fetchMe, onLogout: logout),
+    activeSite: FakeActiveSitePublisher(recorder: recorder),
     editingSessions: FakeEditingSessions(recorder: recorder, onFlush: flush),
     orphanSweeper: FakeOrphanSweeper(recorder: recorder, onSweep: sweep),
     sync: FakeSyncConnection(recorder: recorder),
@@ -191,7 +200,7 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "exchange(session-1)", "fetchMe", "switchUser(user-1)", "siteId=site-1",
-        "discardEntitlementCache", "store", "publish",
+        "discardEntitlementCache", "store", "publish", "activeSite=site-1",
       ])
     #expect(
       harness.publisher.published == [
@@ -218,7 +227,7 @@ private func makeHarness(
 
     #expect(
       harness.calls == [
-        "exchange(session-1)", "switchUser(user-9)", "store", "publish",
+        "exchange(session-1)", "switchUser(user-9)", "store", "publish", "activeSite=site-9",
       ])
     #expect(harness.preferences.siteId == "site-9")
     #expect(try harness.store.authTokens()?.accessToken == "access-session-1")
@@ -237,8 +246,8 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "exchange(session-new)", "fetchMe", "switchUser(user-new)", "siteId=site-new",
-        "discardEntitlementCache", "store", "publish", "disconnectSubscriptions",
-        "syncSessionChanged",
+        "discardEntitlementCache", "store", "publish", "activeSite=site-new",
+        "disconnectSubscriptions", "syncSessionChanged",
       ])
   }
 
@@ -271,7 +280,8 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "exchange(session-new)", "tokenCleared", "discardEntitlementCache", "switchUser(nil)",
-        "publish", "clearGraphQLCache", "disconnectSubscriptions", "syncSessionChanged",
+        "activeSite=nil", "publish", "clearGraphQLCache", "disconnectSubscriptions",
+        "syncSessionChanged",
       ])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
@@ -315,7 +325,7 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "exchange(session-1)", "fetchMe", "switchUser(user-1)", "discardEntitlementCache", "store",
-        "publish",
+        "publish", "activeSite=site-keep",
       ])
     #expect(harness.preferences.siteId == "site-keep")
   }
@@ -332,8 +342,8 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "flush", "stop", "sweep(true,true)", "oidcLogout", "tokenCleared",
-        "discardEntitlementCache", "switchUser(nil)", "publish", "clearGraphQLCache",
-        "disconnectSubscriptions", "syncSessionChanged",
+        "discardEntitlementCache", "switchUser(nil)", "activeSite=nil", "publish",
+        "clearGraphQLCache", "disconnectSubscriptions", "syncSessionChanged",
       ])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
@@ -347,8 +357,8 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "flush", "stop", "sweep(true,true)", "tokenCleared", "discardEntitlementCache",
-        "switchUser(nil)", "publish", "clearGraphQLCache", "disconnectSubscriptions",
-        "syncSessionChanged",
+        "switchUser(nil)", "activeSite=nil", "publish", "clearGraphQLCache",
+        "disconnectSubscriptions", "syncSessionChanged",
       ])
   }
 
@@ -424,6 +434,28 @@ private func makeHarness(
     #expect(harness.preferences.currentUser == "user-0")
     #expect(try harness.store.authTokens() == previous)
     #expect(!harness.calls.contains("disconnectSubscriptions"))
+    #expect(!harness.calls.contains { $0.hasPrefix("activeSite=") })
+  }
+
+  @Test func loginPublishesResolvedSite() async throws {
+    let harness = makeHarness()
+    try await harness.service.login(sessionToken: "s1")
+    #expect(harness.calls.contains("activeSite=site-1"))
+  }
+
+  @Test func reusedSessionPublishesStoredSite() async throws {
+    let harness = makeHarness(
+      tokens: AuthTokens(sessionToken: "s1", accessToken: "a", userId: "user-1"),
+      siteId: "site-keep")
+    try await harness.service.renew()
+    #expect(harness.calls.contains("activeSite=site-keep"))
+  }
+
+  @Test func logoutPublishesNil() async throws {
+    let harness = makeHarness(
+      tokens: AuthTokens(sessionToken: "s1", accessToken: "a", userId: "user-1"))
+    await harness.service.logout()
+    #expect(harness.calls.last { $0.hasPrefix("activeSite=") } == "activeSite=nil")
   }
 
   @Test func logoutRunsToCompletionWhenTheCallerIsCancelled() async throws {
@@ -440,8 +472,8 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "flush", "stop", "sweep(true,true)", "oidcLogout", "tokenCleared",
-        "discardEntitlementCache", "switchUser(nil)", "publish", "clearGraphQLCache",
-        "disconnectSubscriptions", "syncSessionChanged",
+        "discardEntitlementCache", "switchUser(nil)", "activeSite=nil", "publish",
+        "clearGraphQLCache", "disconnectSubscriptions", "syncSessionChanged",
       ])
   }
 }

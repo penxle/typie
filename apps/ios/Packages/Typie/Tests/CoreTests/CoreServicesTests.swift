@@ -27,7 +27,8 @@ final class AssemblyStub: StubURLProtocol, @unchecked Sendable {
   override func startLoading() {
     let url = request.url!
     let body = Self.body(of: request).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-    let operation = ["LoginWithEmail", "AuthService_Me", "ServerProbe"].first { body.contains($0) }
+    let operation = ["EmailLogin_LoginWithEmail_Mutation", "AuthService_Me", "ServerProbe_Query"]
+      .first { body.contains($0) }
     Self.lock.withLock {
       Self.recorded.append(
         Recorded(
@@ -39,7 +40,7 @@ final class AssemblyStub: StubURLProtocol, @unchecked Sendable {
     var headers = ["Content-Type": "application/json"]
     var payload = "{}"
     switch (url.path, operation) {
-    case ("/graphql", "LoginWithEmail"):
+    case ("/graphql", "EmailLogin_LoginWithEmail_Mutation"):
       let attachCookie = Self.lock.withLock {
         defer { Self.sessionCookiePending = false }
         return Self.sessionCookiePending
@@ -48,7 +49,7 @@ final class AssemblyStub: StubURLProtocol, @unchecked Sendable {
       payload = #"{"data":{"loginWithEmail":true}}"#
     case ("/graphql", "AuthService_Me"):
       payload = #"{"data":{"me":{"id":"user-1","sites":[{"id":"site-1"}]}}}"#
-    case ("/graphql", "ServerProbe"):
+    case ("/graphql", "ServerProbe_Query"):
       payload =
         #"{"data":{"__typename":"Query","randomName":"probe","me":{"__typename":"User","id":"user-1"}}}"#
     case ("/authorize", _):
@@ -98,11 +99,13 @@ final class AssemblyStub: StubURLProtocol, @unchecked Sendable {
     #expect(services.authState.state == .authenticated(expected))
     #expect(services.authService.accessToken == "access-1")
     #expect(
-      AssemblyStub.requests.first { $0.operation == "LoginWithEmail" }?.authorization == nil)
+      AssemblyStub.requests.first { $0.operation == "EmailLogin_LoginWithEmail_Mutation" }?
+        .authorization == nil)
 
     try await services.emailLogin(email: "a@b.test", password: "x")
     #expect(
-      AssemblyStub.requests.last { $0.operation == "LoginWithEmail" }?.authorization
+      AssemblyStub.requests.last { $0.operation == "EmailLogin_LoginWithEmail_Mutation" }?
+        .authorization
         == "Bearer access-1")
 
     #if DEBUG
@@ -112,14 +115,15 @@ final class AssemblyStub: StubURLProtocol, @unchecked Sendable {
         configuration: stubbedConfiguration(AssemblyStub.self))
       let probe = try #require(services.serverProbe)
       #expect(await probe.graphQL() == "randomName=probe me=present")
-      let cached = try await reader.apollo.fetch(query: ServerProbeQuery(), cachePolicy: .cacheOnly)
+      let cached = try await reader.apollo.fetch(
+        query: ServerProbe_Query(), cachePolicy: .cacheOnly)
       #expect(cached?.data?.randomName == "probe")
 
       await services.authService.logout()
 
       #expect(services.authState.state == .unauthenticated)
       let cleared = try await reader.apollo.fetch(
-        query: ServerProbeQuery(), cachePolicy: .cacheOnly)
+        query: ServerProbe_Query(), cachePolicy: .cacheOnly)
       #expect(cleared?.data == nil)
     #endif
   }

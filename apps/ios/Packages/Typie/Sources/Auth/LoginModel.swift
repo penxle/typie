@@ -2,11 +2,16 @@ import Core
 import Design
 import Observation
 
+public enum LoginFailure: Sendable, Equatable {
+  case invalidCredentials
+  case passwordNotSet
+  case unknown
+}
+
 @Observable
 @MainActor
 public final class LoginModel {
   public private(set) var isSubmitting = false
-  public private(set) var dialog: TDialogItem?
 
   public let form: TFormState
   public let email: TFieldState
@@ -29,10 +34,6 @@ public final class LoginModel {
     self.form = form
   }
 
-  public func dismissDialog() {
-    dialog = nil
-  }
-
   public func focusEmail() {
     email.requestFocus()
   }
@@ -41,32 +42,24 @@ public final class LoginModel {
     password.value = ""
   }
 
-  public func submit() async {
-    guard !isSubmitting else { return }
+  public func submit() async -> LoginFailure? {
+    guard !isSubmitting else { return nil }
     isSubmitting = true
     defer { isSubmitting = false }
-    guard form.validate() else { return }
+    guard form.validate() else { return nil }
     form.endEditing()
     do {
       try await login(email.value, password.value)
       onSuccess()
+      return nil
     } catch EmailLoginError.invalidCredentials {
-      fail(
-        title: "잘못된 이메일 또는 비밀번호예요", message: "입력한 로그인 정보가 일치하지 않아요. 이메일과 비밀번호를 다시 한번 확인해주세요.")
+      return .invalidCredentials
     } catch EmailLoginError.passwordNotSet {
-      fail(
-        title: "SNS 계정으로 가입한 이메일이에요",
-        message:
-          "이 계정에는 아직 비밀번호가 없어요. 가입할 때 사용한 SNS 계정으로 시작하거나, 로그인 후 설정에서 비밀번호를 설정하면 이메일로도 로그인할 수 있어요."
-      )
+      return .passwordNotSet
     } catch is CancellationError {
-      return
+      return nil
     } catch {
-      fail(title: "로그인할 수 없어요", message: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+      return .unknown
     }
-  }
-
-  private func fail(title: String, message: String) {
-    dialog = TDialogItem(title: title, message: message, confirmText: "확인")
   }
 }

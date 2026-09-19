@@ -14,7 +14,7 @@ public struct EmailLogin: Sendable {
 
   public func callAsFunction(email: String, password: String) async throws {
     let response = try await client.apollo.perform(
-      mutation: LoginWithEmailMutation(
+      mutation: EmailLogin_LoginWithEmail_Mutation(
         input: LoginWithEmailInput(email: email, password: password)))
     if let error = response.errors?.first {
       let mapped = mappedGraphQLError(error)
