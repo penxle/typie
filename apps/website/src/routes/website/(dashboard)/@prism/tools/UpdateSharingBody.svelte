@@ -12,7 +12,7 @@
 
   const VISIBILITY_LABELS: Record<EntityVisibility, string> = {
     PUBLIC: '발행됨',
-    UNLISTED: '링크 조회',
+    UNLISTED: '링크 공개',
     PRIVATE: '비공개',
   };
   const CONSEQUENCES: Record<EntityVisibility, string> = {

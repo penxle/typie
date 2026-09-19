@@ -168,11 +168,11 @@
 
       <a
         class={center(linkFieldButtonStyle)}
-        aria-label="조회 페이지에서 열기"
+        aria-label="공개 페이지에서 열기"
         href={folders.data[0].entity.url}
         rel="noopener noreferrer"
         target="_blank"
-        use:tooltip={{ message: '조회 페이지에서 열기', placement: 'top' }}
+        use:tooltip={{ message: '공개 페이지에서 열기', placement: 'top' }}
       >
         <Icon icon={ExternalLinkIcon} size={14} />
       </a>

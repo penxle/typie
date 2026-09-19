@@ -25,7 +25,7 @@
     {#if visibility === EntityVisibility.PUBLIC}
       <span>시리즈로 발행된 폴더</span>
     {:else if visibility === EntityVisibility.UNLISTED}
-      <span>링크 조회 가능 폴더</span>
+      <span>링크 공개 폴더</span>
     {:else}
       <span>비공개 폴더</span>
     {/if}

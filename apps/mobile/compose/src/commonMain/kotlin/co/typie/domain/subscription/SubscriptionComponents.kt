@@ -34,7 +34,7 @@ val fullPlanFeatures =
     SubscriptionFeature(icon = Lucide.BookOpenText, label = "무제한 글자 수"),
     SubscriptionFeature(icon = Lucide.Images, label = "무제한 파일 업로드"),
     SubscriptionFeature(icon = Lucide.SpellCheck, label = "맞춤법 검사"),
-    SubscriptionFeature(icon = Lucide.Link, label = "커스텀 게시 주소"),
+    SubscriptionFeature(icon = Lucide.Link, label = "커스텀 스페이스 주소"),
     SubscriptionFeature(icon = Lucide.Type, label = "커스텀 폰트 업로드"),
     SubscriptionFeature(icon = Lucide.FlaskConical, label = "베타 기능 우선 접근"),
     SubscriptionFeature(icon = Lucide.Headset, label = "문제 발생 시 우선 지원"),

@@ -302,7 +302,7 @@ internal fun MainDrawerContent() {
           dismissAndRun { nav.navigate(Route.StudioSettings) }
         }
 
-        DrawerActionRow(icon = Lucide.ExternalLink, label = "게시 페이지 열기") {
+        DrawerActionRow(icon = Lucide.ExternalLink, label = "스페이스 열기") {
           dismissAndRun { uriHandler.openUri(currentSite.url) }
         }
 

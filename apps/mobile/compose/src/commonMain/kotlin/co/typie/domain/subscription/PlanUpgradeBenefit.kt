@@ -9,7 +9,7 @@ enum class PlanUpgradeBenefit(val icon: IconData, val title: String, val descrip
   MultipleStudios(Lucide.FolderPlus, "여러 스페이스 생성", "주제와 목적별로 공간을 분리해요"),
   SpellCheck(Lucide.SpellCheck, "맞춤법 검사", "실시간으로 맞춤법을 확인해요"),
   AiFeedback(Lucide.Lightbulb, "AI 피드백", "작품을 분석하고 피드백을 제안해요"),
-  CustomSpaceAddress(Lucide.Globe, "커스텀 게시 주소", "기억하기 쉬운 주소로 공유해요"),
+  CustomSpaceAddress(Lucide.Globe, "커스텀 스페이스 주소", "기억하기 쉬운 주소로 공유해요"),
   CustomFontUpload(Lucide.Type, "커스텀 폰트 업로드", "나만의 글꼴로 공간에 개성을 입혀요"),
   DiscordCommunity(Lucide.Sprout, "디스코드 커뮤니티 참여", "다른 사용자들과 함께 쓰는 방법을 나눠요"),
   MoreBenefits(Lucide.Ellipsis, "그리고 더 많은 혜택", "베타 기능 우선 접근과 우선 지원까지"),
