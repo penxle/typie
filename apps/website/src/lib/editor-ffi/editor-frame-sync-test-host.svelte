@@ -181,7 +181,7 @@
       editor.extensionAreaEl = el;
     }}
     data-editor-extension-area
-    onclick={editor.nativeSelection ? handle(editor, handleClick) : onclick}
+    onclick={editor.nativeSelection ? (event) => handleClick(editor, event, (point) => ctx.scroll?.attachViewportAnchorAt(point)) : onclick}
     oncontextmenu={editor.nativeSelection ? () => cancelPointerInteraction(editor) : undefined}
     onpointercancel={editor.nativeSelection ? handle(editor, handlePointerCancel) : undefined}
     onpointerdown={editor.nativeSelection ? handle(editor, handlePointerDown) : undefined}
