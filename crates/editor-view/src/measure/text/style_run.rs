@@ -1,9 +1,13 @@
 use std::ops::Range;
 
 use editor_resource::{FontRegistry, PLACEHOLDER_WEIGHT, Resolution};
+use icu_properties::CodePointMapDataBorrowed;
+use icu_properties::props::Script;
 use icu_segmenter::GraphemeClusterSegmenter;
+use parley::style::Language;
 
 use super::inline::TextRun;
+use super::shaping_language::{locale_at_byte, resolve_shaping_locale_runs};
 
 pub(crate) struct StyleRun {
     pub run_index: usize,
@@ -13,6 +17,7 @@ pub(crate) struct StyleRun {
     pub font_size: f32,
     pub letter_spacing: f32,
     pub line_height: f32,
+    pub locale: Option<Language>,
 }
 
 pub(crate) fn resolve_cluster_family_weight(
@@ -44,9 +49,12 @@ pub(crate) fn resolve_style_runs(
     runs: &[TextRun],
     font_registry: &mut FontRegistry,
     grapheme_segmenter: &GraphemeClusterSegmenter,
+    scripts: CodePointMapDataBorrowed<'_, Script>,
 ) -> Vec<StyleRun> {
     let mut style_runs: Vec<StyleRun> = Vec::new();
     let mut cluster_codepoints: Vec<u32> = Vec::new();
+    let locale_runs = resolve_shaping_locale_runs(text, scripts);
+    let mut locale_run_index = 0;
 
     for (run_index, run) in runs.iter().enumerate() {
         let requested_family_id = font_registry.intern(&run.style.font_family);
@@ -75,6 +83,7 @@ pub(crate) fn resolve_style_runs(
 
             let byte_start = run.byte_range.start + cluster_start;
             let byte_end = run.byte_range.start + boundary;
+            let locale = locale_at_byte(&locale_runs, &mut locale_run_index, byte_start);
 
             let can_merge = style_runs.last().is_some_and(|last: &StyleRun| {
                 last.family == resolved_family
@@ -82,6 +91,7 @@ pub(crate) fn resolve_style_runs(
                     && last.font_size == run.style.font_size
                     && last.letter_spacing == run.style.letter_spacing
                     && last.line_height == run.style.line_height
+                    && last.locale == locale
                     && last.run_index == run_index
                     && last.byte_range.end == byte_start
             });
@@ -97,6 +107,7 @@ pub(crate) fn resolve_style_runs(
                     font_size: run.style.font_size,
                     letter_spacing: run.style.letter_spacing,
                     line_height: run.style.line_height,
+                    locale,
                 });
             }
 
@@ -109,17 +120,23 @@ pub(crate) fn resolve_style_runs(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use editor_crdt::{Dot, InputEvent, ListOp, build_oplog};
     use editor_model::{
-        AliasLog, Anchor, Bias, DocLogs, DocView, Modifier, ModifierAttrLog, ModifierAttrOp,
-        NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
+        AliasLog, Alignment, Anchor, Bias, DocLogs, DocView, Modifier, ModifierAttrLog,
+        ModifierAttrOp, NodeAttrLog, NodeType, SeqItem, SpanLog, SpanOp, project_document,
     };
     use editor_resource::{
         FontFamily, FontFamilySource, FontManifest, FontRegistry, FontWeight, PLACEHOLDER_WEIGHT,
+        Resource,
     };
 
     use crate::measure::text::inline::collect_text_runs;
+    use crate::measure::text::layout::build_layout;
+
+    const LOCL_TEST_FONT: &[u8] = include_bytes!("../../../assets/locl-test-font.ttf");
 
     fn logs(items: &[(Dot, SeqItem)]) -> DocLogs {
         let mut ev = Vec::new();
@@ -227,8 +244,75 @@ mod tests {
         let (text, runs, _tabs) = collect_text_runs(&para);
         let n_runs = runs.len();
         let segmenter = GraphemeClusterSegmenter::new().static_to_owned();
-        let srs = resolve_style_runs(&text, &runs, reg, &segmenter);
+        let scripts = icu_properties::CodePointMapData::<Script>::new();
+        let srs = resolve_style_runs(&text, &runs, reg, &segmenter, scripts);
         (text, srs, n_runs)
+    }
+
+    fn shaped_glyph_ids(l: &DocLogs) -> Vec<u32> {
+        let pd = project_document(l).unwrap();
+        let view = DocView::new(&pd);
+        let para = view.root().unwrap().child_blocks().next().unwrap();
+        let (text, runs, _tabs) = collect_text_runs(&para);
+
+        let mut resource = Resource::new_test();
+        resource.font_context.collection.register_fonts(
+            fontique::Blob::new(Arc::new(LOCL_TEST_FONT.to_vec())),
+            Some(fontique::FontInfoOverride {
+                family_name: Some("Arial"),
+                weight: Some(fontique::FontWeight::new(400.0)),
+                ..Default::default()
+            }),
+        );
+        resource.font_registry.set_fonts(vec![FontFamily {
+            name: "Arial".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "locl-test-font".into(),
+            }],
+        }]);
+        let family = resource.font_registry.intern_id("Arial").unwrap();
+        resource.font_registry.set_manifest(
+            family,
+            400,
+            FontManifest::from_coverages(&[vec![
+                '\u{2026}' as u32,
+                '\u{2026}' as u32,
+                '\u{D55C}' as u32,
+                '\u{D55C}' as u32,
+            ]]),
+        );
+        resource.font_registry.force_loaded_for_test(family, 400, 1);
+
+        let segmenter = GraphemeClusterSegmenter::new().static_to_owned();
+        let scripts = icu_properties::CodePointMapData::<Script>::new();
+        let style_runs = resolve_style_runs(
+            &text,
+            &runs,
+            &mut resource.font_registry,
+            &segmenter,
+            scripts,
+        );
+        let layout = build_layout(
+            &text,
+            &style_runs,
+            Alignment::Left,
+            0.0,
+            1.0e6,
+            &mut resource,
+            &[],
+        );
+
+        let mut glyph_ids = Vec::new();
+        for line in layout.lines() {
+            for item in line.items() {
+                if let parley::PositionedLayoutItem::GlyphRun(run) = item {
+                    glyph_ids.extend(run.glyphs().map(|glyph| glyph.id));
+                }
+            }
+        }
+        glyph_ids
     }
 
     #[test]
@@ -330,6 +414,52 @@ mod tests {
         assert_eq!(srs[1].byte_range, 1..2);
         assert_eq!(srs[0].family, arial);
         assert_eq!(srs[1].family, arial);
+    }
+
+    #[test]
+    fn korean_text_selects_localized_punctuation_glyph() {
+        let mut l = build_logs(vec![ch('…'), ch('한')]);
+        with_root_arial(&mut l);
+
+        assert_eq!(shaped_glyph_ids(&l), [2, 3]);
+    }
+
+    #[test]
+    fn locale_changes_split_style_runs_without_changing_source_run() {
+        let mut l = build_logs(vec![ch('한'), ch('…'), ch('あ')]);
+        with_root_arial(&mut l);
+        let mut reg = registry_with_families(&[("Arial", &[400])]);
+        let arial = reg.intern_id("Arial").unwrap();
+        reg.force_loaded_for_test(arial, 400, 1);
+
+        let (_text, style_runs, source_run_count) = style_runs_of(&l, &mut reg);
+
+        assert_eq!(source_run_count, 1);
+        assert_eq!(style_runs.len(), 2);
+        assert_eq!(style_runs[0].run_index, 0);
+        assert_eq!(style_runs[0].byte_range, 0..6);
+        assert_eq!(style_runs[0].locale.unwrap().as_str(), "ko");
+        assert_eq!(style_runs[1].run_index, 0);
+        assert_eq!(style_runs[1].byte_range, 6..9);
+        assert_eq!(style_runs[1].locale.unwrap().as_str(), "ja");
+    }
+
+    #[test]
+    fn locale_resolution_keeps_grapheme_clusters_atomic() {
+        let mut l = build_logs(vec![ch('A'), ch('\u{301}'), ch('한')]);
+        with_root_arial(&mut l);
+        let mut reg = registry_with_families(&[("Arial", &[400])]);
+        let arial = reg.intern_id("Arial").unwrap();
+        reg.force_loaded_for_test(arial, 400, 1);
+
+        let (_text, style_runs, source_run_count) = style_runs_of(&l, &mut reg);
+
+        assert_eq!(source_run_count, 1);
+        assert_eq!(style_runs.len(), 2);
+        assert_eq!(style_runs[0].byte_range, 0..3);
+        assert_eq!(style_runs[0].locale, None);
+        assert_eq!(style_runs[1].byte_range, 3..6);
+        assert_eq!(style_runs[1].locale.unwrap().as_str(), "ko");
     }
 
     #[test]

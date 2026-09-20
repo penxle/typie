@@ -41,6 +41,7 @@ editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 fontique = { workspace = true, optional = true }
 hashbrown.workspace = true
+icu_properties.workspace = true
 icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
@@ -56,5 +57,6 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 fontique.workspace = true
+icu_properties = { workspace = true, features = ["compiled_data"] }
 icu_segmenter = { workspace = true, features = ["compiled_data", "auto"] }
 proptest.workspace = true

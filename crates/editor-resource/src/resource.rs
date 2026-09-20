@@ -7,7 +7,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use icu_properties::CodePointMapData;
-use icu_properties::props::GeneralCategory;
+use icu_properties::props::{GeneralCategory, Script};
 
 use crate::brush::TextBrush;
 use crate::error::ResourceError;
@@ -97,6 +97,7 @@ pub struct ResourceSnapshot {
     fonts: Arc<FontRegistry>,
     segmenters: Arc<TextSegmenters>,
     general_category: Arc<CodePointMapData<GeneralCategory>>,
+    script: Arc<CodePointMapData<Script>>,
     text_replacement_rules: Arc<[TextReplacementRule]>,
     auto_surround_enabled: bool,
 }
@@ -111,6 +112,7 @@ impl ResourceSnapshot {
             fonts: Arc::new(fonts),
             segmenters: icu.segmenters,
             general_category: icu.general_category,
+            script: icu.script,
             text_replacement_rules: Arc::from([]),
             auto_surround_enabled: true,
         }
@@ -136,6 +138,10 @@ impl ResourceSnapshot {
         &self.general_category
     }
 
+    pub fn script(&self) -> &Arc<CodePointMapData<Script>> {
+        &self.script
+    }
+
     pub fn text_replacement_rules(&self) -> &Arc<[TextReplacementRule]> {
         &self.text_replacement_rules
     }
@@ -151,6 +157,7 @@ impl ResourceSnapshot {
             fonts: Arc::clone(&self.fonts),
             segmenters: Arc::clone(&self.segmenters),
             general_category: Arc::clone(&self.general_category),
+            script: Arc::clone(&self.script),
             text_replacement_rules: Arc::clone(&self.text_replacement_rules),
             auto_surround_enabled: self.auto_surround_enabled,
         }
@@ -474,6 +481,10 @@ impl Resource {
         self.snapshot.general_category()
     }
 
+    pub fn script(&self) -> &Arc<CodePointMapData<Script>> {
+        self.snapshot.script()
+    }
+
     pub fn text_replacement_rules(&self) -> &Arc<[TextReplacementRule]> {
         self.snapshot.text_replacement_rules()
     }
@@ -514,13 +525,7 @@ impl Resource {
 #[cfg(any(test, feature = "test-utils"))]
 impl ResourceSource {
     pub fn new_test() -> Self {
-        let segmenters = Arc::new(TextSegmenters::new_test());
-        let general_category =
-            Arc::new(CodePointMapData::<GeneralCategory>::new().static_to_owned());
-        Self::new(IcuResources {
-            segmenters,
-            general_category,
-        })
+        Self::new(IcuResources::new_test())
     }
 }
 
@@ -561,6 +566,7 @@ mod tests {
             before.general_category(),
             committed.general_category()
         ));
+        assert!(Arc::ptr_eq(before.script(), committed.script()));
         assert!(Arc::ptr_eq(
             before.text_replacement_rules(),
             committed.text_replacement_rules()
