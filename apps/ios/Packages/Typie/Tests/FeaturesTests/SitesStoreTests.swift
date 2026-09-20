@@ -59,7 +59,7 @@ import Testing
     #expect(site.id == "site-1")
     #expect(site.name == "n-site-1")
     #expect(site.url == "https://site-1.example.test")
-    #expect(site.logo?.absoluteString == "https://img.example.test/site-1.png")
+    #expect(Img.url(of: site.logo)?.absoluteString == "https://img.example.test/site-1.png")
   }
 
   @Test func selectSwitchesActiveSite() async throws {

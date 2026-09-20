@@ -7,7 +7,7 @@
   import UIKit
 
   @MainActor
-  public struct LoginScreen: View {
+  struct LoginScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isRevealed = false
@@ -22,7 +22,7 @@
     private let presenter: @MainActor () -> UIViewController?
     private let toast = Container.shared.toast()
 
-    public init(
+    init(
       onEmail: @escaping () -> Void, presenter: @escaping @MainActor () -> UIViewController?
     ) {
       self.onEmail = onEmail
@@ -30,7 +30,7 @@
       singleSignOn = Container.shared.singleSignOnModel {}
     }
 
-    public var body: some View {
+    var body: some View {
       GeometryReader { proxy in
         let insets = proxy.safeAreaInsets
         let restShift = (insets.bottom + StartButton.height - insets.top) / 2

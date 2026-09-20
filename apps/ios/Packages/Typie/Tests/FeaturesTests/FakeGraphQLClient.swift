@@ -11,6 +11,7 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
 
   private let lock = NSLock()
   private var performed: [any GraphQLOperation] = []
+  private var watched: [any GraphQLOperation] = []
   private var mutationResults: [String: [Result<Any, any Error>]] = [:]
   private var listeners: [String: [ObjectIdentifier: (Result<Any, any Error>) -> Void]] = [:]
   private var pending: [String: [Result<Any, any Error>]] = [:]
@@ -58,6 +59,12 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
     performedMutations.compactMap { $0 as? M }
   }
 
+  var watchedQueries: [any GraphQLOperation] { lock.withLock { watched } }
+
+  func watched<Q: GraphQLQuery>(_ query: Q.Type) -> [Q] {
+    watchedQueries.compactMap { $0 as? Q }
+  }
+
   func watchCount<Q: GraphQLQuery>(of query: Q.Type) -> Int {
     lock.withLock { watchCounts[Q.operationName] ?? 0 }
   }
@@ -91,6 +98,7 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
     }
     let held = lock.withLock { () -> [Result<Any, any Error>] in
       watchCounts[Q.operationName, default: 0] += 1
+      watched.append(query)
       listeners[Q.operationName, default: [:]][ObjectIdentifier(token)] = deliver
       return pending.removeValue(forKey: Q.operationName) ?? []
     }

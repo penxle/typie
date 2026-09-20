@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, gte, lt, lte, sql, sum } from 'drizzle-orm';
 import { db, DocumentCharacterCountChanges, first, UserGoals } from '#/db/index.ts';
-import { getExcludedDeltasByDate } from '#/utils/excluded-stats.ts';
+import { getExcludedDeltasByDate, getExcludedDeltasByDocument } from '#/utils/excluded-stats.ts';
 import { getEffectiveTarget } from '#/utils/goal.ts';
 import type { Dayjs } from 'dayjs';
 
@@ -107,4 +107,42 @@ export const todayCharacterCountChange = async (userId: string): Promise<{ date:
   const startOfToday = dayjs.kst().startOf('day');
   const rows = await characterChangesInRange(userId, startOfToday, startOfToday.add(1, 'day'));
   return rows[0] ?? { date: startOfToday, additions: 0, deletions: 0 };
+};
+
+export const documentCharacterChangesOn = async (
+  userId: string,
+  date: Dayjs,
+): Promise<{ documentId: string; additions: number; deletions: number }[]> => {
+  const from = dayjs.kst(date).startOf('day');
+  const to = from.add(1, 'day');
+
+  const rows = await db
+    .select({
+      documentId: DocumentCharacterCountChanges.documentId,
+      additions: sum(DocumentCharacterCountChanges.additions).mapWith(Number),
+      deletions: sum(DocumentCharacterCountChanges.deletions).mapWith(Number),
+    })
+    .from(DocumentCharacterCountChanges)
+    .where(
+      and(
+        eq(DocumentCharacterCountChanges.userId, userId),
+        gte(DocumentCharacterCountChanges.bucket, from),
+        lt(DocumentCharacterCountChanges.bucket, to),
+      ),
+    )
+    .groupBy(DocumentCharacterCountChanges.documentId);
+
+  const excludedByDocument = await getExcludedDeltasByDocument({ userId, from, to });
+
+  return rows
+    .map((row) => {
+      const excluded = excludedByDocument.get(row.documentId);
+      return {
+        documentId: row.documentId,
+        additions: row.additions - (excluded?.additions ?? 0),
+        deletions: row.deletions - (excluded?.deletions ?? 0),
+      };
+    })
+    .filter((row) => row.additions > 0)
+    .toSorted((a, b) => b.additions - a.additions);
 };

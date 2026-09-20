@@ -10,11 +10,11 @@ default:
     @just --list
 
 # Build the app for the simulator
-build:
+build: graphql icons
     xcodebuild build -project {{project}} -scheme {{scheme}} -destination '{{simulator}}' -quiet
 
 # Run package tests on the host
-test:
+test: graphql icons
     swift test --package-path Packages/Typie
 
 # Check formatting
@@ -42,6 +42,10 @@ graphql:
       mv .tools/apollo-ios-cli "$cli"
     fi
     "$cli" generate --path apollo-codegen-config.json
+
+# Generate the icon catalog from LucideIcon/TypieIcon references (shared generator in apps/mobile)
+icons:
+    pnpm --dir ../mobile run generate-icons
 
 # Write Configuration/Config.local.xcconfig from Doppler (config: dev|prod)
 env config="dev":

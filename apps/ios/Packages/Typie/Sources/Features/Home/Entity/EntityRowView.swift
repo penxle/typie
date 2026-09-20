@@ -32,7 +32,7 @@
     }
   }
 
-  public struct EntityRowView: View {
+  struct EntityRowView: View {
     @Environment(\.theme) private var theme
     private var colors: TColors { theme.colors }
 
@@ -42,7 +42,7 @@
     private let title: HighlightedText
     private let snippet: HighlightedText?
 
-    public init(
+    init(
       icon: EntityIconSpec, path: [String], trailing: String?, title: HighlightedText,
       snippet: HighlightedText? = nil
     ) {
@@ -53,7 +53,7 @@
       self.snippet = snippet
     }
 
-    public var body: some View {
+    var body: some View {
       let appearance = EntityIcon.appearance(icon, colors: colors)
       VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 8) {

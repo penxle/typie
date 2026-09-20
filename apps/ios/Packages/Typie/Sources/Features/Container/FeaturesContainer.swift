@@ -6,6 +6,22 @@ extension Container {
     self { SitesStore() }.scope(.session)
   }
 
+  @MainActor var homeStore: Factory<HomeStore> {
+    self { HomeStore() }
+  }
+
+  @MainActor var homeTreeStore: Factory<HomeTreeStore> {
+    self { HomeTreeStore() }.scope(.session)
+  }
+
+  @MainActor var entityCreator: Factory<EntityCreator> {
+    self { EntityCreator() }.scope(.session)
+  }
+
+  @MainActor var userGoalModel: Factory<UserGoalModel> {
+    self { UserGoalModel() }
+  }
+
   @MainActor var emailLoginModel: ParameterFactory<@MainActor () -> Void, EmailLoginModel> {
     self { EmailLoginModel(onSuccess: $0) }
   }
@@ -16,6 +32,10 @@ extension Container {
 
   @MainActor var createSiteModel: Factory<CreateSiteModel> {
     self { CreateSiteModel() }
+  }
+
+  @MainActor var userGoalFormModel: ParameterFactory<UserGoalModel, UserGoalFormModel> {
+    self { UserGoalFormModel(goal: $0) }
   }
 
   @MainActor var searchModel: Factory<SearchModel> {

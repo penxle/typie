@@ -16,6 +16,7 @@ private struct PressEffect: ViewModifier {
   let scale: CGFloat
 
   @Environment(\.pressTrigger) private var trigger
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var heldAt: ContinuousClock.Instant?
 
   private let minimumHold: Duration = .milliseconds(120)
@@ -24,7 +25,10 @@ private struct PressEffect: ViewModifier {
   func body(content: Content) -> some View {
     content
       .scaleEffect(shown ? scale : 1)
-      .animation(shown ? .easeOut(duration: 0.05) : .smooth(duration: 0.3), value: shown)
+      .animation(
+        reduceMotion ? nil : (shown ? .easeOut(duration: 0.05) : .smooth(duration: 0.3)),
+        value: shown
+      )
       .onChange(of: isPressed) { _, pressed in
         if pressed { heldAt = .now }
       }

@@ -1,9 +1,9 @@
-public enum EntityPath {
-  public static let root = "작업실"
+enum EntityPath {
+  static let root = "작업실"
   static let separator = " › "
   static let ellipsis = "…"
 
-  public static func candidates(_ segments: [String]) -> [String] {
+  static func candidates(_ segments: [String]) -> [String] {
     guard !segments.isEmpty else { return [root] }
     let all = [root] + segments
     return (0..<all.count).map { drop in
@@ -12,7 +12,7 @@ public enum EntityPath {
     }
   }
 
-  public static func choose(_ segments: [String], fits: (String) -> Bool) -> String {
+  static func choose(_ segments: [String], fits: (String) -> Bool) -> String {
     let options = candidates(segments)
     return options.first(where: fits) ?? options[options.count - 1]
   }

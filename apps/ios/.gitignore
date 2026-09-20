@@ -17,7 +17,9 @@ node_modules/
 .tools/
 **/__generated__/
 Packages/Typie/Sources/GraphQL/*
-!Packages/Typie/Sources/GraphQL/SchemaConfiguration.swift
-!Packages/Typie/Sources/GraphQL/CustomScalars/
+!Packages/Typie/Sources/GraphQL/Schema/
+Packages/Typie/Sources/GraphQL/Schema/*
+!Packages/Typie/Sources/GraphQL/Schema/SchemaConfiguration.swift
+!Packages/Typie/Sources/GraphQL/Schema/CustomScalars/
 Packages/Typie/Sources/GraphQLMocks/*
 !Packages/Typie/Sources/GraphQLMocks/GraphQLMocks.swift

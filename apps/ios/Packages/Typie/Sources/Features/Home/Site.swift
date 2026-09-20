@@ -1,12 +1,13 @@
 import Foundation
+import GraphQL
 
-public struct Site: Identifiable, Equatable, Sendable {
-  public let id: String
-  public let name: String
-  public let url: String
-  public let logo: URL?
+struct Site: Identifiable, Equatable, Sendable {
+  let id: String
+  let name: String
+  let url: String
+  let logo: Img_image?
 
-  public init(id: String, name: String, url: String, logo: URL?) {
+  init(id: String, name: String, url: String, logo: Img_image?) {
     self.id = id
     self.name = name
     self.url = url

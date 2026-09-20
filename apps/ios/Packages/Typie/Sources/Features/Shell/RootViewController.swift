@@ -66,9 +66,10 @@
         return AuthFlowController()
       case .main:
         let router = Container.shared.router()
-        let controller = MainTabBarController(
+        let controller = ShellController(
           rootProvider: { tab in router.root(for: tab) },
-          createAction: { tab in router.createAction(for: tab) })
+          openSearchHit: { hit, presenter in router.pushSearchHit(hit, from: presenter) },
+          createMenu: { top in router.createMenu(for: top) })
         Container.shared.sites().onCreated = { [weak self] in self?.dismiss(animated: true) }
         return controller
       }

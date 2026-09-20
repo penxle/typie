@@ -3,7 +3,7 @@ import FactoryKit
 import GraphQL
 import Observation
 
-public enum SingleSignOnOutcome: Sendable, Equatable {
+enum SingleSignOnOutcome: Sendable, Equatable {
   case succeeded
   case cancelled
   case failed
@@ -11,20 +11,20 @@ public enum SingleSignOnOutcome: Sendable, Equatable {
 
 @Observable
 @MainActor
-public final class SingleSignOnModel {
-  public private(set) var activeProvider: Core.SingleSignOnProvider?
+final class SingleSignOnModel {
+  private(set) var activeProvider: Core.SingleSignOnProvider?
 
   @ObservationIgnored private let singleSignOn = Container.shared.singleSignOn()
   @ObservationIgnored private let client = Container.shared.graphQLClient()
   @ObservationIgnored private let onSuccess: @MainActor () -> Void
 
-  public init(onSuccess: @escaping @MainActor () -> Void) {
+  init(onSuccess: @escaping @MainActor () -> Void) {
     self.onSuccess = onSuccess
   }
 
-  public var isBusy: Bool { activeProvider != nil }
+  var isBusy: Bool { activeProvider != nil }
 
-  public func signIn(
+  func signIn(
     with provider: Core.SingleSignOnProvider,
     presenter: @escaping @MainActor () -> AnyObject?
   ) async -> SingleSignOnOutcome {

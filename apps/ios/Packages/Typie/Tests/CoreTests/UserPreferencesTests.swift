@@ -73,4 +73,25 @@ import Testing
       #expect(defaults.object(forKey: "recent_searches@A") == nil)
     }
   }
+
+  @Test func storesExpandedFoldersPerSite() {
+    withFreshDefaults { defaults in
+      let preferences = UserPreferences(userId: "A", defaults: defaults)
+      preferences.setExpandedFolders(["f2", "f1"], siteId: "site-1")
+      #expect(preferences.expandedFolders(siteId: "site-1") == ["f2", "f1"])
+      #expect(preferences.expandedFolders(siteId: "site-2") == [])
+      #expect(defaults.stringArray(forKey: "expanded_folders:site-1@A") == ["f2", "f1"])
+    }
+  }
+
+  @Test func clearingExpandedFoldersRemovesKey() {
+    withFreshDefaults { defaults in
+      let preferences = UserPreferences(userId: "A", defaults: defaults)
+      preferences.setExpandedFolders(["f1"], siteId: "site-1")
+      preferences.setExpandedFolders([], siteId: "site-1")
+      #expect(defaults.object(forKey: "expanded_folders:site-1@A") == nil)
+      #expect(
+        UserPreferences(userId: "A", defaults: defaults).expandedFolders(siteId: "site-1") == [])
+    }
+  }
 }

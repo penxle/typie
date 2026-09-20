@@ -38,7 +38,7 @@ extension Container {
   }
 
   public var apolloStore: Factory<ApolloStore> {
-    self { ApolloStore() }.singleton
+    self { GraphQLCache.makeStore() }.singleton
   }
 
   @MainActor public var authState: Factory<AuthStateStore> {

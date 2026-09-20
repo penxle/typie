@@ -12,6 +12,9 @@
     static let contentBottomInset = barHeight + bottomPadding
     static let iconSide: CGFloat = 22
     private static let createSpacing: CGFloat = 8
+    static let createButtonSide: CGFloat = 50
+    private static let createButtonSpacing: CGFloat = 12
+    private static let createButtonFade: TimeInterval = 0.15
     private static let contentPadding: CGFloat = 2
     private static let lightSelectionAlpha: CGFloat = 0.06
     private static let darkSelectionAlpha: CGFloat = 0.12
@@ -28,7 +31,13 @@
     private static let expandBounce: CGFloat = 0.3
     private static let collapseDuration: TimeInterval = 0.3
     private static let collapseBounce: CGFloat = 0.15
+    private static let searchExpandDuration: TimeInterval = 0.25
+    private static let searchExpandBounce: CGFloat = 0
+    private static let searchCollapseDuration: TimeInterval = 0.2
+    private static let searchCollapseBounce: CGFloat = 0
     private static let menuPadding: CGFloat = 8
+    private static let collapsedTabScale: CGFloat = 0.01
+    private static let dismissEntryTransform = CGAffineTransform(scaleX: 0.6, y: 0.6)
 
     private let containerView: UIVisualEffectView
     private let tabGlassView: UIVisualEffectView
@@ -48,7 +57,18 @@
     private var isIgnoringTouch = false
     private var settleLink: CADisplayLink?
     private var lastSettleHeight: CGFloat?
+    private let dismissView: UIVisualEffectView
+    private let createButtonView: UIVisualEffectView
+    private let searchFieldView: UIView
+    private let progressView: UIView
+    let searchButton = UIButton(type: .system)
+    let dismissButton = UIButton(type: .system)
     let createButton = UIButton(type: .system)
+    private var isCreateButtonVisible = false
+    private(set) var isSearching = false
+    private(set) var isConcealed = false
+    private var tabFormConstraints: [NSLayoutConstraint] = []
+    private var searchFormConstraints: [NSLayoutConstraint] = []
     private(set) var isExpanded = false
 
     var onSelect: ((MainTab) -> Void)?
@@ -58,12 +78,15 @@
 
     init(
       selectedTint: UIColor, normalTint: UIColor, accentTint: UIColor, menuView: UIView,
-      menuHeaderHeight: CGFloat, menuRowHeight: CGFloat, menuRowCount: Int
+      menuHeaderHeight: CGFloat, menuRowHeight: CGFloat, menuRowCount: Int,
+      searchFieldView: UIView, progressView: UIView, createTint: UIColor, onCreateTint: UIColor
     ) {
       self.menuView = menuView
       self.menuHeaderHeight = menuHeaderHeight
       self.menuRowHeight = menuRowHeight
       self.menuHeight = menuHeaderHeight + menuRowHeight * CGFloat(menuRowCount)
+      self.searchFieldView = searchFieldView
+      self.progressView = progressView
       let containerEffect = UIGlassContainerEffect()
       containerEffect.spacing = Self.createSpacing
       containerView = UIVisualEffectView(effect: containerEffect)
@@ -71,6 +94,8 @@
       pillView = UIVisualEffectView(effect: UIGlassEffect())
       menuGlassView = UIVisualEffectView(effect: Self.interactiveGlass())
       createView = UIVisualEffectView(effect: Self.interactiveGlass())
+      dismissView = UIVisualEffectView(effect: Self.interactiveGlass())
+      createButtonView = UIVisualEffectView(effect: Self.tintedGlass(createTint))
 
       let switcherImage = UIImage(
         named: LucideIcon.chevronsUpDown.assetName, in: TDesignBundle.bundle, with: nil)!
@@ -101,8 +126,14 @@
           onSelect?(MainTab.allCases[segmentedControl.selectedSegmentIndex])
         }, for: .valueChanged)
 
-      createButton.configuration = .plain()
-      createButton.configuration?.baseForegroundColor = selectedTint
+      searchButton.configuration = .plain()
+      searchButton.configuration?.baseForegroundColor = selectedTint
+      searchButton.configuration?.image = Self.barIcon(LucideIcon.search)
+      searchButton.accessibilityLabel = "검색"
+      dismissButton.configuration = .plain()
+      dismissButton.configuration?.baseForegroundColor = selectedTint
+      dismissButton.configuration?.image = Self.barIcon(LucideIcon.x)
+      dismissButton.accessibilityLabel = "검색 닫기"
 
       let content = containerView.contentView
       addSubview(containerView)
@@ -120,10 +151,33 @@
       tabContentView.addSubview(segmentedControl)
       tabContentView.addSubview(iconsOverlay)
       content.addSubview(createView)
-      createView.contentView.addSubview(createButton)
+      createView.contentView.addSubview(searchButton)
+      searchFieldView.backgroundColor = .clear
+      searchFieldView.isHidden = true
+      searchFieldView.alpha = 0
+      createView.contentView.addSubview(searchFieldView)
+      progressView.backgroundColor = .clear
+      progressView.isUserInteractionEnabled = false
+      progressView.isHidden = true
+      progressView.alpha = 0
+      createView.contentView.addSubview(progressView)
+      content.addSubview(dismissView)
+      dismissView.isHidden = true
+      dismissView.alpha = 0
+      dismissView.contentView.addSubview(dismissButton)
+      createButton.configuration = .plain()
+      createButton.configuration?.baseForegroundColor = onCreateTint
+      createButton.configuration?.image = Self.barIcon(LucideIcon.plus)
+      createButton.showsMenuAsPrimaryAction = true
+      createButton.accessibilityLabel = "새로 만들기"
+      content.addSubview(createButtonView)
+      createButtonView.contentView.addSubview(createButton)
+      createButtonView.isHidden = true
+      createButtonView.alpha = 0
       for view in [
         containerView, tabGlassView, pillView, menuGlassView, segmentedControl, iconsOverlay,
-        createView, createButton,
+        createView, searchButton, searchFieldView, progressView, dismissView, dismissButton,
+        createButtonView, createButton,
       ] {
         view.translatesAutoresizingMaskIntoConstraints = false
       }
@@ -142,7 +196,7 @@
         pillView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
         pillView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         pillView.trailingAnchor.constraint(
-          equalTo: createView.leadingAnchor, constant: -Self.createSpacing),
+          equalTo: content.trailingAnchor, constant: -(Self.createSpacing + Self.barHeight)),
 
         tabGlassView.leadingAnchor.constraint(equalTo: pillView.leadingAnchor),
         tabGlassView.trailingAnchor.constraint(equalTo: pillView.trailingAnchor),
@@ -168,16 +222,58 @@
         iconsOverlay.topAnchor.constraint(equalTo: segmentedControl.topAnchor),
         iconsOverlay.bottomAnchor.constraint(equalTo: segmentedControl.bottomAnchor),
 
-        createView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
         createView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-        createView.widthAnchor.constraint(equalToConstant: Self.barHeight),
         createView.heightAnchor.constraint(equalToConstant: Self.barHeight),
 
-        createButton.leadingAnchor.constraint(equalTo: createContent.leadingAnchor),
-        createButton.trailingAnchor.constraint(equalTo: createContent.trailingAnchor),
-        createButton.topAnchor.constraint(equalTo: createContent.topAnchor),
-        createButton.bottomAnchor.constraint(equalTo: createContent.bottomAnchor),
+        dismissView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        dismissView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        dismissView.widthAnchor.constraint(equalToConstant: Self.barHeight),
+        dismissView.heightAnchor.constraint(equalToConstant: Self.barHeight),
+
+        createButtonView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        createButtonView.bottomAnchor.constraint(
+          equalTo: createView.topAnchor, constant: -Self.createButtonSpacing),
+        createButtonView.widthAnchor.constraint(equalToConstant: Self.createButtonSide),
+        createButtonView.heightAnchor.constraint(equalToConstant: Self.createButtonSide),
+        createButton.leadingAnchor.constraint(equalTo: createButtonView.contentView.leadingAnchor),
+        createButton.trailingAnchor.constraint(
+          equalTo: createButtonView.contentView.trailingAnchor),
+        createButton.topAnchor.constraint(equalTo: createButtonView.contentView.topAnchor),
+        createButton.bottomAnchor.constraint(equalTo: createButtonView.contentView.bottomAnchor),
+
+        dismissButton.leadingAnchor.constraint(equalTo: dismissView.contentView.leadingAnchor),
+        dismissButton.trailingAnchor.constraint(equalTo: dismissView.contentView.trailingAnchor),
+        dismissButton.topAnchor.constraint(equalTo: dismissView.contentView.topAnchor),
+        dismissButton.bottomAnchor.constraint(equalTo: dismissView.contentView.bottomAnchor),
+
+        searchButton.leadingAnchor.constraint(equalTo: createContent.leadingAnchor),
+        searchButton.topAnchor.constraint(equalTo: createContent.topAnchor),
+        searchButton.bottomAnchor.constraint(equalTo: createContent.bottomAnchor),
+        searchButton.widthAnchor.constraint(equalToConstant: Self.barHeight),
+        progressView.leadingAnchor.constraint(equalTo: searchButton.leadingAnchor),
+        progressView.trailingAnchor.constraint(equalTo: searchButton.trailingAnchor),
+        progressView.topAnchor.constraint(equalTo: searchButton.topAnchor),
+        progressView.bottomAnchor.constraint(equalTo: searchButton.bottomAnchor),
+
+        searchFieldView.leadingAnchor.constraint(
+          equalTo: createContent.leadingAnchor, constant: Self.barHeight),
+        searchFieldView.trailingAnchor.constraint(
+          equalTo: createContent.trailingAnchor,
+          constant: -(Self.barHeight - TSearchField.clearButtonWidth) / 2),
+        searchFieldView.topAnchor.constraint(equalTo: createContent.topAnchor),
+        searchFieldView.bottomAnchor.constraint(equalTo: createContent.bottomAnchor),
       ])
+
+      tabFormConstraints = [
+        createView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        createView.widthAnchor.constraint(equalToConstant: Self.barHeight),
+      ]
+      searchFormConstraints = [
+        createView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+        createView.trailingAnchor.constraint(
+          equalTo: dismissView.leadingAnchor, constant: -Self.createSpacing),
+      ]
+      NSLayoutConstraint.activate(tabFormConstraints)
     }
 
     @available(*, unavailable)
@@ -187,9 +283,15 @@
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
       let surface = isExpanded ? menuGlassView : tabGlassView
-      let insideSurface = surface.point(inside: convert(point, to: surface), with: event)
+      let insideSurface =
+        !isSearching && surface.point(inside: convert(point, to: surface), with: event)
       let insideCreate = createView.point(inside: convert(point, to: createView), with: event)
-      guard insideSurface || insideCreate else { return nil }
+      let insideDismiss =
+        isSearching && dismissView.point(inside: convert(point, to: dismissView), with: event)
+      let insideCreateButton =
+        !createButtonView.isHidden
+        && createButtonView.point(inside: convert(point, to: createButtonView), with: event)
+      guard insideSurface || insideCreate || insideDismiss || insideCreateButton else { return nil }
       return super.hitTest(point, with: event)
     }
 
@@ -201,6 +303,8 @@
         pillView.cornerConfiguration = .capsule(maximumRadius: Self.barHeight / 2)
         menuGlassView.cornerConfiguration = .capsule(maximumRadius: Self.barHeight / 2)
         createView.cornerConfiguration = .capsule()
+        dismissView.cornerConfiguration = .capsule()
+        createButtonView.cornerConfiguration = .capsule()
       }
       menuView.frame = CGRect(
         x: Self.menuPadding, y: Self.menuPadding, width: max(0, pillWidth - Self.menuPadding * 2),
@@ -349,6 +453,147 @@
       }
     }
 
+    func setSearchLoading(_ loading: Bool) {
+      pendingProgress?.cancel()
+      pendingProgress = nil
+      guard loading else {
+        showProgress(false)
+        return
+      }
+      let item = DispatchWorkItem { [weak self] in self?.showProgress(true) }
+      pendingProgress = item
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.progressDelay, execute: item)
+    }
+
+    private func showProgress(_ shown: Bool) {
+      guard shown != !progressView.isHidden else { return }
+      if shown { progressView.isHidden = false }
+      UIView.animate(
+        withDuration: Self.progressCrossfade,
+        animations: {
+          self.progressView.alpha = shown ? 1 : 0
+          self.searchButton.alpha = shown ? 0 : 1
+        }
+      ) { _ in
+        if !shown, self.progressView.alpha == 0 { self.progressView.isHidden = true }
+      }
+    }
+
+    private var pendingProgress: DispatchWorkItem?
+    private static let progressDelay: TimeInterval = 0.25
+    private static let progressCrossfade: TimeInterval = 0.15
+
+    func setSearching(_ searching: Bool, completion: (() -> Void)? = nil) {
+      guard searching != isSearching else {
+        completion?()
+        return
+      }
+      if searching, isExpanded {
+        setExpanded(false)
+      }
+      isSearching = searching
+      applyCreateButtonVisibility()
+      tabContentView.isUserInteractionEnabled = !searching
+      searchButton.isUserInteractionEnabled = !searching
+      searchButton.accessibilityElementsHidden = searching
+      let reduceMotion = UIAccessibility.isReduceMotionEnabled
+      let tabSurfaces: [UIView] = [tabGlassView, pillView, tabContentView]
+      let tabGlasses = [tabGlassView, pillView]
+      if searching {
+        iconsOverlay.pauseTracking()
+        dismissView.isHidden = false
+        searchFieldView.isHidden = false
+        dismissView.transform = reduceMotion ? .identity : Self.dismissEntryTransform
+        NSLayoutConstraint.deactivate(tabFormConstraints)
+        NSLayoutConstraint.activate(searchFormConstraints)
+        UIView.animate(
+          springDuration: Self.searchExpandDuration,
+          bounce: reduceMotion ? 0 : Self.searchExpandBounce, options: [.allowUserInteraction],
+          animations: {
+            self.superview?.layoutIfNeeded()
+            for surface in tabSurfaces {
+              surface.alpha = 0
+            }
+            for glass in tabGlasses {
+              glass.transform = reduceMotion ? .identity : self.collapsedTabTransform
+            }
+            self.dismissView.alpha = 1
+            self.dismissView.transform = .identity
+            self.searchFieldView.alpha = 1
+          }
+        ) { _ in
+          guard self.isSearching else { return }
+          completion?()
+        }
+      } else {
+        NSLayoutConstraint.deactivate(searchFormConstraints)
+        NSLayoutConstraint.activate(tabFormConstraints)
+        UIView.animate(
+          springDuration: Self.searchCollapseDuration,
+          bounce: reduceMotion ? 0 : Self.searchCollapseBounce, options: [.allowUserInteraction],
+          animations: {
+            self.superview?.layoutIfNeeded()
+            for surface in tabSurfaces {
+              surface.alpha = 1
+            }
+            for glass in tabGlasses {
+              glass.transform = .identity
+            }
+            self.dismissView.alpha = 0
+            self.dismissView.transform = reduceMotion ? .identity : Self.dismissEntryTransform
+            self.searchFieldView.alpha = 0
+          }
+        ) { _ in
+          guard !self.isSearching else { return }
+          self.dismissView.isHidden = true
+          self.searchFieldView.isHidden = true
+          self.iconsOverlay.resumeTracking()
+          completion?()
+        }
+      }
+    }
+
+    func setCreateButtonVisible(_ visible: Bool) {
+      guard visible != isCreateButtonVisible else { return }
+      isCreateButtonVisible = visible
+      applyCreateButtonVisibility()
+    }
+
+    private func applyCreateButtonVisibility() {
+      let shown = isCreateButtonVisible && !isSearching && !isConcealed
+      if shown { createButtonView.isHidden = false }
+      let duration = UIAccessibility.isReduceMotionEnabled ? 0 : Self.createButtonFade
+      UIView.animate(withDuration: duration) {
+        self.createButtonView.alpha = shown ? 1 : 0
+      } completion: { _ in
+        if !shown { self.createButtonView.isHidden = true }
+      }
+    }
+
+    func setConcealed(_ concealed: Bool) {
+      guard concealed != isConcealed else { return }
+      if concealed, isExpanded {
+        setExpanded(false)
+      }
+      isConcealed = concealed
+      applyCreateButtonVisibility()
+      isUserInteractionEnabled = !concealed
+      accessibilityElementsHidden = concealed
+      if concealed {
+        iconsOverlay.pauseTracking()
+      } else if !isSearching {
+        iconsOverlay.resumeTracking()
+      }
+      if #available(iOS 26.1, *), !UIAccessibility.isReduceMotionEnabled {
+        tabGlassView.effect = concealed ? UIColorEffect(color: .clear) : Self.interactiveGlass()
+        createView.effect = concealed ? UIColorEffect(color: .clear) : Self.interactiveGlass()
+        tabGlassView.contentView.alpha = concealed ? 0 : 1
+        createView.contentView.alpha = concealed ? 0 : 1
+      } else {
+        alpha = concealed ? 0 : 1
+      }
+    }
+
     private func startSettleLink() {
       stopSettleLink()
       let link = CADisplayLink(target: self, selector: #selector(checkSettled))
@@ -412,9 +657,31 @@
       CGAffineTransform(translationX: 0, y: Self.exitSlideDistance)
     }
 
+    private var collapsedTabTransform: CGAffineTransform {
+      let width = tabGlassView.bounds.width
+      let scale = Self.collapsedTabScale
+      return CGAffineTransform(translationX: -(width / 2) * (1 - scale), y: 0)
+        .scaledBy(x: scale, y: 1)
+    }
+
+    static func barIcon(_ name: TIconName) -> UIImage {
+      let image = UIImage(named: name.assetName, in: TDesignBundle.bundle, with: nil)!
+      let size = CGSize(width: iconSide, height: iconSide)
+      return UIGraphicsImageRenderer(size: size).image { _ in
+        image.draw(in: CGRect(origin: .zero, size: size))
+      }.withRenderingMode(.alwaysTemplate)
+    }
+
     private static func interactiveGlass() -> UIGlassEffect {
       let effect = UIGlassEffect()
       effect.isInteractive = true
+      return effect
+    }
+
+    private static func tintedGlass(_ tint: UIColor) -> UIGlassEffect {
+      let effect = UIGlassEffect()
+      effect.isInteractive = true
+      effect.tintColor = tint
       return effect
     }
 
@@ -714,8 +981,10 @@
       let startIndex = originalIndex
       originalIndex = nil
       super.touchesEnded(touches, with: event)
-      guard let startIndex, landedIndex != startIndex else { return }
-      if landedIndex == momentaryIndex {
+      guard let startIndex else { return }
+      if landedIndex == startIndex {
+        sendActions(for: .valueChanged)
+      } else if landedIndex == momentaryIndex {
         selectedSegmentTintColor = .clear
         forceInstantUnlift()
         UIView.performWithoutAnimation {

@@ -8,3 +8,9 @@ public func parseDateTime(_ raw: String) -> Date? {
   plain.formatOptions = [.withInternetDateTime]
   return plain.date(from: raw)
 }
+
+public func formatDateTime(_ date: Date) -> String {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  return formatter.string(from: date)
+}

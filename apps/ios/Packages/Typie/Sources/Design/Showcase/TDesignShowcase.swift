@@ -78,6 +78,14 @@
             }
           }
 
+          section("링") {
+            HStack(spacing: 16) {
+              TProgressRing(progress: 0.35, state: .under, size: 16)
+              TProgressRing(progress: 0.35, state: .under, size: 72)
+              TProgressRing(progress: 0.35, state: .achieved, size: 72)
+            }
+          }
+
           section("버튼") {
             TButton("기본 버튼") {}
             TButton("보조 버튼", variant: .secondary, leadingIcon: LucideIcon.headphones) {}
@@ -108,6 +116,13 @@
                   title: "잘못된 이메일 또는 비밀번호예요",
                   message: "입력한 로그인 정보가 일치하지 않아요. 이메일과 비밀번호를 다시 한번 확인해주세요.",
                   confirmText: "확인"))
+            }
+
+            TButton("확인 대화상자", variant: .secondary) {
+              _ = await dialog.confirm(
+                TDialogItem(
+                  title: "일일 목표를 해제하시겠어요?", message: "설정한 하루 목표 글자 수가 사라져요.",
+                  confirmText: "해제", cancelText: "취소", confirmIsDestructive: true))
             }
           }
 
