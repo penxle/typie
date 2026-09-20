@@ -149,7 +149,11 @@ export const handlePointerUp: EditorEventHandler<HTMLElement, PointerEvent> = (e
   editor.endNativeDragAdmission({ restoreFocus: true });
 };
 
-export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor, e) => {
+export const handleClick = (
+  editor: Editor,
+  e: MouseEvent & { currentTarget: HTMLElement },
+  attachViewportAnchorAt?: (point: LocalPoint) => void,
+): void => {
   const state = PointerState.of(editor);
   const target = state.clickTarget;
   if (target && 'pointerId' in e && e.pointerId !== target.pointerId) return;
@@ -162,7 +166,10 @@ export const handleClick: EditorEventHandler<HTMLElement, MouseEvent> = (editor,
     const hit = interactiveTarget(editor, editor.interactiveHitTest(local.page, local.x, local.y), local);
     if (!hit || hit.type !== target.hit.type || hit.id !== target.hit.id) return;
     match(hit)
-      .with({ type: 'fold_title' }, ({ id }) => editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id } }))
+      .with({ type: 'fold_title' }, ({ id }) => {
+        attachViewportAnchorAt?.(local);
+        editor.enqueue({ type: 'view', op: { type: 'toggle_fold', id } });
+      })
       .with({ type: 'callout_icon' }, ({ id, next_variant }) =>
         editor.enqueue({ type: 'node', op: { type: 'set_attrs', id, attrs: { type: 'callout', variant: next_variant } } }),
       )

@@ -99,7 +99,7 @@
         ctx.scroll?.cancel();
         handlePointerDown(editor, event);
       },
-      onclick: handle(editor, handleClick),
+      onclick: (event) => handleClick(editor, event, (point) => ctx.scroll?.attachViewportAnchorAt(point)),
       oncontextmenu: (event) => {
         cancelPointerInteraction(editor);
         if (!editor.nativeSelection) handleContextMenu(editor, event);

@@ -366,6 +366,56 @@ describe.each(['mouse', 'pen', 'touch'])('%s fold activation', (pointerType) => 
     if (!protectContent) await vi.waitFor(() => expect(root.textContent).toContain('folded body'));
   });
 });
+it('keeps the clicked fold title attached while expanding content above the viewport anchor', async () => {
+  const before = Array.from({ length: 12 }, (_, index) => paragraph(`before ${index}`));
+  const body = Array.from({ length: 12 }, (_, index) => paragraph(`body ${index}`));
+  const after = Array.from({ length: 12 }, (_, index) => paragraph(`after ${index}`));
+  const { root, scrollRoot } = await viewer(
+    doc([
+      ...before,
+      entry({ type: 'fold' }, [
+        entry({ type: 'fold_title' }, [entry({ type: 'text', text: 'anchored title' })]),
+        entry({ type: 'fold_content' }, body),
+      ]),
+      ...after,
+    ]),
+  );
+  const title = defined(
+    [...root.querySelectorAll<HTMLElement>('[data-selection-run]')].find((run) => run.textContent === 'anchored title'),
+  );
+  const viewport = scrollRoot.getBoundingClientRect();
+  scrollRoot.scrollTop += title.getBoundingClientRect().top - viewport.top - 20;
+  scrollRoot.dispatchEvent(new Event('scroll'));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const beforeTop = title.getBoundingClientRect().top;
+  const point = {
+    clientX: title.getBoundingClientRect().left - 8,
+    clientY: beforeTop + title.getBoundingClientRect().height / 2,
+  };
+  const target = defined(document.elementFromPoint(point.clientX, point.clientY));
+  const send = (type: string) =>
+    target.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 42,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        ...point,
+      }),
+    );
+  send('pointerdown');
+  send('pointerup');
+  send('click');
+
+  await vi.waitFor(() => expect(root.textContent).toContain('body 11'));
+  const expandedTitle = defined(
+    [...root.querySelectorAll<HTMLElement>('[data-selection-run]')].find((run) => run.textContent === 'anchored title'),
+  );
+  expect(expandedTitle.getBoundingClientRect().top).toBeCloseTo(beforeTop, 0);
+});
 it.each([false, true])(
   'includes collapsed bodies with native select-all but keeps title-only selections partial, backwards=%s',
   async (backwards) => {
