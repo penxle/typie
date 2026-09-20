@@ -51,6 +51,7 @@ pub(crate) fn build_layout(
             font_features: FontFeatures::Source(Cow::Borrowed(
                 "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
             )),
+            locale: style_run.locale,
             word_break: WordBreak::BreakAll,
             overflow_wrap: OverflowWrap::Anywhere,
             ..TextStyle::default()
@@ -114,6 +115,7 @@ mod tests {
             font_size,
             letter_spacing: 0.0,
             line_height: 1.6,
+            locale: None,
         }
     }
 

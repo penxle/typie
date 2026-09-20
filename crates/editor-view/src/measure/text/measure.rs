@@ -256,11 +256,13 @@ fn measure_segment<'a>(
     let strut =
         compute_strut(resource, base_style).expect("strut layout should have one line and run");
     let grapheme_segmenter = Arc::clone(resource.segmenters());
+    let scripts = Arc::clone(resource.script());
     let style_runs = resolve_style_runs(
         seg_text,
         &seg_runs,
         &mut resource.font_registry,
         &grapheme_segmenter.grapheme,
+        scripts.as_borrowed(),
     );
     let tab_boxes: Vec<(TabMark<'a>, f32)> = seg_tabs
         .into_iter()

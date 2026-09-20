@@ -619,11 +619,13 @@ mod tests {
         };
         let strut = compute_strut(&mut resource, &base).expect("strut");
         let segmenters = Arc::clone(resource.segmenters());
+        let scripts = Arc::clone(resource.script());
         let style_runs = resolve_style_runs(
             &text,
             &runs,
             &mut resource.font_registry,
             &segmenters.grapheme,
+            scripts.as_borrowed(),
         );
         let tab_boxes: Vec<(TabMark, f32)> = tabs
             .into_iter()

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use icu_properties::CodePointMapData;
-use icu_properties::props::GeneralCategory;
+use icu_properties::props::{GeneralCategory, Script};
 use icu_provider::buf::AsDeserializingBufferProvider;
 use icu_provider_blob::BlobDataProvider;
 use icu_segmenter::options::{SentenceBreakOptions, WordBreakOptions};
@@ -19,6 +19,7 @@ pub struct TextSegmenters {
 pub struct IcuResources {
     pub segmenters: Arc<TextSegmenters>,
     pub general_category: Arc<CodePointMapData<GeneralCategory>>,
+    pub script: Arc<CodePointMapData<Script>>,
 }
 
 impl IcuResources {
@@ -43,10 +44,15 @@ impl IcuResources {
             CodePointMapData::<GeneralCategory>::try_new_unstable(&dp)
                 .map_err(|e| ResourceError::IcuProperty(e.to_string()))?,
         );
+        let script = Arc::new(
+            CodePointMapData::<Script>::try_new_unstable(&dp)
+                .map_err(|e| ResourceError::IcuProperty(e.to_string()))?,
+        );
 
         Ok(Self {
             segmenters,
             general_category,
+            script,
         })
     }
 }
@@ -70,6 +76,7 @@ impl IcuResources {
             general_category: Arc::new(
                 CodePointMapData::<GeneralCategory>::new().static_to_owned(),
             ),
+            script: Arc::new(CodePointMapData::<Script>::new().static_to_owned()),
         }
     }
 }

@@ -6,7 +6,8 @@ use std::borrow::Cow;
 
 use editor_resource::{Resource, TextBrush};
 use parley::style::{
-    FontFamily, FontFamilyName, FontFeatures, FontWeight as ParleyFontWeight, LineHeight, TextStyle,
+    FontFamily, FontFamilyName, FontFeatures, FontWeight as ParleyFontWeight, Language, LineHeight,
+    TextStyle,
 };
 use parley::{OverflowWrap, WordBreak};
 
@@ -14,6 +15,7 @@ use crate::glyph_run::{Glyph, RubyAnnotation, RubyGlyphRun, Synthesis};
 
 use super::extract::ExtractedLine;
 use super::inline::RubyGroup;
+use super::shaping_language::{locale_at_byte, resolve_shaping_locale_runs};
 use super::style_run::resolve_cluster_family_weight;
 use crate::glyph_run::GlyphRun;
 
@@ -22,6 +24,7 @@ struct RubyFontRun {
     byte_range: std::ops::Range<usize>,
     family_id: u16,
     weight: u16,
+    locale: Option<Language>,
 }
 
 fn resolve_ruby_font_runs(
@@ -32,6 +35,9 @@ fn resolve_ruby_font_runs(
 ) -> Vec<RubyFontRun> {
     let requested_family_id = resource.font_registry.intern(family);
     let segmenters = std::sync::Arc::clone(resource.segmenters());
+    let scripts = std::sync::Arc::clone(resource.script());
+    let locale_runs = resolve_shaping_locale_runs(text, scripts.as_borrowed());
+    let mut locale_run_index = 0;
     let mut runs: Vec<RubyFontRun> = Vec::new();
     let mut cluster_codepoints: Vec<u32> = Vec::new();
     let mut cluster_start = 0usize;
@@ -52,9 +58,11 @@ fn resolve_ruby_font_runs(
             weight,
             &cluster_codepoints,
         );
+        let locale = locale_at_byte(&locale_runs, &mut locale_run_index, cluster_start);
         if let Some(last) = runs.last_mut()
             && last.family_id == family_id
             && last.weight == resolved_weight
+            && last.locale == locale
         {
             last.byte_range.end = boundary;
         } else {
@@ -62,6 +70,7 @@ fn resolve_ruby_font_runs(
                 byte_range: cluster_start..boundary,
                 family_id,
                 weight: resolved_weight,
+                locale,
             });
         }
         cluster_start = boundary;
@@ -180,6 +189,7 @@ pub(crate) fn build_ruby_annotations(
                 font_size: ruby_font_size,
                 font_weight: ParleyFontWeight::new(font_run.weight as f32),
                 line_height: LineHeight::FontSizeRelative(1.0),
+                locale: font_run.locale,
                 brush: TextBrush { run_index },
                 font_features: FontFeatures::Source(Cow::Borrowed(
                     "\"ss05\" 1, \"cv12\" 1, \"ss18\" 1",
@@ -461,6 +471,29 @@ mod tests {
             vec![(0..3, primary, 400)],
             "cluster가 폰트 경계로 쪼개지면 안 된다"
         );
+    }
+
+    #[test]
+    fn ruby_font_runs_include_shaping_locale() {
+        let mut resource = fallback_resource();
+
+        let runs = resolve_ruby_font_runs("한…글", "Primary", 400, &mut resource);
+
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].locale.as_ref().map(Language::as_str), Some("ko"));
+    }
+
+    #[test]
+    fn ruby_locale_change_splits_an_otherwise_equal_font_run() {
+        let mut resource = fallback_resource();
+
+        let runs = resolve_ruby_font_runs("한…あ", "Primary", 400, &mut resource);
+
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].byte_range, 0..6);
+        assert_eq!(runs[0].locale.as_ref().map(Language::as_str), Some("ko"));
+        assert_eq!(runs[1].byte_range, 6..9);
+        assert_eq!(runs[1].locale.as_ref().map(Language::as_str), Some("ja"));
     }
 
     #[test]
