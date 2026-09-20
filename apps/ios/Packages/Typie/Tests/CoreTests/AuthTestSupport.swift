@@ -21,13 +21,14 @@ func waitOnMain(_ condition: @MainActor () -> Bool) async throws {
   throw WaitTimeout()
 }
 
-func makeTestConfig() throws -> AppConfig {
-  try AppConfig(
+func makeTestConfig() -> AppConfig {
+  AppConfig(
     infoDictionary: [
       "API_URL": "https://api.example.test", "AUTH_URL": "https://auth.example.test",
-      "OIDC_CLIENT_ID": "client", "KAKAO_NATIVE_APP_KEY": "kakao-key",
-      "NAVER_CLIENT_ID": "naver-client",
-    ], oidcClientSecret: "secret", naverClientSecret: "naver-secret")
+      "OIDC_CLIENT_ID": "client", "OIDC_CLIENT_SECRET": "secret",
+      "KAKAO_NATIVE_APP_KEY": "kakao-key", "NAVER_CLIENT_ID": "naver-client",
+      "NAVER_CLIENT_SECRET": "naver-secret",
+    ])
 }
 
 func stubbedConfiguration(_ stub: URLProtocol.Type) -> URLSessionConfiguration {
@@ -41,16 +42,6 @@ func withFreshDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
   let defaults = UserDefaults(suiteName: name)!
   defer { defaults.removePersistentDomain(forName: name) }
   try body(defaults)
-}
-
-func withFreshDefaultsAsync(
-  isolation: isolated (any Actor)? = #isolation,
-  _ body: (UserDefaults) async throws -> Void
-) async rethrows {
-  let name = "test-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: name)!
-  defer { defaults.removePersistentDomain(forName: name) }
-  try await body(defaults)
 }
 
 class StubURLProtocol: URLProtocol, @unchecked Sendable {

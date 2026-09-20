@@ -60,7 +60,7 @@ final class OIDCStub: StubURLProtocol, @unchecked Sendable {
 @Suite(.serialized) struct OIDCClientTests {
   private func makeClient() throws -> OIDCClient {
     OIDCClient(
-      config: try makeTestConfig(),
+      config: makeTestConfig(),
       session: HTTPSession.make(configuration: stubbedConfiguration(OIDCStub.self)))
   }
 
@@ -273,16 +273,16 @@ final class OIDCStub: StubURLProtocol, @unchecked Sendable {
     #expect(request.value(forHTTPHeaderField: "Cookie") == "typie-st=session")
   }
 
-  @Test func fetchMeParsesUserAndSites() async throws {
+  @Test func fetchMeParsesUser() async throws {
     OIDCStub.reset()
     OIDCStub.set(
       "/graphql",
       .init(
         statusCode: 200, headers: ["Content-Type": "application/json"],
-        body: Data(#"{"data":{"me":{"id":"u1","sites":[{"id":"s1"},{"id":"s2"}]}}}"#.utf8)))
+        body: Data(#"{"data":{"me":{"id":"u1"}}}"#.utf8)))
 
     let me = try await makeClient().fetchMe(accessToken: "access")
-    #expect(me == Me(id: "u1", siteIds: ["s1", "s2"]))
+    #expect(me == Me(id: "u1"))
 
     let request = try #require(OIDCStub.recordedRequest("/graphql"))
     #expect(request.httpMethod == "POST")
@@ -293,7 +293,7 @@ final class OIDCStub: StubURLProtocol, @unchecked Sendable {
     #expect(!names.contains { $0.hasPrefix("x-device") })
     let body = try #require(OIDCStub.recordedBody("/graphql"))
     let decoded = try JSONDecoder().decode([String: String].self, from: body)
-    #expect(decoded == ["query": "query AuthService_Me { me { id sites { id } } }"])
+    #expect(decoded == ["query": "query AuthService_Me { me { id } }"])
   }
 
   @Test func fetchMeWithoutUserUsesFirstErrorMessage() async throws {

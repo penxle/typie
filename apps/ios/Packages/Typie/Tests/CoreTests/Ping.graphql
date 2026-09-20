@@ -1,0 +1,5 @@
+query Ping_Query {
+  me {
+    id
+  }
+}

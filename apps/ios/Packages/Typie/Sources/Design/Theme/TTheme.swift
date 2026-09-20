@@ -3,7 +3,7 @@ import SwiftUI
 public struct TTheme: Sendable {
   public let colors: TColors
   public let shadows: TShadows
-  public let mode: ResolvedThemeMode
+  public let mode: TResolvedThemeMode
 
   public static let light = TTheme(colors: .light, shadows: .light, mode: .light)
   public static let dark = TTheme(colors: .dark, shadows: .dark, mode: .dark)

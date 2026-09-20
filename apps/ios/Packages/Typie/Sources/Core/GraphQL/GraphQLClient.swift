@@ -34,7 +34,21 @@ final class RedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
   }
 }
 
-public struct GraphQLClient: Sendable {
+public protocol QueryWatcher: Sendable {
+  func refetch() async
+  func cancel()
+}
+
+public protocol GraphQLClient: Sendable {
+  func perform<M: GraphQLMutation>(_ mutation: M) async throws -> M.Data
+  where M.ResponseFormat == SingleResponseFormat
+
+  func watch<Q: GraphQLQuery>(
+    _ query: Q, onResult: @escaping @Sendable (Result<Q.Data, any Error>) -> Void
+  ) async -> any QueryWatcher
+}
+
+struct ApolloGraphQLClient: GraphQLClient {
   let apollo: ApolloClient
 
   static func make(
@@ -43,7 +57,7 @@ public struct GraphQLClient: Sendable {
     onSessionCookie: @escaping @Sendable (String) async throws -> Void,
     store: ApolloStore = ApolloStore(),
     configuration: URLSessionConfiguration = HTTPSession.configuration()
-  ) -> GraphQLClient {
+  ) -> ApolloGraphQLClient {
     let transport = RequestChainNetworkTransport(
       urlSession: URLSession(
         configuration: configuration, delegate: RedirectBlocker(), delegateQueue: nil),
@@ -51,6 +65,47 @@ public struct GraphQLClient: Sendable {
         deviceHeaders: deviceHeaders, accessToken: accessToken, onSessionCookie: onSessionCookie),
       store: store,
       endpointURL: config.apiURL.appending(path: "graphql"))
-    return GraphQLClient(apollo: ApolloClient(networkTransport: transport, store: store))
+    return ApolloGraphQLClient(apollo: ApolloClient(networkTransport: transport, store: store))
+  }
+
+  func perform<M: GraphQLMutation>(_ mutation: M) async throws -> M.Data
+  where M.ResponseFormat == SingleResponseFormat {
+    try Self.outcome(of: try await apollo.perform(mutation: mutation)).get()
+  }
+
+  func watch<Q: GraphQLQuery>(
+    _ query: Q, onResult: @escaping @Sendable (Result<Q.Data, any Error>) -> Void
+  ) async -> any QueryWatcher {
+    let watcher = await apollo.watch(query: query, cachePolicy: .cacheAndNetwork) { result in
+      switch result {
+      case .success(let response): onResult(Self.outcome(of: response))
+      case .failure(let error): onResult(.failure(error))
+      }
+    }
+    return ApolloQueryWatcher(watcher: watcher)
+  }
+
+  private static func outcome<O: GraphQLOperation>(of response: GraphQLResponse<O>)
+    -> Result<O.Data, any Error>
+  {
+    if let error = response.errors?.first {
+      return .failure(mappedGraphQLError(error))
+    }
+    guard let data = response.data else {
+      return .failure(HTTPError.malformedResponse("\(O.operationName): no data"))
+    }
+    return .success(data)
+  }
+}
+
+private struct ApolloQueryWatcher<Q: GraphQLQuery>: QueryWatcher {
+  let watcher: GraphQLQueryWatcher<Q>
+
+  func refetch() async {
+    await watcher.fetch(fetchBehavior: .NetworkOnly)
+  }
+
+  func cancel() {
+    watcher.cancel()
   }
 }

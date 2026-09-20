@@ -1,29 +1,32 @@
 import Core
 import Design
+import FactoryKit
+import Features
+import Platform
 import UIKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
-  private var toastWindow: ToastWindow?
-  private var dialogWindow: DialogWindow?
-  private var theme: ThemeSettings?
+  private var toastWindow: OverlayWindow?
+  private var dialogWindow: OverlayWindow?
 
   func scene(
     _ scene: UIScene,
     willConnectTo session: UISceneSession,
     options connectionOptions: UIScene.ConnectionOptions
   ) {
-    guard let windowScene = scene as? UIWindowScene,
-      let environment = (UIApplication.shared.delegate as? AppDelegate)?.environment
-    else { return }
+    guard let windowScene = scene as? UIWindowScene else { return }
     let window = UIWindow(windowScene: windowScene)
-    let theme = ThemeSettings()
-    self.theme = theme
-    window.rootViewController = RootViewController(environment: environment, theme: theme)
+    window.rootViewController = RootViewController()
     self.window = window
-    toastWindow = ToastWindow(windowScene: windowScene, toast: environment.toast)
-    dialogWindow = DialogWindow(windowScene: windowScene, dialog: environment.dialog)
-    observeTheme(theme, window: window)
+    let dialog = Container.shared.dialog()
+    toastWindow = OverlayWindow(
+      windowScene: windowScene, level: .alert - 1, avoidsKeyboard: true, isInteractive: { false },
+      content: TToastOverlay(center: Container.shared.toast()))
+    dialogWindow = OverlayWindow(
+      windowScene: windowScene, level: .alert - 2, avoidsKeyboard: false,
+      isInteractive: { dialog.current != nil }, content: TDialogOverlay(center: dialog))
+    observeTheme(Container.shared.theme(), window: window)
     window.makeKeyAndVisible()
     handle(connectionOptions.urlContexts)
   }
@@ -34,7 +37,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   private func handle(_ contexts: Set<UIOpenURLContext>) {
     for context in contexts {
-      _ = SingleSignOnSDK.handle(context.url)
+      _ = Platform.handle(context.url)
     }
   }
 
@@ -42,10 +45,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window = nil
     toastWindow = nil
     dialogWindow = nil
-    theme = nil
   }
 
-  private func observeTheme(_ theme: ThemeSettings, window: UIWindow) {
+  private func observeTheme(_ theme: TThemeSettings, window: UIWindow) {
     keepObserving(while: window) { [weak self, weak window, weak theme] in
       guard let theme else { return }
       let style: UIUserInterfaceStyle =

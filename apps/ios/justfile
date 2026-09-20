@@ -3,7 +3,7 @@ scheme := "iOS"
 simulator := "generic/platform=iOS Simulator"
 apollo_version := "2.4.0"
 apollo_cli_sha256 := "c48b2137144bfc823c1b4f219d5b1d7f4f36a059744150e7f2505aa971f0b1fc"
-swift_sources := "find App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests Packages/EditorFFI/Package.swift Packages/EditorFFI/Sources -name '*.swift' -not -path '*/__generated__/*' -not -path 'App/Generated/*' -not -path 'Packages/Typie/Sources/GraphQL/*' -not -path '*/EditorBindings/Generated/*' -print0"
+swift_sources := "find App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests Packages/EditorFFI/Package.swift Packages/EditorFFI/Sources -name '*.swift' -not -path '*/__generated__/*' -not -path 'Packages/Typie/Sources/GraphQL/*' -not -path 'Packages/Typie/Sources/GraphQLMocks/*' -not -path '*/EditorBindings/Generated/*' -print0"
 
 [private]
 default:
@@ -43,38 +43,9 @@ graphql:
     fi
     "$cli" generate --path apollo-codegen-config.json
 
-# Write Configuration/Config.local.xcconfig and App/Generated/Secrets.swift from Doppler (mobile/dev)
+# Write Configuration/Config.local.xcconfig from Doppler (config: dev|prod)
 env config="dev":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    keys='["API_URL","AUTH_URL","OIDC_CLIENT_ID","GOOGLE_IOS_CLIENT_ID","GOOGLE_DOT_REVERSED_IOS_CLIENT_ID","GOOGLE_SERVER_CLIENT_ID","KAKAO_NATIVE_APP_KEY","NAVER_CLIENT_ID"]'
-    config_tmp=$(mktemp)
-    secrets_tmp=$(mktemp)
-    trap 'rm -f "$config_tmp" "$secrets_tmp"' EXIT
-    downloaded=$(doppler secrets download -p mobile -c {{config}} --no-file --format json)
-    printf '%s' "$downloaded" | jq -r --argjson keys "$keys" '
-        . as $all
-        | $keys[]
-        | . as $key
-        | $all[$key]
-        | if type != "string" or test("^\\s*$") then error("missing \($key)") else . end
-        | if test("[$\n]") then error("unsupported character in \($key)") else . end
-        | "\($key) = \(gsub("//"; "/$()/"))"
-      ' > "$config_tmp"
-    [ "$(wc -l < "$config_tmp" | tr -d ' ')" -eq "$(jq length <<< "$keys")" ]
-    printf '%s' "$downloaded" | jq -r '
-        def secret(name): .[name]
-          | if type != "string" or test("^\\s*$") then error("missing \(name)") else . end
-          | if test("[[:cntrl:]]") then error("unsupported character in \(name)") else . end
-          | gsub("\\\\"; "\\\\") | gsub("\""; "\\\"");
-        "enum Secrets {\n  static let oidcClientSecret = \"\(secret("OIDC_CLIENT_SECRET"))\"\n  static let naverClientSecret = \"\(secret("NAVER_CLIENT_SECRET"))\"\n}"
-      ' > "$secrets_tmp"
-    [ "$(wc -l < "$secrets_tmp" | tr -d ' ')" -eq 4 ]
-    chmod 600 "$config_tmp" "$secrets_tmp"
-    mkdir -p App/Generated
-    mv "$config_tmp" Configuration/Config.local.xcconfig
-    mv "$secrets_tmp" App/Generated/Secrets.swift
-    echo "wrote Configuration/Config.local.xcconfig ($(wc -l < Configuration/Config.local.xcconfig | tr -d ' ') keys) and App/Generated/Secrets.swift"
+    scripts/env.sh {{config}}
 
 # Sync signing credentials (match)
 setup:

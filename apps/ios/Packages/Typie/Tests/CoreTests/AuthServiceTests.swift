@@ -29,6 +29,7 @@ private final class FakeSecureStore: SecureStore, @unchecked Sendable {
   private let store = InMemorySecureStore()
   private let lock = NSLock()
   private var failsWrites = false
+  private var failsClears = false
   private let recorder: CallRecorder
 
   init(recorder: CallRecorder, tokens: AuthTokens? = nil) {
@@ -40,42 +41,20 @@ private final class FakeSecureStore: SecureStore, @unchecked Sendable {
     lock.withLock { failsWrites = true }
   }
 
+  func failClears() {
+    lock.withLock { failsClears = true }
+  }
+
   func data(for key: String) throws -> Data? {
     try store.data(for: key)
   }
 
   func set(_ data: Data?, for key: String) throws {
     if data != nil, lock.withLock({ failsWrites }) { throw CocoaError(.fileWriteUnknown) }
+    if data == nil, lock.withLock({ failsClears }) { throw CocoaError(.fileWriteUnknown) }
     try store.set(data, for: key)
     recorder.record(data == nil ? "tokenCleared" : "store")
   }
-}
-
-private final class FakePreferences: UserScopedPreferences, @unchecked Sendable {
-  private let lock = NSLock()
-  private var boundUser: String?
-  private var site: String?
-  private let recorder: CallRecorder
-
-  init(recorder: CallRecorder, siteId: String? = nil) {
-    self.recorder = recorder
-    site = siteId
-  }
-
-  func switchUser(_ userId: String?) {
-    lock.withLock { boundUser = userId }
-    recorder.record("switchUser(\(userId ?? "nil"))")
-  }
-
-  var siteId: String? {
-    get { lock.withLock { site } }
-    set {
-      lock.withLock { site = newValue }
-      recorder.record("siteId=\(newValue ?? "nil")")
-    }
-  }
-
-  var currentUser: String? { lock.withLock { boundUser } }
 }
 
 private final class FakeAuthStatePublisher: AuthStatePublishing, @unchecked Sendable {
@@ -107,50 +86,9 @@ private final class FakeAuthStatePublisher: AuthStatePublishing, @unchecked Send
   var snapshotsAtPublish: [String?] { lock.withLock { snapshots } }
 }
 
-private struct FakeActiveSitePublisher: ActiveSitePublishing {
-  let recorder: CallRecorder
-
-  func publish(_ siteId: String?) async {
-    recorder.record("activeSite=\(siteId ?? "nil")")
-  }
-}
-
-private struct FakeEditingSessions: EditingSessionRegistry {
-  let recorder: CallRecorder
-  let onFlush: @Sendable () async throws -> Void
-
-  func flushSyncAll() async throws {
-    recorder.record("flush")
-    try await onFlush()
-  }
-
-  func stopAll() async {
-    recorder.record("stop")
-  }
-}
-
-private struct FakeOrphanSweeper: OrphanSweeping {
-  let recorder: CallRecorder
-  let onSweep: @Sendable () async throws -> Void
-
-  func sweep(includeOpenDocuments: Bool, deleteOnSuccess: Bool) async throws {
-    recorder.record("sweep(\(includeOpenDocuments),\(deleteOnSuccess))")
-    try await onSweep()
-  }
-}
-
-private struct FakeSyncConnection: SyncConnectionLifecycle {
-  let recorder: CallRecorder
-
-  func onSessionChanged() async {
-    recorder.record("syncSessionChanged")
-  }
-}
-
 private struct Harness {
   let recorder: CallRecorder
   let store: FakeSecureStore
-  let preferences: FakePreferences
   let publisher: FakeAuthStatePublisher
   let service: AuthService
 
@@ -159,49 +97,30 @@ private struct Harness {
 
 private func makeHarness(
   tokens: AuthTokens? = nil,
-  siteId: String? = nil,
   exchange: @escaping @Sendable (String) async throws -> String = { "access-\($0)" },
-  fetchMe: @escaping @Sendable (String) async throws -> Me = { _ in
-    Me(id: "user-1", siteIds: ["site-1"])
-  },
-  logout: @escaping @Sendable (String) async -> Void = { _ in },
-  flush: @escaping @Sendable () async throws -> Void = {},
-  sweep: @escaping @Sendable () async throws -> Void = {}
+  fetchMe: @escaping @Sendable (String) async throws -> Me = { _ in Me(id: "user-1") },
+  logout: @escaping @Sendable (String) async -> Void = { _ in }
 ) -> Harness {
   let recorder = CallRecorder()
   let store = FakeSecureStore(recorder: recorder, tokens: tokens)
-  let preferences = FakePreferences(recorder: recorder, siteId: siteId)
   let publisher = FakeAuthStatePublisher(recorder: recorder)
   let service = AuthService(
     secureStore: store,
-    preferences: preferences,
     authState: publisher,
     oidc: FakeOIDC(
       recorder: recorder, onExchange: exchange, onFetchMe: fetchMe, onLogout: logout),
-    activeSite: FakeActiveSitePublisher(recorder: recorder),
-    editingSessions: FakeEditingSessions(recorder: recorder, onFlush: flush),
-    orphanSweeper: FakeOrphanSweeper(recorder: recorder, onSweep: sweep),
-    sync: FakeSyncConnection(recorder: recorder),
-    clearGraphQLCache: { recorder.record("clearGraphQLCache") },
-    disconnectSubscriptions: { recorder.record("disconnectSubscriptions") },
-    discardEntitlementCache: { recorder.record("discardEntitlementCache") }
+    clearGraphQLCache: { recorder.record("clearGraphQLCache") }
   )
-  return Harness(
-    recorder: recorder, store: store, preferences: preferences, publisher: publisher,
-    service: service)
+  return Harness(recorder: recorder, store: store, publisher: publisher, service: service)
 }
 
 @Suite struct AuthServiceTests {
-  @Test func firstLoginResolvesSiteAndPublishesWithoutTouchingSockets() async throws {
-    let harness = makeHarness(fetchMe: { _ in Me(id: "user-1", siteIds: ["site-1", "site-2"]) })
+  @Test func firstLoginFetchesTheUserAndPublishes() async throws {
+    let harness = makeHarness()
 
     try await harness.service.login(sessionToken: "session-1")
 
-    #expect(
-      harness.calls == [
-        "exchange(session-1)", "fetchMe", "switchUser(user-1)", "siteId=site-1",
-        "discardEntitlementCache", "store", "publish", "activeSite=site-1",
-      ])
+    #expect(harness.calls == ["exchange(session-1)", "fetchMe", "store", "publish"])
     #expect(
       harness.publisher.published == [
         .authenticated(
@@ -209,46 +128,36 @@ private func makeHarness(
       ])
     #expect(harness.service.accessToken == "access-session-1")
     #expect(try harness.store.authTokens()?.userId == "user-1")
-    #expect(harness.preferences.siteId == "site-1")
   }
 
   @Test func renewWithSameSessionTokenReusesStoredUserId() async throws {
     let harness = makeHarness(
       tokens: AuthTokens(
         sessionToken: "session-1", accessToken: "stale", userId: "user-9"),
-      siteId: "site-9",
       fetchMe: { _ in
         Issue.record("fetchMe must not be called")
-        return Me(id: "other", siteIds: [])
+        return Me(id: "other")
       }
     )
 
     try await harness.service.renew()
 
-    #expect(
-      harness.calls == [
-        "exchange(session-1)", "switchUser(user-9)", "store", "publish", "activeSite=site-9",
-      ])
-    #expect(harness.preferences.siteId == "site-9")
+    #expect(harness.calls == ["exchange(session-1)", "store", "publish"])
+    #expect(try harness.store.authTokens()?.userId == "user-9")
     #expect(try harness.store.authTokens()?.accessToken == "access-session-1")
     #expect(harness.service.accessToken == "access-session-1")
   }
 
-  @Test func loginWithDifferentSessionTokenSwitchesSessionInOrder() async throws {
+  @Test func loginWithDifferentSessionTokenReplacesTheStoredSession() async throws {
     let harness = makeHarness(
       tokens: AuthTokens(sessionToken: "session-old", accessToken: "old", userId: "user-old"),
-      siteId: "site-old",
-      fetchMe: { _ in Me(id: "user-new", siteIds: ["site-new"]) }
+      fetchMe: { _ in Me(id: "user-new") }
     )
 
     try await harness.service.login(sessionToken: "session-new")
 
-    #expect(
-      harness.calls == [
-        "exchange(session-new)", "fetchMe", "switchUser(user-new)", "siteId=site-new",
-        "discardEntitlementCache", "store", "publish", "activeSite=site-new",
-        "disconnectSubscriptions", "syncSessionChanged",
-      ])
+    #expect(harness.calls == ["exchange(session-new)", "fetchMe", "store", "publish"])
+    #expect(try harness.store.authTokens()?.userId == "user-new")
   }
 
   @Test func fetchMeFailureLeavesPreviousSessionIntact() async throws {
@@ -278,11 +187,7 @@ private func makeHarness(
     }
 
     #expect(
-      harness.calls == [
-        "exchange(session-new)", "tokenCleared", "discardEntitlementCache", "switchUser(nil)",
-        "activeSite=nil", "publish", "clearGraphQLCache", "disconnectSubscriptions",
-        "syncSessionChanged",
-      ])
+      harness.calls == ["exchange(session-new)", "tokenCleared", "publish", "clearGraphQLCache"])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
     #expect(harness.service.accessToken == nil)
@@ -292,7 +197,6 @@ private func makeHarness(
     for failure in [HTTPError.network("offline"), HTTPError.status(500)] {
       let harness = makeHarness(
         tokens: AuthTokens(sessionToken: "session-1", accessToken: "old", userId: "user-1"),
-        siteId: "site-1",
         exchange: { _ in throw failure }
       )
 
@@ -300,8 +204,6 @@ private func makeHarness(
 
       #expect(harness.calls == ["exchange(session-1)"])
       #expect(try harness.store.authTokens()?.accessToken == "old")
-      #expect(harness.preferences.currentUser == nil)
-      #expect(harness.preferences.siteId == "site-1")
       #expect(harness.publisher.published.isEmpty)
     }
   }
@@ -316,35 +218,14 @@ private func makeHarness(
     #expect(harness.service.accessToken == nil)
   }
 
-  @Test func keepsStoredSiteIdWhenResolutionYieldsNothing() async throws {
+  @Test func logoutClearsEverythingInOrder() async throws {
     let harness = makeHarness(
-      siteId: "site-keep", fetchMe: { _ in Me(id: "user-1", siteIds: []) })
+      tokens: AuthTokens(sessionToken: "session-1", accessToken: "old", userId: "user-1"))
 
-    try await harness.service.login(sessionToken: "session-1")
+    try await harness.service.logout()
 
     #expect(
-      harness.calls == [
-        "exchange(session-1)", "fetchMe", "switchUser(user-1)", "discardEntitlementCache", "store",
-        "publish", "activeSite=site-keep",
-      ])
-    #expect(harness.preferences.siteId == "site-keep")
-  }
-
-  @Test func logoutDrainsSessionsThenClearsEverythingInOrder() async throws {
-    let harness = makeHarness(
-      tokens: AuthTokens(sessionToken: "session-1", accessToken: "old", userId: "user-1"),
-      flush: { throw HTTPError.network("flush failed") },
-      sweep: { throw HTTPError.network("sweep failed") }
-    )
-
-    await harness.service.logout()
-
-    #expect(
-      harness.calls == [
-        "flush", "stop", "sweep(true,true)", "oidcLogout", "tokenCleared",
-        "discardEntitlementCache", "switchUser(nil)", "activeSite=nil", "publish",
-        "clearGraphQLCache", "disconnectSubscriptions", "syncSessionChanged",
-      ])
+      harness.calls == ["oidcLogout", "tokenCleared", "publish", "clearGraphQLCache"])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
   }
@@ -352,14 +233,21 @@ private func makeHarness(
   @Test func logoutWithoutStoredSessionSkipsTheOIDCCall() async throws {
     let harness = makeHarness()
 
-    await harness.service.logout()
+    try await harness.service.logout()
 
-    #expect(
-      harness.calls == [
-        "flush", "stop", "sweep(true,true)", "tokenCleared", "discardEntitlementCache",
-        "switchUser(nil)", "activeSite=nil", "publish", "clearGraphQLCache",
-        "disconnectSubscriptions", "syncSessionChanged",
-      ])
+    #expect(harness.calls == ["tokenCleared", "publish", "clearGraphQLCache"])
+  }
+
+  @Test func logoutThrowsWhenClearingTheKeychainFails() async throws {
+    let harness = makeHarness(
+      tokens: AuthTokens(sessionToken: "session-1", accessToken: "old", userId: "user-1"))
+    harness.store.failClears()
+
+    await #expect(throws: CocoaError.self) { try await harness.service.logout() }
+
+    #expect(harness.calls == ["oidcLogout", "publish", "clearGraphQLCache"])
+    #expect(harness.publisher.published == [.unauthenticated])
+    #expect(harness.service.accessToken == nil)
   }
 
   @Test func concurrentLoginsRunOneAfterTheOther() async throws {
@@ -369,7 +257,7 @@ private func makeHarness(
         if token == "session-1" { await gate.wait() }
         return "access-\(token)"
       },
-      fetchMe: { accessToken in Me(id: "user-\(accessToken)", siteIds: []) }
+      fetchMe: { accessToken in Me(id: "user-\(accessToken)") }
     )
 
     let first = Task { try await harness.service.login(sessionToken: "session-1") }
@@ -394,12 +282,11 @@ private func makeHarness(
     let stateStore = await AuthStateStore()
     let service = AuthService(
       secureStore: store,
-      preferences: FakePreferences(recorder: recorder),
       authState: stateStore,
       oidc: FakeOIDC(
         recorder: recorder,
         onExchange: { "access-\($0)" },
-        onFetchMe: { _ in Me(id: "user-1", siteIds: ["site-1"]) },
+        onFetchMe: { _ in Me(id: "user-1") },
         onLogout: { _ in })
     )
 
@@ -411,7 +298,7 @@ private func makeHarness(
           AuthTokens(
             sessionToken: "session-1", accessToken: "access-session-1", userId: "user-1")))
 
-    await service.logout()
+    try await service.logout()
     state = await stateStore.state
     #expect(state == .unauthenticated)
   }
@@ -423,7 +310,7 @@ private func makeHarness(
     #expect(harness.publisher.snapshotsAtPublish == ["access-session-1"])
   }
 
-  @Test func tokenStoreFailureFailsLoginAndKeepsPreviousIdentity() async throws {
+  @Test func tokenStoreFailureFailsLoginAndKeepsTheStoredSession() async throws {
     let previous = AuthTokens(sessionToken: "session-0", accessToken: "access-0", userId: "user-0")
     let harness = makeHarness(tokens: previous)
     harness.store.failWrites()
@@ -431,31 +318,8 @@ private func makeHarness(
       try await harness.service.login(sessionToken: "session-9")
     }
     #expect(harness.publisher.published.isEmpty)
-    #expect(harness.preferences.currentUser == "user-0")
     #expect(try harness.store.authTokens() == previous)
-    #expect(!harness.calls.contains("disconnectSubscriptions"))
-    #expect(!harness.calls.contains { $0.hasPrefix("activeSite=") })
-  }
-
-  @Test func loginPublishesResolvedSite() async throws {
-    let harness = makeHarness()
-    try await harness.service.login(sessionToken: "s1")
-    #expect(harness.calls.contains("activeSite=site-1"))
-  }
-
-  @Test func reusedSessionPublishesStoredSite() async throws {
-    let harness = makeHarness(
-      tokens: AuthTokens(sessionToken: "s1", accessToken: "a", userId: "user-1"),
-      siteId: "site-keep")
-    try await harness.service.renew()
-    #expect(harness.calls.contains("activeSite=site-keep"))
-  }
-
-  @Test func logoutPublishesNil() async throws {
-    let harness = makeHarness(
-      tokens: AuthTokens(sessionToken: "s1", accessToken: "a", userId: "user-1"))
-    await harness.service.logout()
-    #expect(harness.calls.last { $0.hasPrefix("activeSite=") } == "activeSite=nil")
+    #expect(harness.service.accessToken == nil)
   }
 
   @Test func logoutRunsToCompletionWhenTheCallerIsCancelled() async throws {
@@ -463,17 +327,12 @@ private func makeHarness(
     let previous = AuthTokens(sessionToken: "session-0", accessToken: "access-0", userId: "user-0")
     let harness = makeHarness(tokens: previous, logout: { _ in await gate.wait() })
 
-    let caller = Task { await harness.service.logout() }
+    let caller = Task { try await harness.service.logout() }
     try await waitUntil { harness.recorder.calls.contains("oidcLogout") }
     caller.cancel()
     await gate.open()
-    await caller.value
+    try await caller.value
 
-    #expect(
-      harness.calls == [
-        "flush", "stop", "sweep(true,true)", "oidcLogout", "tokenCleared",
-        "discardEntitlementCache", "switchUser(nil)", "activeSite=nil", "publish",
-        "clearGraphQLCache", "disconnectSubscriptions", "syncSessionChanged",
-      ])
+    #expect(harness.calls == ["oidcLogout", "tokenCleared", "publish", "clearGraphQLCache"])
   }
 }

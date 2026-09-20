@@ -2,7 +2,7 @@
   "schemaNamespace": "GraphQL",
   "input": {
     "schemaSearchPaths": ["../api/schema.graphql"],
-    "operationSearchPaths": ["Packages/Typie/Sources/**/*.graphql", "App/**/*.graphql"]
+    "operationSearchPaths": ["Packages/Typie/Sources/**/*.graphql", "Packages/Typie/Tests/**/*.graphql", "App/**/*.graphql"]
   },
   "output": {
     "schemaTypes": {
@@ -10,7 +10,7 @@
       "moduleType": { "other": {} }
     },
     "operations": { "relative": { "subpath": "__generated__", "accessModifier": "public" } },
-    "testMocks": { "none": {} }
+    "testMocks": { "absolute": { "path": "Packages/Typie/Sources/GraphQLMocks", "accessModifier": "public" } }
   },
   "options": { "pruneGeneratedFiles": true }
 }

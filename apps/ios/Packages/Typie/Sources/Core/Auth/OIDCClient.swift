@@ -3,7 +3,6 @@ import Foundation
 
 struct Me: Sendable, Equatable {
   let id: String
-  let siteIds: [String]
 }
 
 struct OIDCClient: Sendable {
@@ -11,7 +10,7 @@ struct OIDCClient: Sendable {
 
   private static let redirectURI = "typie:///authorize"
   private static let logoutRedirectURI = "typie:///"
-  private static let meQuery = "query AuthService_Me { me { id sites { id } } }"
+  private static let meQuery = "query AuthService_Me { me { id } }"
 
   private let config: AppConfig
   private let session: Session
@@ -52,7 +51,7 @@ struct OIDCClient: Sendable {
     guard let me = body.data?.me else {
       throw HTTPError.malformedResponse("/graphql me: \(body.errors?.first?.message ?? "no data")")
     }
-    return Me(id: me.id, siteIds: me.sites.map(\.id))
+    return Me(id: me.id)
   }
 
   static func authorizeParameters(config: AppConfig) -> [String: String] {
@@ -164,11 +163,6 @@ struct OIDCClient: Sendable {
   }
 
   private struct MeUser: Decodable {
-    let id: String
-    let sites: [MeSite]
-  }
-
-  private struct MeSite: Decodable {
     let id: String
   }
 

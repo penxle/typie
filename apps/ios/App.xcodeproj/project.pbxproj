@@ -10,13 +10,8 @@
 		C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0002A1B2C3D4E5F60002 /* Core */; };
 		C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0004A1B2C3D4E5F60004 /* Design */; };
 		C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0007A1B2C3D4E5F60007 /* EditorBindings */; };
-		C0DE000AA1B2C3D4E5F6000A /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0009A1B2C3D4E5F60009 /* Auth */; };
-		C0DE0013A1B2C3D4E5F60013 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */; };
-		C0DE0014A1B2C3D4E5F60014 /* KakaoSDKCommon in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */; };
-		C0DE0015A1B2C3D4E5F60015 /* KakaoSDKAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */; };
-		C0DE0016A1B2C3D4E5F60016 /* KakaoSDKUser in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */; };
-		C0DE0017A1B2C3D4E5F60017 /* NidThirdPartyLogin in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */; };
-		C0DE001BA1B2C3D4E5F6001B /* Home in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE001AA1B2C3D4E5F6001A /* Home */; };
+		C0DE000AA1B2C3D4E5F6000A /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0009A1B2C3D4E5F60009 /* Features */; };
+		C0DE001DA1B2C3D4E5F6001D /* Platform in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE001CA1B2C3D4E5F6001C /* Platform */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,16 +49,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C0DE000AA1B2C3D4E5F6000A /* Auth in Frameworks */,
 				C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */,
 				C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */,
 				C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */,
-				C0DE0013A1B2C3D4E5F60013 /* GoogleSignIn in Frameworks */,
-				C0DE001BA1B2C3D4E5F6001B /* Home in Frameworks */,
-				C0DE0014A1B2C3D4E5F60014 /* KakaoSDKCommon in Frameworks */,
-				C0DE0015A1B2C3D4E5F60015 /* KakaoSDKAuth in Frameworks */,
-				C0DE0016A1B2C3D4E5F60016 /* KakaoSDKUser in Frameworks */,
-				C0DE0017A1B2C3D4E5F60017 /* NidThirdPartyLogin in Frameworks */,
+				C0DE000AA1B2C3D4E5F6000A /* Features in Frameworks */,
+				C0DE001DA1B2C3D4E5F6001D /* Platform in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,16 +105,11 @@
 			);
 			name = App;
 			packageProductDependencies = (
-				C0DE0009A1B2C3D4E5F60009 /* Auth */,
 				C0DE0002A1B2C3D4E5F60002 /* Core */,
 				C0DE0004A1B2C3D4E5F60004 /* Design */,
 				C0DE0007A1B2C3D4E5F60007 /* EditorBindings */,
-				C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */,
-				C0DE001AA1B2C3D4E5F6001A /* Home */,
-				C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */,
-				C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */,
-				C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */,
-				C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */,
+				C0DE0009A1B2C3D4E5F60009 /* Features */,
+				C0DE001CA1B2C3D4E5F6001C /* Platform */,
 			);
 			productName = App;
 			productReference = 842029C347CE17DD479773A2 /* Typie.app */;
@@ -158,9 +143,6 @@
 			packageReferences = (
 				C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */,
 				C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */,
-				C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
-				C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
-				C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0E2EDBC5D892DD3F91C268A /* Products */;
@@ -503,33 +485,6 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 10.0.0;
-			};
-		};
-		C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kakao/kakao-ios-sdk.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.29.0;
-			};
-		};
-		C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/naver/naveridlogin-sdk-ios-swift.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 5.2.1;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		C0DE0002A1B2C3D4E5F60002 /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -546,40 +501,15 @@
 			package = C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */;
 			productName = EditorBindings;
 		};
-		C0DE0009A1B2C3D4E5F60009 /* Auth */ = {
+		C0DE0009A1B2C3D4E5F60009 /* Features */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */;
-			productName = Auth;
+			productName = Features;
 		};
-		C0DE000EA1B2C3D4E5F6000E /* GoogleSignIn */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE000BA1B2C3D4E5F6000B /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignIn;
-		};
-		C0DE000FA1B2C3D4E5F6000F /* KakaoSDKCommon */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
-			productName = KakaoSDKCommon;
-		};
-		C0DE0010A1B2C3D4E5F60010 /* KakaoSDKAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
-			productName = KakaoSDKAuth;
-		};
-		C0DE0011A1B2C3D4E5F60011 /* KakaoSDKUser */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE000CA1B2C3D4E5F6000C /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
-			productName = KakaoSDKUser;
-		};
-		C0DE0012A1B2C3D4E5F60012 /* NidThirdPartyLogin */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE000DA1B2C3D4E5F6000D /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */;
-			productName = NidThirdPartyLogin;
-		};
-		C0DE001AA1B2C3D4E5F6001A /* Home */ = {
+		C0DE001CA1B2C3D4E5F6001C /* Platform */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */;
-			productName = Home;
+			productName = Platform;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
