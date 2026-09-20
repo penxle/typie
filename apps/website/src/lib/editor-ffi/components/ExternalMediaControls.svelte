@@ -29,7 +29,8 @@
 
 {#if detached}
   <div
-    style:bottom={`calc(100% + ${BAR_GAP / zoom}px)`}
+    style:bottom="100%"
+    style:padding-bottom={`${BAR_GAP / zoom}px`}
     style:opacity={shown ? '1' : undefined}
     class={css({
       position: 'absolute',
