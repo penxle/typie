@@ -26,10 +26,12 @@ enum UserGoalLineCopy {
     private var colors: TColors { theme.colors }
 
     private let goal: UserGoalState
+    private let showsChevron: Bool
     private let onOpen: () -> Void
 
-    init(goal: UserGoalState, onOpen: @escaping () -> Void) {
+    init(goal: UserGoalState, showsChevron: Bool = true, onOpen: @escaping () -> Void) {
       self.goal = goal
+      self.showsChevron = showsChevron
       self.onOpen = onOpen
     }
 
@@ -49,9 +51,11 @@ enum UserGoalLineCopy {
             TText(
               "설정된 목표가 없어요", style: TTypography.text, color: colors.textMuted, maxLines: 1)
           }
-          TIcon(
-            LucideIcon.chevronRight, size: 18, tint: colors.textHint, relativeTo: TTypography.text
-          )
+          if showsChevron {
+            TIcon(
+              LucideIcon.chevronRight, size: 18, tint: colors.textHint,
+              relativeTo: TTypography.text)
+          }
           Spacer(minLength: 0)
         }
         .frame(minHeight: 44)

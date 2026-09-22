@@ -8,71 +8,37 @@
     @Environment(\.theme) private var theme
     private var colors: TColors { theme.colors }
 
-    @State private var scrollOffset: CGFloat = 0
-    @State private var headingHeight: CGFloat = 0
-
-    private let title: HomeTitleState
+    private let title: HeroTitleState
     private let store: HomeStore
     private let sections: () -> Sections
 
-    init(title: HomeTitleState, store: HomeStore, @ViewBuilder sections: @escaping () -> Sections) {
+    init(title: HeroTitleState, store: HomeStore, @ViewBuilder sections: @escaping () -> Sections) {
       self.title = title
       self.store = store
       self.sections = sections
     }
 
     var body: some View {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
-          heading
-          VStack(alignment: .leading, spacing: 0) {
-            if store.loadFailed, !store.hasData {
-              failure
-            } else {
-              sections()
-                .redacted(reason: store.isPlaceholder ? .placeholder : [])
-                .allowsHitTesting(!store.isPlaceholder)
-                .accessibilityHidden(store.isPlaceholder)
-            }
-          }
+      HeroScrollView(title: title) {
+        TText("홈", style: TTypography.hero, color: colors.textDefault)
           .padding(.horizontal, 16)
-          .padding(.bottom, HomeBody.bottomClearance)
+          .padding(.top, 12)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } content: {
+        VStack(alignment: .leading, spacing: 0) {
+          if store.loadFailed, !store.hasData {
+            RetryPrompt { store.refetch() }
+          } else {
+            sections()
+              .redacted(reason: store.isPlaceholder ? .placeholder : [])
+              .allowsHitTesting(!store.isPlaceholder)
+              .accessibilityHidden(store.isPlaceholder)
+          }
         }
-        .frame(maxWidth: 600)
-        .frame(maxWidth: .infinity)
-      }
-      .onScrollGeometryChange(for: CGFloat.self) { geometry in
-        geometry.contentOffset.y + geometry.contentInsets.top
-      } action: { _, offset in
-        scrollOffset = offset
-        syncTitle()
-      }
-      .canvasBackground()
-      .onAppear { store.refetch() }
-    }
-
-    private var failure: some View {
-      RetryPrompt { store.refetch() }
-    }
-
-    private var heading: some View {
-      TText("홈", style: TTypography.hero, color: colors.textDefault)
         .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onGeometryChange(for: CGFloat.self) { proxy in
-          proxy.size.height
-        } action: { height in
-          headingHeight = height
-          syncTitle()
-        }
-    }
-
-    private func syncTitle() {
-      let visible = scrollOffset >= headingHeight
-      if title.titleVisible != visible {
-        title.titleVisible = visible
+        .padding(.bottom, HomeBody.bottomClearance)
       }
+      .onAppear { store.refetch() }
     }
   }
 

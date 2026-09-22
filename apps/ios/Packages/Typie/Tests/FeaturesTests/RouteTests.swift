@@ -12,14 +12,15 @@ import Testing
   }
 
   @Test func homeListRoutesAreDistinct() {
-    #expect(Route.pinnedEntities != Route.studioTree)
-    #expect(Route.studioTree != Route.studio)
+    #expect(Route.pinnedEntities != Route.siteEntities)
+    #expect(Route.siteEntities != Route.home)
   }
 
   @Test func tabsMapToTheirRootRoutes() {
-    #expect(MainTab.allCases == [.home, .studio, .notes])
+    #expect(MainTab.allCases == [.home, .notes, .prism, .square])
     #expect(MainTab.home.route == .home)
-    #expect(MainTab.studio.route == .studio)
     #expect(MainTab.notes.route == .notes)
+    #expect(MainTab.prism.route == .prism)
+    #expect(MainTab.square.route == .square)
   }
 }

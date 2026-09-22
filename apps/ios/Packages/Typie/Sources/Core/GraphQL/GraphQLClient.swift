@@ -45,7 +45,7 @@ public protocol GraphQLClient: Sendable {
 
   func watch<Q: GraphQLQuery>(
     _ query: Q, onResult: @escaping @Sendable (Result<Q.Data, any Error>) -> Void
-  ) async -> any QueryWatcher
+  ) -> any QueryWatcher
 }
 
 struct ApolloGraphQLClient: GraphQLClient {
@@ -75,14 +75,19 @@ struct ApolloGraphQLClient: GraphQLClient {
 
   func watch<Q: GraphQLQuery>(
     _ query: Q, onResult: @escaping @Sendable (Result<Q.Data, any Error>) -> Void
-  ) async -> any QueryWatcher {
-    let watcher = await apollo.watch(query: query, cachePolicy: .cacheAndNetwork) { result in
-      switch result {
-      case .success(let response): onResult(Self.outcome(of: response))
-      case .failure(let error): onResult(.failure(error))
+  ) -> any QueryWatcher {
+    let deferred = DeferredQueryWatcher()
+    let apollo = apollo
+    Task {
+      let watcher = await apollo.watch(query: query, cachePolicy: .cacheAndNetwork) { result in
+        switch result {
+        case .success(let response): onResult(Self.outcome(of: response))
+        case .failure(let error): onResult(.failure(error))
+        }
       }
+      deferred.attach(ApolloQueryWatcher(watcher: watcher))
     }
-    return ApolloQueryWatcher(watcher: watcher)
+    return deferred
   }
 
   private static func outcome<O: GraphQLOperation>(of response: GraphQLResponse<O>)
@@ -95,6 +100,41 @@ struct ApolloGraphQLClient: GraphQLClient {
       return .failure(HTTPError.malformedResponse("\(O.operationName): no data"))
     }
     return .success(data)
+  }
+}
+
+final class DeferredQueryWatcher: QueryWatcher, @unchecked Sendable {
+  private let lock = NSLock()
+  private var attached: (any QueryWatcher)?
+  private var cancelled = false
+  private var refetchRequested = false
+
+  func attach(_ watcher: any QueryWatcher) {
+    let (cancelled, refetchRequested) = lock.withLock { () -> (Bool, Bool) in
+      attached = watcher
+      return (self.cancelled, self.refetchRequested)
+    }
+    if cancelled {
+      watcher.cancel()
+    } else if refetchRequested {
+      Task { await watcher.refetch() }
+    }
+  }
+
+  func refetch() async {
+    let watcher = lock.withLock { () -> (any QueryWatcher)? in
+      if attached == nil { refetchRequested = true }
+      return attached
+    }
+    await watcher?.refetch()
+  }
+
+  func cancel() {
+    let watcher = lock.withLock { () -> (any QueryWatcher)? in
+      cancelled = true
+      return attached
+    }
+    watcher?.cancel()
   }
 }
 

@@ -17,10 +17,10 @@
     var body: some View {
       Button(action: onOpen) {
         HStack(spacing: 2) {
-          TText(title, style: TTypography.heading, color: theme.colors.textDefault)
+          TText(title, style: TTypography.lead, color: theme.colors.textDefault)
           TIcon(
             LucideIcon.chevronRight, size: 20, tint: theme.colors.textHint,
-            relativeTo: TTypography.heading)
+            relativeTo: TTypography.lead)
         }
         .frame(minHeight: 44)
         .contentShape(Rectangle())

@@ -20,7 +20,6 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
   @ObservationIgnored private var watcher: (any QueryWatcher)?
   @ObservationIgnored private var consumer: Task<Void, Never>?
   @ObservationIgnored private var generation = 0
-  @ObservationIgnored private var refetchPending = false
 
   public init(
     client: any GraphQLClient,
@@ -45,11 +44,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
   }
 
   public func refetch() {
-    guard isSettled else { return }
-    guard let watcher else {
-      refetchPending = currentInput != nil
-      return
-    }
+    guard isSettled, let watcher else { return }
     Task { await watcher.refetch() }
   }
 
@@ -87,19 +82,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
         receive(result)
       }
     }
-    let client = client
-    Task { [weak self] in
-      let watcher = await client.watch(query) { continuation.yield($0) }
-      guard let self, self.generation == generation else {
-        watcher.cancel()
-        return
-      }
-      self.watcher = watcher
-      if refetchPending {
-        refetchPending = false
-        refetch()
-      }
-    }
+    watcher = client.watch(query) { continuation.yield($0) }
   }
 
   private func stop() {
@@ -108,7 +91,6 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
     watcher = nil
     consumer?.cancel()
     consumer = nil
-    refetchPending = false
   }
 
   private func receive(_ result: Result<Query.Data, any Error>) {

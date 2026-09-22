@@ -56,9 +56,11 @@ let package = Package(
       ],
       exclude: [
         "Auth/EmailLogin.graphql", "Auth/SingleSignOnLogin.graphql",
-        "Home/Entity/EntityContainer.graphql", "Home/Entity/EntityRow.graphql",
-        "Home/Home.graphql", "Home/SiteSwitcher.graphql",
-        "Image/Img.graphql", "Search/Search.graphql", "UserGoal/UserGoal.graphql",
+        "Entity/Container/FolderContents.graphql", "Entity/Container/SiteEntities.graphql",
+        "Entity/EntityContainer.graphql", "Entity/EntityRow.graphql",
+        "Home/Home.graphql", "Home/Recent/RecentDocuments.graphql", "Home/SiteSwitcher.graphql",
+        "Image/Img.graphql", "Profile/Profile.graphql", "Search/Search.graphql",
+        "UserGoal/UserGoal.graphql",
       ]
     ),
     .target(

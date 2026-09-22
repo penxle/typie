@@ -1,13 +1,15 @@
 enum Route: Hashable, Sendable {
   case home
-  case studio
   case notes
+  case prism
+  case square
   case settings
   case siteSwitcher
   case userGoal
+  case profile
   case pinnedEntities
   case recentDocuments
-  case studioTree
+  case siteEntities
   case folder(entityId: String)
   case folderDetails(entityId: String)
   case document(entityId: String)
@@ -16,8 +18,9 @@ enum Route: Hashable, Sendable {
 
 enum MainTab: String, CaseIterable, Sendable {
   case home
-  case studio
   case notes
+  case prism
+  case square
 
   static let initial = MainTab.home
 
@@ -28,8 +31,9 @@ enum MainTab: String, CaseIterable, Sendable {
   var route: Route {
     switch self {
     case .home: .home
-    case .studio: .studio
     case .notes: .notes
+    case .prism: .prism
+    case .square: .square
     }
   }
 }

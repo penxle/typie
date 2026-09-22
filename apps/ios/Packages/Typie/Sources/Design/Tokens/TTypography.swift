@@ -81,6 +81,8 @@ public enum TTypography {
     size: 28, weight: .semibold, lineHeight: 36, relativeTo: .title)
   public static let heading = TTextStyle(
     size: 22, weight: .semibold, lineHeight: 28, relativeTo: .title2)
+  public static let lead = TTextStyle(
+    size: 20, weight: .semibold, lineHeight: 26, relativeTo: .title3)
   public static let title = TTextStyle(
     size: 17, weight: .semibold, lineHeight: 22, relativeTo: .headline)
   public static let text = TTextStyle(

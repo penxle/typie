@@ -26,13 +26,7 @@
           if store.loadFailed, !store.hasData {
             RetryPrompt { store.refetch() }
           } else if store.siteOrPlaceholder.pinned.isEmpty {
-            TText(
-              "문서나 폴더를 고정하면 여기 나타나요", style: TTypography.detail,
-              color: theme.colors.textHint, alignment: .center
-            )
-            .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .background(theme.colors.surfaceInset, in: TShapes.squircle(TShapes.md))
+            EmptyStateBox(text: "문서나 폴더를 고정해 빠르게 접근할 수 있어요")
           } else {
             ForEach(store.siteOrPlaceholder.pinned) { item in
               EntityLineRow(item: item) {

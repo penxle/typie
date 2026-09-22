@@ -1,0 +1,18 @@
+query FolderContents_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    ...EntityRow_entity
+
+    node {
+      __typename
+
+      ... on Folder {
+        characterCount
+      }
+    }
+
+    children {
+      ...EntityRow_entity
+    }
+  }
+}
