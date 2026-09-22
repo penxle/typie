@@ -10,6 +10,10 @@ import Testing
   nonisolated private static let retryTitle = "문제가 발생했어요"
   nonisolated private static let retryMessage = "잠시 후 다시 시도해주세요."
   nonisolated private static let retryText = "다시 시도"
+  nonisolated private static let removeTitle = "일일 목표를 해제하시겠어요?"
+  nonisolated private static let removeMessage = "설정한 하루 목표 글자 수가 사라져요."
+  nonisolated private static let removeText = "해제"
+  nonisolated private static let cancelText = "취소"
 
   private static func failure() -> TDialogItem {
     TDialogItem(title: failureTitle, message: failureMessage, confirmText: confirmText)
@@ -17,6 +21,12 @@ import Testing
 
   private static func retry() -> TDialogItem {
     TDialogItem(title: retryTitle, message: retryMessage, confirmText: retryText)
+  }
+
+  private static func remove() -> TDialogItem {
+    TDialogItem(
+      title: removeTitle, message: removeMessage, confirmText: removeText, cancelText: cancelText,
+      confirmIsDestructive: true)
   }
 
   @Test func startsEmpty() {
@@ -79,6 +89,44 @@ import Testing
     #expect(first.count == 0)
     #expect(second.count == 1)
   }
+
+  @Test func confirmResolvesTrueOnConfirm() async {
+    let center = TDialogCenter()
+    async let answer = center.confirm(Self.remove())
+    await waitUntilPresented(center)
+    #expect(center.current?.cancelText == Self.cancelText)
+    center.confirm()
+    #expect(await answer == true)
+    #expect(center.current == nil)
+  }
+
+  @Test func confirmResolvesFalseOnDismiss() async {
+    let center = TDialogCenter()
+    async let answer = center.confirm(Self.remove())
+    await waitUntilPresented(center)
+    center.dismiss()
+    #expect(await answer == false)
+    #expect(center.current == nil)
+  }
+
+  @Test func announcementListsActionsOnlyForConfirm() {
+    #expect(
+      TDialogOverlay.announcement(for: Self.failure())
+        == "\(Self.failureTitle). \(Self.failureMessage)")
+    #expect(
+      TDialogOverlay.announcement(for: Self.remove())
+        == "\(Self.removeTitle). \(Self.removeMessage) \(Self.cancelText), \(Self.removeText)")
+  }
+
+  @Test func alertItemHasNoCancel() {
+    #expect(Self.failure().cancelText == nil)
+    #expect(Self.failure().confirmIsDestructive == false)
+  }
+}
+
+@MainActor
+private func waitUntilPresented(_ center: TDialogCenter) async {
+  while center.current == nil { await Task.yield() }
 }
 
 @MainActor

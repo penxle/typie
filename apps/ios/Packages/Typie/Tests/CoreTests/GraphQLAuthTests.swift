@@ -1,5 +1,6 @@
 import Apollo
 import Foundation
+import GraphQL
 import Testing
 
 @testable import Core

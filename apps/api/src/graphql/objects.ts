@@ -163,6 +163,16 @@ export const UserGoalHistory = builder.simpleObject('UserGoalHistory', {
   }),
 });
 
+export const DocumentCharacterCountChange = builder
+  .objectRef<{ documentId: string; additions: number; deletions: number }>('DocumentCharacterCountChange')
+  .implement({
+    fields: (t) => ({
+      document: t.expose('documentId', { type: Document }),
+      additions: t.exposeInt('additions'),
+      deletions: t.exposeInt('deletions'),
+    }),
+  });
+
 export const PlanRule = builder.objectRef<Partial<PlanRules>>('PlanRule');
 
 export const DocumentFont = builder.simpleObject('DocumentFont', {

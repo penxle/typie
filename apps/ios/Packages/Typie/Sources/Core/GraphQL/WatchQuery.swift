@@ -45,6 +45,7 @@ public final class WatchQuery<Input: Equatable & Sendable, Query: GraphQLQuery> 
   }
 
   public func refetch() {
+    guard isSettled else { return }
     guard let watcher else {
       refetchPending = currentInput != nil
       return

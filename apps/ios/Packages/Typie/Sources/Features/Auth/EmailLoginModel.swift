@@ -4,7 +4,7 @@ import FactoryKit
 import GraphQL
 import Observation
 
-public enum LoginFailure: Sendable, Equatable {
+enum LoginFailure: Sendable, Equatable {
   case invalidCredentials
   case passwordNotSet
   case unknown
@@ -12,17 +12,17 @@ public enum LoginFailure: Sendable, Equatable {
 
 @Observable
 @MainActor
-public final class EmailLoginModel {
-  public private(set) var isSubmitting = false
+final class EmailLoginModel {
+  private(set) var isSubmitting = false
 
-  public let form: TFormState
-  public let email: TFieldState
-  public let password: TFieldState
+  let form: TFormState
+  let email: TFieldState
+  let password: TFieldState
 
   @ObservationIgnored private let client = Container.shared.graphQLClient()
   @ObservationIgnored private let onSuccess: @MainActor () -> Void
 
-  public init(onSuccess: @escaping @MainActor () -> Void) {
+  init(onSuccess: @escaping @MainActor () -> Void) {
     self.onSuccess = onSuccess
 
     let form = TFormState(autoFocusFirstField: false, validatesOnBlur: true)
@@ -32,15 +32,15 @@ public final class EmailLoginModel {
     self.form = form
   }
 
-  public func focusEmail() {
+  func focusEmail() {
     email.requestFocus()
   }
 
-  public func discardPassword() {
+  func discardPassword() {
     password.value = ""
   }
 
-  public func submit() async -> LoginFailure? {
+  func submit() async -> LoginFailure? {
     guard !isSubmitting else { return nil }
     isSubmitting = true
     defer { isSubmitting = false }

@@ -18,7 +18,6 @@
       let root = UIViewController()
       root.view.backgroundColor = .clear
       let host = ThemedHostingController(title: "", content)
-      host.view.backgroundColor = .clear
       host.view.translatesAutoresizingMaskIntoConstraints = false
       root.addChild(host)
       root.view.addSubview(host.view)

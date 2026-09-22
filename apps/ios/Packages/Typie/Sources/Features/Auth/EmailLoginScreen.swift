@@ -6,7 +6,7 @@
   import UIKit
 
   @MainActor
-  public struct EmailLoginScreen: View {
+  struct EmailLoginScreen: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var colors: TColors { theme.colors }
@@ -16,11 +16,11 @@
     private let model: EmailLoginModel
     private let dialog = Container.shared.dialog()
 
-    public init(model: EmailLoginModel) {
+    init(model: EmailLoginModel) {
       self.model = model
     }
 
-    public var body: some View {
+    var body: some View {
       GeometryReader { proxy in
         VStack(spacing: 0) {
           ScrollView {

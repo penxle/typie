@@ -79,10 +79,17 @@ import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { hasLiveYearlyBillingKeySubscription } from '#/utils/subscription-billing-key.ts';
 import { lockUserSubscriptionState } from '#/utils/subscription-lock.ts';
 import { getUserUsage } from '#/utils/user.ts';
-import { currentUserGoal, dailyCharacterChanges, dailyGoalHistory, todayCharacterCountChange } from '#/utils/user-stats.ts';
+import {
+  currentUserGoal,
+  dailyCharacterChanges,
+  dailyGoalHistory,
+  documentCharacterChangesOn,
+  todayCharacterCountChange,
+} from '#/utils/user-stats.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
+  DocumentCharacterCountChange,
   DocumentFontFamily,
   Entity,
   FontFamily,
@@ -363,6 +370,20 @@ User.implement({
         }
 
         return await todayCharacterCountChange(self.id);
+      },
+    }),
+
+    dailyDocumentCharacterCountChanges: t.withAuth({ session: true }).field({
+      type: [DocumentCharacterCountChange],
+      args: {
+        date: t.arg({ type: 'DateTime', required: true }),
+      },
+      resolve: async (self, args, ctx) => {
+        if (ctx.session.userId !== self.id) {
+          return [];
+        }
+
+        return await documentCharacterChangesOn(self.id, dayjs(args.date));
       },
     }),
 

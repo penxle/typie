@@ -5,12 +5,12 @@ import GraphQL
 import Observation
 
 @MainActor @Observable
-public final class SitesStore {
-  public private(set) var sites: [Site] = []
-  public private(set) var isCreating = false
-  public private(set) var loadFailed = false
+final class SitesStore {
+  private(set) var sites: [Site] = []
+  private(set) var isCreating = false
+  private(set) var loadFailed = false
 
-  @ObservationIgnored public var onCreated: @MainActor () -> Void = {}
+  @ObservationIgnored var onCreated: @MainActor () -> Void = {}
 
   @ObservationIgnored private let client: any GraphQLClient
   @ObservationIgnored private let query: WatchQuery<NoInput, SiteSwitcher_Query>
@@ -18,7 +18,7 @@ public final class SitesStore {
   @ObservationIgnored private var pendingCreatedSiteId: String?
   @ObservationIgnored private var pendingCreation: CheckedContinuation<Bool, Never>?
 
-  public init() {
+  init() {
     let client = Container.shared.graphQLClient()
     self.client = client
     query = WatchQuery(client: client, query: SiteSwitcher_Query())
@@ -29,21 +29,21 @@ public final class SitesStore {
     pendingCreation?.resume(returning: false)
   }
 
-  public var current: Site? {
+  var current: Site? {
     sites.first { $0.id == activeSite.siteId }
   }
 
-  public var isSettled: Bool { query.isSettled }
+  var isSettled: Bool { query.isSettled }
 
-  public func refetch() {
+  func refetch() {
     query.refetch()
   }
 
-  public func select(_ id: String) {
+  func select(_ id: String) {
     activeSite.select(id)
   }
 
-  public func create(name: String) async -> Bool {
+  func create(name: String) async -> Bool {
     guard !isCreating else { return false }
     isCreating = true
     defer { isCreating = false }
@@ -73,7 +73,7 @@ public final class SitesStore {
       let sites = fetched.map {
         Site(
           id: $0.id, name: $0.name, url: $0.url,
-          logo: ImageSource($0.logo.fragments.tImage_image)?.url)
+          logo: $0.logo.fragments.img_image)
       }
       self.sites = sites
       loadFailed = false

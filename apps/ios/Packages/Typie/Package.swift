@@ -35,13 +35,9 @@ let package = Package(
       dependencies: [
         "GraphQL",
         .product(name: "Apollo", package: "apollo-ios"),
+        .product(name: "ApolloSQLite", package: "apollo-ios"),
         .product(name: "Alamofire", package: "Alamofire"),
         .product(name: "FactoryKit", package: "Factory"),
-      ],
-      exclude: [
-        "Auth/EmailLogin.graphql", "Auth/SingleSignOnLogin.graphql",
-        "Entity/EntityRow.graphql", "Home/Search.graphql",
-        "Home/SiteSwitcher.graphql", "Image/TImage.graphql",
       ]
     ),
     .target(
@@ -57,6 +53,12 @@ let package = Package(
       name: "Features",
       dependencies: [
         "Core", "Design", "GraphQL", .product(name: "FactoryKit", package: "Factory"),
+      ],
+      exclude: [
+        "Auth/EmailLogin.graphql", "Auth/SingleSignOnLogin.graphql",
+        "Home/Entity/EntityContainer.graphql", "Home/Entity/EntityRow.graphql",
+        "Home/Home.graphql", "Home/SiteSwitcher.graphql",
+        "Image/Img.graphql", "Search/Search.graphql", "UserGoal/UserGoal.graphql",
       ]
     ),
     .target(

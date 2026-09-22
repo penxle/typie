@@ -1,0 +1,19 @@
+query SiteSwitcher_Query {
+  me {
+    id
+    sites {
+      id
+      name
+      url
+      logo {
+        ...Img_image
+      }
+    }
+  }
+}
+
+mutation SiteSwitcher_CreateSite_Mutation($input: CreateSiteInput!) {
+  createSite(input: $input) {
+    id
+  }
+}

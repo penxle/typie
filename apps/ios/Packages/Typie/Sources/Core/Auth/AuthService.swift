@@ -35,6 +35,7 @@ public final class AuthService: Sendable {
 
   public func login(sessionToken: String) async throws {
     try await lock.withLock {
+      await self.clearGraphQLCache()
       try await self.authenticateOrReset(sessionToken: sessionToken)
     }
   }

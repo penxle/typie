@@ -120,7 +120,8 @@ private func makeHarness(
 
     try await harness.service.login(sessionToken: "session-1")
 
-    #expect(harness.calls == ["exchange(session-1)", "fetchMe", "store", "publish"])
+    #expect(
+      harness.calls == ["clearGraphQLCache", "exchange(session-1)", "fetchMe", "store", "publish"])
     #expect(
       harness.publisher.published == [
         .authenticated(
@@ -148,6 +149,17 @@ private func makeHarness(
     #expect(harness.service.accessToken == "access-session-1")
   }
 
+  @Test func loginClearsTheGraphQLCacheButRenewKeepsIt() async throws {
+    let login = makeHarness()
+    try await login.service.login(sessionToken: "session-1")
+    #expect(login.calls.filter { $0 == "clearGraphQLCache" }.count == 1)
+
+    let renew = makeHarness(
+      tokens: AuthTokens(sessionToken: "session-1", accessToken: "stale", userId: "user-9"))
+    try await renew.service.renew()
+    #expect(renew.calls.contains("clearGraphQLCache") == false)
+  }
+
   @Test func loginWithDifferentSessionTokenReplacesTheStoredSession() async throws {
     let harness = makeHarness(
       tokens: AuthTokens(sessionToken: "session-old", accessToken: "old", userId: "user-old"),
@@ -156,7 +168,10 @@ private func makeHarness(
 
     try await harness.service.login(sessionToken: "session-new")
 
-    #expect(harness.calls == ["exchange(session-new)", "fetchMe", "store", "publish"])
+    #expect(
+      harness.calls == [
+        "clearGraphQLCache", "exchange(session-new)", "fetchMe", "store", "publish",
+      ])
     #expect(try harness.store.authTokens()?.userId == "user-new")
   }
 
@@ -170,7 +185,7 @@ private func makeHarness(
       try await harness.service.login(sessionToken: "session-new")
     }
 
-    #expect(harness.calls == ["exchange(session-new)", "fetchMe"])
+    #expect(harness.calls == ["clearGraphQLCache", "exchange(session-new)", "fetchMe"])
     #expect(harness.publisher.published.isEmpty)
     #expect(try harness.store.authTokens()?.sessionToken == "session-old")
     #expect(harness.service.accessToken == nil)
@@ -187,7 +202,10 @@ private func makeHarness(
     }
 
     #expect(
-      harness.calls == ["exchange(session-new)", "tokenCleared", "publish", "clearGraphQLCache"])
+      harness.calls == [
+        "clearGraphQLCache", "exchange(session-new)", "tokenCleared", "publish",
+        "clearGraphQLCache",
+      ])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
     #expect(harness.service.accessToken == nil)

@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct TIcon: View {
   @Environment(\.theme) private var theme
+  @Environment(\.redactionReasons) private var redactionReasons
   private var colors: TColors { theme.colors }
 
   private let name: TIconName
@@ -32,10 +33,16 @@ public struct TIcon: View {
   }
 
   public var body: some View {
-    image
-      .renderingMode(.template)
-      .resizable()
-      .frame(width: side, height: side)
-      .foregroundStyle(tint ?? colors.textDefault)
+    if redactionReasons.contains(.placeholder) {
+      Circle()
+        .fill(colors.surfaceInset)
+        .frame(width: side, height: side)
+    } else {
+      image
+        .renderingMode(.template)
+        .resizable()
+        .frame(width: side, height: side)
+        .foregroundStyle(tint ?? colors.textDefault)
+    }
   }
 }

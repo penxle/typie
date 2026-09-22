@@ -1,11 +1,16 @@
+import ApolloTestSupport
 import Foundation
+import GraphQL
+import GraphQLMocks
 import Testing
 
 @testable import Features
 
 @Suite struct SiteTests {
-  @Test func identityComesFromId() throws {
-    let logo = try #require(URL(string: "https://img.example.test/logo.png"))
+  @Test func identityComesFromId() async {
+    let logo = await Img_image.from(
+      Mock<GraphQLMocks.Image>(
+        height: 64, id: GraphQL.ID("img-1"), url: "https://img.example.test/logo.png", width: 64))
     let site = Site(id: "site-1", name: "site one", url: "site-one", logo: logo)
 
     #expect(site.id == "site-1")

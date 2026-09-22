@@ -2,6 +2,7 @@ import Apollo
 import FactoryKit
 import FactoryTesting
 import Foundation
+import GraphQL
 import Testing
 
 @testable import Core

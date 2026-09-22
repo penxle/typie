@@ -428,6 +428,12 @@ enum DocumentBundleKind {
   PUSHED
 }
 
+type DocumentCharacterCountChange {
+  additions: Int!
+  deletions: Int!
+  document: Document!
+}
+
 type DocumentComment {
   content: String!
   createdAt: DateTime!
@@ -782,6 +788,7 @@ type File implements Blob {
 
 type Folder implements IFolder {
   characterCount: Int!
+  childCount: Int!
   createdAt: DateTime!
   description: String
   documentCount: Int!
@@ -2513,6 +2520,7 @@ type User implements IUser {
   characterCountChanges: [CharacterCountChange!]!
   createdAt: DateTime!
   credit: Int!
+  dailyDocumentCharacterCountChanges(date: DateTime!): [DocumentCharacterCountChange!]!
   devices: [UserDevice!]!
   documentCount: Int!
   documentFontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!

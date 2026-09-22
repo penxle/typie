@@ -8,6 +8,7 @@
     init(title: String, _ content: some View) {
       super.init(rootView: AnyView(content.themed()))
       self.title = title
+      view.backgroundColor = .clear
       navigationItem.backButtonDisplayMode = .minimal
     }
 

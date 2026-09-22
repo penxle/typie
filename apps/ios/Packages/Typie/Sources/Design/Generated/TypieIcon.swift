@@ -8,5 +8,4 @@ public enum TypieIcon {
   public static let folderOpenFilled = TIconName("typie/folder-open-filled")
   public static let houseFilled = TIconName("typie/house-filled")
   public static let stickyNoteFilled = TIconName("typie/sticky-note-filled")
-  public static let stickyNotePlus = TIconName("typie/sticky-note-plus")
 }

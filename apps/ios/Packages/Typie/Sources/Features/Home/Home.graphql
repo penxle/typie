@@ -1,0 +1,66 @@
+fragment UserGoalSection_user on User {
+  id
+  goal {
+    id
+    targetCharacterCount
+  }
+  goalHistory {
+    date
+    targetCharacterCount
+    additions
+    achieved
+  }
+  todayCharacterCountChange {
+    date
+    additions
+  }
+}
+
+fragment HomeTree_entity on Entity {
+  id
+  ...EntityRow_entity
+
+  node {
+    __typename
+
+    ... on Folder {
+      childCount
+    }
+  }
+}
+
+fragment HomeScreen_site on Site {
+  id
+  name
+
+  pinnedEntities {
+    ...HomeTree_entity
+  }
+
+  entities {
+    ...HomeTree_entity
+  }
+}
+
+query HomeScreen_Query($siteId: ID!) {
+  me {
+    id
+    ...UserGoalSection_user
+  }
+
+  site(siteId: $siteId) {
+    id
+    ...HomeScreen_site
+  }
+}
+
+query HomeTree_Children_Query($entityId: ID!) {
+  entity(entityId: $entityId) {
+    id
+    ...HomeTree_entity
+
+    children {
+      ...HomeTree_entity
+    }
+  }
+}

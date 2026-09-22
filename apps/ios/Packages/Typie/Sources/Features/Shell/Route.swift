@@ -1,27 +1,30 @@
-public enum Route: Hashable, Sendable {
+enum Route: Hashable, Sendable {
   case home
   case studio
   case notes
   case settings
   case siteSwitcher
+  case userGoal
+  case pinnedEntities
+  case studioTree
   case folder(entityId: String)
   case folderDetails(entityId: String)
   case document(entityId: String)
   case documentBodySettings(entityId: String)
 }
 
-public enum MainTab: String, CaseIterable, Sendable {
+enum MainTab: String, CaseIterable, Sendable {
   case home
   case studio
   case notes
 
-  public static let initial = MainTab.home
+  static let initial = MainTab.home
 
-  public var index: Int {
+  var index: Int {
     Self.allCases.firstIndex(of: self)!
   }
 
-  public var route: Route {
+  var route: Route {
     switch self {
     case .home: .home
     case .studio: .studio

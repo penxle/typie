@@ -92,6 +92,27 @@ private func searchData(_ hits: sending [any AnyMock]) async
     #expect(Self.watches(context) == 0)
   }
 
+  @Test func isSearchingCoversFlightOnly() async throws {
+    let context = makeContext(debounce: .milliseconds(20))
+    #expect(!context.model.isSearching)
+    context.model.setText("q")
+    #expect(!context.model.isSearching)
+    try await waitOnMain { Self.watches(context) == 1 }
+    #expect(context.model.isSearching)
+    await push(context, [documentHit(id: "1")])
+    try await waitOnMain { !context.model.isSearching }
+    context.model.setText("")
+    #expect(!context.model.isSearching)
+  }
+
+  @Test func isSearchingEndsOnFailure() async throws {
+    let context = makeContext(debounce: .milliseconds(20))
+    context.model.setText("q")
+    try await waitOnMain { Self.watches(context) == 1 }
+    pushFailure(context)
+    try await waitOnMain { !context.model.isSearching }
+  }
+
   @Test func debouncesBeforeQuerying() async throws {
     let context = makeContext(debounce: .milliseconds(150))
     context.model.setText("q")
@@ -195,6 +216,41 @@ private func searchData(_ hits: sending [any AnyMock]) async
     context.model.select(recent: "old")
     #expect(context.model.text == "old")
     try await waitOnMain { Self.watches(context) == 1 }
+  }
+
+  @Test func submittingRecordsKeyword() {
+    let context = makeContext(recent: ["z"], debounce: .seconds(10))
+    context.model.setText("q")
+    context.model.submit()
+    #expect(context.model.recentSearches == ["q", "z"])
+    #expect(context.preferences.recentSearches == ["q", "z"])
+  }
+
+  @Test func interactingRecordsActiveKeyword() async throws {
+    let context = makeContext(recent: ["z"])
+    context.model.setText("q")
+    try await waitOnMain { Self.watches(context) == 1 }
+    context.model.didInteract()
+    #expect(context.model.recentSearches == ["q", "z"])
+  }
+
+  @Test func interactingWhileBlankRecordsNothing() {
+    let context = makeContext(recent: ["z"])
+    context.model.didInteract()
+    #expect(context.model.recentSearches == ["z"])
+  }
+
+  @Test func submittingBlankRecordsNothing() {
+    let context = makeContext(recent: ["z"], debounce: .seconds(10))
+    context.model.setText(" ")
+    context.model.submit()
+    #expect(context.model.recentSearches == ["z"])
+  }
+
+  @Test func selectingRecentMovesItToFront() {
+    let context = makeContext(recent: ["a", "b"], debounce: .seconds(10))
+    context.model.select(recent: "b")
+    #expect(context.model.recentSearches == ["b", "a"])
   }
 
   @Test func removingRecentPersists() {

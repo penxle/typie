@@ -5,7 +5,7 @@
   import SwiftUI
 
   @MainActor
-  public struct CreateSiteScreen: View {
+  struct CreateSiteScreen: View {
     @Environment(\.theme) private var theme
     private var colors: TColors { theme.colors }
 
@@ -14,11 +14,11 @@
     private let model: CreateSiteModel
     private let toast = Container.shared.toast()
 
-    public init(model: CreateSiteModel) {
+    init(model: CreateSiteModel) {
       self.model = model
     }
 
-    public var body: some View {
+    var body: some View {
       GeometryReader { proxy in
         VStack(spacing: 0) {
           ScrollView {

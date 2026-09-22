@@ -5,7 +5,7 @@
   import SwiftUI
 
   @MainActor
-  public struct SiteSwitcherScreen: View {
+  struct SiteSwitcherScreen: View {
     @Environment(\.theme) private var theme
     private var colors: TColors { theme.colors }
 
@@ -13,27 +13,19 @@
     private let onSelected: () -> Void
     private let onCreate: () -> Void
 
-    public init(onSelected: @escaping () -> Void, onCreate: @escaping () -> Void) {
+    init(onSelected: @escaping () -> Void, onCreate: @escaping () -> Void) {
       self.onSelected = onSelected
       self.onCreate = onCreate
     }
 
-    public var body: some View {
+    var body: some View {
       ScrollView {
         VStack(spacing: 12) {
           if model.loadFailed {
-            VStack(spacing: 0) {
-              TText("문제가 발생했어요", style: TTypography.label, color: colors.textDefault)
-              Spacer().frame(height: 6)
-              TText("잠시 후 다시 시도해주세요.", style: TTypography.caption, color: colors.textMuted)
-              Spacer().frame(height: 20)
-              TButton("다시 시도", variant: .secondary) { model.refetch() }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
+            RetryPrompt { model.refetch() }
           } else {
             if !model.sites.isEmpty {
-              HomeCard {
+              card {
                 ForEach(model.sites) { site in
                   Button {
                     model.select(site.id)
@@ -41,14 +33,14 @@
                   } label: {
                     row(site, isCurrent: site.id == model.current?.id)
                   }
-                  .buttonStyle(.plain)
+                  .buttonStyle(TPressEffectStyle(TPressLook()))
                 }
               }
             }
             if model.isSettled {
-              HomeCard {
+              card {
                 Button(action: onCreate) { createRow }
-                  .buttonStyle(.plain)
+                  .buttonStyle(TPressEffectStyle(TPressLook()))
               }
             }
           }
@@ -65,10 +57,10 @@
 
     private func row(_ site: Site, isCurrent: Bool) -> some View {
       HStack(spacing: 12) {
-        TImage(url: site.logo, side: 36)
-          .clipShape(TShapes.squircle(10))
+        Img(site.logo, side: 32)
+          .clipShape(TShapes.rounded(TShapes.sm))
           .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
           TText(site.name, style: TTypography.label, color: colors.textDefault, maxLines: 1)
           TText(site.url, style: TTypography.caption, color: colors.textMuted, maxLines: 1)
         }
@@ -84,10 +76,19 @@
       .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
     }
 
+    private func card(@ViewBuilder _ content: () -> some View) -> some View {
+      VStack(spacing: 0) { content() }
+        .padding(.horizontal, 10)
+        .background(
+          colors.textDefault.opacity(Self.cardInsetOpacity), in: TShapes.squircle(TShapes.lg))
+    }
+
+    private static let cardInsetOpacity: Double = 0.03
+
     private var createRow: some View {
       HStack(spacing: 12) {
         TIcon(LucideIcon.plus, size: 18, tint: colors.textMuted)
-          .frame(width: 36, height: 36)
+          .frame(width: 32, height: 32)
         TText("새 스페이스 생성", style: TTypography.label, color: colors.textMuted)
         Spacer(minLength: 0)
       }

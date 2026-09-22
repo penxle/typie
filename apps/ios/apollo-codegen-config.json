@@ -9,7 +9,7 @@
       "path": "Packages/Typie/Sources/GraphQL",
       "moduleType": { "other": {} }
     },
-    "operations": { "relative": { "subpath": "__generated__", "accessModifier": "public" } },
+    "operations": { "inSchemaModule": {} },
     "testMocks": { "absolute": { "path": "Packages/Typie/Sources/GraphQLMocks", "accessModifier": "public" } }
   },
   "options": { "pruneGeneratedFiles": true }

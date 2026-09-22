@@ -116,6 +116,32 @@ Folder.implement({
       },
     }),
 
+    childCount: t.int({
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Folder.childCount',
+          nullable: true,
+          load: async (entityIds: string[]) => {
+            return await db
+              .select({ parentId: Entities.parentId, count: sql<number>`count(*)` })
+              .from(Entities)
+              .where(
+                and(
+                  inArray(Entities.parentId, entityIds),
+                  eq(Entities.state, EntityState.ACTIVE),
+                  inArray(Entities.type, [EntityType.FOLDER, EntityType.DOCUMENT]),
+                ),
+              )
+              .groupBy(Entities.parentId);
+          },
+          key: (row) => row?.parentId,
+        });
+
+        const row = await loader.load(self.entityId);
+        return row ? Number(row.count) : 0;
+      },
+    }),
+
     folderCount: t.int({
       resolve: async (self) => {
         const rows = await db.execute<{ count: number }>(

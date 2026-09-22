@@ -1,30 +1,30 @@
 import Design
 import SwiftUI
 
-public enum EntityKind: Equatable, Sendable {
+enum EntityKind: Equatable, Sendable {
   case document
   case folder
 }
 
-public struct EntityIconSpec: Equatable, Sendable {
-  public let kind: EntityKind
-  public let name: String
-  public let color: String
+struct EntityIconSpec: Equatable, Sendable {
+  let kind: EntityKind
+  let name: String
+  let color: String
 
-  public init(kind: EntityKind, name: String, color: String) {
+  init(kind: EntityKind, name: String, color: String) {
     self.kind = kind
     self.name = name
     self.color = color
   }
 }
 
-public struct EntityIconAppearance: Equatable {
-  public let icon: TIconName
-  public let tint: Color
+struct EntityIconAppearance: Equatable {
+  let icon: TIconName
+  let tint: Color
 }
 
-public enum EntityIcon {
-  public static func appearance(_ spec: EntityIconSpec, colors: TColors) -> EntityIconAppearance {
+enum EntityIcon {
+  static func appearance(_ spec: EntityIconSpec, colors: TColors) -> EntityIconAppearance {
     let fallback = spec.kind == .folder ? LucideIcon.folder : LucideIcon.file
     let icon = names[spec.name.trimmingCharacters(in: .whitespaces)] ?? fallback
     let tint = tint(spec.color, colors: colors) ?? colors.textMuted

@@ -1,0 +1,36 @@
+query UserGoalScreen_Query {
+  me {
+    id
+    ...UserGoalSection_user
+  }
+}
+
+query UserGoalDay_Query($date: DateTime!) {
+  me {
+    id
+    dailyDocumentCharacterCountChanges(date: $date) {
+      document {
+        id
+        title
+        entity {
+          id
+        }
+      }
+      additions
+    }
+  }
+}
+
+mutation UserGoalScreen_UpdateUserGoal_Mutation($input: UpdateUserGoalInput!) {
+  updateUserGoal(input: $input) {
+    id
+    ...UserGoalSection_user
+  }
+}
+
+mutation UserGoalScreen_DeleteUserGoal_Mutation {
+  deleteUserGoal {
+    id
+    ...UserGoalSection_user
+  }
+}
