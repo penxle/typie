@@ -62,25 +62,40 @@ public final class TToastCenter {
   }
 }
 
+@MainActor
+@Observable
+public final class TToastLayout {
+  public var bottomInset: CGFloat = 0
+
+  public init() {}
+}
+
 public struct TToastOverlay: View {
   @Environment(\.theme) private var theme
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private var colors: TColors { theme.colors }
 
-  @ScaledMetric(relativeTo: TTypography.caption.textStyle) private var badgeSide: CGFloat = 20
+  @ScaledMetric(relativeTo: TTypography.control.textStyle) private var badgeSide: CGFloat = 20
 
   private let center: TToastCenter
+  private let layout: TToastLayout
 
-  public init(center: TToastCenter) {
+  public init(center: TToastCenter, layout: TToastLayout = TToastLayout()) {
     self.center = center
+    self.layout = layout
   }
 
   private var transition: AnyTransition {
-    let base: AnyTransition =
-      reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 4))
+    if reduceMotion {
+      return .asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.18)),
+        removal: .opacity.animation(.easeOut(duration: 0.15)))
+    }
     return .asymmetric(
-      insertion: base.animation(.easeOut(duration: 0.2)),
-      removal: base.animation(.easeIn(duration: 0.2)))
+      insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .bottom))
+        .animation(.easeOut(duration: 0.22)),
+      removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom))
+        .animation(.easeOut(duration: 0.15)))
   }
 
   public var body: some View {
@@ -92,37 +107,45 @@ public struct TToastOverlay: View {
           .onAppear { AccessibilityNotification.Announcement(item.message).post() }
       }
     }
+    .padding(.bottom, layout.bottomInset)
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout.bottomInset)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    .animation(.easeOut(duration: 0.2), value: center.current)
+    .animation(.easeOut(duration: 0.22), value: center.current)
   }
 
   private func surface(_ item: TToastItem) -> some View {
-    let shape = TShapes.rounded(TShapes.lg)
-    return HStack(spacing: 8) {
+    HStack(spacing: 8) {
       ZStack {
         switch item.kind {
         case .success:
           Circle().fill(colors.successDefault).frame(width: badgeSide, height: badgeSide)
           TIcon(
             LucideIcon.check, size: 12, tint: colors.textOnSuccess,
-            relativeTo: TTypography.caption)
+            relativeTo: TTypography.control)
         case .error:
           Circle().fill(colors.dangerDefault).frame(width: badgeSide, height: badgeSide)
           TIcon(
             TypieIcon.exclamation, size: 12, tint: colors.textOnDanger,
-            relativeTo: TTypography.caption)
+            relativeTo: TTypography.control)
         }
       }
-      TText(item.message, style: TTypography.caption, color: colors.textOnInverse)
+      TText(item.message, style: TTypography.control, color: colors.textDefault)
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 16)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background {
-      shape.fill(.ultraThinMaterial)
-      shape.fill(colors.surfaceInverse.opacity(0.6))
-    }
+    .padding(.leading, 14)
+    .padding(.trailing, 18)
+    .padding(.vertical, 12)
+    .modifier(ToastGlass())
     .frame(maxWidth: 600)
     .padding(.horizontal, 16)
+  }
+}
+
+private struct ToastGlass: ViewModifier {
+  func body(content: Content) -> some View {
+    if #available(iOS 26, macOS 26, *) {
+      content.glassEffect(.regular, in: .capsule)
+    } else {
+      content.background(.ultraThinMaterial, in: TShapes.capsule)
+    }
   }
 }

@@ -8,31 +8,78 @@
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let indentStep: CGFloat = 24
-    static let expandCurve = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.22)
+    static let expand = Animation.spring(duration: 0.22, bounce: 0)
+    static let expandReduced = Animation.easeOut(duration: 0.12)
+
+    static func expandAnimation(reduceMotion: Bool) -> Animation {
+      reduceMotion ? expandReduced : expand
+    }
+
+    static func rowTransition(reduceMotion: Bool) -> AnyTransition {
+      if reduceMotion { return .opacity }
+      return .asymmetric(
+        insertion: .opacity.animation(.easeOut(duration: 0.12).delay(0.05)),
+        removal: .opacity.animation(.easeOut(duration: 0.08)))
+    }
 
     static func indent(_ depth: Int) -> CGFloat { CGFloat(depth) * indentStep }
 
     private let store: HomeTreeStore
     private let nodes: [HomeTreeNode]
+    private let onOpenDocument: (String) -> Void
+    private let onOpenFolder: (EntityRowItem) -> Void
+
+    init(
+      store: HomeTreeStore, nodes: [HomeTreeNode],
+      onOpenDocument: @escaping (String) -> Void, onOpenFolder: @escaping (EntityRowItem) -> Void
+    ) {
+      self.store = store
+      self.nodes = nodes
+      self.onOpenDocument = onOpenDocument
+      self.onOpenFolder = onOpenFolder
+    }
+
+    var body: some View {
+      VStack(alignment: .leading, spacing: 0) {
+        HomeTreeRows(
+          store: store, nodes: nodes, depth: 0, onOpenDocument: onOpenDocument,
+          onOpenFolder: onOpenFolder)
+      }
+      .animation(Self.expandAnimation(reduceMotion: reduceMotion), value: store.expansion)
+    }
+  }
+
+  @MainActor
+  struct HomeTreeRows: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let store: HomeTreeStore
+    private let nodes: [HomeTreeNode]
+    private let hint: String?
     private let depth: Int
     private let onOpenDocument: (String) -> Void
     private let onOpenFolder: (EntityRowItem) -> Void
 
     init(
-      store: HomeTreeStore, nodes: [HomeTreeNode], depth: Int,
+      store: HomeTreeStore, nodes: [HomeTreeNode], hint: String? = nil, depth: Int,
       onOpenDocument: @escaping (String) -> Void, onOpenFolder: @escaping (EntityRowItem) -> Void
     ) {
       self.store = store
       self.nodes = nodes
+      self.hint = hint
       self.depth = depth
       self.onOpenDocument = onOpenDocument
       self.onOpenFolder = onOpenFolder
     }
 
     var body: some View {
+      let transition =
+        depth > 0 ? HomeTreeView.rowTransition(reduceMotion: reduceMotion) : AnyTransition.identity
       ForEach(nodes) { node in
-        row(node)
-          .transition(.move(edge: .top).combined(with: .opacity))
+        row(node).transition(transition)
+      }
+      if let hint {
+        TreeHintRow(text: hint, depth: depth).transition(transition)
       }
     }
 
@@ -47,24 +94,35 @@
         let expanded = store.isExpanded(item.entityId)
         FolderRow(
           item: item, childCount: childCount, depth: depth, expanded: expanded,
-          onOpen: { onOpenFolder(item) }, onToggle: { toggle(item.entityId) })
+          onOpen: { onOpenFolder(item) }, onToggle: { store.toggle(item.entityId) })
         if expanded {
-          let children = store.children(of: item.entityId)
-          HomeTreeView(
-            store: store, nodes: children, depth: depth + 1, onOpenDocument: onOpenDocument,
-            onOpenFolder: onOpenFolder
-          )
-          .animation(reduceMotion ? nil : Self.expandCurve, value: children.map(\.id))
+          HomeTreeRows(
+            store: store, nodes: store.children(of: item.entityId),
+            hint: childrenHint(item.entityId), depth: depth + 1,
+            onOpenDocument: onOpenDocument, onOpenFolder: onOpenFolder)
         }
       }
     }
+  }
 
-    private func toggle(_ id: String) {
-      if !store.isExpanded(id), !reduceMotion {
-        withAnimation(Self.expandCurve) { store.toggle(id) }
-      } else {
-        store.toggle(id)
-      }
+  extension HomeTreeRows {
+    fileprivate func childrenHint(_ id: String) -> String? {
+      if store.failed(id) { return "폴더 내용을 불러오지 못했어요" }
+      if store.isLoaded(id), store.children(of: id).isEmpty { return "폴더가 비어있어요" }
+      return nil
+    }
+  }
+
+  private struct TreeHintRow: View {
+    @Environment(\.theme) private var theme
+
+    let text: String
+    let depth: Int
+
+    var body: some View {
+      TText(text, style: TTypography.detail, color: theme.colors.textHint)
+        .padding(.leading, HomeTreeView.indent(depth))
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }
   }
 
@@ -103,8 +161,7 @@
               LucideIcon.chevronDown, size: 18, tint: colors.textHint, relativeTo: TTypography.text
             )
             .rotationEffect(.degrees(expanded ? 0 : -90))
-            .animation(
-              reduceMotion ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.2), value: expanded)
+            .animation(reduceMotion ? nil : HomeTreeView.expand, value: expanded)
           }
           .padding(.leading, 12)
           .frame(minWidth: 44, minHeight: 44)
@@ -124,10 +181,12 @@
 
     var body: some View {
       Rectangle()
-        .fill(theme.colors.borderHairline)
+        .fill(theme.colors.borderDefault)
         .frame(height: 1)
-        .frame(height: 16)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .padding(.leading, HomeTreeView.indent(depth))
+        .contentShape(Rectangle())
+        .onTapGesture {}
         .accessibilityHidden(true)
     }
   }

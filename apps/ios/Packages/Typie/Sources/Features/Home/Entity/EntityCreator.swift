@@ -35,6 +35,16 @@ final class EntityCreator {
     }
   }
 
+  func createDivider(siteId: String, parentEntityId: String?) async -> String? {
+    await perform {
+      try await client.perform(
+        EntityContainer_CreateDivider_Mutation(
+          input: CreateDividerInput(
+            parentEntityId: parentEntityId.map { .some($0) } ?? nil, siteId: siteId))
+      ).createDivider.entity.id
+    }
+  }
+
   private func perform(_ operation: () async throws -> String) async -> String? {
     guard !isCreating else { return nil }
     isCreating = true

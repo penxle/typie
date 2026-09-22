@@ -119,8 +119,8 @@ import Testing
     #expect(store.children(of: "f1").isEmpty)
   }
 
-  @Test func ensureLoadedNotifiesObservers() async {
-    let (store, _, _) = makeStore()
+  @Test func childrenArrivalNotifiesObservers() async throws {
+    let (store, client, _) = makeStore()
     await drainMainActor()
     let recorder = CallRecorder()
     withObservationTracking {
@@ -128,7 +128,16 @@ import Testing
     } onChange: {
       recorder.record("children")
     }
-    store.ensureLoaded("f1")
+    store.toggle("f1")
+    #expect(store.expansion == HomeTreeExpansion(expanded: ["f1"], children: [:]))
+    try await waitOnMain { client.watchCount(of: HomeTree_Children_Query.self) == 1 }
+    client.push(
+      .success(await childrenData(parentId: "f1", children: documents(["d1"]))),
+      for: HomeTree_Children_Query.self)
+    try await waitOnMain { !store.children(of: "f1").isEmpty }
     #expect(recorder.calls == ["children"])
+    #expect(store.expansion.children == ["f1": store.children(of: "f1")])
+    store.toggle("f1")
+    #expect(store.expansion == HomeTreeExpansion(expanded: [], children: [:]))
   }
 }

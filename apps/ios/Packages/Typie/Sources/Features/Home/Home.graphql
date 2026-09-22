@@ -37,6 +37,12 @@ fragment HomeScreen_site on Site {
     ...HomeTree_entity
   }
 
+  recentDocuments(sort: VIEWED_AT, limit: 5) {
+    documents {
+      ...RecentDocument_document
+    }
+  }
+
   entities {
     ...HomeTree_entity
   }

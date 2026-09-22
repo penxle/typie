@@ -35,8 +35,21 @@ import Testing
     #expect(state.roots.map(\.id) == ["f1", "x1", "d1"])
   }
 
+  @Test func mapsRecentDocumentsInOrder() async {
+    let data = await HomeScreen_Query.Data.from(
+      Mock<GraphQLMocks.Query>(
+        me: nil,
+        site: homeSiteMock(recent: [
+          recentDocumentMock(id: "r1", title: "첫째", viewedAt: "2026-09-22T09:00:00.000Z"),
+          recentDocumentMock(id: "r2", title: "둘째", viewedAt: "2026-09-21T09:00:00.000Z"),
+        ])))
+    let state = HomeSiteState(data.site.fragments.homeScreen_site)
+    #expect(state.recent.map(\.entityId) == ["r1", "r2"])
+  }
+
   @Test func placeholderHasThreeRowsInBothSections() {
     #expect(HomeSiteState.placeholder.homePinned.count == 3)
+    #expect(HomeSiteState.placeholder.recent.count == 3)
     #expect(HomeSiteState.placeholder.roots.count == 3)
     #expect(HomeSiteState.placeholder.roots.allSatisfy { $0.item != nil })
   }

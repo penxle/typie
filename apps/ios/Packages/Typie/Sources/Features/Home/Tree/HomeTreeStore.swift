@@ -7,6 +7,11 @@ struct HomeTreeChildrenInput: Equatable, Sendable {
   let entityId: String
 }
 
+struct HomeTreeExpansion: Equatable, Sendable {
+  let expanded: Set<String>
+  let children: [String: [HomeTreeNode]]
+}
+
 @MainActor @Observable
 final class HomeTreeStore {
   private(set) var expanded: Set<String> = []
@@ -14,7 +19,10 @@ final class HomeTreeStore {
   @ObservationIgnored private let client: any GraphQLClient
   @ObservationIgnored private let preferences: UserPreferences
   @ObservationIgnored private let activeSite: ActiveSiteStore
+
   private var queries: [String: WatchQuery<HomeTreeChildrenInput, HomeTree_Children_Query>] = [:]
+  private var childrenById: [String: [HomeTreeNode]] = [:]
+  private var parentById: [String: HomeTreeNode] = [:]
   @ObservationIgnored private var loadedSiteId: String??
 
   init() {
@@ -22,6 +30,11 @@ final class HomeTreeStore {
     preferences = Container.shared.userPreferences()
     activeSite = Container.shared.activeSite()
     keepObserving(while: self) { [weak self] in self?.syncSite() }
+  }
+
+  var expansion: HomeTreeExpansion {
+    HomeTreeExpansion(
+      expanded: expanded, children: childrenById.filter { expanded.contains($0.key) })
   }
 
   func isExpanded(_ id: String) -> Bool {
@@ -44,24 +57,32 @@ final class HomeTreeStore {
 
   func ensureLoaded(_ id: String) {
     guard queries[id] == nil else { return }
-    queries[id] = WatchQuery(
+    let query = WatchQuery(
       client: client,
       input: { HomeTreeChildrenInput(entityId: id) },
       query: { HomeTree_Children_Query(entityId: $0.entityId) })
+    queries[id] = query
+    keepObserving(while: self) { [weak self, weak query] in
+      guard let self, let query, queries[id] === query else { return }
+      guard let entity = query.data?.entity else { return }
+      let children = entity.children.compactMap { HomeTreeNode.make($0.fragments.homeTree_entity) }
+      let parent = HomeTreeNode.make(entity.fragments.homeTree_entity)
+      guard childrenById[id] != children || parentById[id] != parent else { return }
+      childrenById[id] = children
+      parentById[id] = parent
+    }
   }
 
   func children(of id: String) -> [HomeTreeNode] {
-    guard let entity = queries[id]?.data?.entity else { return [] }
-    return entity.children.compactMap { HomeTreeNode.make($0.fragments.homeTree_entity) }
+    childrenById[id] ?? []
   }
 
   func node(_ id: String) -> HomeTreeNode? {
-    guard let entity = queries[id]?.data?.entity else { return nil }
-    return HomeTreeNode.make(entity.fragments.homeTree_entity)
+    parentById[id]
   }
 
   func isLoaded(_ id: String) -> Bool {
-    queries[id]?.data != nil
+    childrenById[id] != nil
   }
 
   func isLoading(_ id: String) -> Bool {
@@ -83,6 +104,8 @@ final class HomeTreeStore {
     guard loadedSiteId != .some(siteId) else { return }
     loadedSiteId = .some(siteId)
     queries = [:]
+    childrenById = [:]
+    parentById = [:]
     expanded = siteId.map { Set(preferences.expandedFolders(siteId: $0)) } ?? []
     for id in expanded.sorted() { ensureLoaded(id) }
   }

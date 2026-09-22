@@ -33,6 +33,26 @@ import Testing
           entity: Mock<GraphQLMocks.Entity>(id: GraphQL.ID(id)), id: "\(id)-folder")))
   }
 
+  private func created(divider id: String) async -> EntityContainer_CreateDivider_Mutation.Data {
+    await EntityContainer_CreateDivider_Mutation.Data.from(
+      Mock<GraphQLMocks.Mutation>(
+        createDivider: Mock<GraphQLMocks.Divider>(
+          entity: Mock<GraphQLMocks.Entity>(id: GraphQL.ID(id)), id: "\(id)-divider")))
+  }
+
+  @Test func createsDividerInsideParent() async {
+    let (creator, client) = make()
+    client.stub(
+      .success(await created(divider: "e3")), for: EntityContainer_CreateDivider_Mutation.self)
+    let id = await creator.createDivider(siteId: "site-1", parentEntityId: "f1")
+    #expect(id == "e3")
+    let input = client.performed(EntityContainer_CreateDivider_Mutation.self)[0].input
+    #expect(input.siteId == "site-1")
+    #expect(input.parentEntityId == .some("f1"))
+    #expect(input.lowerOrder == nil)
+    #expect(input.upperOrder == nil)
+  }
+
   @Test func createsDocumentAtRootAsV2() async {
     let (creator, client) = make()
     client.stub(

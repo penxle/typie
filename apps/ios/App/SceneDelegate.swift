@@ -7,7 +7,6 @@ import UIKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
-  private var toastWindow: OverlayWindow?
   private var dialogWindow: OverlayWindow?
 
   func scene(
@@ -16,13 +15,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     options connectionOptions: UIScene.ConnectionOptions
   ) {
     guard let windowScene = scene as? UIWindowScene else { return }
-    let window = UIWindow(windowScene: windowScene)
+    let window = MainWindow(windowScene: windowScene)
     window.rootViewController = RootViewController()
     self.window = window
     let dialog = Container.shared.dialog()
-    toastWindow = OverlayWindow(
-      windowScene: windowScene, level: .alert - 1, avoidsKeyboard: true, isInteractive: { false },
-      content: TToastOverlay(center: Container.shared.toast()))
+    window.installToast(center: Container.shared.toast())
     dialogWindow = OverlayWindow(
       windowScene: windowScene, level: .alert - 2, avoidsKeyboard: false,
       isInteractive: { dialog.current != nil }, content: TDialogOverlay(center: dialog))
@@ -43,7 +40,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func sceneDidDisconnect(_ scene: UIScene) {
     window = nil
-    toastWindow = nil
     dialogWindow = nil
   }
 
@@ -57,7 +53,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         case .dark: .dark
         }
       window?.overrideUserInterfaceStyle = style
-      self?.toastWindow?.overrideUserInterfaceStyle = style
       self?.dialogWindow?.overrideUserInterfaceStyle = style
     }
   }

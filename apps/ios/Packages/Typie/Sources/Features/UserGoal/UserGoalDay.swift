@@ -45,7 +45,7 @@ struct UserGoalDay: Equatable, Sendable {
   var countText: String { UserGoalFormat.characters(additions) }
 
   var sentence: String {
-    guard let target else { return "목표가 없던 날이에요" }
+    guard let target else { return isToday ? "설정된 목표가 없어요" : "목표가 없던 날이에요" }
     if achieved { return "목표 \(UserGoalFormat.characters(target))를 달성했어요" }
     if isToday {
       if additions == 0 { return "아직 쓰기 전이에요" }
@@ -57,14 +57,7 @@ struct UserGoalDay: Equatable, Sendable {
     return "목표 \(UserGoalFormat.characters(target))"
   }
 
-  var noGoalDetail: String? {
-    hasGoal || additions == 0 ? nil : "\(countText)를 썼어요"
-  }
-
   var accessibilityLabel: String {
-    if hasGoal {
-      return "\(title), \(countText), \(sentence)"
-    }
-    return [title, sentence, noGoalDetail].compactMap { $0 }.joined(separator: ", ")
+    "\(title), \(countText), \(sentence)"
   }
 }

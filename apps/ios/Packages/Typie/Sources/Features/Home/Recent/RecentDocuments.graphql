@@ -1,0 +1,21 @@
+fragment RecentDocument_document on Document {
+  id
+
+  entity {
+    id
+    viewedAt
+    ...EntityRow_entity
+  }
+}
+
+query RecentDocuments_Query($siteId: ID!) {
+  site(siteId: $siteId) {
+    id
+
+    recentDocuments(sort: VIEWED_AT, limit: 50) {
+      documents {
+        ...RecentDocument_document
+      }
+    }
+  }
+}

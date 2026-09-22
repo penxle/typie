@@ -2,12 +2,20 @@ import Core
 import FactoryKit
 
 extension Container {
+  @MainActor public var bottomChrome: Factory<BottomChrome> {
+    self { BottomChrome() }.scope(.singleton)
+  }
+
   @MainActor var sites: Factory<SitesStore> {
     self { SitesStore() }.scope(.session)
   }
 
   @MainActor var homeStore: Factory<HomeStore> {
     self { HomeStore() }
+  }
+
+  @MainActor var recentDocumentsStore: Factory<RecentDocumentsStore> {
+    self { RecentDocumentsStore() }
   }
 
   @MainActor var homeTreeStore: Factory<HomeTreeStore> {

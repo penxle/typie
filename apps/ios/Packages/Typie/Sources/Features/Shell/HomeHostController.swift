@@ -45,7 +45,11 @@
         let alpha: CGFloat = visible ? 1 : 0
         guard titleLabel.alpha != alpha else { return }
         let duration = UIAccessibility.isReduceMotionEnabled ? 0 : 0.2
-        UIView.animate(withDuration: duration) { self.titleLabel.alpha = alpha }
+        UIView.animate(
+          withDuration: duration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]
+        ) {
+          self.titleLabel.alpha = alpha
+        }
       }
     }
 

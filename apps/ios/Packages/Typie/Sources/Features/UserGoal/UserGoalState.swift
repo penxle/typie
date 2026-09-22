@@ -14,21 +14,16 @@ struct UserGoalState: Equatable, Sendable {
   let status: UserGoalStatus?
   let history: [UserGoalHistoryEntry]
   let streaks: Streaks
-  let month: UserGoalMonth?
 
   var hasGoal: Bool { status != nil }
 
   static let placeholder = UserGoalState(
-    status: nil, history: [], streaks: Streaks(current: 0, best: 0), month: nil)
+    status: nil, history: [], streaks: Streaks(current: 0, best: 0))
 
-  init(
-    status: UserGoalStatus?, history: [UserGoalHistoryEntry], streaks: Streaks,
-    month: UserGoalMonth?
-  ) {
+  init(status: UserGoalStatus?, history: [UserGoalHistoryEntry], streaks: Streaks) {
     self.status = status
     self.history = history
     self.streaks = streaks
-    self.month = month
   }
 
   init(snapshot: UserGoalSnapshot, today: KSTDay) {
@@ -48,6 +43,5 @@ struct UserGoalState: Equatable, Sendable {
       let raw = UserGoalStreaks.streaks(snapshot.history, today: today)
       streaks = Streaks(current: raw.current, best: raw.best)
     }
-    month = UserGoalMonth(history: history, today: today)
   }
 }

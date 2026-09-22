@@ -4,7 +4,7 @@
   import SwiftUI
 
   @MainActor
-  struct HomeScreen<Sections: View, Extra: View>: View {
+  struct HomeScreen<Sections: View>: View {
     @Environment(\.theme) private var theme
     private var colors: TColors { theme.colors }
 
@@ -14,16 +14,11 @@
     private let title: HomeTitleState
     private let store: HomeStore
     private let sections: () -> Sections
-    private let extra: Extra
 
-    init(
-      title: HomeTitleState, store: HomeStore, @ViewBuilder sections: @escaping () -> Sections,
-      @ViewBuilder extra: () -> Extra
-    ) {
+    init(title: HomeTitleState, store: HomeStore, @ViewBuilder sections: @escaping () -> Sections) {
       self.title = title
       self.store = store
       self.sections = sections
-      self.extra = extra()
     }
 
     var body: some View {
@@ -39,7 +34,6 @@
                 .allowsHitTesting(!store.isPlaceholder)
                 .accessibilityHidden(store.isPlaceholder)
             }
-            extra
           }
           .padding(.horizontal, 16)
           .padding(.bottom, HomeBody.bottomClearance)

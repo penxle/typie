@@ -36,14 +36,16 @@ import Testing
     #expect(day(0, target: 1000, additions: 1, achieved: false).title == "오늘")
   }
 
-  @Test func noGoalDayHasNoRingAndOptionalCount() {
+  @Test func noGoalDayShowsCountAndSentence() {
     let empty = day(-20, target: nil, additions: 0, achieved: false)
     #expect(empty.hasGoal == false)
+    #expect(empty.countText == "0자")
     #expect(empty.sentence == "목표가 없던 날이에요")
-    #expect(empty.noGoalDetail == nil)
     let written = day(-20, target: nil, additions: 300, achieved: false)
-    #expect(written.noGoalDetail == "300자를 썼어요")
-    #expect(written.accessibilityLabel == "9월 1일 화, 목표가 없던 날이에요, 300자를 썼어요")
+    #expect(written.accessibilityLabel == "9월 1일 화, 300자, 목표가 없던 날이에요")
+    let todayNone = day(0, target: nil, additions: 120, achieved: false)
+    #expect(todayNone.sentence == "설정된 목표가 없어요")
+    #expect(todayNone.accessibilityLabel == "오늘, 120자, 설정된 목표가 없어요")
   }
 
   @Test func derivesFromHistoryUsingThatDaysTarget() {

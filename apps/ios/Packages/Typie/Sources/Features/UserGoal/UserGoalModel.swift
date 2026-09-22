@@ -11,7 +11,10 @@ final class UserGoalModel {
   private(set) var loadFailed = false
   private(set) var isMutating = false
   private var selectedDayOverride: KSTDay?
+  private var displayedWeekOverride: KSTDay?
+  private var anchorOverride: KSTDay?
   private(set) var documents: [UserGoalDayDocument] = []
+  private(set) var dailyAdditions: [KSTDay: Int] = [:]
   private(set) var documentsFailed = false
 
   @ObservationIgnored var now: () -> Date = { Date() }
@@ -38,15 +41,89 @@ final class UserGoalModel {
 
   var selected: UserGoalDay? {
     guard let state else { return nil }
-    return UserGoalDay(day: selectedDay, today: today, history: state.history)
+    let day = UserGoalDay(day: selectedDay, today: today, history: state.history)
+    guard !day.hasGoal else { return day }
+    return UserGoalDay(
+      day: day.day, isToday: day.isToday, target: nil,
+      additions: dailyAdditions[day.day] ?? 0, achieved: false)
+  }
+
+  var displayedWeek: KSTDay { displayedWeekOverride ?? UserGoalMonth.weekStart(of: today) }
+  var anchor: KSTDay { anchorOverride ?? today }
+
+  func grid(for week: KSTDay) -> UserGoalMonth? {
+    guard let state else { return nil }
+    let containing = week == displayedWeek ? anchor : week
+    let key = KSTDay(year: containing.year, month: containing.month, day: 1)
+    let today = today
+    if gridToday != today {
+      gridToday = today
+      gridCache = [:]
+    }
+    if let cached = gridCache[key] { return cached }
+    let grid = UserGoalMonth(
+      history: state.history, today: today, containing: containing, coverageStart: coverageStart)
+    gridCache[key] = grid
+    return grid
+  }
+
+  @ObservationIgnored private var gridToday: KSTDay?
+  @ObservationIgnored private var gridCache: [KSTDay: UserGoalMonth] = [:]
+
+  private static let historyDays = 365
+
+  private var coverageStart: KSTDay? {
+    state == nil ? nil : today.adding(days: -(Self.historyDays - 1))
+  }
+
+  var weeks: [KSTDay] {
+    guard let coverageStart else { return [] }
+    var weeks: [KSTDay] = []
+    var cursor = UserGoalMonth.weekStart(of: coverageStart)
+    let last = UserGoalMonth.weekStart(of: today)
+    while cursor <= last {
+      weeks.append(cursor)
+      cursor = cursor.adding(days: 7)
+    }
+    return weeks
+  }
+
+  var monthPages: [KSTDay] {
+    let weeks = weeks
+    guard let first = weeks.first, let last = weeks.last else { return [] }
+    var pages: [KSTDay] = []
+    var month = KSTDay(year: first.year, month: first.month, day: 1)
+    while month <= last {
+      if (month.year, month.month) == (anchor.year, anchor.month) {
+        pages.append(displayedWeek)
+      } else {
+        let start = UserGoalMonth.weekStart(of: month)
+        let representative = start == month ? start : start.adding(days: 7)
+        if representative >= first, representative <= last { pages.append(representative) }
+      }
+      month = UserGoalMonth.lastDay(year: month.year, month: month.month).adding(days: 1)
+    }
+    return pages
+  }
+
+  func show(week: KSTDay) {
+    displayedWeekOverride = week
+    anchorOverride = week
+  }
+
+  func settleDisplayedWeek() {
+    let week = UserGoalMonth.weekStart(of: anchor)
+    if week != displayedWeek { displayedWeekOverride = week }
   }
 
   private var dayQueryInput: KSTDay? {
-    hasGoal || state?.history.isEmpty == false ? selectedDay : nil
+    hasData ? selectedDay : nil
   }
 
   func select(_ day: KSTDay) {
-    guard day <= today, day != selectedDay else { return }
+    guard day <= today else { return }
+    anchorOverride = day
+    guard day != selectedDay else { return }
     selectedDayOverride = day
   }
 
@@ -83,7 +160,12 @@ final class UserGoalModel {
     let error = query.error
     let user = data?.me?.fragments.userGoalSection_user
     if let user {
+      dailyAdditions = Dictionary(
+        (data?.me?.characterCountChanges ?? []).compactMap { row in
+          parseDateTime(row.date).map { (KSTDay($0), row.additions) }
+        }, uniquingKeysWith: { _, last in last })
       state = UserGoalState(snapshot: UserGoalSnapshot(user), today: today)
+      gridCache = [:]
       hasData = true
       loadFailed = false
     }

@@ -2,6 +2,10 @@ query UserGoalScreen_Query {
   me {
     id
     ...UserGoalSection_user
+    characterCountChanges {
+      date
+      additions
+    }
   }
 }
 

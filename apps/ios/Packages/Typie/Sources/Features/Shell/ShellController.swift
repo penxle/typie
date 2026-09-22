@@ -2,6 +2,7 @@
 
   import Core
   import Design
+  import FactoryKit
   import UIKit
 
   final class ShellController: UIViewController, UINavigationControllerDelegate,
@@ -10,10 +11,12 @@
     private static let rootTransitionDuration: TimeInterval = 0.15
     private static let searchPushDuration: TimeInterval = 0.25
     private static let searchPopDuration: TimeInterval = 0.2
+    private static let createButtonTintMix: Double = 0.1
 
     private let rootProvider: @MainActor (MainTab) -> UIViewController
     private let openSearchHit: @MainActor (SearchHit, UIViewController) -> UIViewController?
-    private let createMenu: @MainActor (UIViewController) -> UIMenu?
+    private let createItems: @MainActor (UIViewController) -> [CreateMenuItem]?
+    private let moreMenuItems: [MoreMenuItem]
     private let session = SearchSession()
     private let navigation: ShellNavigationController
     private var roots: [MainTab: UIViewController] = [:]
@@ -23,18 +26,24 @@
     private var moreMenuState: MoreMenuState?
     private let selectionFeedback = UISelectionFeedbackGenerator()
     private var setBarSearching: ((Bool) -> Void)?
-    private var setBarConcealed: ((Bool) -> Void)?
+    private var setBarConcealed: ((Bool, TimeInterval) -> Void)?
     private var syncCreateButton: ((UIViewController?) -> Void)?
+    private var applyCreateButton: ((TimeInterval?) -> Void)?
+    private var createMenuAvailable = false
+    private var barSearching = false
+    private var barConcealed = false
     private var barContentInset: CGFloat = 0
 
     init(
       rootProvider: @escaping @MainActor (MainTab) -> UIViewController,
       openSearchHit: @escaping @MainActor (SearchHit, UIViewController) -> UIViewController?,
-      createMenu: @escaping @MainActor (UIViewController) -> UIMenu?
+      createItems: @escaping @MainActor (UIViewController) -> [CreateMenuItem]?,
+      moreMenuItems: [MoreMenuItem]
     ) {
       self.rootProvider = rootProvider
       self.openSearchHit = openSearchHit
-      self.createMenu = createMenu
+      self.createItems = createItems
+      self.moreMenuItems = moreMenuItems
       let root = rootProvider(MainTab.initial)
       navigation = ShellNavigationController(root: root)
       super.init(nibName: nil, bundle: nil)
@@ -78,6 +87,8 @@
     ) {
       syncContentInset(of: viewController)
       let concealed = viewController.hidesBottomBarWhenPushed
+      let interactive = navigationController.transitionCoordinator?.isInteractive == true
+      if !interactive, !concealed { syncCreateButton?(viewController) }
       if let coordinator = navigationController.transitionCoordinator {
         if coordinator.isInteractive {
           coordinator.notifyWhenInteractionChanges { [weak self] context in
@@ -89,10 +100,10 @@
           animateBar(concealed: concealed, duration: coordinator.transitionDuration)
         }
       } else {
-        setBarConcealed?(concealed)
+        setBarConcealed?(concealed, 0)
       }
-      guard navigationController.transitionCoordinator?.isInteractive != true else { return }
-      syncCreateButton?(viewController)
+      guard !interactive else { return }
+      if concealed { syncCreateButton?(viewController) }
       syncSearchChrome(top: viewController)
     }
 
@@ -100,17 +111,13 @@
       _ navigationController: UINavigationController, didShow viewController: UIViewController,
       animated: Bool
     ) {
-      setBarConcealed?(viewController.hidesBottomBarWhenPushed)
+      setBarConcealed?(viewController.hidesBottomBarWhenPushed, 0)
       syncCreateButton?(viewController)
       syncSearchChrome(top: viewController)
     }
 
     private func animateBar(concealed: Bool, duration: TimeInterval) {
-      UIView.animate(
-        withDuration: duration, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]
-      ) { [weak self] in
-        self?.setBarConcealed?(concealed)
-      }
+      setBarConcealed?(concealed, duration)
     }
 
     private func syncSearchChrome(top: UIViewController) {
@@ -201,7 +208,7 @@
           MoreMenuItem(icon: LucideIcon.userRound, title: "프로필"),
           MoreMenuItem(icon: LucideIcon.settings, title: "설정"),
           MoreMenuItem(icon: LucideIcon.ellipsis, title: "더 보기"),
-        ], profileName: "Finn")
+        ] + moreMenuItems, profileName: "Finn")
       moreMenuState = menuState
       let menuHost = ThemedHostingController(title: "", MoreMenu(state: menuState))
       menuHost.safeAreaRegions = []
@@ -219,8 +226,23 @@
         accentTint: .theme(\.paletteBlue), menuView: menuHost.view,
         menuHeaderHeight: MoreMenu.headerHeight, menuRowHeight: MoreMenu.rowHeight,
         menuRowCount: menuState.items.count, searchFieldView: searchFieldHost.view,
-        progressView: progressHost.view, createTint: .theme(\.accentDefault),
-        onCreateTint: .theme(\.surfaceCanvas))
+        progressView: progressHost.view)
+      let createState = CreateMenuState()
+      let createMenuHost = ThemedHostingController(title: "", CreateMenu(state: createState))
+      createMenuHost.safeAreaRegions = []
+      addChild(createMenuHost)
+      let createButton = CreateButtonView(
+        tint: .theme { $0.surfaceInset.mix(with: $0.textDefault, by: Self.createButtonTintMix) },
+        glyphTint: .theme(\.textDefault), state: createState, menuView: createMenuHost.view)
+      createMenuHost.didMove(toParent: self)
+      createButton.onHighlightChange = { [weak self] index in
+        if index != nil { self?.selectionFeedback.selectionChanged() }
+      }
+      createButton.onCommit = { [weak createButton] index in
+        guard let createButton, createState.items.indices.contains(index) else { return }
+        createButton.setExpanded(false)
+        createState.items[index].action()
+      }
       menuHost.didMove(toParent: self)
       searchFieldHost.didMove(toParent: self)
       progressHost.didMove(toParent: self)
@@ -234,41 +256,73 @@
         if index != nil { selectionFeedback.selectionChanged() }
       }
       bar.onScrubCommit = { [weak self] in
-        guard let self, let moreMenuState else { return }
-        if moreMenuState.highlightedIndex != nil {
-          moreMenuState.highlightedIndex = nil
-          collapseMenu?()
+        guard let self, let moreMenuState, let index = moreMenuState.highlightedIndex else {
+          return
         }
+        moreMenuState.highlightedIndex = nil
+        collapseMenu?()
+        guard let top = navigation.topViewController else { return }
+        moreMenuState.items[index].action?(top)
       }
       bar.onSelect = { [weak self] tab in
         self?.select(tab)
       }
-      bar.onExpandedChange = { [weak self] expanded in
-        self?.menuDismissView.isHidden = !expanded
-        self?.moreMenuState?.isPresented = expanded
-        if !expanded { self?.moreMenuState?.highlightedIndex = nil }
+      bar.onExpandedChange = { [weak self, weak createButton] expanded in
+        guard let self else { return }
+        if expanded { createButton?.setExpanded(false) }
+        menuDismissView.isHidden = !expanded && createButton?.isExpanded != true
+        moreMenuState?.isPresented = expanded
+        if !expanded { moreMenuState?.highlightedIndex = nil }
+      }
+      createButton.onExpandedChange = { [weak self, weak bar] expanded in
+        guard let self else { return }
+        if expanded { bar?.setExpanded(false) }
+        menuDismissView.isHidden = !expanded && bar?.isExpanded != true
       }
       bar.searchButton.addAction(
         UIAction { [weak self] _ in self?.openSearch() }, for: .primaryActionTriggered)
       bar.dismissButton.addAction(
         UIAction { [weak self] _ in self?.closeSearch() }, for: .primaryActionTriggered)
-      collapseMenu = { [weak bar] in bar?.setExpanded(false) }
-      setBarSearching = { [weak bar] searching in bar?.setSearching(searching) }
-      setBarConcealed = { [weak bar] concealed in bar?.setConcealed(concealed) }
-      syncCreateButton = { [weak self, weak bar] top in
-        guard let self, let bar else { return }
-        let menu = top.flatMap { createMenu($0) }
-        bar.createButton.menu = menu
-        bar.setCreateButtonVisible(menu != nil)
+      collapseMenu = { [weak bar, weak createButton] in
+        bar?.setExpanded(false)
+        createButton?.setExpanded(false)
+      }
+      let chrome = Container.shared.bottomChrome()
+      applyCreateButton = { [weak self, weak createButton] duration in
+        guard let self else { return }
+        let shown = createMenuAvailable && !barSearching && !barConcealed
+        createButton?.setShown(shown, duration: duration)
+        chrome.set(inset: barConcealed ? 0 : MainTabBar.contentBottomInset)
+      }
+      setBarSearching = { [weak self, weak bar] searching in
+        guard let self else { return }
+        barSearching = searching
+        bar?.setSearching(searching)
+        applyCreateButton?(nil)
+      }
+      setBarConcealed = { [weak self, weak bar] concealed, duration in
+        guard let self else { return }
+        barConcealed = concealed
+        bar?.setConcealed(concealed, duration: duration)
+        applyCreateButton?(duration)
+      }
+      syncCreateButton = { [weak self, weak createButton] top in
+        guard let self else { return }
+        let items = top.flatMap { createItems($0) }
+        createButton?.setItems(items ?? [])
+        createMenuAvailable = items != nil
+        applyCreateButton?(nil)
       }
       syncCreateButton?(navigation.topViewController)
       menuDismissView.isHidden = true
       menuDismissView.addGestureRecognizer(
         UITapGestureRecognizer(target: self, action: #selector(dismissMenu)))
       bar.translatesAutoresizingMaskIntoConstraints = false
+      createButton.translatesAutoresizingMaskIntoConstraints = false
       menuDismissView.translatesAutoresizingMaskIntoConstraints = false
       view.addSubview(menuDismissView)
       view.addSubview(bar)
+      view.addSubview(createButton)
       view.keyboardLayoutGuide.usesBottomSafeArea = false
       NSLayoutConstraint.activate([
         menuDismissView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -281,6 +335,9 @@
           equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -MainTabBar.horizontalPadding),
         bar.bottomAnchor.constraint(
           equalTo: view.keyboardLayoutGuide.topAnchor, constant: -MainTabBar.bottomPadding),
+        createButton.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+        createButton.bottomAnchor.constraint(
+          equalTo: bar.bottomAnchor, constant: -(MainTabBar.barHeight + CreateButtonView.spacing)),
       ])
     }
 

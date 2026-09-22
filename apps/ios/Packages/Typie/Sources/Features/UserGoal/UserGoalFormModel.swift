@@ -1,14 +1,17 @@
-import Design
 import Observation
 
 @MainActor @Observable
 final class UserGoalFormModel {
-  nonisolated static let invalidMessage = "목표 글자 수를 올바르게 입력해 주세요."
-  nonisolated static let rule = TFormRule { parse($0) == nil ? invalidMessage : nil }
+  nonisolated static let step = 100
+  nonisolated static let largeStep = 1000
+  nonisolated static let stepFloor = 100
+  nonisolated static let minimum = 1
+  nonisolated static let maximum = Int(Int32.max)
+  nonisolated static let defaultTarget = 1000
 
-  let form: TFormState
-  let target: TFieldState
   let hasGoal: Bool
+  let initial: Int?
+  private(set) var value: Int
   private(set) var isSubmitting = false
   private(set) var isRemoving = false
 
@@ -16,11 +19,26 @@ final class UserGoalFormModel {
 
   init(goal: UserGoalModel) {
     self.goal = goal
-    let form = TFormState(autoFocusFirstField: true, validatesOnBlur: false)
-    let current = goal.state?.status.map { String($0.target) } ?? ""
-    target = form.field(current, rules: [Self.rule])
+    initial = goal.state?.status?.target
+    value = initial ?? Self.defaultTarget
     hasGoal = goal.hasGoal
-    self.form = form
+  }
+
+  var canSubmit: Bool { value >= Self.minimum && value <= Self.maximum && value != initial }
+
+  var canDecrement: Bool { value > Self.stepFloor }
+  var canIncrement: Bool { value < Self.maximum }
+
+  func adjust(by delta: Int) {
+    let floor = delta < 0 ? Self.stepFloor : Self.minimum
+    value = min(Self.maximum, max(floor, value + delta))
+  }
+
+  @discardableResult
+  func enter(_ raw: String) -> Bool {
+    guard let parsed = Self.parse(raw) else { return false }
+    value = parsed
+    return true
   }
 
   nonisolated static func parse(_ raw: String) -> Int? {
@@ -33,11 +51,9 @@ final class UserGoalFormModel {
   }
 
   func submit() async -> Bool? {
-    guard !isSubmitting, !isRemoving else { return nil }
-    guard form.validate(), let value = Self.parse(target.value) else { return nil }
+    guard !isSubmitting, !isRemoving, canSubmit else { return nil }
     isSubmitting = true
     defer { isSubmitting = false }
-    form.endEditing()
     return await goal.save(target: value)
   }
 
@@ -45,7 +61,6 @@ final class UserGoalFormModel {
     guard !isSubmitting, !isRemoving else { return false }
     isRemoving = true
     defer { isRemoving = false }
-    form.endEditing()
     return await goal.remove()
   }
 }

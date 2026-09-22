@@ -35,9 +35,10 @@ import Testing
     try await waitOnMain { model.hasData }
     #expect(model.state?.status == nil)
     #expect(model.hasGoal == false)
+    #expect(model.selected?.hasGoal == false)
     #expect(model.state?.history.count == 1)
     #expect(model.state?.streaks.current == 1)
-    #expect(model.state?.month?.rows.count ?? 0 >= 4)
+    #expect(model.grid(for: model.displayedWeek)?.rows.count ?? 0 >= 4)
     #expect(model.loadFailed == false)
   }
 
@@ -67,7 +68,7 @@ import Testing
       .success(await userGoalScreenData(target: nil, history: [], today: (iso(Self.today), 0))),
       for: UserGoalScreen_Query.self)
     try await waitOnMain { model.hasData }
-    #expect(model.state?.month != nil)
+    #expect(model.grid(for: model.displayedWeek) != nil)
     #expect(model.state?.streaks == UserGoalState.Streaks(current: 0, best: 0))
   }
 
