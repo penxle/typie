@@ -4,6 +4,7 @@ public struct TProgressRing: View {
   public enum RingState: Sendable {
     case under
     case achieved
+    case noGoal
   }
 
   @Environment(\.theme) private var theme
@@ -27,8 +28,25 @@ public struct TProgressRing: View {
   private var size: CGFloat { fixedSize ?? scaledSize }
 
   static func fraction(progress: Double, state: RingState) -> Double {
-    state == .under ? min(max(progress, 0), 1) : 1
+    switch state {
+    case .under: min(max(progress, 0), 1)
+    case .achieved: 1
+    case .noGoal: 0
+    }
   }
+
+  static func dotWidth(for size: CGFloat) -> CGFloat {
+    min(lineWidth(for: size), Self.maxDotWidth)
+  }
+
+  static func dash(for size: CGFloat) -> [CGFloat] {
+    let circumference = .pi * (size - lineWidth(for: size))
+    let dot = dotWidth(for: size)
+    let count = max(6, (circumference / (dot * 2)).rounded(.down))
+    return [0.001, circumference / count - 0.001]
+  }
+
+  private static let maxDotWidth: CGFloat = 4
 
   static func lineWidth(for size: CGFloat) -> CGFloat {
     max(2, size * 3.5 / 32)
@@ -48,12 +66,22 @@ public struct TProgressRing: View {
     let width = Self.lineWidth(for: size)
     let fraction = Self.fraction(progress: progress, state: state)
     let fill = state == .under ? theme.colors.accentDefault : theme.colors.successDefault
+    let dashed = state == .noGoal
     return ZStack {
-      Circle().stroke(theme.colors.surfaceInset, lineWidth: width)
-      Circle()
-        .trim(from: 0, to: fraction)
-        .stroke(fill, style: StrokeStyle(lineWidth: width, lineCap: fraction > 0 ? .round : .butt))
-        .rotationEffect(.degrees(-90))
+      Circle().stroke(
+        theme.colors.borderEmphasis,
+        style: StrokeStyle(
+          lineWidth: dashed ? Self.dotWidth(for: size) : width, lineCap: dashed ? .round : .butt,
+          dash: dashed ? Self.dash(for: size) : []
+        ))
+      if !dashed {
+        Circle()
+          .trim(from: 0, to: fraction)
+          .stroke(
+            fill, style: StrokeStyle(lineWidth: width, lineCap: fraction > 0 ? .round : .butt)
+          )
+          .rotationEffect(.degrees(-90))
+      }
     }
     .padding(width / 2)
     .frame(width: size, height: size)

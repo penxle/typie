@@ -1,3 +1,20 @@
+enum UserGoalLineCopy {
+  static func text(_ status: UserGoalStatus) -> String {
+    var text =
+      "오늘 \(Formatting.comma(status.additions)) / \(UserGoalFormat.characters(status.target))"
+    if status.streak > 0 { text += " · \(status.streak)일 연속" }
+    return text
+  }
+
+  static func accessibilityText(_ status: UserGoalStatus?) -> String {
+    guard let status else { return "일일 목표, 설정된 목표가 없어요" }
+    var text =
+      "일일 목표, 오늘 \(UserGoalFormat.characters(status.target)) 중 \(UserGoalFormat.characters(status.additions))"
+    if status.streak > 0 { text += ", \(status.streak)일 연속" }
+    return text
+  }
+}
+
 #if canImport(UIKit)
 
   import Core
@@ -22,41 +39,27 @@
           if let status = goal.status {
             TProgressRing(
               progress: Double(status.additions) / Double(status.target),
-              state: status.achieved ? .achieved : .under, size: 16, relativeTo: TTypography.detail)
+              state: status.achieved ? .achieved : .under, size: 20, relativeTo: TTypography.text)
             TText(
-              Self.text(status), style: TTypography.detail, color: colors.textMuted, maxLines: 1,
+              UserGoalLineCopy.text(status), style: TTypography.text, color: colors.textMuted,
+              maxLines: 1,
               monospacedDigit: true)
           } else {
-            TIcon(
-              LucideIcon.target, size: 16, tint: colors.textHint, relativeTo: TTypography.detail)
-            TText("일일 목표 정하기", style: TTypography.detail, color: colors.textMuted, maxLines: 1)
+            TProgressRing(progress: 0, state: .noGoal, size: 20, relativeTo: TTypography.text)
+            TText(
+              "설정된 목표가 없어요", style: TTypography.text, color: colors.textMuted, maxLines: 1)
           }
           TIcon(
-            LucideIcon.chevronRight, size: 16, tint: colors.textHint, relativeTo: TTypography.detail
+            LucideIcon.chevronRight, size: 18, tint: colors.textHint, relativeTo: TTypography.text
           )
           Spacer(minLength: 0)
         }
-        .frame(minHeight: 32)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
       }
       .buttonStyle(TPressEffectStyle(TPressLook()))
       .accessibilityElement(children: .combine)
-      .accessibilityLabel(Self.accessibilityText(goal.status))
-    }
-
-    static func text(_ status: UserGoalStatus) -> String {
-      var text =
-        "오늘 \(Formatting.comma(status.additions)) / \(UserGoalFormat.characters(status.target))"
-      if status.streak > 0 { text += " · \(status.streak)일 연속" }
-      return text
-    }
-
-    static func accessibilityText(_ status: UserGoalStatus?) -> String {
-      guard let status else { return "일일 목표 정하기" }
-      var text =
-        "일일 목표, 오늘 \(UserGoalFormat.characters(status.target)) 중 \(UserGoalFormat.characters(status.additions))"
-      if status.streak > 0 { text += ", \(status.streak)일 연속" }
-      return text
+      .accessibilityLabel(UserGoalLineCopy.accessibilityText(goal.status))
     }
   }
 

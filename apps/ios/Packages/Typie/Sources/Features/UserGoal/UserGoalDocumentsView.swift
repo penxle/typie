@@ -21,20 +21,8 @@ struct UserGoalDocumentsView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .firstTextBaseline) {
-        TText("쓴 글", style: TTypography.section, color: colors.textMuted)
-        Spacer(minLength: 8)
-        if !documents.isEmpty {
-          TText(
-            "\(documents.count)개 문서", style: TTypography.caption, color: colors.textHint,
-            monospacedDigit: true)
-        }
-      }
       if failed {
         TText("잠시 후 다시 시도해주세요.", style: TTypography.detail, color: colors.textHint)
-          .padding(.vertical, 12)
-      } else if documents.isEmpty {
-        TText("쓴 글이 없어요", style: TTypography.detail, color: colors.textHint)
           .padding(.vertical, 12)
       } else {
         VStack(spacing: 0) {

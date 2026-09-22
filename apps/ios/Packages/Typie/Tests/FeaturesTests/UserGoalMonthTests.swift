@@ -14,15 +14,19 @@ import Testing
       achieved: achieved)
   }
 
-  @Test func laysOutSeptember2026InFiveRowsWithOutOfMonthCells() {
+  @Test func laysOutSeptember2026InSixRowsWithRealOutOfMonthDays() {
     let month = UserGoalMonth(history: [], today: today)
-    #expect(month.rows.count == 5)
+    #expect(month.rows.count == 6)
     #expect(month.rows.allSatisfy { $0.count == 7 })
     #expect(month.rows[0][0].day == KSTDay(year: 2026, month: 8, day: 30))
-    #expect(month.rows[0][0].state == .out)
+    #expect(month.rows[0][0].inMonth == false)
+    #expect(month.rows[0][0].state == .noGoal)
     #expect(month.rows[0][2].day == KSTDay(year: 2026, month: 9, day: 1))
+    #expect(month.rows[0][2].inMonth)
     #expect(month.rows[4][3].day == KSTDay(year: 2026, month: 9, day: 30))
-    #expect(month.rows[4][4].state == .out)
+    #expect(month.rows[5][6].day == KSTDay(year: 2026, month: 10, day: 10))
+    #expect(month.rows[5][6].inMonth == false)
+    #expect(month.rows[5][6].state == .future)
     #expect(month.todayColumn == 1)
     #expect(month.monthLabel == "2026년 9월")
   }
@@ -52,9 +56,29 @@ import Testing
     #expect(month.weekLabel(of: KSTDay(year: 2026, month: 10, day: 1)) == "2026년 9월")
   }
 
-  @Test func sixRowMonthWhenFirstFallsLateInWeek() {
+  @Test func buildsAnEarlierMonthAndCutsDaysBeforeCoverage() {
+    let month = UserGoalMonth(
+      history: [], today: today, containing: KSTDay(year: 2026, month: 8, day: 15),
+      coverageStart: KSTDay(year: 2026, month: 8, day: 10))
+    #expect(month.monthLabel == "2026년 8월")
+    #expect(month.cell(KSTDay(year: 2026, month: 8, day: 9))?.state == .out)
+    #expect(month.cell(KSTDay(year: 2026, month: 8, day: 10))?.state == .noGoal)
+    #expect(month.cell(KSTDay(year: 2026, month: 9, day: 5))?.inMonth == false)
+    #expect(month.cell(KSTDay(year: 2026, month: 9, day: 5))?.state == .noGoal)
+    #expect(month.cell(today) == nil)
+    #expect(UserGoalMonth.lastDay(year: 2026, month: 2) == KSTDay(year: 2026, month: 2, day: 28))
+    #expect(UserGoalMonth.lastDay(year: 2026, month: 12) == KSTDay(year: 2026, month: 12, day: 31))
+    #expect(UserGoalMonth.weekStart(of: today) == KSTDay(year: 2026, month: 9, day: 20))
+    #expect(
+      UserGoalMonth.weekLabel(for: KSTDay(year: 2026, month: 8, day: 30), today: today)
+        == "2026년 8월 6주차")
+  }
+
+  @Test func alwaysSixRowsEvenWhenTheMonthNeedsFive() {
     let month = UserGoalMonth(history: [], today: KSTDay(year: 2026, month: 8, day: 30))
     #expect(month.rows.count == 6)
     #expect(month.rows[5][0].day == KSTDay(year: 2026, month: 8, day: 30))
+    #expect(month.row(of: KSTDay(year: 2026, month: 9, day: 5)) == 5)
   }
+
 }

@@ -61,6 +61,75 @@ import Testing
     #expect(model.documents.first?.additions == 400)
   }
 
+  @Test func listsWeeksAndMonthPagesAndKeepsTheSelectionWhilePaging() async throws {
+    let client = FakeGraphQLClient()
+    registerFake(client)
+    let model = Container.shared.userGoalModel()
+    model.now = { Self.now }
+    client.push(
+      .success(
+        await userGoalScreenData(
+          target: 300, history: [(iso(Self.today), 0, false)], today: (iso(Self.today), 0))),
+      for: UserGoalScreen_Query.self)
+    try await waitOnMain { model.hasData }
+    let windowStart = Self.today.adding(days: -364)
+    let thisWeek = UserGoalMonth.weekStart(of: Self.today)
+    let weeks = model.weeks
+    #expect(weeks.count == 52 || weeks.count == 53)
+    #expect(weeks.first == UserGoalMonth.weekStart(of: windowStart))
+    #expect(weeks.last == thisWeek)
+    #expect(model.displayedWeek == thisWeek)
+    let pages = model.monthPages
+    #expect(pages.count == 12 || pages.count == 13)
+    #expect(pages.contains(thisWeek))
+    #expect(pages == pages.sorted())
+    #expect(Set(pages.map { "\($0.year)-\($0.month)" }).count == pages.count)
+    #expect(pages.allSatisfy { weeks.contains($0) })
+    model.show(week: weeks[weeks.count - 2])
+    #expect(model.displayedWeek == weeks[weeks.count - 2])
+    #expect(model.anchor == weeks[weeks.count - 2])
+    #expect(model.selectedDay == Self.today)
+    model.select(Self.today.adding(days: -1))
+    #expect(model.anchor == Self.today.adding(days: -1))
+    #expect(model.displayedWeek == weeks[weeks.count - 2])
+    model.settleDisplayedWeek()
+    #expect(model.displayedWeek == UserGoalMonth.weekStart(of: Self.today.adding(days: -1)))
+    let firstOfMonth = KSTDay(year: Self.today.year, month: Self.today.month, day: 1)
+    model.select(firstOfMonth)
+    model.settleDisplayedWeek()
+    #expect(model.displayedWeek == UserGoalMonth.weekStart(of: firstOfMonth))
+    #expect(model.grid(for: model.displayedWeek)?.month == firstOfMonth.month)
+    #expect(
+      model.grid(for: model.displayedWeek)?.weekLabel(of: model.anchor).hasSuffix("1주차") == true)
+    #expect(model.monthPages.contains(model.displayedWeek))
+    let beforeWindow = model.grid(for: weeks[0])?.cell(windowStart.adding(days: -1))
+    #expect(beforeWindow == nil || beforeWindow?.state == .out)
+    #expect(model.grid(for: weeks[0])?.cell(windowStart)?.state != .out)
+  }
+
+  @Test func noGoalDayShowsThatDaysCharacterCountImmediately() async throws {
+    let client = FakeGraphQLClient()
+    registerFake(client)
+    let model = Container.shared.userGoalModel()
+    model.now = { Self.now }
+    let yesterday = Self.today.adding(days: -1)
+    let before = Self.today.adding(days: -2)
+    client.push(
+      .success(
+        await userGoalScreenData(
+          target: 300, history: [(iso(yesterday), 400, true), (iso(Self.today), 0, false)],
+          today: (iso(Self.today), 0), changes: [(iso(before), 300), (iso(yesterday), 400)])),
+      for: UserGoalScreen_Query.self)
+    try await waitOnMain { model.hasData }
+    model.select(before)
+    #expect(model.selected?.hasGoal == false)
+    #expect(model.selected?.countText == "300자")
+    #expect(model.selected?.sentence == "목표가 없던 날이에요")
+    model.select(yesterday)
+    #expect(model.selected?.hasGoal == true)
+    #expect(model.selected?.countText == "400자")
+  }
+
   @Test func ignoresFutureDaysAndReportsDocumentFailure() async throws {
     let (model, client) = try await makeModel()
     model.select(Self.today.adding(days: 1))

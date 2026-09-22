@@ -10,6 +10,7 @@
   final class Router {
     private let theme = Container.shared.theme()
     private let toast = Container.shared.toast()
+    private let dialog = Container.shared.dialog()
     private let authService = Container.shared.authService()
     private let sites = Container.shared.sites()
     private let creator = Container.shared.entityCreator()
@@ -114,6 +115,20 @@
       presenter.navigationController?.pushViewController(controller, animated: true)
     }
 
+    func pushRecentDocuments(from presenter: UIViewController) {
+      let host = HostReference()
+      let controller = ThemedHostingController(
+        title: "최근",
+        RecentDocumentsScreen(store: Container.shared.recentDocumentsStore()) {
+          [weak self] entityId in
+          guard let self, let presenter = host.controller else { return }
+          push(.document(entityId: entityId), from: presenter)
+        })
+      controller.hidesBottomBarWhenPushed = true
+      host.controller = controller
+      presenter.navigationController?.pushViewController(controller, animated: true)
+    }
+
     func pushStudioTree(home: HomeStore, tree: HomeTreeStore, from presenter: UIViewController) {
       let host = HostReference()
       let controller = ThemedHostingController(
@@ -166,11 +181,10 @@
       return controller
     }
 
-    func createMenu(for controller: UIViewController) -> UIMenu? {
+    func createItems(for controller: UIViewController) -> [CreateMenuItem]? {
       guard let context = controller.creationContext else { return nil }
-      return UIMenu(children: [
-        UIAction(title: "새 문서", image: menuIcon(LucideIcon.filePlus)) {
-          [weak self, weak controller] _ in
+      return [
+        CreateMenuItem(icon: LucideIcon.filePlus, title: "새 문서") { [weak self, weak controller] in
           guard let self, let controller, let siteId = context.siteId() else { return }
           Task { @MainActor [weak self, weak controller] in
             guard let self, !creator.isCreating else { return }
@@ -186,7 +200,7 @@
             push(.document(entityId: entityId), from: controller)
           }
         },
-        UIAction(title: "새 폴더", image: menuIcon(LucideIcon.folderPlus)) { [weak self] _ in
+        CreateMenuItem(icon: LucideIcon.folderPlus, title: "새 폴더") { [weak self] in
           guard let self, let siteId = context.siteId() else { return }
           Task { @MainActor [weak self] in
             guard let self, !creator.isCreating else { return }
@@ -200,7 +214,29 @@
             context.didCreate()
           }
         },
-      ])
+        CreateMenuItem(icon: LucideIcon.minus, title: "새 구분선") { [weak self] in
+          guard let self, let siteId = context.siteId() else { return }
+          Task { @MainActor [weak self] in
+            guard let self, !creator.isCreating else { return }
+            guard
+              await creator.createDivider(siteId: siteId, parentEntityId: context.parentEntityId)
+                != nil
+            else {
+              toast.error("오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+              return
+            }
+            context.didCreate()
+          }
+        },
+      ]
+    }
+
+    func createMenu(for controller: UIViewController) -> UIMenu? {
+      guard let items = createItems(for: controller) else { return nil }
+      return UIMenu(
+        children: items.map { item in
+          UIAction(title: item.title, image: menuIcon(item.icon)) { _ in item.action() }
+        })
     }
 
     private func installSiteLogo(on controller: UIViewController) {
@@ -217,7 +253,7 @@
             UIAction(title: "휴지통", image: menuIcon(LucideIcon.trash2)) { _ in },
           ]),
       ])
-      let logo = SiteLogoBarItem(menu: menu)
+      let logo = SiteLogoBarItem(menu: menu, displayScale: controller.traitCollection.displayScale)
       controller.navigationItem.leftBarButtonItem = logo.item
       objc_setAssociatedObject(controller, &siteLogoKey, logo, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
       let model = sites
@@ -228,7 +264,7 @@
         logo.currentURL = url
         let scale = logo.displayScale
         Task { @MainActor [weak logo] in
-          let image = await Img.load(source, side: SiteLogoBarItem.side, scale: scale)
+          let image = await Img.load(source, side: SiteLogoBarItem.logoSide, scale: scale)
           guard let logo, logo.currentURL == url else { return }
           logo.setImage(image)
         }
@@ -249,39 +285,13 @@
       }.withRenderingMode(.alwaysTemplate)
     }
 
-    private func pushScreen(title: String, _ screen: some View, from presenter: UIViewController) {
-      presenter.navigationController?.pushViewController(
-        ThemedHostingController(title: title, screen), animated: true)
-    }
-
-    private func pushAction(_ title: String, _ route: Route, host: HostReference)
-      -> PlaceholderAction
-    {
-      PlaceholderAction(title: title) { [weak self] in
-        guard let presenter = host.controller else { return }
-        self?.push(route, from: presenter)
-      }
-    }
-
-    private func presentAction(_ title: String, _ route: Route, host: HostReference)
-      -> PlaceholderAction
-    {
-      PlaceholderAction(title: title) { [weak self] in
-        guard let presenter = host.controller else { return }
-        self?.present(route, from: presenter)
-      }
-    }
-
-    private func homeActions(host: HostReference, home: HomeStore) -> [PlaceholderAction] {
+    func moreMenuItems() -> [MoreMenuItem] {
       [
-        PlaceholderAction(title: "toggle placeholder") { home.previewsPlaceholder.toggle() },
-        pushAction("push settings", .settings, host: host),
-        pushAction("push document", .document(entityId: "sample"), host: host),
-        PlaceholderAction(title: "push design showcase") { [weak self] in
-          guard let self, let presenter = host.controller else { return }
+        MoreMenuItem(icon: LucideIcon.palette, title: "디자인 쇼케이스") { [weak self] presenter in
+          guard let self else { return }
           pushScreen(title: "Design", TDesignShowcase(theme: theme), from: presenter)
         },
-        PlaceholderAction(title: "logout") { [weak self] in
+        MoreMenuItem(icon: LucideIcon.logOut, title: "로그아웃") { [weak self] _ in
           guard let self else { return }
           Task { [authService, toast] in
             do {
@@ -292,6 +302,11 @@
           }
         },
       ]
+    }
+
+    private func pushScreen(title: String, _ screen: some View, from presenter: UIViewController) {
+      presenter.navigationController?.pushViewController(
+        ThemedHostingController(title: title, screen), animated: true)
     }
 
     private func viewController(for route: Route) -> UIViewController {
@@ -310,7 +325,6 @@
     private func homeController(host: HostReference) -> UIViewController {
       let home = Container.shared.homeStore()
       let tree = Container.shared.homeTreeStore()
-      let actions = homeActions(host: host, home: home)
       let title = HomeTitleState()
       let content = ThemedHostingController(
         title: "",
@@ -325,6 +339,10 @@
               guard let self, let presenter = host.controller else { return }
               pushPinnedEntities(home: home, from: presenter)
             },
+            onOpenRecentAll: { [weak self] in
+              guard let self, let presenter = host.controller else { return }
+              pushRecentDocuments(from: presenter)
+            },
             onOpenAll: { [weak self] in
               guard let self, let presenter = host.controller else { return }
               pushStudioTree(home: home, tree: tree, from: presenter)
@@ -337,8 +355,6 @@
               guard let self, let presenter = host.controller else { return }
               pushFolder(item, tree: tree, from: presenter)
             })
-        } extra: {
-          PlaceholderDevActions(actions: actions)
         })
       let controller = HomeHostController(title: title, content: content)
       controller.creationContext = EntityCreationContext(
@@ -363,21 +379,19 @@
         title: "일일 목표",
         UserGoalScreen(
           model: model,
-          onEdit: { [weak self] in
-            guard let self, let presenter = host.controller else { return }
-            presentUserGoalForm(goal: model, from: presenter)
-          },
           onOpenDocument: { [weak self] entityId in
             guard let self, let presenter = host.controller else { return }
             push(.document(entityId: entityId), from: presenter)
           }))
-      let edit = UIAction(title: "수정") { [weak self] _ in
-        guard let self, let presenter = host.controller else { return }
-        presentUserGoalForm(goal: model, from: presenter)
-      }
-      controller.navigationItem.rightBarButtonItem = UIBarButtonItem(primaryAction: edit)
+      let edit = UIBarButtonItem(
+        image: menuIcon(LucideIcon.slidersHorizontal),
+        primaryAction: UIAction { [weak self] _ in
+          guard let self, let presenter = host.controller else { return }
+          presentUserGoalForm(goal: model, from: presenter)
+        })
+      edit.accessibilityLabel = "수정"
+      controller.navigationItem.rightBarButtonItem = edit
       controller.hidesBottomBarWhenPushed = true
-      UserGoalEditBarItem.bind(controller.navigationItem, to: model)
       return controller
     }
 
@@ -388,28 +402,44 @@
         title: model.hasGoal ? "일일 목표 수정" : "일일 목표 정하기",
         UserGoalFormScreen(model: model) { host.controller?.dismiss(animated: true) })
       host.controller = form
-      present(form, from: presenter)
+      let safeBottom = presenter.view.window?.safeAreaInsets.bottom ?? 0
+      let height = UserGoalFormScreen.contentHeight + safeBottom
+      present(
+        form, from: presenter,
+        detents: [.custom(identifier: .init("userGoalForm")) { _ in height }])
+      form.navigationController?.sheetPresentationController?.prefersGrabberVisible = true
+      form.navigationItem.leftBarButtonItem = UIBarButtonItem(
+        systemItem: .close,
+        primaryAction: UIAction { [weak host] _ in host?.controller?.dismiss(animated: true) })
+      guard model.hasGoal else { return }
+      let remove = UIBarButtonItem(
+        title: "제거",
+        primaryAction: UIAction { [weak self, weak host] _ in
+          guard let self else { return }
+          Task { await self.removeUserGoal(model, host: host) }
+        })
+      remove.tintColor = .theme(\.dangerDefault)
+      form.navigationItem.rightBarButtonItem = remove
+    }
+
+    private func removeUserGoal(_ model: UserGoalFormModel, host: HostReference?) async {
+      let confirmed = await dialog.confirm(
+        TDialogItem(
+          title: "일일 목표를 제거하시겠어요?", message: "설정한 하루 목표 글자 수가 사라져요.",
+          confirmText: "제거", cancelText: "취소", confirmIsDestructive: true))
+      guard confirmed else { return }
+      if await model.remove() {
+        toast.success("일일 목표를 제거했어요.")
+        host?.controller?.dismiss(animated: true)
+      } else {
+        toast.error("오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+      }
     }
 
     private func placeholderController(for route: Route, host: HostReference) -> UIViewController {
-      let actions: [PlaceholderAction] =
-        switch route {
-        case .document:
-          [
-            presentAction(
-              "present body settings", .documentBodySettings(entityId: "sample"), host: host)
-          ]
-        case .studio:
-          [
-            pushAction("push folder", .folder(entityId: "sample"), host: host),
-            presentAction("present folder details", .folderDetails(entityId: "sample"), host: host),
-          ]
-        case .folder: [pushAction("push folder", .folder(entityId: "nested"), host: host)]
-        default: []
-        }
-      return ThemedHostingController(
+      ThemedHostingController(
         title: String(describing: route).components(separatedBy: "(")[0],
-        PlaceholderScreen(route: route, actions: actions))
+        PlaceholderScreen(route: route))
     }
   }
 

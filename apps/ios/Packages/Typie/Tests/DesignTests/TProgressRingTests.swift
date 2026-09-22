@@ -14,6 +14,15 @@ import Testing
     #expect(TProgressRing.fraction(progress: 0, state: .achieved) == 1)
   }
 
+  @Test func noGoalHasNoFillAndEvenDots() {
+    #expect(TProgressRing.fraction(progress: 0.7, state: .noGoal) == 0)
+    let dash = TProgressRing.dash(for: 32)
+    let circumference = Double.pi * (32 - TProgressRing.lineWidth(for: 32))
+    let count = (circumference / (dash[0] + dash[1])).rounded()
+    #expect(dash.count == 2)
+    #expect(abs(count * (dash[0] + dash[1]) - circumference) < 0.001)
+  }
+
   @Test func lineWidthScalesWithFloor() {
     #expect(TProgressRing.lineWidth(for: 32) == 3.5)
     #expect(TProgressRing.lineWidth(for: 16) == 2)

@@ -79,6 +79,7 @@ Entity.implement({
   fields: (t) => ({
     view: t.expose('id', { type: EntityView }),
     deletedAt: t.expose('deletedAt', { type: 'DateTime', nullable: true }),
+    viewedAt: t.expose('viewedAt', { type: 'DateTime', nullable: true }),
     pinnedOrder: t.exposeString('pinnedOrder', { nullable: true }),
 
     site: t.expose('siteId', { type: Site }),

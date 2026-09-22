@@ -299,6 +299,7 @@ unreact
 unreacted
 unredacted
 unresolve
+unretained
 unsplittable
 unstub
 unsubscriber

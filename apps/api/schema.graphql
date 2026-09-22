@@ -693,6 +693,7 @@ type Entity implements IEntity {
   url: String!
   user: User!
   view: EntityView!
+  viewedAt: DateTime
   visibility: EntityVisibility!
 }
 

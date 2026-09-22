@@ -28,12 +28,14 @@
         VStack(alignment: .leading, spacing: 0) {
           if tree.failed(folderId) {
             RetryPrompt { tree.refetchChildren(of: folderId) }
-          } else if children.isEmpty, tree.isLoaded(folderId) {
+          } else if !tree.isLoaded(folderId) {
+            EmptyView()
+          } else if children.isEmpty {
             TText("아직 문서가 없어요", style: TTypography.detail, color: theme.colors.textHint)
               .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
           } else {
             HomeTreeView(
-              store: tree, nodes: children, depth: 0, onOpenDocument: onOpenDocument,
+              store: tree, nodes: children, onOpenDocument: onOpenDocument,
               onOpenFolder: onOpenFolder)
           }
         }

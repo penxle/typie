@@ -73,7 +73,7 @@ func createdSiteData(_ id: String) async -> SiteSwitcher_CreateSite_Mutation.Dat
 
 func goalUserMock(
   target: Int?, history: [(date: String, additions: Int, achieved: Bool)],
-  today: (date: String, additions: Int)
+  today: (date: String, additions: Int), pastTarget: Int = 200
 ) -> Mock<GraphQLMocks.User> {
   Mock<GraphQLMocks.User>(
     goal: target.map {
@@ -82,7 +82,7 @@ func goalUserMock(
     goalHistory: history.map {
       Mock<GraphQLMocks.UserGoalHistory>(
         achieved: $0.achieved, additions: $0.additions, date: $0.date,
-        targetCharacterCount: target ?? 0)
+        targetCharacterCount: target ?? pastTarget)
     },
     id: "user-1",
     todayCharacterCountChange: Mock<GraphQLMocks.CharacterCountChange>(
@@ -91,7 +91,8 @@ func goalUserMock(
 
 func entityMock(
   id: String, kind: EntityKind, title: String, updatedAt: String = "2026-09-20T15:00:00.000Z",
-  ancestors: [(id: String, name: String)] = [], icon: String = "", iconColor: String = ""
+  ancestors: [(id: String, name: String)] = [], icon: String = "", iconColor: String = "",
+  viewedAt: String? = nil
 ) -> Mock<GraphQLMocks.Entity> {
   let node: any AnyMock =
     switch kind {
@@ -108,7 +109,13 @@ func entityMock(
         id: $0.id, node: Mock<GraphQLMocks.Folder>(id: "\($0.id)-folder", name: $0.name))
     },
     icon: icon, iconColor: iconColor, id: id, node: node,
-    type: .case(kind == .document ? .document : .folder))
+    type: .case(kind == .document ? .document : .folder), viewedAt: viewedAt)
+}
+
+func recentDocumentMock(id: String, title: String, viewedAt: String) -> Mock<GraphQLMocks.Document>
+{
+  Mock<GraphQLMocks.Document>(
+    entity: entityMock(id: id, kind: .document, title: title, viewedAt: viewedAt), id: "\(id)-doc")
 }
 
 func dividerEntityMock(id: String) -> Mock<GraphQLMocks.Entity> {
@@ -129,9 +136,12 @@ func folderEntityMock(
 
 func homeSiteMock(
   id: String = "site-1", name: String = "스페이스 A",
-  pinned: [Mock<GraphQLMocks.Entity>] = [], roots: [Mock<GraphQLMocks.Entity>] = []
+  pinned: [Mock<GraphQLMocks.Entity>] = [], recent: [Mock<GraphQLMocks.Document>] = [],
+  roots: [Mock<GraphQLMocks.Entity>] = []
 ) -> Mock<GraphQLMocks.Site> {
-  Mock<GraphQLMocks.Site>(entities: roots, id: id, name: name, pinnedEntities: pinned)
+  Mock<GraphQLMocks.Site>(
+    entities: roots, id: id, name: name, pinnedEntities: pinned,
+    recentDocuments: Mock<GraphQLMocks.RecentDocumentsResult>(documents: recent))
 }
 
 func childrenData(parentId: String, children: [Mock<GraphQLMocks.Entity>]) async
@@ -163,11 +173,13 @@ func homeDataWithoutMe() async -> HomeScreen_Query.Data {
 
 func userGoalScreenData(
   target: Int?, history: [(date: String, additions: Int, achieved: Bool)],
-  today: (date: String, additions: Int)
+  today: (date: String, additions: Int), changes: [(date: String, additions: Int)] = []
 ) async -> UserGoalScreen_Query.Data {
-  await UserGoalScreen_Query.Data.from(
-    Mock<GraphQLMocks.Query>(
-      me: goalUserMock(target: target, history: history, today: today)))
+  let user = goalUserMock(target: target, history: history, today: today)
+  user.characterCountChanges = changes.map {
+    Mock<GraphQLMocks.CharacterCountChange>(additions: $0.additions, date: $0.date)
+  }
+  return await UserGoalScreen_Query.Data.from(Mock<GraphQLMocks.Query>(me: user))
 }
 
 func updatedUserGoalData(target: Int) async -> UserGoalScreen_UpdateUserGoal_Mutation.Data {

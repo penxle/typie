@@ -28,12 +28,16 @@
         VStack(alignment: .leading, spacing: 0) {
           if store.loadFailed, !store.hasData {
             RetryPrompt { store.refetch() }
+          } else if store.isPlaceholder {
+            HomeTreeRows(
+              store: tree, nodes: site.roots, depth: 0, onOpenDocument: onOpenDocument,
+              onOpenFolder: onOpenFolder)
           } else if site.roots.isEmpty {
             TText("아직 문서가 없어요", style: TTypography.detail, color: theme.colors.textHint)
               .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
           } else {
             HomeTreeView(
-              store: tree, nodes: site.roots, depth: 0, onOpenDocument: onOpenDocument,
+              store: tree, nodes: site.roots, onOpenDocument: onOpenDocument,
               onOpenFolder: onOpenFolder)
           }
         }

@@ -20,7 +20,6 @@ import Testing
       state.history.last
         == UserGoalHistoryEntry(day: today, target: 300, additions: 120, achieved: false))
     #expect(state.streaks == UserGoalState.Streaks(current: 1, best: 1))
-    #expect(state.month?.today == today)
     #expect(state.hasGoal)
   }
 
@@ -32,14 +31,12 @@ import Testing
     #expect(state.hasGoal == false)
     #expect(state.history.count == 1)
     #expect(state.streaks.current == 1)
-    #expect(state.month != nil)
   }
 
   @Test func emptyHistoryHasNoGrid() async {
     let state = UserGoalState(
       snapshot: UserGoalSnapshot(await goalUser(target: nil, history: [], today: (todayISO, 0))),
       today: today)
-    #expect(state.month?.rows.isEmpty == false)
     #expect(state.streaks == UserGoalState.Streaks(current: 0, best: 0))
   }
 
@@ -49,7 +46,6 @@ import Testing
     #expect(state.status == nil)
     #expect(state.streaks == UserGoalState.Streaks(current: 0, best: 0))
     #expect(state.history.isEmpty)
-    #expect(state.month == nil)
   }
 
   @Test func missingTodayChangeCountsAsZero() async {

@@ -30,11 +30,11 @@ struct UserGoalDayView: View {
             color: day.achieved ? colors.textDefault : colors.textMuted, monospacedDigit: true)
         }
       } else {
+        TProgressRing(progress: 0, state: .noGoal, size: Self.ringSize)
         VStack(spacing: 2) {
+          TText(
+            day.countText, style: TTypography.title, color: colors.textMuted, monospacedDigit: true)
           TText(day.sentence, style: TTypography.detail, color: colors.textMuted)
-          if let detail = day.noGoalDetail {
-            TText(detail, style: TTypography.caption, color: colors.textHint, monospacedDigit: true)
-          }
         }
       }
     }

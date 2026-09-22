@@ -8,11 +8,23 @@
       super.init(navigationBarClass: PassthroughNavigationBar.self, toolbarClass: nil)
       viewControllers = [root]
       navigationBar.tintColor = .theme(\.textDefault)
+      applyAppearance()
+      registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) {
+        (self: ShellNavigationController, _) in
+        self.applyAppearance()
+      }
+    }
+
+    private func applyAppearance() {
       let appearance = UINavigationBarAppearance()
       appearance.configureWithDefaultBackground()
       let chevron = UIImage(
         named: LucideIcon.chevronLeft.assetName, in: TDesignBundle.bundle, with: nil)
       appearance.setBackIndicatorImage(chevron, transitionMaskImage: chevron)
+      appearance.titleTextAttributes = [
+        .font: TTypography.title.uiFont(for: traitCollection),
+        .foregroundColor: UIColor.theme(\.textDefault),
+      ]
       navigationBar.standardAppearance = appearance
       navigationBar.scrollEdgeAppearance = appearance
     }

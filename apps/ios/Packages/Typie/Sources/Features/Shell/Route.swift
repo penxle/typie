@@ -6,6 +6,7 @@ enum Route: Hashable, Sendable {
   case siteSwitcher
   case userGoal
   case pinnedEntities
+  case recentDocuments
   case studioTree
   case folder(entityId: String)
   case folderDetails(entityId: String)

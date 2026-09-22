@@ -6,11 +6,13 @@ struct HomeSiteState: Equatable, Sendable {
 
   let name: String
   let pinned: [EntityRowItem]
+  let recent: [EntityRowItem]
   let roots: [HomeTreeNode]
 
-  init(name: String, pinned: [EntityRowItem], roots: [HomeTreeNode]) {
+  init(name: String, pinned: [EntityRowItem], recent: [EntityRowItem], roots: [HomeTreeNode]) {
     self.name = name
     self.pinned = pinned
+    self.recent = recent
     self.roots = roots
   }
 
@@ -18,6 +20,9 @@ struct HomeSiteState: Equatable, Sendable {
     name = site.name
     pinned = site.pinnedEntities.compactMap {
       EntityRowItem.make($0.fragments.homeTree_entity.fragments.entityRow_entity, path: [])
+    }
+    recent = site.recentDocuments.documents.compactMap {
+      RecentDocument.make($0.fragments.recentDocument_document)?.item
     }
     roots = site.entities.compactMap { HomeTreeNode.make($0.fragments.homeTree_entity) }
   }
@@ -32,6 +37,7 @@ struct HomeSiteState: Equatable, Sendable {
           icon: EntityIconSpec(kind: .document, name: "", color: ""), path: [],
           title: EntityText.documentTitle(""), updatedAt: nil))
     }
-    return HomeSiteState(name: "", pinned: rows, roots: rows.map(HomeTreeNode.document))
+    return HomeSiteState(
+      name: "", pinned: rows, recent: rows, roots: rows.map(HomeTreeNode.document))
   }()
 }

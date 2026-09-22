@@ -17,3 +17,13 @@ mutation EntityContainer_CreateFolder_Mutation($input: CreateFolderInput!) {
     }
   }
 }
+
+mutation EntityContainer_CreateDivider_Mutation($input: CreateDividerInput!) {
+  createDivider(input: $input) {
+    id
+
+    entity {
+      id
+    }
+  }
+}
