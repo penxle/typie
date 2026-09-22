@@ -516,6 +516,7 @@ struct SoftwareKeyboardPresentationGeometry {
   }
 
   private static func remoteKeyboardWindow(on screen: UIScreen) -> UIWindow? {
+    if #available(iOS 27, *) { return nil }
     guard let cls = NSClassFromString("UIRemoteKeyboardWindow") else { return nil }
     let selector = NSSelectorFromString("remoteKeyboardWindowForScreen:create:")
     guard
