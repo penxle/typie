@@ -1,6 +1,6 @@
 {
   "name": "@typie/desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "타이피 데스크톱 앱",
   "author": "PENXLE COMPANY",
@@ -30,7 +30,7 @@
     "@typie/tsconfig": "workspace:*",
     "@typie/ui": "workspace:*",
     "electron": "^44.0.0",
-    "electron-builder": "^26.15.7",
+    "electron-builder": "^26.16.1",
     "electron-updater": "^6.8.9",
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",
