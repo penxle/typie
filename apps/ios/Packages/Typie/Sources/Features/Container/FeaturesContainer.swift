@@ -10,6 +10,10 @@ extension Container {
     self { SitesStore() }.scope(.session)
   }
 
+  @MainActor var liveUpdates: Factory<LiveUpdates> {
+    self { LiveUpdates() }.scope(.session)
+  }
+
   @MainActor var homeStore: Factory<HomeStore> {
     self { HomeStore() }
   }

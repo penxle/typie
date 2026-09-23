@@ -130,7 +130,7 @@ enum EntityCardListRules {
           }
           TText(
             EntityText.excerpt(document.excerpt), style: TTypography.detail,
-            color: colors.textMuted, maxLines: 1
+            color: colors.textHint, maxLines: 1
           )
           .padding(.leading, 24)
         }

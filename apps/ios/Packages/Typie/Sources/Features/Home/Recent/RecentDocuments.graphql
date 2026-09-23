@@ -14,6 +14,7 @@ query RecentDocuments_Query($siteId: ID!, $sort: RecentDocumentSort!) {
 
     recentDocuments(sort: $sort, limit: 50) {
       documents {
+        id
         ...RecentDocument_document
       }
     }

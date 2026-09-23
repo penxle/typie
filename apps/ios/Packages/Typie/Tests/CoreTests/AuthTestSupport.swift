@@ -25,6 +25,7 @@ func makeTestConfig() -> AppConfig {
   AppConfig(
     infoDictionary: [
       "API_URL": "https://api.example.test", "AUTH_URL": "https://auth.example.test",
+      "WS_URL": "wss://api.example.test",
       "OIDC_CLIENT_ID": "client", "OIDC_CLIENT_SECRET": "secret",
       "KAKAO_NATIVE_APP_KEY": "kakao-key", "NAVER_CLIENT_ID": "naver-client",
       "NAVER_CLIENT_SECRET": "naver-secret",

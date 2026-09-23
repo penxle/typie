@@ -109,7 +109,8 @@ private func makeHarness(
     authState: publisher,
     oidc: FakeOIDC(
       recorder: recorder, onExchange: exchange, onFetchMe: fetchMe, onLogout: logout),
-    clearGraphQLCache: { recorder.record("clearGraphQLCache") }
+    clearGraphQLCache: { recorder.record("clearGraphQLCache") },
+    disconnectSubscriptions: { recorder.record("disconnectSubscriptions") }
   )
   return Harness(recorder: recorder, store: store, publisher: publisher, service: service)
 }
@@ -171,6 +172,7 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "clearGraphQLCache", "exchange(session-new)", "fetchMe", "store", "publish",
+        "disconnectSubscriptions",
       ])
     #expect(try harness.store.authTokens()?.userId == "user-new")
   }
@@ -204,7 +206,7 @@ private func makeHarness(
     #expect(
       harness.calls == [
         "clearGraphQLCache", "exchange(session-new)", "tokenCleared", "publish",
-        "clearGraphQLCache",
+        "clearGraphQLCache", "disconnectSubscriptions",
       ])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
@@ -243,7 +245,9 @@ private func makeHarness(
     try await harness.service.logout()
 
     #expect(
-      harness.calls == ["oidcLogout", "tokenCleared", "publish", "clearGraphQLCache"])
+      harness.calls == [
+        "oidcLogout", "tokenCleared", "publish", "clearGraphQLCache", "disconnectSubscriptions",
+      ])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(try harness.store.authTokens() == nil)
   }
@@ -253,7 +257,8 @@ private func makeHarness(
 
     try await harness.service.logout()
 
-    #expect(harness.calls == ["tokenCleared", "publish", "clearGraphQLCache"])
+    #expect(
+      harness.calls == ["tokenCleared", "publish", "clearGraphQLCache", "disconnectSubscriptions"])
   }
 
   @Test func logoutThrowsWhenClearingTheKeychainFails() async throws {
@@ -263,7 +268,8 @@ private func makeHarness(
 
     await #expect(throws: CocoaError.self) { try await harness.service.logout() }
 
-    #expect(harness.calls == ["oidcLogout", "publish", "clearGraphQLCache"])
+    #expect(
+      harness.calls == ["oidcLogout", "publish", "clearGraphQLCache", "disconnectSubscriptions"])
     #expect(harness.publisher.published == [.unauthenticated])
     #expect(harness.service.accessToken == nil)
   }
@@ -351,6 +357,20 @@ private func makeHarness(
     await gate.open()
     try await caller.value
 
-    #expect(harness.calls == ["oidcLogout", "tokenCleared", "publish", "clearGraphQLCache"])
+    #expect(
+      harness.calls == [
+        "oidcLogout", "tokenCleared", "publish", "clearGraphQLCache", "disconnectSubscriptions",
+      ])
+  }
+
+  @Test func keepingTheSessionDoesNotDisconnectSubscriptions() async throws {
+    let first = makeHarness()
+    try await first.service.login(sessionToken: "session-1")
+    #expect(first.calls.contains("disconnectSubscriptions") == false)
+
+    let renew = makeHarness(
+      tokens: AuthTokens(sessionToken: "session-1", accessToken: "stale", userId: "user-9"))
+    try await renew.service.renew()
+    #expect(renew.calls.contains("disconnectSubscriptions") == false)
   }
 }

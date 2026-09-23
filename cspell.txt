@@ -69,6 +69,7 @@ dotenv
 dotum
 ebgp
 edgi
+enotconn
 epub
 eulyoo
 everforest

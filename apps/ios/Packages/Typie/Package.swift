@@ -19,6 +19,7 @@ let package = Package(
     .package(url: "https://github.com/kakao/kakao-ios-sdk.git", from: "2.29.0"),
     .package(url: "https://github.com/naver/naveridlogin-sdk-ios-swift.git", from: "5.2.1"),
     .package(url: "https://github.com/hmlongco/Factory.git", from: "3.3.0"),
+    .package(url: "https://github.com/apple/swift-log.git", from: "1.15.1"),
   ],
   targets: [
     .target(name: "GraphQL", dependencies: [.product(name: "ApolloAPI", package: "apollo-ios")]),
@@ -36,9 +37,12 @@ let package = Package(
         "GraphQL",
         .product(name: "Apollo", package: "apollo-ios"),
         .product(name: "ApolloSQLite", package: "apollo-ios"),
+        .product(name: "ApolloWebSocket", package: "apollo-ios"),
         .product(name: "Alamofire", package: "Alamofire"),
         .product(name: "FactoryKit", package: "Factory"),
-      ]
+        .product(name: "Logging", package: "swift-log"),
+      ],
+      exclude: ["GraphQL/SubscriptionConnection.graphql"]
     ),
     .target(
       name: "Design",
@@ -60,7 +64,7 @@ let package = Package(
         "Entity/EntityContainer.graphql", "Entity/EntityRow.graphql",
         "Home/Home.graphql", "Home/Recent/RecentDocuments.graphql", "Home/SiteSwitcher.graphql",
         "Image/Img.graphql", "Profile/Profile.graphql", "Search/Search.graphql",
-        "UserGoal/UserGoal.graphql",
+        "Shell/LiveUpdates.graphql", "UserGoal/UserGoal.graphql",
       ]
     ),
     .target(
@@ -79,6 +83,7 @@ let package = Package(
           name: "NidThirdPartyLogin", package: "naveridlogin-sdk-ios-swift",
           condition: .when(platforms: [.iOS])),
         .product(name: "FactoryKit", package: "Factory"),
+        .product(name: "Logging", package: "swift-log"),
       ]
     ),
     .testTarget(
@@ -88,7 +93,10 @@ let package = Package(
         .product(name: "Alamofire", package: "Alamofire"),
         .product(name: "Apollo", package: "apollo-ios"),
         .product(name: "ApolloTestSupport", package: "apollo-ios"),
+        .product(name: "ApolloWebSocket", package: "apollo-ios"),
         .product(name: "FactoryTesting", package: "Factory"),
+        .product(name: "Logging", package: "swift-log"),
+        .product(name: "InMemoryLogging", package: "swift-log"),
       ],
       exclude: ["Ping.graphql"]),
     .testTarget(

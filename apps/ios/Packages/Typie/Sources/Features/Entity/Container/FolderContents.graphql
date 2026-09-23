@@ -7,11 +7,13 @@ query FolderContents_Query($entityId: ID!) {
       __typename
 
       ... on Folder {
+        id
         characterCount
       }
     }
 
     children {
+      id
       ...EntityRow_entity
     }
   }

@@ -33,12 +33,21 @@ extension Container {
     self { HTTPSession.make(configuration: self.httpSessionConfiguration()) }.singleton
   }
 
+  var webSocketTaskFactory: Factory<@Sendable (URLRequest) -> any PingableWebSocketTask> {
+    self { ApolloGraphQLClient.webSocketTasks(configuration: self.httpSessionConfiguration()) }
+      .singleton
+  }
+
   public var secureStore: Factory<any SecureStore> {
     self { KeychainStore() }.singleton
   }
 
   public var apolloStore: Factory<ApolloStore> {
     self { GraphQLCache.makeStore() }.singleton
+  }
+
+  @MainActor public var appLifecycle: Factory<AppLifecycle> {
+    self { AppLifecycle() }.singleton
   }
 
   @MainActor public var authState: Factory<AuthStateStore> {
@@ -51,7 +60,12 @@ extension Container {
         secureStore: self.secureStore(),
         authState: self.authState(),
         oidc: OIDCClient(config: self.appConfig(), session: self.httpSession()),
-        clearGraphQLCache: { [store = self.apolloStore()] in try? await store.clearCache() })
+        clearGraphQLCache: { [store = self.apolloStore()] in try? await store.clearCache() },
+        disconnectSubscriptions: { [container = self] in
+          await MainActor.run {
+            (container.graphQLClient() as? ApolloGraphQLClient)?.connection.reset()
+          }
+        })
     }.singleton
   }
 
@@ -59,11 +73,14 @@ extension Container {
     self {
       let device = self.device()
       let auth = self.authService()
-      return ApolloGraphQLClient.make(
+      let client = ApolloGraphQLClient.make(
         config: self.appConfig(), deviceHeaders: { device.headers },
         accessToken: { auth.accessToken },
         onSessionCookie: { try await auth.login(sessionToken: $0) },
-        store: self.apolloStore(), configuration: self.httpSessionConfiguration())
+        store: self.apolloStore(), configuration: self.httpSessionConfiguration(),
+        makeSocket: self.webSocketTaskFactory())
+      client.connection.follow(self.appLifecycle())
+      return client
     }.singleton
   }
 
