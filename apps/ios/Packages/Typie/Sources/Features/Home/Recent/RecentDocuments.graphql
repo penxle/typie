@@ -8,11 +8,11 @@ fragment RecentDocument_document on Document {
   }
 }
 
-query RecentDocuments_Query($siteId: ID!) {
+query RecentDocuments_Query($siteId: ID!, $sort: RecentDocumentSort!) {
   site(siteId: $siteId) {
     id
 
-    recentDocuments(sort: VIEWED_AT, limit: 50) {
+    recentDocuments(sort: $sort, limit: 50) {
       documents {
         ...RecentDocument_document
       }

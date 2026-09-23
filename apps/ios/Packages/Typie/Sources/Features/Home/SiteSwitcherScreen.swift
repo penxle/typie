@@ -83,7 +83,7 @@
           colors.textDefault.opacity(Self.cardInsetOpacity), in: TShapes.squircle(TShapes.lg))
     }
 
-    private static let cardInsetOpacity: Double = 0.03
+    static let cardInsetOpacity: Double = 0.03
 
     private var createRow: some View {
       HStack(spacing: 12) {

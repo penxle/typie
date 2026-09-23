@@ -44,12 +44,14 @@ import Testing
           recentDocumentMock(id: "r2", title: "둘째", viewedAt: "2026-09-21T09:00:00.000Z"),
         ])))
     let state = HomeSiteState(data.site.fragments.homeScreen_site)
-    #expect(state.recent.map(\.entityId) == ["r1", "r2"])
+    #expect(state.recentlyViewed.map(\.entityId) == ["r1", "r2"])
+    #expect(state.recent(.viewed).map(\.entityId) == ["r1", "r2"])
   }
 
   @Test func placeholderHasThreeRowsInBothSections() {
     #expect(HomeSiteState.placeholder.homePinned.count == 3)
-    #expect(HomeSiteState.placeholder.recent.count == 3)
+    #expect(HomeSiteState.placeholder.recentlyViewed.count == 3)
+    #expect(HomeSiteState.placeholder.recentlyUpdated.count == 3)
     #expect(HomeSiteState.placeholder.roots.count == 3)
     #expect(HomeSiteState.placeholder.roots.allSatisfy { $0.item != nil })
   }

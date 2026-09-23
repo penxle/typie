@@ -8,6 +8,7 @@ import Testing
   private static let tokens: [(TTextStyle, CGFloat, TFontWeight, CGFloat, Font.TextStyle)] = [
     (TTypography.hero, 28, .semibold, 36, .title),
     (TTypography.heading, 22, .semibold, 28, .title2),
+    (TTypography.lead, 20, .semibold, 26, .title3),
     (TTypography.title, 17, .semibold, 22, .headline),
     (TTypography.text, 16, .regular, 24, .callout),
     (TTypography.label, 15, .semibold, 20, .subheadline),

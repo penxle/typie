@@ -8,12 +8,12 @@ struct RecentGroup: Equatable, Sendable, Identifiable {
 }
 
 enum RecentGrouping {
-  static func groups(_ documents: [RecentDocument], now: Date) -> [RecentGroup] {
+  static func groups(_ documents: [RecentDocument], sort: RecentSort, now: Date) -> [RecentGroup] {
     let today = KSTDay(now)
+    let dated = documents.compactMap { document in document.date(for: sort).map { (document, $0) } }
     var groups: [RecentGroup] = []
-    for document in documents {
-      guard let viewedAt = document.viewedAt else { continue }
-      let bucket = bucket(for: KSTDay(viewedAt), today: today)
+    for (document, date) in dated.sorted(by: { $0.1 > $1.1 }) {
+      let bucket = bucket(for: KSTDay(date), today: today)
       if let last = groups.last, last.id == bucket.id {
         groups[groups.count - 1] = RecentGroup(
           id: last.id, label: last.label, documents: last.documents + [document])

@@ -22,7 +22,7 @@
           if store.loadFailed, !store.hasData {
             RetryPrompt { store.refetch() }
           } else if groups.isEmpty {
-            RecentEmptyBox()
+            EmptyStateBox(text: store.sort.emptyText)
           } else {
             ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
               TText(group.label, style: TTypography.label, color: theme.colors.textMuted)
@@ -43,20 +43,6 @@
         .frame(maxWidth: .infinity)
       }
       .canvasBackground()
-    }
-  }
-
-  struct RecentEmptyBox: View {
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-      TText(
-        "최근 본 문서가 없어요", style: TTypography.detail, color: theme.colors.textHint,
-        alignment: .center
-      )
-      .padding(.horizontal, 16)
-      .frame(maxWidth: .infinity, minHeight: 80)
-      .background(theme.colors.surfaceInset, in: TShapes.squircle(TShapes.md))
     }
   }
 

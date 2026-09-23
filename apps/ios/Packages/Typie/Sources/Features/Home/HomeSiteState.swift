@@ -6,14 +6,26 @@ struct HomeSiteState: Equatable, Sendable {
 
   let name: String
   let pinned: [EntityRowItem]
-  let recent: [EntityRowItem]
+  let recentlyViewed: [EntityRowItem]
+  let recentlyUpdated: [EntityRowItem]
   let roots: [HomeTreeNode]
 
-  init(name: String, pinned: [EntityRowItem], recent: [EntityRowItem], roots: [HomeTreeNode]) {
+  init(
+    name: String, pinned: [EntityRowItem], recentlyViewed: [EntityRowItem],
+    recentlyUpdated: [EntityRowItem], roots: [HomeTreeNode]
+  ) {
     self.name = name
     self.pinned = pinned
-    self.recent = recent
+    self.recentlyViewed = recentlyViewed
+    self.recentlyUpdated = recentlyUpdated
     self.roots = roots
+  }
+
+  func recent(_ sort: RecentSort) -> [EntityRowItem] {
+    switch sort {
+    case .viewed: recentlyViewed
+    case .updated: recentlyUpdated
+    }
   }
 
   init(_ site: HomeScreen_site) {
@@ -21,7 +33,10 @@ struct HomeSiteState: Equatable, Sendable {
     pinned = site.pinnedEntities.compactMap {
       EntityRowItem.make($0.fragments.homeTree_entity.fragments.entityRow_entity, path: [])
     }
-    recent = site.recentDocuments.documents.compactMap {
+    recentlyViewed = site.recentlyViewedDocuments.documents.compactMap {
+      RecentDocument.make($0.fragments.recentDocument_document)?.item
+    }
+    recentlyUpdated = site.recentlyUpdatedDocuments.documents.compactMap {
       RecentDocument.make($0.fragments.recentDocument_document)?.item
     }
     roots = site.entities.compactMap { HomeTreeNode.make($0.fragments.homeTree_entity) }
@@ -35,9 +50,10 @@ struct HomeSiteState: Equatable, Sendable {
         EntityDocumentItem(
           entityId: "placeholder-\(index)",
           icon: EntityIconSpec(kind: .document, name: "", color: ""), path: [],
-          title: EntityText.documentTitle(""), updatedAt: nil))
+          title: EntityText.documentTitle(""), subtitle: nil, excerpt: "", updatedAt: nil))
     }
     return HomeSiteState(
-      name: "", pinned: rows, recent: rows, roots: rows.map(HomeTreeNode.document))
+      name: "", pinned: rows, recentlyViewed: rows, recentlyUpdated: rows,
+      roots: rows.map(HomeTreeNode.document))
   }()
 }

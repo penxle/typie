@@ -5,7 +5,7 @@
 
   @available(iOS 26, *)
   final class CreateButtonView: UIView {
-    static let side: CGFloat = 50
+    static let side: CGFloat = MainTabBar.barHeight
     static let spacing: CGFloat = 12
     static let cardWidth: CGFloat = 208
     private static let fade: TimeInterval = 0.15

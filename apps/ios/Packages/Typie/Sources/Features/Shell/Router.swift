@@ -17,12 +17,23 @@
 
     init() {}
 
-    func root(for tab: MainTab) -> UIViewController {
+    func tabRoot() -> TabRootController {
+      let root = TabRootController(initial: MainTab.initial) { tab in self.root(for: tab) }
+      installSiteLogo(on: root)
+      let profile = UIBarButtonItem(
+        image: menuIcon(LucideIcon.circleUserRound),
+        primaryAction: UIAction { [weak self, weak root] _ in
+          guard let self, let root else { return }
+          push(.profile, from: root)
+        })
+      profile.accessibilityLabel = "프로필 메뉴"
+      root.sharedRightItems = [profile]
+      return root
+    }
+
+    private func root(for tab: MainTab) -> UIViewController {
       let controller = viewController(for: tab.route)
       controller.title = tab.label
-      if tab == .home {
-        installSiteLogo(on: controller)
-      }
       return controller
     }
 
@@ -61,8 +72,12 @@
         case .document: viewController(for: .document(entityId: hit.entityId))
         case .folder(let folder):
           folderController(
-            entityId: folder.entityId, title: folder.title.plain,
-            tree: Container.shared.homeTreeStore())
+            entityId: folder.entityId,
+            initial: EntityFolderItem(
+              entityId: folder.entityId, icon: folder.icon, path: folder.path,
+              title: folder.title.plain, folderCount: folder.folderCount,
+              documentCount: folder.documentCount),
+            title: folder.title.plain)
         }
       navigation.pushViewController(controller, animated: true)
       return controller
@@ -107,78 +122,147 @@
             push(.document(entityId: entityId), from: presenter)
           },
           onOpenFolder: { [weak self] item in
-            guard let self, let presenter = host.controller else { return }
-            pushFolder(item, tree: Container.shared.homeTreeStore(), from: presenter)
+            guard let self, let presenter = host.controller, case .folder(let folder) = item
+            else { return }
+            pushFolder(folder, from: presenter)
           }))
       controller.hidesBottomBarWhenPushed = true
       host.controller = controller
       presenter.navigationController?.pushViewController(controller, animated: true)
+    }
+
+    private func presentHomeCustomize(from presenter: UIViewController) {
+      let screen = ThemedHostingController(
+        title: "홈 사용자화", HomeCustomizeScreen(layout: Container.shared.homeLayoutStore()))
+      present(screen, from: presenter)
+      let navigation = screen.navigationController
+      navigation?.sheetPresentationController?.detents = [
+        .custom(identifier: .init("homeCustomize")) { [weak navigation] _ in
+          HomeCustomizeScreen.contentHeight + (navigation?.navigationBar.bounds.height ?? 54)
+        }
+      ]
+      screen.navigationItem.leftBarButtonItem = closeItem { [weak navigation] in
+        navigation?.dismiss(animated: true)
+      }
+      navigation?.sheetPresentationController?.prefersGrabberVisible = true
     }
 
     func pushRecentDocuments(from presenter: UIViewController) {
       let host = HostReference()
+      let store = Container.shared.recentDocumentsStore()
       let controller = ThemedHostingController(
         title: "최근",
-        RecentDocumentsScreen(store: Container.shared.recentDocumentsStore()) {
-          [weak self] entityId in
+        RecentDocumentsScreen(store: store) { [weak self] entityId in
           guard let self, let presenter = host.controller else { return }
           push(.document(entityId: entityId), from: presenter)
         })
+      let sortMenu = UIMenu(
+        title: "정렬 기준",
+        children: [
+          UIDeferredMenuElement.uncached { [weak store] completion in
+            let current = store?.sort
+            completion(
+              RecentSort.allCases.map { sort in
+                UIAction(title: sort.title, state: current == sort ? .on : .off) { [weak store] _ in
+                  store?.sortOverride = sort
+                }
+              })
+          }
+        ])
+      let more = UIBarButtonItem(image: menuIcon(LucideIcon.ellipsis), menu: sortMenu)
+      more.accessibilityLabel = "더 보기"
+      controller.navigationItem.rightBarButtonItem = more
       controller.hidesBottomBarWhenPushed = true
       host.controller = controller
       presenter.navigationController?.pushViewController(controller, animated: true)
     }
 
-    func pushStudioTree(home: HomeStore, tree: HomeTreeStore, from presenter: UIViewController) {
+    func pushSiteEntities(home: HomeStore, from presenter: UIViewController) {
       let host = HostReference()
-      let controller = ThemedHostingController(
-        title: sites.current?.name ?? "스페이스",
-        StudioTreeScreen(
-          store: home, tree: tree,
+      let store = Container.shared.siteEntitiesStore()
+      let title = HeroTitleState()
+      let name = sites.current?.name
+      let content = ThemedHostingController(
+        title: "",
+        SiteEntitiesScreen(
+          store: store, title: title, initialName: name,
           onOpenDocument: { [weak self] entityId in
             guard let self, let presenter = host.controller else { return }
             push(.document(entityId: entityId), from: presenter)
           },
-          onOpenFolder: { [weak self] item in
+          onOpenFolder: { [weak self] folder in
             guard let self, let presenter = host.controller else { return }
-            pushFolder(item, tree: tree, from: presenter)
+            pushFolder(folder, from: presenter)
           }))
+      let controller = HeroHostController(title: title, content: content)
+      controller.title = name ?? "스페이스"
+      controller.hidesBottomBarWhenPushed = true
+      controller.keepsCreateButtonWhenBarHidden = true
+      controller.navigationItem.rightBarButtonItems = [moreItem(), homeItem(for: controller)]
       host.controller = controller
       controller.creationContext = EntityCreationContext(
-        siteId: { home.siteId }, parentEntityId: nil, didCreate: { home.refetch() })
+        siteId: { home.siteId }, parentEntityId: nil,
+        didCreate: { [weak store] in
+          store?.refetch()
+          home.refetch()
+        })
       presenter.navigationController?.pushViewController(controller, animated: true)
     }
 
-    func pushFolder(_ item: EntityRowItem, tree: HomeTreeStore, from presenter: UIViewController) {
+    func pushFolder(_ folder: EntityFolderItem, from presenter: UIViewController) {
       presenter.navigationController?.pushViewController(
-        folderController(entityId: item.entityId, title: item.title, tree: tree), animated: true)
+        folderController(entityId: folder.entityId, initial: folder, title: folder.title),
+        animated: true)
     }
 
-    func folderController(entityId: String, title: String, tree: HomeTreeStore)
+    func folderController(entityId: String, initial: EntityFolderItem?, title: String)
       -> UIViewController
     {
       let host = HostReference()
-      let controller = ThemedHostingController(
-        title: title,
+      let store = FolderContentsStore(entityId: entityId, initial: initial, title: title)
+      let titleState = HeroTitleState()
+      let content = ThemedHostingController(
+        title: "",
         FolderScreen(
-          folderId: entityId, tree: tree,
+          store: store, title: titleState,
           onOpenDocument: { [weak self] childId in
             guard let self, let presenter = host.controller else { return }
             push(.document(entityId: childId), from: presenter)
           },
           onOpenFolder: { [weak self] child in
             guard let self, let presenter = host.controller else { return }
-            pushFolder(child, tree: tree, from: presenter)
+            pushFolder(child, from: presenter)
           }))
+      let controller = HeroHostController(title: titleState, content: content)
+      controller.title = title
       controller.hidesBottomBarWhenPushed = true
+      controller.keepsCreateButtonWhenBarHidden = true
+      controller.navigationItem.rightBarButtonItems = [moreItem(), homeItem(for: controller)]
       host.controller = controller
       controller.creationContext = EntityCreationContext(
         siteId: { Container.shared.activeSite().siteId }, parentEntityId: entityId,
-        didCreate: { tree.refetchChildren(of: entityId) })
-      let add = UIBarButtonItem(image: menuIcon(LucideIcon.plus), menu: createMenu(for: controller))
-      add.accessibilityLabel = "새로 만들기"
-      controller.navigationItem.rightBarButtonItem = add
+        didCreate: { [weak store] in
+          store?.refetch()
+          Container.shared.homeTreeStore().refetchChildren(of: entityId)
+        })
       return controller
+    }
+
+    private func homeItem(for controller: UIViewController) -> UIBarButtonItem {
+      let item = UIBarButtonItem(
+        image: menuIcon(LucideIcon.house),
+        primaryAction: UIAction { [weak controller] _ in
+          controller?.navigationController?.popToRootViewController(animated: true)
+        })
+      item.accessibilityLabel = "홈"
+      return item
+    }
+
+    private func moreItem() -> UIBarButtonItem {
+      let item = UIBarButtonItem(
+        image: menuIcon(LucideIcon.ellipsis), primaryAction: UIAction { _ in })
+      item.accessibilityLabel = "더 보기"
+      return item
     }
 
     func createItems(for controller: UIViewController) -> [CreateMenuItem]? {
@@ -271,6 +355,13 @@
       }
     }
 
+    private func closeItem(_ dismiss: @escaping @MainActor () -> Void) -> UIBarButtonItem {
+      let item = UIBarButtonItem(
+        image: menuIcon(LucideIcon.x), primaryAction: UIAction { _ in dismiss() })
+      item.accessibilityLabel = "닫기"
+      return item
+    }
+
     private static let menuIconSide: CGFloat = 20
 
     private func icon(_ name: TIconName) -> UIImage? {
@@ -285,30 +376,6 @@
       }.withRenderingMode(.alwaysTemplate)
     }
 
-    func moreMenuItems() -> [MoreMenuItem] {
-      [
-        MoreMenuItem(icon: LucideIcon.palette, title: "디자인 쇼케이스") { [weak self] presenter in
-          guard let self else { return }
-          pushScreen(title: "Design", TDesignShowcase(theme: theme), from: presenter)
-        },
-        MoreMenuItem(icon: LucideIcon.logOut, title: "로그아웃") { [weak self] _ in
-          guard let self else { return }
-          Task { [authService, toast] in
-            do {
-              try await authService.logout()
-            } catch {
-              toast.error("오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-            }
-          }
-        },
-      ]
-    }
-
-    private func pushScreen(title: String, _ screen: some View, from presenter: UIViewController) {
-      presenter.navigationController?.pushViewController(
-        ThemedHostingController(title: title, screen), animated: true)
-    }
-
     private func viewController(for route: Route) -> UIViewController {
       let host = HostReference()
       let controller: UIViewController =
@@ -316,6 +383,7 @@
         case .siteSwitcher: siteSwitcherController(host: host)
         case .home: homeController(host: host)
         case .userGoal: userGoalController(host: host)
+        case .profile: profileController()
         default: placeholderController(for: route, host: host)
         }
       host.controller = controller
@@ -325,12 +393,12 @@
     private func homeController(host: HostReference) -> UIViewController {
       let home = Container.shared.homeStore()
       let tree = Container.shared.homeTreeStore()
-      let title = HomeTitleState()
+      let title = HeroTitleState()
       let content = ThemedHostingController(
         title: "",
         HomeScreen(title: title, store: home) { [weak self] in
           HomeBody(
-            store: home, tree: tree,
+            store: home, tree: tree, layout: Container.shared.homeLayoutStore(),
             onOpenGoal: { [weak self] in
               guard let self, let presenter = host.controller else { return }
               push(.userGoal, from: presenter)
@@ -345,18 +413,30 @@
             },
             onOpenAll: { [weak self] in
               guard let self, let presenter = host.controller else { return }
-              pushStudioTree(home: home, tree: tree, from: presenter)
+              pushSiteEntities(home: home, from: presenter)
             },
             onOpenDocument: { [weak self] entityId in
               guard let self, let presenter = host.controller else { return }
               push(.document(entityId: entityId), from: presenter)
             },
             onOpenFolder: { [weak self] item in
-              guard let self, let presenter = host.controller else { return }
-              pushFolder(item, tree: tree, from: presenter)
+              guard let self, let presenter = host.controller, case .folder(let folder) = item
+              else { return }
+              pushFolder(folder, from: presenter)
             })
         })
-      let controller = HomeHostController(title: title, content: content)
+      let controller = HeroHostController(title: title, content: content)
+      let more = UIBarButtonItem(
+        image: menuIcon(LucideIcon.ellipsis),
+        menu: UIMenu(children: [
+          UIAction(title: "홈 사용자화", image: menuIcon(LucideIcon.slidersHorizontal)) {
+            [weak self, weak controller] _ in
+            guard let self, let controller else { return }
+            presentHomeCustomize(from: controller)
+          }
+        ]))
+      more.accessibilityLabel = "더 보기"
+      controller.navigationItem.rightBarButtonItem = more
       controller.creationContext = EntityCreationContext(
         siteId: { home.siteId }, parentEntityId: nil, didCreate: { home.refetch() })
       return controller
@@ -395,6 +475,30 @@
       return controller
     }
 
+    private func profileController() -> UIViewController {
+      let controller = ThemedHostingController(
+        title: "프로필",
+        ProfileScreen(model: Container.shared.profileModel()) { [weak self] in
+          guard let self else { return }
+          Task { await self.logout() }
+        })
+      controller.hidesBottomBarWhenPushed = true
+      return controller
+    }
+
+    private func logout() async {
+      let confirmed = await dialog.confirm(
+        TDialogItem(
+          title: "로그아웃", message: "정말 로그아웃하시겠어요?", confirmText: "로그아웃",
+          cancelText: "취소", confirmIsDestructive: true))
+      guard confirmed else { return }
+      do {
+        try await authService.logout()
+      } catch {
+        toast.error("오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+      }
+    }
+
     private func presentUserGoalForm(goal: UserGoalModel, from presenter: UIViewController) {
       let model = Container.shared.userGoalFormModel(goal)
       let host = HostReference()
@@ -408,9 +512,9 @@
         form, from: presenter,
         detents: [.custom(identifier: .init("userGoalForm")) { _ in height }])
       form.navigationController?.sheetPresentationController?.prefersGrabberVisible = true
-      form.navigationItem.leftBarButtonItem = UIBarButtonItem(
-        systemItem: .close,
-        primaryAction: UIAction { [weak host] _ in host?.controller?.dismiss(animated: true) })
+      form.navigationItem.leftBarButtonItem = closeItem { [weak host] in
+        host?.controller?.dismiss(animated: true)
+      }
       guard model.hasGoal else { return }
       let remove = UIBarButtonItem(
         title: "제거",

@@ -112,10 +112,13 @@ func entityMock(
     type: .case(kind == .document ? .document : .folder), viewedAt: viewedAt)
 }
 
-func recentDocumentMock(id: String, title: String, viewedAt: String) -> Mock<GraphQLMocks.Document>
-{
+func recentDocumentMock(
+  id: String, title: String, viewedAt: String, updatedAt: String = "2026-09-20T15:00:00.000Z"
+) -> Mock<GraphQLMocks.Document> {
   Mock<GraphQLMocks.Document>(
-    entity: entityMock(id: id, kind: .document, title: title, viewedAt: viewedAt), id: "\(id)-doc")
+    entity: entityMock(
+      id: id, kind: .document, title: title, updatedAt: updatedAt, viewedAt: viewedAt),
+    id: "\(id)-doc")
 }
 
 func dividerEntityMock(id: String) -> Mock<GraphQLMocks.Entity> {
@@ -139,9 +142,12 @@ func homeSiteMock(
   pinned: [Mock<GraphQLMocks.Entity>] = [], recent: [Mock<GraphQLMocks.Document>] = [],
   roots: [Mock<GraphQLMocks.Entity>] = []
 ) -> Mock<GraphQLMocks.Site> {
-  Mock<GraphQLMocks.Site>(
-    entities: roots, id: id, name: name, pinnedEntities: pinned,
-    recentDocuments: Mock<GraphQLMocks.RecentDocumentsResult>(documents: recent))
+  let site = Mock<GraphQLMocks.Site>(entities: roots, id: id, name: name, pinnedEntities: pinned)
+  site._data["recentlyViewedDocuments"] =
+    Mock<GraphQLMocks.RecentDocumentsResult>(documents: recent)
+  site._data["recentlyUpdatedDocuments"] =
+    Mock<GraphQLMocks.RecentDocumentsResult>(documents: recent)
+  return site
 }
 
 func childrenData(parentId: String, children: [Mock<GraphQLMocks.Entity>]) async
@@ -245,4 +251,30 @@ func userGoalDayData(_ documents: [(id: String, title: String, additions: Int)])
               id: GraphQL.ID($0.id), title: $0.title))
         },
         id: "user-1")))
+}
+
+func siteEntitiesData(
+  name: String = "스페이스 A", folderCount: Int = 0, documentCount: Int = 0,
+  entities: [Mock<GraphQLMocks.Entity>] = []
+) async -> SiteEntities_Query.Data {
+  await SiteEntities_Query.Data.from(
+    Mock<GraphQLMocks.Query>(
+      site: Mock<GraphQLMocks.Site>(
+        documentCount: documentCount, entities: entities, folderCount: folderCount, id: "site-1",
+        name: name)))
+}
+
+func folderContentsData(
+  id: String = "f1", name: String = "소설", folderCount: Int = 1, documentCount: Int = 2,
+  characterCount: Int = 0, children: [Mock<GraphQLMocks.Entity>] = [], icon: String = "",
+  iconColor: String = ""
+) async -> FolderContents_Query.Data {
+  await FolderContents_Query.Data.from(
+    Mock<GraphQLMocks.Query>(
+      entity: Mock<GraphQLMocks.Entity>(
+        children: children, icon: icon, iconColor: iconColor, id: id,
+        node: Mock<GraphQLMocks.Folder>(
+          characterCount: characterCount, documentCount: documentCount, folderCount: folderCount,
+          id: "\(id)-folder", name: name),
+        type: .case(.folder))))
 }

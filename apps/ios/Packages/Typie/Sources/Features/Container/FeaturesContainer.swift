@@ -14,8 +14,16 @@ extension Container {
     self { HomeStore() }
   }
 
+  @MainActor var homeLayoutStore: Factory<HomeLayoutStore> {
+    self { HomeLayoutStore() }.scope(.session)
+  }
+
   @MainActor var recentDocumentsStore: Factory<RecentDocumentsStore> {
     self { RecentDocumentsStore() }
+  }
+
+  @MainActor var siteEntitiesStore: Factory<SiteEntitiesStore> {
+    self { SiteEntitiesStore() }
   }
 
   @MainActor var homeTreeStore: Factory<HomeTreeStore> {
@@ -28,6 +36,10 @@ extension Container {
 
   @MainActor var userGoalModel: Factory<UserGoalModel> {
     self { UserGoalModel() }
+  }
+
+  @MainActor var profileModel: Factory<ProfileModel> {
+    self { ProfileModel() }
   }
 
   @MainActor var emailLoginModel: ParameterFactory<@MainActor () -> Void, EmailLoginModel> {

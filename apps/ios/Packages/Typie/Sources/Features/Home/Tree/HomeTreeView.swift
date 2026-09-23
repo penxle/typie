@@ -120,7 +120,7 @@
     let depth: Int
 
     var body: some View {
-      TText(text, style: TTypography.detail, color: theme.colors.textHint)
+      TText(text, style: TTypography.text, color: theme.colors.textHint)
         .padding(.leading, HomeTreeView.indent(depth))
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
     }

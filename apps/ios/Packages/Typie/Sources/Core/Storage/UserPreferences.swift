@@ -4,6 +4,9 @@ public final class UserPreferences: @unchecked Sendable {
   private static let siteIdKey = "site_id"
   private static let recentSearchesKey = "recent_searches"
   private static let expandedFoldersKey = "expanded_folders"
+  private static let homeSectionOrderKey = "home_section_order"
+  private static let hiddenHomeSectionsKey = "home_hidden_sections"
+  private static let recentDocumentsSortKey = "recent_documents_sort"
 
   private let defaults: UserDefaults
   private let lock = NSLock()
@@ -55,6 +58,50 @@ public final class UserPreferences: @unchecked Sendable {
       } else {
         defaults.set(ids, forKey: key)
       }
+    }
+  }
+
+  public func homeSectionOrder() -> [String] {
+    lock.withLock {
+      defaults.stringArray(forKey: Self.scopedKey(Self.homeSectionOrderKey, userId)) ?? []
+    }
+  }
+
+  public func setHomeSectionOrder(_ ids: [String]) {
+    lock.withLock { storeArray(ids, key: Self.homeSectionOrderKey) }
+  }
+
+  public func hiddenHomeSections() -> [String] {
+    lock.withLock {
+      defaults.stringArray(forKey: Self.scopedKey(Self.hiddenHomeSectionsKey, userId)) ?? []
+    }
+  }
+
+  public func setHiddenHomeSections(_ ids: [String]) {
+    lock.withLock { storeArray(ids, key: Self.hiddenHomeSectionsKey) }
+  }
+
+  public func recentDocumentsSort() -> String? {
+    lock.withLock { defaults.string(forKey: Self.scopedKey(Self.recentDocumentsSortKey, userId)) }
+  }
+
+  public func setRecentDocumentsSort(_ value: String?) {
+    lock.withLock {
+      let scoped = Self.scopedKey(Self.recentDocumentsSortKey, userId)
+      if let value {
+        defaults.set(value, forKey: scoped)
+      } else {
+        defaults.removeObject(forKey: scoped)
+      }
+    }
+  }
+
+  private func storeArray(_ values: [String], key: String) {
+    let scoped = Self.scopedKey(key, userId)
+    if values.isEmpty {
+      defaults.removeObject(forKey: scoped)
+    } else {
+      defaults.set(values, forKey: scoped)
     }
   }
 

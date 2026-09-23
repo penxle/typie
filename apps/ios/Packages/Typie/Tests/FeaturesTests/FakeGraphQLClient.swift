@@ -91,7 +91,7 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
 
   func watch<Q: GraphQLQuery>(
     _ query: Q, onResult: @escaping @Sendable (Result<Q.Data, any Error>) -> Void
-  ) async -> any QueryWatcher {
+  ) -> any QueryWatcher {
     let token = Token()
     let deliver = { (result: Result<Any, any Error>) in
       onResult(result.map { $0 as! Q.Data })

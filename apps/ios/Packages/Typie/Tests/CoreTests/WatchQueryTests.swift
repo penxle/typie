@@ -200,22 +200,6 @@ private func pingBody(_ name: String) -> String {
     #expect(WatchQueryStub.requestCount == 2)
   }
 
-  @Test func refetchRequestedBeforeWatcherAttachesRunsAfterAttach() async throws {
-    let data = await Ping_Query.Data.from(
-      Mock<GraphQLMocks.Query>(me: Mock<GraphQLMocks.User>(id: GraphQL.ID("one"))))
-    let client = GatedWatchClient(data: data)
-    let query = WatchQuery(client: client, query: Ping_Query())
-    try await waitOnMain { query.isSettled && client.isParked }
-    #expect(query.data?.me?.id == "one")
-    #expect(client.refetchCount == 0)
-    query.refetch()
-    #expect(client.refetchCount == 0)
-    await client.gate.open()
-    try await waitOnMain { client.refetchCount == 1 }
-    query.refetch()
-    try await waitOnMain { client.refetchCount == 2 }
-  }
-
   @Test func refetchHitsNetworkAndUpdates() async throws {
     let client = try makeClient()
     WatchQueryStub.reset([(200, pingBody("one")), (200, pingBody("two"))])

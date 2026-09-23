@@ -17,6 +17,7 @@
   }
 
   private nonisolated(unsafe) var creationContextKey: UInt8 = 0
+  private nonisolated(unsafe) var floatingCreateButtonKey: UInt8 = 0
 
   extension UIViewController {
     var creationContext: EntityCreationContext? {
@@ -24,6 +25,14 @@
       set {
         objc_setAssociatedObject(
           self, &creationContextKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+      }
+    }
+
+    var keepsCreateButtonWhenBarHidden: Bool {
+      get { objc_getAssociatedObject(self, &floatingCreateButtonKey) as? Bool ?? false }
+      set {
+        objc_setAssociatedObject(
+          self, &floatingCreateButtonKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
       }
     }
   }

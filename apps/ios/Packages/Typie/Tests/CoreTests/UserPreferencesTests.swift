@@ -84,6 +84,25 @@ import Testing
     }
   }
 
+  @Test func storesHomeLayoutUnderScopedKeys() {
+    withFreshDefaults { defaults in
+      let preferences = UserPreferences(userId: "A", defaults: defaults)
+      preferences.setHomeSectionOrder(["all", "goal"])
+      preferences.setHiddenHomeSections(["recent"])
+      #expect(defaults.stringArray(forKey: "home_section_order@A") == ["all", "goal"])
+      #expect(defaults.stringArray(forKey: "home_hidden_sections@A") == ["recent"])
+      let reloaded = UserPreferences(userId: "A", defaults: defaults)
+      #expect(reloaded.homeSectionOrder() == ["all", "goal"])
+      #expect(reloaded.hiddenHomeSections() == ["recent"])
+      reloaded.setHiddenHomeSections([])
+      #expect(defaults.object(forKey: "home_hidden_sections@A") == nil)
+      reloaded.setRecentDocumentsSort("updated")
+      #expect(defaults.string(forKey: "recent_documents_sort@A") == "updated")
+      #expect(UserPreferences(userId: "A", defaults: defaults).recentDocumentsSort() == "updated")
+      #expect(UserPreferences(userId: "B", defaults: defaults).homeSectionOrder() == [])
+    }
+  }
+
   @Test func clearingExpandedFoldersRemovesKey() {
     withFreshDefaults { defaults in
       let preferences = UserPreferences(userId: "A", defaults: defaults)

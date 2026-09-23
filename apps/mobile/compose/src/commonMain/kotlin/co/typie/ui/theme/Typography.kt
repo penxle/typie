@@ -61,6 +61,18 @@ object AppTypography {
       )
     }
 
+  /** 소제목 (heading 아래, title 위) */
+  val lead: TextStyle
+    @Composable
+    get() {
+      return TextStyle(
+        fontFamily = SuitFontFamily,
+        fontSize = 20.sp,
+        fontWeight = FontWeight.W600,
+        lineHeight = 26.sp,
+      )
+    }
+
   /** 카드 제목, TopBar 타이틀, 리스트 주요 텍스트 */
   val title: TextStyle
     @Composable

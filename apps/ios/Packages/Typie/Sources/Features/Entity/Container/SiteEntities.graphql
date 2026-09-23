@@ -1,0 +1,12 @@
+query SiteEntities_Query($siteId: ID!) {
+  site(siteId: $siteId) {
+    id
+    name
+    folderCount
+    documentCount
+
+    entities {
+      ...EntityRow_entity
+    }
+  }
+}

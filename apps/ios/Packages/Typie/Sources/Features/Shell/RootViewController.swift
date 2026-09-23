@@ -67,10 +67,9 @@
       case .main:
         let router = Container.shared.router()
         let controller = ShellController(
-          rootProvider: { tab in router.root(for: tab) },
+          tabRoot: router.tabRoot(),
           openSearchHit: { hit, presenter in router.pushSearchHit(hit, from: presenter) },
-          createItems: { top in router.createItems(for: top) },
-          moreMenuItems: router.moreMenuItems())
+          createItems: { top in router.createItems(for: top) })
         Container.shared.sites().onCreated = { [weak self] in self?.dismiss(animated: true) }
         return controller
       }

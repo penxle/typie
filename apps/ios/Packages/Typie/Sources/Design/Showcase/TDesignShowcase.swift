@@ -40,6 +40,7 @@
             VStack(alignment: .leading, spacing: 12) {
               TText("화면 제목 hero 28/36", style: TTypography.hero)
               TText("섹션 제목 heading 22/28", style: TTypography.heading)
+              TText("소제목 lead 20/26", style: TTypography.lead)
               TText("내비·대화상자 제목 title 17/22", style: TTypography.title)
               TText("본문 text 16/24 — 언제든 이어 쓰는 글쓰기 앱, 타이피.", style: TTypography.text)
               TText("행 제목 label 15/20", style: TTypography.label)

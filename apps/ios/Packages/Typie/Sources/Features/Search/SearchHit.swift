@@ -18,6 +18,8 @@ struct SearchFolderHit: Equatable, Sendable {
   let icon: EntityIconSpec
   let path: [String]
   let title: HighlightedText
+  let folderCount: Int
+  let documentCount: Int
   let summary: String
 }
 
@@ -82,6 +84,7 @@ extension SearchHit {
       path: EntityRowItem.path(entity.fragments.entityRowPath_entity),
       title: hit.name.map(HighlightedText.init(markup:))
         ?? HighlightedText(plain: EntityText.folderName(folder.name)),
+      folderCount: folder.folderCount, documentCount: folder.documentCount,
       summary: EntityText.folderSummary(
         folders: folder.folderCount, documents: folder.documentCount))
   }
