@@ -13,6 +13,7 @@ public final class AuthService: Sendable {
   private let authState: any AuthStatePublishing
   private let oidc: any OIDCExchanging
   private let clearGraphQLCache: @Sendable () async -> Void
+  private let disconnectSubscriptions: @Sendable () async -> Void
 
   private let lock = AsyncLock()
   private let currentAccessToken = Mutex<String?>(nil)
@@ -21,12 +22,14 @@ public final class AuthService: Sendable {
     secureStore: any SecureStore,
     authState: any AuthStatePublishing,
     oidc: any OIDCExchanging,
-    clearGraphQLCache: @escaping @Sendable () async -> Void = {}
+    clearGraphQLCache: @escaping @Sendable () async -> Void = {},
+    disconnectSubscriptions: @escaping @Sendable () async -> Void = {}
   ) {
     self.secureStore = secureStore
     self.authState = authState
     self.oidc = oidc
     self.clearGraphQLCache = clearGraphQLCache
+    self.disconnectSubscriptions = disconnectSubscriptions
   }
 
   public var accessToken: String? {
@@ -86,12 +89,16 @@ public final class AuthService: Sendable {
       sessionToken: sessionToken, accessToken: accessToken, userId: userId)
     try secureStore.setAuthTokens(tokens)
     await publish(.authenticated(tokens))
+    if let previous = previousTokens?.sessionToken, previous != sessionToken {
+      await disconnectSubscriptions()
+    }
   }
 
   private func unauthenticate() async throws {
     let cleared = Result { try secureStore.setAuthTokens(nil) }
     await publish(.unauthenticated)
     await clearGraphQLCache()
+    await disconnectSubscriptions()
     try cleared.get()
   }
 

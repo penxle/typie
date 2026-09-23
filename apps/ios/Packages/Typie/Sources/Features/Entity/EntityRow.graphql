@@ -1,10 +1,13 @@
 fragment EntityIcon_entity on Entity {
+  id
   type
   icon
   iconColor
 }
 
 fragment EntityRowPath_entity on Entity {
+  id
+
   ancestors {
     id
 
@@ -14,6 +17,14 @@ fragment EntityRowPath_entity on Entity {
       ... on Folder {
         id
         name
+      }
+
+      ... on Document {
+        id
+      }
+
+      ... on Divider {
+        id
       }
     }
   }
@@ -42,11 +53,17 @@ fragment EntityRow_entity on Entity {
     __typename
 
     ... on Folder {
+      id
       ...EntityRowFolder_folder
     }
 
     ... on Document {
+      id
       ...EntityRowDocument_document
+    }
+
+    ... on Divider {
+      id
     }
   }
 }

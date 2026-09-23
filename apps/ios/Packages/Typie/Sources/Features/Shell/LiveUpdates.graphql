@@ -1,0 +1,82 @@
+subscription LiveUpdates_SiteUpdateStream_Subscription($siteId: ID!) {
+  siteUpdateStream(siteId: $siteId) {
+    ... on Site {
+      id
+      name
+      folderCount
+      documentCount
+
+      pinnedEntities {
+        id
+        ...HomeTree_entity
+      }
+
+      entities {
+        id
+        ...HomeTree_entity
+      }
+    }
+
+    ... on Entity {
+      id
+      ...HomeTree_entity
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          characterCount
+        }
+      }
+
+      ancestors {
+        id
+
+        node {
+          __typename
+
+          ... on Folder {
+            id
+            characterCount
+          }
+
+          ... on Document {
+            id
+          }
+
+          ... on Divider {
+            id
+          }
+        }
+      }
+
+      children {
+        id
+        ...HomeTree_entity
+      }
+    }
+  }
+}
+
+subscription LiveUpdates_SiteRecentDocumentsUpdateStream_Subscription($siteId: ID!) {
+  siteRecentDocumentsUpdateStream(siteId: $siteId)
+}
+
+subscription LiveUpdates_UserGoalUpdateStream_Subscription {
+  userGoalUpdateStream {
+    id
+    ...UserGoalSection_user
+  }
+}
+
+subscription LiveUpdates_UserUsageUpdateStream_Subscription($userId: ID!) {
+  userUsageUpdateStream(userId: $userId) {
+    id
+
+    todayCharacterCountChange {
+      date
+      additions
+    }
+  }
+}

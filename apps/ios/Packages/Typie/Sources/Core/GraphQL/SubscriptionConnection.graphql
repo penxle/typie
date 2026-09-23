@@ -1,0 +1,3 @@
+mutation SubscriptionConnection_CreateWsSession_Mutation {
+  createWsSession
+}

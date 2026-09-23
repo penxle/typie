@@ -3,3 +3,15 @@ query Ping_Query {
     id
   }
 }
+
+subscription Ping_Subscription {
+  userGoalUpdateStream {
+    id
+  }
+}
+
+subscription Ping_Usage_Subscription($userId: ID!) {
+  userUsageUpdateStream(userId: $userId) {
+    id
+  }
+}

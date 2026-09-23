@@ -6,6 +6,8 @@
 	<string>$(API_URL)</string>
 	<key>AUTH_URL</key>
 	<string>$(AUTH_URL)</string>
+	<key>WS_URL</key>
+	<string>$(WS_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

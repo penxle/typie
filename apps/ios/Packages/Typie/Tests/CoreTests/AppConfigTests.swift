@@ -7,6 +7,7 @@ import Testing
   private let valid: [String: Any] = [
     "API_URL": "https://api.example.test",
     "AUTH_URL": "https://auth.example.test",
+    "WS_URL": "wss://api.example.test",
     "OIDC_CLIENT_ID": "client",
     "OIDC_CLIENT_SECRET": "secret",
     "KAKAO_NATIVE_APP_KEY": "kakao-key",
@@ -22,6 +23,7 @@ import Testing
     let config = make(valid)
     #expect(config.apiURL == URL(string: "https://api.example.test"))
     #expect(config.authURL == URL(string: "https://auth.example.test"))
+    #expect(config.wsURL == URL(string: "wss://api.example.test"))
     #expect(config.oidcClientID == "client")
     #expect(config.oidcClientSecret == "secret")
     #expect(config.kakaoAppKey == "kakao-key")

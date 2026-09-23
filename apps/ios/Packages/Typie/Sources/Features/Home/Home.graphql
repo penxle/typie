@@ -24,6 +24,7 @@ fragment HomeTree_entity on Entity {
     __typename
 
     ... on Folder {
+      id
       childCount
     }
   }
@@ -34,22 +35,26 @@ fragment HomeScreen_site on Site {
   name
 
   pinnedEntities {
+    id
     ...HomeTree_entity
   }
 
   recentlyViewedDocuments: recentDocuments(sort: VIEWED_AT, limit: 5) {
     documents {
+      id
       ...RecentDocument_document
     }
   }
 
   recentlyUpdatedDocuments: recentDocuments(sort: UPDATED_AT, limit: 5) {
     documents {
+      id
       ...RecentDocument_document
     }
   }
 
   entities {
+    id
     ...HomeTree_entity
   }
 }
@@ -72,6 +77,7 @@ query HomeTree_Children_Query($entityId: ID!) {
     ...HomeTree_entity
 
     children {
+      id
       ...HomeTree_entity
     }
   }

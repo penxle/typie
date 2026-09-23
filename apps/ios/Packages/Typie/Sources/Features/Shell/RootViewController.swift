@@ -65,6 +65,7 @@
         Container.shared.manager.reset(scope: .session)
         return AuthFlowController()
       case .main:
+        Container.shared.liveUpdates().start()
         let router = Container.shared.router()
         let controller = ShellController(
           tabRoot: router.tabRoot(),

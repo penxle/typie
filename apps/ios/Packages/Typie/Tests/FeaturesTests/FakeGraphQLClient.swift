@@ -19,6 +19,10 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
   private var watchCounts: [String: Int] = [:]
   private var refetchCounts: [String: Int] = [:]
   private var gate: Gate?
+  private var subscribedOperations: [any GraphQLOperation] = []
+  private var subscribers: [String: [ObjectIdentifier: @Sendable (Any) -> Void]] = [:]
+  private var liveWatches: [ObjectIdentifier: any GraphQLOperation] = [:]
+  private var refetchedOperations: [any GraphQLOperation] = []
 
   func stub<M: GraphQLMutation>(_ results: [Result<M.Data, any Error>], for mutation: M.Type) {
     lock.withLock {
@@ -100,10 +104,56 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
       watchCounts[Q.operationName, default: 0] += 1
       watched.append(query)
       listeners[Q.operationName, default: [:]][ObjectIdentifier(token)] = deliver
+      liveWatches[ObjectIdentifier(token)] = query
       return pending.removeValue(forKey: Q.operationName) ?? []
     }
     for result in held { deliver(result) }
     return Watcher(client: self, operation: Q.operationName, token: token)
+  }
+
+  func subscribe<S: GraphQLSubscription>(_ subscription: S) -> AsyncStream<S.Data> {
+    let (stream, continuation) = AsyncStream.makeStream(of: S.Data.self)
+    let token = Token()
+    let key = ObjectIdentifier(token)
+    lock.withLock {
+      subscribedOperations.append(subscription)
+      subscribers[S.operationName, default: [:]][key] = { continuation.yield($0 as! S.Data) }
+    }
+    continuation.onTermination = { [weak self] _ in
+      withExtendedLifetime(token) {}
+      self?.unsubscribe(S.operationName, key)
+    }
+    return stream
+  }
+
+  func emit<S: GraphQLSubscription>(_ data: S.Data, for subscription: S.Type) {
+    let targets = lock.withLock { Array((subscribers[S.operationName] ?? [:]).values) }
+    for target in targets { target(data) }
+  }
+
+  func subscribed<S: GraphQLSubscription>(_ subscription: S.Type) -> [S] {
+    lock.withLock { subscribedOperations.compactMap { $0 as? S } }
+  }
+
+  func activeSubscriptions<S: GraphQLSubscription>(of subscription: S.Type) -> Int {
+    lock.withLock { subscribers[S.operationName]?.count ?? 0 }
+  }
+
+  func refetched<Q: GraphQLQuery>(_ query: Q.Type) -> [Q] {
+    lock.withLock { refetchedOperations.compactMap { $0 as? Q } }
+  }
+
+  func refetchWatches(where predicate: (any GraphQLOperation) -> Bool) {
+    let names = lock.withLock {
+      let matched = liveWatches.values.filter { predicate($0) }
+      refetchedOperations.append(contentsOf: matched)
+      return matched.map { type(of: $0).operationName }
+    }
+    for name in names { refetch(name) }
+  }
+
+  private func unsubscribe(_ operation: String, _ key: ObjectIdentifier) {
+    lock.withLock { _ = subscribers[operation]?.removeValue(forKey: key) }
   }
 
   fileprivate final class Token: Sendable {}
@@ -124,6 +174,7 @@ final class FakeGraphQLClient: Core.GraphQLClient, @unchecked Sendable {
   private func stopWatching(_ operation: String, _ token: Token) {
     lock.withLock {
       _ = listeners[operation]?.removeValue(forKey: ObjectIdentifier(token))
+      _ = liveWatches.removeValue(forKey: ObjectIdentifier(token))
     }
   }
 

@@ -39,6 +39,21 @@ final class PerformStub: StubURLProtocol, @unchecked Sendable {
   }
 }
 
+final class RefetchStub: StubURLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  nonisolated(unsafe) private static var served = 0
+
+  static func reset() { lock.withLock { served = 0 } }
+  static var count: Int { lock.withLock { served } }
+
+  override func startLoading() {
+    Self.lock.withLock { Self.served += 1 }
+    respond(
+      headers: ["Content-Type": "application/json"],
+      body: Data(#"{"data":{"__typename":"Query","me":{"__typename":"User","id":"u1"}}}"#.utf8))
+  }
+}
+
 @Suite(.serialized) struct GraphQLClientTests {
   @Test func sendsDeviceHeadersToGraphQLEndpoint() async throws {
     let client = ApolloGraphQLClient.make(
@@ -89,6 +104,38 @@ final class PerformStub: StubURLProtocol, @unchecked Sendable {
     ) {
       _ = try await client.perform(loginMutation())
     }
+  }
+
+  @Test func refetchWatchesRefetchesOnlyLiveMatchingWatches() async throws {
+    RefetchStub.reset()
+    let client = ApolloGraphQLClient.make(
+      config: makeTestConfig(), deviceHeaders: { [:] }, accessToken: { nil },
+      onSessionCookie: { _ in }, configuration: stubbedConfiguration(RefetchStub.self))
+    let watcher = client.watch(Ping_Query()) { _ in }
+    try await waitUntil { RefetchStub.count == 1 }
+
+    client.refetchWatches { _ in false }
+    client.refetchWatches { $0 is Ping_Query }
+    try await waitUntil { RefetchStub.count == 2 }
+
+    watcher.cancel()
+    client.refetchWatches { _ in true }
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(RefetchStub.count == 2)
+  }
+
+  @Test func registeringAWatchPrunesCancelledOnes() async throws {
+    RefetchStub.reset()
+    let client = ApolloGraphQLClient.make(
+      config: makeTestConfig(), deviceHeaders: { [:] }, accessToken: { nil },
+      onSessionCookie: { _ in }, configuration: stubbedConfiguration(RefetchStub.self))
+    let first = client.watch(Ping_Query()) { _ in }
+    first.cancel()
+
+    let second = client.watch(Ping_Query()) { _ in }
+
+    #expect(client.watches.count == 1)
+    second.cancel()
   }
 
   private func makePerformClient() -> ApolloGraphQLClient {

@@ -3,6 +3,7 @@ import Foundation
 public struct AppConfig: Sendable, Equatable {
   public let apiURL: URL
   public let authURL: URL
+  public let wsURL: URL
   public let oidcClientID: String
   public let oidcClientSecret: String
   public let kakaoAppKey: String
@@ -12,6 +13,7 @@ public struct AppConfig: Sendable, Equatable {
   public init(infoDictionary: [String: Any]) {
     apiURL = Self.url("API_URL", in: infoDictionary)
     authURL = Self.url("AUTH_URL", in: infoDictionary)
+    wsURL = Self.url("WS_URL", in: infoDictionary)
     oidcClientID = Self.string("OIDC_CLIENT_ID", in: infoDictionary)
     kakaoAppKey = Self.string("KAKAO_NATIVE_APP_KEY", in: infoDictionary)
     naverClientID = Self.string("NAVER_CLIENT_ID", in: infoDictionary)

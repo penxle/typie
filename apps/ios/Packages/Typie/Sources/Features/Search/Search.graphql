@@ -7,6 +7,7 @@ fragment SearchResultDocument_hit on SearchHitDocument {
     id
 
     entity {
+      id
       ...EntityRow_entity
       ...EntityRowPath_entity
     }
@@ -20,6 +21,7 @@ fragment SearchResultFolder_hit on SearchHitFolder {
     id
 
     entity {
+      id
       ...EntityRow_entity
       ...EntityRowPath_entity
     }

@@ -30,7 +30,9 @@ final class ContainerStub: StubURLProtocol, @unchecked Sendable {
   override func startLoading() {
     let url = request.url!
     let body = Self.body(of: request).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-    let operation = ["AuthService_Me", "Ping_Query"].first { body.contains($0) }
+    let operation = [
+      "AuthService_Me", "Ping_Query", "SubscriptionConnection_CreateWsSession_Mutation",
+    ].first { body.contains($0) }
     Self.lock.withLock {
       Self.recorded.append(
         Recorded(
@@ -51,6 +53,8 @@ final class ContainerStub: StubURLProtocol, @unchecked Sendable {
       payload = #"{"data":{"__typename":"Query","me":{"__typename":"User","id":"user-1"}}}"#
     case ("/graphql", "AuthService_Me"):
       payload = #"{"data":{"me":{"id":"user-1"}}}"#
+    case ("/graphql", "SubscriptionConnection_CreateWsSession_Mutation"):
+      payload = #"{"data":{"createWsSession":"ticket-container"}}"#
     case ("/authorize", _):
       statusCode = 302
       headers["Location"] = "typie:///authorize?code=code-1"
@@ -146,5 +150,36 @@ final class ContainerStub: StubURLProtocol, @unchecked Sendable {
     #expect(authState.state == .unauthenticated)
     let cleared = try await reader.apollo.fetch(query: Ping_Query(), cachePolicy: .cacheOnly)
     #expect(cleared?.data == nil)
+  }
+
+  @Test func wiresTheSubscriptionConnectionToTheLifecycleAndLogout() async throws {
+    ContainerStub.reset()
+    register(store: ApolloStore())
+    let factory = FakeSocketFactory()
+    Container.shared.webSocketTaskFactory.register { { factory.make($0) } }
+
+    let client = try #require(Container.shared.graphQLClient() as? ApolloGraphQLClient)
+    let authService = Container.shared.authService()
+    let lifecycle = Container.shared.appLifecycle()
+    _ = try await client.apollo.fetch(query: Ping_Query(), cachePolicy: .networkOnly)
+    #expect(
+      Container.shared.authState().state
+        == .authenticated(
+          AuthTokens(sessionToken: "session-1", accessToken: "access-1", userId: "user-1")))
+
+    let stream = Container.shared.graphQLClient().subscribe(Ping_Subscription())
+    let consumer = Task { for await _ in stream {} }
+    try await waitUntil { factory.sockets.first?.subscribeIDs.count == 1 }
+    try await waitUntil { client.connection.acknowledgements == 1 }
+    let socket = factory.sockets[0]
+    #expect(socket.sessionTicket == "ticket-container")
+    #expect(socket.pingCount == 0)
+
+    lifecycle.update(foreground: true)
+    try await waitUntil { socket.pingCount >= 1 }
+
+    try await authService.logout()
+    try await waitUntil { socket.cancelCount >= 1 }
+    consumer.cancel()
   }
 }
