@@ -9,6 +9,7 @@ mod edit_op;
 mod error;
 mod fragment;
 mod leaf_blocks;
+mod macro_root;
 mod modifier;
 mod node_attr;
 mod nodes;
@@ -21,9 +22,6 @@ mod span;
 mod subtree;
 mod view;
 
-#[cfg(any(test, feature = "test-utils"))]
-mod test_utils;
-
 pub use alias::{AliasClasses, AliasLog, AliasOp, AliasRun, alias_op_is_valid};
 pub use alignment::*;
 pub use attr::*;
@@ -33,6 +31,7 @@ pub use edit_op::*;
 pub use error::*;
 pub use fragment::*;
 pub use imbl;
+pub use macro_root::*;
 pub use modifier::*;
 pub use node_attr::*;
 pub use nodes::*;
@@ -44,6 +43,3 @@ pub use seq::*;
 pub use span::*;
 pub use subtree::*;
 pub use view::{ChildView, DocView, InlineItem, InlineKind, LeafStateRef, LeafView, NodeView};
-
-#[cfg(any(test, feature = "test-utils"))]
-pub use test_utils::*;

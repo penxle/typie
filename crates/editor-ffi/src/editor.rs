@@ -1489,6 +1489,16 @@ impl Editor {
     }
 }
 
+#[cfg(not(feature = "wasm"))]
+impl Editor {
+    pub(crate) fn with_viewport_core<F, R>(&self, f: F) -> EditorResult<R>
+    where
+        F: FnOnce(&mut editor_core::Editor) -> EditorResult<R>,
+    {
+        self.with_tick(|inner| f(&mut inner.editor))
+    }
+}
+
 fn position_is_addressable(pos: &editor_state::Position, view: &editor_model::DocView) -> bool {
     pos.resolve(view).is_some()
 }

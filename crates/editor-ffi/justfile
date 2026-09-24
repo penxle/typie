@@ -3,6 +3,10 @@ target_dir := workspace_dir / "target"
 mobile_dir := workspace_dir / "apps/mobile"
 generated_dir := mobile_dir / "generated/uniffi"
 ios_package_dir := workspace_dir / "apps/ios/Packages/EditorFFI"
+ios_package_sources := ios_package_dir / "Sources/EditorFFI"
+ios_package_config := justfile_directory() / "uniffi-ios-package.toml"
+ios_font_fixture_source := workspace_dir / "apps/ios/Packages/Typie/Sources/Design/Resources/Fonts/suit_regular.ttf"
+ios_font_fixtures := workspace_dir / "apps/ios/Packages/Typie/Tests/EditorTests/Fixtures/Fonts/SUIT-400"
 
 crate := "editor_ffi"
 mode := "release"
@@ -11,6 +15,7 @@ profile := if mode == "debug" { "dev" } else { "release" }
 host_target := `rustc --print host-tuple`
 cdylib_ext := if os() == "macos" { "dylib" } else { "so" }
 bindgen := "cargo run --quiet -p editor-bindgen --features bin --bin"
+font_fixture := "cargo run --quiet -p editor-server --features bin --bin editor-font-fixture --"
 host_bindgen_lib := target_dir / host_target / "debug" / "lib" + crate + "." + cdylib_ext
 
 [private]
@@ -30,7 +35,7 @@ desktop: host bindings-kotlin
 # Build Android
 android: bindings-kotlin (ensure "cargo-ndk")
     rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-    cargo ndk \
+    MACOSX_DEPLOYMENT_TARGET=15.0 cargo ndk \
         -t arm64-v8a -t armeabi-v7a -t x86_64 \
         -o {{mobile_dir}}/android/src/main/jniLibs \
         build --manifest-path {{justfile_directory()}}/Cargo.toml \
@@ -54,23 +59,28 @@ ios: bindings-swift bindings-kotlin (build "uniffi" "aarch64-apple-ios") (build 
     just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{mobile_dir}}/ios/Resources/icu.zst
 
 # Build the Swift package artifacts for apps/ios
-ios-package: host-bindgen (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim")
+ios-package: host-bindgen (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim") (build "uniffi" "aarch64-apple-darwin")
     #!/usr/bin/env bash
     set -e
     headers=$(mktemp -d)
     {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
-        "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name EditorFFI
-    rm -rf {{ios_package_dir}}/Sources/EditorBindings/Generated
-    mkdir -p {{ios_package_dir}}/Sources/EditorBindings/Generated
+        "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name CEditorFFI \
+        --config {{ios_package_config}}
+    rm -rf {{ios_package_sources}}/Generated
+    mkdir -p {{ios_package_sources}}/Generated/UniFFI {{ios_package_sources}}/Generated/Types
     {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
-        {{ios_package_dir}}/Sources/EditorBindings/Generated --swift-sources
-    rm -rf {{ios_package_dir}}/Editor.xcframework
+        {{ios_package_sources}}/Generated/UniFFI --swift-sources --config {{ios_package_config}}
+    {{bindgen}} editor-bindgen-swift-types -- {{host_bindgen_lib}} {{ios_package_sources}}/Generated/Types
+    rm -rf {{ios_package_dir}}/CEditorFFI.xcframework
     xcodebuild -create-xcframework \
         -library {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
         -library {{target_dir}}/aarch64-apple-ios-sim/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
-        -output {{ios_package_dir}}/Editor.xcframework
+        -library {{target_dir}}/aarch64-apple-darwin/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
+        -output {{ios_package_dir}}/CEditorFFI.xcframework
     rm -rf "$headers"
-    just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{ios_package_dir}}/Sources/EditorBindings/Resources/icu.zst
+    just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{ios_package_sources}}/Resources/icu.zst
+    rm -rf {{ios_font_fixtures}}
+    {{font_fixture}} {{ios_font_fixture_source}} {{ios_font_fixtures}}
 
 # Build client + server WASM
 wasm: wasm-browser wasm-server
@@ -120,12 +130,15 @@ build features target:
     if [[ "{{target}}" == *-apple-ios* ]]; then
         export IPHONEOS_DEPLOYMENT_TARGET=15.6
     fi
+    export MACOSX_DEPLOYMENT_TARGET=15.0
     rustup target add {{target}}
     cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
         --profile {{profile}}-{{features}} --features {{features}} --target {{target}}
 
 [private]
 icu-datagen binary output: (ensure "icu4x-datagen")
+    #!/usr/bin/env bash
+    set -euo pipefail
     mkdir -p "$(dirname "{{output}}")"
     RUST_LOG=off icu4x-datagen --markers-for-bin "{{binary}}" --format blob | zstd -19 -f -o "{{output}}"
 

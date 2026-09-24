@@ -41,6 +41,7 @@ const DEFAULT_REPAIR_BUDGET: usize = 1 << 20;
 
 #[cfg(any(test, feature = "test-utils"))]
 thread_local! {
+    #[cfg_attr(target_os = "android", expect(clippy::missing_const_for_thread_local))]
     static REPAIR_BUDGET_OVERRIDE: std::cell::Cell<Option<usize>> =
         const { std::cell::Cell::new(None) };
 }

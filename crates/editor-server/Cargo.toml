@@ -7,6 +7,7 @@ edition.workspace = true
 doctest = false
 
 [features]
+bin = []
 test-utils = ["icu_segmenter/compiled_data", "icu_segmenter/auto"]
 uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-resource/uniffi"]
 wasm = [
@@ -36,6 +37,11 @@ uniffi = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 write-fonts.workspace = true
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[[bin]]
+name = "editor-font-fixture"
+path = "src/bin/editor-font-fixture.rs"
+required-features = ["bin"]
 
 [dev-dependencies]
 proptest.workspace = true

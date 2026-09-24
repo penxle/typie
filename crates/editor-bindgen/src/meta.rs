@@ -18,6 +18,7 @@ pub enum FfiKind {
     Enum {
         variants: Vec<FfiVariant>,
         serde_tag: Option<String>,
+        serde_content: Option<String>,
         default_variant: Option<String>,
     },
     Custom {
@@ -63,6 +64,20 @@ pub struct FfiMethod {
     pub is_constructor: bool,
     pub params: Vec<FfiParam>,
     pub return_type: FfiReturnType,
+}
+
+impl FfiMethod {
+    pub fn is_primary_constructor(&self) -> bool {
+        self.is_constructor && self.name == "new"
+    }
+
+    pub fn wrapper_name(&self) -> &str {
+        if self.is_primary_constructor() {
+            "create"
+        } else {
+            &self.name
+        }
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -169,6 +184,7 @@ mod tests {
                     },
                 ],
                 serde_tag: None,
+                serde_content: None,
                 default_variant: Some("Downstream".into()),
             },
             generics: Vec::new(),
@@ -181,6 +197,7 @@ mod tests {
                 variants,
                 serde_tag,
                 default_variant,
+                ..
             } => {
                 assert_eq!(variants.len(), 2);
                 assert!(serde_tag.is_none());
@@ -208,6 +225,7 @@ mod tests {
                     serde_rename_all: None,
                 }],
                 serde_tag: Some("type".into()),
+                serde_content: None,
                 default_variant: None,
             },
             generics: Vec::new(),
@@ -217,6 +235,37 @@ mod tests {
         match decoded.kind {
             FfiKind::Enum { serde_tag, .. } => {
                 assert_eq!(serde_tag.as_deref(), Some("type"));
+            }
+            _ => panic!("expected enum"),
+        }
+    }
+
+    #[test]
+    fn roundtrip_adjacent_tagged_enum() {
+        let meta = FfiMeta {
+            name: "ImageNodeAttr".into(),
+            serde_rename_all: Some("snake_case".into()),
+            kind: FfiKind::Enum {
+                variants: vec![FfiVariant::Tuple {
+                    name: "Proportion".into(),
+                    tys: vec!["u32".into()],
+                }],
+                serde_tag: Some("type".into()),
+                serde_content: Some("value".into()),
+                default_variant: None,
+            },
+            generics: Vec::new(),
+        };
+        let encoded = bitcode::encode(&meta);
+        let decoded: FfiMeta = bitcode::decode(&encoded).unwrap();
+        match decoded.kind {
+            FfiKind::Enum {
+                serde_tag,
+                serde_content,
+                ..
+            } => {
+                assert_eq!(serde_tag.as_deref(), Some("type"));
+                assert_eq!(serde_content.as_deref(), Some("value"));
             }
             _ => panic!("expected enum"),
         }
@@ -362,5 +411,38 @@ mod tests {
             decoded.methods[0].return_type,
             FfiReturnType::Vec(FfiScalarReturn::Complex("EditorEvent".into()))
         );
+    }
+
+    #[test]
+    fn primary_constructor_is_wrapped_as_create() {
+        let method = FfiMethod {
+            name: "new".into(),
+            is_async: false,
+            is_constructor: true,
+            params: vec![],
+            return_type: FfiReturnType::Owned("EditorHost".into()),
+        };
+        assert!(method.is_primary_constructor());
+        assert_eq!(method.wrapper_name(), "create");
+    }
+
+    #[test]
+    fn named_constructor_and_methods_keep_their_names() {
+        let named = FfiMethod {
+            name: "create".into(),
+            is_async: false,
+            is_constructor: true,
+            params: vec![],
+            return_type: FfiReturnType::Owned("EditorHost".into()),
+        };
+        let method = FfiMethod {
+            name: "new".into(),
+            is_constructor: false,
+            ..named.clone()
+        };
+        assert!(!named.is_primary_constructor());
+        assert_eq!(named.wrapper_name(), "create");
+        assert!(!method.is_primary_constructor());
+        assert_eq!(method.wrapper_name(), "new");
     }
 }

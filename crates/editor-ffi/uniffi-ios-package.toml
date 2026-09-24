@@ -1,0 +1,46 @@
+[crates.editor_clipboard.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_commands.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_common.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_core.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_crdt.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_ffi.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_introspection.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_model.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_renderer.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_resource.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_state.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_transaction.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_view.bindings.swift]
+ffi_module_name = "CEditorFFI"
+
+[crates.editor_ffi.bindings.swift.rename]
+Editor = "REditor"
+EditorHost = "REditorHost"
+GraphIngest = "RGraphIngest"
+ResourceUpdate = "RResourceUpdate"
+EditorViewport = "REditorViewport"
+EditorFrame = "REditorFrame"

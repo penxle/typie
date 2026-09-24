@@ -84,6 +84,10 @@ extension Container {
     }.singleton
   }
 
+  @MainActor public var devMode: Factory<DevModeStore> {
+    self { DevModeStore(defaults: .standard) }.singleton
+  }
+
   @MainActor public var userPreferences: Factory<UserPreferences> {
     self {
       guard case .authenticated(let tokens) = self.authState().state else { fatalError() }

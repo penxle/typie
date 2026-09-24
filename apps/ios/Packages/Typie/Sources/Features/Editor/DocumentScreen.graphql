@@ -1,0 +1,18 @@
+query DocumentScreen_FontFamilies_Query {
+  me {
+    id
+
+    documentFontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+      id
+      familyName
+      source
+
+      fonts {
+        id
+        weight
+        url
+        hash
+      }
+    }
+  }
+}

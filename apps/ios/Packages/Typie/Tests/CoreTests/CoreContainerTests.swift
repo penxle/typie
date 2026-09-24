@@ -116,6 +116,12 @@ final class ContainerStub: StubURLProtocol, @unchecked Sendable {
     #expect(Container.shared.activeSite().siteId == "site-7")
   }
 
+  @Test func devModeOutlivesTheSession() {
+    let devMode = Container.shared.devMode()
+    Container.shared.manager.reset(scope: .session)
+    #expect(Container.shared.devMode() === devMode)
+  }
+
   @Test func wiresSessionCookieBearerAndCacheClearing() async throws {
     ContainerStub.reset()
     let store = ApolloStore()

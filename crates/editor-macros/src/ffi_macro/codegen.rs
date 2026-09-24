@@ -98,7 +98,10 @@ pub fn generate_type_alias(item: &syn::ItemType) -> TokenStream {
 }
 
 fn generate_meta_static(input: &FfiInput) -> TokenStream {
-    let meta = meta::extract(&input.item, input.custom.as_ref());
+    let meta = match meta::extract(&input.item, input.custom.as_ref()) {
+        Ok(meta) => meta,
+        Err(error) => return error.to_compile_error(),
+    };
     let encoded = bitcode::encode(&meta);
 
     let payload_len = encoded.len() as u32;

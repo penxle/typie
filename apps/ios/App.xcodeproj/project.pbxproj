@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0002A1B2C3D4E5F60002 /* Core */; };
 		C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0004A1B2C3D4E5F60004 /* Design */; };
-		C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0007A1B2C3D4E5F60007 /* EditorBindings */; };
 		C0DE000AA1B2C3D4E5F6000A /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE0009A1B2C3D4E5F60009 /* Features */; };
 		C0DE001DA1B2C3D4E5F6001D /* Platform in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE001CA1B2C3D4E5F6001C /* Platform */; };
 /* End PBXBuildFile section */
@@ -51,7 +50,6 @@
 			files = (
 				C0DE0003A1B2C3D4E5F60003 /* Core in Frameworks */,
 				C0DE0005A1B2C3D4E5F60005 /* Design in Frameworks */,
-				C0DE0008A1B2C3D4E5F60008 /* EditorBindings in Frameworks */,
 				C0DE000AA1B2C3D4E5F6000A /* Features in Frameworks */,
 				C0DE001DA1B2C3D4E5F6001D /* Platform in Frameworks */,
 			);
@@ -107,7 +105,6 @@
 			packageProductDependencies = (
 				C0DE0002A1B2C3D4E5F60002 /* Core */,
 				C0DE0004A1B2C3D4E5F60004 /* Design */,
-				C0DE0007A1B2C3D4E5F60007 /* EditorBindings */,
 				C0DE0009A1B2C3D4E5F60009 /* Features */,
 				C0DE001CA1B2C3D4E5F6001C /* Platform */,
 			);
@@ -142,7 +139,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */,
-				C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0E2EDBC5D892DD3F91C268A /* Products */;
@@ -479,10 +475,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Typie;
 		};
-		C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/EditorFFI;
-		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -495,11 +487,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C0DE0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "Packages/Typie" */;
 			productName = Design;
-		};
-		C0DE0007A1B2C3D4E5F60007 /* EditorBindings */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0DE0006A1B2C3D4E5F60006 /* XCLocalSwiftPackageReference "Packages/EditorFFI" */;
-			productName = EditorBindings;
 		};
 		C0DE0009A1B2C3D4E5F60009 /* Features */ = {
 			isa = XCSwiftPackageProductDependency;

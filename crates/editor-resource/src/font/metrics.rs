@@ -82,7 +82,7 @@ pub(super) fn metrics_font(data: &[u8]) -> Result<Vec<u8>, ResourceError> {
     // sanitizers reject fonts whose entire glyf table has zero length.
     let glyf = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x31, 0];
     let mut loca = vec![0u8; (count + 1) * 2];
-    for offset in loca.chunks_exact_mut(2).skip(1) {
+    for offset in loca.as_chunks_mut::<2>().0.iter_mut().skip(1) {
         offset.copy_from_slice(&8_u16.to_be_bytes());
     }
     builder.add_raw(Tag::new(b"glyf"), &glyf);

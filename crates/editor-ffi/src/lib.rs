@@ -23,3 +23,5 @@ mod prelude;
 mod root;
 #[cfg(any(test, feature = "wasm-server"))]
 mod server;
+#[cfg(not(feature = "wasm"))]
+pub mod viewport;

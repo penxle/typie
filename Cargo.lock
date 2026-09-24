@@ -942,6 +942,7 @@ dependencies = [
  "editor-state",
  "editor-transaction",
  "editor-view",
+ "editor-viewport",
  "editor-xml",
  "env_filter 0.1.4",
  "env_logger",
@@ -1189,6 +1190,14 @@ dependencies = [
  "tsify",
  "uniffi",
  "wasm-bindgen",
+ "workspace-hack",
+]
+
+[[package]]
+name = "editor-viewport"
+version = "0.0.1"
+dependencies = [
+ "proptest",
  "workspace-hack",
 ]
 

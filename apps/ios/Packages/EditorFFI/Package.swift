@@ -4,17 +4,16 @@ import PackageDescription
 
 let package = Package(
   name: "EditorFFI",
-  platforms: [.iOS(.v18)],
+  platforms: [.iOS(.v18), .macOS(.v15)],
   products: [
-    .library(name: "EditorBindings", targets: ["EditorBindings"])
+    .library(name: "EditorFFI", targets: ["EditorFFI"])
   ],
   targets: [
-    .binaryTarget(name: "EditorFFI", path: "Editor.xcframework"),
+    .binaryTarget(name: "CEditorFFI", path: "CEditorFFI.xcframework"),
     .target(
-      name: "EditorBindings",
-      dependencies: ["EditorFFI"],
-      resources: [.copy("Resources/icu.zst")],
-      swiftSettings: [.swiftLanguageMode(.v5)]
+      name: "EditorFFI",
+      dependencies: ["CEditorFFI"],
+      resources: [.copy("Resources/icu.zst")]
     ),
   ]
 )
