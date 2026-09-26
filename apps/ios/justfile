@@ -3,23 +3,38 @@ scheme := "iOS"
 simulator := "generic/platform=iOS Simulator"
 apollo_version := "2.4.0"
 apollo_cli_sha256 := "c48b2137144bfc823c1b4f219d5b1d7f4f36a059744150e7f2505aa971f0b1fc"
-swift_sources := "find App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests Packages/EditorFFI/Package.swift Packages/EditorFFI/Sources -name '*.swift' -not -path '*/__generated__/*' -not -path 'Packages/Typie/Sources/GraphQL/*' -not -path 'Packages/Typie/Sources/GraphQLMocks/*' -not -path '*/EditorBindings/Generated/*' -print0"
+swift_sources := "find App Packages/Typie/Package.swift Packages/Typie/Sources Packages/Typie/Tests Packages/EditorFFI/Package.swift Packages/EditorFFI/Sources -name '*.swift' -not -path '*/__generated__/*' -not -path 'Packages/Typie/Sources/GraphQL/*' -not -path 'Packages/Typie/Sources/GraphQLMocks/*' -not -path '*/EditorFFI/Generated/*' -print0"
 
 [private]
 default:
     @just --list
 
 # Build the app for the simulator
-build: graphql icons
+build: editor-ffi graphql icons
     xcodebuild build -project {{project}} -scheme {{scheme}} -destination '{{simulator}}' -quiet
 
 # Run package tests on the host
-test: graphql icons
+test: editor-ffi graphql icons
     swift test --package-path Packages/Typie
 
-# Check formatting
+# Check formatting and that only the Editor target imports EditorFFI, internally
 lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
     {{swift_sources}} | xargs -0 swift format lint --strict
+    scan() {
+      for root in "$@"; do
+        [ -d "$root" ] || { echo "$root is missing, so EditorFFI imports cannot be checked" >&2; exit 1; }
+      done
+      status=0
+      grep -rnHE --include='*.swift' '^[[:space:]]*(@[[:alnum:]_]+(\([^)]*\))?[[:space:]]*)*([[:alpha:]]+[[:space:]]+)?import[[:space:]]+([[:alpha:]]+[[:space:]]+)?C?EditorFFI([.;[:space:]]|$)' "$@" || status=$?
+      [ "$status" -le 1 ] || { echo "Could not scan $* for EditorFFI imports" >&2; exit "$status"; }
+    }
+    outside=$(scan App Packages/Typie/Sources | awk 'index($0, "Packages/Typie/Sources/Editor/") != 1')
+    exposed=$(scan Packages/Typie/Sources/Editor | awk '!/^[^:]*:[0-9]+:[[:space:]]*internal[[:space:]]+import[[:space:]]+EditorFFI[[:space:]]*$/')
+    [ -z "$outside" ] || printf 'EditorFFI is imported outside Packages/Typie/Sources/Editor:\n%s\n' "$outside"
+    [ -z "$exposed" ] || printf 'Packages/Typie/Sources/Editor must import EditorFFI with internal import:\n%s\n' "$exposed"
+    [ -z "$outside$exposed" ]
 
 # Apply formatting
 format:
@@ -58,3 +73,11 @@ setup:
 # Build Release and upload to TestFlight
 beta:
     doppler run -p mobile -c prod -- fastlane beta
+
+[private]
+editor-ffi:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for path in Packages/EditorFFI/CEditorFFI.xcframework Packages/EditorFFI/Sources/EditorFFI/Generated/UniFFI Packages/EditorFFI/Sources/EditorFFI/Generated/Types Packages/EditorFFI/Sources/EditorFFI/Resources/icu.zst Packages/Typie/Tests/EditorTests/Fixtures; do
+      [ -e "$path" ] || { echo "$path is missing. Run: cd crates/editor-ffi && just ios-package"; exit 1; }
+    done

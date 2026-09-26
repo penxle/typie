@@ -15,7 +15,7 @@ pub(crate) type FontRequests = HashMap<(String, u16), HashMap<Dot, HashSet<u32>>
 fn font_from_effective(eff: &BTreeMap<ModifierType, Modifier>) -> (String, u16) {
     let family = match eff.get(&ModifierType::FontFamily) {
         Some(Modifier::FontFamily { value }) => value.clone(),
-        _ => String::new(),
+        _ => editor_model::DEFAULT_FONT_FAMILY.to_string(),
     };
     let weight = match eff.get(&ModifierType::FontWeight) {
         Some(Modifier::FontWeight { value }) => *value,

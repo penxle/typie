@@ -12,6 +12,7 @@ let package = Package(
     .library(name: "Platform", targets: ["Platform"]),
   ],
   dependencies: [
+    .package(path: "../EditorFFI"),
     .package(url: "https://github.com/apollographql/apollo-ios.git", from: "2.4.0"),
     .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.12.2"),
     .package(url: "https://github.com/kean/Nuke.git", from: "13.2.0"),
@@ -54,12 +55,17 @@ let package = Package(
       resources: [.process("Resources")]
     ),
     .target(
+      name: "Editor",
+      dependencies: ["Core", "Design", .product(name: "EditorFFI", package: "EditorFFI")]
+    ),
+    .target(
       name: "Features",
       dependencies: [
-        "Core", "Design", "GraphQL", .product(name: "FactoryKit", package: "Factory"),
+        "Core", "Design", "Editor", "GraphQL", .product(name: "FactoryKit", package: "Factory"),
       ],
       exclude: [
         "Auth/EmailLogin.graphql", "Auth/SingleSignOnLogin.graphql",
+        "Editor/DocumentScreen.graphql",
         "Entity/Container/FolderContents.graphql", "Entity/Container/SiteEntities.graphql",
         "Entity/EntityContainer.graphql", "Entity/EntityRow.graphql",
         "Home/Home.graphql", "Home/Recent/RecentDocuments.graphql", "Home/SiteSwitcher.graphql",
@@ -106,11 +112,16 @@ let package = Package(
     .testTarget(
       name: "FeaturesTests",
       dependencies: [
-        "Features", "Core", "Design", "GraphQL", "GraphQLMocks",
+        "Features", "Core", "Design", "Editor", "GraphQL", "GraphQLMocks",
         .product(name: "Apollo", package: "apollo-ios"),
         .product(name: "ApolloTestSupport", package: "apollo-ios"),
         .product(name: "FactoryTesting", package: "Factory"),
       ]),
+    .testTarget(
+      name: "EditorTests",
+      dependencies: ["Editor", .product(name: "EditorFFI", package: "EditorFFI")],
+      resources: [.copy("Fixtures")]
+    ),
   ],
   swiftLanguageModes: [.v6]
 )

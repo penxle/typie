@@ -131,6 +131,107 @@ mod tests {
         prepare_font_chunk(0u32.to_be_bytes().to_vec()).expect("test chunk must be valid")
     }
 
+    fn register_default_family(
+        source: &mut ResourceSource,
+    ) -> Arc<editor_resource::ResourceSnapshot> {
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: editor_model::DEFAULT_FONT_FAMILY.into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "h1".into(),
+                }],
+            }]))
+            .expect("font families must change resources")
+    }
+
+    fn requests_default_family_manifest(events: &[EditorEvent]) -> bool {
+        events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == editor_model::DEFAULT_FONT_FAMILY
+                        && *weight == 400
+                        && *required == [FontData::Manifest]
+            )
+        })
+    }
+
+    fn initialize_with_fonts_registered(state: editor_state::State) -> Vec<EditorEvent> {
+        let mut source = ResourceSource::new_test();
+        register_default_family(&mut source);
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        })
+    }
+
+    fn register_fonts_after_initialize(state: editor_state::State) -> Vec<EditorEvent> {
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        let snapshot = register_default_family(&mut ResourceSource::new_test());
+        editor.receive_resource_update(crate::ResourceUpdate::new(
+            snapshot,
+            vec![SystemEvent::FontsChanged],
+        ));
+        editor
+            .tick()
+            .expect("resource update tick must succeed")
+            .expect("resource update must produce a tick")
+            .events
+    }
+
+    fn initialized_editor(state: editor_state::State, source: &ResourceSource) -> Editor {
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+        editor
+    }
+
+    fn theme_update(source: &mut ResourceSource) -> crate::ResourceUpdate {
+        let snapshot = source
+            .set_theme_variant(editor_resource::ThemeVariant::DarkBlack)
+            .expect("theme must change resources");
+        crate::ResourceUpdate::new(snapshot, vec![SystemEvent::ThemeVariantChanged])
+    }
+
+    fn tick_resource_update(
+        editor: &mut Editor,
+        update: crate::ResourceUpdate,
+    ) -> Vec<EditorEvent> {
+        editor.receive_resource_update(update);
+        editor
+            .tick()
+            .expect("resource update tick must succeed")
+            .expect("resource update must produce a tick")
+            .events
+    }
+
+    fn font_requests(events: &[EditorEvent]) -> Vec<&EditorEvent> {
+        events
+            .iter()
+            .filter(|event| matches!(event, EditorEvent::FontDataMissing { .. }))
+            .collect()
+    }
+
+    fn relayouts(events: &[EditorEvent]) -> bool {
+        events.contains(&EditorEvent::RenderInvalidated)
+            && events.iter().any(|event| {
+                matches!(
+                    event,
+                    EditorEvent::StateChanged { fields }
+                        if fields.contains(&StateField::PageSizes)
+                            && fields.contains(&StateField::Cursor)
+                )
+            })
+    }
+
     #[test]
     fn initialize_populates_pending_fonts() {
         let (state, p1) = state! {
@@ -184,6 +285,325 @@ mod tests {
             )
         });
         assert!(has_data_missing);
+    }
+
+    #[test]
+    fn initialize_requests_default_family_when_root_has_no_font_family() {
+        let (state, ..) = state! {
+            doc {
+                root [] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        assert!(
+            state
+                .view()
+                .root()
+                .unwrap()
+                .block_modifier(editor_model::ModifierType::FontFamily)
+                .is_none()
+        );
+
+        let events = initialize_with_fonts_registered(state);
+
+        assert!(requests_default_family_manifest(&events), "{events:?}");
+    }
+
+    #[test]
+    fn initialize_requests_root_font_family() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family(editor_model::DEFAULT_FONT_FAMILY.to_string())] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let events = initialize_with_fonts_registered(state);
+
+        assert!(requests_default_family_manifest(&events), "{events:?}");
+    }
+
+    #[test]
+    fn late_font_list_requests_default_family_when_root_has_no_font_family() {
+        let (state, ..) = state! {
+            doc {
+                root [] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        assert!(
+            state
+                .view()
+                .root()
+                .unwrap()
+                .block_modifier(editor_model::ModifierType::FontFamily)
+                .is_none()
+        );
+
+        let events = register_fonts_after_initialize(state);
+
+        assert!(requests_default_family_manifest(&events), "{events:?}");
+    }
+
+    #[test]
+    fn late_font_list_requests_root_font_family() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family(editor_model::DEFAULT_FONT_FAMILY.to_string())] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let events = register_fonts_after_initialize(state);
+
+        assert!(requests_default_family_manifest(&events), "{events:?}");
+    }
+
+    #[test]
+    fn skipped_font_list_commit_still_requests_root_family_manifest() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family(editor_model::DEFAULT_FONT_FAMILY.to_string())] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        let mut delivered = initialized_editor(state.clone(), &source);
+        let mut skipped = initialized_editor(state, &source);
+
+        let fonts = register_default_family(&mut source);
+        let delivered_events = tick_resource_update(
+            &mut delivered,
+            crate::ResourceUpdate::new(fonts, vec![SystemEvent::FontsChanged]),
+        );
+        let skipped_events = tick_resource_update(&mut skipped, theme_update(&mut source));
+
+        assert!(
+            requests_default_family_manifest(&skipped_events),
+            "{skipped_events:?}"
+        );
+        assert_eq!(
+            font_requests(&skipped_events),
+            font_requests(&delivered_events)
+        );
+        assert_eq!(skipped.resource_resync_count_for_test(), 1);
+    }
+
+    #[test]
+    fn skipped_font_base_commit_still_relayouts_without_requesting_the_base() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        let mut delivered = initialized_editor(state.clone(), &source);
+        let mut skipped = initialized_editor(state, &source);
+
+        let base = source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
+            .expect("font base must change resources");
+        let delivered_events = tick_resource_update(
+            &mut delivered,
+            crate::ResourceUpdate::new(
+                base,
+                vec![SystemEvent::FontBaseLoaded {
+                    family: "TestFont".to_string(),
+                    weight: 400,
+                }],
+            ),
+        );
+        let skipped_events = tick_resource_update(&mut skipped, theme_update(&mut source));
+
+        assert!(relayouts(&delivered_events), "{delivered_events:?}");
+        assert!(relayouts(&skipped_events), "{skipped_events:?}");
+        assert!(font_requests(&delivered_events).is_empty());
+        assert_eq!(
+            font_requests(&skipped_events),
+            vec![&EditorEvent::FontDataMissing {
+                family: "TestFont".to_string(),
+                weight: 400,
+                required: vec![FontData::Chunk { id: 0 }],
+                prefetch: Vec::new(),
+            }]
+        );
+    }
+
+    #[test]
+    fn skipped_last_font_chunk_commit_still_relayouts_without_requesting_the_chunk() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = test_source_single_chunk("TestFont", 400, "h", 0x41, 0x41);
+        source
+            .insert_font_base("TestFont", 400, fake_base())
+            .expect("font base must be compatible")
+            .expect("font base must change resources");
+        let mut delivered = initialized_editor(state.clone(), &source);
+        let mut skipped = initialized_editor(state, &source);
+
+        let chunk = source
+            .add_font_chunk("TestFont", 400, 0, fake_chunk())
+            .unwrap()
+            .expect("font chunk must change resources");
+        let delivered_events = tick_resource_update(
+            &mut delivered,
+            crate::ResourceUpdate::new(
+                chunk,
+                vec![SystemEvent::FontChunkLoaded {
+                    family: "TestFont".to_string(),
+                    weight: 400,
+                    chunk_id: 0,
+                }],
+            ),
+        );
+        let skipped_events = tick_resource_update(&mut skipped, theme_update(&mut source));
+
+        assert!(relayouts(&delivered_events), "{delivered_events:?}");
+        assert!(relayouts(&skipped_events), "{skipped_events:?}");
+        assert_eq!(
+            font_requests(&skipped_events),
+            font_requests(&delivered_events)
+        );
+        assert!(font_requests(&skipped_events).is_empty());
+    }
+
+    #[test]
+    fn skipped_font_manifest_commit_settles_the_manifest_request() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph { text("A") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: "TestFont".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "h".into(),
+                }],
+            }]))
+            .expect("font families must change resources");
+        let mut delivered = initialized_editor(state.clone(), &source);
+        let mut skipped = initialized_editor(state, &source);
+        assert!(!skipped.requested_manifests.is_empty());
+
+        let manifest = source
+            .add_font_manifest(
+                "TestFont",
+                400,
+                editor_resource::FontManifest::from_coverages(&[vec![0x41, 0x41]]),
+            )
+            .expect("font manifest must be compatible")
+            .expect("font manifest must change resources");
+        let delivered_events = tick_resource_update(
+            &mut delivered,
+            crate::ResourceUpdate::new(
+                manifest,
+                vec![SystemEvent::FontManifestLoaded {
+                    family: "TestFont".to_string(),
+                    weight: 400,
+                }],
+            ),
+        );
+        let skipped_events = tick_resource_update(&mut skipped, theme_update(&mut source));
+
+        assert!(skipped.requested_manifests.is_empty());
+        assert!(
+            skipped_events.iter().any(|event| matches!(
+                event,
+                EditorEvent::FontDataMissing { family, required, .. }
+                    if family == "TestFont"
+                        && *required == [FontData::Base, FontData::Chunk { id: 0 }]
+            )),
+            "{skipped_events:?}"
+        );
+        assert_eq!(
+            font_requests(&skipped_events),
+            font_requests(&delivered_events)
+        );
+    }
+
+    #[test]
+    fn resource_updates_received_in_commit_order_do_not_resynchronize() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family(editor_model::DEFAULT_FONT_FAMILY.to_string())] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        let mut editor = initialized_editor(state, &source);
+
+        let fonts = register_default_family(&mut source);
+        tick_resource_update(
+            &mut editor,
+            crate::ResourceUpdate::new(fonts, vec![SystemEvent::FontsChanged]),
+        );
+        let theme_events = tick_resource_update(&mut editor, theme_update(&mut source));
+
+        assert_eq!(theme_events, vec![EditorEvent::RenderInvalidated]);
+        assert_eq!(editor.resource_resync_count_for_test(), 0);
+    }
+
+    #[test]
+    fn coalesced_resource_updates_do_not_resynchronize() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family(editor_model::DEFAULT_FONT_FAMILY.to_string())] {
+                    p1: paragraph { text("hello") }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        let mut editor = initialized_editor(state, &source);
+
+        let fonts = register_default_family(&mut source);
+        editor.receive_resource_update(crate::ResourceUpdate::new(
+            fonts,
+            vec![SystemEvent::FontsChanged],
+        ));
+        editor.receive_resource_update(theme_update(&mut source));
+        assert_eq!(editor.queued_entry_count_for_test(), 1);
+
+        let events = editor
+            .tick()
+            .expect("resource update tick must succeed")
+            .expect("resource update must produce a tick")
+            .events;
+
+        assert!(requests_default_family_manifest(&events), "{events:?}");
+        assert!(events.contains(&EditorEvent::RenderInvalidated));
+        assert_eq!(editor.resource_resync_count_for_test(), 0);
     }
 
     #[test]

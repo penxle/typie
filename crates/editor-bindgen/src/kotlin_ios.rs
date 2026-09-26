@@ -107,7 +107,7 @@ fn generate_ios_wrapper(
         w.line("");
         w.open_block("companion object");
         for ctor in &constructors {
-            let kt_name = ctor.name.to_lower_camel_case();
+            let kt_name = ctor.wrapper_name().to_lower_camel_case();
             let params_sig = ctor
                 .params
                 .iter()
@@ -885,5 +885,26 @@ mod tests {
         };
         let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
         assert!(output.contains("result?.boolValue"));
+    }
+
+    #[test]
+    fn primary_constructor_keeps_the_create_factory() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![FfiMethod {
+                name: "new".into(),
+                is_async: false,
+                is_constructor: true,
+                params: vec![FfiParam {
+                    name: "kind".into(),
+                    ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                }],
+                return_type: FfiReturnType::Owned("EditorHost".into()),
+            }],
+        };
+        let output = generate_ios_wrapper(&iface, std::slice::from_ref(&iface), &empty_ct());
+        assert!(output.contains("fun create("), "{output}");
+        assert!(output.contains("createWithKind("), "{output}");
+        assert!(!output.contains("newWithKind("), "{output}");
     }
 }

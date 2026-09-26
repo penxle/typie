@@ -14,7 +14,7 @@ wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm
 editor-clipboard = { path = "../editor-clipboard" }
 editor-crdt = { path = "../editor-crdt" }
 editor-macros = { path = "../editor-macros" }
-editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-model = { path = "../editor-model" }
 editor-state = { path = "../editor-state" }
 hashbrown.workspace = true
 serde.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "editor-viewport"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+proptest = { workspace = true }

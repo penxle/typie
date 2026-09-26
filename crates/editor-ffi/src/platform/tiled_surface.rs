@@ -70,7 +70,7 @@ impl TiledSurface {
             ));
         }
         let mut requested = Vec::with_capacity(bounds.len() / 4);
-        for r in bounds.chunks_exact(4) {
+        for r in bounds.as_chunks::<4>().0 {
             if r[0] < 0
                 || r[1] < 0
                 || r[2] <= r[0]

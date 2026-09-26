@@ -337,6 +337,8 @@ pub struct Editor {
     viewport_anchor_presentation: Option<(Revision, editor_view::ViewportAnchorPresentation)>,
     #[cfg(test)]
     resource_apply_count: usize,
+    #[cfg(test)]
+    resource_resync_count: usize,
     pending_events: Vec<EditorEvent>,
     pub(crate) pending_ops: Vec<Op<EditOp>>,
     // A mid-tick layout reconciliation drains projected layout dirtiness. If a
@@ -400,6 +402,8 @@ impl Editor {
             viewport_anchor_presentation: None,
             #[cfg(test)]
             resource_apply_count: 0,
+            #[cfg(test)]
+            resource_resync_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_tick_changes: TickChanges::default(),
@@ -1829,14 +1833,16 @@ impl Editor {
         &mut self,
         update: crate::ResourceUpdate,
     ) -> Result<bool, EditorError> {
-        let changed = self
-            .resource
-            .lock()
-            .unwrap()
-            .apply_update(Arc::clone(update.snapshot()))
-            .map_err(|error| EditorError::General {
-                msg: error.to_string(),
-            })?;
+        let (changed, skipped) = {
+            let mut resource = self.resource.lock().unwrap();
+            let current = resource.snapshot().revision();
+            let changed = resource
+                .apply_update(Arc::clone(update.snapshot()))
+                .map_err(|error| EditorError::General {
+                    msg: error.to_string(),
+                })?;
+            (changed, update.base_revision() > current)
+        };
         if !changed {
             return Ok(false);
         }
@@ -1844,10 +1850,23 @@ impl Editor {
         {
             self.resource_apply_count += 1;
         }
+        if skipped {
+            self.resynchronize_resources()?;
+        }
         for notice in update.into_notices() {
             handle::handle_system_event(self, notice)?;
         }
         Ok(true)
+    }
+
+    fn resynchronize_resources(&mut self) -> Result<(), EditorError> {
+        #[cfg(test)]
+        {
+            self.resource_resync_count += 1;
+        }
+        self.renderer.reset_font_data_caches();
+        handle::handle_system_event(self, SystemEvent::ThemeVariantChanged)?;
+        handle::handle_system_event(self, SystemEvent::FontsChanged)
     }
 
     pub(crate) fn transact(
@@ -2681,6 +2700,8 @@ impl Editor {
             viewport_anchor_presentation: None,
             #[cfg(test)]
             resource_apply_count: 0,
+            #[cfg(test)]
+            resource_resync_count: 0,
             pending_events: Vec::new(),
             pending_ops: Vec::new(),
             pending_tick_changes: TickChanges::default(),
@@ -2733,6 +2754,11 @@ impl Editor {
     #[cfg(test)]
     pub(crate) fn resource_apply_count_for_test(&self) -> usize {
         self.resource_apply_count
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resource_resync_count_for_test(&self) -> usize {
+        self.resource_resync_count
     }
 
     #[cfg(test)]
@@ -3874,6 +3900,108 @@ mod tests {
             [EditorEvent::RenderInvalidated]
         ));
         assert!(editor.shaped_font_inflight.is_empty());
+    }
+
+    #[test]
+    fn skipped_shaped_glyph_chunk_commit_settles_the_inflight_request() {
+        let (state, _) = state! {
+            doc {
+                root { p1: paragraph { text("A") } }
+            }
+            selection: (p1, 0)
+        };
+        let mut source = ResourceSource::new_test();
+        source
+            .set_fonts(prepare_fonts(vec![editor_resource::FontFamily {
+                name: "Inter".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "inter-400".into(),
+                }],
+            }]))
+            .unwrap();
+        source
+            .add_font_manifest(
+                "Inter",
+                400,
+                editor_resource::FontManifest::from_coverages(&[
+                    vec![0x41, 0x41],
+                    vec![0x42, 0x42],
+                ])
+                .with_glyph_chunks(1, vec![vec![], vec![0]])
+                .unwrap(),
+            )
+            .unwrap();
+        source
+            .insert_font_base(
+                "Inter",
+                400,
+                prepare_font_base(&editor_resource::compress_zstd(include_bytes!(
+                    "../../editor-resource/assets/placeholder.ttf"
+                )))
+                .unwrap(),
+            )
+            .unwrap();
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        let family_id = editor
+            .resource
+            .lock()
+            .unwrap()
+            .font_registry
+            .intern_id("Inter")
+            .unwrap();
+        let observation = || editor_view::glyph_run::ShapedGlyphObservation {
+            family_id,
+            weight: 400,
+            glyph_ids: vec![0],
+        };
+        crate::font::request_shaped_glyphs(&mut editor, vec![observation()]);
+        let requested = std::mem::take(&mut editor.pending_events);
+        assert!(matches!(
+            requested.as_slice(),
+            [EditorEvent::FontDataMissing { family, required, .. }]
+                if family == "Inter" && matches!(required.as_slice(), [FontData::Chunk { id: 1 }])
+        ));
+        assert_eq!(editor.shaped_font_inflight.len(), 1);
+
+        source
+            .add_font_chunk(
+                "Inter",
+                400,
+                1,
+                prepare_font_chunk(0u32.to_be_bytes().to_vec()).unwrap(),
+            )
+            .unwrap()
+            .expect("font chunk must change resources");
+        let unrelated = source
+            .set_auto_surround_enabled(false)
+            .expect("auto surround must change resources");
+        editor.receive_resource_update(crate::ResourceUpdate::new(unrelated, Vec::new()));
+        let events = editor
+            .tick()
+            .expect("resource update tick must succeed")
+            .expect("resource update must produce a tick")
+            .events;
+
+        assert!(editor.shaped_font_inflight.is_empty());
+        crate::font::request_shaped_glyphs(&mut editor, vec![observation()]);
+        let requests_chunk = |events: &[EditorEvent]| {
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    EditorEvent::FontDataMissing { family, required, .. }
+                        if family == "Inter" && required.contains(&FontData::Chunk { id: 1 })
+                )
+            })
+        };
+        assert!(!requests_chunk(&events), "{events:?}");
+        assert!(
+            !requests_chunk(&editor.pending_events),
+            "{:?}",
+            editor.pending_events
+        );
     }
 
     #[test]
@@ -7798,6 +7926,64 @@ mod tests {
         assert!(
             hot_pixels == fresh_pixels,
             "hot replacement must not reuse glyph data from the previous font base"
+        );
+    }
+
+    #[test]
+    fn skipped_font_base_replacement_matches_a_fresh_renderer() {
+        const REPLACEMENT_FONT_TTF: &[u8] = include_bytes!("../../../assets/Noto-Phantom.ttf");
+
+        let (state, ..) = state! {
+            doc {
+                root [font_family("test".to_string()), font_weight(400)] {
+                    p1: paragraph {
+                        text("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+                    }
+                }
+            }
+            selection: (p1, 0)
+        };
+        let fresh_state = state.clone();
+
+        let mut source = real_font_source();
+        let resource = Arc::new(Mutex::new(editor_resource::Resource::from_snapshot(
+            source.snapshot(),
+        )));
+        let mut hot = editor_with_resource(state, resource);
+
+        let size = hot.view().pages()[0].size;
+        let (width, height) = (size.width.round() as u16, size.height.round() as u16);
+        let initial_pixels = full_page_buf(&mut hot, 0, 1.0, width, height);
+
+        let replacement = editor_resource::compress_zstd(REPLACEMENT_FONT_TTF);
+        source
+            .insert_font_base(
+                "test",
+                400,
+                prepare_font_base(&replacement).expect("replacement font must be valid"),
+            )
+            .expect("replacement font base must be compatible")
+            .expect("replacement font base must change resources");
+        let unrelated = source
+            .set_auto_surround_enabled(false)
+            .expect("auto surround must change resources");
+        hot.receive_resource_update(crate::ResourceUpdate::new(unrelated, Vec::new()));
+        hot.tick().expect("unrelated resource tick must succeed");
+        let hot_pixels = full_page_buf(&mut hot, 0, 1.0, width, height);
+
+        let fresh_resource = Arc::new(Mutex::new(editor_resource::Resource::from_snapshot(
+            source.snapshot(),
+        )));
+        let mut fresh = editor_with_resource(fresh_state, fresh_resource);
+        let fresh_pixels = full_page_buf(&mut fresh, 0, 1.0, width, height);
+
+        assert_ne!(
+            initial_pixels, fresh_pixels,
+            "the test fonts must produce different pixels"
+        );
+        assert!(
+            hot_pixels == fresh_pixels,
+            "a skipped font base commit must not leave glyph data from the previous font base"
         );
     }
 

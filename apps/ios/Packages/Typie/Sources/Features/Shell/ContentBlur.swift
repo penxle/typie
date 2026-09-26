@@ -12,7 +12,8 @@
         let layer = view.layer
         let from = (layer.presentation() ?? layer).value(forKeyPath: keyPath) as? CGFloat ?? 0
         if layer.filters?.isEmpty != false {
-          guard let filter = makeFilter() else { continue }
+          guard let filter = makeFilter(type: "gaussianBlur") else { continue }
+          filter.setValue(filterName, forKey: "name")
           filter.setValue(from, forKey: "inputRadius")
           layer.filters = [filter]
         }
@@ -33,16 +34,14 @@
       }
     }
 
-    private static func makeFilter() -> NSObject? {
+    static func makeFilter(type: String) -> NSObject? {
       guard let filterClass = NSClassFromString("CAFilter") as AnyObject as? NSObjectProtocol else {
         return nil
       }
       let selector = NSSelectorFromString("filterWithType:")
       guard filterClass.responds(to: selector),
-        let filter = filterClass.perform(selector, with: "gaussianBlur")?.takeUnretainedValue()
-          as? NSObject
+        let filter = filterClass.perform(selector, with: type)?.takeUnretainedValue() as? NSObject
       else { return nil }
-      filter.setValue(filterName, forKey: "name")
       return filter
     }
   }

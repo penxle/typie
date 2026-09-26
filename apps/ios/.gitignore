@@ -23,3 +23,4 @@ Packages/Typie/Sources/GraphQL/Schema/*
 !Packages/Typie/Sources/GraphQL/Schema/CustomScalars/
 Packages/Typie/Sources/GraphQLMocks/*
 !Packages/Typie/Sources/GraphQLMocks/GraphQLMocks.swift
+Packages/Typie/Tests/EditorTests/Fixtures/

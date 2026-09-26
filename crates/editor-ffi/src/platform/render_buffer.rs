@@ -87,7 +87,7 @@ impl RenderBuffer {
 
 // All pixel and bounds pointers below are valid only between beginRead and endRead.
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_allocate() -> i64 {
     Box::into_raw(Box::new(RenderBuffer::default())) as i64
@@ -102,7 +102,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_allocate(
     Box::into_raw(Box::new(RenderBuffer::default())) as i64
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_free(handle: i64) {
     if handle != 0 {
@@ -126,7 +126,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_free(
     }
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_begin_read(handle: i64) -> bool {
     if handle == 0 {
@@ -148,7 +148,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_beginRead(
     unsafe { (&*(handle as *const RenderBuffer)).begin_read() }
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_end_read(handle: i64) {
     if handle != 0 {
@@ -172,7 +172,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_endRead(
     }
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_width(handle: i64) -> i32 {
     if handle == 0 {
@@ -196,7 +196,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPixelWidth(
     b.pinned(|f| f.width as i32)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_height(handle: i64) -> i32 {
     if handle == 0 {
@@ -220,7 +220,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPixelHeight(
     b.pinned(|f| f.height as i32)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_editor_revision(handle: i64) -> i64 {
     if handle == 0 {
@@ -244,7 +244,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedEditorRevisi
     b.pinned(|f| f.editor_revision as i64)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_frame_key(handle: i64) -> i64 {
     if handle == 0 {
@@ -268,7 +268,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedFrameKey(
     b.pinned(|f| f.frame_key as i64)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_tile_count(handle: i64) -> i32 {
     if handle == 0 {
@@ -292,7 +292,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedTileCount(
     b.pinned(|f| f.tiles.len() as i32)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_tile_bounds(handle: i64, index: i32) -> i64 {
     if handle == 0 {
@@ -317,7 +317,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedTileBounds(
     b.tile(index, |t| t.bounds.as_ptr() as i64)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_tile_pixels(handle: i64, index: i32) -> i64 {
     if handle == 0 {
@@ -342,7 +342,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedTilePixels(
     b.tile(index, |t| t.pixels.as_ptr() as i64)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_pinned_tile_version(handle: i64, index: i32) -> i64 {
     if handle == 0 {
@@ -367,7 +367,7 @@ pub extern "C" fn Java_co_typie_editor_render_RenderBuffer_getPinnedTileVersion(
     b.tile(index, |t| t.version as i64)
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn render_buffer_read_pinned_tile_into(
     handle: i64,

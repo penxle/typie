@@ -116,7 +116,7 @@ fn generate_jna_class(
     if !constructors.is_empty() {
         out.push_str("    companion object {\n");
         for ctor in &constructors {
-            let kt_name = ctor.name.to_lower_camel_case();
+            let kt_name = ctor.wrapper_name().to_lower_camel_case();
             let params = ctor
                 .params
                 .iter()
@@ -150,12 +150,17 @@ fn generate_jna_class(
                 .collect::<Vec<_>>()
                 .join(",\n                    ");
 
+            let native_target = if ctor.is_primary_constructor() {
+                format!("Native{}", iface.name)
+            } else {
+                format!("Native{}.{}", iface.name, ctor.name.to_lower_camel_case())
+            };
             let native_call = if ctor.params.is_empty() {
-                format!("Native{}.{}()", iface.name, kt_name)
+                format!("{}()", native_target)
             } else {
                 format!(
-                    "Native{}.{}(\n                    {}\n                )",
-                    iface.name, kt_name, native_args
+                    "{}(\n                    {}\n                )",
+                    native_target, native_args
                 )
             };
 
@@ -727,5 +732,22 @@ mod tests {
             "ByteArray data should not be converted:\n{}",
             output
         );
+    }
+
+    #[test]
+    fn primary_constructor_calls_the_uniffi_constructor() {
+        let mut iface = editor_host_iface();
+        iface.methods[0].name = "new".into();
+        iface.methods[0].is_async = false;
+        let all_ifaces = vec![iface.clone()];
+        let output = generate_jna_class(&iface, &all_ifaces, &empty_ct());
+        assert!(output.contains("fun create("), "{output}");
+        assert!(!output.contains("suspend fun create("), "{output}");
+        assert!(
+            output.contains("return JnaEditorHost(NativeEditorHost("),
+            "{output}"
+        );
+        assert!(!output.contains("NativeEditorHost.new("), "{output}");
+        assert!(!output.contains("fun new("), "{output}");
     }
 }

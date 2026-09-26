@@ -358,7 +358,7 @@ fn write_modifiers_tree(modifiers: &[Modifier], output: &mut String) {
 }
 
 fn non_default_root_modifiers(modifiers: &[Modifier]) -> Vec<Modifier> {
-    let defaults = editor_model::default_modifiers();
+    let defaults = editor_model::macro_root_modifiers();
     modifiers
         .iter()
         .filter(|m| !defaults.contains(m))

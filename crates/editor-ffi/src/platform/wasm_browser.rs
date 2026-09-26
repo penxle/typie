@@ -336,10 +336,10 @@ impl SurfaceHandle {
         {
             return false;
         }
-        if let Some(background) = &mut self.background {
-            if !background.present(frame_key) {
-                return false;
-            }
+        if let Some(background) = &mut self.background
+            && !background.present(frame_key)
+        {
+            return false;
         }
         self.foreground.present(frame_key)
     }

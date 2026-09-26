@@ -91,7 +91,7 @@ pub struct EditorHost {
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl EditorHost {
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
-    pub fn create(icu_data: Vec<u8>) -> EditorResult<Owned<Self>> {
+    pub fn new(icu_data: Vec<u8>) -> EditorResult<Owned<Self>> {
         #[cfg(feature = "wasm")]
         console_error_panic_hook::set_once();
 

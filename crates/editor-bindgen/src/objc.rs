@@ -66,7 +66,7 @@ fn last_word_is_preposition(camel: &str) -> bool {
 /// the first argument name starts with a preposition.
 /// Source: swift/lib/AST/Decl.cpp (AbstractFunctionDecl::getObjCSelector).
 pub fn objc_selector(method: &FfiMethod) -> String {
-    let base = method.name.to_lower_camel_case();
+    let base = method.wrapper_name().to_lower_camel_case();
     if method.params.is_empty() {
         format!("{}WithError", base)
     } else {
@@ -285,5 +285,20 @@ mod tests {
         ];
         let result = swift_param_decl(&params, |_| "String".into());
         assert_eq!(result, "family: String, weight: String");
+    }
+
+    #[test]
+    fn selector_for_primary_constructor_uses_the_wrapper_name() {
+        let m = FfiMethod {
+            is_constructor: true,
+            ..method(
+                "new",
+                vec![param(
+                    "icu_data",
+                    FfiParamType::Vec(crate::meta::FfiScalarParam::Primitive("u8".into())),
+                )],
+            )
+        };
+        assert_eq!(objc_selector(&m), "createWithIcuData");
     }
 }

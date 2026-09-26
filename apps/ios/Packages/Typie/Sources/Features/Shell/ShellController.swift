@@ -202,6 +202,7 @@
         selectedTint: .theme(\.textDefault), normalTint: .theme(\.textMuted),
         accentTint: .theme(\.paletteBlue), searchFieldView: searchFieldHost.view,
         progressView: progressHost.view)
+      let backdrop = MainTabBarBackdrop(fadeColor: .theme(\.surfaceCanvas))
       let createState = CreateMenuState()
       let createMenuHost = ThemedHostingController(title: "", CreateMenu(state: createState))
       createMenuHost.safeAreaRegions = []
@@ -261,10 +262,11 @@
         bar?.setSearching(searching)
         applyCreateButton?(nil)
       }
-      setBarConcealed = { [weak self, weak bar] concealed, duration in
+      setBarConcealed = { [weak self, weak bar, weak backdrop] concealed, duration in
         guard let self else { return }
         barConcealed = concealed
         bar?.setConcealed(concealed, duration: duration)
+        backdrop?.setConcealed(concealed, duration: duration)
         applyCreateButton?(duration)
       }
       syncCreateButton = { [weak self, weak createButton] top in
@@ -279,14 +281,20 @@
       menuDismissView.isHidden = true
       menuDismissView.addGestureRecognizer(
         UITapGestureRecognizer(target: self, action: #selector(dismissMenu)))
+      backdrop.translatesAutoresizingMaskIntoConstraints = false
       bar.translatesAutoresizingMaskIntoConstraints = false
       createButton.translatesAutoresizingMaskIntoConstraints = false
       menuDismissView.translatesAutoresizingMaskIntoConstraints = false
+      view.addSubview(backdrop)
       view.addSubview(menuDismissView)
       view.addSubview(bar)
       view.addSubview(createButton)
       view.keyboardLayoutGuide.usesBottomSafeArea = false
       NSLayoutConstraint.activate([
+        backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+        backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        backdrop.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+        backdrop.heightAnchor.constraint(equalToConstant: MainTabBarBackdrop.height),
         menuDismissView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         menuDismissView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         menuDismissView.topAnchor.constraint(equalTo: view.topAnchor),

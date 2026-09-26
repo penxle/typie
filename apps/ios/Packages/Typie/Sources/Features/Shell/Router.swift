@@ -14,6 +14,7 @@
     private let authService = Container.shared.authService()
     private let sites = Container.shared.sites()
     private let creator = Container.shared.entityCreator()
+    private let devMode = Container.shared.devMode()
 
     init() {}
 
@@ -384,6 +385,7 @@
         case .home: homeController(host: host)
         case .userGoal: userGoalController(host: host)
         case .profile: profileController()
+        case .document: documentController()
         default: placeholderController(for: route, host: host)
         }
       host.controller = controller
@@ -484,6 +486,46 @@
         })
       controller.hidesBottomBarWhenPushed = true
       return controller
+    }
+
+    private func documentController() -> UIViewController {
+      let controller = DocumentScreenController()
+      controller.hidesBottomBarWhenPushed = true
+      keepObserving(while: controller) { [weak self, weak controller, weak devMode] in
+        guard let self, let controller, let devMode else { return }
+        controller.navigationItem.rightBarButtonItem =
+          devMode.isEnabled ? toolsItem(for: controller) : nil
+      }
+      return controller
+    }
+
+    private func toolsItem(for controller: DocumentScreenController) -> UIBarButtonItem {
+      let tools = UIBarButtonItem(
+        image: menuIcon(LucideIcon.ellipsis),
+        menu: UIMenu(children: [
+          UIDeferredMenuElement.uncached { [weak self, weak controller] completion in
+            guard let self, let controller else { return completion([]) }
+            completion(developerMenu(for: controller))
+          }
+        ]))
+      tools.accessibilityLabel = "도구"
+      return tools
+    }
+
+    private func developerMenu(for controller: DocumentScreenController) -> [UIMenuElement] {
+      let overlays = controller.debugOverlays
+      let toggles = DebugOverlayToggle.all.map { toggle in
+        UIAction(title: toggle.title(in: overlays), image: menuIcon(toggle.icon)) {
+          [weak controller] _ in
+          controller?.debugOverlays.formSymmetricDifference(toggle.overlay)
+        }
+      }
+      let layout = UIAction(
+        title: "합성 문서 레이아웃 전환", image: menuIcon(LucideIcon.arrowRightLeft)
+      ) { [weak controller] _ in
+        controller?.switchSyntheticLayout()
+      }
+      return toggles + [UIMenu(options: .displayInline, children: [layout])]
     }
 
     private func logout() async {

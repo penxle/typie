@@ -14,3 +14,5 @@ pub mod objc;
 pub mod reader;
 #[cfg(feature = "bin")]
 pub mod swift;
+#[cfg(feature = "bin")]
+pub mod swift_types;

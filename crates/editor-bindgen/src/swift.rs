@@ -102,16 +102,22 @@ fn generate_constructor_method(
     };
 
     out.push_str(&format!(
-        "    @objc public func create({}) {{\n",
+        "    @objc public func {}({}) {{\n",
+        method.wrapper_name().to_lower_camel_case(),
         all_params
     ));
     out.push_str("        do {\n");
 
     let call_args = swift_call_args(&method.params, |p| param_conversion(p, custom_types));
-    let create_call = if call_args.is_empty() {
-        format!("{}.create()", inner_type)
+    let create_call = if method.is_primary_constructor() {
+        format!("{}({})", inner_type, call_args)
     } else {
-        format!("{}.create({})", inner_type, call_args)
+        format!(
+            "{}.{}({})",
+            inner_type,
+            method.name.to_lower_camel_case(),
+            call_args
+        )
     };
 
     out.push_str(&format!("            self.inner = try {}\n", create_call));
@@ -754,5 +760,34 @@ mod tests {
             "Constructor should not use Task:\n{}",
             output
         );
+    }
+
+    #[test]
+    fn primary_constructor_calls_the_uniffi_initializer() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![FfiMethod {
+                name: "new".into(),
+                is_async: false,
+                is_constructor: true,
+                params: vec![FfiParam {
+                    name: "kind".into(),
+                    ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                }],
+                return_type: FfiReturnType::Owned("EditorHost".into()),
+            }],
+        };
+        let output = generate_class(&iface, &empty_ct());
+        assert!(
+            output.contains(
+                "@objc public func create(kind: String?, error: AutoreleasingUnsafeMutablePointer<NSError?>)"
+            ),
+            "{output}"
+        );
+        assert!(
+            output.contains("self.inner = try EditorHost(kind: kind)"),
+            "{output}"
+        );
+        assert!(!output.contains("EditorHost.new("), "{output}");
     }
 }

@@ -200,7 +200,7 @@ fn build_modifiers_expr(node: &NodeDef) -> TokenStream {
             None => quote! {
                 {
                     let mut __mods: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
-                    for __m in default_modifiers() {
+                    for __m in macro_root_modifiers() {
                         __mods.insert(Modifier::as_type(&__m), __m);
                     }
                     __mods
@@ -215,7 +215,7 @@ fn build_modifiers_expr(node: &NodeDef) -> TokenStream {
                 quote! {
                     {
                         let mut __mods: BTreeMap<ModifierType, Modifier> = BTreeMap::new();
-                        for __m in default_modifiers_with(vec![#(#modifier_exprs),*]) {
+                        for __m in macro_root_modifiers_with(vec![#(#modifier_exprs),*]) {
                             __mods.insert(Modifier::as_type(&__m), __m);
                         }
                         __mods

@@ -74,13 +74,19 @@ pub struct TickResult {
 
 #[derive(Clone)]
 pub struct ResourceUpdate {
+    base_revision: ResourceRevision,
     snapshot: Arc<ResourceSnapshot>,
     notices: Vec<SystemEvent>,
 }
 
 impl ResourceUpdate {
     pub fn new(snapshot: Arc<ResourceSnapshot>, notices: Vec<SystemEvent>) -> Self {
-        Self { snapshot, notices }
+        let base_revision = ResourceRevision::new(snapshot.revision().get().saturating_sub(1));
+        Self {
+            base_revision,
+            snapshot,
+            notices,
+        }
     }
 
     pub fn snapshot(&self) -> &Arc<ResourceSnapshot> {
@@ -89,6 +95,10 @@ impl ResourceUpdate {
 
     pub fn revision(&self) -> ResourceRevision {
         self.snapshot.revision()
+    }
+
+    pub(crate) fn base_revision(&self) -> ResourceRevision {
+        self.base_revision
     }
 
     pub fn notices(&self) -> &[SystemEvent] {
@@ -108,6 +118,7 @@ impl ResourceUpdate {
 impl std::fmt::Debug for ResourceUpdate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ResourceUpdate")
+            .field("base_revision", &self.base_revision)
             .field("revision", &self.revision())
             .field("notices", &self.notices)
             .finish_non_exhaustive()
@@ -116,7 +127,9 @@ impl std::fmt::Debug for ResourceUpdate {
 
 impl PartialEq for ResourceUpdate {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.snapshot, &other.snapshot) && self.notices == other.notices
+        self.base_revision == other.base_revision
+            && Arc::ptr_eq(&self.snapshot, &other.snapshot)
+            && self.notices == other.notices
     }
 }
 
@@ -758,5 +771,33 @@ mod tests {
         assert_eq!(editor.resource_apply_count_for_test(), 1);
         assert!(duplicate.is_none());
         assert_eq!(editor.revision(), revision);
+    }
+
+    #[test]
+    fn older_resource_update_is_still_stale_after_a_skipped_commit() {
+        let mut source = ResourceSource::new_test();
+        let resource = Arc::new(Mutex::new(Resource::from_snapshot(source.snapshot())));
+        let (state, ..) = state! {
+            doc { root { p: paragraph { text("") } } }
+            selection: (p, 0)
+        };
+        let mut editor = Editor::new_test_with_resource(state, resource);
+        let older = theme_update(&mut source);
+        let newer = replacement_update(&mut source, "X");
+
+        editor.receive_resource_update(newer);
+        editor.tick().unwrap().unwrap();
+        editor.receive_resource_update(older);
+        let error = editor
+            .tick()
+            .expect_err("an older resource snapshot must fail the tick");
+
+        assert!(
+            matches!(
+                &error,
+                EditorError::General { msg } if msg.starts_with("stale resource snapshot")
+            ),
+            "{error:?}"
+        );
     }
 }
